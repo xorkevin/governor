@@ -1,5 +1,5 @@
-hash: 823f7e7ea987a905f07cf14af36c94fca5c8ba9b805e515d4a9b64b5230e619d
-updated: 2017-04-11T12:23:07.690857071-07:00
+hash: 3206df078a1ef9f7ef6a08bbba7f3a2054fe3364a5f27e02f64083b8b78b62c8
+updated: 2017-04-14T16:37:02.425120238-07:00
 imports:
 - name: github.com/dgrijalva/jwt-go
   version: a601269ab70c205d26370c16f7c81e9017c14e04
@@ -20,6 +20,10 @@ imports:
   version: 30a891c33c7cde7b02a981314b4228ec99380cca
 - name: github.com/sirupsen/logrus
   version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+- name: github.com/stretchr/testify
+  version: 69483b4bd14f5845b5a1e55bca19e954e827f1d0
+  subpackages:
+  - assert
 - name: github.com/valyala/bytebufferpool
   version: e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7
 - name: github.com/valyala/fasttemplate

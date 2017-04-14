@@ -37,6 +37,9 @@ POSTGRES_PASS=admin
 all: build
 
 
+test:
+	go test -cover $$(glide novendor)
+
 dev:
 	VERSION=$(VERSION) MODE=DEBUG go run $(SERVE_PATH)
 
