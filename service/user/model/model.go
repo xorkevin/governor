@@ -1,21 +1,49 @@
 package usermodel
 
 type (
-	// User is the db model
-	User struct {
+	// Model is the db User model
+	Model struct {
+		id
+		auth
+		passhash
+		props
 	}
 
-	// ID holds all user identification information
-	ID struct {
-		UID      []byte `json:"uid"`
+	id struct {
+		uid
+		username
+	}
+
+	uid struct {
+		UID []byte `json:"uid"`
+	}
+
+	username struct {
 		Username string `json:"username"`
 	}
 
-	// Info holds user information
-	Info struct {
+	auth struct {
+		Level uint64   `json:"auth_level"`
+		Tags  []string `json:"auth_tags"`
 	}
 
-	// Props holds user facts
-	Props struct {
+	passhash struct {
+		Hash    []byte `json:"pass_hash"`
+		Salt    []byte `json:"pass_salt"`
+		Version int    `json:"pass_version"`
+	}
+
+	props struct {
+		name
+		email
+	}
+
+	name struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
+	email struct {
+		Email string `json:"email"`
 	}
 )
