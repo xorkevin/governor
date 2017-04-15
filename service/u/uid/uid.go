@@ -1,11 +1,11 @@
-package upsilon
+package uid
 
 import (
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"github.com/hackform/governor/service/u/tau"
+	"github.com/hackform/governor/service/u/utime"
 )
 
 ///////////////////////
@@ -13,8 +13,8 @@ import (
 ///////////////////////
 
 type (
-	// Upsilon is an identifier that can be initialized with a custom length composed of a user specified time, hash, and random bits
-	Upsilon struct {
+	// UID is an identifier that can be initialized with a custom length composed of a user specified time, hash, and random bits
+	UID struct {
 		timebits,
 		hashbits,
 		randbits,
@@ -23,18 +23,18 @@ type (
 	}
 )
 
-// NewU creates a new Upsilon without a hash input
-func NewU(timesize, randsize int) (*Upsilon, error) {
+// NewU creates a new UID without a hash input
+func NewU(timesize, randsize int) (*UID, error) {
 	return New(timesize, 0, randsize, nil)
 }
 
-// New creates a new Upsilon
-func New(timesize, hashsize, randsize int, input []byte) (*Upsilon, error) {
+// New creates a new UID
+func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 	k := new(bytes.Buffer)
 
 	if timesize > 0 {
 		var t []byte
-		timestamp, err := tau.Timestamp()
+		timestamp, err := utime.Timestamp()
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +81,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*Upsilon, error) {
 		randsize = 0
 	}
 
-	return &Upsilon{
+	return &UID{
 		timebits: timesize,
 		hashbits: hashsize,
 		randbits: randsize,
@@ -90,14 +90,14 @@ func New(timesize, hashsize, randsize int, input []byte) (*Upsilon, error) {
 	}, nil
 }
 
-// FromBytes creates a new Upsilon from an existing byte slice
-func FromBytes(timesize, hashsize, randsize int, b []byte) (*Upsilon, error) {
+// FromBytes creates a new UID from an existing byte slice
+func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, error) {
 	size := timesize + hashsize + randsize
 	if len(b) != size {
 		return nil, fmt.Errorf("upsilon error: byte slice length %d does not match defined sizes %d", len(b), size)
 	}
 
-	return &Upsilon{
+	return &UID{
 		timebits: timesize,
 		hashbits: hashsize,
 		randbits: randsize,
@@ -106,8 +106,8 @@ func FromBytes(timesize, hashsize, randsize int, b []byte) (*Upsilon, error) {
 	}, nil
 }
 
-// FromBase64 creates a new Upsilon from a base64 encoded string
-func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*Upsilon, error) {
+// FromBase64 creates a new UID from a base64 encoded string
+func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, error) {
 	b, err := base64.URLEncoding.DecodeString(ustring)
 	if err != nil {
 		return nil, fmt.Errorf("upsilon error: %s", err)
@@ -116,42 +116,42 @@ func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*Upsilon, e
 	return FromBytes(timeSize, hashSize, randomSize, b)
 }
 
-// Bytes returns the full raw bytes of an Upsilon
-func (u *Upsilon) Bytes() []byte {
+// Bytes returns the full raw bytes of an UID
+func (u *UID) Bytes() []byte {
 	return u.u
 }
 
-// Time returns only the time bytes of an Upsilon
-func (u *Upsilon) Time() []byte {
+// Time returns only the time bytes of an UID
+func (u *UID) Time() []byte {
 	return u.u[:u.timebits]
 }
 
-// Hash returns only the hash initialization bytes of an Upsilon
-func (u *Upsilon) Hash() []byte {
+// Hash returns only the hash initialization bytes of an UID
+func (u *UID) Hash() []byte {
 	return u.u[u.timebits : u.timebits+u.hashbits]
 }
 
-// Rand returns only the random bytes of an Upsilon
-func (u *Upsilon) Rand() []byte {
+// Rand returns only the random bytes of an UID
+func (u *UID) Rand() []byte {
 	return u.u[u.timebits+u.hashbits:]
 }
 
-// Base64 returns the full raw bytes of an Upsilon encoded in standard padded base64
-func (u *Upsilon) Base64() string {
+// Base64 returns the full raw bytes of an UID encoded in standard padded base64
+func (u *UID) Base64() string {
 	return base64.URLEncoding.EncodeToString(u.u)
 }
 
-// TimeBase64 returns only the time bytes of an Upsilon encoded in standard padded base64
-func (u *Upsilon) TimeBase64() string {
+// TimeBase64 returns only the time bytes of an UID encoded in standard padded base64
+func (u *UID) TimeBase64() string {
 	return base64.URLEncoding.EncodeToString(u.Time())
 }
 
-// HashBase64 returns only the hash initialization bytes of an Upsilon encoded in standard padded base64
-func (u *Upsilon) HashBase64() string {
+// HashBase64 returns only the hash initialization bytes of an UID encoded in standard padded base64
+func (u *UID) HashBase64() string {
 	return base64.URLEncoding.EncodeToString(u.Hash())
 }
 
-// RandBase64 returns only the random bytes of an Upsilon encoded in standard padded base64
-func (u *Upsilon) RandBase64() string {
+// RandBase64 returns only the random bytes of an UID encoded in standard padded base64
+func (u *UID) RandBase64() string {
 	return base64.URLEncoding.EncodeToString(u.Rand())
 }

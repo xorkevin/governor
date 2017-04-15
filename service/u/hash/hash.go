@@ -1,4 +1,4 @@
-package eta
+package hash
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ type (
 )
 
 const (
-	// Latest holds the value of the latest version of eta
+	// Latest holds the value of the latest version
 	Latest = 1
 )
 
