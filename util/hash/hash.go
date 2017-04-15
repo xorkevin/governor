@@ -10,6 +10,11 @@ import (
 // Hash //
 //////////
 
+const (
+	// Latest holds the value of the latest version
+	Latest = 1
+)
+
 type (
 	config struct {
 		version,
@@ -19,11 +24,6 @@ type (
 		memBlocksize,
 		parallelFactor int
 	}
-)
-
-const (
-	// Latest holds the value of the latest version
-	Latest = 1
 )
 
 var (

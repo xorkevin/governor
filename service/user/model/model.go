@@ -1,6 +1,7 @@
 package usermodel
 
 import (
+	"database/sql"
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
@@ -23,7 +24,7 @@ type (
 
 	// ID is user identification
 	ID struct {
-		Userid   []byte `json:"uid"`
+		Userid   []byte `json:"userid"`
 		Username string `json:"username"`
 	}
 
@@ -92,4 +93,28 @@ func NewBaseUser(username, password, email, firstname, lastname string) (*Model,
 // NewAdmin creates a new Admin User Model
 func NewAdmin(username, password, email, firstname, lastname string) (*Model, error) {
 	return New(username, password, email, firstname, lastname, rank.Admin())
+}
+
+// IDBase64 returns the userid as a base64 encoded string
+func (m *Model) IDBase64() (string, error) {
+	u, err := uid.FromBytes(uidTimeSize, 0, uidRandSize, m.Userid)
+	if err != nil {
+		return "", err
+	}
+	return u.Base64(), nil
+}
+
+// Insert inserts the model into the db
+func (m *Model) Insert(db *sql.DB) error {
+	return nil
+}
+
+// Update updates the model in the db
+func (m *Model) Update(db *sql.DB) error {
+	return nil
+}
+
+// Setup creates a new User table
+func Setup(db *sql.DB) error {
+	return nil
 }

@@ -1,6 +1,7 @@
 package health
 
 import (
+	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -20,7 +21,7 @@ func New() *Health {
 }
 
 // Mount is a collection of routes for healthchecks
-func (h *Health) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (h *Health) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
 	r.GET("/check", func(c echo.Context) error {
 		t, err := time.Now().MarshalText()
 		if err != nil {
@@ -33,9 +34,11 @@ func (h *Health) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) er
 			return c.String(http.StatusOK, conf.Version)
 		})
 		r.GET("/ping", func(c echo.Context) error {
+			t, _ := time.Now().MarshalText()
 			l.WithFields(logrus.Fields{
+				"time":     string(t),
 				"service":  "health",
-				"action":   "ping",
+				"request":  "ping",
 				"response": "pong",
 			}).Info("Ping")
 			return c.String(http.StatusOK, "Pong")

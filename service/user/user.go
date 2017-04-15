@@ -1,6 +1,7 @@
 package user
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
@@ -8,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"regexp"
+	"time"
 )
 
 type (
@@ -45,17 +47,20 @@ func (r *requestUserPost) valid() error {
 	if !emailRegex.MatchString(r.Email) {
 		return fmt.Errorf("email is invalid")
 	}
-	if len(r.Firstname) < 1 {
-		return fmt.Errorf("first name must be provided")
-	}
-	if len(r.Lastname) < 1 {
-		return fmt.Errorf("last name must be provided")
-	}
 	return nil
 }
 
+type (
+	responseUserPost struct {
+		Userid    string `json:"userid"`
+		Username  string `json:"username"`
+		Firstname string `json:"first_name"`
+		Lastname  string `json:"last_name"`
+	}
+)
+
 // Mount is a collection of routes for healthchecks
-func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
 	r.POST("/user", func(c echo.Context) error {
 		ruser := &requestUserPost{}
 		if err := c.Bind(ruser); err != nil {
@@ -66,9 +71,38 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		}
 		m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.Firstname, ruser.Lastname)
 		if err != nil {
+			l.WithFields(logrus.Fields{
+				"service": "user",
+				"request": "post",
+				"action":  "new base user",
+			}).Error(err)
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
-		return c.JSON(http.StatusCreated, m)
+		if err := m.Insert(db); err != nil {
+			l.WithFields(logrus.Fields{
+				"service": "user",
+				"request": "post",
+				"action":  "insert user",
+			}).Error(err)
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+
+		t, _ := time.Now().MarshalText()
+		userid, _ := m.IDBase64()
+		l.WithFields(logrus.Fields{
+			"time":    string(t),
+			"service": "user",
+			"request": "post",
+			"userid":  userid,
+			"action":  "created",
+		}).Info("success")
+
+		return c.JSON(http.StatusCreated, &responseUserPost{
+			Userid:    userid,
+			Username:  m.Username,
+			Firstname: m.FirstName,
+			Lastname:  m.LastName,
+		})
 	})
 
 	ru := r.Group("/user")

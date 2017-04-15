@@ -146,11 +146,11 @@ func (s *Server) Start(port uint) error {
 type (
 	// Service is an interface for services
 	Service interface {
-		Mount(c Config, r *echo.Group, l *logrus.Logger) error
+		Mount(c Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error
 	}
 )
 
 // MountRoute mounts a service
 func (s *Server) MountRoute(path string, r Service, m ...echo.MiddlewareFunc) error {
-	return r.Mount(s.config, s.i.Group(path, m...), s.log)
+	return r.Mount(s.config, s.i.Group(path, m...), s.db, s.log)
 }
