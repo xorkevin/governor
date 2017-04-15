@@ -2,7 +2,9 @@ package usermodel
 
 import (
 	"github.com/hackform/governor/util/hash"
+	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
+	"time"
 )
 
 const (
@@ -40,14 +42,15 @@ type (
 
 	// Props stores user info
 	Props struct {
-		Email     string `json:"email"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
+		Email        string `json:"email"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		CreationDate int64  `json:"creation_date"`
 	}
 )
 
-// New creates a new Model
-func New(username, password, email, firstname, lastname string) (*Model, error) {
+// New creates a new User Model
+func New(username, password, email, firstname, lastname string, level uint32) (*Model, error) {
 	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
 	if err != nil {
 		return nil, err
@@ -64,7 +67,7 @@ func New(username, password, email, firstname, lastname string) (*Model, error) 
 			Username: username,
 		},
 		Auth: Auth{
-			Level: 0,
+			Level: level,
 			Tags:  []string{},
 		},
 		Passhash: Passhash{
@@ -73,9 +76,20 @@ func New(username, password, email, firstname, lastname string) (*Model, error) 
 			Version: mVersion,
 		},
 		Props: Props{
-			Email:     email,
-			FirstName: firstname,
-			LastName:  lastname,
+			Email:        email,
+			FirstName:    firstname,
+			LastName:     lastname,
+			CreationDate: time.Now().Unix(),
 		},
 	}, nil
+}
+
+// NewBaseUser creates a new Base User Model
+func NewBaseUser(username, password, email, firstname, lastname string) (*Model, error) {
+	return New(username, password, email, firstname, lastname, rank.BaseUser())
+}
+
+// NewAdmin creates a new Admin User Model
+func NewAdmin(username, password, email, firstname, lastname string) (*Model, error) {
+	return New(username, password, email, firstname, lastname, rank.Admin())
 }

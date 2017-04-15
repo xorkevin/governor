@@ -7,7 +7,12 @@ const (
 	maskUser    uint32 = 0x000000FF
 )
 
-type (
-	// Rank is a bitfield
-	Rank uint32
-)
+// BaseUser creates a new user rank
+func BaseUser() uint32 {
+	return 0x01000001
+}
+
+// Admin creates a new Administrator rank
+func Admin() uint32 {
+	return 0x010F0001
+}
