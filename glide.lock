@@ -1,5 +1,5 @@
-hash: 3206df078a1ef9f7ef6a08bbba7f3a2054fe3364a5f27e02f64083b8b78b62c8
-updated: 2017-04-14T16:37:02.425120238-07:00
+hash: fa8cc68d81be1d81cfde45a15b4c924727d075d82c7d350bbf857dc9bc551a95
+updated: 2017-04-15T01:34:49.599133016-07:00
 imports:
 - name: github.com/dgrijalva/jwt-go
   version: a601269ab70c205d26370c16f7c81e9017c14e04
@@ -14,6 +14,8 @@ imports:
   - color
   - log
   - random
+- name: github.com/lib/pq
+  version: 2704adc878c21e1329f46f6e56a1c387d788ff94
 - name: github.com/mattn/go-colorable
   version: d228849504861217f796da67fae4f6e347643f15
 - name: github.com/mattn/go-isatty
@@ -33,6 +35,8 @@ imports:
   subpackages:
   - acme
   - acme/autocert
+  - pbkdf2
+  - scrypt
 - name: golang.org/x/net
   version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
   subpackages:
@@ -42,4 +46,12 @@ imports:
   version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
   - unix
-testImports: []
+testImports:
+- name: github.com/davecgh/go-spew
+  version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
+  subpackages:
+  - spew
+- name: github.com/pmezard/go-difflib
+  version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
+  subpackages:
+  - difflib

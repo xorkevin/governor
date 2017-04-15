@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"database/sql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
@@ -11,14 +12,16 @@ import (
 type (
 	// Config is the server configuration
 	Config struct {
-		Version  string
-		LogLevel int
+		Version     string
+		LogLevel    int
+		PostgresURL string
 	}
 
 	// Server is an http gateway
 	Server struct {
 		i      *echo.Echo
 		log    *logrus.Logger
+		db     *sql.DB
 		config Config
 	}
 )
@@ -76,8 +79,9 @@ func levelToLog(level int) logrus.Level {
 //   MODE
 func NewConfig() Config {
 	return Config{
-		Version:  os.Getenv("VERSION"),
-		LogLevel: envToLevel(os.Getenv("MODE")),
+		Version:     os.Getenv("VERSION"),
+		LogLevel:    envToLevel(os.Getenv("MODE")),
+		PostgresURL: os.Getenv("POSTGRES_URL"),
 	}
 }
 
@@ -122,6 +126,19 @@ func New(config Config) *Server {
 
 // Start starts the server at the specified port
 func (s *Server) Start(port uint) error {
+	// db
+	db, err := sql.Open("postgres", s.config.PostgresURL)
+	if err != nil {
+		s.log.Error(err)
+		return err
+	}
+	if err := db.Ping(); err != nil {
+		s.log.Error(err)
+		return err
+	}
+	s.db = db
+	defer db.Close()
+
 	s.i.Logger.Fatal(s.i.Start(":" + strconv.Itoa(int(port))))
 	return nil
 }

@@ -4,6 +4,7 @@ MODE=INFO
 API_PORT=8080
 FSS_PORT=3000
 BASEDIR=public
+POSTGRES_URL="user=postgres password=admin dbname=governor host=localhost port=5432 sslmode=disable"
 
 
 # CMD
@@ -41,7 +42,7 @@ test:
 	go test -cover $$(glide novendor)
 
 dev:
-	VERSION=$(VERSION) MODE=DEBUG go run $(SERVE_PATH)
+	VERSION=$(VERSION) MODE=DEBUG POSTGRES_URL=$(POSTGRES_URL) go run $(SERVE_PATH)
 
 dev-fsserve:
 	BASEDIR=$(BASEDIR) go run $(FSSERVE_PATH)
@@ -69,7 +70,7 @@ docker-build: build
 	docker build -f Dockerfile.fs -t $(FSSERVE_IMAGE_NAME) .
 
 docker-run:
-	docker run -d --name $(SERVE_CONTAINER_NAME) -e VERSION=$(VERSION) -e MODE=$(MODE) -p $(API_PORT):$(API_PORT) $(SERVE_IMAGE_NAME)
+	docker run -d --name $(SERVE_CONTAINER_NAME) -e VERSION=$(VERSION) -e MODE=$(MODE) -e POSTGRES_URL=$(POSTGRES_URL) -p $(API_PORT):$(API_PORT) $(SERVE_IMAGE_NAME)
 	docker run -d --name $(FSSERVE_CONTAINER_NAME) -e BASEDIR=$(BASEDIR) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) -p $(FSS_PORT):$(FSS_PORT) $(FSSERVE_IMAGE_NAME)
 
 docker-stop:
