@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"github.com/hackform/governor/service/u/utime"
+	"github.com/hackform/governor/util/utime"
 )
 
 ///////////////////////

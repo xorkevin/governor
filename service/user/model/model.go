@@ -1,49 +1,81 @@
 package usermodel
 
+import (
+	"github.com/hackform/governor/util/hash"
+	"github.com/hackform/governor/util/uid"
+)
+
+const (
+	uidTimeSize = 8
+	uidRandSize = 8
+)
+
 type (
 	// Model is the db User model
 	Model struct {
-		id
-		auth
-		passhash
-		props
+		ID
+		Auth
+		Passhash
+		Props
 	}
 
-	id struct {
-		uid
-		username
-	}
-
-	uid struct {
-		UID []byte `json:"uid"`
-	}
-
-	username struct {
+	// ID is user identification
+	ID struct {
+		Userid   []byte `json:"uid"`
 		Username string `json:"username"`
 	}
 
-	auth struct {
-		Level uint64   `json:"auth_level"`
+	// Auth manages user permissions
+	Auth struct {
+		Level uint32   `json:"auth_level"`
 		Tags  []string `json:"auth_tags"`
 	}
 
-	passhash struct {
+	// Passhash controls the user password
+	Passhash struct {
 		Hash    []byte `json:"pass_hash"`
 		Salt    []byte `json:"pass_salt"`
 		Version int    `json:"pass_version"`
 	}
 
-	props struct {
-		name
-		email
-	}
-
-	name struct {
+	// Props stores user info
+	Props struct {
+		Email     string `json:"email"`
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
 	}
-
-	email struct {
-		Email string `json:"email"`
-	}
 )
+
+// New creates a new Model
+func New(username, password, email, firstname, lastname string) (*Model, error) {
+	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
+	if err != nil {
+		return nil, err
+	}
+
+	mHash, mSalt, mVersion, err := hash.Hash(password, hash.Latest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Model{
+		ID: ID{
+			Userid:   mUID.Bytes(),
+			Username: username,
+		},
+		Auth: Auth{
+			Level: 0,
+			Tags:  []string{},
+		},
+		Passhash: Passhash{
+			Hash:    mHash,
+			Salt:    mSalt,
+			Version: mVersion,
+		},
+		Props: Props{
+			Email:     email,
+			FirstName: firstname,
+			LastName:  lastname,
+		},
+	}, nil
+}
