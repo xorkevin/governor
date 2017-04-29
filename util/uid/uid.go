@@ -14,6 +14,11 @@ import (
 // Unique Identifier //
 ///////////////////////
 
+const (
+	moduleID    = "uid"
+	moduleIDNew = moduleID + ".New"
+)
+
 type (
 	// UID is an identifier that can be initialized with a custom length composed of a user specified time, hash, and random bits
 	UID struct {
@@ -38,10 +43,11 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 		var t []byte
 		timestamp, err := utime.Timestamp()
 		if err != nil {
+			err.AddTrace(moduleIDNew)
 			return nil, err
 		}
 		if len(timestamp) < 1 {
-			return nil, governor.NewError("No timestamp", 0, http.StatusInternalServerError)
+			return nil, governor.NewError(moduleIDNew, "No timestamp", 0, http.StatusInternalServerError)
 		}
 		t = make([]byte, timesize)
 		l := len(timestamp) - timesize
@@ -58,7 +64,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 	if hashsize > 0 {
 		var h []byte
 		if input == nil || len(input) < 1 {
-			return nil, governor.NewError("No hash input provided", 0, http.StatusInternalServerError)
+			return nil, governor.NewError(moduleIDNew, "No hash input provided", 0, http.StatusInternalServerError)
 		}
 		h = make([]byte, hashsize)
 		l := len(input) - hashsize
@@ -76,7 +82,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 		r := make([]byte, randsize)
 		_, err := rand.Read(r)
 		if err != nil {
-			return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+			return nil, governor.NewError(moduleIDNew, err.Error(), 0, http.StatusInternalServerError)
 		}
 		k.Write(r)
 	} else {
@@ -92,11 +98,15 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 	}, nil
 }
 
+const (
+	moduleIDFromBytes = moduleID + ".FromBytes"
+)
+
 // FromBytes creates a new UID from an existing byte slice
 func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Error) {
 	size := timesize + hashsize + randsize
 	if len(b) != size {
-		return nil, governor.NewError(fmt.Sprintf("byte slice length %d does not match defined sizes %d", len(b), size), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDFromBytes, fmt.Sprintf("byte slice length %d does not match defined sizes %d", len(b), size), 0, http.StatusInternalServerError)
 	}
 
 	return &UID{
@@ -108,11 +118,15 @@ func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Erro
 	}, nil
 }
 
+const (
+	moduleIDFromBase64 = moduleID + ".FromBase64"
+)
+
 // FromBase64 creates a new UID from a base64 encoded string
 func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *governor.Error) {
 	b, err := base64.URLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	return FromBytes(timeSize, hashSize, randomSize, b)

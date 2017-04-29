@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"bytes"
 	"database/sql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -10,26 +11,14 @@ import (
 )
 
 type (
-	// Config is the server configuration
-	Config struct {
-		Version     string
-		LogLevel    int
-		PostgresURL string
-	}
-
-	// Server is an http gateway
-	Server struct {
-		i      *echo.Echo
-		log    *logrus.Logger
-		db     *sql.DB
-		config Config
-	}
-
 	// Error is an error container
 	Error struct {
-		message string
-		code    int
-		status  int
+		origin   string
+		source   []string
+		message  string
+		code     int
+		status   int
+		logLevel int
 	}
 
 	responseError struct {
@@ -39,16 +28,58 @@ type (
 )
 
 // NewError creates a new custom Error
-func NewError(message string, code int, status int) *Error {
+func NewError(origin string, message string, code int, status int) *Error {
 	return &Error{
-		message: message,
-		code:    code,
-		status:  status,
+		origin:   origin,
+		source:   []string{origin},
+		message:  message,
+		code:     code,
+		status:   status,
+		logLevel: levelError,
+	}
+}
+
+// NewErrorWarn creates a new custom Error
+func NewErrorWarn(origin string, message string, code int, status int) *Error {
+	return &Error{
+		origin:   origin,
+		source:   []string{origin},
+		message:  message,
+		code:     code,
+		status:   status,
+		logLevel: levelWarn,
+	}
+}
+
+// NewErrorUser creates a new custom Error
+func NewErrorUser(origin string, message string, code int, status int) *Error {
+	return &Error{
+		origin:   origin,
+		source:   []string{origin},
+		message:  message,
+		code:     code,
+		status:   status,
+		logLevel: levelNoLog,
 	}
 }
 
 func (e *Error) Error() string {
 	return e.Message()
+}
+
+// Origin returns the origin of the error message
+func (e *Error) Origin() string {
+	return e.origin
+}
+
+// Source returns the source of the error message
+func (e *Error) Source() string {
+	k := bytes.NewBufferString(e.source[len(e.source)-1])
+	for i := len(e.source) - 2; i > -1; i-- {
+		k.WriteString("/")
+		k.WriteString(e.source[i])
+	}
+	return k.String()
 }
 
 // Message returns the error message
@@ -66,6 +97,45 @@ func (e *Error) Status() int {
 	return e.status
 }
 
+// Level returns the severity of the error
+func (e *Error) Level() int {
+	return e.logLevel
+}
+
+// AddTrace adds the current caller to the call stack of the error
+func (e *Error) AddTrace(module string) {
+	e.source = append(e.source, module)
+}
+
+func errorHandler(i *echo.Echo, l *logrus.Logger) echo.HTTPErrorHandler {
+	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
+		if err, ok := err.(*Error); ok {
+			switch err.Level() {
+			case levelError:
+				l.WithFields(logrus.Fields{
+					"origin": err.Origin(),
+					"source": err.Source(),
+					"code":   err.Code(),
+				}).Error(err.Message())
+			case levelWarn:
+				l.WithFields(logrus.Fields{
+					"origin": err.Origin(),
+					"source": err.Source(),
+					"code":   err.Code(),
+				}).Warn(err.Message())
+			}
+			c.JSON(err.Status(), &responseError{
+				Message: err.Message(),
+				Code:    err.Code(),
+			})
+		} else {
+			l.Warnf("unhandled nongovernor error: %s", err.Error())
+			l.Error(err)
+			i.DefaultHTTPErrorHandler(err, c)
+		}
+	})
+}
+
 const (
 	levelDebug = iota
 	levelInfo
@@ -73,6 +143,7 @@ const (
 	levelError
 	levelFatal
 	levelPanic
+	levelNoLog
 )
 
 func envToLevel(e string) int {
@@ -113,6 +184,15 @@ func levelToLog(level int) logrus.Level {
 	}
 }
 
+type (
+	// Config is the server configuration
+	Config struct {
+		Version     string
+		LogLevel    int
+		PostgresURL string
+	}
+)
+
 // NewConfig creates a new server configuration
 // It requires ENV vars:
 //   VERSION
@@ -130,6 +210,16 @@ func (c *Config) IsDebug() bool {
 	return c.LogLevel == levelDebug
 }
 
+type (
+	// Server is an http gateway
+	Server struct {
+		i      *echo.Echo
+		log    *logrus.Logger
+		db     *sql.DB
+		config Config
+	}
+)
+
 // New creates a new Server
 func New(config Config) (*Server, error) {
 	// logger
@@ -146,17 +236,7 @@ func New(config Config) (*Server, error) {
 	i := echo.New()
 
 	// error handling
-	i.HTTPErrorHandler = echo.HTTPErrorHandler(func(err error, c echo.Context) {
-		if err, ok := err.(*Error); ok {
-			c.JSON(err.Status(), &responseError{
-				Message: err.Message(),
-				Code:    err.Code(),
-			})
-		} else {
-			l.Warnf("unhandled nongovernor error: %s", err.Error())
-			i.DefaultHTTPErrorHandler(err, c)
-		}
-	})
+	i.HTTPErrorHandler = errorHandler(i, l)
 
 	// middleware
 	i.Pre(middleware.RemoveTrailingSlash())

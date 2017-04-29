@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+const (
+	moduleID = "conf"
+)
+
 type (
 	// Conf is a configuration service for admins
 	Conf struct {
@@ -32,22 +36,26 @@ type (
 	}
 )
 
+const (
+	moduleIDReqValid = moduleID + ".reqvalid"
+)
+
 var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
 func (r *requestSetupPost) valid() *governor.Error {
 	if len(r.Username) < 3 {
-		return governor.NewError("username must be longer than 2 chars", 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, "username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
 	if len(r.Password) < 10 {
-		return governor.NewError("password must be longer than 9 chars", 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
 	if !emailRegex.MatchString(r.Email) {
-		return governor.NewError("email is invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
 	}
 	if len(r.Orgname) == 0 {
-		return governor.NewError("organization name must be provided", 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, "organization name must be provided", 0, http.StatusBadRequest)
 	}
 	return nil
 }
@@ -60,114 +68,64 @@ type (
 	}
 )
 
+const (
+	moduleIDSetup = moduleID + ".setup"
+)
+
 // Mount is a collection of routes for admins
 func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+	lsetup := l.WithFields(logrus.Fields{
+		"origin": moduleIDSetup,
+	})
 	r.POST("/setup", func(c echo.Context) error {
 		rsetup := &requestSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
-			return governor.NewError(err.Error(), 0, http.StatusBadRequest)
+			return governor.NewErrorUser(moduleIDSetup, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := rsetup.valid(); err != nil {
 			return err
 		}
 		mconf, err := confmodel.New(rsetup.Orgname)
 		if err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "new conf",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "new conf",
-		}).Info("created new configuration model")
+		lsetup.Info("created new configuration model")
 
 		madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, "Admin", "")
 		if err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "new admin",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "new admin",
-		}).Info("created new admin model")
+		lsetup.Info("created new admin model")
 
 		if err := usermodel.Setup(db); err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "user setup",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "user setup",
-		}).Info("created new user table")
+		lsetup.Info("created new user table")
 
 		if err := confmodel.Setup(db); err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "conf setup",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "conf setup",
-		}).Info("created new configuration table")
+		lsetup.Info("created new configuration table")
 
 		if err := mconf.Insert(db); err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "insert conf",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "insert conf",
-		}).Info("inserted new configuration into config")
+		lsetup.Info("inserted new configuration into config")
 
 		if err := madmin.Insert(db); err != nil {
-			l.WithFields(logrus.Fields{
-				"service": "conf",
-				"request": "setup",
-				"action":  "insert admin",
-				"code":    err.Code(),
-			}).Error(err)
+			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		l.WithFields(logrus.Fields{
-			"service": "conf",
-			"request": "setup",
-			"action":  "insert admin",
-		}).Info("inserted new admin into users")
+		lsetup.Info("inserted new admin into users")
 
 		t, _ := time.Now().MarshalText()
-		l.WithFields(logrus.Fields{
-			"time":    string(t),
-			"service": "conf",
-			"request": "setup",
-			"action":  "setup",
+		lsetup.WithFields(logrus.Fields{
+			"time": string(t),
 		}).Info("successfully setup database")
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{

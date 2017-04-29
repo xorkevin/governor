@@ -14,7 +14,8 @@ import (
 
 const (
 	// Latest holds the value of the latest version
-	Latest = 1
+	Latest   = 1
+	moduleID = "hash"
 )
 
 type (
@@ -54,17 +55,21 @@ func (c *config) Version() int {
 	return c.version
 }
 
+const (
+	moduleIDHash = moduleID + ".Hash"
+)
+
 // Hash returns a new hash and salt for a given password
 func Hash(password string, version int) (h, s []byte, v int, e *governor.Error) {
 	c := newConfig(version)
 	salt := make([]byte, c.saltLength)
 	_, err := rand.Read(salt)
 	if err != nil {
-		return nil, nil, 0, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+		return nil, nil, 0, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
 	}
 	hash, err := scrypt.Key([]byte(password), salt, c.workFactor, c.memBlocksize, c.parallelFactor, c.hashLength)
 	if err != nil {
-		return nil, nil, 0, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+		return nil, nil, 0, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return hash, salt, c.version, nil
 }
