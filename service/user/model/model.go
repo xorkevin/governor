@@ -118,6 +118,6 @@ func (m *Model) Update(db *sql.DB) error {
 
 // Setup creates a new User table
 func Setup(db *sql.DB) error {
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT_NULL, auth_tags TEXT NOT_NULL, pass_hash BYTEA NOT_NULL, pass_salt BYTEA NOT_NULL, pass_version INT NOT_NULL, email VARCHAR(255) NOT_NULL, first_name VARCHAR(255) NOT_NULL, last_name VARCHAR(255) NOT_NULL, creation_time BIGINT NOT_NULL);", tableName))
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, pass_salt BYTEA NOT NULL, pass_version INT NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
 	return err
 }

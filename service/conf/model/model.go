@@ -48,6 +48,6 @@ func (m *Model) Update(db *sql.DB) error {
 
 // Setup creates a new Config table
 func Setup(db *sql.DB) error {
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (config INT PRIMARY KEY, orgname VARCHAR(255) NOT_NULL, creation_time BIGINT NOT_NULL);", tableName))
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
 	return err
 }

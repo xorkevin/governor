@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	g := governor.New(governor.NewConfig())
+	g, err := governor.New(governor.NewConfig())
+	if err != nil {
+		return
+	}
 
 	hS := health.New()
 	cS := conf.New()

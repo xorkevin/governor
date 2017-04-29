@@ -91,7 +91,7 @@ func (c *Config) IsDebug() bool {
 }
 
 // New creates a new Server
-func New(config Config) *Server {
+func New(config Config) (*Server, error) {
 	// logger
 	l := logrus.New()
 	if config.IsDebug() {
@@ -117,27 +117,28 @@ func New(config Config) *Server {
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
 
+	// db
+	db, err := sql.Open("postgres", config.PostgresURL)
+	if err != nil {
+		l.Error(err)
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		l.Error(err)
+		return nil, err
+	}
+
 	return &Server{
 		i:      i,
 		log:    l,
+		db:     db,
 		config: config,
-	}
+	}, nil
 }
 
 // Start starts the server at the specified port
 func (s *Server) Start(port uint) error {
-	// db
-	db, err := sql.Open("postgres", s.config.PostgresURL)
-	if err != nil {
-		s.log.Error(err)
-		return err
-	}
-	if err := db.Ping(); err != nil {
-		s.log.Error(err)
-		return err
-	}
-	s.db = db
-	defer db.Close()
+	defer s.db.Close()
 
 	s.i.Logger.Fatal(s.i.Start(":" + strconv.Itoa(int(port))))
 	return nil
