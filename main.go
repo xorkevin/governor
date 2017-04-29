@@ -24,7 +24,47 @@ type (
 		db     *sql.DB
 		config Config
 	}
+
+	// Error is an error container
+	Error struct {
+		message string
+		code    int
+		status  int
+	}
+
+	responseError struct {
+		Message string `json:"message"`
+		Code    int    `json:"code"`
+	}
 )
+
+// NewError creates a new custom Error
+func NewError(message string, code int, status int) *Error {
+	return &Error{
+		message: message,
+		code:    code,
+		status:  status,
+	}
+}
+
+func (e *Error) Error() string {
+	return e.Message()
+}
+
+// Message returns the error message
+func (e *Error) Message() string {
+	return e.message
+}
+
+// Code returns the error code
+func (e *Error) Code() int {
+	return e.code
+}
+
+// Status returns the http status
+func (e *Error) Status() int {
+	return e.status
+}
 
 const (
 	levelDebug = iota
@@ -104,6 +144,18 @@ func New(config Config) (*Server, error) {
 
 	// http server instance
 	i := echo.New()
+
+	// error handling
+	i.HTTPErrorHandler = echo.HTTPErrorHandler(func(err error, c echo.Context) {
+		if err, ok := err.(*Error); ok {
+			c.JSON(err.Status(), &responseError{
+				Message: err.Message(),
+				Code:    err.Code(),
+			})
+		} else {
+			i.DefaultHTTPErrorHandler(err, c)
+		}
+	})
 
 	// middleware
 	i.Pre(middleware.RemoveTrailingSlash())

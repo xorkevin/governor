@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/utime"
+	"net/http"
 )
 
 ///////////////////////
@@ -24,12 +26,12 @@ type (
 )
 
 // NewU creates a new UID without a hash input
-func NewU(timesize, randsize int) (*UID, error) {
+func NewU(timesize, randsize int) (*UID, *governor.Error) {
 	return New(timesize, 0, randsize, nil)
 }
 
 // New creates a new UID
-func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
+func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error) {
 	k := new(bytes.Buffer)
 
 	if timesize > 0 {
@@ -39,7 +41,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 			return nil, err
 		}
 		if len(timestamp) < 1 {
-			return nil, fmt.Errorf("upsilon error: No timestamp")
+			return nil, governor.NewError("No timestamp", 0, http.StatusInternalServerError)
 		}
 		t = make([]byte, timesize)
 		l := len(timestamp) - timesize
@@ -56,7 +58,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 	if hashsize > 0 {
 		var h []byte
 		if input == nil || len(input) < 1 {
-			return nil, fmt.Errorf("upsilon error: No hash input provided")
+			return nil, governor.NewError("No hash input provided", 0, http.StatusInternalServerError)
 		}
 		h = make([]byte, hashsize)
 		l := len(input) - hashsize
@@ -74,7 +76,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 		r := make([]byte, randsize)
 		_, err := rand.Read(r)
 		if err != nil {
-			return nil, err
+			return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 		}
 		k.Write(r)
 	} else {
@@ -91,10 +93,10 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 }
 
 // FromBytes creates a new UID from an existing byte slice
-func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, error) {
+func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Error) {
 	size := timesize + hashsize + randsize
 	if len(b) != size {
-		return nil, fmt.Errorf("upsilon error: byte slice length %d does not match defined sizes %d", len(b), size)
+		return nil, governor.NewError(fmt.Sprintf("byte slice length %d does not match defined sizes %d", len(b), size), 0, http.StatusInternalServerError)
 	}
 
 	return &UID{
@@ -107,10 +109,10 @@ func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, error) {
 }
 
 // FromBase64 creates a new UID from a base64 encoded string
-func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, error) {
+func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *governor.Error) {
 	b, err := base64.URLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, fmt.Errorf("upsilon error: %s", err)
+		return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	return FromBytes(timeSize, hashSize, randomSize, b)

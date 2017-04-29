@@ -3,7 +3,9 @@ package hash
 import (
 	"bytes"
 	"crypto/rand"
+	"github.com/hackform/governor"
 	"golang.org/x/crypto/scrypt"
+	"net/http"
 )
 
 //////////
@@ -53,15 +55,18 @@ func (c *config) Version() int {
 }
 
 // Hash returns a new hash and salt for a given password
-func Hash(password string, version int) (h, s []byte, v int, e error) {
+func Hash(password string, version int) (h, s []byte, v int, e *governor.Error) {
 	c := newConfig(version)
 	salt := make([]byte, c.saltLength)
 	_, err := rand.Read(salt)
 	if err != nil {
-		return []byte{}, salt, 0, err
+		return nil, nil, 0, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 	}
 	hash, err := scrypt.Key([]byte(password), salt, c.workFactor, c.memBlocksize, c.parallelFactor, c.hashLength)
-	return hash, salt, c.version, err
+	if err != nil {
+		return nil, nil, 0, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+	}
+	return hash, salt, c.version, nil
 }
 
 // Verify checks to see if the hash of the given password and salt matches the provided passhash

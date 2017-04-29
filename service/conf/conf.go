@@ -2,7 +2,6 @@ package conf
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf/model"
 	"github.com/hackform/governor/service/user/model"
@@ -26,6 +25,7 @@ func New() *Conf {
 
 type (
 	requestSetupPost struct {
+		Username string `json:"username"`
 		Password string `json:"password"`
 		Email    string `json:"email"`
 		Orgname  string `json:"orgname"`
@@ -37,22 +37,26 @@ var (
 )
 
 func (r *requestSetupPost) valid() error {
+	if len(r.Username) == 0 {
+		return governor.NewError("username must be provided", 0, http.StatusBadRequest)
+	}
 	if len(r.Password) < 10 {
-		return fmt.Errorf("password must be longer than 9 chars")
+		return governor.NewError("password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
 	if !emailRegex.MatchString(r.Email) {
-		return fmt.Errorf("email is invalid")
+		return governor.NewError("email is invalid", 0, http.StatusBadRequest)
 	}
 	if len(r.Orgname) == 0 {
-		return fmt.Errorf("organization name must be provided")
+		return governor.NewError("organization name must be provided", 0, http.StatusBadRequest)
 	}
 	return nil
 }
 
 type (
 	responseSetupPost struct {
-		Version string `json:"version"`
-		Orgname string `json:"orgname"`
+		Username string `json:"username"`
+		Version  string `json:"version"`
+		Orgname  string `json:"orgname"`
 	}
 )
 
@@ -61,10 +65,10 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 	r.POST("/setup", func(c echo.Context) error {
 		rsetup := &requestSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return governor.NewError(err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := rsetup.valid(); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return err
 		}
 		mconf, err := confmodel.New(rsetup.Orgname)
 		if err != nil {
@@ -72,8 +76,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "conf",
 				"request": "setup",
 				"action":  "new conf",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -81,14 +86,15 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 			"action":  "new conf",
 		}).Info("created new configuration model")
 
-		madmin, err := usermodel.NewAdmin("admin", rsetup.Password, rsetup.Email, "Admin", "")
+		madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, "Admin", "")
 		if err != nil {
 			l.WithFields(logrus.Fields{
 				"service": "conf",
 				"request": "setup",
 				"action":  "new admin",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -101,8 +107,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "conf",
 				"request": "setup",
 				"action":  "user setup",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -115,8 +122,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "conf",
 				"request": "setup",
 				"action":  "conf setup",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -129,8 +137,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "conf",
 				"request": "setup",
 				"action":  "insert conf",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -143,8 +152,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "conf",
 				"request": "setup",
 				"action":  "insert admin",
+				"code":    err.Code(),
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return err
 		}
 		l.WithFields(logrus.Fields{
 			"service": "conf",
@@ -161,8 +171,9 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		}).Info("successfully setup database")
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
-			Version: conf.Version,
-			Orgname: mconf.Orgname,
+			Username: madmin.Username,
+			Version:  conf.Version,
+			Orgname:  mconf.Orgname,
 		})
 	})
 	return nil

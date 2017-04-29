@@ -2,7 +2,6 @@ package user
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
@@ -39,13 +38,13 @@ var (
 
 func (r *requestUserPost) valid() error {
 	if len(r.Username) < 3 {
-		return fmt.Errorf("username must be longer than 2 chars")
+		return governor.NewError("username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
 	if len(r.Password) < 10 {
-		return fmt.Errorf("password must be longer than 9 chars")
+		return governor.NewError("password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
 	if !emailRegex.MatchString(r.Email) {
-		return fmt.Errorf("email is invalid")
+		return governor.NewError("email is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
 }
@@ -64,10 +63,10 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 	r.POST("/user", func(c echo.Context) error {
 		ruser := &requestUserPost{}
 		if err := c.Bind(ruser); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return governor.NewError(err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := ruser.valid(); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return err
 		}
 		m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.Firstname, ruser.Lastname)
 		if err != nil {
@@ -76,7 +75,7 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"request": "post",
 				"action":  "new base user",
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 		}
 		if err := m.Insert(db); err != nil {
 			l.WithFields(logrus.Fields{
@@ -84,7 +83,7 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"request": "post",
 				"action":  "insert user",
 			}).Error(err)
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+			return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 		}
 
 		t, _ := time.Now().MarshalText()

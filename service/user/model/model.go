@@ -3,9 +3,11 @@ package usermodel
 import (
 	"database/sql"
 	"fmt"
+	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
+	"net/http"
 	"time"
 )
 
@@ -52,7 +54,7 @@ type (
 )
 
 // New creates a new User Model
-func New(username, password, email, firstname, lastname string, r rank.Rank) (*Model, error) {
+func New(username, password, email, firstname, lastname string, r rank.Rank) (*Model, *governor.Error) {
 	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
 	if err != nil {
 		return nil, err
@@ -86,17 +88,17 @@ func New(username, password, email, firstname, lastname string, r rank.Rank) (*M
 }
 
 // NewBaseUser creates a new Base User Model
-func NewBaseUser(username, password, email, firstname, lastname string) (*Model, error) {
+func NewBaseUser(username, password, email, firstname, lastname string) (*Model, *governor.Error) {
 	return New(username, password, email, firstname, lastname, rank.BaseUser())
 }
 
 // NewAdmin creates a new Admin User Model
-func NewAdmin(username, password, email, firstname, lastname string) (*Model, error) {
+func NewAdmin(username, password, email, firstname, lastname string) (*Model, *governor.Error) {
 	return New(username, password, email, firstname, lastname, rank.Admin())
 }
 
 // IDBase64 returns the userid as a base64 encoded string
-func (m *Model) IDBase64() (string, error) {
+func (m *Model) IDBase64() (string, *governor.Error) {
 	u, err := uid.FromBytes(uidTimeSize, 0, uidRandSize, m.Userid)
 	if err != nil {
 		return "", err
@@ -105,19 +107,28 @@ func (m *Model) IDBase64() (string, error) {
 }
 
 // Insert inserts the model into the db
-func (m *Model) Insert(db *sql.DB) error {
+func (m *Model) Insert(db *sql.DB) *governor.Error {
 	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
-	return err
+	if err != nil {
+		return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
 }
 
 // Update updates the model in the db
-func (m *Model) Update(db *sql.DB) error {
+func (m *Model) Update(db *sql.DB) *governor.Error {
 	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE userid = $1;", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
-	return err
+	if err != nil {
+		return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
 }
 
 // Setup creates a new User table
-func Setup(db *sql.DB) error {
+func Setup(db *sql.DB) *governor.Error {
 	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, pass_salt BYTEA NOT NULL, pass_version INT NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
-	return err
+	if err != nil {
+		return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
 }

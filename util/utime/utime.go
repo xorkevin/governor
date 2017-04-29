@@ -3,7 +3,8 @@ package utime
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"github.com/hackform/governor"
+	"net/http"
 	"time"
 )
 
@@ -13,14 +14,14 @@ import (
 
 // Timestamp creates a new 12 byte array from Unixtime
 // first 8 bytes are seconds and next 4 bytes are nanoseconds
-func Timestamp() ([]byte, error) {
+func Timestamp() ([]byte, *governor.Error) {
 	b := new(bytes.Buffer)
 	t := time.Now()
 	if err := binary.Write(b, binary.BigEndian, t.Unix()); err != nil {
-		return nil, fmt.Errorf("tau error: %s", err.Error())
+		return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 	}
 	if err := binary.Write(b, binary.BigEndian, int32(t.Nanosecond())); err != nil {
-		return nil, fmt.Errorf("tau error: %s", err.Error())
+		return nil, governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 	}
 	return b.Bytes(), nil
 }
