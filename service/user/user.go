@@ -36,7 +36,7 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func (r *requestUserPost) valid() error {
+func (r *requestUserPost) valid() *governor.Error {
 	if len(r.Username) < 3 {
 		return governor.NewError("username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
@@ -74,6 +74,7 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "user",
 				"request": "post",
 				"action":  "new base user",
+				"code":    err.Code(),
 			}).Error(err)
 			return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 		}
@@ -82,6 +83,7 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 				"service": "user",
 				"request": "post",
 				"action":  "insert user",
+				"code":    err.Code(),
 			}).Error(err)
 			return governor.NewError(err.Error(), 0, http.StatusInternalServerError)
 		}
@@ -89,11 +91,12 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		t, _ := time.Now().MarshalText()
 		userid, _ := m.IDBase64()
 		l.WithFields(logrus.Fields{
-			"time":    string(t),
-			"service": "user",
-			"request": "post",
-			"userid":  userid,
-			"action":  "created",
+			"time":     string(t),
+			"service":  "user",
+			"request":  "post",
+			"userid":   userid,
+			"username": m.Username,
+			"action":   "created",
 		}).Info("success")
 
 		return c.JSON(http.StatusCreated, &responseUserPost{

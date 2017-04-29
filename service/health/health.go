@@ -23,10 +23,7 @@ func New() *Health {
 // Mount is a collection of routes for healthchecks
 func (h *Health) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
 	r.GET("/check", func(c echo.Context) error {
-		t, err := time.Now().MarshalText()
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
+		t, _ := time.Now().MarshalText()
 		return c.String(http.StatusOK, string(t))
 	})
 	if conf.IsDebug() {

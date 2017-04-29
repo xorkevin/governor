@@ -153,6 +153,7 @@ func New(config Config) (*Server, error) {
 				Code:    err.Code(),
 			})
 		} else {
+			l.Warnf("unhandled nongovernor error: %s", err.Error())
 			i.DefaultHTTPErrorHandler(err, c)
 		}
 	})

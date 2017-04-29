@@ -36,9 +36,9 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func (r *requestSetupPost) valid() error {
-	if len(r.Username) == 0 {
-		return governor.NewError("username must be provided", 0, http.StatusBadRequest)
+func (r *requestSetupPost) valid() *governor.Error {
+	if len(r.Username) < 3 {
+		return governor.NewError("username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
 	if len(r.Password) < 10 {
 		return governor.NewError("password must be longer than 9 chars", 0, http.StatusBadRequest)
