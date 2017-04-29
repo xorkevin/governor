@@ -29,10 +29,12 @@ func New() *Conf {
 
 type (
 	requestSetupPost struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Email    string `json:"email"`
-		Orgname  string `json:"orgname"`
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		Email     string `json:"email"`
+		Firstname string `json:"first_name"`
+		Lastname  string `json:"last_name"`
+		Orgname   string `json:"orgname"`
 	}
 )
 
@@ -62,9 +64,11 @@ func (r *requestSetupPost) valid() *governor.Error {
 
 type (
 	responseSetupPost struct {
-		Username string `json:"username"`
-		Version  string `json:"version"`
-		Orgname  string `json:"orgname"`
+		Username  string `json:"username"`
+		Firstname string `json:"first_name"`
+		Lastname  string `json:"last_name"`
+		Version   string `json:"version"`
+		Orgname   string `json:"orgname"`
 	}
 )
 
@@ -92,7 +96,7 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		}
 		lsetup.Info("created new configuration model")
 
-		madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, "Admin", "")
+		madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname)
 		if err != nil {
 			err.AddTrace(moduleIDSetup)
 			return err
@@ -121,7 +125,11 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 			err.AddTrace(moduleIDSetup)
 			return err
 		}
-		lsetup.Info("inserted new admin into users")
+		userid, _ := madmin.IDBase64()
+		lsetup.WithFields(logrus.Fields{
+			"username": madmin.Username,
+			"userid":   userid,
+		}).Info("inserted new admin into users")
 
 		t, _ := time.Now().MarshalText()
 		lsetup.WithFields(logrus.Fields{
@@ -129,9 +137,11 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		}).Info("successfully setup database")
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
-			Username: madmin.Username,
-			Version:  conf.Version,
-			Orgname:  mconf.Orgname,
+			Username:  madmin.Username,
+			Firstname: madmin.FirstName,
+			Lastname:  madmin.LastName,
+			Version:   conf.Version,
+			Orgname:   mconf.Orgname,
 		})
 	})
 	return nil
