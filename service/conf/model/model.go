@@ -2,78 +2,52 @@ package confmodel
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
 const (
-	// Latest holds the value of the latest version
-	Latest = 1
+	tableName = "config"
+	rowID     = 0
 )
 
 type (
-	config struct {
-		version int
-	}
-)
-
-var (
-	v001 = &config{
-		version: 1,
-	}
-
-	latestConfig = v001
-)
-
-func newConfig(version int) *config {
-	switch version {
-	case v001.version:
-		return v001
-	default:
-		return latestConfig
-	}
-}
-
-func (c *config) Version() int {
-	return c.version
-}
-
-type (
-	// Model is the db User model
+	// Model is the db Config model
 	Model struct {
-		Version int `json:"version"`
 		Props
 	}
 
-	// Props stores user info
+	// Props stores Config info
 	Props struct {
 		Orgname      string `json:"orgname"`
-		CreationDate int64  `json:"creation_date"`
+		CreationTime int64  `json:"creation_time"`
 	}
 )
 
 // New creates a new Conf Model
-func New(orgname string, version int) (*Model, error) {
-	c := newConfig(version)
+func New(orgname string) (*Model, error) {
 	return &Model{
-		Version: c.version,
 		Props: Props{
 			Orgname:      orgname,
-			CreationDate: time.Now().Unix(),
+			CreationTime: time.Now().Unix(),
 		},
 	}, nil
 }
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (config, orgname, creation_time) VALUES ($1, $2, $3);", tableName), rowID, m.Orgname, m.CreationTime)
+	return err
 }
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (config, orgname, creation_time) = ($1, $2, $3) WHERE config = $1;", tableName), rowID, m.Orgname, m.CreationTime)
+	return err
 }
 
-// Setup creates a new User table
+// Setup creates a new Config table
 func Setup(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (config INT PRIMARY KEY, orgname VARCHAR(255) NOT_NULL, creation_time BIGINT NOT_NULL);", tableName))
+	return err
 }

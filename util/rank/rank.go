@@ -1,18 +1,42 @@
 package rank
 
-const (
-	maskVersion uint32 = 0xFF000000
-	maskAdmin   uint32 = 0x00FF0000
-	maskMod     uint32 = 0x0000FF00
-	maskUser    uint32 = 0x000000FF
+import (
+	"sort"
+	"strings"
 )
 
+const (
+	tagUser  = "user"
+	tagAdmin = "admin"
+)
+
+type (
+	// Rank represents the set of all user auth tags
+	Rank map[string]bool
+)
+
+// Stringify transforms the rank into an alphabetically ordered, comma delimited string
+func (r Rank) Stringify() string {
+	keys := []string{}
+	for k, v := range r {
+		if v {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
 // BaseUser creates a new user rank
-func BaseUser() uint32 {
-	return 0x01000001
+func BaseUser() Rank {
+	return Rank{
+		tagUser: true,
+	}
 }
 
 // Admin creates a new Administrator rank
-func Admin() uint32 {
-	return 0x010F0001
+func Admin() Rank {
+	b := BaseUser()
+	b[tagAdmin] = true
+	return b
 }

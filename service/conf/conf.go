@@ -66,7 +66,7 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		if err := rsetup.valid(); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
-		mconf, err := confmodel.New(rsetup.Orgname, confmodel.Latest)
+		mconf, err := confmodel.New(rsetup.Orgname)
 		if err != nil {
 			l.WithFields(logrus.Fields{
 				"service": "conf",
@@ -128,7 +128,6 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		}).Info("success")
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
-			Version: mconf.Version,
 			Orgname: mconf.Orgname,
 		})
 	})

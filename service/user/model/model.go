@@ -2,6 +2,7 @@ package usermodel
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
@@ -11,6 +12,7 @@ import (
 const (
 	uidTimeSize = 8
 	uidRandSize = 8
+	tableName   = "users"
 )
 
 type (
@@ -30,8 +32,7 @@ type (
 
 	// Auth manages user permissions
 	Auth struct {
-		Level uint32   `json:"auth_level"`
-		Tags  []string `json:"auth_tags"`
+		Tags string `json:"auth_tags"`
 	}
 
 	// Passhash controls the user password
@@ -46,12 +47,12 @@ type (
 		Email        string `json:"email"`
 		FirstName    string `json:"first_name"`
 		LastName     string `json:"last_name"`
-		CreationDate int64  `json:"creation_date"`
+		CreationTime int64  `json:"creation_time"`
 	}
 )
 
 // New creates a new User Model
-func New(username, password, email, firstname, lastname string, level uint32) (*Model, error) {
+func New(username, password, email, firstname, lastname string, r rank.Rank) (*Model, error) {
 	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
 	if err != nil {
 		return nil, err
@@ -68,8 +69,7 @@ func New(username, password, email, firstname, lastname string, level uint32) (*
 			Username: username,
 		},
 		Auth: Auth{
-			Level: level,
-			Tags:  []string{},
+			Tags: r.Stringify(),
 		},
 		Passhash: Passhash{
 			Hash:    mHash,
@@ -80,7 +80,7 @@ func New(username, password, email, firstname, lastname string, level uint32) (*
 			Email:        email,
 			FirstName:    firstname,
 			LastName:     lastname,
-			CreationDate: time.Now().Unix(),
+			CreationTime: time.Now().Unix(),
 		},
 	}, nil
 }
@@ -106,15 +106,18 @@ func (m *Model) IDBase64() (string, error) {
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	return err
 }
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE userid = $1;", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	return err
 }
 
 // Setup creates a new User table
 func Setup(db *sql.DB) error {
-	return nil
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT_NULL, auth_tags TEXT NOT_NULL, pass_hash BYTEA NOT_NULL, pass_salt BYTEA NOT_NULL, pass_version INT NOT_NULL, email VARCHAR(255) NOT_NULL, first_name VARCHAR(255) NOT_NULL, last_name VARCHAR(255) NOT_NULL, creation_time BIGINT NOT_NULL);", tableName))
+	return err
 }
