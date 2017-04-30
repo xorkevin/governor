@@ -151,7 +151,7 @@ const (
 
 // Setup creates a new User table
 func Setup(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, pass_salt BYTEA NOT NULL, pass_version INT NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, pass_salt BYTEA NOT NULL, pass_version INT NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
