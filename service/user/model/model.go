@@ -41,9 +41,7 @@ type (
 
 	// Passhash controls the user password
 	Passhash struct {
-		Hash    []byte `json:"pass_hash"`
-		Salt    []byte `json:"pass_salt"`
-		Version int    `json:"pass_version"`
+		Hash []byte `json:"pass_hash"`
 	}
 
 	// Props stores user info
@@ -67,7 +65,7 @@ func New(username, password, email, firstname, lastname string, r rank.Rank) (*M
 		return nil, err
 	}
 
-	mHash, mSalt, mVersion, err := hash.Hash(password, hash.Latest)
+	mHash, err := hash.Hash(password)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
 		return nil, err
@@ -82,9 +80,7 @@ func New(username, password, email, firstname, lastname string, r rank.Rank) (*M
 			Tags: r.Stringify(),
 		},
 		Passhash: Passhash{
-			Hash:    mHash,
-			Salt:    mSalt,
-			Version: mVersion,
+			Hash: mHash,
 		},
 		Props: Props{
 			Email:        email,
@@ -125,7 +121,7 @@ const (
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -138,7 +134,7 @@ const (
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, pass_salt, pass_version, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE userid = $1;", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Passhash.Salt, m.Passhash.Version, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8) WHERE userid = $1;", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -151,7 +147,7 @@ const (
 
 // Setup creates a new User table
 func Setup(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, pass_salt BYTEA NOT NULL, pass_version INT NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
+	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
