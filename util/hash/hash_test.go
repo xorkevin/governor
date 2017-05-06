@@ -16,4 +16,6 @@ func Test_Uid(t *testing.T) {
 	assert.Nil(err, "there should be no error when creating the latest config")
 	assert.Equal(latestConfig, c, "newConfig should produce the latest config provided the version vLatest")
 	assert.Equal(vLatest, c.Version(), "the version numbers should match")
+	assert.False(Verify("notpass", h), "incorrect password should fail")
+	assert.False(Verify(pass, []byte{}), "passhash of incorrect length should be false")
 }
