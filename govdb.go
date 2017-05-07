@@ -41,7 +41,7 @@ const (
 
 // Health is a health check for the service
 func (db *database) Health() *Error {
-	if err := db.db.Ping(); err != nil {
+	if _, err := db.db.Exec("SELECT 1;"); err != nil {
 		return NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
 	}
 	return nil

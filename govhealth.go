@@ -2,7 +2,6 @@ package governor
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
