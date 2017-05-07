@@ -77,7 +77,7 @@ const (
 )
 
 // Mount is a collection of routes for admins
-func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (c *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
 	lsetup := l.WithFields(logrus.Fields{
 		"origin": moduleIDSetup,
 	})
@@ -144,5 +144,10 @@ func (h *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 			Orgname:   mconf.Orgname,
 		})
 	})
+	return nil
+}
+
+// Health is a check for service health
+func (c *Conf) Health() *governor.Error {
 	return nil
 }

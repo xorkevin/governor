@@ -70,7 +70,7 @@ const (
 	moduleIDUser = moduleID + ".user"
 )
 
-// Mount is a collection of routes for healthchecks
+// Mount is a collection of routes for accessing and modifying user data
 func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
 	r.POST("/user", func(c echo.Context) error {
 		ruser := &requestUserPost{}
@@ -120,5 +120,10 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		return c.String(http.StatusOK, "login")
 	})
 
+	return nil
+}
+
+// Health is a check for service health
+func (u *User) Health() *governor.Error {
 	return nil
 }
