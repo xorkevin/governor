@@ -174,8 +174,8 @@ func (m *Model) Insert(db *sql.DB) *governor.Error {
 	_, err := db.Exec(sqlInsert, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code.Name() {
-			case "unique_violation":
+			switch postgresErr.Code {
+			case "23505": // unique_violation
 				return governor.NewErrorUser(moduleIDModIns, err.Error(), 0, http.StatusBadRequest)
 			default:
 				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
