@@ -44,15 +44,25 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
+const (
+	lengthCap = 128
+)
+
 func (r *requestUserPost) valid() *governor.Error {
-	if len(r.Username) < 3 {
+	if len(r.Username) < 3 || len(r.Username) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
-	if len(r.Password) < 10 {
+	if len(r.Password) < 10 || len(r.Password) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
-	if !emailRegex.MatchString(r.Email) {
+	if !emailRegex.MatchString(r.Email) || len(r.Email) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
+	}
+	if len(r.Firstname) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "first name is too long", 0, http.StatusBadRequest)
+	}
+	if len(r.Lastname) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
 	}
 	return nil
 }

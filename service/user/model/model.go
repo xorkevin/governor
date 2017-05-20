@@ -116,12 +116,61 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 }
 
 const (
+	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
+)
+
+var (
+	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", tableName)
+)
+
+// GetByIDB64 returns a user model with the given base64 id
+func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
+	u, err := uid.FromBase64(uidTimeSize, 0, uidRandSize, idb64)
+	if err != nil {
+		err.AddTrace(moduleIDModGet64)
+		return nil, err
+	}
+	mUser := &Model{}
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 0, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return mUser, nil
+}
+
+const (
+	moduleIDModGetUN = moduleIDModel + ".GetByUsername"
+)
+
+var (
+	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", tableName)
+)
+
+// GetByUsername returns a user model with the given username
+func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
+	mUser := &Model{}
+	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 0, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return mUser, nil
+}
+
+const (
 	moduleIDModIns = moduleIDModel + ".Insert"
+)
+
+var (
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -132,9 +181,13 @@ const (
 	moduleIDModUp = moduleIDModel + ".Update"
 )
 
+var (
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8) WHERE userid = $1;", tableName)
+)
+
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8) WHERE userid = $1;", tableName), m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -145,9 +198,13 @@ const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 
+var (
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+)
+
 // Setup creates a new User table
 func Setup(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName))
+	_, err := db.Exec(sqlSetup)
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
