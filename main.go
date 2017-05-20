@@ -3,6 +3,7 @@ package governor
 import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	_ "github.com/lib/pq" // depends upon postgres
 	"github.com/sirupsen/logrus"
 	"os"
 	"strconv"

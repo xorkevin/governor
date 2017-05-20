@@ -4,7 +4,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/user"
-	_ "github.com/lib/pq"
 )
 
 func main() {
