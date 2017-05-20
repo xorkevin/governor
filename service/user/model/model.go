@@ -7,6 +7,7 @@ import (
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
+	"github.com/lib/pq"
 	"net/http"
 	"time"
 )
@@ -153,7 +154,7 @@ func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 0, http.StatusNotFound)
+			return nil, governor.NewErrorUser(moduleIDModGet64, "no user found with that username", 0, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -172,7 +173,14 @@ var (
 func (m *Model) Insert(db *sql.DB) *governor.Error {
 	_, err := db.Exec(sqlInsert, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
-		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code.Name() {
+			case "unique_violation":
+				return governor.NewErrorUser(moduleIDModIns, err.Error(), 0, http.StatusBadRequest)
+			default:
+				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
+			}
+		}
 	}
 	return nil
 }
