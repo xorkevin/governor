@@ -26,26 +26,30 @@ func New() *User {
 	return &User{}
 }
 
-type (
-	requestUserPost struct {
-		Username  string `json:"username"`
-		Password  string `json:"password"`
-		Email     string `json:"email"`
-		Firstname string `json:"first_name"`
-		Lastname  string `json:"last_name"`
-	}
-)
-
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
+	lengthCap        = 128
 )
 
 var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-const (
-	lengthCap = 128
+type (
+	requestUserPost struct {
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
+	responseUserPost struct {
+		Userid    string `json:"userid"`
+		Username  string `json:"username"`
+		Firstname string `json:"first_name"`
+		Lastname  string `json:"last_name"`
+	}
 )
 
 func (r *requestUserPost) valid() *governor.Error {
@@ -58,23 +62,52 @@ func (r *requestUserPost) valid() *governor.Error {
 	if !emailRegex.MatchString(r.Email) || len(r.Email) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
 	}
-	if len(r.Firstname) > lengthCap {
+	if len(r.FirstName) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "first name is too long", 0, http.StatusBadRequest)
 	}
-	if len(r.Lastname) > lengthCap {
+	if len(r.LastName) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
 	}
 	return nil
 }
 
 type (
-	responseUserPost struct {
-		Userid    string `json:"userid"`
-		Username  string `json:"username"`
-		Firstname string `json:"first_name"`
-		Lastname  string `json:"last_name"`
+	requestUserGetUsername struct {
+		Username string `json:"username"`
+	}
+
+	requestUserGetID struct {
+		Userid string `json:"userid"`
+	}
+
+	responseUserGetPublic struct {
+		Username     string `json:"username"`
+		Tags         string `json:"auth_tags"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	responseUserGetPrivate struct {
+		responseUserGetPublic
+		Userid []byte `json:"userid"`
+		Email  string `json:"email"`
 	}
 )
+
+func (r *requestUserGetUsername) valid() *governor.Error {
+	if len(r.Username) < 1 || len(r.Username) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "username must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func (r *requestUserGetID) valid() *governor.Error {
+	if len(r.Userid) < 1 {
+		return governor.NewErrorUser(moduleIDReqValid, "userid must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
 
 const (
 	moduleIDUser = moduleID + ".user"
@@ -90,7 +123,7 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 		if err := ruser.valid(); err != nil {
 			return err
 		}
-		m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.Firstname, ruser.Lastname)
+		m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 		if err != nil {
 			err.AddTrace(moduleIDUser)
 			return err
@@ -118,11 +151,69 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.
 	})
 
 	ru := r.Group("/user")
-	ru.GET("/:id", func(c echo.Context) error {
-		return c.String(http.StatusOK, "public: "+c.Param("id"))
+
+	ru.GET("/id/:id", func(c echo.Context) error {
+		ruser := &requestUserGetID{
+			Userid: c.Param("id"),
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		m, err := usermodel.GetByIDB64(db, ruser.Userid)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, &responseUserGetPublic{
+			Username:     m.Username,
+			Tags:         m.Tags,
+			FirstName:    m.FirstName,
+			LastName:     m.LastName,
+			CreationTime: m.CreationTime,
+		})
 	})
-	ru.GET("/:id/private", func(c echo.Context) error {
-		return c.String(http.StatusOK, "private: "+c.Param("id"))
+
+	ru.GET("/u/:username", func(c echo.Context) error {
+		ruser := &requestUserGetUsername{
+			Username: c.Param("username"),
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		m, err := usermodel.GetByUsername(db, ruser.Username)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, &responseUserGetPublic{
+			Username:     m.Username,
+			Tags:         m.Tags,
+			FirstName:    m.FirstName,
+			LastName:     m.LastName,
+			CreationTime: m.CreationTime,
+		})
+	})
+
+	ru.GET("/id/:id/private", func(c echo.Context) error {
+		ruser := &requestUserGetID{
+			Userid: c.Param("id"),
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		m, err := usermodel.GetByIDB64(db, ruser.Userid)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, &responseUserGetPrivate{
+			responseUserGetPublic: responseUserGetPublic{
+				Username:     m.Username,
+				Tags:         m.Tags,
+				FirstName:    m.FirstName,
+				LastName:     m.LastName,
+				CreationTime: m.CreationTime,
+			},
+			Userid: m.Userid,
+			Email:  m.Email,
+		})
 	})
 
 	ra := r.Group("/auth")
