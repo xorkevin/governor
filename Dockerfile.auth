@@ -1,5 +1,5 @@
 FROM scratch
 MAINTAINER xorkevin
-COPY bin/serve /
+COPY bin/auth /
 EXPOSE 8080
-CMD ["/serve"]
+CMD ["/auth"]
