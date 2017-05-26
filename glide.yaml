@@ -11,3 +11,5 @@ import:
   subpackages:
   - assert
 - package: github.com/lib/pq
+- package: github.com/spf13/viper
+- package: github.com/spf13/pflag

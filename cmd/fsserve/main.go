@@ -1,10 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"github.com/hackform/governor/staticfs"
 )
 
 func main() {
-	s := staticfs.New(staticfs.NewConfig())
-	s.Start(3000)
+	config, err := staticfs.NewConfig()
+	if err != nil {
+		fmt.Printf("error reading config: %s\n", err)
+		return
+	}
+	s := staticfs.New(config)
+	s.Start()
 }

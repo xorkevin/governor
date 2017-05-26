@@ -1,0 +1,10 @@
+version: version
+mode: INFO
+port: 8080
+postgres:
+  user: postgres
+  password: admin
+  dbname: governor
+  host: gpostgres
+  port: 5432
+  sslmode: disable

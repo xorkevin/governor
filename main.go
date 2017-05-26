@@ -5,36 +5,7 @@ import (
 	"github.com/labstack/echo/middleware"
 	_ "github.com/lib/pq" // depends upon postgres
 	"github.com/sirupsen/logrus"
-	"os"
-	"strconv"
 )
-
-type (
-	// Config is the server configuration
-	Config struct {
-		Version     string
-		LogLevel    int
-		PostgresURL string
-	}
-)
-
-// NewConfig creates a new server configuration
-// It requires ENV vars:
-//   VERSION
-//   MODE
-//   POSTGRES_URL
-func NewConfig() Config {
-	return Config{
-		Version:     os.Getenv("VERSION"),
-		LogLevel:    envToLevel(os.Getenv("MODE")),
-		PostgresURL: os.Getenv("POSTGRES_URL"),
-	}
-}
-
-// IsDebug returns if the configuration is in debug mode
-func (c *Config) IsDebug() bool {
-	return c.LogLevel == levelDebug
-}
 
 type (
 	// Server is an http gateway
@@ -89,9 +60,9 @@ func New(config Config) (*Server, error) {
 }
 
 // Start starts the server at the specified port
-func (s *Server) Start(port uint) error {
+func (s *Server) Start() error {
 	defer s.db.db.Close()
 
-	s.i.Logger.Fatal(s.i.Start(":" + strconv.Itoa(int(port))))
+	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
 }

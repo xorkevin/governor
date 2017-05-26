@@ -1,6 +1,5 @@
 # METADATA
 VERSION=v0.1.0
-MODE=INFO
 API_PORT=8080
 FSS_PORT=3000
 BASEDIR=public
@@ -19,8 +18,6 @@ FSSERVE_NAME=fsserve
 FSSERVE_PATH=cmd/fsserve/main.go
 FSSERVE_BIN_PATH=$(BIN_OUT)/$(FSSERVE_NAME)
 
-# DEV
-POSTGRES_URL_DEV="user=postgres password=admin dbname=governor host=localhost port=5432 sslmode=disable"
 
 # DOCKER
 DOCKER_NETWORK=governornetwork
@@ -28,7 +25,6 @@ AUTH_IMAGE_NAME=governorauth
 AUTH_CONTAINER_NAME=gauth
 FSSERVE_IMAGE_NAME=governorfsserver
 FSSERVE_CONTAINER_NAME=gfs
-POSTGRES_URL_DOCKER="user=postgres password=admin dbname=governor host=$(POSTGRES_CONTAINER) port=5432 sslmode=disable"
 
 
 # DEV_POSTGRES
@@ -45,10 +41,10 @@ test:
 	go test -cover $$(glide novendor)
 
 dev:
-	VERSION=$(VERSION) MODE=DEBUG POSTGRES_URL=$(POSTGRES_URL_DEV) go run $(AUTH_PATH)
+	go run $(AUTH_PATH) --config authdev
 
 dev-fsserve:
-	BASEDIR=$(BASEDIR) go run $(FSSERVE_PATH)
+	go run $(FSSERVE_PATH)
 
 clean:
 	if [ -d $(BIN_OUT) ]; then rm -r $(BIN_OUT); fi
@@ -77,8 +73,8 @@ docker-build: build
 	docker build -f Dockerfile.fs -t $(FSSERVE_IMAGE_NAME) .
 
 docker-run:
-	docker run -d --name $(AUTH_CONTAINER_NAME) -e VERSION=$(VERSION) -e MODE=$(MODE) -e POSTGRES_URL=$(POSTGRES_URL_DOCKER) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
-	docker run -d --name $(FSSERVE_CONTAINER_NAME) -e BASEDIR=$(BASEDIR) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) -p $(FSS_PORT):$(FSS_PORT) $(FSSERVE_IMAGE_NAME)
+	docker run -d --name $(AUTH_CONTAINER_NAME) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
+	docker run -d --name $(FSSERVE_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) -p $(FSS_PORT):$(FSS_PORT) $(FSSERVE_IMAGE_NAME)
 
 docker-stop:
 	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=running)" ]; then docker stop $(AUTH_CONTAINER_NAME); fi

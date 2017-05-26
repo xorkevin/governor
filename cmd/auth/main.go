@@ -1,13 +1,20 @@
 package main
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/user"
 )
 
 func main() {
-	g, err := governor.New(governor.NewConfig())
+	config, err := governor.NewConfig("auth")
+	if err != nil {
+		fmt.Printf("error reading config: %s\n", err)
+		return
+	}
+
+	g, err := governor.New(config)
 	if err != nil {
 		return
 	}
@@ -17,5 +24,5 @@ func main() {
 
 	g.MountRoute("/api/conf", cS)
 	g.MountRoute("/api/u", uS)
-	g.Start(8080)
+	g.Start()
 }
