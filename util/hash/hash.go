@@ -31,34 +31,40 @@ type (
 )
 
 var (
-	// 2016, 0.36s, 64MB
+	// 2016
+	// attack 0.19s, 64MB
+	// user 0.32s
 	v010 = &config{
 		version:        10,
 		hashLength:     64,
 		saltLength:     64,
 		workFactor:     65536,
 		memBlocksize:   8,
-		parallelFactor: 2,
+		parallelFactor: 1,
 	}
 
-	// 2016, 1.4s, 128MB
+	// 2016
+	// attack 0.73s, 128MB
+	// user 1.2s
 	v011 = &config{
 		version:        11,
 		hashLength:     64,
 		saltLength:     64,
 		workFactor:     131072,
 		memBlocksize:   8,
-		parallelFactor: 4,
+		parallelFactor: 2,
 	}
 
-	// 2016, 0.09s, 16MB
+	// 2016
+	// attack 0.054s, 16MB
+	// user 0.096s
 	v012 = &config{
 		version:        12,
 		hashLength:     64,
 		saltLength:     64,
 		workFactor:     16384,
 		memBlocksize:   8,
-		parallelFactor: 2,
+		parallelFactor: 1,
 	}
 
 	latestConfig       = v010
@@ -115,19 +121,16 @@ func hashC(c *config, password string) ([]byte, *governor.Error) {
 }
 
 // Hash returns a new hash and salt for a given password
-// 2016, 0.36s, 64MB
 func Hash(password string) ([]byte, *governor.Error) {
 	return hashC(latestConfig, password)
 }
 
 // Strong returns a stronger hash and salt for a given password
-// 2016, 1.4s, 128MB
 func Strong(password string) ([]byte, *governor.Error) {
 	return hashC(latestConfigStrong, password)
 }
 
 // Fast returns a fast hash and salt for a given password
-// 2016, 0.09s, 16MB
 func Fast(password string) ([]byte, *governor.Error) {
 	return hashC(latestConfigFast, password)
 }
