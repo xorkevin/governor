@@ -77,7 +77,6 @@ const (
 )
 
 func newConfig(version int) (*config, *governor.Error) {
-	fmt.Println(version)
 	switch version {
 	case v010.version:
 		return v010, nil
