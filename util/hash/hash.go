@@ -33,16 +33,37 @@ type (
 )
 
 var (
-	v001 = &config{
-		version:        1,
+	// 0.36s, 64MB
+	v010 = &config{
+		version:        10,
+		hashLength:     64,
+		saltLength:     64,
+		workFactor:     65536,
+		memBlocksize:   8,
+		parallelFactor: 2,
+	}
+
+	// 2.9s, 256MB
+	v011 = &config{
+		version:        11,
+		hashLength:     64,
+		saltLength:     64,
+		workFactor:     252144,
+		memBlocksize:   8,
+		parallelFactor: 4,
+	}
+
+	// 0.09s, 16MB
+	v012 = &config{
+		version:        12,
 		hashLength:     64,
 		saltLength:     64,
 		workFactor:     16384,
 		memBlocksize:   8,
-		parallelFactor: 1,
+		parallelFactor: 2,
 	}
 
-	latestConfig = v001
+	latestConfig = v010
 )
 
 const (
@@ -51,8 +72,12 @@ const (
 
 func newConfig(version int) (*config, *governor.Error) {
 	switch version {
-	case v001.version:
-		return v001, nil
+	case v010.version:
+		return v010, nil
+	case v011.version:
+		return v011, nil
+	case v012.version:
+		return v012, nil
 	default:
 		return nil, governor.NewError(moduleIDConfig, fmt.Sprintf("%d is not a valid version number", version), 0, http.StatusBadRequest)
 	}
@@ -70,9 +95,7 @@ func shash(password string, salt []byte, c *config) ([]byte, error) {
 	return scrypt.Key([]byte(password), salt, c.workFactor, c.memBlocksize, c.parallelFactor, c.hashLength)
 }
 
-// Hash returns a new hash and salt for a given password
-func Hash(password string) ([]byte, *governor.Error) {
-	c := latestConfig
+func hashC(c *config, password string) ([]byte, *governor.Error) {
 	salt := make([]byte, c.saltLength)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
@@ -88,6 +111,24 @@ func Hash(password string) ([]byte, *governor.Error) {
 	b.Write(hash)
 	b.Write(salt)
 	return b.Bytes(), nil
+}
+
+// Hash returns a new hash and salt for a given password
+// 0.36s, 64MB
+func Hash(password string) ([]byte, *governor.Error) {
+	return hashC(latestConfig, password)
+}
+
+// Strong returns a stronger hash and salt for a given password
+// 2.9s, 256MB
+func Strong(password string) ([]byte, *governor.Error) {
+	return hashC(v011, password)
+}
+
+// Fast returns a fast hash and salt for a given password
+// 0.09s, 16MB
+func Fast(password string) ([]byte, *governor.Error) {
+	return hashC(v012, password)
 }
 
 // Verify checks to see if the hash of the given password and salt matches the provided passhash
