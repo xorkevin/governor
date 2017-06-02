@@ -15,8 +15,6 @@ import (
 //////////
 
 const (
-	// Latest holds the value of the latest version
-	vLatest       = 1
 	versionLength = 4
 	moduleID      = "hash"
 )
@@ -33,7 +31,7 @@ type (
 )
 
 var (
-	// 0.36s, 64MB
+	// 2016, 0.36s, 64MB
 	v010 = &config{
 		version:        10,
 		hashLength:     64,
@@ -43,17 +41,17 @@ var (
 		parallelFactor: 2,
 	}
 
-	// 2.9s, 256MB
+	// 2016, 1.4s, 128MB
 	v011 = &config{
 		version:        11,
 		hashLength:     64,
 		saltLength:     64,
-		workFactor:     252144,
+		workFactor:     131072,
 		memBlocksize:   8,
 		parallelFactor: 4,
 	}
 
-	// 0.09s, 16MB
+	// 2016, 0.09s, 16MB
 	v012 = &config{
 		version:        12,
 		hashLength:     64,
@@ -63,7 +61,9 @@ var (
 		parallelFactor: 2,
 	}
 
-	latestConfig = v010
+	latestConfig       = v010
+	latestConfigStrong = v011
+	latestConfigFast   = v012
 )
 
 const (
@@ -71,6 +71,7 @@ const (
 )
 
 func newConfig(version int) (*config, *governor.Error) {
+	fmt.Println(version)
 	switch version {
 	case v010.version:
 		return v010, nil
@@ -105,7 +106,7 @@ func hashC(c *config, password string) ([]byte, *governor.Error) {
 		return nil, governor.NewError(moduleIDHash, errs.Error(), 0, http.StatusInternalServerError)
 	}
 	b := bytes.Buffer{}
-	if err := binary.Write(&b, binary.BigEndian, int32(vLatest)); err != nil {
+	if err := binary.Write(&b, binary.BigEndian, int32(c.version)); err != nil {
 		return nil, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
 	}
 	b.Write(hash)
@@ -114,21 +115,21 @@ func hashC(c *config, password string) ([]byte, *governor.Error) {
 }
 
 // Hash returns a new hash and salt for a given password
-// 0.36s, 64MB
+// 2016, 0.36s, 64MB
 func Hash(password string) ([]byte, *governor.Error) {
 	return hashC(latestConfig, password)
 }
 
 // Strong returns a stronger hash and salt for a given password
-// 2.9s, 256MB
+// 2016, 1.4s, 128MB
 func Strong(password string) ([]byte, *governor.Error) {
-	return hashC(v011, password)
+	return hashC(latestConfigStrong, password)
 }
 
 // Fast returns a fast hash and salt for a given password
-// 0.09s, 16MB
+// 2016, 0.09s, 16MB
 func Fast(password string) ([]byte, *governor.Error) {
-	return hashC(v012, password)
+	return hashC(latestConfigFast, password)
 }
 
 // Verify checks to see if the hash of the given password and salt matches the provided passhash
