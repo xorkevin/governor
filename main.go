@@ -27,7 +27,7 @@ func New(config Config) (*Server, error) {
 	i.HTTPErrorHandler = errorHandler(i, l)
 	l.Info("initialized error handling")
 	i.Pre(middleware.RemoveTrailingSlash())
-	if config.LogLevel == levelDebug {
+	if config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 			Format: "time=${time_rfc3339}, method=${method}, uri=${uri}, status=${status}, latency=${latency_human}\n",
 		}))
