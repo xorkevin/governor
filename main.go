@@ -13,7 +13,6 @@ type (
 		i      *echo.Echo
 		log    *logrus.Logger
 		h      *health
-		db     *database
 		config Config
 	}
 )
@@ -37,32 +36,26 @@ func New(config Config) (*Server, error) {
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
 	l.Info("initialized middleware")
-	db, err := newDB(&config)
-	if err != nil {
-		l.Error(err)
-		return nil, err
-	}
-	l.Info("initialized database")
 
 	s := &Server{
 		i:      i,
 		log:    l,
-		db:     db,
 		config: config,
 		h:      newHealth(),
 	}
 	s.MountRoute("/api/healthz", s.h)
 	l.Info("mounted health checkpoint")
-	s.MountRoute("/api/null/database", db)
-	l.Info("mounted database")
 
 	return s, nil
 }
 
 // Start starts the server at the specified port
 func (s *Server) Start() error {
-	defer s.db.db.Close()
-
 	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
+}
+
+// Logger returns an instance to the logger
+func (s *Server) Logger() *logrus.Logger {
+	return s.log
 }

@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf/model"
 	"github.com/hackform/governor/service/user/model"
@@ -19,12 +18,15 @@ const (
 type (
 	// Conf is a configuration service for admins
 	Conf struct {
+		db *governor.Database
 	}
 )
 
 // New creates a new Conf service
-func New() *Conf {
-	return &Conf{}
+func New(db *governor.Database) *Conf {
+	return &Conf{
+		db: db,
+	}
 }
 
 type (
@@ -77,7 +79,8 @@ const (
 )
 
 // Mount is a collection of routes for admins
-func (c *Conf) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (c *Conf) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := c.db.DB()
 	lsetup := l.WithFields(logrus.Fields{
 		"origin": moduleIDSetup,
 	})

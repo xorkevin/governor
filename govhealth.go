@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"database/sql"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -34,7 +33,7 @@ func newHealth() *health {
 }
 
 // Mount is a collection of routes for healthchecks
-func (h *health) Mount(conf Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 	r.GET("/check", func(c echo.Context) error {
 		t, _ := time.Now().MarshalText()
 		if errs := h.check(); len(errs) > 0 {

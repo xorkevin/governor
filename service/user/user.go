@@ -1,7 +1,6 @@
 package user
 
 import (
-	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -14,12 +13,15 @@ const (
 type (
 	// User is a user management service
 	User struct {
+		db *governor.Database
 	}
 )
 
 // New creates a new User
-func New() *User {
-	return &User{}
+func New(db *governor.Database) *User {
+	return &User{
+		db: db,
+	}
 }
 
 const (
@@ -27,7 +29,8 @@ const (
 )
 
 // Mount is a collection of routes for accessing and modifying user data
-func (u *User) Mount(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := u.db.DB()
 	if err := mountRest(conf, r.Group("/user"), db, l); err != nil {
 		return err
 	}

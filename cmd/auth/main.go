@@ -19,8 +19,19 @@ func main() {
 		return
 	}
 
-	cS := conf.New()
-	uS := user.New()
+	log := g.Logger()
+
+	db, err := governor.NewDB(&config)
+	if err != nil {
+		log.Errorf("error creating DB: %s\n", err)
+		return
+	}
+	log.Info("initialized database")
+	g.MountRoute("/api/null/database", db)
+	log.Info("mounted database")
+
+	cS := conf.New(db)
+	uS := user.New(db)
 
 	g.MountRoute("/api/conf", cS)
 	g.MountRoute("/api/u", uS)

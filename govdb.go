@@ -8,7 +8,8 @@ import (
 )
 
 type (
-	database struct {
+	// Database is a service wrapper around an sql.DB instance
+	Database struct {
 		db *sql.DB
 	}
 )
@@ -17,7 +18,8 @@ const (
 	moduleID = "database"
 )
 
-func newDB(c *Config) (*database, error) {
+// NewDB creates a new db service
+func NewDB(c *Config) (*Database, error) {
 	db, err := sql.Open("postgres", c.PostgresURL)
 	if err != nil {
 		return nil, err
@@ -25,13 +27,13 @@ func newDB(c *Config) (*database, error) {
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
-	return &database{
+	return &Database{
 		db: db,
 	}, nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (db *database) Mount(conf Config, r *echo.Group, sdb *sql.DB, l *logrus.Logger) error {
+func (db *Database) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 	return nil
 }
 
@@ -40,9 +42,14 @@ const (
 )
 
 // Health is a health check for the service
-func (db *database) Health() *Error {
+func (db *Database) Health() *Error {
 	if _, err := db.db.Exec("SELECT 1;"); err != nil {
 		return NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
 	}
 	return nil
+}
+
+// DB returns the sql database instance
+func (db *Database) DB() *sql.DB {
+	return db.db
 }
