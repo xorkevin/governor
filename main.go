@@ -3,7 +3,6 @@ package governor
 import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
-	_ "github.com/lib/pq" // depends upon postgres
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,7 +18,7 @@ type (
 
 // New creates a new Server
 func New(config Config) (*Server, error) {
-	l := newLogger(&config)
+	l := newLogger(config)
 	l.Info("initialized logger")
 	i := echo.New()
 	l.Info("initialized server instance")

@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/db"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 )
@@ -13,12 +14,12 @@ const (
 type (
 	// User is a user management service
 	User struct {
-		db *governor.Database
+		db *db.Database
 	}
 )
 
 // New creates a new User
-func New(db *governor.Database) *User {
+func New(db *db.Database) *User {
 	return &User{
 		db: db,
 	}
@@ -30,11 +31,11 @@ const (
 
 // Mount is a collection of routes for accessing and modifying user data
 func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	db := u.db.DB()
-	if err := mountRest(conf, r.Group("/user"), db, l); err != nil {
+	sdb := u.db.DB()
+	if err := mountRest(conf, r.Group("/user"), sdb, l); err != nil {
 		return err
 	}
-	if err := mountAuth(conf, r.Group("/auth"), db, l); err != nil {
+	if err := mountAuth(conf, r.Group("/auth"), sdb, l); err != nil {
 		return err
 	}
 	return nil

@@ -53,7 +53,7 @@ func levelToLog(level int) logrus.Level {
 	}
 }
 
-func newLogger(c *Config) *logrus.Logger {
+func newLogger(c Config) *logrus.Logger {
 	l := logrus.New()
 	if c.IsDebug() {
 		l.Formatter = &logrus.TextFormatter{}

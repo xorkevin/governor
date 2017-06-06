@@ -3,6 +3,7 @@ package conf
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf/model"
+	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -18,14 +19,14 @@ const (
 type (
 	// Conf is a configuration service for admins
 	Conf struct {
-		db *governor.Database
+		db *db.Database
 	}
 )
 
 // New creates a new Conf service
-func New(db *governor.Database) *Conf {
+func New(database *db.Database) *Conf {
 	return &Conf{
-		db: db,
+		db: database,
 	}
 }
 
@@ -80,7 +81,7 @@ const (
 
 // Mount is a collection of routes for admins
 func (c *Conf) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	db := c.db.DB()
+	sdb := c.db.DB()
 	lsetup := l.WithFields(logrus.Fields{
 		"origin": moduleIDSetup,
 	})
@@ -106,25 +107,25 @@ func (c *Conf) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		}
 		lsetup.Info("created new admin model")
 
-		if err := usermodel.Setup(db); err != nil {
+		if err := usermodel.Setup(sdb); err != nil {
 			err.AddTrace(moduleIDSetup)
 			return err
 		}
 		lsetup.Info("created new user table")
 
-		if err := confmodel.Setup(db); err != nil {
+		if err := confmodel.Setup(sdb); err != nil {
 			err.AddTrace(moduleIDSetup)
 			return err
 		}
 		lsetup.Info("created new configuration table")
 
-		if err := mconf.Insert(db); err != nil {
+		if err := mconf.Insert(sdb); err != nil {
 			err.AddTrace(moduleIDSetup)
 			return err
 		}
 		lsetup.Info("inserted new configuration into config")
 
-		if err := madmin.Insert(db); err != nil {
+		if err := madmin.Insert(sdb); err != nil {
 			err.AddTrace(moduleIDSetup)
 			return err
 		}
