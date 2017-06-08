@@ -19,29 +19,85 @@ type (
 		LastName  string `json:"last_name"`
 	}
 
-	responseUserPost struct {
-		Userid    string `json:"userid"`
+	requestUserPut struct {
 		Username  string `json:"username"`
-		Firstname string `json:"first_name"`
-		Lastname  string `json:"last_name"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
+	responseUserUpdate struct {
+		Userid   []byte `json:"userid"`
+		Username string `json:"username"`
 	}
 )
 
-func (r *requestUserPost) valid() *governor.Error {
-	if len(r.Username) < 3 || len(r.Username) > lengthCap {
+func validUsername(username string) *governor.Error {
+	if len(username) < 3 || len(username) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "username must be longer than 2 chars", 0, http.StatusBadRequest)
 	}
-	if len(r.Password) < 10 || len(r.Password) > lengthCap {
+	return nil
+}
+
+func validPassword(password string) *governor.Error {
+	if len(password) < 10 || len(password) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
-	if !emailRegex.MatchString(r.Email) || len(r.Email) > lengthCap {
+	return nil
+}
+
+func validEmail(email string) *governor.Error {
+	if !emailRegex.MatchString(email) || len(email) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
 	}
-	if len(r.FirstName) > lengthCap {
+	return nil
+}
+
+func validFirstName(firstname string) *governor.Error {
+	if len(firstname) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "first name is too long", 0, http.StatusBadRequest)
 	}
-	if len(r.LastName) > lengthCap {
+	return nil
+}
+
+func validLastName(lastname string) *governor.Error {
+	if len(lastname) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func (r *requestUserPost) valid() *governor.Error {
+	if err := validUsername(r.Username); err != nil {
+		return err
+	}
+	if err := validPassword(r.Password); err != nil {
+		return err
+	}
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
+	if err := validFirstName(r.FirstName); err != nil {
+		return err
+	}
+	if err := validLastName(r.LastName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *requestUserPut) valid() *governor.Error {
+	if err := validUsername(r.Username); err != nil {
+		return err
+	}
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
+	if err := validFirstName(r.FirstName); err != nil {
+		return err
+	}
+	if err := validLastName(r.LastName); err != nil {
+		return err
 	}
 	return nil
 }
@@ -112,11 +168,9 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 			"username": m.Username,
 		}).Info("user created")
 
-		return c.JSON(http.StatusCreated, &responseUserPost{
-			Userid:    userid,
-			Username:  m.Username,
-			Firstname: m.FirstName,
-			Lastname:  m.LastName,
+		return c.JSON(http.StatusCreated, &responseUserUpdate{
+			Userid:   m.ID.Userid,
+			Username: m.Username,
 		})
 	})
 
@@ -166,6 +220,37 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		})
 	})
 
+	ri.PUT("/:id", func(c echo.Context) error {
+		reqid := &requestUserGetID{
+			Userid: c.Param("id"),
+		}
+		if err := reqid.valid(); err != nil {
+			return err
+		}
+		ruser := &requestUserPut{}
+		if err := c.Bind(ruser); err != nil {
+			return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		m, err := usermodel.GetByIDB64(db, reqid.Userid)
+		if err != nil {
+			return err
+		}
+		m.Username = ruser.Username
+		m.Email = ruser.Email
+		m.FirstName = ruser.FirstName
+		m.LastName = ruser.LastName
+		if err = m.Update(db); err != nil {
+			return err
+		}
+		return c.JSON(http.StatusCreated, &responseUserUpdate{
+			Userid:   m.ID.Userid,
+			Username: m.Username,
+		})
+	})
+
 	rn := r.Group("/name")
 
 	rn.GET("/:username", func(c echo.Context) error {
@@ -187,6 +272,32 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 			CreationTime: m.CreationTime,
 		})
 	})
+
+	if conf.IsDebug() {
+		rn.GET("/:username/debug", func(c echo.Context) error {
+			ruser := &requestUserGetUsername{
+				Username: c.Param("username"),
+			}
+			if err := ruser.valid(); err != nil {
+				return err
+			}
+			m, err := usermodel.GetByUsername(db, ruser.Username)
+			if err != nil {
+				return err
+			}
+			return c.JSON(http.StatusOK, &responseUserGetPrivate{
+				responseUserGetPublic: responseUserGetPublic{
+					Username:     m.Username,
+					Tags:         m.Tags,
+					FirstName:    m.FirstName,
+					LastName:     m.LastName,
+					CreationTime: m.CreationTime,
+				},
+				Userid: m.Userid,
+				Email:  m.Email,
+			})
+		})
+	}
 
 	return nil
 }
