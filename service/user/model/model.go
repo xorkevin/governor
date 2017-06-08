@@ -103,6 +103,21 @@ func NewAdmin(username, password, email, firstname, lastname string) (*Model, *g
 }
 
 const (
+	moduleIDHash = moduleIDModel + ".Hash"
+)
+
+// RehashPass updates the password with a new hash
+func (m *Model) RehashPass(password string) *governor.Error {
+	mHash, err := hash.Hash(password)
+	if err != nil {
+		err.AddTrace(moduleIDHash)
+		return err
+	}
+	m.Passhash.Hash = mHash
+	return nil
+}
+
+const (
 	moduleIDModB64 = moduleIDModel + ".IDBase64"
 )
 

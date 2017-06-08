@@ -26,6 +26,10 @@ type (
 		LastName  string `json:"last_name"`
 	}
 
+	requestUserPutPassword struct {
+		Password string `json:"password"`
+	}
+
 	responseUserUpdate struct {
 		Userid   []byte `json:"userid"`
 		Username string `json:"username"`
@@ -97,6 +101,13 @@ func (r *requestUserPut) valid() *governor.Error {
 		return err
 	}
 	if err := validLastName(r.LastName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *requestUserPutPassword) valid() *governor.Error {
+	if err := validPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
@@ -243,6 +254,39 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		m.FirstName = ruser.FirstName
 		m.LastName = ruser.LastName
 		if err = m.Update(db); err != nil {
+			err.AddTrace(moduleIDUser)
+			return err
+		}
+		return c.JSON(http.StatusCreated, &responseUserUpdate{
+			Userid:   m.ID.Userid,
+			Username: m.Username,
+		})
+	})
+
+	ri.PUT("/:id/password", func(c echo.Context) error {
+		reqid := &requestUserGetID{
+			Userid: c.Param("id"),
+		}
+		if err := reqid.valid(); err != nil {
+			return err
+		}
+		ruser := &requestUserPutPassword{}
+		if err := c.Bind(ruser); err != nil {
+			return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		m, err := usermodel.GetByIDB64(db, reqid.Userid)
+		if err != nil {
+			return err
+		}
+		if err = m.RehashPass(ruser.Password); err != nil {
+			err.AddTrace(moduleIDUser)
+			return err
+		}
+		if err = m.Update(db); err != nil {
+			err.AddTrace(moduleIDUser)
 			return err
 		}
 		return c.JSON(http.StatusCreated, &responseUserUpdate{
