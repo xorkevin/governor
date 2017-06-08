@@ -16,5 +16,5 @@ type (
 // MountRoute mounts a service
 func (s *Server) MountRoute(path string, r Service, m ...echo.MiddlewareFunc) error {
 	s.h.addService(r)
-	return r.Mount(s.config, s.i.Group(path, m...), s.log)
+	return r.Mount(s.config, s.i.Group(s.config.BaseURL+path, m...), s.log)
 }

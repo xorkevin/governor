@@ -48,13 +48,13 @@ func main() {
 	uS := user.New(db)
 	log.Info("initialized user service")
 
-	g.MountRoute("/api/conf", cS)
+	g.MountRoute("/conf", cS)
 	log.Info("mounted conf service")
 
-	g.MountRoute("/api/u", uS)
+	g.MountRoute("/u", uS)
 	log.Info("mounted user service")
 
-	g.MountRoute("/api/null/database", db)
+	g.MountRoute("/null/database", db)
 	log.Info("mounted database")
 
 	g.Start()

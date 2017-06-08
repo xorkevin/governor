@@ -1,6 +1,6 @@
-version: version
 mode: INFO
 port: 8080
+baseurl: /api
 postgres:
   user: postgres
   password: admin
