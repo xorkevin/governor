@@ -22,7 +22,7 @@ type (
 
 	// Tokenizer is a token generator
 	Tokenizer struct {
-		secret string
+		secret []byte
 		issuer string
 	}
 )
@@ -34,15 +34,20 @@ const (
 // New creates a new Tokenizer
 func New(secret, issuer string) *Tokenizer {
 	return &Tokenizer{
-		secret: secret,
+		secret: []byte(secret),
 		issuer: issuer,
 	}
 }
 
+const (
+	moduleTokenGenerate = moduleToken + ".generate"
+)
+
 // Generate returns a new jwt token from a user model
 func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id string) (string, *Claims, *governor.Error) {
-	id, err := u.IDBase64()
+	userid, err := u.IDBase64()
 	if err != nil {
+		err.AddTrace(moduleTokenGenerate)
 		return "", nil, err
 	}
 	now := time.Now().Unix()
@@ -54,7 +59,7 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 			IssuedAt:  now,
 			ExpiresAt: now + duration,
 		},
-		Userid:    id,
+		Userid:    userid,
 		Username:  u.Username,
 		AuthTags:  u.Auth.Tags,
 		Email:     u.Email,
@@ -63,7 +68,7 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 	}
 	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
 	if errjwt != nil {
-		return "", nil, governor.NewError(moduleToken, errjwt.Error(), 0, http.StatusInternalServerError)
+		return "", nil, governor.NewError(moduleTokenGenerate, errjwt.Error(), 0, http.StatusInternalServerError)
 	}
 	return token, claims, nil
 }
