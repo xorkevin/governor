@@ -13,3 +13,5 @@ import:
 - package: github.com/lib/pq
 - package: github.com/spf13/viper
 - package: github.com/spf13/pflag
+- package: github.com/dgrijalva/jwt-go
+  version: ^3.0.0
