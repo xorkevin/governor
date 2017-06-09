@@ -72,3 +72,19 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 	}
 	return token, claims, nil
 }
+
+const (
+	moduleTokenValidate = moduleToken + ".validate"
+)
+
+// Validate returns whether a token is valid or not
+func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
+	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) { return t.secret, nil }); err == nil {
+		if claims, ok := token.Claims.(*Claims); ok {
+			if claims.Valid() == nil && claims.VerifyIssuer(t.issuer, true) && claims.Subject == subject && claims.Id == id {
+				return true, claims
+			}
+		}
+	}
+	return false, nil
+}
