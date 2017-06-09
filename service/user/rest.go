@@ -119,6 +119,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 		if err != nil {
 			err.AddTrace(moduleIDUser)
@@ -153,6 +154,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.GetByIDB64(db, ruser.Userid)
 		if err != nil {
 			return err
@@ -173,6 +175,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.GetByIDB64(db, ruser.Userid)
 		if err != nil {
 			return err
@@ -204,6 +207,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.GetByIDB64(db, reqid.Userid)
 		if err != nil {
 			return err
@@ -236,6 +240,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.GetByIDB64(db, reqid.Userid)
 		if err != nil {
 			return err
@@ -263,6 +268,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		m, err := usermodel.GetByUsername(db, ruser.Username)
 		if err != nil {
 			return err
@@ -284,6 +290,7 @@ func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 			if err := ruser.valid(); err != nil {
 				return err
 			}
+
 			m, err := usermodel.GetByUsername(db, ruser.Username)
 			if err != nil {
 				return err

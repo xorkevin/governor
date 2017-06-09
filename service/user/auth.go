@@ -49,6 +49,7 @@ func mountAuth(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 				Valid: true,
 			})
 		}
+
 		return c.JSON(http.StatusUnauthorized, &responseUserAuth{
 			Valid: false,
 		})
