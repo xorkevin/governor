@@ -3,7 +3,7 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
-	"github.com/hackform/governor/service/user/middleware"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -33,7 +33,7 @@ type (
 		db        *db.Database
 		tokenizer *token.Tokenizer
 		loginTime int64
-		gate      *usermiddleware.Gate
+		gate      *gate.Gate
 	}
 )
 
@@ -48,7 +48,7 @@ func New(conf governor.Config, db *db.Database) *User {
 		db:        db,
 		tokenizer: token.New(c["secret"], c["issuer"]),
 		loginTime: t,
-		gate:      usermiddleware.NewGate(c["secret"], c["issuer"]),
+		gate:      gate.New(c["secret"], c["issuer"]),
 	}
 }
 

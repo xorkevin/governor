@@ -1,4 +1,4 @@
-package usermiddleware
+package gate
 
 import (
 	"github.com/hackform/governor"
@@ -24,8 +24,8 @@ type (
 	Validator func(c echo.Context, claims token.Claims) bool
 )
 
-// NewGate returns a new Gate
-func NewGate(secret, issuer string) *Gate {
+// New returns a new Gate
+func New(secret, issuer string) *Gate {
 	return &Gate{
 		tokenizer: token.New(secret, issuer),
 	}
