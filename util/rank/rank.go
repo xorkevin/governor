@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
+// Tags for user rank
 const (
-	tagUser  = "user"
-	tagAdmin = "admin"
+	TagUser  = "user"
+	TagAdmin = "admin"
 )
 
 type (
@@ -27,16 +28,31 @@ func (r Rank) Stringify() string {
 	return strings.Join(keys, ",")
 }
 
+// Has checks if a Rank has a tag
+func (r Rank) Has(tag string) bool {
+	val, ok := r[tag]
+	return ok && val
+}
+
+// FromString creates a new Rank from a string
+func FromString(rankString string) Rank {
+	r := Rank{}
+	for _, i := range strings.Split(rankString, ",") {
+		r[i] = true
+	}
+	return r
+}
+
 // BaseUser creates a new user rank
 func BaseUser() Rank {
 	return Rank{
-		tagUser: true,
+		TagUser: true,
 	}
 }
 
 // Admin creates a new Administrator rank
 func Admin() Rank {
 	b := BaseUser()
-	b[tagAdmin] = true
+	b[TagAdmin] = true
 	return b
 }
