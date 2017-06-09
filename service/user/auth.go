@@ -123,8 +123,12 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
-			return c.JSON(http.StatusOK, responseUserAuth{})
-		})
+			return c.JSON(http.StatusOK, responseUserAuth{
+				Valid:  true,
+				Token:  strings.Split(c.Request().Header.Get("Authorization"), " ")[1],
+				Claims: c.Get("user").(*token.Claims),
+			})
+		}, u.AuthenticateUser())
 	}
 
 	return nil
