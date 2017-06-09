@@ -68,9 +68,8 @@ docker-setup:
 	docker network create -d bridge $(DOCKER_NETWORK)
 
 docker-build: build
-	docker build -f Dockerfile.auth -t $(AUTH_IMAGE_NAME):$(VERSION) .
-	docker build -f Dockerfile.auth -t $(AUTH_IMAGE_NAME) .
-	docker build -f Dockerfile.fs -t $(FSSERVE_IMAGE_NAME) .
+	docker build -f ./cmd/auth/Dockerfile -t $(AUTH_IMAGE_NAME):$(VERSION) -t $(AUTH_IMAGE_NAME):latest .
+	docker build -f ./cmd/fsserve/Dockerfile -t $(FSSERVE_IMAGE_NAME):latest .
 
 docker-run:
 	docker run -d --name $(AUTH_CONTAINER_NAME) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
