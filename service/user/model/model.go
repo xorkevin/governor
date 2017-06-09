@@ -102,6 +102,11 @@ func NewAdmin(username, password, email, firstname, lastname string) (*Model, *g
 	return New(username, password, email, firstname, lastname, rank.Admin())
 }
 
+// ValidatePass validates the password against a hash
+func (m *Model) ValidatePass(password string) bool {
+	return hash.Verify(password, m.Passhash.Hash)
+}
+
 const (
 	moduleIDHash = moduleIDModel + ".Hash"
 )

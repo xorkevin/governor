@@ -27,6 +27,7 @@ func New(db *db.Database) *User {
 
 const (
 	moduleIDUser = moduleID + ".user"
+	moduleIDAuth = moduleID + ".auth"
 )
 
 // Mount is a collection of routes for accessing and modifying user data

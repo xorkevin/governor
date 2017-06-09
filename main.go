@@ -30,7 +30,7 @@ func New(config Config) (*Server, error) {
 			Format: "time=${time_rfc3339}, method=${method}, uri=${uri}, status=${status}, latency=${latency_human}\n",
 		}))
 	}
-	i.Use(middleware.BodyLimit("1M"))
+	i.Use(middleware.BodyLimit("2M"))
 	i.Use(middleware.CORS())
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())

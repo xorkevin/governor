@@ -36,41 +36,6 @@ type (
 	}
 )
 
-func validUsername(username string) *governor.Error {
-	if len(username) < 3 || len(username) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "username must be longer than 2 chars", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
-func validPassword(password string) *governor.Error {
-	if len(password) < 10 || len(password) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
-func validEmail(email string) *governor.Error {
-	if !emailRegex.MatchString(email) || len(email) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
-func validFirstName(firstname string) *governor.Error {
-	if len(firstname) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "first name is too long", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
-func validLastName(lastname string) *governor.Error {
-	if len(lastname) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
 func (r *requestUserPost) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
 		return err
@@ -138,17 +103,11 @@ type (
 )
 
 func (r *requestUserGetUsername) valid() *governor.Error {
-	if len(r.Username) < 1 || len(r.Username) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "username must be provided", 0, http.StatusBadRequest)
-	}
-	return nil
+	return hasUsername(r.Username)
 }
 
 func (r *requestUserGetID) valid() *governor.Error {
-	if len(r.Userid) < 1 {
-		return governor.NewErrorUser(moduleIDReqValid, "userid must be provided", 0, http.StatusBadRequest)
-	}
-	return nil
+	return hasUserid(r.Userid)
 }
 
 func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
