@@ -1,9 +1,9 @@
 package user
 
 import (
-	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -16,7 +16,9 @@ type (
 	}
 
 	responseUserAuth struct {
-		Valid bool
+		Valid  bool
+		Token  string       `json:"token,omitempty"`
+		Claims token.Claims `json:"claims,omitempty"`
 	}
 )
 
@@ -30,7 +32,9 @@ func (r *requestUserAuth) valid() *governor.Error {
 	return nil
 }
 
-func mountAuth(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	r.POST("/login", func(c echo.Context) error {
 		ruser := &requestUserAuth{}
 		if err := c.Bind(ruser); err != nil {
@@ -45,8 +49,16 @@ func mountAuth(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 			return err
 		}
 		if m.ValidatePass(ruser.Password) {
+			token, claims, err := u.tokenizer.Generate(m, u.loginTime, "login", "")
+			if err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+
 			return c.JSON(http.StatusOK, &responseUserAuth{
-				Valid: true,
+				Valid:  true,
+				Token:  token,
+				Claims: *claims,
 			})
 		}
 
@@ -54,6 +66,12 @@ func mountAuth(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger
 			Valid: false,
 		})
 	})
+
+	if conf.IsDebug() {
+		r.GET("/decode", func(c echo.Context) error {
+			return c.JSON(http.StatusOK, responseUserAuth{})
+		})
+	}
 
 	return nil
 }

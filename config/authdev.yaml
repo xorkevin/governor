@@ -8,3 +8,7 @@ postgres:
   host: localhost
   port: 5432
   sslmode: disable
+userauth:
+  issuer: governor_auth
+  secret: secret
+  duration: 5m

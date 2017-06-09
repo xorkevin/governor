@@ -53,12 +53,13 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
 
-	v.SetEnvPrefix("gov")
-
 	v.SetConfigName(*configFilename)
 	v.AddConfigPath("./config")
 	v.AddConfigPath(".")
 	v.SetConfigType("yaml")
+
+	v.SetEnvPrefix("gov")
+	v.AutomaticEnv()
 
 	return Config{
 		config: v,

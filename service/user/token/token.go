@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"net/http"
+	"time"
 )
 
 type (
@@ -18,17 +19,51 @@ type (
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
 	}
+
+	// Tokenizer is a token generator
+	Tokenizer struct {
+		secret string
+		issuer string
+	}
 )
 
 const (
 	moduleToken = "token"
 )
 
-// New returns a new jwt token from a user model
-func New(user *usermodel.Model) (string, *governor.Error) {
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, Claims{}).SignedString("")
-	if err != nil {
-		return "", governor.NewError(moduleToken, err.Error(), 0, http.StatusInternalServerError)
+// New creates a new Tokenizer
+func New(secret, issuer string) *Tokenizer {
+	return &Tokenizer{
+		secret: secret,
+		issuer: issuer,
 	}
-	return token, nil
+}
+
+// Generate returns a new jwt token from a user model
+func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id string) (string, *Claims, *governor.Error) {
+	id, err := u.IDBase64()
+	if err != nil {
+		return "", nil, err
+	}
+	now := time.Now().Unix()
+	claims := &Claims{
+		StandardClaims: jwt.StandardClaims{
+			Subject:   subject,
+			Id:        id,
+			Issuer:    t.issuer,
+			IssuedAt:  now,
+			ExpiresAt: now + duration,
+		},
+		Userid:    id,
+		Username:  u.Username,
+		AuthTags:  u.Auth.Tags,
+		Email:     u.Email,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+	}
+	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
+	if errjwt != nil {
+		return "", nil, governor.NewError(moduleToken, errjwt.Error(), 0, http.StatusInternalServerError)
+	}
+	return token, claims, nil
 }

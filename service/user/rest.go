@@ -1,7 +1,6 @@
 package user
 
 import (
-	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
@@ -110,7 +109,8 @@ func (r *requestUserGetID) valid() *governor.Error {
 	return hasUserid(r.Userid)
 }
 
-func mountRest(conf governor.Config, r *echo.Group, db *sql.DB, l *logrus.Logger) error {
+func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := u.db.DB()
 	r.POST("", func(c echo.Context) error {
 		ruser := &requestUserPost{}
 		if err := c.Bind(ruser); err != nil {

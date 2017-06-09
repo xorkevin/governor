@@ -45,7 +45,7 @@ func main() {
 	cS := conf.New(db)
 	log.Info("initialized conf service")
 
-	uS := user.New(db)
+	uS := user.New(config, db)
 	log.Info("initialized user service")
 
 	g.MountRoute("/conf", cS)
