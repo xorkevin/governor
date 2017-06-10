@@ -191,7 +191,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			Userid: m.Userid,
 			Email:  m.Email,
 		})
-	})
+	}, u.gate.OwnerOrAdmin("id"))
 
 	ri.PUT("/:id", func(c echo.Context) error {
 		reqid := &requestUserGetID{
@@ -224,7 +224,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			Userid:   m.ID.Userid,
 			Username: m.Username,
 		})
-	})
+	}, u.gate.Owner("id"))
 
 	ri.PUT("/:id/password", func(c echo.Context) error {
 		reqid := &requestUserGetID{
@@ -257,7 +257,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			Userid:   m.ID.Userid,
 			Username: m.Username,
 		})
-	})
+	}, u.gate.Owner("id"))
 
 	rn := r.Group("/name")
 

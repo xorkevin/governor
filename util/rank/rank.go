@@ -7,8 +7,9 @@ import (
 
 // Tags for user rank
 const (
-	TagUser  = "user"
-	TagAdmin = "admin"
+	TagUser   = "user"
+	TagAdmin  = "admin"
+	TagSystem = "admin"
 )
 
 type (
@@ -55,4 +56,11 @@ func Admin() Rank {
 	b := BaseUser()
 	b[TagAdmin] = true
 	return b
+}
+
+// System creates a new System rank
+func System() Rank {
+	return Rank{
+		TagSystem: true,
+	}
 }

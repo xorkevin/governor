@@ -11,19 +11,6 @@ import (
 )
 
 const (
-	time5m int64 = 300
-)
-
-// Conf loads in the default
-func Conf(c *governor.Config) error {
-	v := c.Conf()
-	v.SetDefault("userauth.duration", "5m")
-	v.SetDefault("userauth.secret", "governor")
-	v.SetDefault("userauth.issuer", "governor")
-	return nil
-}
-
-const (
 	moduleID = "user"
 )
 
@@ -35,6 +22,10 @@ type (
 		loginTime int64
 		gate      *gate.Gate
 	}
+)
+
+const (
+	time5m int64 = 300
 )
 
 // New creates a new User

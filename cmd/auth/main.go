@@ -5,7 +5,9 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/user"
+	"github.com/hackform/governor/service/user/conf"
 )
 
 func main() {
@@ -16,11 +18,16 @@ func main() {
 	}
 	fmt.Println("created new config")
 
-	if err = db.Conf(&config); err != nil {
+	if err = dbconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
 	fmt.Println("loaded db config defaults")
+	if err = userconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("loaded user config defaults")
 
 	if err = config.Init(); err != nil {
 		fmt.Printf(err.Error())
