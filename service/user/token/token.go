@@ -12,12 +12,8 @@ type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.StandardClaims
-		Userid    string `json:"userid"`
-		Username  string `json:"username"`
-		AuthTags  string `json:"auth_tags"`
-		Email     string `json:"email"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
+		Userid   string `json:"userid"`
+		AuthTags string `json:"auth_tags"`
 	}
 
 	// Tokenizer is a token generator
@@ -59,12 +55,8 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 			IssuedAt:  now,
 			ExpiresAt: now + duration,
 		},
-		Userid:    userid,
-		Username:  u.Username,
-		AuthTags:  u.Auth.Tags,
-		Email:     u.Email,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		Userid:   userid,
+		AuthTags: u.Auth.Tags,
 	}
 	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
 	if errjwt != nil {

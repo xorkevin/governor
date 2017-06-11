@@ -17,9 +17,12 @@ type (
 	}
 
 	responseUserAuth struct {
-		Valid  bool
-		Token  string        `json:"token,omitempty"`
-		Claims *token.Claims `json:"claims,omitempty"`
+		Valid     bool
+		Token     string        `json:"token,omitempty"`
+		Claims    *token.Claims `json:"claims,omitempty"`
+		Username  string        `json:"username,omitempty"`
+		FirstName string        `json:"first_name,omitempty"`
+		LastName  string        `json:"last_name,omitempty"`
 	}
 )
 
@@ -57,9 +60,12 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			}
 
 			return c.JSON(http.StatusOK, &responseUserAuth{
-				Valid:  true,
-				Token:  token,
-				Claims: claims,
+				Valid:     true,
+				Token:     token,
+				Claims:    claims,
+				Username:  m.Username,
+				FirstName: m.FirstName,
+				LastName:  m.LastName,
 			})
 		}
 
