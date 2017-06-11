@@ -15,6 +15,7 @@ const (
 // Tags for user rank
 const (
 	TagUser   = "user"
+	TagMod    = "mod"
 	TagAdmin  = "admin"
 	TagSystem = "system"
 )
@@ -44,14 +45,32 @@ func (r Rank) Has(tag string) bool {
 
 // HasMod checks if a Rank has a moderator tag
 func (r Rank) HasMod(tag string) bool {
-	val, ok := r["mod_"+tag]
+	val, ok := r[TagMod+"_"+tag]
 	return ok && val
 }
 
 // HasUser checks if a Rank has a user tag
 func (r Rank) HasUser(tag string) bool {
-	val, ok := r["user_"+tag]
+	val, ok := r[TagUser+"_"+tag]
 	return ok && val
+}
+
+// Add adds a rank
+func (r Rank) Add(other Rank) {
+	for key, value := range other {
+		if value {
+			r[key] = true
+		}
+	}
+}
+
+// Remove removes a rank
+func (r Rank) Remove(other Rank) {
+	for key, value := range other {
+		if value {
+			delete(r, key)
+		}
+	}
 }
 
 const (
@@ -66,9 +85,12 @@ var (
 // FromString creates a new Rank from a string
 func FromString(rankString string) (Rank, *governor.Error) {
 	r := Rank{}
+	if len(rankString) < 1 {
+		return r, nil
+	}
 	for _, i := range strings.Split(rankString, ",") {
 		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, governor.NewError(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
+			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}
 		r[i] = true
 	}

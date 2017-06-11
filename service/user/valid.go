@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/util/rank"
 	"net/http"
 	"regexp"
 )
@@ -9,6 +10,7 @@ import (
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
 	lengthCap        = 128
+	lengthCapLarge   = 4096
 )
 
 var (
@@ -46,6 +48,16 @@ func validFirstName(firstname string) *governor.Error {
 func validLastName(lastname string) *governor.Error {
 	if len(lastname) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validRank(rankString string) *governor.Error {
+	if len(rankString) > lengthCapLarge {
+		return governor.NewErrorUser(moduleIDReqValid, "rank exceeds the max length", 0, http.StatusBadRequest)
+	}
+	if _, err := rank.FromString(rankString); err != nil {
+		return err
 	}
 	return nil
 }
