@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	requestUserPost struct {
+	reqUserPost struct {
 		Username  string `json:"username"`
 		Password  string `json:"password"`
 		Email     string `json:"email"`
@@ -18,24 +18,28 @@ type (
 		LastName  string `json:"last_name"`
 	}
 
-	requestUserPut struct {
+	reqUserPut struct {
 		Username  string `json:"username"`
 		Email     string `json:"email"`
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
 	}
 
-	requestUserPutPassword struct {
+	reqUserPutPassword struct {
 		Password string `json:"password"`
 	}
 
-	responseUserUpdate struct {
+	reqUserPutRank struct {
+		Rank string `json:"rank"`
+	}
+
+	resUserUpdate struct {
 		Userid   []byte `json:"userid"`
 		Username string `json:"username"`
 	}
 )
 
-func (r *requestUserPost) valid() *governor.Error {
+func (r *reqUserPost) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
@@ -54,7 +58,7 @@ func (r *requestUserPost) valid() *governor.Error {
 	return nil
 }
 
-func (r *requestUserPut) valid() *governor.Error {
+func (r *reqUserPut) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
@@ -70,7 +74,7 @@ func (r *requestUserPut) valid() *governor.Error {
 	return nil
 }
 
-func (r *requestUserPutPassword) valid() *governor.Error {
+func (r *reqUserPutPassword) valid() *governor.Error {
 	if err := validPassword(r.Password); err != nil {
 		return err
 	}
@@ -78,15 +82,15 @@ func (r *requestUserPutPassword) valid() *governor.Error {
 }
 
 type (
-	requestUserGetUsername struct {
+	reqUserGetUsername struct {
 		Username string `json:"username"`
 	}
 
-	requestUserGetID struct {
+	reqUserGetID struct {
 		Userid string `json:"userid"`
 	}
 
-	responseUserGetPublic struct {
+	resUserGetPublic struct {
 		Username     string `json:"username"`
 		Tags         string `json:"auth_tags"`
 		FirstName    string `json:"first_name"`
@@ -94,25 +98,25 @@ type (
 		CreationTime int64  `json:"creation_time"`
 	}
 
-	responseUserGetPrivate struct {
-		responseUserGetPublic
+	resUserGet struct {
+		resUserGetPublic
 		Userid []byte `json:"userid"`
 		Email  string `json:"email"`
 	}
 )
 
-func (r *requestUserGetUsername) valid() *governor.Error {
+func (r *reqUserGetUsername) valid() *governor.Error {
 	return hasUsername(r.Username)
 }
 
-func (r *requestUserGetID) valid() *governor.Error {
+func (r *reqUserGetID) valid() *governor.Error {
 	return hasUserid(r.Userid)
 }
 
 func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	r.POST("", func(c echo.Context) error {
-		ruser := &requestUserPost{}
+		ruser := &reqUserPost{}
 		if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 		}
@@ -139,7 +143,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			"username": m.Username,
 		}).Info("user created")
 
-		return c.JSON(http.StatusCreated, &responseUserUpdate{
+		return c.JSON(http.StatusCreated, &resUserUpdate{
 			Userid:   m.ID.Userid,
 			Username: m.Username,
 		})
@@ -148,7 +152,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	ri := r.Group("/id")
 
 	ri.GET("/:id", func(c echo.Context) error {
-		ruser := &requestUserGetID{
+		ruser := &reqUserGetID{
 			Userid: c.Param("id"),
 		}
 		if err := ruser.valid(); err != nil {
@@ -159,7 +163,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, &responseUserGetPublic{
+		return c.JSON(http.StatusOK, &resUserGetPublic{
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,
@@ -169,7 +173,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	})
 
 	ri.GET("/:id/private", func(c echo.Context) error {
-		ruser := &requestUserGetID{
+		ruser := &reqUserGetID{
 			Userid: c.Param("id"),
 		}
 		if err := ruser.valid(); err != nil {
@@ -180,8 +184,8 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, &responseUserGetPrivate{
-			responseUserGetPublic: responseUserGetPublic{
+		return c.JSON(http.StatusOK, &resUserGet{
+			resUserGetPublic: resUserGetPublic{
 				Username:     m.Username,
 				Tags:         m.Tags,
 				FirstName:    m.FirstName,
@@ -194,13 +198,13 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	}, u.gate.OwnerOrAdmin("id"))
 
 	ri.PUT("/:id", func(c echo.Context) error {
-		reqid := &requestUserGetID{
+		reqid := &reqUserGetID{
 			Userid: c.Param("id"),
 		}
 		if err := reqid.valid(); err != nil {
 			return err
 		}
-		ruser := &requestUserPut{}
+		ruser := &reqUserPut{}
 		if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 		}
@@ -220,20 +224,20 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			err.AddTrace(moduleIDUser)
 			return err
 		}
-		return c.JSON(http.StatusCreated, &responseUserUpdate{
+		return c.JSON(http.StatusCreated, &resUserUpdate{
 			Userid:   m.ID.Userid,
 			Username: m.Username,
 		})
 	}, u.gate.Owner("id"))
 
 	ri.PUT("/:id/password", func(c echo.Context) error {
-		reqid := &requestUserGetID{
+		reqid := &reqUserGetID{
 			Userid: c.Param("id"),
 		}
 		if err := reqid.valid(); err != nil {
 			return err
 		}
-		ruser := &requestUserPutPassword{}
+		ruser := &reqUserPutPassword{}
 		if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 		}
@@ -253,7 +257,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			err.AddTrace(moduleIDUser)
 			return err
 		}
-		return c.JSON(http.StatusCreated, &responseUserUpdate{
+		return c.JSON(http.StatusCreated, &resUserUpdate{
 			Userid:   m.ID.Userid,
 			Username: m.Username,
 		})
@@ -262,7 +266,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	rn := r.Group("/name")
 
 	rn.GET("/:username", func(c echo.Context) error {
-		ruser := &requestUserGetUsername{
+		ruser := &reqUserGetUsername{
 			Username: c.Param("username"),
 		}
 		if err := ruser.valid(); err != nil {
@@ -273,7 +277,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, &responseUserGetPublic{
+		return c.JSON(http.StatusOK, &resUserGetPublic{
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,
@@ -284,7 +288,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {
-			ruser := &requestUserGetUsername{
+			ruser := &reqUserGetUsername{
 				Username: c.Param("username"),
 			}
 			if err := ruser.valid(); err != nil {
@@ -295,8 +299,8 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			if err != nil {
 				return err
 			}
-			return c.JSON(http.StatusOK, &responseUserGetPrivate{
-				responseUserGetPublic: responseUserGetPublic{
+			return c.JSON(http.StatusOK, &resUserGet{
+				resUserGetPublic: resUserGetPublic{
 					Username:     m.Username,
 					Tags:         m.Tags,
 					FirstName:    m.FirstName,

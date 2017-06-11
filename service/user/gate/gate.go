@@ -62,27 +62,43 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 // Admin is a middleware function to validate if a user is an admin
 func (g *Gate) Admin() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		return rank.FromString(claims.AuthTags).Has(rank.TagAdmin)
+		r, err := rank.FromString(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		return r.Has(rank.TagAdmin)
 	}, authenticationSubject)
 }
 
 // User is a middleware function to validate if the request is made by a user
 func (g *Gate) User() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		return rank.FromString(claims.AuthTags).Has(rank.TagUser)
+		r, err := rank.FromString(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		return r.Has(rank.TagUser)
 	}, authenticationSubject)
 }
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by a user
 func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		return c.Param(idparam) == claims.Userid || rank.FromString(claims.AuthTags).Has(rank.TagAdmin)
+		r, err := rank.FromString(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		return c.Param(idparam) == claims.Userid || r.Has(rank.TagAdmin)
 	}, authenticationSubject)
 }
 
 // System is a middleware function to validate if the request is made by a system
 func (g *Gate) System() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		return rank.FromString(claims.AuthTags).Has(rank.TagSystem)
+		r, err := rank.FromString(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		return r.Has(rank.TagSystem)
 	}, authenticationSubject)
 }
