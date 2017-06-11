@@ -29,7 +29,8 @@ type (
 	}
 
 	reqUserPutPassword struct {
-		Password string `json:"password"`
+		NewPassword string `json:"new_password"`
+		OldPassword string `json:"old_password"`
 	}
 
 	reqUserPutRank struct {
@@ -79,7 +80,10 @@ func (r *reqUserPut) valid() *governor.Error {
 }
 
 func (r *reqUserPutPassword) valid() *governor.Error {
-	if err := validPassword(r.Password); err != nil {
+	if err := validPassword(r.NewPassword); err != nil {
+		return err
+	}
+	if err := hasPassword(r.OldPassword); err != nil {
 		return err
 	}
 	return nil
@@ -263,7 +267,10 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err != nil {
 			return err
 		}
-		if err = m.RehashPass(ruser.Password); err != nil {
+		if !m.ValidatePass(ruser.OldPassword) {
+			return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
+		}
+		if err = m.RehashPass(ruser.NewPassword); err != nil {
 			err.AddTrace(moduleIDUser)
 			return err
 		}
