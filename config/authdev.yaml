@@ -1,3 +1,4 @@
+version: v0.1.0
 mode: DEBUG
 port: 8080
 baseurl: /api/v1

@@ -5,10 +5,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-const (
-	govVersion = "v0.1.0"
-)
-
 type (
 	// Config is the server configuration
 	Config struct {
@@ -35,7 +31,7 @@ func (c *Config) Init() error {
 	if err := c.config.ReadInConfig(); err != nil {
 		return err
 	}
-	c.Version = govVersion
+	c.Version = c.config.GetString("version")
 	c.LogLevel = envToLevel(c.config.GetString("mode"))
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")

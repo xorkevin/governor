@@ -74,11 +74,6 @@ func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 	return nil
 }
 
-// Health is a health check for the service
-func (h *health) Health() *Error {
-	return nil
-}
-
 func (h *health) addService(s Service) {
 	h.services = append(h.services, s)
 }
