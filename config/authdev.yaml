@@ -12,4 +12,4 @@ postgres:
 userauth:
   issuer: governor_auth
   secret: secret
-  duration: 5m
+  duration: 15m
