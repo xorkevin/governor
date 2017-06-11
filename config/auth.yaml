@@ -1,6 +1,6 @@
 mode: INFO
 port: 8080
-baseurl: /api
+baseurl: /api/v1
 postgres:
   user: postgres
   password: admin
