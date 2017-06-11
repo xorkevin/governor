@@ -42,7 +42,7 @@ func New(config Config) (*Server, error) {
 		config: config,
 		h:      newHealth(),
 	}
-	s.h.Mount(config, s.i.Group("/api/healthz"), l)
+	s.h.Mount(config, s.i.Group(s.config.BaseURL+"/healthz"), l)
 	l.Info("mounted health checkpoint")
 
 	return s, nil
