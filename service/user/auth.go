@@ -17,12 +17,13 @@ type (
 	}
 
 	responseUserAuth struct {
-		Valid     bool
-		Token     string        `json:"token,omitempty"`
-		Claims    *token.Claims `json:"claims,omitempty"`
-		Username  string        `json:"username,omitempty"`
-		FirstName string        `json:"first_name,omitempty"`
-		LastName  string        `json:"last_name,omitempty"`
+		Valid        bool
+		AccessToken  string        `json:"access_token,omitempty"`
+		RefreshToken string        `json:"refresh_token,omitempty"`
+		Claims       *token.Claims `json:"claims,omitempty"`
+		Username     string        `json:"username,omitempty"`
+		FirstName    string        `json:"first_name,omitempty"`
+		LastName     string        `json:"last_name,omitempty"`
 	}
 )
 
@@ -53,19 +54,25 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 		if m.ValidatePass(ruser.Password) {
-			token, claims, err := u.tokenizer.Generate(m, u.loginTime, "authentication", "")
+			accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, "authentication", "")
+			if err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, "refresh", "")
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
 			}
 
 			return c.JSON(http.StatusOK, &responseUserAuth{
-				Valid:     true,
-				Token:     token,
-				Claims:    claims,
-				Username:  m.Username,
-				FirstName: m.FirstName,
-				LastName:  m.LastName,
+				Valid:        true,
+				AccessToken:  accessToken,
+				RefreshToken: refreshToken,
+				Claims:       claims,
+				Username:     m.Username,
+				FirstName:    m.FirstName,
+				LastName:     m.LastName,
 			})
 		}
 
@@ -74,12 +81,16 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		})
 	})
 
+	r.POST("/exchange", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, &responseUserAuth{})
+	})
+
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
 			return c.JSON(http.StatusOK, responseUserAuth{
-				Valid:  true,
-				Token:  strings.Split(c.Request().Header.Get("Authorization"), " ")[1],
-				Claims: c.Get("user").(*token.Claims),
+				Valid:       true,
+				AccessToken: strings.Split(c.Request().Header.Get("Authorization"), " ")[1],
+				Claims:      c.Get("user").(*token.Claims),
 			})
 		}, u.gate.User())
 	}

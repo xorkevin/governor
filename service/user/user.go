@@ -17,29 +17,36 @@ const (
 type (
 	// User is a user management service
 	User struct {
-		db        *db.Database
-		tokenizer *token.Tokenizer
-		loginTime int64
-		gate      *gate.Gate
+		db          *db.Database
+		tokenizer   *token.Tokenizer
+		accessTime  int64
+		refreshTime int64
+		gate        *gate.Gate
 	}
 )
 
 const (
-	time5m int64 = 300
+	time15m int64 = 900
+	time7d  int64 = 604800
 )
 
 // New creates a new User
 func New(conf governor.Config, db *db.Database) *User {
 	c := conf.Conf().GetStringMapString("userauth")
-	t := time5m
+	atime := time15m
+	rtime := time7d
 	if duration, err := time.ParseDuration(c["duration"]); err != nil {
-		t = duration.Nanoseconds() / 1000000000
+		atime = duration.Nanoseconds() / 1000000000
+	}
+	if duration, err := time.ParseDuration(c["refresh_duration"]); err != nil {
+		rtime = duration.Nanoseconds() / 1000000000
 	}
 	return &User{
-		db:        db,
-		tokenizer: token.New(c["secret"], c["issuer"]),
-		loginTime: t,
-		gate:      gate.New(c["secret"], c["issuer"]),
+		db:          db,
+		tokenizer:   token.New(c["secret"], c["issuer"]),
+		accessTime:  atime,
+		refreshTime: rtime,
+		gate:        gate.New(c["secret"], c["issuer"]),
 	}
 }
 

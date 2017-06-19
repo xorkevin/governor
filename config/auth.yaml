@@ -13,3 +13,4 @@ userauth:
   issuer: governor_auth
   secret: secret
   duration: 15m
+  refresh_duration: 168h
