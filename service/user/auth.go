@@ -11,12 +11,16 @@ import (
 )
 
 type (
-	requestUserAuth struct {
+	reqUserAuth struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
-	responseUserAuth struct {
+	reqExchangeToken struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	resUserAuth struct {
 		Valid        bool
 		AccessToken  string        `json:"access_token,omitempty"`
 		RefreshToken string        `json:"refresh_token,omitempty"`
@@ -27,7 +31,7 @@ type (
 	}
 )
 
-func (r *requestUserAuth) valid() *governor.Error {
+func (r *reqUserAuth) valid() *governor.Error {
 	if err := hasUsername(r.Username); err != nil {
 		return err
 	}
@@ -37,11 +41,18 @@ func (r *requestUserAuth) valid() *governor.Error {
 	return nil
 }
 
+func (r *reqExchangeToken) valid() *governor.Error {
+	if err := hasToken(r.RefreshToken); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	r.POST("/login", func(c echo.Context) error {
-		ruser := &requestUserAuth{}
+		ruser := &reqUserAuth{}
 		if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
@@ -65,7 +76,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 
-			return c.JSON(http.StatusOK, &responseUserAuth{
+			return c.JSON(http.StatusOK, &resUserAuth{
 				Valid:        true,
 				AccessToken:  accessToken,
 				RefreshToken: refreshToken,
@@ -76,18 +87,26 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			})
 		}
 
-		return c.JSON(http.StatusUnauthorized, &responseUserAuth{
+		return c.JSON(http.StatusUnauthorized, &resUserAuth{
 			Valid: false,
 		})
 	})
 
 	r.POST("/exchange", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, &responseUserAuth{})
+		ruser := &reqExchangeToken{}
+		if err := c.Bind(ruser); err != nil {
+			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, &resUserAuth{})
 	})
 
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
-			return c.JSON(http.StatusOK, responseUserAuth{
+			return c.JSON(http.StatusOK, resUserAuth{
 				Valid:       true,
 				AccessToken: strings.Split(c.Request().Header.Get("Authorization"), " ")[1],
 				Claims:      c.Get("user").(*token.Claims),
