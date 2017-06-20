@@ -17,7 +17,7 @@ const (
   __/ |
  |___/  %s
 
- http server starting on port %s
+ %s
 `
 )
 
@@ -69,7 +69,7 @@ func New(config Config) (*Server, error) {
 // Start starts the server at the specified port
 func (s *Server) Start() error {
 	if s.showBanner {
-		fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), color.RedString(s.config.Port))
+		fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), "http server on "+color.RedString(":"+s.config.Port))
 	}
 	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
