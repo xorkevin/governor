@@ -68,7 +68,6 @@ build: clean build-auth build-fsserve
 
 
 ## docker
-
 docker-setup:
 	docker network create -d bridge $(DOCKER_NETWORK)
 
@@ -117,3 +116,11 @@ redis-stop:
 	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=exited)" ]; then docker rm $(REDIS_CONTAINER); fi
 
 redis-restart: redis-stop redis-run
+
+
+## docker dev env
+setup: docker-setup pg-setup redis-setup
+
+restart: pg-restart redis-restart
+
+stop: pg-stop redis-stop
