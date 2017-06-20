@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/cache"
+	"github.com/hackform/governor/service/cache/conf"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/db/conf"
@@ -23,6 +25,13 @@ func main() {
 		return
 	}
 	fmt.Println("loaded db config defaults")
+
+	if err = cacheconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("loaded cache config defaults")
+
 	if err = userconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
 		return
@@ -42,27 +51,37 @@ func main() {
 	log := g.Logger()
 	log.Info("server instance created")
 
-	db, err := db.New(config)
+	dbService, err := db.New(config)
 	if err != nil {
 		log.Errorf("error creating DB: %s\n", err)
 		return
 	}
 	log.Info("initialized database")
 
-	cS := conf.New(db)
+	cacheService, err := cache.New(config)
+	if err != nil {
+		log.Errorf("error creating Cache: %s\n", err)
+		return
+	}
+	log.Info("initialized cache")
+
+	confService := conf.New(dbService)
 	log.Info("initialized conf service")
 
-	uS := user.New(config, db)
+	userService := user.New(config, dbService)
 	log.Info("initialized user service")
 
-	g.MountRoute("/conf", cS)
+	g.MountRoute("/null/database", dbService)
+	log.Info("mounted database")
+
+	g.MountRoute("/null/cache", cacheService)
+	log.Info("mounted cache")
+
+	g.MountRoute("/conf", confService)
 	log.Info("mounted conf service")
 
-	g.MountRoute("/u", uS)
+	g.MountRoute("/u", userService)
 	log.Info("mounted user service")
-
-	g.MountRoute("/null/database", db)
-	log.Info("mounted database")
 
 	g.Start()
 }
