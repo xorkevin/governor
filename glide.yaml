@@ -17,3 +17,5 @@ import:
   version: ^3.0.0
 - package: github.com/go-redis/redis
   version: ^6.5.0
+- package: github.com/fatih/color
+  version: ^1.5.0

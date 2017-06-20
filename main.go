@@ -1,9 +1,24 @@
 package governor
 
 import (
+	"fmt"
+	"github.com/fatih/color"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	banner = `
+  __ _  _____   _____ _ __ _ __   ___  _ __
+ / _' |/ _ \ \ / / _ \ '__| '_ \ / _ \| '__|
+| (_| | (_) \ V /  __/ |  | | | | (_) | |
+ \__. |\___/ \_/ \___|_|  |_| |_|\___/|_|
+  __/ |
+ |___/  %s
+
+ http server starting on port %s
+`
 )
 
 type (
@@ -22,6 +37,7 @@ func New(config Config) (*Server, error) {
 	l.Info("initialized logger")
 	i := echo.New()
 	l.Info("initialized server instance")
+	i.HideBanner = true
 	i.HTTPErrorHandler = errorHandler(i, l)
 	l.Info("initialized error handling")
 	i.Pre(middleware.RemoveTrailingSlash())
@@ -50,6 +66,7 @@ func New(config Config) (*Server, error) {
 
 // Start starts the server at the specified port
 func (s *Server) Start() error {
+	fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), color.RedString(s.config.Port))
 	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
 }
