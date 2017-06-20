@@ -128,6 +128,36 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		})
 	})
 
+	r.POST("/refresh", func(c echo.Context) error {
+		ruser := &reqExchangeToken{}
+		if err := c.Bind(ruser); err != nil {
+			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		}
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+
+		// check the refresh token
+		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, "")
+		if !validToken {
+			return c.JSON(http.StatusUnauthorized, &resUserAuth{
+				Valid: false,
+			})
+		}
+
+		// generate a new refreshToken from the refreshToken claims
+		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, refreshSubject, "")
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+
+		return c.JSON(http.StatusOK, &resUserAuth{
+			Valid:        true,
+			RefreshToken: refreshToken,
+		})
+	})
+
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
 			return c.JSON(http.StatusOK, resUserAuth{
