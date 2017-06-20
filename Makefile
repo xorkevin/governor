@@ -32,6 +32,11 @@ POSTGRES_VOLUME=governorpgvol
 POSTGRES_CONTAINER=gpostgres
 POSTGRES_PASS=admin
 
+# DEV_REDIS
+REDIS_VOLUME=governorredisvol
+REDIS_CONTAINER=gredis
+REDIS_PASS=admin
+
 
 
 all: build
@@ -98,3 +103,17 @@ pg-stop:
 	if [ "$$(docker ps -q -f name=$(POSTGRES_CONTAINER) -f status=exited)" ]; then docker rm $(POSTGRES_CONTAINER); fi
 
 pg-restart: pg-stop pg-run
+
+
+## redis
+redis-setup:
+	docker volume create --name $(REDIS_VOLUME)
+
+redis-run:
+	docker run -d --name $(REDIS_CONTAINER) --network=$(DOCKER_NETWORK) -p 6379:6379 -v $(REDIS_VOLUME):/data redis:alpine redis-server --requirepass $(REDIS_PASS)
+
+redis-stop:
+	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=running)" ]; then docker stop $(REDIS_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=exited)" ]; then docker rm $(REDIS_CONTAINER); fi
+
+redis-restart: redis-stop redis-run
