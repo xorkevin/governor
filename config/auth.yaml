@@ -9,6 +9,11 @@ postgres:
   host: gpostgres
   port: 5432
   sslmode: disable
+redis:
+  password: admin
+  dbname: 0
+  host: gredis
+  port: 6379
 userauth:
   issuer: governor_auth
   secret: secret
