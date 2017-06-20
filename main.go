@@ -24,10 +24,11 @@ const (
 type (
 	// Server is an http gateway
 	Server struct {
-		i      *echo.Echo
-		log    *logrus.Logger
-		h      *health
-		config Config
+		i          *echo.Echo
+		log        *logrus.Logger
+		h          *health
+		config     Config
+		showBanner bool
 	}
 )
 
@@ -53,10 +54,11 @@ func New(config Config) (*Server, error) {
 	l.Info("initialized middleware")
 
 	s := &Server{
-		i:      i,
-		log:    l,
-		config: config,
-		h:      newHealth(),
+		i:          i,
+		log:        l,
+		config:     config,
+		h:          newHealth(),
+		showBanner: true,
 	}
 	s.h.Mount(config, s.i.Group(s.config.BaseURL+"/healthz"), l)
 	l.Info("mounted health checkpoint")
@@ -66,7 +68,9 @@ func New(config Config) (*Server, error) {
 
 // Start starts the server at the specified port
 func (s *Server) Start() error {
-	fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), color.RedString(s.config.Port))
+	if s.showBanner {
+		fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), color.RedString(s.config.Port))
+	}
 	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
 }
