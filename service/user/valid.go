@@ -84,8 +84,8 @@ func hasPassword(password string) *governor.Error {
 }
 
 func hasToken(token string) *governor.Error {
-	if len(token) < 1 || len(token) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "password must be provided", 0, http.StatusBadRequest)
+	if len(token) < 1 || len(token) > lengthCapLarge {
+		return governor.NewErrorUser(moduleIDReqValid, "token must be provided", 0, http.StatusBadRequest)
 	}
 	return nil
 }

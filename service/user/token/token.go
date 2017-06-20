@@ -66,6 +66,24 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 }
 
 const (
+	moduleTokenGenerateFromClaims = moduleToken + ".generatefromclaims"
+)
+
+// GenerateFromClaims creates a new jwt from a set of claims
+func (t *Tokenizer) GenerateFromClaims(claims *Claims, duration int64, subject, id string) (string, *governor.Error) {
+	now := time.Now().Unix()
+	claims.IssuedAt = now
+	claims.ExpiresAt = now + duration
+	claims.Subject = subject
+	claims.Id = id
+	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
+	if errjwt != nil {
+		return "", governor.NewError(moduleTokenGenerateFromClaims, errjwt.Error(), 0, http.StatusInternalServerError)
+	}
+	return token, nil
+}
+
+const (
 	moduleTokenValidate = moduleToken + ".validate"
 )
 

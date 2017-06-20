@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"strings"
 )
 
 type (
@@ -48,6 +47,11 @@ func (r *reqExchangeToken) valid() *governor.Error {
 	return nil
 }
 
+const (
+	authenticationSubject = "authentication"
+	refreshSubject        = "refresh"
+)
+
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 
@@ -65,12 +69,14 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 		if m.ValidatePass(ruser.Password) {
-			accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, "authentication", "")
+			// generate an access token
+			accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
 			}
-			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, "refresh", "")
+			// generate a refresh tokens
+			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, "")
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
@@ -101,15 +107,32 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
-		return c.JSON(http.StatusOK, &resUserAuth{})
+		// check the refresh token
+		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, "")
+		if !validToken {
+			return c.JSON(http.StatusUnauthorized, &resUserAuth{
+				Valid: false,
+			})
+		}
+
+		// generate a new accessToken from the refreshToken claims
+		accessToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+
+		return c.JSON(http.StatusOK, &resUserAuth{
+			Valid:       true,
+			AccessToken: accessToken,
+		})
 	})
 
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
 			return c.JSON(http.StatusOK, resUserAuth{
-				Valid:       true,
-				AccessToken: strings.Split(c.Request().Header.Get("Authorization"), " ")[1],
-				Claims:      c.Get("user").(*token.Claims),
+				Valid:  true,
+				Claims: c.Get("user").(*token.Claims),
 			})
 		}, u.gate.User())
 	}
