@@ -19,24 +19,25 @@ func main() {
 		return
 	}
 	fmt.Println("created new config")
+	fmt.Println("loading config defaults:")
 
 	if err = dbconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
-	fmt.Println("loaded db config defaults")
+	fmt.Println("- db")
 
 	if err = cacheconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
-	fmt.Println("loaded cache config defaults")
+	fmt.Println("- cache")
 
 	if err = userconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
-	fmt.Println("loaded user config defaults")
+	fmt.Println("- user")
 
 	if err = config.Init(); err != nil {
 		fmt.Printf(err.Error())
