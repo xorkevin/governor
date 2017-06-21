@@ -120,7 +120,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 
-			// set the session id and key into redis
+			// set the session id and key into cache
 			if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 			}
@@ -203,11 +203,24 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			})
 		}
 
-		// generate a new refreshToken from the refreshToken claims
-		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, refreshSubject, "")
+		// create a new key for the session
+		key, err := uid.NewU(0, 16)
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
+		}
+		sessionKey = key.Base64()
+
+		// generate a new refreshToken from the refreshToken claims
+		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, refreshSubject, sessionKey)
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+
+		// set the session id and key into cache
+		if err := ch.Set(ruser.SessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
 		return c.JSON(http.StatusOK, &resUserAuth{
