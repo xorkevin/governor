@@ -152,7 +152,6 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		sessionKey := ""
-
 		if key, err := ch.Get(ruser.SessionID).Result(); err == nil {
 			sessionKey = key
 		} else {
@@ -189,8 +188,15 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		sessionKey := ""
+		if key, err := ch.Get(ruser.SessionID).Result(); err == nil {
+			sessionKey = key
+		} else {
+			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+		}
+
 		// check the refresh token
-		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, "")
+		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionKey)
 		if !validToken {
 			return c.JSON(http.StatusUnauthorized, &resUserAuth{
 				Valid: false,
