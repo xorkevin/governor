@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/token"
@@ -18,6 +19,7 @@ type (
 	// User is a user management service
 	User struct {
 		db          *db.Database
+		cache       *cache.Cache
 		tokenizer   *token.Tokenizer
 		accessTime  int64
 		refreshTime int64
@@ -31,7 +33,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, db *db.Database) *User {
+func New(conf governor.Config, db *db.Database, ch *cache.Cache) *User {
 	c := conf.Conf().GetStringMapString("userauth")
 	atime := time15m
 	rtime := time7d
@@ -43,6 +45,7 @@ func New(conf governor.Config, db *db.Database) *User {
 	}
 	return &User{
 		db:          db,
+		cache:       ch,
 		tokenizer:   token.New(c["secret"], c["issuer"]),
 		accessTime:  atime,
 		refreshTime: rtime,

@@ -68,7 +68,7 @@ func main() {
 	confService := conf.New(dbService)
 	log.Info("initialized conf service")
 
-	userService := user.New(config, dbService)
+	userService := user.New(config, dbService, cacheService)
 	log.Info("initialized user service")
 
 	g.MountRoute("/null/database", dbService)
