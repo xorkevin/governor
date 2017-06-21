@@ -8,19 +8,19 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type (
 	reqUserAuth struct {
-		Username  string `json:"username"`
-		Password  string `json:"password"`
-		SessionID string `json:"session_id"`
+		Username     string `json:"username"`
+		Password     string `json:"password"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	reqExchangeToken struct {
 		RefreshToken string `json:"refresh_token"`
-		SessionID    string `json:"session_id"`
 	}
 
 	resUserAuth struct {
@@ -31,7 +31,6 @@ type (
 		Username     string        `json:"username,omitempty"`
 		FirstName    string        `json:"first_name,omitempty"`
 		LastName     string        `json:"last_name,omitempty"`
-		SessionID    string        `json:"session_id,omitempty"`
 	}
 )
 
@@ -47,9 +46,6 @@ func (r *reqUserAuth) valid() *governor.Error {
 
 func (r *reqExchangeToken) valid() *governor.Error {
 	if err := hasToken(r.RefreshToken); err != nil {
-		return err
-	}
-	if err := hasToken(r.SessionID); err != nil {
 		return err
 	}
 	return nil
@@ -80,13 +76,15 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if m.ValidatePass(ruser.Password) {
 			sessionID := ""
 			// if session_id is provided, is in cache, and is valid, set it as the sessionID
-			if len(ruser.SessionID) > 0 {
-				if _, err := ch.Get(ruser.SessionID).Result(); err == nil {
-					if id, err := uid.FromBase64(4, 8, 4, ruser.SessionID); err == nil {
-						sessionID = id.Base64()
+			if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken); ok {
+				if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+					if _, err := ch.Get(s[0]).Result(); err == nil {
+						if id, err := uid.FromBase64(4, 8, 4, s[0]); err == nil {
+							sessionID = id.Base64()
+						}
+					} else {
+						return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 					}
-				} else {
-					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 				}
 			}
 			// otherwise, create a new sessionID
@@ -114,7 +112,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 			// generate a refresh tokens with the sessionKey
-			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, sessionKey)
+			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
@@ -133,7 +131,6 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				Username:     m.Username,
 				FirstName:    m.FirstName,
 				LastName:     m.LastName,
-				SessionID:    sessionID,
 			})
 		}
 
@@ -151,15 +148,25 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		sessionID := ""
 		sessionKey := ""
-		if key, err := ch.Get(ruser.SessionID).Result(); err == nil {
-			sessionKey = key
-		} else {
-			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken); ok {
+			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+				if key, err := ch.Get(s[0]).Result(); err == nil {
+					sessionID = s[0]
+					sessionKey = key
+				} else {
+					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+				}
+			}
+		}
+
+		if sessionID == "" {
+			return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
 		}
 
 		// check the refresh token
-		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionKey)
+		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 		if !validToken {
 			return c.JSON(http.StatusUnauthorized, &resUserAuth{
 				Valid: false,
@@ -188,15 +195,25 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		sessionID := ""
 		sessionKey := ""
-		if key, err := ch.Get(ruser.SessionID).Result(); err == nil {
-			sessionKey = key
-		} else {
-			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken); ok {
+			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+				if key, err := ch.Get(s[0]).Result(); err == nil {
+					sessionID = s[0]
+					sessionKey = key
+				} else {
+					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+				}
+			}
+		}
+
+		if sessionID == "" {
+			return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
 		}
 
 		// check the refresh token
-		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionKey)
+		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 		if !validToken {
 			return c.JSON(http.StatusUnauthorized, &resUserAuth{
 				Valid: false,
@@ -212,14 +229,14 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		sessionKey = key.Base64()
 
 		// generate a new refreshToken from the refreshToken claims
-		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, refreshSubject, sessionKey)
+		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, refreshSubject, sessionID+":"+sessionKey)
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
 
 		// set the session id and key into cache
-		if err := ch.Set(ruser.SessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 

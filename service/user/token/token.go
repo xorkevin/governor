@@ -98,3 +98,13 @@ func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
 	}
 	return false, nil
 }
+
+// GetClaims returns the claims of a token without verifying
+func (t *Tokenizer) GetClaims(tokenString string) (bool, *Claims) {
+	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) { return t.secret, nil }); err == nil {
+		if claims, ok := token.Claims.(*Claims); ok {
+			return true, claims
+		}
+	}
+	return false, nil
+}
