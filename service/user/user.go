@@ -30,6 +30,7 @@ type (
 const (
 	time15m int64 = 900
 	time7d  int64 = 604800
+	b1            = 1000000000
 )
 
 // New creates a new User
@@ -38,10 +39,10 @@ func New(conf governor.Config, db *db.Database, ch *cache.Cache) *User {
 	atime := time15m
 	rtime := time7d
 	if duration, err := time.ParseDuration(c["duration"]); err != nil {
-		atime = duration.Nanoseconds() / 1000000000
+		atime = duration.Nanoseconds() / b1
 	}
 	if duration, err := time.ParseDuration(c["refresh_duration"]); err != nil {
-		rtime = duration.Nanoseconds() / 1000000000
+		rtime = duration.Nanoseconds() / b1
 	}
 	return &User{
 		db:          db,
