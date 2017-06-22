@@ -4,6 +4,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
@@ -21,6 +22,7 @@ type (
 		db          *db.Database
 		cache       *cache.Cache
 		tokenizer   *token.Tokenizer
+		mailer      *mail.Mail
 		accessTime  int64
 		refreshTime int64
 		gate        *gate.Gate
@@ -34,7 +36,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *User {
+func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache, m *mail.Mail) *User {
 	c := conf.Conf().GetStringMapString("userauth")
 	atime := time15m
 	rtime := time7d
@@ -50,6 +52,7 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 	return &User{
 		db:          db,
 		cache:       ch,
+		mailer:      m,
 		tokenizer:   token.New(c["secret"], c["issuer"]),
 		accessTime:  atime,
 		refreshTime: rtime,

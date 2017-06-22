@@ -20,8 +20,8 @@ userauth:
   duration: 15m
   refresh_duration: 168h
 mail:
-  username: admin
-  password: admin
+  username: test
+  password: test
   host: localhost
   port: 1025
   from_address: gov@hack.com
