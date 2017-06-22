@@ -24,7 +24,9 @@ type (
 )
 
 // New creates a new Conf service
-func New(database *db.Database) *Conf {
+func New(l *logrus.Logger, database *db.Database) *Conf {
+	l.Info("initialized conf service")
+
 	return &Conf{
 		db: database,
 	}
@@ -148,6 +150,9 @@ func (c *Conf) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			Orgname:   mconf.Orgname,
 		})
 	})
+
+	l.Info("mounted conf service")
+
 	return nil
 }
 

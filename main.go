@@ -63,6 +63,7 @@ func New(config Config) (*Server, error) {
 	s.h.Mount(config, s.i.Group(s.config.BaseURL+"/healthz"), l)
 	l.Info("mounted health checkpoint")
 
+	l.Info("server instance created")
 	return s, nil
 }
 

@@ -20,7 +20,7 @@ const (
 )
 
 // New creates a new cache service
-func New(c governor.Config) (*Cache, error) {
+func New(c governor.Config, l *logrus.Logger) (*Cache, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("redis")
 
@@ -31,8 +31,11 @@ func New(c governor.Config) (*Cache, error) {
 	})
 
 	if _, err := cache.Ping().Result(); err != nil {
+		l.Errorf("error creating Cache: %s\n", err)
 		return nil, err
 	}
+
+	l.Info("initialized cache")
 
 	return &Cache{
 		cache: cache,
@@ -41,11 +44,12 @@ func New(c governor.Config) (*Cache, error) {
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (c *Cache) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	l.Info("mounted cache")
 	return nil
 }
 
 const (
-	moduleIDHealth = moduleID + ".Health"
+	moduleIDHealth = moduleID + ".health"
 )
 
 // Health is a health check for the service

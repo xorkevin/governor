@@ -34,7 +34,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, db *db.Database, ch *cache.Cache) *User {
+func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *User {
 	c := conf.Conf().GetStringMapString("userauth")
 	atime := time15m
 	rtime := time7d
@@ -44,6 +44,9 @@ func New(conf governor.Config, db *db.Database, ch *cache.Cache) *User {
 	if duration, err := time.ParseDuration(c["refresh_duration"]); err != nil {
 		rtime = duration.Nanoseconds() / b1
 	}
+
+	l.Info("initialized user service")
+
 	return &User{
 		db:          db,
 		cache:       ch,
@@ -67,6 +70,9 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 	if err := u.mountAuth(conf, r.Group("/auth"), l); err != nil {
 		return err
 	}
+
+	l.Info("mounted user service")
+
 	return nil
 }
 

@@ -23,4 +23,6 @@ mail:
   username: admin
   password: admin
   host: localhost
-  port: 587
+  port: 1025
+  # port: 587
+  from_address: gov@hack.com

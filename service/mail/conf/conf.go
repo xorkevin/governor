@@ -11,5 +11,6 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("mail.password", "admin")
 	v.SetDefault("mail.host", "localhost")
 	v.SetDefault("mail.port", "587")
+	v.SetDefault("mail.insecure", false)
 	return nil
 }

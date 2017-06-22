@@ -22,7 +22,7 @@ const (
 )
 
 // New creates a new db service
-func New(c governor.Config) (*Database, error) {
+func New(c governor.Config, l *logrus.Logger) (*Database, error) {
 	v := c.Conf()
 	pgconf := v.GetStringMapString("postgres")
 	pgarr := []string{}
@@ -32,11 +32,16 @@ func New(c governor.Config) (*Database, error) {
 	postgresURL := strings.Join(pgarr, " ")
 	db, err := sql.Open("postgres", postgresURL)
 	if err != nil {
+		l.Errorf("error creating DB: %s\n", err)
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
+		l.Errorf("error creating DB: %s\n", err)
 		return nil, err
 	}
+
+	l.Info("initialized database")
+
 	return &Database{
 		db: db,
 	}, nil
@@ -44,11 +49,12 @@ func New(c governor.Config) (*Database, error) {
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (db *Database) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	l.Info("mounted database")
 	return nil
 }
 
 const (
-	moduleIDHealth = moduleID + ".Health"
+	moduleIDHealth = moduleID + ".health"
 )
 
 // Health is a health check for the service
