@@ -4,7 +4,7 @@ import (
 	"github.com/hackform/governor"
 )
 
-// Conf loads in the defaults for the database
+// Conf loads in the defaults for the cache
 func Conf(c *governor.Config) error {
 	v := c.Conf()
 	v.SetDefault("redis.password", "admin")

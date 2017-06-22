@@ -19,3 +19,8 @@ userauth:
   secret: secret
   duration: 15m
   refresh_duration: 168h
+mail:
+  username: admin
+  password: admin
+  host: localhost
+  port: 587

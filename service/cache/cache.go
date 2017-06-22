@@ -56,7 +56,7 @@ func (c *Cache) Health() *governor.Error {
 	return nil
 }
 
-// Cache returns the sql database instance
+// Cache returns the cache instance
 func (c *Cache) Cache() *redis.Client {
 	return c.cache
 }
