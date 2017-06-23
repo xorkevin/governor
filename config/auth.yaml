@@ -22,7 +22,7 @@ userauth:
 mail:
   username: test
   password: test
-  host: localhost
+  host: gmail
   port: 1025
   # port: 587
   from_address: gov@hack.com

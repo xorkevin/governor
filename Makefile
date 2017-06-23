@@ -37,6 +37,9 @@ REDIS_VOLUME=governorredisvol
 REDIS_CONTAINER=gredis
 REDIS_PASS=admin
 
+# DEV_MAIL
+MAIL_CONTAINER=gmail
+
 
 
 all: build
@@ -118,9 +121,19 @@ redis-stop:
 redis-restart: redis-stop redis-run
 
 
+## mailer
+mail-run:
+	docker run -d --name $(MAIL_CONTAINER) --network=$(DOCKER_NETWORK) -p 1025:1025 -p 8025:8025 mailhog/mailhog
+
+mail-stop:
+	if [ "$$(docker ps -q -f name=$(MAIL_CONTAINER) -f status=running)" ]; then docker stop $(MAIL_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(MAIL_CONTAINER) -f status=exited)" ]; then docker rm $(MAIL_CONTAINER); fi
+
+mail-restart: mail-stop mail-run
+
 ## docker dev env
 setup: docker-setup pg-setup redis-setup
 
-restart: pg-restart redis-restart
+restart: pg-restart redis-restart mail-restart
 
-stop: pg-stop redis-stop
+stop: pg-stop redis-stop mail-stop
