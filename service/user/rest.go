@@ -23,6 +23,11 @@ type (
 		Username string `json:"username"`
 	}
 
+	reqForgotPasswordReset struct {
+		Key         string `json:"key"`
+		NewPassword string `json:"new_password"`
+	}
+
 	reqUserPut struct {
 		Username  string `json:"username"`
 		FirstName string `json:"first_name"`
@@ -78,6 +83,16 @@ func (r *reqUserPostConfirm) valid() *governor.Error {
 
 func (r *reqForgotPassword) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqForgotPasswordReset) valid() *governor.Error {
+	if err := hasToken(r.Key); err != nil {
+		return err
+	}
+	if err := validPassword(r.NewPassword); err != nil {
 		return err
 	}
 	return nil

@@ -265,7 +265,40 @@ func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
-	return nil
+	db := u.db.DB()
+	ch := u.cache.Cache()
+
+	ruser := &reqForgotPasswordReset{}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	userid := ""
+	if result, err := ch.Get(ruser.Key).Result(); err == nil {
+		userid = result
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	m, err := usermodel.GetByIDB64(db, userid)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := m.RehashPass(ruser.NewPassword); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	if err := m.Update(db); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, &resUserUpdate{
+		Userid:   m.ID.Userid,
+		Username: m.Username,
+	})
 }
 
 func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
