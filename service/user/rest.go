@@ -183,7 +183,7 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	})
 
 	// password reset
-	r.GET("/password/forgot", func(c echo.Context) error {
+	r.POST("/password/forgot", func(c echo.Context) error {
 		return u.forgotPassword(c, l)
 	})
 

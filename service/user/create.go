@@ -226,6 +226,9 @@ func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	mailer := u.mailer
 
 	ruser := &reqForgotPassword{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
 	if err := ruser.valid(); err != nil {
 		return err
 	}
@@ -269,6 +272,9 @@ func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
 	ruser := &reqForgotPasswordReset{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
 	if err := ruser.valid(); err != nil {
 		return err
 	}
