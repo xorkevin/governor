@@ -73,8 +73,9 @@ func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
 
 func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
+	ch := u.cache.Cache()
 
-	ruser := &reqUserPost{}
+	ruser := &reqUserPostConfirm{}
 	if err := c.Bind(ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
@@ -82,10 +83,15 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
+	gobUser, err := ch.Get(ruser.Key).Result()
 	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+
+	m := &usermodel.Model{}
+	b := bytes.NewBufferString(gobUser)
+	if err := gob.NewDecoder(b).Decode(m); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	if err := m.Insert(db); err != nil {

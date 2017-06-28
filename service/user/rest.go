@@ -15,6 +15,10 @@ type (
 		LastName  string `json:"last_name"`
 	}
 
+	reqUserPostConfirm struct {
+		Key string `json:"key"`
+	}
+
 	reqUserPut struct {
 		Username  string `json:"username"`
 		Email     string `json:"email"`
@@ -52,6 +56,13 @@ func (r *reqUserPost) valid() *governor.Error {
 		return err
 	}
 	if err := validLastName(r.LastName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqUserPostConfirm) valid() *governor.Error {
+	if err := hasToken(r.Key); err != nil {
 		return err
 	}
 	return nil
@@ -130,6 +141,9 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	r.POST("", func(c echo.Context) error {
 		return u.confirmUser(c, l)
+	})
+	r.POST("/confirm", func(c echo.Context) error {
+		return u.postUser(c, l)
 	})
 
 	ri := r.Group("/id")
