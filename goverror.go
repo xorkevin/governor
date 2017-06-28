@@ -98,6 +98,11 @@ func (e *Error) Level() int {
 	return e.logLevel
 }
 
+// IsErrorUser returns if the error is a user error
+func (e *Error) IsErrorUser() bool {
+	return e.logLevel == levelNoLog
+}
+
 // AddTrace adds the current caller to the call stack of the error
 func (e *Error) AddTrace(module string) {
 	e.source = append(e.source, module)

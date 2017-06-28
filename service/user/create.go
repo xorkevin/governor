@@ -1,11 +1,14 @@
 package user
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
+	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -13,7 +16,64 @@ import (
 	"time"
 )
 
-func postUser(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+	ch := u.cache.Cache()
+	mailer := u.mailer
+
+	ruser := &reqUserPost{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	m2, err := usermodel.GetByUsername(db, ruser.Username)
+	if err != nil && !err.IsErrorUser() {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	if m2 != nil && m2.Username == ruser.Username {
+		return governor.NewErrorUser(moduleIDUser, "username is already taken", 0, http.StatusBadRequest)
+	}
+
+	m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	b := bytes.Buffer{}
+	if err := gob.NewEncoder(&b).Encode(m); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	if err := ch.Set(sessionKey, b.String(), time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := mailer.Send(m.Email, "Confirm your account", "key: "+sessionKey); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, &resUserUpdate{
+		Userid:   m.ID.Userid,
+		Username: m.Username,
+	})
+}
+
+func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	ruser := &reqUserPost{}
 	if err := c.Bind(ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -27,6 +87,7 @@ func postUser(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
+
 	if err := m.Insert(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err

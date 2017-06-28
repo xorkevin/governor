@@ -72,7 +72,7 @@ func main() {
 
 	confService := conf.New(g.Logger(), dbService)
 
-	userService := user.New(config, g.Logger(), dbService, cacheService)
+	userService := user.New(config, g.Logger(), dbService, cacheService, mailService)
 
 	g.MountRoute("/null/database", dbService)
 

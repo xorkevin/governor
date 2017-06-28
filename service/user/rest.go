@@ -127,8 +127,9 @@ func (r *reqUserGetID) valid() *governor.Error {
 
 func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
+
 	r.POST("", func(c echo.Context) error {
-		return postUser(c, l, db)
+		return u.confirmUser(c, l)
 	})
 
 	ri := r.Group("/id")
