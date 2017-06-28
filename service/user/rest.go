@@ -149,7 +149,6 @@ func (r *reqUserGetID) valid() *governor.Error {
 
 func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	// new user routes
-
 	r.POST("", func(c echo.Context) error {
 		return u.confirmUser(c, l)
 	})
@@ -189,6 +188,14 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
+	})
+
+	ri.GET("/:username/password/forgot", func(c echo.Context) error {
+		return u.forgotPassword(c, l)
+	})
+
+	ri.PUT("/:username/password/forgot/reset", func(c echo.Context) error {
+		return u.forgotPasswordReset(c, l)
 	})
 
 	if conf.IsDebug() {

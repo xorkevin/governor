@@ -220,6 +220,14 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
+func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
+	return nil
+}
+
+func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
+	return nil
+}
+
 func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
