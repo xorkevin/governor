@@ -2,7 +2,6 @@ package user
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
@@ -114,7 +113,9 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func putUser(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	reqid := &reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -146,7 +147,9 @@ func putUser(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func putEmail(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	reqid := &reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -179,7 +182,9 @@ func putEmail(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func putPassword(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	reqid := &reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -215,7 +220,9 @@ func putPassword(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func patchRank(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	reqid := &reqUserGetID{
 		Userid: c.Param("id"),
 	}

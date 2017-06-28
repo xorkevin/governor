@@ -148,7 +148,7 @@ func (r *reqUserGetID) valid() *governor.Error {
 }
 
 func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	db := u.db.DB()
+	// new user routes
 
 	r.POST("", func(c echo.Context) error {
 		return u.confirmUser(c, l)
@@ -157,34 +157,43 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return u.postUser(c, l)
 	})
 
+	// id routes
 	ri := r.Group("/id")
+
 	ri.GET("/:id", func(c echo.Context) error {
-		return getByID(c, l, db)
+		return u.getByID(c, l)
 	})
+
 	ri.GET("/:id/private", func(c echo.Context) error {
-		return getByIDPrivate(c, l, db)
+		return u.getByIDPrivate(c, l)
 	}, u.gate.OwnerOrAdmin("id"))
+
 	ri.PUT("/:id", func(c echo.Context) error {
-		return putUser(c, l, db)
+		return u.putUser(c, l)
 	}, u.gate.Owner("id"))
+
 	ri.PUT("/:id/email", func(c echo.Context) error {
-		return putEmail(c, l, db)
+		return u.putEmail(c, l)
 	}, u.gate.Owner("id"))
+
 	ri.PUT("/:id/password", func(c echo.Context) error {
-		return putPassword(c, l, db)
+		return u.putPassword(c, l)
 	}, u.gate.Owner("id"))
+
 	ri.PATCH("/:id/rank", func(c echo.Context) error {
-		return patchRank(c, l, db)
+		return u.patchRank(c, l)
 	}, u.gate.User())
 
+	// username routes
 	rn := r.Group("/name")
+
 	rn.GET("/:username", func(c echo.Context) error {
-		return getByUsername(c, l, db)
+		return u.getByUsername(c, l)
 	})
 
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {
-			return getByUsernameDebug(c, l, db)
+			return u.getByUsernameDebug(c, l)
 		})
 	}
 

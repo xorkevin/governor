@@ -1,14 +1,15 @@
 package user
 
 import (
-	"database/sql"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
-func getByID(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	ruser := &reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -29,7 +30,9 @@ func getByID(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func getByIDPrivate(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	ruser := &reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -54,7 +57,9 @@ func getByIDPrivate(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func getByUsername(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) getByUsername(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	ruser := &reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -75,7 +80,9 @@ func getByUsername(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 	})
 }
 
-func getByUsernameDebug(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+func (u *User) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	ruser := &reqUserGetUsername{
 		Username: c.Param("username"),
 	}
