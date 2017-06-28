@@ -156,6 +156,11 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return u.postUser(c, l)
 	})
 
+	// password reset
+	r.PUT("/password/forgot/reset", func(c echo.Context) error {
+		return u.forgotPasswordReset(c, l)
+	})
+
 	// id routes
 	ri := r.Group("/id")
 
@@ -192,10 +197,6 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	ri.GET("/:username/password/forgot", func(c echo.Context) error {
 		return u.forgotPassword(c, l)
-	})
-
-	ri.PUT("/:username/password/forgot/reset", func(c echo.Context) error {
-		return u.forgotPasswordReset(c, l)
 	})
 
 	if conf.IsDebug() {
