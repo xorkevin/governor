@@ -134,9 +134,41 @@ func putUser(c echo.Context, l *logrus.Logger, db *sql.DB) error {
 		return err
 	}
 	m.Username = ruser.Username
-	m.Email = ruser.Email
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
+	if err = m.Update(db); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	return c.JSON(http.StatusCreated, &resUserUpdate{
+		Userid:   m.ID.Userid,
+		Username: m.Username,
+	})
+}
+
+func putEmail(c echo.Context, l *logrus.Logger, db *sql.DB) error {
+	reqid := &reqUserGetID{
+		Userid: c.Param("id"),
+	}
+	if err := reqid.valid(); err != nil {
+		return err
+	}
+	ruser := &reqUserPutEmail{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	if err != nil {
+		return err
+	}
+	if !m.ValidatePass(ruser.Password) {
+		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
+	}
+	m.Email = ruser.Email
 	if err = m.Update(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err

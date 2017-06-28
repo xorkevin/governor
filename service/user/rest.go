@@ -21,9 +21,13 @@ type (
 
 	reqUserPut struct {
 		Username  string `json:"username"`
-		Email     string `json:"email"`
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
+	}
+
+	reqUserPutEmail struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	reqUserPutPassword struct {
@@ -72,13 +76,20 @@ func (r *reqUserPut) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
-	if err := validEmail(r.Email); err != nil {
-		return err
-	}
 	if err := validFirstName(r.FirstName); err != nil {
 		return err
 	}
 	if err := validLastName(r.LastName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqUserPutEmail) valid() *governor.Error {
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
@@ -155,6 +166,9 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	}, u.gate.OwnerOrAdmin("id"))
 	ri.PUT("/:id", func(c echo.Context) error {
 		return putUser(c, l, db)
+	}, u.gate.Owner("id"))
+	ri.PUT("/:id/email", func(c echo.Context) error {
+		return putEmail(c, l, db)
 	}, u.gate.Owner("id"))
 	ri.PUT("/:id/password", func(c echo.Context) error {
 		return putPassword(c, l, db)
