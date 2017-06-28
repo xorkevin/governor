@@ -19,44 +19,58 @@ const (
 type (
 	// User is a user management service
 	User struct {
-		db          *db.Database
-		cache       *cache.Cache
-		tokenizer   *token.Tokenizer
-		mailer      *mail.Mail
-		accessTime  int64
-		refreshTime int64
-		gate        *gate.Gate
+		db                *db.Database
+		cache             *cache.Cache
+		tokenizer         *token.Tokenizer
+		mailer            *mail.Mail
+		accessTime        int64
+		refreshTime       int64
+		confirmTime       int64
+		passwordResetTime int64
+		gate              *gate.Gate
 	}
 )
 
 const (
 	time15m int64 = 900
 	time7d  int64 = 604800
+	time24h int64 = 86400
 	b1            = 1000000000
 )
 
 // New creates a new User
 func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache, m *mail.Mail) *User {
-	c := conf.Conf().GetStringMapString("userauth")
-	atime := time15m
-	rtime := time7d
-	if duration, err := time.ParseDuration(c["duration"]); err != nil {
-		atime = duration.Nanoseconds() / b1
+	ca := conf.Conf().GetStringMapString("userauth")
+	cu := conf.Conf().GetStringMapString("user")
+	accessTime := time15m
+	refreshTime := time7d
+	confirmTime := time24h
+	passwordResetTime := time24h
+	if duration, err := time.ParseDuration(ca["duration"]); err != nil {
+		accessTime = duration.Nanoseconds() / b1
 	}
-	if duration, err := time.ParseDuration(c["refresh_duration"]); err != nil {
-		rtime = duration.Nanoseconds() / b1
+	if duration, err := time.ParseDuration(ca["refresh_duration"]); err != nil {
+		refreshTime = duration.Nanoseconds() / b1
+	}
+	if duration, err := time.ParseDuration(cu["confirm_duration"]); err != nil {
+		confirmTime = duration.Nanoseconds() / b1
+	}
+	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err != nil {
+		passwordResetTime = duration.Nanoseconds() / b1
 	}
 
 	l.Info("initialized user service")
 
 	return &User{
-		db:          db,
-		cache:       ch,
-		mailer:      m,
-		tokenizer:   token.New(c["secret"], c["issuer"]),
-		accessTime:  atime,
-		refreshTime: rtime,
-		gate:        gate.New(c["secret"], c["issuer"]),
+		db:                db,
+		cache:             ch,
+		mailer:            m,
+		tokenizer:         token.New(ca["secret"], ca["issuer"]),
+		accessTime:        accessTime,
+		refreshTime:       refreshTime,
+		confirmTime:       confirmTime,
+		passwordResetTime: passwordResetTime,
+		gate:              gate.New(ca["secret"], ca["issuer"]),
 	}
 }
 

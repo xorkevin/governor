@@ -19,6 +19,10 @@ type (
 		Key string `json:"key"`
 	}
 
+	reqForgotPassword struct {
+		Username string `json:"username"`
+	}
+
 	reqUserPut struct {
 		Username  string `json:"username"`
 		FirstName string `json:"first_name"`
@@ -67,6 +71,13 @@ func (r *reqUserPost) valid() *governor.Error {
 
 func (r *reqUserPostConfirm) valid() *governor.Error {
 	if err := hasToken(r.Key); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqForgotPassword) valid() *governor.Error {
+	if err := validUsername(r.Username); err != nil {
 		return err
 	}
 	return nil
@@ -157,6 +168,10 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	})
 
 	// password reset
+	r.GET("/password/forgot", func(c echo.Context) error {
+		return u.forgotPassword(c, l)
+	})
+
 	r.PUT("/password/forgot/reset", func(c echo.Context) error {
 		return u.forgotPasswordReset(c, l)
 	})
@@ -193,10 +208,6 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
-	})
-
-	ri.GET("/:username/password/forgot", func(c echo.Context) error {
-		return u.forgotPassword(c, l)
 	})
 
 	if conf.IsDebug() {

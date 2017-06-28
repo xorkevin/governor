@@ -11,5 +11,7 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("userauth.refresh_duration", "168h")
 	v.SetDefault("userauth.secret", "governor")
 	v.SetDefault("userauth.issuer", "governor")
+	v.SetDefault("user.confirm_duration", "24h")
+	v.SetDefault("user.password_reset_duration", "24h")
 	return nil
 }

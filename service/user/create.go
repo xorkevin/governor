@@ -50,13 +50,13 @@ func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
 
 	key, err := uid.NewU(0, 16)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
+		err.AddTrace(moduleIDUser)
 		return err
 	}
 	sessionKey := key.Base64()
 
-	if err := ch.Set(sessionKey, b.String(), time.Duration(u.refreshTime*b1)).Err(); err != nil {
-		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if err := ch.Set(sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	if err := mailer.Send(m.Email, "Confirm your account", "key: "+sessionKey); err != nil {
@@ -221,7 +221,47 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
-	return nil
+	db := u.db.DB()
+	ch := u.cache.Cache()
+	mailer := u.mailer
+
+	ruser := &reqForgotPassword{}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	m, err := usermodel.GetByUsername(db, ruser.Username)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	userid, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := ch.Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := mailer.Send(m.Email, "Password reset", "key: "+sessionKey); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, &resUserUpdate{
+		Userid:   m.ID.Userid,
+		Username: m.Username,
+	})
 }
 
 func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
