@@ -59,8 +59,8 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	var sessions []string
 	if s, err := ch.HGetAll(sessionIDSetKey).Result(); err == nil {
 		sessions = []string{}
-		for _, v := range s {
-			sessions = append(sessions, v)
+		for k, v := range s {
+			sessions = append(sessions, k+","+v)
 		}
 		sort.Sort(sort.Reverse(sort.StringSlice(sessions)))
 	} else {
