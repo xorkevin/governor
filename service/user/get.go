@@ -60,7 +60,7 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	if s, err := ch.HGetAll(sessionIDSetKey).Result(); err == nil {
 		sessions = []string{}
 		for k, v := range s {
-			sessions = append(sessions, k+","+v)
+			sessions = append(sessions, v+","+k)
 		}
 		sort.Sort(sort.Reverse(sort.StringSlice(sessions)))
 	} else {
