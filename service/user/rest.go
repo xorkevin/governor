@@ -160,8 +160,9 @@ type (
 
 	resUserGet struct {
 		resUserGetPublic
-		Userid []byte `json:"userid"`
-		Email  string `json:"email"`
+		Userid   []byte   `json:"userid"`
+		Email    string   `json:"email"`
+		Sessions []string `json:"active_sessions"`
 	}
 )
 

@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -59,6 +60,7 @@ const (
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
+	mailer := u.mailer
 
 	r.POST("/login", func(c echo.Context) error {
 		ruser := &reqUserAuth{}
@@ -116,6 +118,28 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
+			}
+
+			userid, err := m.IDBase64()
+			if err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+
+			sessionIDSetKey := "usersession:" + userid
+
+			if isMember, err := ch.HExists(sessionIDSetKey, sessionID).Result(); err == nil {
+				if !isMember {
+					if err := mailer.Send(m.Email, "New Login", "New login from "+c.RealIP()); err != nil {
+						err.AddTrace(moduleIDAuth)
+						return err
+					}
+				}
+				if err = ch.HSet(sessionIDSetKey, sessionID, strconv.FormatInt(time.Now().Unix(), 10)+","+c.RealIP()).Err(); err != nil {
+					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+				}
+			} else {
+				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 			}
 
 			// set the session id and key into cache

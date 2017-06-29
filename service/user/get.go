@@ -1,10 +1,12 @@
 package user
 
 import (
+	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"sort"
 )
 
 func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
@@ -32,6 +34,7 @@ func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
 
 func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
+	ch := u.cache.Cache()
 
 	ruser := &reqUserGetID{
 		Userid: c.Param("id"),
@@ -44,6 +47,26 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	userid, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	sessionIDSetKey := "usersession:" + userid
+
+	var sessions []string
+	if s, err := ch.HGetAll(sessionIDSetKey).Result(); err == nil {
+		sessions = []string{}
+		for _, v := range s {
+			sessions = append(sessions, v)
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(sessions)))
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
 			Username:     m.Username,
@@ -52,8 +75,9 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 			LastName:     m.LastName,
 			CreationTime: m.CreationTime,
 		},
-		Userid: m.Userid,
-		Email:  m.Email,
+		Userid:   m.Userid,
+		Email:    m.Email,
+		Sessions: sessions,
 	})
 }
 
