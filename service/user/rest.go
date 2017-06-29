@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 )
@@ -160,9 +161,12 @@ type (
 
 	resUserGet struct {
 		resUserGetPublic
-		Userid   []byte   `json:"userid"`
-		Email    string   `json:"email"`
-		Sessions []string `json:"active_sessions"`
+		Userid []byte `json:"userid"`
+		Email  string `json:"email"`
+	}
+
+	resUserGetSessions struct {
+		Sessions []session.Session `json:"active_sessions"`
 	}
 )
 

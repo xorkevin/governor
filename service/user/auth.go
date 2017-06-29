@@ -3,12 +3,12 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -89,23 +89,20 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 					}
 				}
 			}
-			// otherwise, create a new sessionID
+
+			var s *session.Session
 			if sessionID == "" {
-				id, err := uid.New(4, 8, 4, m.Userid)
-				if err != nil {
+				// otherwise, create a new sessionID
+				if s, err = session.New(m, c); err != nil {
 					err.AddTrace(moduleIDAuth)
 					return err
 				}
-				sessionID = id.Base64()
+			} else {
+				if s, err = session.FromSessionID(sessionID, m, c); err != nil {
+					err.AddTrace(moduleIDAuth)
+					return err
+				}
 			}
-
-			// create a key for the session
-			key, err := uid.NewU(0, 16)
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			sessionKey := key.Base64()
 
 			// generate an access token
 			accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
@@ -114,28 +111,26 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 			// generate a refresh tokens with the sessionKey
-			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
+			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
 			}
 
-			userid, err := m.IDBase64()
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-
-			sessionIDSetKey := "usersession:" + userid
-
-			if isMember, err := ch.HExists(sessionIDSetKey, sessionID).Result(); err == nil {
+			// store the session in cache
+			if isMember, err := ch.HExists(s.UserKey(), s.SessionID).Result(); err == nil {
+				sessionGob, err := s.ToGob()
+				if err != nil {
+					err.AddTrace(moduleIDAuth)
+					return err
+				}
 				if !isMember {
-					if err := mailer.Send(m.Email, "New Login", "New login from "+c.RealIP()); err != nil {
+					if err := mailer.Send(m.Email, "New Login", "New login from "+s.IP+" with the useragent: "+s.UserAgent); err != nil {
 						err.AddTrace(moduleIDAuth)
 						return err
 					}
 				}
-				if err = ch.HSet(sessionIDSetKey, sessionID, strconv.FormatInt(time.Now().Unix(), 10)+","+c.RealIP()).Err(); err != nil {
+				if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
 					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 				}
 			} else {
@@ -143,7 +138,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			}
 
 			// set the session id and key into cache
-			if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+			if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 			}
 

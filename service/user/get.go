@@ -1,8 +1,11 @@
 package user
 
 import (
+	"bytes"
+	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -54,19 +57,6 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	sessionIDSetKey := "usersession:" + userid
-
-	var sessions []string
-	if s, err := ch.HGetAll(sessionIDSetKey).Result(); err == nil {
-		sessions = []string{}
-		for k, v := range s {
-			sessions = append(sessions, v+","+k)
-		}
-		sort.Sort(sort.Reverse(sort.StringSlice(sessions)))
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
 			Username:     m.Username,
@@ -75,9 +65,41 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 			LastName:     m.LastName,
 			CreationTime: m.CreationTime,
 		},
-		Userid:   m.Userid,
-		Email:    m.Email,
-		Sessions: sessions,
+		Userid: m.Userid,
+		Email:  m.Email,
+	})
+}
+
+func (u *User) getSessions(c echo.Context, l *logrus.Logger) error {
+	ch := u.cache.Cache()
+
+	ruser := &reqUserGetID{
+		Userid: c.Param("id"),
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	s := session.Session{
+		Userid: ruser.Userid,
+	}
+
+	sarr := session.Slice{}
+	if sgobs, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+		for _, v := range sgobs {
+			s := session.Session{}
+			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
+				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+			}
+			sarr = append(sarr, s)
+		}
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	sort.Sort(sort.Reverse(sarr))
+
+	return c.JSON(http.StatusOK, &resUserGetSessions{
+		Sessions: sarr,
 	})
 }
 
