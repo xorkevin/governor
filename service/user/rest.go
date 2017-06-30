@@ -45,6 +45,10 @@ type (
 		OldPassword string `json:"old_password"`
 	}
 
+	reqUserRmSessions struct {
+		SessionIDs []string `json:"session_ids"`
+	}
+
 	reqUserPutRank struct {
 		Add    string `json:"add"`
 		Remove string `json:"remove"`
@@ -127,6 +131,13 @@ func (r *reqUserPutPassword) valid() *governor.Error {
 		return err
 	}
 	if err := hasPassword(r.OldPassword); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqUserRmSessions) valid() *governor.Error {
+	if err := hasIDs(r.SessionIDs); err != nil {
 		return err
 	}
 	return nil
@@ -221,6 +232,10 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	ri.PUT("/:id/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
+	}, u.gate.Owner("id"))
+
+	ri.DELETE("/:id/sessions", func(c echo.Context) error {
+		return u.killSessions(c, l)
 	}, u.gate.Owner("id"))
 
 	ri.PATCH("/:id/rank", func(c echo.Context) error {

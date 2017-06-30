@@ -89,3 +89,10 @@ func hasToken(token string) *governor.Error {
 	}
 	return nil
 }
+
+func hasIDs(ids []string) *governor.Error {
+	if len(ids) < 1 {
+		return governor.NewErrorUser(moduleIDReqValid, "ids must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
@@ -141,10 +142,7 @@ func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
@@ -176,10 +174,7 @@ func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
@@ -214,10 +209,7 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
@@ -261,10 +253,7 @@ func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
@@ -301,10 +290,35 @@ func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (u *User) killSessions(c echo.Context, l *logrus.Logger) error {
+	ch := u.cache.Cache()
+
+	reqid := &reqUserGetID{
+		Userid: c.Param("id"),
+	}
+	if err := reqid.valid(); err != nil {
+		return err
+	}
+	ruser := &reqUserRmSessions{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	s := session.Session{
+		Userid: reqid.Userid,
+	}
+
+	if err := ch.HDel(s.UserKey(), ruser.SessionIDs...).Err(); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusNotFound)
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
@@ -353,10 +367,7 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
-		Username: m.Username,
-	})
+	return c.NoContent(http.StatusNoContent)
 }
 
 func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bool) *governor.Error {
