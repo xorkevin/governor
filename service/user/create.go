@@ -319,7 +319,7 @@ func (u *User) killSessions(c echo.Context, l *logrus.Logger) error {
 	}
 
 	if err := ch.HDel(s.UserKey(), ruser.SessionIDs...).Err(); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	return c.NoContent(http.StatusNoContent)
