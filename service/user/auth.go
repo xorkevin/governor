@@ -84,8 +84,6 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 						if id, err := uid.FromBase64(4, 8, 4, s[0]); err == nil {
 							sessionID = id.Base64()
 						}
-					} else {
-						return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 					}
 				}
 			}

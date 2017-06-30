@@ -207,6 +207,10 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return u.getByIDPrivate(c, l)
 	}, u.gate.OwnerOrAdmin("id"))
 
+	ri.GET("/:id/sessions", func(c echo.Context) error {
+		return u.getSessions(c, l)
+	}, u.gate.Owner("id"))
+
 	ri.PUT("/:id", func(c echo.Context) error {
 		return u.putUser(c, l)
 	}, u.gate.Owner("id"))

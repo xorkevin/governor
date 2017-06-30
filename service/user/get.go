@@ -37,7 +37,6 @@ func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
 
 func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
-	ch := u.cache.Cache()
 
 	ruser := &reqUserGetID{
 		Userid: c.Param("id"),
@@ -48,12 +47,6 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, ruser.Userid)
 	if err != nil {
-		return err
-	}
-
-	userid, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	}
 
@@ -89,7 +82,7 @@ func (u *User) getSessions(c echo.Context, l *logrus.Logger) error {
 		for _, v := range sgobs {
 			s := session.Session{}
 			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
-				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+				return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 			}
 			sarr = append(sarr, s)
 		}
