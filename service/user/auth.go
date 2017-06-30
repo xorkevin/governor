@@ -172,8 +172,6 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				if key, err := ch.Get(s[0]).Result(); err == nil {
 					sessionID = s[0]
 					sessionKey = key
-				} else {
-					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 				}
 			}
 		}
@@ -219,8 +217,6 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				if key, err := ch.Get(s[0]).Result(); err == nil {
 					sessionID = s[0]
 					sessionKey = key
-				} else {
-					return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 				}
 			}
 		}

@@ -314,6 +314,10 @@ func (u *User) killSessions(c echo.Context, l *logrus.Logger) error {
 		Userid: reqid.Userid,
 	}
 
+	if err := ch.Del(ruser.SessionIDs...).Err(); err != nil {
+		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
 	if err := ch.HDel(s.UserKey(), ruser.SessionIDs...).Err(); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusNotFound)
 	}
