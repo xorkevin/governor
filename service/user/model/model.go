@@ -223,6 +223,23 @@ func (m *Model) Update(db *sql.DB) *governor.Error {
 }
 
 const (
+	moduleIDModDel = moduleIDModel + ".Delete"
+)
+
+var (
+	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE userid = $1;", tableName)
+)
+
+// Delete deletes the model in the db
+func (m *Model) Delete(db *sql.DB) *governor.Error {
+	_, err := db.Exec(sqlDelete, m.Userid)
+	if err != nil {
+		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 

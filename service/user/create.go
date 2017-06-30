@@ -488,5 +488,10 @@ func (u *User) deleteUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
+	if err := m.Delete(db); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
