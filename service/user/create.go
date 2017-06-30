@@ -133,6 +133,7 @@ func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		err.AddTrace(moduleIDUser)
 		return err
 	}
 	m.Username = ruser.Username
@@ -164,6 +165,7 @@ func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		err.AddTrace(moduleIDUser)
 		return err
 	}
 	if !m.ValidatePass(ruser.Password) {
@@ -196,6 +198,7 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		err.AddTrace(moduleIDUser)
 		return err
 	}
 	if !m.ValidatePass(ruser.OldPassword) {
@@ -359,7 +362,29 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		err.AddTrace(moduleIDUser)
 		return err
+	}
+
+	if editAddRank.Has("admin") {
+		t, _ := time.Now().MarshalText()
+		userid, _ := m.IDBase64()
+		l.WithFields(logrus.Fields{
+			"time":     string(t),
+			"origin":   moduleIDUser,
+			"userid":   userid,
+			"username": m.Username,
+		}).Info("admin status added")
+	}
+	if editRemoveRank.Has("admin") {
+		t, _ := time.Now().MarshalText()
+		userid, _ := m.IDBase64()
+		l.WithFields(logrus.Fields{
+			"time":     string(t),
+			"origin":   moduleIDUser,
+			"userid":   userid,
+			"username": m.Username,
+		}).Info("admin status removed")
 	}
 
 	finalRank, _ := rank.FromString(m.Auth.Tags)
@@ -404,4 +429,64 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 		}
 	}
 	return nil
+}
+
+func (u *User) deleteUser(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+	ch := u.cache.Cache()
+
+	reqid := &reqUserGetID{
+		Userid: c.Param("id"),
+	}
+	if err := reqid.valid(); err != nil {
+		return err
+	}
+	ruser := &reqUserDelete{}
+	if err := c.Bind(ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	if reqid.Userid != ruser.Userid {
+		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
+	}
+
+	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if m.Username != ruser.Username {
+		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
+	}
+
+	if !m.ValidatePass(ruser.Password) {
+		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
+	}
+
+	s := session.Session{
+		Userid: reqid.Userid,
+	}
+
+	sessionIDs := []string{}
+	if smap, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+		for k := range smap {
+			sessionIDs = append(sessionIDs, k)
+		}
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := ch.Del(sessionIDs...).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := ch.HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }

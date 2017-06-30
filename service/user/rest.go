@@ -54,6 +54,12 @@ type (
 		Remove string `json:"remove"`
 	}
 
+	reqUserDelete struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
 	resUserUpdate struct {
 		Userid   []byte `json:"userid"`
 		Username string `json:"username"`
@@ -153,6 +159,19 @@ func (r *reqUserPutRank) valid() *governor.Error {
 	return nil
 }
 
+func (r *reqUserDelete) valid() *governor.Error {
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := hasUsername(r.Username); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
+
 type (
 	reqUserGetUsername struct {
 		Username string `json:"username"`
@@ -241,6 +260,10 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	ri.PATCH("/:id/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
 	}, u.gate.User())
+
+	ri.DELETE("/:id", func(c echo.Context) error {
+		return u.deleteUser(c, l)
+	}, u.gate.Owner("id"))
 
 	// username routes
 	rn := r.Group("/name")
