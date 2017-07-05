@@ -1,6 +1,7 @@
 package token
 
 import (
+	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
@@ -89,7 +90,12 @@ const (
 
 // Validate returns whether a token is valid or not
 func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
-	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) { return t.secret, nil }); err == nil {
+	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		return t.secret, nil
+	}); err == nil {
 		if claims, ok := token.Claims.(*Claims); ok {
 			if claims.Valid() == nil && claims.VerifyIssuer(t.issuer, true) && claims.Subject == subject && claims.Id == id {
 				return true, claims
