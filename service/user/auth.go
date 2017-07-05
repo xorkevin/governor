@@ -198,6 +198,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return c.JSON(http.StatusOK, &resUserAuth{
 			Valid:       true,
 			AccessToken: accessToken,
+			Claims:      claims,
 		})
 	})
 
