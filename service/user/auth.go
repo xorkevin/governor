@@ -25,7 +25,7 @@ type (
 	}
 
 	resUserAuth struct {
-		Valid        bool
+		Valid        bool          `json:"valid"`
 		AccessToken  string        `json:"access_token,omitempty"`
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		Claims       *token.Claims `json:"claims,omitempty"`
