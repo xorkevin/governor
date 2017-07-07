@@ -13,10 +13,36 @@ type (
 	reqUserGetID struct {
 		Userid string `json:"userid"`
 	}
+
+	reqProfileModel struct {
+		Userid string `json:"userid"`
+		Email  string `json:"contact_email"`
+		Bio    string `json:"bio"`
+		Image  string `json:"image"`
+	}
 )
 
 func (r *reqUserGetID) valid() *governor.Error {
-	return hasUserid(r.Userid)
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqProfileModel) valid() *governor.Error {
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
+	if err := validBio(r.Email); err != nil {
+		return err
+	}
+	if err := validImage(r.Image); err != nil {
+		return err
+	}
+	return nil
 }
 
 const (
@@ -41,13 +67,14 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 
 // Mount is a collection of routes for accessing and modifying profile data
 func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	r.POST("/:id", func(c echo.Context) error {
-		ruser := &reqUserGetID{
+	r.POST("/", func(c echo.Context) error {
+		rprofile := &reqProfileModel{
 			Userid: c.Param("id"),
 		}
-		if err := ruser.valid(); err != nil {
+		if err := rprofile.valid(); err != nil {
 			return err
 		}
+
 		return c.NoContent(http.StatusNoContent)
 	})
 
@@ -58,6 +85,7 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+
 		return c.NoContent(http.StatusNoContent)
 	})
 

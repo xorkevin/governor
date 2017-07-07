@@ -32,7 +32,7 @@ func validPassword(password string) *governor.Error {
 }
 
 func validEmail(email string) *governor.Error {
-	if !emailRegex.MatchString(email) || len(email) > lengthCap {
+	if !emailRegex.MatchString(email) || len(email) > lengthCapLarge {
 		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
@@ -63,7 +63,7 @@ func validRank(rankString string) *governor.Error {
 }
 
 func hasUserid(userid string) *governor.Error {
-	if len(userid) < 1 || len(userid) > lengthCap {
+	if len(userid) < 1 || len(userid) > lengthCapLarge {
 		return governor.NewErrorUser(moduleIDReqValid, "userid must be provided", 0, http.StatusBadRequest)
 	}
 	return nil
