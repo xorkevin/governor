@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/model"
 	"github.com/lib/pq"
 	"net/http"
 )
@@ -17,12 +18,51 @@ const (
 type (
 	// Model is the db profile model
 	Model struct {
-		Userid string `json:"userid"`
+		Userid []byte `json:"userid"`
 		Email  string `json:"contact_email"`
 		Bio    string `json:"bio"`
 		Image  string `json:"profile_image_url"`
 	}
 )
+
+const (
+	moduleIDModB64 = moduleIDModel + ".IDBase64"
+)
+
+// IDBase64 returns the userid as a base64 encoded string
+func (m *Model) IDBase64() (string, *governor.Error) {
+	u, err := usermodel.ParseUIDToB64(m.Userid)
+	if err != nil {
+		err.AddTrace(moduleIDModB64)
+		return "", err
+	}
+	return u.Base64(), nil
+}
+
+const (
+	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
+)
+
+var (
+	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, contact_email, bio, profile_image_url FROM %s WHERE userid=$1;", tableName)
+)
+
+// GetByIDB64 returns a profile model with the given base64 id
+func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
+	u, err := usermodel.ParseB64ToUID(idb64)
+	if err != nil {
+		err.AddTrace(moduleIDModGet64)
+		return nil, err
+	}
+	mUser := &Model{}
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 0, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return mUser, nil
+}
 
 const (
 	moduleIDModIns = moduleIDModel + ".Insert"
@@ -66,11 +106,28 @@ func (m *Model) Update(db *sql.DB) *governor.Error {
 }
 
 const (
+	moduleIDModDel = moduleIDModel + ".Delete"
+)
+
+var (
+	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE userid = $1;", tableName)
+)
+
+// Delete deletes the model in the db
+func (m *Model) Delete(db *sql.DB) *governor.Error {
+	_, err := db.Exec(sqlDelete, m.Userid)
+	if err != nil {
+		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, contact_email VARCHAR(4096), bio VARCHAR(4096), profile_image_url VARCHAR(4096));", tableName)
 )
 
 // Setup creates a new Profile table

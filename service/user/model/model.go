@@ -126,9 +126,14 @@ const (
 	moduleIDModB64 = moduleIDModel + ".IDBase64"
 )
 
+// ParseUIDToB64 converts a UID userid into base64
+func ParseUIDToB64(userid []byte) (*uid.UID, *governor.Error) {
+	return uid.FromBytes(uidTimeSize, 0, uidRandSize, userid)
+}
+
 // IDBase64 returns the userid as a base64 encoded string
 func (m *Model) IDBase64() (string, *governor.Error) {
-	u, err := uid.FromBytes(uidTimeSize, 0, uidRandSize, m.Userid)
+	u, err := ParseUIDToB64(m.Userid)
 	if err != nil {
 		err.AddTrace(moduleIDModB64)
 		return "", err
@@ -144,9 +149,14 @@ var (
 	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", tableName)
 )
 
+// ParseB64ToUID converts a userid in base64 into a UID
+func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
+	return uid.FromBase64(uidTimeSize, 0, uidRandSize, idb64)
+}
+
 // GetByIDB64 returns a user model with the given base64 id
 func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
-	u, err := uid.FromBase64(uidTimeSize, 0, uidRandSize, idb64)
+	u, err := ParseB64ToUID(idb64)
 	if err != nil {
 		err.AddTrace(moduleIDModGet64)
 		return nil, err
@@ -244,7 +254,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags TEXT NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new User table

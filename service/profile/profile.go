@@ -20,6 +20,13 @@ type (
 		Bio    string `json:"bio"`
 		Image  string `json:"image"`
 	}
+
+	resProfileModel struct {
+		Userid []byte `json:"userid"`
+		Email  string `json:"contact_email"`
+		Bio    string `json:"bio"`
+		Image  string `json:"image"`
+	}
 )
 
 func (r *reqUserGetID) valid() *governor.Error {
