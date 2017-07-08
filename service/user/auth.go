@@ -73,6 +73,9 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 		m, err := usermodel.GetByUsername(db, ruser.Username)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
 			return err
 		}
 		if m.ValidatePass(ruser.Password) {

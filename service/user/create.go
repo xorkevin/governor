@@ -30,7 +30,7 @@ func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
 	}
 
 	m2, err := usermodel.GetByUsername(db, ruser.Username)
-	if err != nil && !err.IsErrorUser() {
+	if err != nil && err.Code() != 2 {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -95,6 +95,9 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 	}
 
 	if err := m.Insert(db); err != nil {
+		if err.Code() == 3 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -133,6 +136,9 @@ func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -165,6 +171,9 @@ func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -198,6 +207,9 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -230,6 +242,9 @@ func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByUsername(db, ruser.Username)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -280,6 +295,9 @@ func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -362,6 +380,9 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -455,6 +476,9 @@ func (u *User) deleteUser(c echo.Context, l *logrus.Logger) error {
 
 	m, err := usermodel.GetByIDB64(db, reqid.Userid)
 	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}

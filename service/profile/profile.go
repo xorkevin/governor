@@ -4,13 +4,14 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/profile/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
 type (
-	reqUserGetID struct {
+	reqProfileGetID struct {
 		Userid string `json:"userid"`
 	}
 
@@ -29,7 +30,7 @@ type (
 	}
 )
 
-func (r *reqUserGetID) valid() *governor.Error {
+func (r *reqProfileGetID) valid() *governor.Error {
 	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -82,14 +83,25 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
+		m := &profilemodel.Model{
+			Email: rprofile.Email,
+			Bio:   rprofile.Bio,
+			Image: rprofile.Image,
+		}
+
+		if err := m.SetIDB64(rprofile.Userid); err != nil {
+			err.SetErrorUser()
+			return err
+		}
+
 		return c.NoContent(http.StatusNoContent)
 	})
 
 	r.PUT("/:id", func(c echo.Context) error {
-		ruser := &reqUserGetID{
+		rprofile := &reqProfileGetID{
 			Userid: c.Param("id"),
 		}
-		if err := ruser.valid(); err != nil {
+		if err := rprofile.valid(); err != nil {
 			return err
 		}
 

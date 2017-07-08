@@ -164,7 +164,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 0, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -184,7 +184,7 @@ func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewErrorUser(moduleIDModGet64, "no user found with that username", 0, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -206,7 +206,7 @@ func (m *Model) Insert(db *sql.DB) *governor.Error {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
 			case "23505": // unique_violation
-				return governor.NewErrorUser(moduleIDModIns, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 			default:
 				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 			}

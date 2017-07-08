@@ -26,6 +26,21 @@ type (
 )
 
 const (
+	moduleIDModSetIDB64 = moduleIDModel + ".SetIDB64"
+)
+
+// SetIDB64 sets the userid of the model from a base64 value
+func (m *Model) SetIDB64(idb64 string) *governor.Error {
+	u, err := usermodel.ParseB64ToUID(idb64)
+	if err != nil {
+		err.AddTrace(moduleIDModSetIDB64)
+		return err
+	}
+	m.Userid = u.Bytes()
+	return nil
+}
+
+const (
 	moduleIDModB64 = moduleIDModel + ".IDBase64"
 )
 
@@ -57,7 +72,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 0, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -79,7 +94,7 @@ func (m *Model) Insert(db *sql.DB) *governor.Error {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
 			case "23505": // unique_violation
-				return governor.NewErrorUser(moduleIDModIns, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 			default:
 				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 			}
