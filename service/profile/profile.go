@@ -23,7 +23,7 @@ type (
 	}
 
 	resProfileModel struct {
-		Userid []byte `json:"userid"`
+		Userid []byte `json:"userid,omitempty"`
 		Email  string `json:"contact_email"`
 		Bio    string `json:"bio"`
 		Image  string `json:"image"`
@@ -107,7 +107,37 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.NoContent(http.StatusNoContent)
 	})
 
-	r.PUT("/:id", func(c echo.Context) error {
+	r.PUT("/id/:id", func(c echo.Context) error {
+		rprofile := &reqProfileModel{}
+		if err := c.Bind(rprofile); err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		}
+		rprofile.Userid = c.Param("id")
+		if err := rprofile.valid(); err != nil {
+			return err
+		}
+
+		m, err := profilemodel.GetByIDB64(db, rprofile.Userid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+		}
+
+		m.Email = rprofile.Email
+		m.Bio = rprofile.Bio
+		m.Image = rprofile.Image
+
+		if err := m.Update(db); err != nil {
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	r.GET("/id/:id/private", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
 			Userid: c.Param("id"),
 		}
@@ -115,7 +145,43 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
-		return c.NoContent(http.StatusNoContent)
+		m, err := profilemodel.GetByIDB64(db, rprofile.Userid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+		}
+
+		return c.JSON(http.StatusOK, &resProfileModel{
+			Userid: m.Userid,
+			Email:  m.Email,
+			Bio:    m.Bio,
+			Image:  m.Image,
+		})
+	})
+
+	r.GET("/id/:id", func(c echo.Context) error {
+		rprofile := &reqProfileGetID{
+			Userid: c.Param("id"),
+		}
+		if err := rprofile.valid(); err != nil {
+			return err
+		}
+
+		m, err := profilemodel.GetByIDB64(db, rprofile.Userid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+		}
+
+		return c.JSON(http.StatusOK, &resProfileModel{
+			Email: m.Email,
+			Bio:   m.Bio,
+			Image: m.Image,
+		})
 	})
 
 	l.Info("mounted profile service")
