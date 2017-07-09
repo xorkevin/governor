@@ -75,6 +75,8 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 
 // Mount is a collection of routes for accessing and modifying profile data
 func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := u.db.DB()
+
 	r.POST("/", func(c echo.Context) error {
 		rprofile := &reqProfileModel{
 			Userid: c.Param("id"),
@@ -91,6 +93,14 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 
 		if err := m.SetIDB64(rprofile.Userid); err != nil {
 			err.SetErrorUser()
+			return err
+		}
+
+		if err := m.Insert(db); err != nil {
+			if err.Code() == 3 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
 			return err
 		}
 
