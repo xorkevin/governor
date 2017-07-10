@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strings"
 )
 
 type (
@@ -23,11 +24,17 @@ type (
 		Image  string `json:"image"`
 	}
 
+	reqSetPublicFields struct {
+		Add    []string `json:"add"`
+		Remove []string `json:"remove"`
+	}
+
 	resProfileModel struct {
-		Userid []byte `json:"userid,omitempty"`
-		Email  string `json:"contact_email"`
-		Bio    string `json:"bio"`
-		Image  string `json:"image"`
+		Userid       []byte `json:"userid,omitempty"`
+		Email        string `json:"contact_email"`
+		Bio          string `json:"bio"`
+		Image        string `json:"image"`
+		PublicFields string `json:"public_fields"`
 	}
 )
 
@@ -49,6 +56,16 @@ func (r *reqProfileModel) valid() *governor.Error {
 		return err
 	}
 	if err := validImage(r.Image); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqSetPublicFields) valid() *governor.Error {
+	if err := validSetPublic(strings.Join(r.Add, ",")); err != nil {
+		return err
+	}
+	if err := validSetPublic(strings.Join(r.Remove, ",")); err != nil {
 		return err
 	}
 	return nil
@@ -100,6 +117,8 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			err.SetErrorUser()
 			return err
 		}
+
+		m.SetPublic([]string{"bio", "image"}, []string{})
 
 		if err := m.Insert(db); err != nil {
 			if err.Code() == 3 {
@@ -159,10 +178,11 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.JSON(http.StatusOK, &resProfileModel{
-			Userid: m.Userid,
-			Email:  m.Email,
-			Bio:    m.Bio,
-			Image:  m.Image,
+			Userid:       m.Userid,
+			Email:        m.Email,
+			Bio:          m.Bio,
+			Image:        m.Image,
+			PublicFields: m.PublicFields,
 		})
 	}, p.gate.OwnerOrAdmin("id"))
 

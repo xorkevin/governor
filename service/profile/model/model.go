@@ -86,7 +86,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, contact_email, bio, profile_image_url FROM %s WHERE userid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, contact_email, bio, profile_image_url, public_fields FROM %s WHERE userid=$1;", tableName)
 )
 
 // GetByIDB64 returns a profile model with the given base64 id
@@ -97,7 +97,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mUser := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image, &mUser.PublicFields); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
@@ -111,12 +111,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, contact_email, bio, profile_image_url, public_fields) VALUES ($1, $2, $3, $4, $5);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Userid, m.Email, m.Bio, m.Image)
+	_, err := db.Exec(sqlInsert, m.Userid, m.Email, m.Bio, m.Image, m.PublicFields)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -135,12 +135,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, contact_email, bio, profile_image_url, public_fields) = ($1, $2, $3, $4, $5) WHERE userid = $1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Userid, m.Email, m.Bio, m.Image)
+	_, err := db.Exec(sqlUpdate, m.Userid, m.Email, m.Bio, m.Image, m.PublicFields)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -169,7 +169,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, contact_email VARCHAR(4096), bio VARCHAR(4096), profile_image_url VARCHAR(4096));", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, contact_email VARCHAR(4096), bio VARCHAR(4096), profile_image_url VARCHAR(4096), public_fields VARCHAR(4096));", tableName)
 )
 
 // Setup creates a new Profile table
