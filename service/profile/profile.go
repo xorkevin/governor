@@ -9,7 +9,6 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"strings"
 )
 
 type (
@@ -24,17 +23,10 @@ type (
 		Image  string `json:"image"`
 	}
 
-	reqSetPublicFields struct {
-		Add    []string `json:"add"`
-		Remove []string `json:"remove"`
-	}
-
 	resProfileModel struct {
-		Userid       []byte `json:"userid,omitempty"`
-		Email        string `json:"contact_email"`
-		Bio          string `json:"bio"`
-		Image        string `json:"image"`
-		PublicFields string `json:"public_fields"`
+		Email string `json:"contact_email"`
+		Bio   string `json:"bio"`
+		Image string `json:"image"`
 	}
 )
 
@@ -56,16 +48,6 @@ func (r *reqProfileModel) valid() *governor.Error {
 		return err
 	}
 	if err := validImage(r.Image); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqSetPublicFields) valid() *governor.Error {
-	if err := validSetPublic(strings.Join(r.Add, ",")); err != nil {
-		return err
-	}
-	if err := validSetPublic(strings.Join(r.Remove, ",")); err != nil {
 		return err
 	}
 	return nil
@@ -118,8 +100,6 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
-		m.SetPublic([]string{"bio", "image"}, []string{})
-
 		if err := m.Insert(db); err != nil {
 			if err.Code() == 3 {
 				err.SetErrorUser()
@@ -160,31 +140,6 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.Owner("id"))
-
-	r.GET("/id/:id/private", func(c echo.Context) error {
-		rprofile := &reqProfileGetID{
-			Userid: c.Param("id"),
-		}
-		if err := rprofile.valid(); err != nil {
-			return err
-		}
-
-		m, err := profilemodel.GetByIDB64(db, rprofile.Userid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleID)
-		}
-
-		return c.JSON(http.StatusOK, &resProfileModel{
-			Userid:       m.Userid,
-			Email:        m.Email,
-			Bio:          m.Bio,
-			Image:        m.Image,
-			PublicFields: m.PublicFields,
-		})
-	}, p.gate.OwnerOrAdmin("id"))
 
 	r.GET("/id/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{

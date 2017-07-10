@@ -53,10 +53,3 @@ func validImage(imageurl string) *governor.Error {
 	}
 	return nil
 }
-
-func validSetPublic(setpublic string) *governor.Error {
-	if len(setpublic) > lengthCapLarge {
-		return governor.NewErrorUser(moduleIDReqValid, "set of public fields is invalid", 0, http.StatusBadRequest)
-	}
-	return nil
-}
