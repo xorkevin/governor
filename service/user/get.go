@@ -31,6 +31,7 @@ func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
 	}
 
 	return c.JSON(http.StatusOK, &resUserGetPublic{
+		Userid:       m.Userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
 		FirstName:    m.FirstName,
@@ -59,14 +60,14 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
+			Userid:       m.Userid,
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,
 			LastName:     m.LastName,
 			CreationTime: m.CreationTime,
 		},
-		Userid: m.Userid,
-		Email:  m.Email,
+		Email: m.Email,
 	})
 }
 
@@ -121,6 +122,7 @@ func (u *User) getByUsername(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, &resUserGetPublic{
+		Userid:       m.Userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
 		FirstName:    m.FirstName,
@@ -148,13 +150,13 @@ func (u *User) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 	}
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
+			Userid:       m.Userid,
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,
 			LastName:     m.LastName,
 			CreationTime: m.CreationTime,
 		},
-		Userid: m.Userid,
-		Email:  m.Email,
+		Email: m.Email,
 	})
 }

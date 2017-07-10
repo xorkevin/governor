@@ -182,6 +182,7 @@ type (
 	}
 
 	resUserGetPublic struct {
+		Userid       []byte `json:"userid"`
 		Username     string `json:"username"`
 		Tags         string `json:"auth_tags"`
 		FirstName    string `json:"first_name"`
@@ -191,8 +192,7 @@ type (
 
 	resUserGet struct {
 		resUserGetPublic
-		Userid []byte `json:"userid"`
-		Email  string `json:"email"`
+		Email string `json:"email"`
 	}
 
 	resUserGetSessions struct {
