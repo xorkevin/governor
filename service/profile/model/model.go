@@ -7,6 +7,8 @@ import (
 	"github.com/hackform/governor/service/user/model"
 	"github.com/lib/pq"
 	"net/http"
+	"sort"
+	"strings"
 )
 
 const (
@@ -18,10 +20,11 @@ const (
 type (
 	// Model is the db profile model
 	Model struct {
-		Userid []byte `json:"userid"`
-		Email  string `json:"contact_email"`
-		Bio    string `json:"bio"`
-		Image  string `json:"profile_image_url"`
+		Userid       []byte `json:"userid"`
+		Email        string `json:"contact_email"`
+		Bio          string `json:"bio"`
+		Image        string `json:"profile_image_url"`
+		PublicFields string `json:"public_fields"`
 	}
 )
 
@@ -37,6 +40,30 @@ func (m *Model) SetIDB64(idb64 string) *governor.Error {
 		return err
 	}
 	m.Userid = u.Bytes()
+	return nil
+}
+
+const (
+	moduleIDModSetPublic = moduleIDModel + ".SetPublic"
+)
+
+// SetPublic sets the public fields of the model
+func (m *Model) SetPublic(add []string, remove []string) *governor.Error {
+	s := strings.Split(m.PublicFields, ",")
+	s = append(s, add...)
+	sort.Strings(s)
+	sort.Strings(remove)
+	i := 0
+	j := 0
+	for i < len(s) && j < len(remove) {
+		if s[i] == remove[j] {
+			s = append(s[:i], s[i+1:]...)
+			j++
+		} else {
+			i++
+		}
+	}
+	m.PublicFields = strings.Join(s, ",")
 	return nil
 }
 
