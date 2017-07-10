@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/profile/model"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -62,20 +63,24 @@ type (
 	Profile struct {
 		db    *db.Database
 		cache *cache.Cache
+		gate  *gate.Gate
 	}
 )
 
 // New creates a new Profile service
 func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *Profile {
+	ca := conf.Conf().GetStringMapString("userauth")
+
 	return &Profile{
 		db:    db,
 		cache: ch,
+		gate:  gate.New(ca["secret"], ca["issuer"]),
 	}
 }
 
 // Mount is a collection of routes for accessing and modifying profile data
-func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	db := u.db.DB()
+func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := p.db.DB()
 
 	r.POST("/", func(c echo.Context) error {
 		rprofile := &reqProfileModel{
@@ -105,7 +110,7 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	})
+	}, p.gate.Owner("id"))
 
 	r.PUT("/id/:id", func(c echo.Context) error {
 		rprofile := &reqProfileModel{}
@@ -135,7 +140,7 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	})
+	}, p.gate.Owner("id"))
 
 	r.GET("/id/:id/private", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
@@ -159,7 +164,7 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			Bio:    m.Bio,
 			Image:  m.Image,
 		})
-	})
+	}, p.gate.OwnerOrAdmin("id"))
 
 	r.GET("/id/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
@@ -190,6 +195,6 @@ func (u *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 }
 
 // Health is a check for service health
-func (u *Profile) Health() *governor.Error {
+func (p *Profile) Health() *governor.Error {
 	return nil
 }
