@@ -70,6 +70,8 @@ type (
 func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
+	l.Info("initialized profile service")
+
 	return &Profile{
 		db:    db,
 		cache: ch,
@@ -111,7 +113,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.Owner("id"))
 
-	r.PUT("/id/:id", func(c echo.Context) error {
+	r.PUT("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileModel{}
 		if err := c.Bind(rprofile); err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
@@ -141,7 +143,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.Owner("id"))
 
-	r.GET("/id/:id", func(c echo.Context) error {
+	r.GET("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
 			Userid: c.Param("id"),
 		}

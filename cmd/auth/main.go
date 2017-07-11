@@ -10,6 +10,8 @@ import (
 	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
+	"github.com/hackform/governor/service/profile"
+	"github.com/hackform/governor/service/profile/conf"
 	"github.com/hackform/governor/service/user"
 	"github.com/hackform/governor/service/user/conf"
 )
@@ -47,6 +49,12 @@ func main() {
 	}
 	fmt.Println("- user")
 
+	if err = profileconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("- profile")
+
 	if err = config.Init(); err != nil {
 		fmt.Printf(err.Error())
 		return
@@ -70,19 +78,17 @@ func main() {
 
 	mailService := mail.New(config, g.Logger())
 
-	confService := conf.New(g.Logger(), dbService)
-
-	userService := user.New(config, g.Logger(), dbService, cacheService, mailService)
-
 	g.MountRoute("/null/database", dbService)
 
 	g.MountRoute("/null/cache", cacheService)
 
 	g.MountRoute("/null/mail", mailService)
 
-	g.MountRoute("/conf", confService)
+	g.MountRoute("/conf", conf.New(g.Logger(), dbService))
 
-	g.MountRoute("/u", userService)
+	g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService))
+
+	g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService))
 
 	g.Start()
 }
