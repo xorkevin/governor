@@ -50,7 +50,7 @@ const (
 
 // ParseUIDToB64 converts a UID postid into base64
 func ParseUIDToB64(postid []byte) (*uid.UID, *governor.Error) {
-	return uid.FromBytes(uidTimeSize, 0, uidRandSize, postid)
+	return uid.FromBytesTRSplit(postid)
 }
 
 // IDBase64 returns the postid as a base64 encoded string

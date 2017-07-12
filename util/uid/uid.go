@@ -118,6 +118,17 @@ func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Erro
 	}, nil
 }
 
+// FromBytesTRSplit creates a new UID from an existing byte slice with equal parts devoted to time and rand bytes
+func FromBytesTRSplit(b []byte) (*UID, *governor.Error) {
+	if len(b)%2 != 0 {
+		return nil, governor.NewError(moduleIDFromBytes, fmt.Sprintf("byte slice length %d is not even", len(b)), 0, http.StatusInternalServerError)
+	}
+
+	t := len(b) / 2
+
+	return FromBytes(t, 0, t, b)
+}
+
 const (
 	moduleIDFromBase64 = moduleID + ".FromBase64"
 )

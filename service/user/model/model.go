@@ -128,7 +128,7 @@ const (
 
 // ParseUIDToB64 converts a UID userid into base64
 func ParseUIDToB64(userid []byte) (*uid.UID, *governor.Error) {
-	return uid.FromBytes(uidTimeSize, 0, uidRandSize, userid)
+	return uid.FromBytesTRSplit(userid)
 }
 
 // IDBase64 returns the userid as a base64 encoded string
