@@ -56,7 +56,7 @@ func validRank(rankString string) *governor.Error {
 	if len(rankString) > lengthCapLarge {
 		return governor.NewErrorUser(moduleIDReqValid, "rank exceeds the max length", 0, http.StatusBadRequest)
 	}
-	if _, err := rank.FromString(rankString); err != nil {
+	if _, err := rank.FromStringUser(rankString); err != nil {
 		return err
 	}
 	return nil

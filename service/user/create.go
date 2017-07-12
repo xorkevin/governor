@@ -367,9 +367,9 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 	if !ok {
 		return governor.NewErrorUser(moduleIDUser, "invalid auth claims", 0, http.StatusUnauthorized)
 	}
-	updaterRank, _ := rank.FromString(updaterClaims.AuthTags)
-	editAddRank, _ := rank.FromString(ruser.Add)
-	editRemoveRank, _ := rank.FromString(ruser.Remove)
+	updaterRank, _ := rank.FromStringUser(updaterClaims.AuthTags)
+	editAddRank, _ := rank.FromStringUser(ruser.Add)
+	editRemoveRank, _ := rank.FromStringUser(ruser.Remove)
 
 	if err := canUpdateRank(editAddRank, updaterRank, reqid.Userid, updaterClaims.Userid, updaterRank.Has(rank.TagAdmin)); err != nil {
 		return err
@@ -408,7 +408,7 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 		}).Info("admin status removed")
 	}
 
-	finalRank, _ := rank.FromString(m.Auth.Tags)
+	finalRank, _ := rank.FromStringUser(m.Auth.Tags)
 	finalRank.Add(editAddRank)
 	finalRank.Remove(editRemoveRank)
 

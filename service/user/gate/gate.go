@@ -62,7 +62,7 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 // Admin is a middleware function to validate if a user is an admin
 func (g *Gate) Admin() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromString(claims.AuthTags)
+		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
 		}
@@ -73,7 +73,7 @@ func (g *Gate) Admin() echo.MiddlewareFunc {
 // User is a middleware function to validate if the request is made by a user
 func (g *Gate) User() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromString(claims.AuthTags)
+		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
 		}
@@ -84,7 +84,7 @@ func (g *Gate) User() echo.MiddlewareFunc {
 // OwnerOrAdmin is a middleware function to validate if the request is made by a user
 func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromString(claims.AuthTags)
+		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
 		}
@@ -95,7 +95,7 @@ func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 // System is a middleware function to validate if the request is made by a system
 func (g *Gate) System() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromString(claims.AuthTags)
+		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
 		}
