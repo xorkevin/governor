@@ -48,7 +48,7 @@ type (
 func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *Post {
 	ca := conf.Conf().GetStringMapString("userauth")
 
-	l.Info("initialized profile service")
+	l.Info("initialized post service")
 
 	return &Post{
 		db:    db,
@@ -67,7 +67,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		return c.JSON(http.StatusOK, &resPost{})
 	})
 
-	l.Info("mounted profile service")
+	l.Info("mounted post service")
 
 	return nil
 }
