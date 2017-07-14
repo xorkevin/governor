@@ -8,6 +8,7 @@ import (
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
 	"net/http"
+	"time"
 )
 
 const (
@@ -28,6 +29,34 @@ type (
 		CreationTime int64  `json:"creation_time"`
 	}
 )
+
+const (
+	moduleIDModNew = moduleIDModel + ".New"
+)
+
+// New creates a new Post Model
+func New(userid, tags, content string) (*Model, *governor.Error) {
+	u, err := ParseB64ToUID(userid)
+	if err != nil {
+		err.AddTrace(moduleIDModNew)
+		err.SetErrorUser()
+		return nil, err
+	}
+
+	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
+	if err != nil {
+		err.AddTrace(moduleIDModNew)
+		return nil, err
+	}
+
+	return &Model{
+		Postid:       mUID.Bytes(),
+		Userid:       u.Bytes(),
+		Tags:         tags,
+		Content:      content,
+		CreationTime: time.Now().Unix(),
+	}, nil
+}
 
 const (
 	moduleIDModSetUserIDB64 = moduleIDModel + ".SetUserIDB64"
@@ -87,7 +116,7 @@ var (
 
 // ParseB64ToUID converts a postid in base64 into a UID
 func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
-	return uid.FromBase64(uidTimeSize, 0, uidRandSize, idb64)
+	return uid.FromBase64TRSplit(idb64)
 }
 
 // GetByIDB64 returns a post model with the given base64 id

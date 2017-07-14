@@ -143,6 +143,16 @@ func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *gove
 	return FromBytes(timeSize, hashSize, randomSize, b)
 }
 
+// FromBase64TRSplit creates a new UID from a base64 encoded string with equal parts devoted to time and rand bytes
+func FromBase64TRSplit(ustring string) (*UID, *governor.Error) {
+	b, err := base64.URLEncoding.DecodeString(ustring)
+	if err != nil {
+		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	return FromBytesTRSplit(b)
+}
+
 // Bytes returns the full raw bytes of an UID
 func (u *UID) Bytes() []byte {
 	return u.u

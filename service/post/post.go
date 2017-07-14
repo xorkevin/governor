@@ -4,6 +4,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/post/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,8 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 
 // Mount is a collection of routes for accessing and modifying post data
 func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	db := p.db.DB()
+
 	r.POST("/", func(c echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.User())

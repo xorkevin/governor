@@ -151,7 +151,7 @@ var (
 
 // ParseB64ToUID converts a userid in base64 into a UID
 func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
-	return uid.FromBase64(uidTimeSize, 0, uidRandSize, idb64)
+	return uid.FromBase64TRSplit(idb64)
 }
 
 // GetByIDB64 returns a user model with the given base64 id
