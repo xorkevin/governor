@@ -24,9 +24,13 @@ type (
 		Content string `json:"content"`
 	}
 
+	reqPostGet struct {
+		Postid string `json:"postid"`
+	}
+
 	resPost struct {
-		Postid       string `json:"postid"`
-		Userid       string `json:"userid"`
+		Postid       []byte `json:"postid"`
+		Userid       []byte `json:"userid"`
 		Tags         string `json:"group_tags"`
 		Content      string `json:"content"`
 		CreationTime int64  `json:"creation_time"`
@@ -51,6 +55,13 @@ func (r *reqPostPut) valid() *governor.Error {
 		return err
 	}
 	if err := validContent(r.Content); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPostGet) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
 		return err
 	}
 	return nil
@@ -123,7 +134,28 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 	}, p.gate.User())
 
 	r.GET("/:id", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, &resPost{})
+		rpost := &reqPostGet{
+			Postid: c.Param("id"),
+		}
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		m, err := postmodel.GetByIDB64(db, rpost.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			return err
+		}
+
+		return c.JSON(http.StatusOK, &resPost{
+			Postid:       m.Postid,
+			Userid:       m.Userid,
+			Tags:         m.Tags,
+			Content:      m.Content,
+			CreationTime: m.CreationTime,
+		})
 	})
 
 	l.Info("mounted post service")
