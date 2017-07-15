@@ -14,12 +14,16 @@ const (
 )
 
 var (
+	userRegex  = regexp.MustCompile(`^[a-z][a-z0-9.-_]+$`)
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
 func validUsername(username string) *governor.Error {
 	if len(username) < 3 || len(username) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "username must be longer than 2 chars", 0, http.StatusBadRequest)
+	}
+	if !userRegex.MatchString(username) {
+		return governor.NewErrorUser(moduleIDReqValid, "username contains invalid characters", 0, http.StatusBadRequest)
 	}
 	return nil
 }
@@ -72,6 +76,9 @@ func hasUserid(userid string) *governor.Error {
 func hasUsername(username string) *governor.Error {
 	if len(username) < 1 || len(username) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "username must be provided", 0, http.StatusBadRequest)
+	}
+	if !userRegex.MatchString(username) {
+		return governor.NewErrorUser(moduleIDReqValid, "username contains invalid characters", 0, http.StatusBadRequest)
 	}
 	return nil
 }

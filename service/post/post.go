@@ -15,7 +15,7 @@ import (
 type (
 	reqPostPost struct {
 		Userid  string `json:"userid"`
-		Tags    string `json:"group_tags"`
+		Tag     string `json:"group_tag"`
 		Content string `json:"content"`
 	}
 
@@ -31,7 +31,7 @@ type (
 	resPost struct {
 		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
-		Tags         string `json:"group_tags"`
+		Tag          string `json:"group_tag"`
 		Content      string `json:"content"`
 		CreationTime int64  `json:"creation_time"`
 	}
@@ -44,7 +44,7 @@ func (r *reqPostPost) valid() *governor.Error {
 	if err := validContent(r.Content); err != nil {
 		return err
 	}
-	if err := validRank(r.Tags); err != nil {
+	if err := validGroup(r.Tag); err != nil {
 		return err
 	}
 	return nil
@@ -106,7 +106,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			return err
 		}
 
-		m, err := postmodel.New(rpost.Userid, rpost.Tags, rpost.Content)
+		m, err := postmodel.New(rpost.Userid, rpost.Tag, rpost.Content)
 		if err != nil {
 			err.AddTrace(moduleID)
 			return err
@@ -152,7 +152,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		return c.JSON(http.StatusOK, &resPost{
 			Postid:       m.Postid,
 			Userid:       m.Userid,
-			Tags:         m.Tags,
+			Tag:          m.Tag,
 			Content:      m.Content,
 			CreationTime: m.CreationTime,
 		})

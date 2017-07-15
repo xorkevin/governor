@@ -78,9 +78,9 @@ const (
 )
 
 var (
-	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-]+$`)
-	rankRegexUser  = regexp.MustCompile(`^user_[a-z][a-z0-9.-]+$`)
-	rankRegexGroup = regexp.MustCompile(`^group_[a-z][a-z0-9.-]+$`)
+	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
+	rankRegexUser  = regexp.MustCompile(`^user_[a-z][a-z0-9.-_]+$`)
+	rankRegexGroup = regexp.MustCompile(`^group_[a-z][a-z0-9.-_]+$`)
 )
 
 // FromStringUser creates a new User Rank from a string

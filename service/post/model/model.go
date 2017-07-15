@@ -24,7 +24,7 @@ type (
 	Model struct {
 		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
-		Tags         string `json:"group_tags"`
+		Tag          string `json:"group_tag"`
 		Content      string `json:"content"`
 		CreationTime int64  `json:"creation_time"`
 	}
@@ -35,7 +35,7 @@ const (
 )
 
 // New creates a new Post Model
-func New(userid, tags, content string) (*Model, *governor.Error) {
+func New(userid, tag, content string) (*Model, *governor.Error) {
 	u, err := ParseB64ToUID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
@@ -52,7 +52,7 @@ func New(userid, tags, content string) (*Model, *governor.Error) {
 	return &Model{
 		Postid:       mUID.Bytes(),
 		Userid:       u.Bytes(),
-		Tags:         tags,
+		Tag:          tag,
 		Content:      content,
 		CreationTime: time.Now().Unix(),
 	}, nil
@@ -111,7 +111,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tags, content, creation_time FROM %s WHERE postid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tag, content, creation_time FROM %s WHERE postid=$1;", tableName)
 )
 
 // ParseB64ToUID converts a postid in base64 into a UID
@@ -141,7 +141,7 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tags, content, creation_time) VALUES ($1, $2, $3, $4);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, content, creation_time) VALUES ($1, $2, $3, $4);", tableName)
 )
 
 // Insert inserts the model into the db
@@ -165,7 +165,7 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tags, content, creation_time) = ($1, $2, $3, $4) WHERE postid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, content, creation_time) = ($1, $2, $3, $4) WHERE postid = $1;", tableName)
 )
 
 // Update updates the model in the db
@@ -199,7 +199,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tags VARCHAR(4096) NOT NULL, content VARCHAR(65536) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, content VARCHAR(65536) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

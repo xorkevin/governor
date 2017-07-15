@@ -2,14 +2,18 @@ package post
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/rank"
 	"net/http"
+	"regexp"
 )
 
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
 	lengthCap        = 128
 	lengthCapLarge   = 4096
+)
+
+var (
+	groupRegex = regexp.MustCompile(`^[a-z][a-z0-9.-_]+$`)
 )
 
 func hasPostid(postid string) *governor.Error {
@@ -36,12 +40,12 @@ func validContent(content string) *governor.Error {
 	return nil
 }
 
-func validRank(rankString string) *governor.Error {
-	if len(rankString) > lengthCapLarge {
-		return governor.NewErrorUser(moduleIDReqValid, "rank exceeds the max length", 0, http.StatusBadRequest)
+func validGroup(groupTag string) *governor.Error {
+	if len(groupTag) < 1 || len(groupTag) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "group tag must be provided", 0, http.StatusBadRequest)
 	}
-	if _, err := rank.FromStringGroup(rankString); err != nil {
-		return err
+	if !groupRegex.MatchString(groupTag) {
+		return governor.NewErrorUser(moduleIDReqValid, "group tag contains invalid characters", 0, http.StatusBadRequest)
 	}
 	return nil
 }
