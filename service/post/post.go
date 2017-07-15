@@ -133,6 +133,34 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.User())
 
+	r.PUT("/:id", func(c echo.Context) error {
+		rpost := &reqPostPut{}
+		if err := c.Bind(rpost); err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		}
+		rpost.Postid = c.Param("id")
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		m, err := postmodel.GetByIDB64(db, rpost.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			return err
+		}
+
+		m.Content = rpost.Content
+
+		if err := m.Update(db); err != nil {
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.User())
+
 	r.GET("/:id", func(c echo.Context) error {
 		rpost := &reqPostGet{
 			Postid: c.Param("id"),
