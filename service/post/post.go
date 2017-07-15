@@ -9,13 +9,18 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"time"
 )
 
 type (
 	reqPostPost struct {
-		Postid  string `json:"postid"`
 		Userid  string `json:"userid"`
 		Tags    string `json:"group_tags"`
+		Content string `json:"content"`
+	}
+
+	reqPostPut struct {
+		Postid  string `json:"postid"`
 		Content string `json:"content"`
 	}
 
@@ -29,6 +34,25 @@ type (
 )
 
 func (r *reqPostPost) valid() *governor.Error {
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validContent(r.Content); err != nil {
+		return err
+	}
+	if err := validRank(r.Tags); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPostPut) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := validContent(r.Content); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -63,6 +87,38 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 	db := p.db.DB()
 
 	r.POST("/", func(c echo.Context) error {
+		rpost := &reqPostPost{}
+		if err := c.Bind(rpost); err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		}
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		m, err := postmodel.New(rpost.Userid, rpost.Tags, rpost.Content)
+		if err != nil {
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		if err := m.Insert(db); err != nil {
+			if err.Code() == 3 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		t, _ := time.Now().MarshalText()
+		postid, _ := m.IDBase64()
+		userid, _ := m.UserIDBase64()
+		l.WithFields(logrus.Fields{
+			"time":   string(t),
+			"origin": moduleID,
+			"postid": postid,
+			"userid": userid,
+		}).Info("post created")
+
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.User())
 
