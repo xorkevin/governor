@@ -59,6 +59,17 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 	}, authenticationSubject)
 }
 
+// OwnerF is a middleware function to validate if a user owns the accessed resource
+func (g *Gate) OwnerF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		s, err := idfunc(idparam)
+		if err != nil {
+			return false
+		}
+		return s == claims.Userid
+	}, authenticationSubject)
+}
+
 // Admin is a middleware function to validate if a user is an admin
 func (g *Gate) Admin() echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
@@ -89,6 +100,21 @@ func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 			return false
 		}
 		return c.Param(idparam) == claims.Userid || r.Has(rank.TagAdmin)
+	}, authenticationSubject)
+}
+
+// OwnerOrAdminF is a middleware function to validate if the request is made by a user
+func (g *Gate) OwnerOrAdminF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		s, err := idfunc(idparam)
+		if err != nil {
+			return false
+		}
+		return s == claims.Userid || r.Has(rank.TagAdmin)
 	}, authenticationSubject)
 }
 
