@@ -166,7 +166,13 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.User())
+	}, p.gate.OwnerF("id", func(postid string) (string, *governor.Error) {
+		m, err := postmodel.GetByIDB64(db, postid)
+		if err != nil {
+			return "", err
+		}
+		return m.UserIDBase64()
+	}))
 
 	r.GET("/:id", func(c echo.Context) error {
 		rpost := &reqPostGet{

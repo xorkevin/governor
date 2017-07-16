@@ -62,7 +62,7 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 // OwnerF is a middleware function to validate if a user owns the accessed resource
 func (g *Gate) OwnerF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		s, err := idfunc(idparam)
+		s, err := idfunc(c.Param(idparam))
 		if err != nil {
 			return false
 		}
@@ -110,7 +110,7 @@ func (g *Gate) OwnerOrAdminF(idparam string, idfunc func(string) (string, *gover
 		if err != nil {
 			return false
 		}
-		s, err := idfunc(idparam)
+		s, err := idfunc(c.Param(idparam))
 		if err != nil {
 			return false
 		}
