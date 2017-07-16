@@ -25,6 +25,7 @@ type (
 		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
 		Tag          string `json:"group_tag"`
+		Title        string `json:"title"`
 		Content      string `json:"content"`
 		CreationTime int64  `json:"creation_time"`
 	}
@@ -35,7 +36,7 @@ const (
 )
 
 // New creates a new Post Model
-func New(userid, tag, content string) (*Model, *governor.Error) {
+func New(userid, tag, title, content string) (*Model, *governor.Error) {
 	u, err := ParseB64ToUID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
@@ -53,6 +54,7 @@ func New(userid, tag, content string) (*Model, *governor.Error) {
 		Postid:       mUID.Bytes(),
 		Userid:       u.Bytes(),
 		Tag:          tag,
+		Title:        title,
 		Content:      content,
 		CreationTime: time.Now().Unix(),
 	}, nil
@@ -111,7 +113,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tag, content, creation_time FROM %s WHERE postid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tag, title, content, creation_time FROM %s WHERE postid=$1;", tableName)
 )
 
 // ParseB64ToUID converts a postid in base64 into a UID
@@ -127,7 +129,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mPost := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mPost.Postid, &mPost.Userid, &mPost.Content, &mPost.CreationTime); err != nil {
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mPost.Postid, &mPost.Userid, &mPost.Tag, &mPost.Title, &mPost.Content, &mPost.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no post found with that id", 2, http.StatusNotFound)
 		}
@@ -141,12 +143,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, content, creation_time) VALUES ($1, $2, $3, $4);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, title, content, creation_time) VALUES ($1, $2, $3, $4);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Postid, m.Userid, m.Content, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -165,12 +167,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, content, creation_time) = ($1, $2, $3, $4) WHERE postid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, title, content, creation_time) = ($1, $2, $3, $4) WHERE postid = $1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Postid, m.Userid, m.Content, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -199,7 +201,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, content VARCHAR(65536) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, title VARCHAR(4096) NOT NULL, content VARCHAR(65536) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

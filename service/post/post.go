@@ -16,11 +16,13 @@ type (
 	reqPostPost struct {
 		Userid  string `json:"userid"`
 		Tag     string `json:"group_tag"`
+		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
 
 	reqPostPut struct {
 		Postid  string `json:"postid"`
+		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
 
@@ -32,6 +34,7 @@ type (
 		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
 		Tag          string `json:"group_tag"`
+		Title        string `json:"title"`
 		Content      string `json:"content"`
 		CreationTime int64  `json:"creation_time"`
 	}
@@ -39,6 +42,9 @@ type (
 
 func (r *reqPostPost) valid() *governor.Error {
 	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validTitle(r.Title); err != nil {
 		return err
 	}
 	if err := validContent(r.Content); err != nil {
@@ -106,7 +112,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			return err
 		}
 
-		m, err := postmodel.New(rpost.Userid, rpost.Tag, rpost.Content)
+		m, err := postmodel.New(rpost.Userid, rpost.Tag, rpost.Title, rpost.Content)
 		if err != nil {
 			err.AddTrace(moduleID)
 			return err
@@ -151,6 +157,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			return err
 		}
 
+		m.Title = rpost.Title
 		m.Content = rpost.Content
 
 		if err := m.Update(db); err != nil {
@@ -181,6 +188,7 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			Postid:       m.Postid,
 			Userid:       m.Userid,
 			Tag:          m.Tag,
+			Title:        m.Title,
 			Content:      m.Content,
 			CreationTime: m.CreationTime,
 		})

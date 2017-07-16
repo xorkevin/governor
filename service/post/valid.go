@@ -10,6 +10,7 @@ const (
 	moduleIDReqValid = moduleID + ".reqvalid"
 	lengthCap        = 128
 	lengthCapLarge   = 4096
+	lengthCapL2      = 65536
 )
 
 var (
@@ -30,11 +31,21 @@ func hasUserid(userid string) *governor.Error {
 	return nil
 }
 
+func validTitle(title string) *governor.Error {
+	if len(title) == 0 {
+		return governor.NewErrorUser(moduleIDReqValid, "title must be provided", 0, http.StatusBadRequest)
+	}
+	if len(title) > lengthCapLarge {
+		return governor.NewErrorUser(moduleIDReqValid, "title exceeds max length", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
 func validContent(content string) *governor.Error {
 	if len(content) == 0 {
 		return governor.NewErrorUser(moduleIDReqValid, "content must be provided", 0, http.StatusBadRequest)
 	}
-	if len(content) > lengthCapLarge {
+	if len(content) > lengthCapL2 {
 		return governor.NewErrorUser(moduleIDReqValid, "content exceeds max length", 0, http.StatusBadRequest)
 	}
 	return nil
