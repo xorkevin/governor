@@ -19,7 +19,6 @@ type (
 
 	reqPostPut struct {
 		Postid  string `json:"postid"`
-		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
 
@@ -127,7 +126,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
-		m.Title = rpost.Title
 		m.Content = rpost.Content
 
 		if err := m.Update(db); err != nil {
