@@ -422,7 +422,7 @@ func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
 
 func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bool) *governor.Error {
 	for key := range edit {
-		k := strings.Split(key, "_")
+		k := strings.SplitN(key, "_", 2)
 		if len(k) == 1 {
 			switch k[0] {
 			case rank.TagAdmin:
