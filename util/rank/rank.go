@@ -15,6 +15,7 @@ const (
 // Tags for user rank
 const (
 	TagUser   = "user"
+	TagBan    = "ban"
 	TagMod    = "mod"
 	TagAdmin  = "admin"
 	TagSystem = "system"
@@ -55,6 +56,12 @@ func (r Rank) HasUser(tag string) bool {
 	return ok && val
 }
 
+// HasBan checks if a Rank has a ban tag
+func (r Rank) HasBan(tag string) bool {
+	val, ok := r[TagBan+"_"+tag]
+	return ok && val
+}
+
 // Add adds a rank
 func (r Rank) Add(other Rank) {
 	for key, value := range other {
@@ -80,6 +87,7 @@ const (
 var (
 	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
 	rankRegexUser  = regexp.MustCompile(`^user_[a-z][a-z0-9.-_]+$`)
+	rankRegexBan   = regexp.MustCompile(`^ban_[a-z][a-z0-9.-_]+$`)
 	rankRegexGroup = regexp.MustCompile(`^group_[a-z][a-z0-9.-_]+$`)
 )
 
@@ -90,7 +98,7 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 		return r, nil
 	}
 	for _, i := range strings.Split(rankString, ",") {
-		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
+		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagBan && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}
 		r[i] = true

@@ -126,6 +126,11 @@ func (m *Model) UserIDBase64() (string, *governor.Error) {
 	return u.Base64(), nil
 }
 
+// Rescore updates the score
+func (m *Model) Rescore() *governor.Error {
+	return nil
+}
+
 const (
 	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
 )
