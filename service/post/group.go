@@ -2,7 +2,7 @@ package post
 
 import (
 	"github.com/hackform/governor"
-	// "github.com/hackform/governor/service/post/model"
+	"github.com/hackform/governor/service/post/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -13,18 +13,8 @@ type (
 		Group string `json:"group_tag"`
 	}
 
-	resGroupPost struct {
-		Postid       []byte `json:"postid"`
-		Userid       []byte `json:"userid"`
-		Tag          string `json:"group_tag"`
-		Title        string `json:"title"`
-		CreationTime int64  `json:"creation_time"`
-	}
-
-	postsSlice []resGroupPost
-
 	resGroupPosts struct {
-		Posts postsSlice `json:"posts"`
+		Posts postmodel.ModelSlice `json:"posts"`
 	}
 )
 
@@ -47,7 +37,7 @@ func (p *Post) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger)
 		}
 
 		return c.JSON(http.StatusOK, &resGroupPosts{
-			Posts: postsSlice{},
+			Posts: postmodel.ModelSlice{},
 		})
 	})
 	return nil
