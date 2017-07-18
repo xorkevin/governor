@@ -161,7 +161,7 @@ const (
 )
 
 var (
-	sqlGetGroup = fmt.Sprintf("SELECT postid, userid, group_tag, title, up, down, absolute, score, creation_time FROM %s WHERE group_tag=$1 ORDER BY score LIMIT $2 OFFSET $3;", tableName)
+	sqlGetGroup = fmt.Sprintf("SELECT postid, userid, group_tag, title, up, down, absolute, score, creation_time FROM %s WHERE group_tag=$1 ORDER BY score DESC LIMIT $2 OFFSET $3;", tableName)
 )
 
 // GetGroup returns a list of posts from a group
