@@ -98,7 +98,7 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 		return r, nil
 	}
 	for _, i := range strings.Split(rankString, ",") {
-		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagBan && i != TagAdmin && i != TagSystem {
+		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}
 		r[i] = true
