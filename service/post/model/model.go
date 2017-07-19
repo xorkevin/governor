@@ -79,21 +79,6 @@ func New(userid, tag, title, content string) (*Model, *governor.Error) {
 }
 
 const (
-	moduleIDModSetUserIDB64 = moduleIDModel + ".SetUserIDB64"
-)
-
-// SetUserIDB64 sets the userid of the model from a base64 value
-func (m *Model) SetUserIDB64(idb64 string) *governor.Error {
-	u, err := usermodel.ParseB64ToUID(idb64)
-	if err != nil {
-		err.AddTrace(moduleIDModSetUserIDB64)
-		return err
-	}
-	m.Userid = u.Bytes()
-	return nil
-}
-
-const (
 	moduleIDModB64 = moduleIDModel + ".IDBase64"
 )
 
@@ -149,6 +134,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 	u, err := ParseB64ToUID(idb64)
 	if err != nil {
 		err.AddTrace(moduleIDModGet64)
+		err.SetErrorUser()
 		return nil, err
 	}
 	mPost := &Model{}
@@ -195,7 +181,7 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName)
 )
 
 // Insert inserts the model into the db
@@ -219,7 +205,7 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) = ($1, $2, $3, $4) WHERE postid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE postid=$1;", tableName)
 )
 
 // Update updates the model in the db
@@ -236,7 +222,7 @@ const (
 )
 
 var (
-	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE postid = $1;", tableName)
+	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE postid=$1;", tableName)
 )
 
 // Delete deletes the model in the db
