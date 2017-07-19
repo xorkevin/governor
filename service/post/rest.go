@@ -105,6 +105,8 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			"origin": moduleIDPost,
 			"postid": postid,
 			"userid": userid,
+			"group":  m.Tag,
+			"title":  m.Title,
 		}).Info("post created")
 
 		return c.NoContent(http.StatusNoContent)
