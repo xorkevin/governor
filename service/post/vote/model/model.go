@@ -12,8 +12,6 @@ import (
 )
 
 const (
-	uidTimeSize   = 8
-	uidRandSize   = 8
 	tableName     = "votes"
 	moduleID      = "votemodel"
 	moduleIDModel = moduleID + ".Model"
