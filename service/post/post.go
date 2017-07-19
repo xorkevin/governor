@@ -41,7 +41,7 @@ const (
 
 // Mount is a collection of routes for accessing and modifying post data
 func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	if err := p.mountRest(conf, r.Group("/"), l); err != nil {
+	if err := p.mountRest(conf, r.Group("/p"), l); err != nil {
 		return err
 	}
 	if err := p.mountGroup(conf, r.Group("/g"), l); err != nil {

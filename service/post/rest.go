@@ -112,7 +112,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.UserOrBan("group"))
 
-	r.PUT("/p/:id", func(c echo.Context) error {
+	r.PUT("/:id", func(c echo.Context) error {
 		rpost := &reqPostPut{}
 		if err := c.Bind(rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
@@ -146,7 +146,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return m.UserIDBase64()
 	}))
 
-	r.GET("/p/:id", func(c echo.Context) error {
+	r.GET("/:id", func(c echo.Context) error {
 		rpost := &reqPostGet{
 			Postid: c.Param("id"),
 		}
