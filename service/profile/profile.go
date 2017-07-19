@@ -83,10 +83,12 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
-	r.POST("/", func(c echo.Context) error {
-		rprofile := &reqProfileModel{
-			Userid: c.Param("id"),
+	r.POST("/:id", func(c echo.Context) error {
+		rprofile := &reqProfileModel{}
+		if err := c.Bind(rprofile); err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
+		rprofile.Userid = c.Param("id")
 		if err := rprofile.valid(); err != nil {
 			return err
 		}
