@@ -174,11 +174,11 @@ func (r *reqUserDelete) valid() *governor.Error {
 
 type (
 	reqUserGetUsername struct {
-		Username string `json:"username"`
+		Username string `json:"-"`
 	}
 
 	reqUserGetID struct {
-		Userid string `json:"userid"`
+		Userid string `json:"-"`
 	}
 
 	resUserGetPublic struct {

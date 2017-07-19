@@ -11,14 +11,14 @@ import (
 
 type (
 	reqPostPost struct {
-		Userid  string `json:"userid"`
-		Tag     string `json:"group_tag"`
+		Userid  string `json:"-"`
+		Tag     string `json:"-"`
 		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
 
 	reqPostPut struct {
-		Postid  string `json:"postid"`
+		Postid  string `json:"-"`
 		Content string `json:"content"`
 	}
 

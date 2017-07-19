@@ -17,7 +17,7 @@ type (
 	}
 
 	reqProfileModel struct {
-		Userid string `json:"userid"`
+		Userid string `json:"-"`
 		Email  string `json:"contact_email"`
 		Bio    string `json:"bio"`
 		Image  string `json:"image"`
