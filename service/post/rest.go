@@ -77,6 +77,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err := c.Bind(rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
 		}
+		rpost.Userid = c.Get("userid").(string)
 		rpost.Tag = c.Param("group")
 		if err := rpost.valid(); err != nil {
 			return err

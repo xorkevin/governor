@@ -47,6 +47,7 @@ func (g *Gate) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 				return governor.NewErrorUser(moduleIDAuth, "user is forbidden", 0, http.StatusForbidden)
 			}
 			c.Set("user", claims)
+			c.Set("userid", claims.Userid)
 			return next(c)
 		}
 	}
