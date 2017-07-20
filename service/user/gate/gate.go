@@ -56,13 +56,24 @@ func (g *Gate) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 // Owner is a middleware function to validate if a user owns the accessed resource
 func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		return c.Param(idparam) == claims.Userid
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid
 	}, authenticationSubject)
 }
 
 // OwnerF is a middleware function to validate if a user owns the accessed resource
 func (g *Gate) OwnerF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
 		s, err := idfunc(c.Param(idparam))
 		if err != nil {
 			return false
@@ -100,7 +111,7 @@ func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
-		return c.Param(idparam) == claims.Userid || r.Has(rank.TagAdmin)
+		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid || r.Has(rank.TagAdmin)
 	}, authenticationSubject)
 }
 
@@ -112,11 +123,17 @@ func (g *Gate) OwnerOrAdminF(idparam string, idfunc func(string) (string, *gover
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
 		s, err := idfunc(c.Param(idparam))
 		if err != nil {
 			return false
 		}
-		return s == claims.Userid || r.Has(rank.TagAdmin)
+		return s == claims.Userid
 	}, authenticationSubject)
 }
 
@@ -128,11 +145,17 @@ func (g *Gate) ModOrAdminF(idparam string, idfunc func(string) (string, *governo
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
 		s, err := idfunc(c.Param(idparam))
 		if err != nil {
 			return false
 		}
-		return r.Has(rank.TagAdmin) || (r.Has(rank.TagUser) && r.HasMod(s))
+		return r.HasMod(s)
 	}, authenticationSubject)
 }
 
