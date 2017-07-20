@@ -17,12 +17,12 @@ func log(x int32) int64 {
 }
 
 const (
-	timeSlope float64 = 64
+	timeSlope int64 = 64
 )
 
 // Log is the logarithmic sort
 func Log(ups, downs int32, creationTime int64) int64 {
 	x := ups - downs
-	y := int64(math.Abs(float64(time.Now().Unix()-creationTime)) / timeSlope)
-	return sign(x)*log(x) + y
+	y := creationTime - time.Now().Unix()
+	return sign(x)*log(x)*timeSlope + y
 }
