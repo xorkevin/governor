@@ -184,7 +184,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT itemid, postid, group_tag, userid, score, time FROM %s WHERE itemid=$1 AND userid=$2;", tableName)
+	sqlGetByID = fmt.Sprintf("SELECT itemid, postid, group_tag, userid, score, time FROM %s WHERE itemid=$1 AND userid=$2;", tableName)
 )
 
 // ParseB64ToUID converts a base64 into a UID
@@ -208,7 +208,7 @@ func GetByIDB64(db *sql.DB, itemid, userid string) (*Model, *governor.Error) {
 	}
 
 	mVote := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, item.Bytes(), user.Bytes()).Scan(&mVote.Itemid, &mVote.Postid, &mVote.Group, &mVote.Userid, &mVote.Score, &mVote.Time); err != nil {
+	if err := db.QueryRow(sqlGetByID, item.Bytes(), user.Bytes()).Scan(&mVote.Itemid, &mVote.Postid, &mVote.Group, &mVote.Userid, &mVote.Score, &mVote.Time); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no vote found with the ids", 2, http.StatusNotFound)
 		}
@@ -226,33 +226,43 @@ var (
 )
 
 // GetScoreByIDB64 returns the score of an item
-func GetScoreByIDB64(db *sql.DB, itemid string) (int32, *governor.Error) {
+func GetScoreByIDB64(db *sql.DB, itemid string) (int32, int32, *governor.Error) {
 	item, err := ParseB64ToUID(itemid)
 	if err != nil {
 		err.AddTrace(moduleIDModGetScore)
 		err.SetErrorUser()
-		return 0, err
+		return 0, 0, err
 	}
 
-	var i int32
+	return GetScoreByID(db, item.Bytes())
+}
 
-	if rows, err := db.Query(sqlGetScore, item.Bytes()); err == nil {
+// GetScoreByID returns the score of an item
+func GetScoreByID(db *sql.DB, itemid []byte) (int32, int32, *governor.Error) {
+	var u int32
+	var d int32
+
+	if rows, err := db.Query(sqlGetScore, itemid); err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var j int16
 			if err = rows.Scan(&j); err != nil {
-				return 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
+				return 0, 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
 			}
-			i += int32(j)
+			if j > 0 {
+				u += int32(j)
+			} else {
+				d += int32(j)
+			}
 		}
 		if err = rows.Err(); err != nil {
-			return 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
+			return 0, 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
 		}
 	} else {
-		return 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
+		return 0, 0, governor.NewError(moduleIDModGetScore, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	return i, nil
+	return u, d, nil
 }
 
 const (

@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/util/score"
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
 	"net/http"
@@ -24,6 +26,7 @@ type (
 	Model struct {
 		ModelInfo
 		Content string `json:"content"`
+		Locked  bool   `json:"locked"`
 	}
 
 	// ModelInfo is metadata of a post
@@ -35,7 +38,7 @@ type (
 		Up           int32  `json:"up"`
 		Down         int32  `json:"down"`
 		Absolute     int32  `json:"absolute"`
-		Score        int32  `json:"score"`
+		Score        int64  `json:"score"`
 		CreationTime int64  `json:"creation_time"`
 	}
 
@@ -75,6 +78,7 @@ func New(userid, tag, title, content string) (*Model, *governor.Error) {
 			CreationTime: time.Now().Unix(),
 		},
 		Content: content,
+		Locked:  false,
 	}, nil
 }
 
@@ -111,8 +115,21 @@ func (m *Model) UserIDBase64() (string, *governor.Error) {
 	return u.Base64(), nil
 }
 
+const (
+	moduleIDModRescore = moduleIDModel + ".Rescore"
+)
+
 // Rescore updates the score
-func (m *Model) Rescore() *governor.Error {
+func (m *Model) Rescore(db *sql.DB) *governor.Error {
+	if u, d, err := votemodel.GetScoreByID(db, m.Postid); err == nil {
+		m.Up = u
+		m.Down = -d
+		m.Absolute = u + d
+		m.Score = score.Log(m.Up, m.Down, m.CreationTime)
+	} else {
+		err.AddTrace(moduleIDModRescore)
+		return err
+	}
 	return nil
 }
 
@@ -121,7 +138,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tag, title, content, up, down, absolute, score, creation_time FROM %s WHERE postid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT postid, userid, group_tag, title, content, locked, up, down, absolute, score, creation_time FROM %s WHERE postid=$1;", tableName)
 )
 
 // ParseB64ToUID converts a postid in base64 into a UID
@@ -138,7 +155,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mPost := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mPost.Postid, &mPost.Userid, &mPost.Tag, &mPost.Title, &mPost.Content, &mPost.Up, &mPost.Down, &mPost.Absolute, &mPost.Score, &mPost.CreationTime); err != nil {
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mPost.Postid, &mPost.Userid, &mPost.Tag, &mPost.Title, &mPost.Content, &mPost.Locked, &mPost.Up, &mPost.Down, &mPost.Absolute, &mPost.Score, &mPost.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no post found with that id", 2, http.StatusNotFound)
 		}
@@ -181,12 +198,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (postid, userid, group_tag, title, content, locked, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.Locked, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -205,12 +222,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, title, content, up, down, absolute, score, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE postid=$1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (postid, userid, group_tag, title, content, locked, up, down, absolute, score, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) WHERE postid=$1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Postid, m.Userid, m.Tag, m.Title, m.Content, m.Locked, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -239,7 +256,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, title VARCHAR(4096) NOT NULL, content VARCHAR(65536) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score INT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, title VARCHAR(4096) NOT NULL, content VARCHAR(65536) NOT NULL, locked BOOLEAN NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table
