@@ -120,17 +120,32 @@ const (
 )
 
 // Rescore updates the score
-func (m *Model) Rescore(db *sql.DB) *governor.Error {
+func (m *Model) Rescore(db *sql.DB, epoch int64) *governor.Error {
 	if u, d, err := votemodel.GetScoreByID(db, m.Postid); err == nil {
 		m.Up = u
 		m.Down = -d
 		m.Absolute = u + d
-		m.Score = score.Log(m.Up, m.Down, m.CreationTime)
+		m.Score = score.Log(m.Up, m.Down, m.CreationTime, epoch)
 	} else {
 		err.AddTrace(moduleIDModRescore)
 		return err
 	}
 	return nil
+}
+
+// IsLocked returns if the post is locked
+func (m *Model) IsLocked() bool {
+	return m.Locked
+}
+
+// Lock locks the post
+func (m *Model) Lock() {
+	m.Locked = true
+}
+
+// Unlock unlocks the post
+func (m *Model) Unlock() {
+	m.Locked = false
 }
 
 const (
