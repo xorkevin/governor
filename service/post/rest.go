@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	actionLock = iota
+	actionUnlock
+)
+
 type (
 	reqPostPost struct {
 		Userid  string `json:"-"`
@@ -20,6 +25,11 @@ type (
 	reqPostPut struct {
 		Postid  string `json:"-"`
 		Content string `json:"content"`
+	}
+
+	reqPostAction struct {
+		Postid string `json:"-"`
+		Action string `json:"-"`
 	}
 
 	reqPostGet struct {
@@ -57,6 +67,16 @@ func (r *reqPostPut) valid() *governor.Error {
 		return err
 	}
 	if err := validContent(r.Content); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPostAction) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := validAction(r.Action); err != nil {
 		return err
 	}
 	return nil
@@ -130,6 +150,10 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		if m.IsLocked() {
+			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
+		}
+
 		m.Content = rpost.Content
 
 		if err := m.Update(db); err != nil {
@@ -144,6 +168,55 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return "", err
 		}
 		return m.UserIDBase64()
+	}))
+
+	r.PATCH("/:id/:action", func(c echo.Context) error {
+		rpost := &reqPostAction{
+			Postid: c.Param("id"),
+			Action: c.Param("action"),
+		}
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		var action int
+
+		switch rpost.Action {
+		case "lock":
+			action = actionLock
+		case "unlock":
+			action = actionUnlock
+		default:
+			return governor.NewErrorUser(moduleIDPost, "invalid action", 0, http.StatusBadRequest)
+		}
+
+		m, err := postmodel.GetByIDB64(db, rpost.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			return err
+		}
+
+		switch action {
+		case actionLock:
+			m.Lock()
+		case actionUnlock:
+			m.Unlock()
+		}
+
+		if err := m.Update(db); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.ModOrAdminF("id", func(postid string) (string, *governor.Error) {
+		m, err := postmodel.GetByIDB64(db, postid)
+		if err != nil {
+			return "", err
+		}
+		return m.Tag, nil
 	}))
 
 	r.GET("/:id", func(c echo.Context) error {

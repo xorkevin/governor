@@ -60,3 +60,10 @@ func validGroup(groupTag string) *governor.Error {
 	}
 	return nil
 }
+
+func validAction(action string) *governor.Error {
+	if len(action) < 1 || len(action) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "action must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}

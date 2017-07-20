@@ -105,6 +105,7 @@ func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 }
 
 // OwnerOrAdminF is a middleware function to validate if the request is made by the owner or an admin
+// idfunc should return the userid
 func (g *Gate) OwnerOrAdminF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
@@ -116,6 +117,22 @@ func (g *Gate) OwnerOrAdminF(idparam string, idfunc func(string) (string, *gover
 			return false
 		}
 		return s == claims.Userid || r.Has(rank.TagAdmin)
+	}, authenticationSubject)
+}
+
+// ModOrAdminF is a middleware function to validate if the request is made by the moderator of a group or an admin
+// idfunc should return the group_tag
+func (g *Gate) ModOrAdminF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		s, err := idfunc(c.Param(idparam))
+		if err != nil {
+			return false
+		}
+		return r.Has(rank.TagAdmin) || (r.Has(rank.TagUser) && r.HasMod(s))
 	}, authenticationSubject)
 }
 
