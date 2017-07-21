@@ -46,6 +46,11 @@ type (
 		Action string `json:"-"`
 	}
 
+	reqPostDelete struct {
+		Postid string `json:"-"`
+		Userid string `json:"-"`
+	}
+
 	reqPostGet struct {
 		Postid string `json:"postid"`
 	}
@@ -104,6 +109,16 @@ func (r *reqPostActionUser) valid() *governor.Error {
 		return err
 	}
 	if err := validAction(r.Action); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPostDelete) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
 	return nil
@@ -352,6 +367,47 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return "", err
 		}
 		return m.Tag, nil
+	}))
+
+	r.DELETE("/:id", func(c echo.Context) error {
+		rpost := &reqPostDelete{
+			Postid: c.Param("id"),
+			Userid: c.Get("userid").(string),
+		}
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		m, err := postmodel.GetByIDB64(db, rpost.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		if err := m.Delete(db); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.OwnerModOrAdminF("id", func(postid string) (string, string, *governor.Error) {
+		m, err := postmodel.GetByIDB64(db, postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
+			return "", "", err
+		}
+		s, err := m.UserIDBase64()
+		if err != nil {
+			err.AddTrace(moduleIDPost)
+			return "", "", err
+		}
+		return s, m.Tag, nil
 	}))
 
 	r.GET("/:id", func(c echo.Context) error {
