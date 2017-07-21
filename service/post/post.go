@@ -36,7 +36,8 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 }
 
 const (
-	moduleIDPost = moduleID + ".post"
+	moduleIDPost  = moduleID + ".post"
+	moduleIDGroup = moduleID + ".group"
 )
 
 // Mount is a collection of routes for accessing and modifying post data

@@ -11,6 +11,7 @@ const (
 	lengthCap        = 128
 	lengthCapLarge   = 4096
 	lengthCapL2      = 65536
+	amountCap        = 1024
 )
 
 var (
@@ -64,6 +65,20 @@ func validGroup(groupTag string) *governor.Error {
 func validAction(action string) *governor.Error {
 	if len(action) < 1 || len(action) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "action must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validAmount(amt int) *governor.Error {
+	if amt < 1 || amt > amountCap {
+		return governor.NewErrorUser(moduleIDReqValid, "amount is invalid", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validOffset(offset int) *governor.Error {
+	if offset < 1 {
+		return governor.NewErrorUser(moduleIDReqValid, "offset is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
 }
