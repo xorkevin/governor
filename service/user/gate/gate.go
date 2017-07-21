@@ -159,7 +159,7 @@ func (g *Gate) ModOrAdminF(idparam string, idfunc func(string) (string, *governo
 	}, authenticationSubject)
 }
 
-// UserOrBan is a middleware function to validate if the request is made a user and check if the user is banned from the group
+// UserOrBan is a middleware function to validate if the request is made by a user and check if the user is banned from the group
 func (g *Gate) UserOrBan(idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
@@ -167,6 +167,25 @@ func (g *Gate) UserOrBan(idparam string) echo.MiddlewareFunc {
 			return false
 		}
 		return r.Has(rank.TagUser) && !r.HasBan(c.Param(idparam))
+	}, authenticationSubject)
+}
+
+// UserOrBanF is a middleware function to validate if the request is made by a user and check if the user is banned from the group
+// idfunc should return the group_tag
+func (g *Gate) UserOrBanF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		s, err := idfunc(c.Param(idparam))
+		if err != nil {
+			return false
+		}
+		return !r.HasBan(s)
 	}, authenticationSubject)
 }
 

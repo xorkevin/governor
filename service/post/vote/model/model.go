@@ -122,6 +122,16 @@ func NewDownPost(postid, group, userid string) (*Model, *governor.Error) {
 	return NewPost(postid, group, userid, -1)
 }
 
+// Voteid returns the voteid for a vote
+func (m *Model) Voteid() []byte {
+	return append(m.Itemid, m.Userid...)
+}
+
+// Voteid returns the voteid for a vote
+func (m *ModelInfo) Voteid() []byte {
+	return append(m.Itemid, m.Userid...)
+}
+
 const (
 	moduleIDModB64 = moduleIDModel + ".IDBase64"
 )
@@ -184,7 +194,7 @@ const (
 )
 
 var (
-	sqlGetByID = fmt.Sprintf("SELECT itemid, postid, group_tag, userid, score, time FROM %s WHERE itemid=$1 AND userid=$2;", tableName)
+	sqlGetByID = fmt.Sprintf("SELECT itemid, postid, group_tag, userid, score, time FROM %s WHERE voteid=$1;", tableName)
 )
 
 // ParseB64ToUID converts a base64 into a UID
@@ -207,8 +217,14 @@ func GetByIDB64(db *sql.DB, itemid, userid string) (*Model, *governor.Error) {
 		return nil, err
 	}
 
+	v := ModelInfo{
+		Itemid: item.Bytes(),
+		Userid: user.Bytes(),
+		Score:  0,
+	}
+
 	mVote := &Model{}
-	if err := db.QueryRow(sqlGetByID, item.Bytes(), user.Bytes()).Scan(&mVote.Itemid, &mVote.Postid, &mVote.Group, &mVote.Userid, &mVote.Score, &mVote.Time); err != nil {
+	if err := db.QueryRow(sqlGetByID, v.Voteid()).Scan(&mVote.Itemid, &mVote.Postid, &mVote.Group, &mVote.Userid, &mVote.Score, &mVote.Time); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no vote found with the ids", 2, http.StatusNotFound)
 		}
@@ -352,12 +368,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (itemid, postid, group_tag, userid, score, time) VALUES ($1, $2, $3, $4, $5, $6);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (voteid, itemid, postid, group_tag, userid, score, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Itemid, m.Postid, m.Group, m.Userid, m.Score, m.Time)
+	_, err := db.Exec(sqlInsert, m.Voteid(), m.Itemid, m.Postid, m.Group, m.Userid, m.Score, m.Time)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -376,12 +392,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (itemid, postid, group_tag, userid, score, time) = ($1, $2, $3, $4, $5, $6) WHERE itemid=$1 AND userid=$4;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (voteid, itemid, postid, group_tag, userid, score, time) = ($1, $2, $3, $4, $5, $6, $7) WHERE voteid=$1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Itemid, m.Postid, m.Group, m.Userid, m.Score, m.Time)
+	_, err := db.Exec(sqlUpdate, m.Voteid(), m.Itemid, m.Postid, m.Group, m.Userid, m.Score, m.Time)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -393,12 +409,12 @@ const (
 )
 
 var (
-	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE itemid = $1 AND userid = $2;", tableName)
+	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE voteid = $1;", tableName)
 )
 
 // Delete deletes the model in the db
 func (m *Model) Delete(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlDelete, m.Itemid, m.Userid)
+	_, err := db.Exec(sqlDelete, m.Voteid())
 	if err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -410,7 +426,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (itemid BYTEA NOT NULL, postid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, userid BYTEA NOT NULL, score SMALLINT NOT NULL, time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (voteid BYTEA PRIMARY KEY, itemid BYTEA NOT NULL, postid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, userid BYTEA NOT NULL, score SMALLINT NOT NULL, time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

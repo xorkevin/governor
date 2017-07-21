@@ -3,6 +3,7 @@ package post
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/model"
+	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -10,8 +11,15 @@ import (
 )
 
 const (
+	postScoreEpoch int64 = 1500000000
+)
+
+const (
 	actionLock = iota
 	actionUnlock
+	actionUpvote
+	actionDownvote
+	actionRmvote
 )
 
 type (
@@ -29,6 +37,12 @@ type (
 
 	reqPostAction struct {
 		Postid string `json:"-"`
+		Action string `json:"-"`
+	}
+
+	reqPostActionUser struct {
+		Postid string `json:"-"`
+		Userid string `json:"-"`
 		Action string `json:"-"`
 	}
 
@@ -74,6 +88,19 @@ func (r *reqPostPut) valid() *governor.Error {
 
 func (r *reqPostAction) valid() *governor.Error {
 	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := validAction(r.Action); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPostActionUser) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
 	if err := validAction(r.Action); err != nil {
@@ -165,12 +192,16 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	}, p.gate.OwnerF("id", func(postid string) (string, *governor.Error) {
 		m, err := postmodel.GetByIDB64(db, postid)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
 			return "", err
 		}
 		return m.UserIDBase64()
 	}))
 
-	r.PATCH("/:id/:action", func(c echo.Context) error {
+	r.PATCH("/:id/mod/:action", func(c echo.Context) error {
 		rpost := &reqPostAction{
 			Postid: c.Param("id"),
 			Action: c.Param("action"),
@@ -214,6 +245,110 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	}, p.gate.ModOrAdminF("id", func(postid string) (string, *governor.Error) {
 		m, err := postmodel.GetByIDB64(db, postid)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
+			return "", err
+		}
+		return m.Tag, nil
+	}))
+
+	r.PATCH("/:id/:action", func(c echo.Context) error {
+		rpost := &reqPostActionUser{
+			Postid: c.Param("id"),
+			Userid: c.Get("userid").(string),
+			Action: c.Param("action"),
+		}
+		if err := rpost.valid(); err != nil {
+			return err
+		}
+
+		var action int
+
+		switch rpost.Action {
+		case "upvote":
+			action = actionUpvote
+		case "downvote":
+			action = actionDownvote
+		case "rmvote":
+			action = actionRmvote
+		default:
+			return governor.NewErrorUser(moduleIDPost, "invalid action", 0, http.StatusBadRequest)
+		}
+
+		m, err := postmodel.GetByIDB64(db, rpost.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		if m.IsLocked() {
+			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
+		}
+
+		switch action {
+		case actionUpvote:
+			v, err := votemodel.NewUpPost(rpost.Postid, m.Tag, rpost.Userid)
+			if err != nil {
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+			if err := v.Insert(db); err != nil {
+				if err.Code() == 3 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+		case actionDownvote:
+			v, err := votemodel.NewDownPost(rpost.Postid, m.Tag, rpost.Userid)
+			if err != nil {
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+			if err := v.Insert(db); err != nil {
+				if err.Code() == 3 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+		case actionRmvote:
+			v, err := votemodel.GetByIDB64(db, rpost.Postid, rpost.Userid)
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				return err
+			}
+			if err := v.Delete(db); err != nil {
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+		}
+
+		if err := m.Rescore(db, postScoreEpoch); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		if err := m.Update(db); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.UserOrBanF("id", func(postid string) (string, *governor.Error) {
+		m, err := postmodel.GetByIDB64(db, postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
 			return "", err
 		}
 		return m.Tag, nil
@@ -232,6 +367,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			if err.Code() == 2 {
 				err.SetErrorUser()
 			}
+			err.AddTrace(moduleIDPost)
 			return err
 		}
 
