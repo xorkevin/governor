@@ -40,9 +40,6 @@ func Confidence(ups, downs int32) int64 {
 		return -int64(downs)
 	}
 
-	if ups+downs == 0 {
-		return 0
-	}
 	u := float64(ups)
 	d := float64(downs)
 	n := u + d
