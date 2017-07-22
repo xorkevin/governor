@@ -108,5 +108,30 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			Model: *comment,
 		})
 	})
+
+	r.GET("/:postid/c/:commentid/children", func(c echo.Context) error {
+		rcomms := &reqGetComment{}
+		if err := c.Bind(rcomms); err != nil {
+			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
+		}
+		rcomms.Postid = c.Param("postid")
+		rcomms.Commentid = c.Param("commentid")
+		if err := rcomms.valid(); err != nil {
+			return err
+		}
+
+		comments, err := commentmodel.GetChildren(db, rcomms.Commentid, rcomms.Postid, rcomms.Amount, rcomms.Offset)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDComments)
+			return err
+		}
+
+		return c.JSON(http.StatusOK, &resGetComments{
+			Comments: comments,
+		})
+	})
 	return nil
 }
