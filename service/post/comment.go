@@ -97,6 +97,9 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 
 		comment, err := commentmodel.GetByIDB64(db, rcomms.Commentid, rcomms.Postid)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
 			err.AddTrace(moduleIDComments)
 			return err
 		}
