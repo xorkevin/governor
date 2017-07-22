@@ -11,10 +11,6 @@ import (
 )
 
 const (
-	postScoreEpoch int64 = 1500000000
-)
-
-const (
 	actionLock = iota
 	actionUnlock
 	actionUpvote
@@ -346,7 +342,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			}
 		}
 
-		if err := m.Rescore(db, postScoreEpoch); err != nil {
+		if err := m.Rescore(db); err != nil {
 			err.AddTrace(moduleIDPost)
 			return err
 		}

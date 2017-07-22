@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	uidTimeSize   = 8
-	uidRandSize   = 8
-	tableName     = "posts"
-	moduleID      = "postmodel"
-	moduleIDModel = moduleID + ".Model"
+	uidTimeSize          = 8
+	uidRandSize          = 8
+	postScoreEpoch int64 = 1500000000
+	tableName            = "posts"
+	moduleID             = "postmodel"
+	moduleIDModel        = moduleID + ".Model"
 )
 
 type (
@@ -65,6 +66,8 @@ func New(userid, tag, title, content string) (*Model, *governor.Error) {
 		return nil, err
 	}
 
+	t := time.Now().Unix()
+
 	return &Model{
 		ModelInfo: ModelInfo{
 			Postid:       mUID.Bytes(),
@@ -74,8 +77,8 @@ func New(userid, tag, title, content string) (*Model, *governor.Error) {
 			Up:           0,
 			Down:         0,
 			Absolute:     0,
-			Score:        0,
-			CreationTime: time.Now().Unix(),
+			Score:        score.Log(0, 0, t, postScoreEpoch),
+			CreationTime: t,
 		},
 		Content: content,
 		Locked:  false,
@@ -120,12 +123,12 @@ const (
 )
 
 // Rescore updates the score
-func (m *Model) Rescore(db *sql.DB, epoch int64) *governor.Error {
+func (m *Model) Rescore(db *sql.DB) *governor.Error {
 	if u, d, err := votemodel.GetScoreByID(db, m.Postid); err == nil {
 		m.Up = u
 		m.Down = -d
 		m.Absolute = u + d
-		m.Score = score.Log(m.Up, m.Down, m.CreationTime, epoch)
+		m.Score = score.Log(m.Up, m.Down, m.CreationTime, postScoreEpoch)
 	} else {
 		err.AddTrace(moduleIDModRescore)
 		return err
