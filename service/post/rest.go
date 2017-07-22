@@ -130,6 +130,10 @@ func (r *reqPostGet) valid() *governor.Error {
 func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
+	if err := p.mountComments(conf, r.Group("/"), l); err != nil {
+		return err
+	}
+
 	r.POST("/g/:group", func(c echo.Context) error {
 		rpost := &reqPostPost{}
 		if err := c.Bind(rpost); err != nil {

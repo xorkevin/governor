@@ -26,6 +26,7 @@ type (
 	Model struct {
 		Commentid    []byte `json:"commentid"`
 		Parentid     []byte `json:"parentid"`
+		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
 		Content      string `json:"content"`
 		Up           int32  `json:"up"`
@@ -44,14 +45,20 @@ const (
 )
 
 // New creates a new Comment Model
-func New(userid, parentid, content string) (*Model, *governor.Error) {
+func New(userid, postid, parentid, content string) (*Model, *governor.Error) {
 	u, err := ParseB64ToUID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
 		err.SetErrorUser()
 		return nil, err
 	}
-	p, err := ParseB64ToUID(parentid)
+	post, err := ParseB64ToUID(postid)
+	if err != nil {
+		err.AddTrace(moduleIDModNew)
+		err.SetErrorUser()
+		return nil, err
+	}
+	parent, err := ParseB64ToUID(parentid)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
 		err.SetErrorUser()
@@ -66,7 +73,8 @@ func New(userid, parentid, content string) (*Model, *governor.Error) {
 
 	return &Model{
 		Commentid:    mUID.Bytes(),
-		Parentid:     p.Bytes(),
+		Parentid:     parent.Bytes(),
+		Postid:       post.Bytes(),
 		Userid:       u.Bytes(),
 		Content:      content,
 		Up:           0,
@@ -133,7 +141,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT commentid, parentid, userid, content, up, down, absolute, score, creation_time FROM %s WHERE commentid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT commentid, parentid, postid, userid, content, up, down, absolute, score, creation_time FROM %s WHERE commentid=$1 AND postid=$2;", tableName)
 )
 
 // ParseB64ToUID converts a commentid in base64 into a UID
@@ -141,22 +149,28 @@ func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
 	return uid.FromBase64TRSplit(idb64)
 }
 
-// GetByIDB64 returns a post model with the given base64 id
-func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
-	u, err := ParseB64ToUID(idb64)
+// GetByIDB64 returns a comment model with the given base64 id
+func GetByIDB64(db *sql.DB, commentid, postid string) (*Model, *governor.Error) {
+	c, err := ParseB64ToUID(commentid)
 	if err != nil {
 		err.AddTrace(moduleIDModGet64)
 		err.SetErrorUser()
 		return nil, err
 	}
-	mPost := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mPost.Commentid, &mPost.Parentid, &mPost.Userid, &mPost.Content, &mPost.Up, &mPost.Down, &mPost.Absolute, &mPost.Score, &mPost.CreationTime); err != nil {
+	p, err := ParseB64ToUID(postid)
+	if err != nil {
+		err.AddTrace(moduleIDModGet64)
+		err.SetErrorUser()
+		return nil, err
+	}
+	mComment := &Model{}
+	if err := db.QueryRow(sqlGetByIDB64, c.Bytes(), p.Bytes()).Scan(&mComment.Commentid, &mComment.Parentid, &mComment.Postid, &mComment.Userid, &mComment.Content, &mComment.Up, &mComment.Down, &mComment.Absolute, &mComment.Score, &mComment.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no comment found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
-	return mPost, nil
+	return mComment, nil
 }
 
 const (
@@ -164,27 +178,69 @@ const (
 )
 
 var (
-	sqlGetChildren = fmt.Sprintf("SELECT commentid, parentid, userid, content, up, down, absolute, score, creation_time FROM %s WHERE parentid=$1 ORDER BY score DESC LIMIT $2 OFFSET $3;", tableName)
+	sqlGetChildren = fmt.Sprintf("SELECT commentid, parentid, postid, userid, content, up, down, absolute, score, creation_time FROM %s WHERE parentid=$1 AND postid=$2 ORDER BY score DESC LIMIT $3 OFFSET $4;", tableName)
 )
 
 // GetChildren returns a list of child comments of an item
 // parentid could be that of a post or a comment
-func GetChildren(db *sql.DB, parentid string, limit, offset int) (ModelSlice, *governor.Error) {
-	m := ModelSlice{}
-	rows, err := db.Query(sqlGetChildren, parentid, limit, offset)
+func GetChildren(db *sql.DB, parentid, postid string, limit, offset int) (ModelSlice, *governor.Error) {
+	c, err := ParseB64ToUID(parentid)
 	if err != nil {
+		err.AddTrace(moduleIDModGet64)
+		err.SetErrorUser()
+		return nil, err
+	}
+	p, err := ParseB64ToUID(postid)
+	if err != nil {
+		err.AddTrace(moduleIDModGet64)
+		err.SetErrorUser()
+		return nil, err
+	}
+
+	m := ModelSlice{}
+	if rows, err := db.Query(sqlGetChildren, c.Bytes(), p.Bytes(), limit, offset); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			i := Model{}
+			if err = rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
+				return nil, governor.NewError(moduleIDModGetChildren, err.Error(), 0, http.StatusInternalServerError)
+			}
+			m = append(m, i)
+		}
+		if err = rows.Err(); err != nil {
+			return nil, governor.NewError(moduleIDModGetChildren, err.Error(), 0, http.StatusInternalServerError)
+		}
+	} else {
 		return nil, governor.NewError(moduleIDModGetChildren, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return m, nil
+}
+
+const (
+	moduleIDModGetResponses = moduleIDModel + ".GetResponses"
+)
+
+var (
+	sqlGetResponses = fmt.Sprintf("SELECT commentid, parentid, postid, userid, content, up, down, absolute, score, creation_time FROM %s WHERE postid=$1 ORDER BY score DESC LIMIT $2 OFFSET $3;", tableName)
+)
+
+// GetResponses returns a list of top comments of an item
+func GetResponses(db *sql.DB, postid string, limit, offset int) (ModelSlice, *governor.Error) {
+	m := ModelSlice{}
+	rows, err := db.Query(sqlGetResponses, postid, limit, offset)
+	if err != nil {
+		return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		i := Model{}
-		if err := rows.Scan(&i.Commentid, &i.Parentid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
-			return nil, governor.NewError(moduleIDModGetChildren, err.Error(), 0, http.StatusInternalServerError)
+		if err := rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
+			return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
 		}
 		m = append(m, i)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, governor.NewError(moduleIDModGetChildren, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil
 }
@@ -194,12 +250,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (commentid, parentid, userid, content, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (commentid, parentid, postid, userid, content, up, down, absolute, score, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Commentid, m.Parentid, m.Userid, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Commentid, m.Parentid, m.Postid, m.Userid, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -218,12 +274,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (commentid, parentid, userid, content, up, down, absolute, score, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE commentid=$1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (commentid, parentid, postid, userid, content, up, down, absolute, score, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE commentid=$1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Commentid, m.Parentid, m.Userid, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Commentid, m.Parentid, m.Postid, m.Userid, m.Content, m.Up, m.Down, m.Absolute, m.Score, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -252,7 +308,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, userid BYTEA NOT NULL, content VARCHAR(65536) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, postid BYTEA NOT NULL, userid BYTEA NOT NULL, content VARCHAR(65536) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table
