@@ -17,6 +17,13 @@ type (
 		Content  string `json:"content"`
 	}
 
+	reqPutComment struct {
+		Userid    string `json:"-"`
+		Postid    string `json:"-"`
+		Commentid string `json:"-"`
+		Content   string `json:"content"`
+	}
+
 	reqGetComments struct {
 		Postid string `json:"-"`
 		Amount int    `json:"amount"`
@@ -48,6 +55,22 @@ func (r *reqPostComment) valid() *governor.Error {
 		return err
 	}
 	if err := hasPostid(r.Parentid); err != nil {
+		return err
+	}
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validContent(r.Content); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqPutComment) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := hasPostid(r.Commentid); err != nil {
 		return err
 	}
 	if err := hasUserid(r.Userid); err != nil {
@@ -103,6 +126,10 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		if _, err := postmodel.GetByIDB64(db, rcomms.Postid); err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDComments)
 			return err
 		}
 
@@ -117,6 +144,38 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		return c.JSON(http.StatusCreated, resUpdateComment{
+			Commentid: mComment.Commentid,
+		})
+	})
+
+	r.PUT("/:postid/c/:commentid", func(c echo.Context) error {
+		rcomms := &reqPutComment{}
+		if err := c.Bind(rcomms); err != nil {
+			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
+		}
+		rcomms.Postid = c.Param("postid")
+		rcomms.Commentid = c.Param("commentid")
+		rcomms.Userid = c.Get("userid").(string)
+		if err := rcomms.valid(); err != nil {
+			return err
+		}
+
+		mComment, err := commentmodel.GetByIDB64(db, rcomms.Commentid, rcomms.Postid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDComments)
+			return err
+		}
+
+		mComment.Content = rcomms.Content
+
+		if err := mComment.Update(db); err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, resUpdateComment{
 			Commentid: mComment.Commentid,
 		})
 	})
