@@ -9,6 +9,13 @@ import (
 )
 
 type (
+	reqPostComment struct {
+		Userid   string `json:"-"`
+		Postid   string `json:"-"`
+		Parentid string `json:"parentid"`
+		Content  string `json:"content"`
+	}
+
 	reqGetComments struct {
 		Postid string `json:"-"`
 		Amount int    `json:"amount"`
@@ -22,6 +29,10 @@ type (
 		Offset    int    `json:"offset"`
 	}
 
+	resUpdateComment struct {
+		Commentid []byte `json:"commentid"`
+	}
+
 	resGetComments struct {
 		Comments commentmodel.ModelSlice `json:"comments"`
 	}
@@ -30,6 +41,22 @@ type (
 		commentmodel.Model
 	}
 )
+
+func (r *reqPostComment) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := hasPostid(r.Parentid); err != nil {
+		return err
+	}
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validContent(r.Content); err != nil {
+		return err
+	}
+	return nil
+}
 
 func (r *reqGetComments) valid() *governor.Error {
 	if err := hasPostid(r.Postid); err != nil {
@@ -62,6 +89,32 @@ func (r *reqGetComment) valid() *governor.Error {
 
 func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
+
+	r.POST("/:postid/c", func(c echo.Context) error {
+		rcomms := &reqPostComment{}
+		if err := c.Bind(rcomms); err != nil {
+			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
+		}
+		rcomms.Postid = c.Param("postid")
+		rcomms.Userid = c.Get("userid").(string)
+		if err := rcomms.valid(); err != nil {
+			return err
+		}
+
+		mComment, err := commentmodel.New(rcomms.Userid, rcomms.Postid, rcomms.Parentid, rcomms.Content)
+		if err != nil {
+			err.AddTrace(moduleIDComments)
+			return err
+		}
+
+		if err := mComment.Insert(db); err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusCreated, resUpdateComment{
+			Commentid: mComment.Commentid,
+		})
+	})
 
 	r.GET("/:postid/c", func(c echo.Context) error {
 		rcomms := &reqGetComments{}
