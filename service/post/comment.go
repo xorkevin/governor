@@ -3,6 +3,7 @@ package post
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/comment/model"
+	"github.com/hackform/governor/service/post/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -98,6 +99,10 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		rcomms.Postid = c.Param("postid")
 		rcomms.Userid = c.Get("userid").(string)
 		if err := rcomms.valid(); err != nil {
+			return err
+		}
+
+		if _, err := postmodel.GetByIDB64(db, rcomms.Postid); err != nil {
 			return err
 		}
 
