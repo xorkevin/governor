@@ -65,6 +65,7 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 }
 
 // OwnerF is a middleware function to validate if a user owns the accessed resource
+// idfunc should return the userid
 func (g *Gate) OwnerF(idparam string, idfunc func(string) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
@@ -75,6 +76,32 @@ func (g *Gate) OwnerF(idparam string, idfunc func(string) (string, *governor.Err
 			return false
 		}
 		s, err := idfunc(c.Param(idparam))
+		if err != nil {
+			return false
+		}
+		return s == claims.Userid
+	}, authenticationSubject)
+}
+
+// OwnerFM is a middleware function to validate if a user owns the accessed resource
+// idfunc should return the userid
+func (g *Gate) OwnerFM(idfunc func(paramValues ...string) (string, *governor.Error), idparams ...string) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+
+		k := []string{}
+
+		for _, i := range idparams {
+			k = append(k, c.Param(i))
+		}
+
+		s, err := idfunc(k...)
 		if err != nil {
 			return false
 		}

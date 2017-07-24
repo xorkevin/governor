@@ -178,7 +178,17 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		return c.JSON(http.StatusOK, resUpdateComment{
 			Commentid: mComment.Commentid,
 		})
-	})
+	}, p.gate.OwnerFM(func(paramValues ...string) (string, *governor.Error) {
+		m, err := commentmodel.GetByIDB64(db, paramValues[1], paramValues[0])
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDPost)
+			return "", err
+		}
+		return m.UserIDBase64()
+	}, "postid", "commentid"))
 
 	r.GET("/:postid/c", func(c echo.Context) error {
 		rcomms := &reqGetComments{}
@@ -250,5 +260,6 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			Comments: comments,
 		})
 	})
+
 	return nil
 }
