@@ -274,7 +274,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, title VARCHAR(4096) NOT NULL, content VARCHAR(65536) NOT NULL, locked BOOLEAN NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (postid BYTEA PRIMARY KEY, userid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, title VARCHAR(1024) NOT NULL, content VARCHAR(131072) NOT NULL, locked BOOLEAN NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

@@ -308,7 +308,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, postid BYTEA NOT NULL, userid BYTEA NOT NULL, content VARCHAR(65536) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, postid BYTEA NOT NULL, userid BYTEA NOT NULL, content VARCHAR(131072) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

@@ -11,6 +11,7 @@ const (
 	lengthCap        = 128
 	lengthCapLarge   = 4096
 	lengthCapL2      = 65536
+	lengthCapM2      = 1024
 	amountCap        = 1024
 )
 
@@ -36,7 +37,7 @@ func validTitle(title string) *governor.Error {
 	if len(title) == 0 {
 		return governor.NewErrorUser(moduleIDReqValid, "title must be provided", 0, http.StatusBadRequest)
 	}
-	if len(title) > lengthCapLarge {
+	if len(title) > lengthCapM2 {
 		return governor.NewErrorUser(moduleIDReqValid, "title exceeds max length", 0, http.StatusBadRequest)
 	}
 	return nil
