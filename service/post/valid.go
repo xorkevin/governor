@@ -4,6 +4,7 @@ import (
 	"github.com/hackform/governor"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -49,6 +50,9 @@ func validContent(content string) *governor.Error {
 	}
 	if len(content) > lengthCapL2 {
 		return governor.NewErrorUser(moduleIDReqValid, "content exceeds max length", 0, http.StatusBadRequest)
+	}
+	if strings.Contains(content, editEscapeSequence) {
+		return governor.NewErrorUser(moduleIDReqValid, "content contains illegal characters", 0, http.StatusBadRequest)
 	}
 	return nil
 }

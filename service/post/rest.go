@@ -57,6 +57,8 @@ type (
 		Tag          string `json:"group_tag"`
 		Title        string `json:"title"`
 		Content      string `json:"content"`
+		Original     string `json:"original,omitempty"`
+		Edited       bool   `json:"edited"`
 		CreationTime int64  `json:"creation_time"`
 	}
 )
@@ -196,7 +198,8 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
 		}
 
-		m.Content = rpost.Content
+		s1, _, _ := parseContent(m.Content)
+		m.Content = assembleContent(s1, rpost.Content)
 
 		if err := m.Update(db); err != nil {
 			err.AddTrace(moduleIDPost)
@@ -427,14 +430,25 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
-		return c.JSON(http.StatusOK, &resPost{
+		r := &resPost{
 			Postid:       m.Postid,
 			Userid:       m.Userid,
 			Tag:          m.Tag,
 			Title:        m.Title,
-			Content:      m.Content,
 			CreationTime: m.CreationTime,
-		})
+		}
+
+		s1, s2, edited := parseContent(m.Content)
+
+		if edited {
+			r.Content = s2
+			r.Original = s1
+		} else {
+			r.Content = s1
+		}
+		r.Edited = edited
+
+		return c.JSON(http.StatusOK, r)
 	})
 	return nil
 }

@@ -49,12 +49,25 @@ type (
 		Commentid []byte `json:"commentid"`
 	}
 
-	resGetComments struct {
-		Comments commentmodel.ModelSlice `json:"comments"`
+	resGetComment struct {
+		Commentid    []byte `json:"commentid"`
+		Parentid     []byte `json:"parentid"`
+		Postid       []byte `json:"postid"`
+		Userid       []byte `json:"userid"`
+		Content      string `json:"content"`
+		Original     string `json:"original,omitempty"`
+		Edited       bool   `json:"edited"`
+		Up           int32  `json:"up"`
+		Down         int32  `json:"down"`
+		Absolute     int32  `json:"absolute"`
+		Score        int64  `json:"score"`
+		CreationTime int64  `json:"creation_time"`
 	}
 
-	resGetComment struct {
-		commentmodel.Model
+	resCommentSlice []resGetComment
+
+	resGetComments struct {
+		Comments resCommentSlice `json:"comments"`
 	}
 )
 
@@ -193,7 +206,9 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
-		mComment.Content = rcomms.Content
+		s1, _, _ := parseContent(mComment.Content)
+
+		mComment.Content = assembleContent(s1, rcomms.Content)
 
 		if err := mComment.Update(db); err != nil {
 			return err
@@ -340,8 +355,35 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
+		k := make(resCommentSlice, 0, len(commentsSlice))
+
+		for _, i := range commentsSlice {
+			r := resGetComment{
+				Commentid:    i.Commentid,
+				Parentid:     i.Parentid,
+				Postid:       i.Postid,
+				Userid:       i.Userid,
+				Up:           i.Up,
+				Down:         i.Down,
+				Absolute:     i.Absolute,
+				Score:        i.Score,
+				CreationTime: i.CreationTime,
+			}
+
+			s1, s2, edited := parseContent(i.Content)
+			if edited {
+				r.Content = s2
+				r.Original = s1
+			} else {
+				r.Content = s1
+			}
+			r.Edited = edited
+
+			k = append(k, r)
+		}
+
 		return c.JSON(http.StatusOK, &resGetComments{
-			Comments: commentsSlice,
+			Comments: k,
 		})
 	})
 
@@ -365,9 +407,28 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
-		return c.JSON(http.StatusOK, &resGetComment{
-			Model: *comment,
-		})
+		r := &resGetComment{
+			Commentid:    comment.Commentid,
+			Parentid:     comment.Parentid,
+			Postid:       comment.Postid,
+			Userid:       comment.Userid,
+			Up:           comment.Up,
+			Down:         comment.Down,
+			Absolute:     comment.Absolute,
+			Score:        comment.Score,
+			CreationTime: comment.CreationTime,
+		}
+
+		s1, s2, edited := parseContent(comment.Content)
+		if edited {
+			r.Content = s2
+			r.Original = s1
+		} else {
+			r.Content = s1
+		}
+		r.Edited = edited
+
+		return c.JSON(http.StatusOK, r)
 	})
 
 	r.GET("/:postid/c/:commentid/children", func(c echo.Context) error {
@@ -390,8 +451,35 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
+		k := make(resCommentSlice, 0, len(comments))
+
+		for _, i := range comments {
+			r := resGetComment{
+				Commentid:    i.Commentid,
+				Parentid:     i.Parentid,
+				Postid:       i.Postid,
+				Userid:       i.Userid,
+				Up:           i.Up,
+				Down:         i.Down,
+				Absolute:     i.Absolute,
+				Score:        i.Score,
+				CreationTime: i.CreationTime,
+			}
+
+			s1, s2, edited := parseContent(i.Content)
+			if edited {
+				r.Content = s2
+				r.Original = s1
+			} else {
+				r.Content = s1
+			}
+			r.Edited = edited
+
+			k = append(k, r)
+		}
+
 		return c.JSON(http.StatusOK, &resGetComments{
-			Comments: comments,
+			Comments: k,
 		})
 	})
 
