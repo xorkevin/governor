@@ -495,8 +495,9 @@ func (u *User) deleteUser(c echo.Context, l *logrus.Logger) error {
 		Userid: reqid.Userid,
 	}
 
-	sessionIDs := []string{}
+	var sessionIDs []string
 	if smap, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+		sessionIDs = make([]string, 0, len(smap))
 		for k := range smap {
 			sessionIDs = append(sessionIDs, k)
 		}

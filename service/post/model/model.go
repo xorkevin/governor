@@ -192,7 +192,7 @@ var (
 
 // GetGroup returns a list of posts from a group
 func GetGroup(db *sql.DB, tag string, limit, offset int) (ModelSlice, *governor.Error) {
-	m := ModelSlice{}
+	m := make(ModelSlice, 0, limit)
 	rows, err := db.Query(sqlGetGroup, tag, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)

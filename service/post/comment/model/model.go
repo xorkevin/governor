@@ -197,7 +197,7 @@ func GetChildren(db *sql.DB, parentid, postid string, limit, offset int) (ModelS
 		return nil, err
 	}
 
-	m := ModelSlice{}
+	m := make(ModelSlice, 0, limit)
 	if rows, err := db.Query(sqlGetChildren, c.Bytes(), p.Bytes(), limit, offset); err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -226,7 +226,7 @@ var (
 
 // GetResponses returns a list of top comments of an item
 func GetResponses(db *sql.DB, postid string, limit, offset int) (ModelSlice, *governor.Error) {
-	m := ModelSlice{}
+	m := make(ModelSlice, 0, limit)
 	rows, err := db.Query(sqlGetResponses, postid, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)

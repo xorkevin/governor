@@ -25,7 +25,7 @@ const (
 func New(c governor.Config, l *logrus.Logger) (*Database, error) {
 	v := c.Conf()
 	pgconf := v.GetStringMapString("postgres")
-	pgarr := []string{}
+	pgarr := make([]string, 0, len(pgconf))
 	for k, v := range pgconf {
 		pgarr = append(pgarr, k+"="+v)
 	}

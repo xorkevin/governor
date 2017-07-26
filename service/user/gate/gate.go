@@ -95,7 +95,7 @@ func (g *Gate) OwnerFM(idfunc func(paramValues ...string) (string, *governor.Err
 			return false
 		}
 
-		k := []string{}
+		k := make([]string, 0, len(idparams))
 
 		for _, i := range idparams {
 			k = append(k, c.Param(i))

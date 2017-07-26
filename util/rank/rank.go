@@ -28,7 +28,7 @@ type (
 
 // Stringify transforms the rank into an alphabetically ordered, comma delimited string
 func (r Rank) Stringify() string {
-	keys := []string{}
+	keys := make([]string, 0, len(r))
 	for k, v := range r {
 		if v {
 			keys = append(keys, k)
@@ -93,11 +93,12 @@ var (
 
 // FromStringUser creates a new User Rank from a string
 func FromStringUser(rankString string) (Rank, *governor.Error) {
-	r := Rank{}
 	if len(rankString) < 1 {
-		return r, nil
+		return Rank{}, nil
 	}
-	for _, i := range strings.Split(rankString, ",") {
+	rankArray := strings.Split(rankString, ",")
+	r := make(Rank, len(rankArray))
+	for _, i := range rankArray {
 		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}
@@ -108,11 +109,12 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 
 // FromStringGroup creates a new Group Rank from a string
 func FromStringGroup(rankString string) (Rank, *governor.Error) {
-	r := Rank{}
 	if len(rankString) < 1 {
-		return r, nil
+		return Rank{}, nil
 	}
-	for _, i := range strings.Split(rankString, ",") {
+	rankArray := strings.Split(rankString, ",")
+	r := make(Rank, len(rankArray))
+	for _, i := range rankArray {
 		if !rankRegexGroup.MatchString(i) {
 			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}

@@ -85,8 +85,9 @@ func (u *User) getSessions(c echo.Context, l *logrus.Logger) error {
 		Userid: ruser.Userid,
 	}
 
-	sarr := session.Slice{}
+	var sarr session.Slice
 	if sgobs, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+		sarr = make(session.Slice, 0, len(sgobs))
 		for _, v := range sgobs {
 			s := session.Session{}
 			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
