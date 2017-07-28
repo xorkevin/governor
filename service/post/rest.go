@@ -59,6 +59,11 @@ type (
 		Content      string `json:"content"`
 		Original     string `json:"original,omitempty"`
 		Edited       bool   `json:"edited"`
+		Locked       bool   `json:"locked"`
+		Up           int32  `json:"up"`
+		Down         int32  `json:"down"`
+		Absolute     int32  `json:"absolute"`
+		Score        int64  `json:"score"`
 		CreationTime int64  `json:"creation_time"`
 	}
 )
@@ -435,6 +440,11 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			Userid:       m.Userid,
 			Tag:          m.Tag,
 			Title:        m.Title,
+			Locked:       m.Locked,
+			Up:           m.Up,
+			Down:         m.Down,
+			Absolute:     m.Absolute,
+			Score:        m.Score,
 			CreationTime: m.CreationTime,
 		}
 
