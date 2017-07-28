@@ -10,6 +10,7 @@ import (
 	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
+	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
 	"github.com/hackform/governor/service/profile/conf"
 	"github.com/hackform/governor/service/user"
@@ -54,6 +55,12 @@ func main() {
 		return
 	}
 	fmt.Println("- profile")
+
+	if err = postconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("- post")
 
 	if err = config.Init(); err != nil {
 		fmt.Printf(err.Error())

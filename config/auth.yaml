@@ -29,3 +29,5 @@ mail:
   port: 1025
   # port: 587
   from_address: gov@hack.com
+post:
+  archive_time: 2688h
