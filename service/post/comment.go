@@ -162,14 +162,6 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
-		if _, err := postmodel.GetByIDB64(db, rcomms.Postid); err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDComments)
-			return err
-		}
-
 		mComment, err := commentmodel.New(rcomms.Userid, rcomms.Postid, rcomms.Parentid, rcomms.Content)
 		if err != nil {
 			err.AddTrace(moduleIDComments)
@@ -183,7 +175,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		return c.JSON(http.StatusCreated, resUpdateComment{
 			Commentid: mComment.Commentid,
 		})
-	})
+	}, p.archiveGate("postid", true))
 
 	r.PUT("/:postid/c/:commentid", func(c echo.Context) error {
 		rcomms := &reqPutComment{}
@@ -197,14 +189,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
-		mComment, err := commentmodel.GetByIDB64(db, rcomms.Commentid, rcomms.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDComments)
-			return err
-		}
+		mComment := c.Get("commentmodel").(*commentmodel.Model)
 
 		s1, _, _ := parseContent(mComment.Content)
 
@@ -217,8 +202,8 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		return c.JSON(http.StatusOK, resUpdateComment{
 			Commentid: mComment.Commentid,
 		})
-	}, p.gate.OwnerFM(func(paramValues ...string) (string, *governor.Error) {
-		m, err := commentmodel.GetByIDB64(db, paramValues[1], paramValues[0])
+	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+		m, err := commentmodel.GetByIDB64(db, c.Param("commentid"), c.Param("postid"))
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -226,8 +211,9 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			err.AddTrace(moduleIDComments)
 			return "", err
 		}
+		c.Set("commentmodel", m)
 		return m.UserIDBase64()
-	}, "postid", "commentid"))
+	}))
 
 	r.PATCH("/:postid/c/:commentid/:action", func(c echo.Context) error {
 		rcomm := &reqCommentAction{
@@ -253,18 +239,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return governor.NewErrorUser(moduleIDComments, "invalid action", 0, http.StatusBadRequest)
 		}
 
-		post, err := postmodel.GetByIDB64(db, rcomm.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDComments)
-			return err
-		}
-
-		if post.IsLocked() {
-			return governor.NewErrorUser(moduleIDComments, "post is locked", 0, http.StatusConflict)
-		}
+		post := c.Get("postmodel").(*postmodel.Model)
 
 		comm, err := commentmodel.GetByIDB64(db, rcomm.Commentid, rcomm.Postid)
 		if err != nil {
@@ -327,16 +302,37 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.UserOrBanF("postid", func(postid string) (string, *governor.Error) {
-		m, err := postmodel.GetByIDB64(db, postid)
+	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
+		return m.Tag, nil
+	}))
+
+	r.DELETE("/:postid/c/:commentid", func(c echo.Context) error {
+		mComment := c.Get("commentmodel").(*commentmodel.Model)
+
+		if err := mComment.Delete(db); err != nil {
+			err.AddTrace(moduleIDComments)
+			return err
+		}
+
+		return nil
+	}, p.archiveGate("postid", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
+		post := c.Get("postmodel").(*postmodel.Model)
+		m, err := commentmodel.GetByIDB64(db, c.Param("commentid"), c.Param("postid"))
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
 			}
 			err.AddTrace(moduleIDComments)
-			return "", err
+			return "", "", err
 		}
-		return m.Tag, nil
+		s, err := m.UserIDBase64()
+		if err != nil {
+			err.AddTrace(moduleIDPost)
+			return "", "", err
+		}
+		c.Set("commentmodel", m)
+		return s, post.Tag, nil
 	}))
 
 	r.GET("/:postid/c", func(c echo.Context) error {

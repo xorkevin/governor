@@ -42,11 +42,6 @@ type (
 		Action string `json:"-"`
 	}
 
-	reqPostDelete struct {
-		Postid string `json:"-"`
-		Userid string `json:"-"`
-	}
-
 	reqPostGet struct {
 		Postid string `json:"postid"`
 	}
@@ -117,16 +112,6 @@ func (r *reqPostActionUser) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqPostDelete) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *reqPostGet) valid() *governor.Error {
 	if err := hasPostid(r.Postid); err != nil {
 		return err
@@ -134,7 +119,7 @@ func (r *reqPostGet) valid() *governor.Error {
 	return nil
 }
 
-func (p *Post) archiveGate(idparam string) echo.MiddlewareFunc {
+func (p *Post) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc {
 	db := p.db.DB()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -149,6 +134,12 @@ func (p *Post) archiveGate(idparam string) echo.MiddlewareFunc {
 
 			if time.Now().Unix()-m.CreationTime > p.archiveTime {
 				return governor.NewErrorUser(moduleIDPost, "post is archived", 0, http.StatusBadRequest)
+			}
+
+			if checkLocked && m.IsLocked() {
+				if m.IsLocked() {
+					return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
+				}
 			}
 
 			c.Set("postmodel", m)
@@ -217,10 +208,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 		m := c.Get("postmodel").(*postmodel.Model)
 
-		if m.IsLocked() {
-			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
-		}
-
 		s1, _, _ := parseContent(m.Content)
 		m.Content = assembleContent(s1, rpost.Content)
 
@@ -230,7 +217,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id"), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("id", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.UserIDBase64()
 	}))
@@ -270,7 +257,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id"), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("id", false), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
@@ -298,18 +285,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return governor.NewErrorUser(moduleIDPost, "invalid action", 0, http.StatusBadRequest)
 		}
 
-		m, err := postmodel.GetByIDB64(db, rpost.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return err
-		}
-
-		if m.IsLocked() {
-			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
-		}
+		m := c.Get("postmodel").(*postmodel.Model)
 
 		switch action {
 		case actionUpvote:
@@ -363,35 +339,13 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.UserOrBanF("id", func(postid string) (string, *governor.Error) {
-		m, err := postmodel.GetByIDB64(db, postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return "", err
-		}
+	}, p.archiveGate("id", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
 
 	r.DELETE("/:id", func(c echo.Context) error {
-		rpost := &reqPostDelete{
-			Postid: c.Param("id"),
-			Userid: c.Get("userid").(string),
-		}
-		if err := rpost.valid(); err != nil {
-			return err
-		}
-
-		m, err := postmodel.GetByIDB64(db, rpost.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return err
-		}
+		m := c.Get("postmodel").(*postmodel.Model)
 
 		if err := m.Delete(db); err != nil {
 			err.AddTrace(moduleIDPost)
@@ -399,15 +353,8 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.OwnerModOrAdminF("id", func(postid string) (string, string, *governor.Error) {
-		m, err := postmodel.GetByIDB64(db, postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return "", "", err
-		}
+	}, p.archiveGate("id", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
 		s, err := m.UserIDBase64()
 		if err != nil {
 			err.AddTrace(moduleIDPost)
