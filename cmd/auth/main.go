@@ -10,6 +10,7 @@ import (
 	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
+	"github.com/hackform/governor/service/post"
 	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
 	"github.com/hackform/governor/service/profile/conf"
@@ -96,6 +97,8 @@ func main() {
 	g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService))
 
 	g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService))
+
+	g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService))
 
 	g.Start()
 }
