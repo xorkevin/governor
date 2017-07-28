@@ -134,6 +134,30 @@ func (r *reqPostGet) valid() *governor.Error {
 	return nil
 }
 
+func (p *Post) archiveGate(idparam string) echo.MiddlewareFunc {
+	db := p.db.DB()
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			m, err := postmodel.GetByIDB64(db, c.Param(idparam))
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDPost)
+				return err
+			}
+
+			if time.Now().Unix()-m.CreationTime > p.archiveTime {
+				return governor.NewErrorUser(moduleIDPost, "post is archived", 0, http.StatusBadRequest)
+			}
+
+			c.Set("postmodel", m)
+
+			return next(c)
+		}
+	}
+}
+
 func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
@@ -191,13 +215,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
-		m, err := postmodel.GetByIDB64(db, rpost.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			return err
-		}
+		m := c.Get("postmodel").(*postmodel.Model)
 
 		if m.IsLocked() {
 			return governor.NewErrorUser(moduleIDPost, "post is locked", 0, http.StatusConflict)
@@ -212,15 +230,8 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.OwnerF("id", func(postid string) (string, *governor.Error) {
-		m, err := postmodel.GetByIDB64(db, postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return "", err
-		}
+	}, p.archiveGate("id"), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
 		return m.UserIDBase64()
 	}))
 
@@ -244,13 +255,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return governor.NewErrorUser(moduleIDPost, "invalid action", 0, http.StatusBadRequest)
 		}
 
-		m, err := postmodel.GetByIDB64(db, rpost.Postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			return err
-		}
+		m := c.Get("postmodel").(*postmodel.Model)
 
 		switch action {
 		case actionLock:
@@ -265,15 +270,8 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.ModOrAdminF("id", func(postid string) (string, *governor.Error) {
-		m, err := postmodel.GetByIDB64(db, postid)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDPost)
-			return "", err
-		}
+	}, p.archiveGate("id"), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
 
