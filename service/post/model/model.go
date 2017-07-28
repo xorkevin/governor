@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/post/comment/model"
 	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/score"
@@ -282,6 +283,12 @@ func Setup(db *sql.DB) *governor.Error {
 	_, err := db.Exec(sqlSetup)
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	if err := commentmodel.Setup(db); err != nil {
+		return err
+	}
+	if err := votemodel.Setup(db); err != nil {
+		return err
 	}
 	return nil
 }

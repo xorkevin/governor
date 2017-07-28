@@ -4,6 +4,8 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf/model"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/post/model"
+	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -114,6 +116,18 @@ func (c *Conf) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 			return err
 		}
 		lsetup.Info("created new user table")
+
+		if err := profilemodel.Setup(sdb); err != nil {
+			err.AddTrace(moduleIDSetup)
+			return err
+		}
+		lsetup.Info("created new profile table")
+
+		if err := postmodel.Setup(sdb); err != nil {
+			err.AddTrace(moduleIDSetup)
+			return err
+		}
+		lsetup.Info("created new post, comment, and vote table")
 
 		if err := confmodel.Setup(sdb); err != nil {
 			err.AddTrace(moduleIDSetup)
