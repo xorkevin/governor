@@ -12,23 +12,16 @@ import (
 
 type (
 	reqPostComment struct {
-		Userid   string `json:"-"`
-		Postid   string `json:"-"`
 		Parentid string `json:"parentid"`
 		Content  string `json:"content"`
 	}
 
 	reqPutComment struct {
-		Userid    string `json:"-"`
-		Postid    string `json:"-"`
-		Commentid string `json:"-"`
-		Content   string `json:"content"`
+		Content string `json:"content"`
 	}
 
 	reqCommentAction struct {
-		Postid    string `json:"-"`
 		Commentid string `json:"-"`
-		Userid    string `json:"-"`
 		Action    string `json:"-"`
 	}
 
@@ -39,6 +32,11 @@ type (
 	}
 
 	reqGetComment struct {
+		Postid    string `json:"-"`
+		Commentid string `json:"-"`
+	}
+
+	reqGetCommentChildren struct {
 		Postid    string `json:"-"`
 		Commentid string `json:"-"`
 		Amount    int    `json:"amount"`
@@ -72,13 +70,7 @@ type (
 )
 
 func (r *reqPostComment) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
 	if err := hasPostid(r.Parentid); err != nil {
-		return err
-	}
-	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
 	if err := validContent(r.Content); err != nil {
@@ -88,15 +80,6 @@ func (r *reqPostComment) valid() *governor.Error {
 }
 
 func (r *reqPutComment) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
-	if err := hasPostid(r.Commentid); err != nil {
-		return err
-	}
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
 	if err := validContent(r.Content); err != nil {
 		return err
 	}
@@ -104,13 +87,7 @@ func (r *reqPutComment) valid() *governor.Error {
 }
 
 func (r *reqCommentAction) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
 	if err := hasPostid(r.Commentid); err != nil {
-		return err
-	}
-	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
 	if err := validAction(r.Action); err != nil {
@@ -139,6 +116,16 @@ func (r *reqGetComment) valid() *governor.Error {
 	if err := hasPostid(r.Commentid); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *reqGetCommentChildren) valid() *governor.Error {
+	if err := hasPostid(r.Postid); err != nil {
+		return err
+	}
+	if err := hasPostid(r.Commentid); err != nil {
+		return err
+	}
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
@@ -156,13 +143,19 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		if err := c.Bind(rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
-		rcomms.Postid = c.Param("postid")
-		rcomms.Userid = c.Get("userid").(string)
 		if err := rcomms.valid(); err != nil {
 			return err
 		}
 
-		mComment, err := commentmodel.New(rcomms.Userid, rcomms.Postid, rcomms.Parentid, rcomms.Content)
+		m := c.Get("postmodel").(*postmodel.Model)
+		postid, err := m.IDBase64()
+		if err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+		userid := c.Get("userid").(string)
+
+		mComment, err := commentmodel.New(userid, postid, rcomms.Parentid, rcomms.Content)
 		if err != nil {
 			err.AddTrace(moduleIDComments)
 			return err
@@ -182,9 +175,6 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		if err := c.Bind(rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
-		rcomms.Postid = c.Param("postid")
-		rcomms.Commentid = c.Param("commentid")
-		rcomms.Userid = c.Get("userid").(string)
 		if err := rcomms.valid(); err != nil {
 			return err
 		}
@@ -203,7 +193,15 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			Commentid: mComment.Commentid,
 		})
 	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
-		m, err := commentmodel.GetByIDB64(db, c.Param("commentid"), c.Param("postid"))
+		rcomm := &reqGetComment{
+			Postid:    c.Param("postid"),
+			Commentid: c.Param("commentid"),
+		}
+		if err := rcomm.valid(); err != nil {
+			return "", err
+		}
+
+		m, err := commentmodel.GetByIDB64(db, rcomm.Commentid, rcomm.Postid)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -217,9 +215,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 
 	r.PATCH("/:postid/c/:commentid/:action", func(c echo.Context) error {
 		rcomm := &reqCommentAction{
-			Postid:    c.Param("postid"),
 			Commentid: c.Param("commentid"),
-			Userid:    c.Get("userid").(string),
 			Action:    c.Param("action"),
 		}
 		if err := rcomm.valid(); err != nil {
@@ -240,8 +236,14 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		post := c.Get("postmodel").(*postmodel.Model)
+		postid, err := post.IDBase64()
+		if err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+		userid := c.Get("userid").(string)
 
-		comm, err := commentmodel.GetByIDB64(db, rcomm.Commentid, rcomm.Postid)
+		comm, err := commentmodel.GetByIDB64(db, rcomm.Commentid, postid)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -252,7 +254,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 
 		switch action {
 		case actionUpvote:
-			v, err := votemodel.NewUp(rcomm.Commentid, rcomm.Postid, post.Tag, rcomm.Userid)
+			v, err := votemodel.NewUp(rcomm.Commentid, postid, post.Tag, userid)
 			if err != nil {
 				err.AddTrace(moduleIDComments)
 				return err
@@ -265,7 +267,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 				return err
 			}
 		case actionDownvote:
-			v, err := votemodel.NewDown(rcomm.Commentid, rcomm.Postid, post.Tag, rcomm.Userid)
+			v, err := votemodel.NewDown(rcomm.Commentid, postid, post.Tag, userid)
 			if err != nil {
 				err.AddTrace(moduleIDComments)
 				return err
@@ -278,7 +280,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 				return err
 			}
 		case actionRmvote:
-			v, err := votemodel.GetByIDB64(db, rcomm.Commentid, rcomm.Userid)
+			v, err := votemodel.GetByIDB64(db, rcomm.Commentid, userid)
 			if err != nil {
 				if err.Code() == 2 {
 					err.SetErrorUser()
@@ -428,7 +430,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 	})
 
 	r.GET("/:postid/c/:commentid/children", func(c echo.Context) error {
-		rcomms := &reqGetComment{}
+		rcomms := &reqGetCommentChildren{}
 		if err := c.Bind(rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
