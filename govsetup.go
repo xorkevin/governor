@@ -69,7 +69,7 @@ type (
 
 // Mount is a collection of routes
 func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
-	r.POST("/", func(c echo.Context) error {
+	r.POST("", func(c echo.Context) error {
 		rsetup := &ReqSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
 			return NewErrorUser(moduleIDSetup, err.Error(), 0, http.StatusBadRequest)
@@ -87,7 +87,7 @@ func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 
 		l.WithFields(logrus.Fields{
 			"time": time.Now().String(),
-		}).Info("successfully setup db")
+		}).Info("successfully setup services")
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
 			Username:  rsetup.Username,

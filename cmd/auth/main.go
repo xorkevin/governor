@@ -71,16 +71,19 @@ func main() {
 
 	g, err := governor.New(config)
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 
 	dbService, err := db.New(config, g.Logger())
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 
 	cacheService, err := cache.New(config, g.Logger())
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 

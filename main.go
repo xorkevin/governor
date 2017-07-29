@@ -54,18 +54,23 @@ func New(config Config) (*Server, error) {
 	i.Use(middleware.Gzip())
 	l.Info("initialized middleware")
 
+	healthService := newHealth()
+	if err := healthService.Mount(config, i.Group(config.BaseURL+"/healthz"), l); err != nil {
+		return nil, err
+	}
+	setupService := newSetup()
+	if err := setupService.Mount(config, i.Group(config.BaseURL+"/setupz"), l); err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		i:          i,
 		log:        l,
 		config:     config,
-		h:          newHealth(),
-		s:          newSetup(),
+		h:          healthService,
+		s:          setupService,
 		showBanner: true,
 	}
-	s.h.Mount(config, s.i.Group(s.config.BaseURL+"/healthz"), l)
-	l.Info("mounted health checkpoint")
-	s.s.Mount(config, s.i.Group(s.config.BaseURL+"/setupz"), l)
-	l.Info("mounted setup service")
 
 	l.Info("server instance created")
 	return s, nil

@@ -71,6 +71,8 @@ func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 			return c.String(http.StatusOK, "Pong")
 		})
 	}
+
+	l.Info("mounted health checkpoint")
 	return nil
 }
 
