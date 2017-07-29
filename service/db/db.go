@@ -65,6 +65,11 @@ func (db *Database) Health() *governor.Error {
 	return nil
 }
 
+// Setup is run on service setup
+func (db *Database) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	return nil
+}
+
 // DB returns the sql database instance
 func (db *Database) DB() *sql.DB {
 	return db.db

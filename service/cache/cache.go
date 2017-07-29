@@ -60,6 +60,11 @@ func (c *Cache) Health() *governor.Error {
 	return nil
 }
 
+// Setup is run on service setup
+func (c *Cache) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	return nil
+}
+
 // Cache returns the cache instance
 func (c *Cache) Cache() *redis.Client {
 	return c.cache

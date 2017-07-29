@@ -177,3 +177,13 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 func (p *Profile) Health() *governor.Error {
 	return nil
 }
+
+// Setup is run on service setup
+func (p *Profile) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	if err := profilemodel.Setup(p.db.DB()); err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	l.Info("created new profile table")
+	return nil
+}

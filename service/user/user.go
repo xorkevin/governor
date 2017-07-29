@@ -6,6 +6,7 @@ import (
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/user/gate"
+	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -95,5 +96,33 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 
 // Health is a check for service health
 func (u *User) Health() *governor.Error {
+	return nil
+}
+
+// Setup is run on service setup
+func (u *User) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname)
+	if err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	l.Info("created new admin model")
+
+	if err := usermodel.Setup(u.db.DB()); err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	l.Info("created new user table")
+
+	if err := madmin.Insert(u.db.DB()); err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	userid, _ := madmin.IDBase64()
+	l.WithFields(logrus.Fields{
+		"username": madmin.Username,
+		"userid":   userid,
+	}).Info("inserted new admin into users")
+
 	return nil
 }

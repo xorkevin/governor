@@ -53,6 +53,11 @@ func (m *Mail) Health() *governor.Error {
 	return nil
 }
 
+// Setup is run on service setup
+func (m *Mail) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	return nil
+}
+
 const (
 	moduleIDSend = moduleID + ".send"
 )

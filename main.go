@@ -27,6 +27,7 @@ type (
 		i          *echo.Echo
 		log        *logrus.Logger
 		h          *health
+		s          *setup
 		config     Config
 		showBanner bool
 	}
@@ -58,10 +59,13 @@ func New(config Config) (*Server, error) {
 		log:        l,
 		config:     config,
 		h:          newHealth(),
+		s:          newSetup(),
 		showBanner: true,
 	}
 	s.h.Mount(config, s.i.Group(s.config.BaseURL+"/healthz"), l)
 	l.Info("mounted health checkpoint")
+	s.s.Mount(config, s.i.Group(s.config.BaseURL+"/setupz"), l)
+	l.Info("mounted setup service")
 
 	l.Info("server instance created")
 	return s, nil

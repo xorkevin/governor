@@ -4,6 +4,9 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/post/comment/model"
+	"github.com/hackform/governor/service/post/model"
+	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -70,5 +73,23 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 
 // Health is a check for service health
 func (p *Post) Health() *governor.Error {
+	return nil
+}
+
+// Setup is run on service setup
+func (p *Post) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+	if err := postmodel.Setup(p.db.DB()); err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	l.Info("created new post table")
+	if err := commentmodel.Setup(p.db.DB()); err != nil {
+		return err
+	}
+	l.Info("created new comment table")
+	if err := votemodel.Setup(p.db.DB()); err != nil {
+		return err
+	}
+	l.Info("created new vote table")
 	return nil
 }
