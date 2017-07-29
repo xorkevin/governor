@@ -20,30 +20,21 @@ const (
 
 type (
 	reqPostPost struct {
-		Userid  string `json:"-"`
 		Tag     string `json:"-"`
 		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
 
 	reqPostPut struct {
-		Postid  string `json:"-"`
 		Content string `json:"content"`
 	}
 
 	reqPostAction struct {
-		Postid string `json:"-"`
-		Action string `json:"-"`
-	}
-
-	reqPostActionUser struct {
-		Postid string `json:"-"`
-		Userid string `json:"-"`
 		Action string `json:"-"`
 	}
 
 	reqPostGet struct {
-		Postid string `json:"postid"`
+		Postid string `json:"-"`
 	}
 
 	resPost struct {
@@ -64,9 +55,6 @@ type (
 )
 
 func (r *reqPostPost) valid() *governor.Error {
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
 	if err := validTitle(r.Title); err != nil {
 		return err
 	}
@@ -80,9 +68,6 @@ func (r *reqPostPost) valid() *governor.Error {
 }
 
 func (r *reqPostPut) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
 	if err := validContent(r.Content); err != nil {
 		return err
 	}
@@ -90,22 +75,6 @@ func (r *reqPostPut) valid() *governor.Error {
 }
 
 func (r *reqPostAction) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
-	if err := validAction(r.Action); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqPostActionUser) valid() *governor.Error {
-	if err := hasPostid(r.Postid); err != nil {
-		return err
-	}
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
 	if err := validAction(r.Action); err != nil {
 		return err
 	}
@@ -123,7 +92,14 @@ func (p *Post) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc
 	db := p.db.DB()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			m, err := postmodel.GetByIDB64(db, c.Param(idparam))
+			rpost := &reqPostGet{
+				Postid: c.Param(idparam),
+			}
+			if err := rpost.valid(); err != nil {
+				return err
+			}
+
+			m, err := postmodel.GetByIDB64(db, rpost.Postid)
 			if err != nil {
 				if err.Code() == 2 {
 					err.SetErrorUser()
@@ -161,13 +137,13 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err := c.Bind(rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
 		}
-		rpost.Userid = c.Get("userid").(string)
 		rpost.Tag = c.Param("group")
 		if err := rpost.valid(); err != nil {
 			return err
 		}
+		userid := c.Get("userid").(string)
 
-		m, err := postmodel.New(rpost.Userid, rpost.Tag, rpost.Title, rpost.Content)
+		m, err := postmodel.New(userid, rpost.Tag, rpost.Title, rpost.Content)
 		if err != nil {
 			err.AddTrace(moduleIDPost)
 			return err
@@ -183,7 +159,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 		t, _ := time.Now().MarshalText()
 		postid, _ := m.IDBase64()
-		userid, _ := m.UserIDBase64()
 		l.WithFields(logrus.Fields{
 			"time":   string(t),
 			"origin": moduleIDPost,
@@ -201,7 +176,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err := c.Bind(rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
 		}
-		rpost.Postid = c.Param("id")
 		if err := rpost.valid(); err != nil {
 			return err
 		}
@@ -224,7 +198,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	r.PATCH("/:id/mod/:action", func(c echo.Context) error {
 		rpost := &reqPostAction{
-			Postid: c.Param("id"),
 			Action: c.Param("action"),
 		}
 		if err := rpost.valid(); err != nil {
@@ -263,9 +236,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 	}))
 
 	r.PATCH("/:id/:action", func(c echo.Context) error {
-		rpost := &reqPostActionUser{
-			Postid: c.Param("id"),
-			Userid: c.Get("userid").(string),
+		rpost := &reqPostAction{
 			Action: c.Param("action"),
 		}
 		if err := rpost.valid(); err != nil {
@@ -286,10 +257,16 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		m := c.Get("postmodel").(*postmodel.Model)
+		postid, err := m.IDBase64()
+		if err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+		userid := c.Get("userid").(string)
 
 		switch action {
 		case actionUpvote:
-			v, err := votemodel.NewUpPost(rpost.Postid, m.Tag, rpost.Userid)
+			v, err := votemodel.NewUpPost(postid, m.Tag, userid)
 			if err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
@@ -302,7 +279,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 		case actionDownvote:
-			v, err := votemodel.NewDownPost(rpost.Postid, m.Tag, rpost.Userid)
+			v, err := votemodel.NewDownPost(postid, m.Tag, userid)
 			if err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
@@ -315,7 +292,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return err
 			}
 		case actionRmvote:
-			v, err := votemodel.GetByIDB64(db, rpost.Postid, rpost.Userid)
+			v, err := votemodel.GetByIDB64(db, postid, userid)
 			if err != nil {
 				if err.Code() == 2 {
 					err.SetErrorUser()
