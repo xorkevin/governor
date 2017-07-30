@@ -8,11 +8,12 @@ import (
 type (
 	// Config is the server configuration
 	Config struct {
-		config   *viper.Viper
-		Version  string
-		LogLevel int
-		Port     string
-		BaseURL  string
+		config    *viper.Viper
+		Version   string
+		LogLevel  int
+		Port      string
+		BaseURL   string
+		PublicDir string
 	}
 )
 
@@ -35,6 +36,7 @@ func (c *Config) Init() error {
 	c.LogLevel = envToLevel(c.config.GetString("mode"))
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
+	c.PublicDir = c.config.GetString("publicdir")
 	return nil
 }
 
@@ -48,6 +50,7 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
+	v.SetDefault("publicdir", "public")
 
 	v.SetConfigName(*configFilename)
 	v.AddConfigPath("./config")

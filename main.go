@@ -19,6 +19,8 @@ const (
 
  %s
 `
+
+	filePrefix = "/file"
 )
 
 type (
@@ -52,6 +54,10 @@ func New(config Config) (*Server, error) {
 	i.Use(middleware.CORS())
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
+	i.Group(filePrefix, middleware.StaticWithConfig(middleware.StaticConfig{
+		Root:  config.PublicDir,
+		HTML5: true,
+	}))
 	l.Info("initialized middleware")
 
 	healthService := newHealth()

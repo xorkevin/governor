@@ -3,6 +3,7 @@ VERSION=v0.1.0
 API_PORT=8080
 FSS_PORT=3000
 BASEDIR=public
+PACKAGE=github.com/hackform/governor
 
 
 # CMD
@@ -13,18 +14,11 @@ AUTH_NAME=auth
 AUTH_PATH=cmd/auth/main.go
 AUTH_BIN_PATH=$(BIN_OUT)/$(AUTH_NAME)
 
-## fsserve
-FSSERVE_NAME=fsserve
-FSSERVE_PATH=cmd/fsserve/main.go
-FSSERVE_BIN_PATH=$(BIN_OUT)/$(FSSERVE_NAME)
-
 
 # DOCKER
 DOCKER_NETWORK=governornetwork
 AUTH_IMAGE_NAME=governorauth
 AUTH_CONTAINER_NAME=gauth
-FSSERVE_IMAGE_NAME=governorfsserver
-FSSERVE_CONTAINER_NAME=gfs
 
 
 # DEV_POSTGRES
@@ -46,13 +40,10 @@ all: build
 
 
 test:
-	go test -cover $$(glide novendor)
+	go test -cover $$(go list ./... | grep -v "^$(PACKAGE)/vendor/")
 
 dev:
 	go run $(AUTH_PATH) --config authdev
-
-dev-fsserve:
-	go run $(FSSERVE_PATH)
 
 clean:
 	if [ -d $(BIN_OUT) ]; then rm -r $(BIN_OUT); fi
@@ -62,12 +53,7 @@ build-auth:
 	if [ -f $(AUTH_BIN_PATH) ]; then rm $(AUTH_BIN_PATH);	fi
 	CGO_ENABLED=0 go build -a -tags netgo -ldflags '-w -s' -o $(AUTH_BIN_PATH) $(AUTH_PATH)
 
-build-fsserve:
-	mkdir -p $(BIN_OUT)
-	if [ -f $(FSSERVE_BIN_PATH) ]; then rm $(FSSERVE_BIN_PATH); fi
-	CGO_ENABLED=0 go build -a -tags netgo -ldflags '-w -s' -o $(FSSERVE_BIN_PATH) $(FSSERVE_PATH)
-
-build: clean build-auth build-fsserve
+build: clean build-auth
 
 
 ## docker
@@ -76,17 +62,13 @@ docker-setup:
 
 docker-build: build
 	docker build -f ./cmd/auth/Dockerfile -t $(AUTH_IMAGE_NAME):$(VERSION) -t $(AUTH_IMAGE_NAME):latest .
-	docker build -f ./cmd/fsserve/Dockerfile -t $(FSSERVE_IMAGE_NAME):latest .
 
 docker-run:
-	docker run -d --name $(AUTH_CONTAINER_NAME) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
-	docker run -d --name $(FSSERVE_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) -p $(FSS_PORT):$(FSS_PORT) $(FSSERVE_IMAGE_NAME)
+	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
 
 docker-stop:
 	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=running)" ]; then docker stop $(AUTH_CONTAINER_NAME); fi
-	if [ "$$(docker ps -q -f name=$(FSSERVE_CONTAINER_NAME) -f status=running)" ]; then docker stop $(FSSERVE_CONTAINER_NAME); fi
 	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=exited)" ]; then docker rm $(AUTH_CONTAINER_NAME); fi
-	if [ "$$(docker ps -q -f name=$(FSSERVE_CONTAINER_NAME) -f status=exited)" ]; then docker rm $(FSSERVE_CONTAINER_NAME); fi
 
 docker-restart: docker-stop docker-run
 
