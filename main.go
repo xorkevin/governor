@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
+	// "golang.org/x/net/publicsuffix"
 )
 
 const (
@@ -19,8 +20,6 @@ const (
 
  %s
 `
-
-	filePrefix = "/file"
 )
 
 type (
@@ -54,7 +53,7 @@ func New(config Config) (*Server, error) {
 	i.Use(middleware.CORS())
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
-	i.Group(filePrefix, middleware.StaticWithConfig(middleware.StaticConfig{
+	i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
 		Root:  config.PublicDir,
 		HTML5: true,
 	}))

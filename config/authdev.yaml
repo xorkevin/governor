@@ -2,7 +2,7 @@ version: v0.1.0
 mode: DEBUG
 port: 8080
 baseurl: /api
-basedir: public
+publicdir: public
 postgres:
   user: postgres
   password: admin
