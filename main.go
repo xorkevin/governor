@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
-	// "golang.org/x/net/publicsuffix"
+	"strings"
 )
 
 const (
@@ -54,8 +54,14 @@ func New(config Config) (*Server, error) {
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
 	i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Root:  config.PublicDir,
-		HTML5: true,
+		Root:   config.PublicDir,
+		Index:  "index.html",
+		Browse: false,
+		HTML5:  true,
+		Skipper: func(c echo.Context) bool {
+			path := c.Request().URL.EscapedPath()
+			return strings.HasPrefix(path, config.BaseURL+"/") || config.BaseURL == path
+		},
 	}))
 	l.Info("initialized middleware")
 
