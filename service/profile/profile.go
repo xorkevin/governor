@@ -23,6 +23,10 @@ type (
 		Image  string `json:"image"`
 	}
 
+	resProfileUpdate struct {
+		Userid []byte `json:"userid"`
+	}
+
 	resProfileModel struct {
 		Email string `json:"contact_email"`
 		Bio   string `json:"bio"`
@@ -112,7 +116,9 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
-		return c.NoContent(http.StatusNoContent)
+		return c.JSON(http.StatusCreated, &resProfileUpdate{
+			Userid: m.Userid,
+		})
 	}, p.gate.Owner("id"))
 
 	r.PUT("/:id", func(c echo.Context) error {

@@ -38,6 +38,10 @@ type (
 		Postid string `json:"-"`
 	}
 
+	resPostUpdate struct {
+		Postid []byte `json:"postid"`
+	}
+
 	resPost struct {
 		Postid       []byte `json:"postid"`
 		Userid       []byte `json:"userid"`
@@ -169,7 +173,9 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			"title":  m.Title,
 		}).Info("post created")
 
-		return c.NoContent(http.StatusNoContent)
+		return c.JSON(http.StatusCreated, &resPostUpdate{
+			Postid: m.Postid,
+		})
 	}, p.gate.UserOrBan("group"))
 
 	r.PUT("/:postid", func(c echo.Context) error {
@@ -266,6 +272,21 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		userid := c.Get("userid").(string)
 
 		switch action {
+		case actionUpvote, actionDownvote, actionRmvote:
+			v, err := votemodel.GetByIDB64(db, postid, userid)
+			if err == nil {
+				if err = v.Delete(db); err != nil {
+					err.AddTrace(moduleIDPost)
+					return err
+				}
+			} else {
+				if err.Code() != 2 {
+					return err
+				}
+			}
+		}
+
+		switch action {
 		case actionUpvote:
 			v, err := votemodel.NewUpPost(postid, m.Tag, userid)
 			if err != nil {
@@ -289,18 +310,6 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				if err.Code() == 3 {
 					err.SetErrorUser()
 				}
-				err.AddTrace(moduleIDPost)
-				return err
-			}
-		case actionRmvote:
-			v, err := votemodel.GetByIDB64(db, postid, userid)
-			if err != nil {
-				if err.Code() == 2 {
-					err.SetErrorUser()
-				}
-				return err
-			}
-			if err := v.Delete(db); err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
 			}
