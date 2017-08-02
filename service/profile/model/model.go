@@ -72,7 +72,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet64, "no profile found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}

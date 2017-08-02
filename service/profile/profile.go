@@ -131,6 +131,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 				err.SetErrorUser()
 			}
 			err.AddTrace(moduleID)
+			return err
 		}
 
 		m.Email = rprofile.Email
@@ -144,6 +145,31 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.Owner("id"))
+
+	r.DELETE("/:id", func(c echo.Context) error {
+		rprofile := &reqProfileGetID{
+			Userid: c.Param("id"),
+		}
+		if err := rprofile.valid(); err != nil {
+			return err
+		}
+
+		m, err := profilemodel.GetByIDB64(db, rprofile.Userid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		if err := m.Delete(db); err != nil {
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.OwnerOrAdmin("id"))
 
 	r.GET("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
@@ -159,6 +185,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 				err.SetErrorUser()
 			}
 			err.AddTrace(moduleID)
+			return err
 		}
 
 		return c.JSON(http.StatusOK, &resProfileModel{
