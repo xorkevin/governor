@@ -47,16 +47,16 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 	refreshTime := time7d
 	confirmTime := time24h
 	passwordResetTime := time24h
-	if duration, err := time.ParseDuration(ca["duration"]); err != nil {
+	if duration, err := time.ParseDuration(ca["duration"]); err == nil {
 		accessTime = duration.Nanoseconds() / b1
 	}
-	if duration, err := time.ParseDuration(ca["refresh_duration"]); err != nil {
+	if duration, err := time.ParseDuration(ca["refresh_duration"]); err == nil {
 		refreshTime = duration.Nanoseconds() / b1
 	}
-	if duration, err := time.ParseDuration(cu["confirm_duration"]); err != nil {
+	if duration, err := time.ParseDuration(cu["confirm_duration"]); err == nil {
 		confirmTime = duration.Nanoseconds() / b1
 	}
-	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err != nil {
+	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err == nil {
 		passwordResetTime = duration.Nanoseconds() / b1
 	}
 

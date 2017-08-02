@@ -226,20 +226,27 @@ var (
 
 // GetResponses returns a list of top comments of an item
 func GetResponses(db *sql.DB, postid string, limit, offset int) (ModelSlice, *governor.Error) {
-	m := make(ModelSlice, 0, limit)
-	rows, err := db.Query(sqlGetResponses, postid, limit, offset)
+	p, err := ParseB64ToUID(postid)
 	if err != nil {
-		return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
+		err.AddTrace(moduleIDModGetResponses)
+		err.SetErrorUser()
+		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		i := Model{}
-		if err := rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
+
+	m := make(ModelSlice, 0, limit)
+	if rows, err := db.Query(sqlGetResponses, p.Bytes(), limit, offset); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			i := Model{}
+			if err = rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
+				return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
+			}
+			m = append(m, i)
+		}
+		if err = rows.Err(); err != nil {
 			return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
 		}
-		m = append(m, i)
-	}
-	if err := rows.Err(); err != nil {
+	} else {
 		return nil, governor.NewError(moduleIDModGetResponses, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil

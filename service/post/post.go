@@ -37,7 +37,7 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 	ca := conf.Conf().GetStringMapString("userauth")
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
-	if duration, err := time.ParseDuration(cp["duration"]); err != nil {
+	if duration, err := time.ParseDuration(cp["archive_time"]); err == nil {
 		archiveTime = duration.Nanoseconds() / b1
 	}
 

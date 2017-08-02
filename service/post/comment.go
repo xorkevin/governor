@@ -27,8 +27,8 @@ type (
 
 	reqGetComments struct {
 		Postid string `json:"-"`
-		Amount int    `json:"amount"`
-		Offset int    `json:"offset"`
+		Amount int    `query:"amount"`
+		Offset int    `query:"offset"`
 	}
 
 	reqGetComment struct {
@@ -39,8 +39,8 @@ type (
 	reqGetCommentChildren struct {
 		Postid    string `json:"-"`
 		Commentid string `json:"-"`
-		Amount    int    `json:"amount"`
-		Offset    int    `json:"offset"`
+		Amount    int    `query:"amount"`
+		Offset    int    `query:"offset"`
 	}
 
 	resUpdateComment struct {
@@ -168,7 +168,10 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		return c.JSON(http.StatusCreated, resUpdateComment{
 			Commentid: mComment.Commentid,
 		})
-	}, p.archiveGate("postid", true))
+	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+		m := c.Get("postmodel").(*postmodel.Model)
+		return m.Tag, nil
+	}))
 
 	r.PUT("/:postid/c/:commentid", func(c echo.Context) error {
 		rcomms := &reqPutComment{}

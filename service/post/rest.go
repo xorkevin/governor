@@ -1,6 +1,7 @@
 package post
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/model"
 	"github.com/hackform/governor/service/post/vote/model"
@@ -128,7 +129,7 @@ func (p *Post) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc
 func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
-	if err := p.mountComments(conf, r.Group("/"), l); err != nil {
+	if err := p.mountComments(conf, r.Group(""), l); err != nil {
 		return err
 	}
 
@@ -171,7 +172,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.UserOrBan("group"))
 
-	r.PUT("/:id", func(c echo.Context) error {
+	r.PUT("/:postid", func(c echo.Context) error {
 		rpost := &reqPostPut{}
 		if err := c.Bind(rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
@@ -191,12 +192,12 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.UserIDBase64()
 	}))
 
-	r.PATCH("/:id/mod/:action", func(c echo.Context) error {
+	r.PATCH("/:postid/mod/:action", func(c echo.Context) error {
 		rpost := &reqPostAction{
 			Action: c.Param("action"),
 		}
@@ -230,12 +231,12 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id", false), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", false), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
 
-	r.PATCH("/:id/:action", func(c echo.Context) error {
+	r.PATCH("/:postid/:action", func(c echo.Context) error {
 		rpost := &reqPostAction{
 			Action: c.Param("action"),
 		}
@@ -316,12 +317,12 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
 
-	r.DELETE("/:id", func(c echo.Context) error {
+	r.DELETE("/:postid", func(c echo.Context) error {
 		m := c.Get("postmodel").(*postmodel.Model)
 
 		if err := m.Delete(db); err != nil {
@@ -330,7 +331,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("id", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
+	}, p.archiveGate("postid", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		s, err := m.UserIDBase64()
 		if err != nil {
@@ -340,10 +341,11 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return s, m.Tag, nil
 	}))
 
-	r.GET("/:id", func(c echo.Context) error {
+	r.GET("/:postid", func(c echo.Context) error {
 		rpost := &reqPostGet{
-			Postid: c.Param("id"),
+			Postid: c.Param("postid"),
 		}
+		fmt.Println("postid", c.Param("postid"))
 		if err := rpost.valid(); err != nil {
 			return err
 		}
