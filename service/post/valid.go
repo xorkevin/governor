@@ -82,7 +82,7 @@ func validAmount(amt int) *governor.Error {
 }
 
 func validOffset(offset int) *governor.Error {
-	if offset < 1 {
+	if offset < 0 {
 		return governor.NewErrorUser(moduleIDReqValid, "offset is invalid", 0, http.StatusBadRequest)
 	}
 	return nil

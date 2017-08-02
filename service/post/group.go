@@ -11,8 +11,8 @@ import (
 type (
 	reqGroupGetPosts struct {
 		Group  string `json:"-"`
-		Amount int    `json:"amount"`
-		Offset int    `json:"offset"`
+		Amount int    `query:"amount"`
+		Offset int    `query:"offset"`
 	}
 
 	resGroupPosts struct {
