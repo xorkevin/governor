@@ -61,7 +61,7 @@ type (
 	}
 
 	resUserUpdate struct {
-		Userid   []byte `json:"userid"`
+		Userid   string `json:"userid"`
 		Username string `json:"username"`
 	}
 )
@@ -182,7 +182,7 @@ type (
 	}
 
 	resUserGetPublic struct {
-		Userid       []byte `json:"userid"`
+		Userid       string `json:"userid"`
 		Username     string `json:"username"`
 		Tags         string `json:"auth_tags"`
 		FirstName    string `json:"first_name"`

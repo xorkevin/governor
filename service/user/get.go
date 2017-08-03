@@ -30,8 +30,10 @@ func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
+	userid, _ := m.IDBase64()
+
 	return c.JSON(http.StatusOK, &resUserGetPublic{
-		Userid:       m.Userid,
+		Userid:       userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
 		FirstName:    m.FirstName,
@@ -58,9 +60,11 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
+	userid, _ := m.IDBase64()
+
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
-			Userid:       m.Userid,
+			Userid:       userid,
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,
@@ -122,8 +126,11 @@ func (u *User) getByUsername(c echo.Context, l *logrus.Logger) error {
 		}
 		return err
 	}
+
+	userid, _ := m.IDBase64()
+
 	return c.JSON(http.StatusOK, &resUserGetPublic{
-		Userid:       m.Userid,
+		Userid:       userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
 		FirstName:    m.FirstName,
@@ -149,9 +156,12 @@ func (u *User) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 		}
 		return err
 	}
+
+	userid, _ := m.IDBase64()
+
 	return c.JSON(http.StatusOK, &resUserGet{
 		resUserGetPublic: resUserGetPublic{
-			Userid:       m.Userid,
+			Userid:       userid,
 			Username:     m.Username,
 			Tags:         m.Tags,
 			FirstName:    m.FirstName,

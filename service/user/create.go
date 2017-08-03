@@ -65,8 +65,10 @@ func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
+	userid, _ := m.IDBase64()
+
 	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
+		Userid:   userid,
 		Username: m.Username,
 	})
 }
@@ -112,7 +114,7 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 	}).Info("user created")
 
 	return c.JSON(http.StatusCreated, &resUserUpdate{
-		Userid:   m.ID.Userid,
+		Userid:   userid,
 		Username: m.Username,
 	})
 }
