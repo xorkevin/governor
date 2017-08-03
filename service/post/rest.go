@@ -39,12 +39,12 @@ type (
 	}
 
 	resPostUpdate struct {
-		Postid []byte `json:"postid"`
+		Postid string `json:"postid"`
 	}
 
 	resPost struct {
-		Postid       []byte `json:"postid"`
-		Userid       []byte `json:"userid"`
+		Postid       string `json:"postid"`
+		Userid       string `json:"userid"`
 		Tag          string `json:"group_tag"`
 		Title        string `json:"title"`
 		Content      string `json:"content"`
@@ -174,7 +174,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}).Info("post created")
 
 		return c.JSON(http.StatusCreated, &resPostUpdate{
-			Postid: m.Postid,
+			Postid: postid,
 		})
 	}, p.gate.UserOrBan("group"))
 
@@ -368,9 +368,12 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		postid, _ := m.IDBase64()
+		userid, _ := m.UserIDBase64()
+
 		r := &resPost{
-			Postid:       m.Postid,
-			Userid:       m.Userid,
+			Postid:       postid,
+			Userid:       userid,
 			Tag:          m.Tag,
 			Title:        m.Title,
 			Locked:       m.Locked,

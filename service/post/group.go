@@ -15,8 +15,22 @@ type (
 		Offset int    `query:"offset"`
 	}
 
+	resPostInfo struct {
+		Postid       string `json:"postid"`
+		Userid       string `json:"userid"`
+		Tag          string `json:"group_tag"`
+		Title        string `json:"title"`
+		Up           int32  `json:"up"`
+		Down         int32  `json:"down"`
+		Absolute     int32  `json:"absolute"`
+		Score        int64  `json:"score"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	postInfoSlice []resPostInfo
+
 	resGroupPosts struct {
-		Posts postmodel.ModelSlice `json:"posts"`
+		Posts postInfoSlice `json:"posts"`
 	}
 )
 
@@ -52,8 +66,30 @@ func (p *Post) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger)
 			return err
 		}
 
+		if len(postsSlice) == 0 {
+			return c.NoContent(http.StatusNotFound)
+		}
+
+		posts := make(postInfoSlice, 0, len(postsSlice))
+		for _, i := range postsSlice {
+			postuid, _ := postmodel.ParseUIDToB64(i.Postid)
+			useruid, _ := postmodel.ParseUIDToB64(i.Userid)
+
+			posts = append(posts, resPostInfo{
+				Postid:       postuid.Base64(),
+				Userid:       useruid.Base64(),
+				Tag:          i.Tag,
+				Title:        i.Title,
+				Up:           i.Up,
+				Down:         i.Down,
+				Absolute:     i.Absolute,
+				Score:        i.Score,
+				CreationTime: i.CreationTime,
+			})
+		}
+
 		return c.JSON(http.StatusOK, &resGroupPosts{
-			Posts: postsSlice,
+			Posts: posts,
 		})
 	})
 	return nil
