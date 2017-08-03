@@ -44,14 +44,14 @@ type (
 	}
 
 	resUpdateComment struct {
-		Commentid []byte `json:"commentid"`
+		Commentid string `json:"commentid"`
 	}
 
 	resGetComment struct {
-		Commentid    []byte `json:"commentid"`
-		Parentid     []byte `json:"parentid"`
-		Postid       []byte `json:"postid"`
-		Userid       []byte `json:"userid"`
+		Commentid    string `json:"commentid"`
+		Parentid     string `json:"parentid"`
+		Postid       string `json:"postid"`
+		Userid       string `json:"userid"`
 		Content      string `json:"content"`
 		Original     string `json:"original,omitempty"`
 		Edited       bool   `json:"edited"`
@@ -165,8 +165,10 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
+		commentid, _ := mComment.IDBase64()
+
 		return c.JSON(http.StatusCreated, resUpdateComment{
-			Commentid: mComment.Commentid,
+			Commentid: commentid,
 		})
 	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
@@ -360,11 +362,15 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		k := make(resCommentSlice, 0, len(commentsSlice))
 
 		for _, i := range commentsSlice {
+			commentid, _ := i.IDBase64()
+			parentid, _ := i.ParentIDBase64()
+			postid, _ := i.PostIDBase64()
+			userid, _ := i.UserIDBase64()
 			r := resGetComment{
-				Commentid:    i.Commentid,
-				Parentid:     i.Parentid,
-				Postid:       i.Postid,
-				Userid:       i.Userid,
+				Commentid:    commentid,
+				Parentid:     parentid,
+				Postid:       postid,
+				Userid:       userid,
 				Up:           i.Up,
 				Down:         i.Down,
 				Absolute:     i.Absolute,
@@ -409,11 +415,15 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
+		commentid, _ := comment.IDBase64()
+		parentid, _ := comment.ParentIDBase64()
+		postid, _ := comment.PostIDBase64()
+		userid, _ := comment.UserIDBase64()
 		r := &resGetComment{
-			Commentid:    comment.Commentid,
-			Parentid:     comment.Parentid,
-			Postid:       comment.Postid,
-			Userid:       comment.Userid,
+			Commentid:    commentid,
+			Parentid:     parentid,
+			Postid:       postid,
+			Userid:       userid,
 			Up:           comment.Up,
 			Down:         comment.Down,
 			Absolute:     comment.Absolute,
@@ -456,11 +466,15 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		k := make(resCommentSlice, 0, len(comments))
 
 		for _, i := range comments {
+			commentid, _ := i.IDBase64()
+			parentid, _ := i.ParentIDBase64()
+			postid, _ := i.PostIDBase64()
+			userid, _ := i.UserIDBase64()
 			r := resGetComment{
-				Commentid:    i.Commentid,
-				Parentid:     i.Parentid,
-				Postid:       i.Postid,
-				Userid:       i.Userid,
+				Commentid:    commentid,
+				Parentid:     parentid,
+				Postid:       postid,
+				Userid:       userid,
 				Up:           i.Up,
 				Down:         i.Down,
 				Absolute:     i.Absolute,

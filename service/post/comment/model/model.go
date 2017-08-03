@@ -105,6 +105,34 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 }
 
 const (
+	moduleIDModParentB64 = moduleIDModel + ".ParentIDBase64"
+)
+
+// ParentIDBase64 returns the parentid as a base64 encoded string
+func (m *Model) ParentIDBase64() (string, *governor.Error) {
+	u, err := ParseUIDToB64(m.Parentid)
+	if err != nil {
+		err.AddTrace(moduleIDModParentB64)
+		return "", err
+	}
+	return u.Base64(), nil
+}
+
+const (
+	moduleIDModPostB64 = moduleIDModel + ".PostIDBase64"
+)
+
+// PostIDBase64 returns the postid as a base64 encoded string
+func (m *Model) PostIDBase64() (string, *governor.Error) {
+	u, err := ParseUIDToB64(m.Postid)
+	if err != nil {
+		err.AddTrace(moduleIDModPostB64)
+		return "", err
+	}
+	return u.Base64(), nil
+}
+
+const (
 	moduleIDModUserB64 = moduleIDModel + ".UserIDBase64"
 )
 
