@@ -27,6 +27,20 @@ func hasPostid(postid string) *governor.Error {
 	return nil
 }
 
+func hasParentid(parentid string) *governor.Error {
+	if len(parentid) < 1 || len(parentid) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "parentid must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func hasCommentid(commentid string) *governor.Error {
+	if len(commentid) < 1 || len(commentid) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "commentid must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
 func hasUserid(userid string) *governor.Error {
 	if len(userid) < 1 || len(userid) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "userid must be provided", 0, http.StatusBadRequest)

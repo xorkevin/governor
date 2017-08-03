@@ -70,7 +70,7 @@ type (
 )
 
 func (r *reqPostComment) valid() *governor.Error {
-	if err := hasPostid(r.Parentid); err != nil {
+	if err := hasParentid(r.Parentid); err != nil {
 		return err
 	}
 	if err := validContent(r.Content); err != nil {
@@ -87,7 +87,7 @@ func (r *reqPutComment) valid() *governor.Error {
 }
 
 func (r *reqCommentAction) valid() *governor.Error {
-	if err := hasPostid(r.Commentid); err != nil {
+	if err := hasCommentid(r.Commentid); err != nil {
 		return err
 	}
 	if err := validAction(r.Action); err != nil {
@@ -113,7 +113,7 @@ func (r *reqGetComment) valid() *governor.Error {
 	if err := hasPostid(r.Postid); err != nil {
 		return err
 	}
-	if err := hasPostid(r.Commentid); err != nil {
+	if err := hasCommentid(r.Commentid); err != nil {
 		return err
 	}
 	return nil
@@ -123,7 +123,7 @@ func (r *reqGetCommentChildren) valid() *governor.Error {
 	if err := hasPostid(r.Postid); err != nil {
 		return err
 	}
-	if err := hasPostid(r.Commentid); err != nil {
+	if err := hasCommentid(r.Commentid); err != nil {
 		return err
 	}
 	if err := validAmount(r.Amount); err != nil {
