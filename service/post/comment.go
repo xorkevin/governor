@@ -192,9 +192,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			return err
 		}
 
-		return c.JSON(http.StatusOK, resUpdateComment{
-			Commentid: mComment.Commentid,
-		})
+		return c.NoContent(http.StatusNoContent)
 	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
 		rcomm := &reqGetComment{
 			Postid:    c.Param("postid"),
@@ -256,6 +254,21 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		switch action {
+		case actionUpvote, actionDownvote, actionRmvote:
+			v, err := votemodel.GetByIDB64(db, rcomm.Commentid, userid)
+			if err == nil {
+				if err = v.Delete(db); err != nil {
+					err.AddTrace(moduleIDComments)
+					return err
+				}
+			} else {
+				if err.Code() != 2 {
+					return err
+				}
+			}
+		}
+
+		switch action {
 		case actionUpvote:
 			v, err := votemodel.NewUp(rcomm.Commentid, postid, post.Tag, userid)
 			if err != nil {
@@ -279,18 +292,6 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 				if err.Code() == 3 {
 					err.SetErrorUser()
 				}
-				err.AddTrace(moduleIDComments)
-				return err
-			}
-		case actionRmvote:
-			v, err := votemodel.GetByIDB64(db, rcomm.Commentid, userid)
-			if err != nil {
-				if err.Code() == 2 {
-					err.SetErrorUser()
-				}
-				return err
-			}
-			if err := v.Delete(db); err != nil {
 				err.AddTrace(moduleIDComments)
 				return err
 			}
