@@ -24,7 +24,7 @@ type (
 	}
 
 	resProfileUpdate struct {
-		Userid []byte `json:"userid"`
+		Userid string `json:"userid"`
 	}
 
 	resProfileModel struct {
@@ -116,8 +116,10 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
+		userid, _ := m.IDBase64()
+
 		return c.JSON(http.StatusCreated, &resProfileUpdate{
-			Userid: m.Userid,
+			Userid: userid,
 		})
 	}, p.gate.Owner("id"))
 
