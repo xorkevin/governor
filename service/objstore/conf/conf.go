@@ -10,6 +10,6 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("minio.keyID", "")
 	v.SetDefault("minio.keySecret", "")
 	v.SetDefault("minio.host", "localhost:9000")
-	v.SetDefault("minio.sslmode", true)
+	v.SetDefault("minio.sslmode", false)
 	return nil
 }
