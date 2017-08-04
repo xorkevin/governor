@@ -43,6 +43,8 @@ func New(c governor.Config, l *logrus.Logger) (*Objstore, error) {
 		return nil, err
 	}
 
+	client.SetAppInfo(c.Appname, c.Version)
+
 	l.Info("initialized object store")
 	return &Objstore{
 		store: client,

@@ -9,6 +9,7 @@ type (
 	// Config is the server configuration
 	Config struct {
 		config    *viper.Viper
+		Appname   string
 		Version   string
 		LogLevel  int
 		Port      string
@@ -32,6 +33,7 @@ func (c *Config) Init() error {
 	if err := c.config.ReadInConfig(); err != nil {
 		return err
 	}
+	c.Appname = c.config.GetString("appname")
 	c.Version = c.config.GetString("version")
 	c.LogLevel = envToLevel(c.config.GetString("mode"))
 	c.Port = c.config.GetString("port")
@@ -46,6 +48,7 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	pflag.Parse()
 
 	v := viper.New()
+	v.SetDefault("appname", "governor")
 	v.SetDefault("version", "version")
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("port", "8080")

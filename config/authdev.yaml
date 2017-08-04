@@ -1,3 +1,4 @@
+appname: governor
 version: v0.1.0
 mode: DEBUG
 port: 8080
