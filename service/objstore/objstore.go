@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/minio/minio-go"
 	"github.com/sirupsen/logrus"
+	"io"
 	"net/http"
 )
 
@@ -100,6 +101,21 @@ func initBucket(client *minio.Client, name, location string) *governor.Error {
 		if exists, err := client.BucketExists(name); err != nil || !exists {
 			return governor.NewError(moduleID, "error creating object store: "+err.Error(), 0, http.StatusInternalServerError)
 		}
+	}
+	return nil
+}
+
+func rmBucket(client *minio.Client, name string) *governor.Error {
+	if err := client.RemoveBucket(name); err != nil {
+		return governor.NewError(moduleID, "error removing bucket: "+err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+// Put puts a new object into the bucket
+func (b *Bucket) Put(name, contentType string, object io.Reader) *governor.Error {
+	if _, err := b.store.PutObject(b.name, name, object, contentType); err != nil {
+		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }
