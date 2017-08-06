@@ -31,6 +31,13 @@ REDIS_VOLUME=governorredisvol
 REDIS_CONTAINER=gredis
 REDIS_PASS=admin
 
+# DEV_MINIO
+MINIO_VOLUME=governorminiovol
+MINIO_VOLUME_CONFIG=governorminioconfigvol
+MINIO_CONTAINER=gminio
+MINIO_KEY=admin
+MINIO_SECRET=adminsecret
+
 # DEV_MAIL
 MAIL_CONTAINER=gmail
 
@@ -64,7 +71,8 @@ docker-build: build
 	docker build -f ./cmd/auth/Dockerfile -t $(AUTH_IMAGE_NAME):$(VERSION) -t $(AUTH_IMAGE_NAME):latest .
 
 docker-run:
-	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) -p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
+	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) \
+		-p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
 
 docker-stop:
 	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=running)" ]; then docker stop $(AUTH_CONTAINER_NAME); fi
@@ -80,7 +88,8 @@ pg-setup:
 	docker volume create --name $(POSTGRES_VOLUME)
 
 pg-run:
-	docker run -d --name $(POSTGRES_CONTAINER) --network=$(DOCKER_NETWORK) -p 5432:5432 -v $(POSTGRES_VOLUME):/var/lib/postgresql/data -e POSTGRES_PASSWORD=$(POSTGRES_PASS) postgres:alpine
+	docker run -d --name $(POSTGRES_CONTAINER) --network=$(DOCKER_NETWORK) -p 5432:5432 \
+		-v $(POSTGRES_VOLUME):/var/lib/postgresql/data -e POSTGRES_PASSWORD=$(POSTGRES_PASS) postgres:alpine
 
 pg-stop:
 	if [ "$$(docker ps -q -f name=$(POSTGRES_CONTAINER) -f status=running)" ]; then docker stop $(POSTGRES_CONTAINER); fi
@@ -94,13 +103,31 @@ redis-setup:
 	docker volume create --name $(REDIS_VOLUME)
 
 redis-run:
-	docker run -d --name $(REDIS_CONTAINER) --network=$(DOCKER_NETWORK) -p 6379:6379 -v $(REDIS_VOLUME):/data redis:alpine redis-server --requirepass $(REDIS_PASS)
+	docker run -d --name $(REDIS_CONTAINER) --network=$(DOCKER_NETWORK) -p 6379:6379 -v $(REDIS_VOLUME):/data \
+		redis:alpine redis-server --requirepass $(REDIS_PASS)
 
 redis-stop:
 	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=running)" ]; then docker stop $(REDIS_CONTAINER); fi
 	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=exited)" ]; then docker rm $(REDIS_CONTAINER); fi
 
 redis-restart: redis-stop redis-run
+
+
+## minio
+minio-setup:
+	docker volume create --name $(MINIO_VOLUME)
+	docker volume create --name $(MINIO_VOLUME_CONFIG)
+
+minio-run:
+	docker run -d --name $(MINIO_CONTAINER) --network=$(DOCKER_NETWORK) -p 9000:9000 -v $(MINIO_VOLUME):/export \
+		-v $(MINIO_VOLUME_CONFIG):/root/.minio  -e "MINIO_ACCESS_KEY=$(MINIO_KEY)" -e "MINIO_SECRET_KEY=$(MINIO_SECRET)" \
+		minio/minio server /export
+
+minio-stop:
+	if [ "$$(docker ps -q -f name=$(MINIO_CONTAINER) -f status=running)" ]; then docker stop $(MINIO_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(MINIO_CONTAINER) -f status=exited)" ]; then docker rm $(MINIO_CONTAINER); fi
+
+minio-restart: minio-stop minio-run
 
 
 ## mailer
@@ -114,8 +141,8 @@ mail-stop:
 mail-restart: mail-stop mail-run
 
 ## docker dev env
-setup: docker-setup pg-setup redis-setup
+setup: docker-setup pg-setup redis-setup minio-setup
 
-restart: pg-restart redis-restart mail-restart
+restart: pg-restart redis-restart minio-restart mail-restart
 
-stop: pg-stop redis-stop mail-stop
+stop: pg-stop redis-stop minio-stop mail-stop
