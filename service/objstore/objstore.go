@@ -87,6 +87,20 @@ func (o *Objstore) GetBucket(name, location string) (*Bucket, *governor.Error) {
 	}, nil
 }
 
+// DestroyBucket destroys the bucket if it exists
+func (o *Objstore) DestroyBucket(name string) *governor.Error {
+	exists, err := o.store.BucketExists(name)
+	if err != nil {
+		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+	}
+	if exists {
+		if err := o.store.RemoveBucket(name); err != nil {
+			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+		}
+	}
+	return nil
+}
+
 // GetBucketDefLoc creates a new bucket if it does not exist at the default location in the store and returns the bucket
 func (o *Objstore) GetBucketDefLoc(name string) (*Bucket, *governor.Error) {
 	return o.GetBucket(name, defaultLocation)
@@ -133,6 +147,7 @@ func (b *Bucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.E
 	return obj, &objinfo, nil
 }
 
+// Remove removes an object from the bucket
 func (b *Bucket) Remove(name string) *governor.Error {
 	if err := b.store.RemoveObject(b.name, name); err != nil {
 		return governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
