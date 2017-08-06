@@ -115,7 +115,7 @@ func main() {
 
 	g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService))
 
-	g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService))
+	g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, objstoreService))
 
 	g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService))
 

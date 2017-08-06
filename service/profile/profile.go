@@ -2,8 +2,8 @@ package profile
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
@@ -20,7 +20,11 @@ type (
 		Userid string `json:"-"`
 		Email  string `json:"contact_email"`
 		Bio    string `json:"bio"`
-		Image  string `json:"image"`
+	}
+
+	reqProfileImage struct {
+		Userid string `json:"-"`
+		Image  string
 	}
 
 	resProfileUpdate struct {
@@ -51,6 +55,13 @@ func (r *reqProfileModel) valid() *governor.Error {
 	if err := validBio(r.Email); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *reqProfileImage) valid() *governor.Error {
+	if err := hasUserid(r.Userid); err != nil {
+		return err
+	}
 	if err := validImage(r.Image); err != nil {
 		return err
 	}
@@ -64,22 +75,22 @@ const (
 type (
 	// Profile is a service for storing user profile information
 	Profile struct {
-		db    *db.Database
-		cache *cache.Cache
-		gate  *gate.Gate
+		db   *db.Database
+		obj  *objstore.Objstore
+		gate *gate.Gate
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache) *Profile {
+func New(conf governor.Config, l *logrus.Logger, db *db.Database, obj *objstore.Objstore) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
 	l.Info("initialized profile service")
 
 	return &Profile{
-		db:    db,
-		cache: ch,
-		gate:  gate.New(ca["secret"], ca["issuer"]),
+		db:   db,
+		obj:  obj,
+		gate: gate.New(ca["secret"], ca["issuer"]),
 	}
 }
 
@@ -100,7 +111,6 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		m := &profilemodel.Model{
 			Email: rprofile.Email,
 			Bio:   rprofile.Bio,
-			Image: rprofile.Image,
 		}
 
 		if err := m.SetIDB64(rprofile.Userid); err != nil {
@@ -144,10 +154,26 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 
 		m.Email = rprofile.Email
 		m.Bio = rprofile.Bio
-		m.Image = rprofile.Image
 
 		if err := m.Update(db); err != nil {
 			err.AddTrace(moduleID)
+			return err
+		}
+
+		return c.NoContent(http.StatusNoContent)
+	}, p.gate.Owner("id"))
+
+	r.PATCH("/:id/image", func(c echo.Context) error {
+		file, err := c.FormFile("file")
+		if err != nil {
+			return governor.NewError(moduleIDReqValid, err.Error(), 0, http.StatusBadRequest)
+		}
+		file.Header
+		rprofile := &reqProfileImage{
+			Userid: c.Param("id"),
+			Image:  "",
+		}
+		if err := rprofile.valid(); err != nil {
 			return err
 		}
 
