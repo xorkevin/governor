@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	canaryBucket    = "bucketCanary"
+	canaryBucket    = "bucket-canary"
 	defaultLocation = "us-east-1"
 	moduleID        = "objstore"
 )
@@ -33,18 +33,18 @@ type (
 func New(c governor.Config, l *logrus.Logger) (*Objstore, error) {
 	v := c.Conf()
 	minioconf := v.GetStringMapString("minio")
-	client, err := minio.New(minioconf["host"], minioconf["keyID"], minioconf["keySecret"], v.GetBool("minio.sslmode"))
+	client, err := minio.New(minioconf["host"]+":"+minioconf["port"], minioconf["key_id"], minioconf["key_secret"], v.GetBool("minio.sslmode"))
 	if err != nil {
 		l.Errorf("error creating object store: %s\n", err)
 		return nil, err
 	}
 
+	client.SetAppInfo(c.Appname, c.Version)
+
 	if err := initBucket(client, canaryBucket, defaultLocation); err != nil {
 		l.Error(err.Error())
 		return nil, err
 	}
-
-	client.SetAppInfo(c.Appname, c.Version)
 
 	l.Info("initialized object store")
 	return &Objstore{
@@ -107,9 +107,13 @@ func (o *Objstore) GetBucketDefLoc(name string) (*Bucket, *governor.Error) {
 }
 
 func initBucket(client *minio.Client, name, location string) *governor.Error {
-	if err := client.MakeBucket(name, location); err != nil {
-		if exists, err := client.BucketExists(name); err != nil || !exists {
-			return governor.NewError(moduleID, "error creating object store: "+err.Error(), 0, http.StatusInternalServerError)
+	exists, err := client.BucketExists(name)
+	if err != nil {
+		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+	}
+	if !exists {
+		if err := client.MakeBucket(name, location); err != nil {
+			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 		}
 	}
 	return nil

@@ -16,6 +16,12 @@ redis:
   dbname: 0
   host: localhost
   port: 6379
+minio:
+  key_id: admin
+  key_secret: adminsecret
+  host: localhost
+  port: 9000
+  sslmode: false
 userauth:
   issuer: governor_auth
   secret: secret

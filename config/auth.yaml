@@ -16,6 +16,12 @@ redis:
   dbname: 0
   host: gredis
   port: 6379
+minio:
+  key_id: admin
+  key_secret: adminsecret
+  host: gminio
+  port: 9000
+  sslmode: false
 userauth:
   issuer: governor_auth
   secret: secret

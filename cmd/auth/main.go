@@ -10,6 +10,8 @@ import (
 	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
+	"github.com/hackform/governor/service/objstore"
+	"github.com/hackform/governor/service/objstore/conf"
 	"github.com/hackform/governor/service/post"
 	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
@@ -38,6 +40,12 @@ func main() {
 		return
 	}
 	fmt.Println("- cache")
+
+	if err = objstoreconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("- objstore")
 
 	if err = mailconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
@@ -87,11 +95,19 @@ func main() {
 		return
 	}
 
+	objstoreService, err := objstore.New(config, g.Logger())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	mailService := mail.New(config, g.Logger())
 
 	g.MountRoute("/null/database", dbService)
 
 	g.MountRoute("/null/cache", cacheService)
+
+	g.MountRoute("/null/objstore", objstoreService)
 
 	g.MountRoute("/null/mail", mailService)
 
