@@ -265,6 +265,19 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		})
 	})
 
+	r.GET("/:id/image", func(c echo.Context) error {
+		userid := c.Get("userid").(string)
+		obj, objinfo, err := p.obj.Get(userid + "-profile")
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return err
+		}
+		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
+	}, p.gate.Owner("id"))
+
 	l.Info("mounted profile service")
 
 	return nil
