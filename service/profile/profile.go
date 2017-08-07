@@ -8,6 +8,8 @@ import (
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
+	"io"
+	"mime"
 	"net/http"
 )
 
@@ -23,8 +25,9 @@ type (
 	}
 
 	reqProfileImage struct {
-		Userid string `json:"-"`
-		Image  string
+		Userid    string `json:"-"`
+		Image     io.Reader
+		ImageType string
 	}
 
 	resProfileUpdate struct {
@@ -65,18 +68,22 @@ func (r *reqProfileImage) valid() *governor.Error {
 	if err := validImage(r.Image); err != nil {
 		return err
 	}
+	if err := validImageType(r.ImageType); err != nil {
+		return err
+	}
 	return nil
 }
 
 const (
-	moduleID = "profile"
+	moduleID    = "profile"
+	imageBucket = "profile-image"
 )
 
 type (
 	// Profile is a service for storing user profile information
 	Profile struct {
 		db   *db.Database
-		obj  *objstore.Objstore
+		obj  *objstore.Bucket
 		gate *gate.Gate
 	}
 )
@@ -85,11 +92,16 @@ type (
 func New(conf governor.Config, l *logrus.Logger, db *db.Database, obj *objstore.Objstore) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
+	b, err := obj.GetBucketDefLoc(imageBucket)
+	if err != nil {
+		l.Errorf("failed to get bucket: %s\n", err.Error())
+	}
+
 	l.Info("initialized profile service")
 
 	return &Profile{
 		db:   db,
-		obj:  obj,
+		obj:  b,
 		gate: gate.New(ca["secret"], ca["issuer"]),
 	}
 }
@@ -164,16 +176,40 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 	}, p.gate.Owner("id"))
 
 	r.PATCH("/:id/image", func(c echo.Context) error {
-		file, err := c.FormFile("file")
+		file, err := c.FormFile("image")
 		if err != nil {
-			return governor.NewError(moduleIDReqValid, err.Error(), 0, http.StatusBadRequest)
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
-		file.Header
+		mediaType, _, err := mime.ParseMediaType(file.Header.Get("Content-Type"))
+		if err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		}
+		image, err := file.Open()
+		if err != nil {
+			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		}
+		defer func(c io.Closer) {
+			err := c.Close()
+			if err != nil {
+				gerr := governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+				l.WithFields(logrus.Fields{
+					"origin": gerr.Origin(),
+					"source": gerr.Source(),
+					"code":   gerr.Code(),
+				}).Error(gerr.Message())
+			}
+		}(image)
 		rprofile := &reqProfileImage{
-			Userid: c.Param("id"),
-			Image:  "",
+			Userid:    c.Get("userid").(string),
+			Image:     image,
+			ImageType: mediaType,
 		}
 		if err := rprofile.valid(); err != nil {
+			return err
+		}
+
+		if err := p.obj.Put(rprofile.Userid+"-profile", rprofile.ImageType, image); err != nil {
+			err.AddTrace(moduleID)
 			return err
 		}
 

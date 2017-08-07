@@ -2,6 +2,7 @@ package profile
 
 import (
 	"github.com/hackform/governor"
+	"io"
 	"net/http"
 	"regexp"
 )
@@ -44,12 +45,18 @@ func validBio(bio string) *governor.Error {
 	return nil
 }
 
-func validImage(imageurl string) *governor.Error {
-	if len(imageurl) == 0 {
-		return nil
-	}
-	if !urlImageRegex.MatchString(imageurl) || len(imageurl) > lengthCapLarge {
-		return governor.NewErrorUser(moduleIDReqValid, "profile image url is invalid", 0, http.StatusBadRequest)
+func validImage(image io.Reader) *governor.Error {
+	if image == nil {
+		return governor.NewErrorUser(moduleIDReqValid, "image is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
+}
+
+func validImageType(imagetype string) *governor.Error {
+	switch imagetype {
+	case "image/jpeg", "image/png", "image/gif":
+		return nil
+	default:
+		return governor.NewErrorUser(moduleIDReqValid, "image type is invalid", 0, http.StatusBadRequest)
+	}
 }
