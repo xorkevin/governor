@@ -142,7 +142,7 @@ func (b *Bucket) Put(name, contentType string, object io.Reader) *governor.Error
 func (b *Bucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error) {
 	obj, err := b.store.GetObject(b.name, name)
 	if err != nil {
-		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
+		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
 	}
 	objinfo, err := obj.Stat()
 	if err != nil {
