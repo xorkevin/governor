@@ -175,7 +175,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.NoContent(http.StatusNoContent)
 	}, p.gate.Owner("id"))
 
-	r.PATCH("/:id/image", func(c echo.Context) error {
+	r.PUT("/:id/image", func(c echo.Context) error {
 		file, err := c.FormFile("image")
 		if err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
