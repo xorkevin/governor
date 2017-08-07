@@ -60,3 +60,10 @@ func validImageType(imagetype string) *governor.Error {
 		return governor.NewErrorUser(moduleIDReqValid, "image type is invalid", 0, http.StatusBadRequest)
 	}
 }
+
+func validKey(key string) *governor.Error {
+	if len(key) < 1 || len(key) > lengthCapLarge {
+		return governor.NewErrorUser(moduleIDReqValid, "key must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}

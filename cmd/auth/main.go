@@ -103,21 +103,48 @@ func main() {
 
 	mailService := mail.New(config, g.Logger())
 
-	g.MountRoute("/null/database", dbService)
+	if err := g.MountRoute("/null/database", dbService); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/null/cache", cacheService)
+	if err := g.MountRoute("/null/cache", cacheService); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/null/objstore", objstoreService)
+	if err := g.MountRoute("/null/objstore", objstoreService); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/null/mail", mailService)
+	if err := g.MountRoute("/null/mail", mailService); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/conf", conf.New(g.Logger(), dbService))
+	if err := g.MountRoute("/conf", conf.New(g.Logger(), dbService)); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService))
+	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService)); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, objstoreService))
+	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService)); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService))
+	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService)); err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	g.Start()
+	if err := g.Start(); err != nil {
+		fmt.Println(err)
+		return
+	}
 }

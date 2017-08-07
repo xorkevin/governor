@@ -2,15 +2,18 @@ package profile
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/user/gate"
+	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"io"
 	"mime"
 	"net/http"
+	"time"
 )
 
 type (
@@ -28,6 +31,7 @@ type (
 		Userid    string `json:"-"`
 		Image     io.Reader
 		ImageType string
+		Key       string
 	}
 
 	resProfileUpdate struct {
@@ -38,6 +42,10 @@ type (
 		Email string `json:"contact_email"`
 		Bio   string `json:"bio"`
 		Image string `json:"image"`
+	}
+
+	resProfileImageChange struct {
+		Key string `json:"key"`
 	}
 )
 
@@ -71,6 +79,9 @@ func (r *reqProfileImage) valid() *governor.Error {
 	if err := validImageType(r.ImageType); err != nil {
 		return err
 	}
+	if err := validKey(r.Key); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -82,14 +93,15 @@ const (
 type (
 	// Profile is a service for storing user profile information
 	Profile struct {
-		db   *db.Database
-		obj  *objstore.Bucket
-		gate *gate.Gate
+		db    *db.Database
+		cache *cache.Cache
+		obj   *objstore.Bucket
+		gate  *gate.Gate
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db *db.Database, obj *objstore.Objstore) *Profile {
+func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache, obj *objstore.Objstore) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
 	b, err := obj.GetBucketDefLoc(imageBucket)
@@ -100,15 +112,17 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, obj *objstore.
 	l.Info("initialized profile service")
 
 	return &Profile{
-		db:   db,
-		obj:  b,
-		gate: gate.New(ca["secret"], ca["issuer"]),
+		db:    db,
+		cache: ch,
+		obj:   b,
+		gate:  gate.New(ca["secret"], ca["issuer"]),
 	}
 }
 
 // Mount is a collection of routes for accessing and modifying profile data
 func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
+	ch := p.cache.Cache()
 
 	r.POST("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileModel{}
@@ -176,6 +190,26 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 	}, p.gate.Owner("id"))
 
 	r.PUT("/:id/image", func(c echo.Context) error {
+		userid := c.Get("userid").(string)
+
+		// create a new key for the session
+		key, err := uid.NewU(0, 16)
+		if err != nil {
+			err.AddTrace(moduleID)
+			return err
+		}
+		sessionKey := key.Base64()
+
+		if err := ch.Set(sessionKey, userid, time.Second*120).Err(); err != nil {
+			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+		}
+
+		return c.JSON(http.StatusOK, &resProfileImageChange{
+			Key: sessionKey,
+		})
+	}, p.gate.Owner("id"))
+
+	r.POST("/:id/image/:key", func(c echo.Context) error {
 		file, err := c.FormFile("image")
 		if err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
@@ -200,12 +234,26 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			}
 		}(image)
 		rprofile := &reqProfileImage{
-			Userid:    c.Get("userid").(string),
+			Userid:    c.Param("id"),
 			Image:     image,
 			ImageType: mediaType,
+			Key:       c.Param("key"),
 		}
 		if err := rprofile.valid(); err != nil {
 			return err
+		}
+
+		userid, err := ch.Get(rprofile.Key).Result()
+		if err != nil {
+			return governor.NewErrorUser(moduleID, "key not found: "+err.Error(), 0, http.StatusBadRequest)
+		}
+
+		if rprofile.Userid != userid {
+			return governor.NewErrorUser(moduleID, "improper profile id", 0, http.StatusBadRequest)
+		}
+
+		if err := ch.Del(rprofile.Key).Err(); err != nil {
+			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 		}
 
 		if err := p.obj.Put(rprofile.Userid+"-profile", rprofile.ImageType, image); err != nil {
@@ -214,7 +262,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.Owner("id"))
+	})
 
 	r.DELETE("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{
@@ -266,8 +314,14 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 	})
 
 	r.GET("/:id/image", func(c echo.Context) error {
-		userid := c.Get("userid").(string)
-		obj, objinfo, err := p.obj.Get(userid + "-profile")
+		rprofile := &reqProfileGetID{
+			Userid: c.Param("id"),
+		}
+		if err := rprofile.valid(); err != nil {
+			return err
+		}
+
+		obj, objinfo, err := p.obj.Get(rprofile.Userid + "-profile")
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -276,7 +330,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	}, p.gate.Owner("id"))
+	})
 
 	l.Info("mounted profile service")
 
