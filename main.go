@@ -44,6 +44,7 @@ func New(config Config) (*Server, error) {
 	i.HTTPErrorHandler = errorHandler(i, l)
 	l.Info("initialized error handling")
 	i.Binder = requestBinder()
+	l.Info("added custom request binder")
 	i.Pre(middleware.RemoveTrailingSlash())
 	if config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
