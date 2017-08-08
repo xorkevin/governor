@@ -5,7 +5,7 @@ port: 8080
 baseurl: /api
 publicdir: public
 allow_origins:
-  - localhost
+  - http://localhost
 postgres:
   user: postgres
   password: admin
