@@ -52,7 +52,10 @@ func New(config Config) (*Server, error) {
 		}))
 	}
 	i.Use(middleware.BodyLimit("2M"))
-	i.Use(middleware.CORS())
+	i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     config.Origins,
+		AllowCredentials: true,
+	}))
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
 	i.Use(middleware.StaticWithConfig(middleware.StaticConfig{

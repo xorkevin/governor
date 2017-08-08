@@ -15,6 +15,7 @@ type (
 		Port      string
 		BaseURL   string
 		PublicDir string
+		Origins   []string
 	}
 )
 
@@ -39,6 +40,7 @@ func (c *Config) Init() error {
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	c.PublicDir = c.config.GetString("publicdir")
+	c.Origins = c.config.GetStringSlice("allow_origins")
 	return nil
 }
 
@@ -54,6 +56,7 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")
+	v.SetDefault("allow_origins", []string{"localhost"})
 
 	v.SetConfigName(*configFilename)
 	v.AddConfigPath("./config")

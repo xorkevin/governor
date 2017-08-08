@@ -4,6 +4,8 @@ mode: DEBUG
 port: 8080
 baseurl: /api
 publicdir: public
+allow_origins:
+  - localhost
 postgres:
   user: postgres
   password: admin
