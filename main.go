@@ -43,6 +43,7 @@ func New(config Config) (*Server, error) {
 	i.HideBanner = true
 	i.HTTPErrorHandler = errorHandler(i, l)
 	l.Info("initialized error handling")
+	i.Binder = requestBinder()
 	i.Pre(middleware.RemoveTrailingSlash())
 	if config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{

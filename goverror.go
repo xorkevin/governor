@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
+	"net/http"
+)
+
+const (
+	moduleIDErr = "goverr"
 )
 
 type (
@@ -131,10 +136,17 @@ func errorHandler(i *echo.Echo, l *logrus.Logger) echo.HTTPErrorHandler {
 					"code":   err.Code(),
 				}).Warn(err.Message())
 			}
-			c.JSON(err.Status(), &responseError{
+			if err := c.JSON(err.Status(), &responseError{
 				Message: err.Message(),
 				Code:    err.Code(),
-			})
+			}); err != nil {
+				gerr := NewError(moduleIDErr, err.Error(), 0, http.StatusInternalServerError)
+				l.WithFields(logrus.Fields{
+					"origin": gerr.Origin(),
+					"source": gerr.Source(),
+					"code":   gerr.Code(),
+				}).Warn(gerr.Message())
+			}
 		} else {
 			i.DefaultHTTPErrorHandler(origErr, c)
 		}
