@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 )
 
 type (
@@ -27,8 +28,8 @@ type (
 
 	reqGetComments struct {
 		Postid string `json:"-"`
-		Amount int    `query:"amount"`
-		Offset int    `query:"offset"`
+		Amount int
+		Offset int
 	}
 
 	reqGetComment struct {
@@ -344,11 +345,22 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 	}))
 
 	r.GET("/:postid/c", func(c echo.Context) error {
-		rcomms := &reqGetComments{}
-		if err := c.Bind(rcomms); err != nil {
-			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
+		var amt, ofs int
+		if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
+			amt = amount
+		} else {
+			return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
 		}
-		rcomms.Postid = c.Param("postid")
+		if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
+			ofs = offset
+		} else {
+			return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+		}
+		rcomms := &reqGetComments{
+			Postid: c.Param("postid"),
+			Amount: amt,
+			Offset: ofs,
+		}
 		if err := rcomms.valid(); err != nil {
 			return err
 		}

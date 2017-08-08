@@ -6,13 +6,14 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 )
 
 type (
 	reqGroupGetPosts struct {
 		Group  string `json:"-"`
-		Amount int    `query:"amount"`
-		Offset int    `query:"offset"`
+		Amount int
+		Offset int
 	}
 
 	resPostInfo struct {
@@ -51,11 +52,22 @@ func (p *Post) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger)
 	db := p.db.DB()
 
 	r.GET("/:group", func(c echo.Context) error {
-		rgroup := &reqGroupGetPosts{}
-		if err := c.Bind(rgroup); err != nil {
-			return governor.NewErrorUser(moduleIDGroup, err.Error(), 0, http.StatusBadRequest)
+		var amt, ofs int
+		if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
+			amt = amount
+		} else {
+			return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
 		}
-		rgroup.Group = c.Param("group")
+		if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
+			ofs = offset
+		} else {
+			return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+		}
+		rgroup := &reqGroupGetPosts{
+			Group:  c.Param("group"),
+			Amount: amt,
+			Offset: ofs,
+		}
 		if err := rgroup.valid(); err != nil {
 			return err
 		}
