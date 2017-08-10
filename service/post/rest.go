@@ -271,28 +271,36 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 		userid := c.Get("userid").(string)
 
+		var originalVote *votemodel.Model
+
 		switch action {
 		case actionUpvote, actionDownvote, actionRmvote:
 			v, err := votemodel.GetByIDB64(db, postid, userid)
 			if err == nil {
-				if err = v.Delete(db); err != nil {
-					err.AddTrace(moduleIDPost)
-					return err
-				}
-			} else {
-				if err.Code() != 2 {
-					return err
-				}
+				originalVote = v
+			} else if err.Code() != 2 {
+				return err
 			}
 		}
 
-		switch action {
-		case actionUpvote:
+		if originalVote == nil {
+			if action == actionRmvote {
+				return c.NoContent(http.StatusNoContent)
+			}
+
 			v, err := votemodel.NewUpPost(postid, m.Tag, userid)
 			if err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
 			}
+			switch action {
+			case actionUpvote:
+				v.Up()
+
+			case actionDownvote:
+				v.Down()
+			}
+
 			if err := v.Insert(db); err != nil {
 				if err.Code() == 3 {
 					err.SetErrorUser()
@@ -300,16 +308,21 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				err.AddTrace(moduleIDPost)
 				return err
 			}
-		case actionDownvote:
-			v, err := votemodel.NewDownPost(postid, m.Tag, userid)
-			if err != nil {
+		} else if action == actionRmvote {
+			if err = originalVote.Delete(db); err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
 			}
-			if err := v.Insert(db); err != nil {
-				if err.Code() == 3 {
-					err.SetErrorUser()
-				}
+		} else {
+			switch action {
+			case actionUpvote:
+				originalVote.Up()
+
+			case actionDownvote:
+				originalVote.Down()
+			}
+
+			if err := originalVote.Update(db); err != nil {
 				err.AddTrace(moduleIDPost)
 				return err
 			}
