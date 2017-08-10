@@ -104,6 +104,10 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
+	if err := ch.Del(ruser.Key).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
 	t, _ := time.Now().MarshalText()
 	userid, _ := m.IDBase64()
 	l.WithFields(logrus.Fields{
