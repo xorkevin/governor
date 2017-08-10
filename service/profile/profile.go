@@ -200,7 +200,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 		sessionKey := key.Base64()
 
-		if err := ch.Set(sessionKey, userid, time.Second*120).Err(); err != nil {
+		if err := ch.Set("profileimage-"+userid, sessionKey, time.Second*300).Err(); err != nil {
 			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 		}
 
@@ -243,16 +243,16 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 			return err
 		}
 
-		userid, err := ch.Get(rprofile.Key).Result()
+		key, err := ch.Get("profileimage-" + rprofile.Userid).Result()
 		if err != nil {
-			return governor.NewErrorUser(moduleID, "key not found: "+err.Error(), 0, http.StatusBadRequest)
+			return governor.NewErrorUser(moduleID, "profile not found: "+err.Error(), 0, http.StatusBadRequest)
 		}
 
-		if rprofile.Userid != userid {
-			return governor.NewErrorUser(moduleID, "improper profile id", 0, http.StatusBadRequest)
+		if rprofile.Key != key {
+			return governor.NewErrorUser(moduleID, "improper key", 0, http.StatusBadRequest)
 		}
 
-		if err := ch.Del(rprofile.Key).Err(); err != nil {
+		if err := ch.Del("profileimage-" + rprofile.Userid).Err(); err != nil {
 			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 		}
 
