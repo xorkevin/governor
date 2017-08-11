@@ -1,12 +1,14 @@
 package gate
 
 import (
+	"errors"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -31,16 +33,42 @@ func New(secret, issuer string) *Gate {
 	}
 }
 
+func getAccessCookie(c echo.Context) (string, error) {
+	cookie, err := c.Cookie("access_token")
+	if err != nil {
+		return "", err
+	}
+	if cookie.Value == "" {
+		return "", errors.New("no cookie value")
+	}
+	return cookie.Value, nil
+}
+
+func rmAccessCookie(c echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:    "access_token",
+		Expires: time.Now(),
+		Value:   "",
+	})
+}
+
 // Authenticate builds a middleware function to validate tokens and set claims
 func (g *Gate) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			h := strings.Split(c.Request().Header.Get("Authorization"), " ")
-			if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
-				return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
+			var accessToken string
+			if t, err := getAccessCookie(c); err == nil {
+				accessToken = t
+			} else {
+				h := strings.Split(c.Request().Header.Get("Authorization"), " ")
+				if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
+					return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
+				}
+				accessToken = h[1]
 			}
-			validToken, claims := g.tokenizer.Validate(h[1], subject, "")
+			validToken, claims := g.tokenizer.Validate(accessToken, subject, "")
 			if !validToken {
+				rmAccessCookie(c)
 				return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
 			}
 			if !v(c, *claims) {

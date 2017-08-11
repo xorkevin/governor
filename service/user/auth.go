@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/session"
@@ -82,6 +83,9 @@ func getAccessCookie(c echo.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if cookie.Value == "" {
+		return "", errors.New("no cookie value")
+	}
 	return cookie.Value, nil
 }
 
@@ -90,7 +94,26 @@ func getRefreshCookie(c echo.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if cookie.Value == "" {
+		return "", errors.New("no cookie value")
+	}
 	return cookie.Value, nil
+}
+
+func rmAccessCookie(c echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:    "access_token",
+		Expires: time.Now(),
+		Value:   "",
+	})
+}
+
+func rmRefreshCookie(c echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:    "refresh_token",
+		Expires: time.Now(),
+		Value:   "",
+	})
 }
 
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
