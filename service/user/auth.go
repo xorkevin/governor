@@ -336,6 +336,12 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		})
 	})
 
+	r.POST("/logout", func(c echo.Context) error {
+		rmAccessCookie(c)
+		rmRefreshCookie(c)
+		return c.NoContent(http.StatusNoContent)
+	})
+
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
 			return c.JSON(http.StatusOK, resUserAuth{
