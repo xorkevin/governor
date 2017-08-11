@@ -57,10 +57,16 @@ const (
 	refreshSubject        = "refresh"
 )
 
+var (
+	userAuthGroup = ""
+)
+
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
+
+	userAuthGroup = conf.BaseURL + "/u/auth"
 
 	r.POST("/login", func(c echo.Context) error {
 		ruser := &reqUserAuth{}
@@ -142,6 +148,24 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 			}
+
+			accessCookie := &http.Cookie{
+				Name:     "access_token",
+				Value:    accessToken,
+				Path:     conf.BaseURL,
+				Expires:  time.Now().Add(time.Duration(u.accessTime * b1)),
+				HttpOnly: true,
+			}
+			refreshCookie := &http.Cookie{
+				Name:     "refresh_token",
+				Value:    refreshToken,
+				Path:     userAuthGroup,
+				Expires:  time.Now().Add(time.Duration(u.refreshTime * b1)),
+				HttpOnly: true,
+			}
+
+			c.SetCookie(accessCookie)
+			c.SetCookie(refreshCookie)
 
 			return c.JSON(http.StatusOK, &resUserAuth{
 				Valid:        true,
