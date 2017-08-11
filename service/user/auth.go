@@ -57,21 +57,54 @@ const (
 	refreshSubject        = "refresh"
 )
 
-var (
-	userAuthGroup = ""
-)
+func (u *User) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
+	c.SetCookie(&http.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		Path:     conf.BaseURL,
+		Expires:  time.Now().Add(time.Duration(u.accessTime * b1)),
+		HttpOnly: true,
+	})
+}
+
+func (u *User) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string) {
+	c.SetCookie(&http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     conf.BaseURL + "/u/auth",
+		Expires:  time.Now().Add(time.Duration(u.refreshTime * b1)),
+		HttpOnly: true,
+	})
+}
+
+func getAccessCookie(c echo.Context) (string, error) {
+	cookie, err := c.Cookie("access_token")
+	if err != nil {
+		return "", err
+	}
+	return cookie.Value, nil
+}
+
+func getRefreshCookie(c echo.Context) (string, error) {
+	cookie, err := c.Cookie("refresh_token")
+	if err != nil {
+		return "", err
+	}
+	return cookie.Value, nil
+}
 
 func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
 
-	userAuthGroup = conf.BaseURL + "/u/auth"
-
 	r.POST("/login", func(c echo.Context) error {
 		ruser := &reqUserAuth{}
 		if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		}
+		if t, err := getRefreshCookie(c); err == nil {
+			ruser.RefreshToken = t
 		}
 		if err := ruser.valid(); err != nil {
 			return err
@@ -149,23 +182,8 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 			}
 
-			accessCookie := &http.Cookie{
-				Name:     "access_token",
-				Value:    accessToken,
-				Path:     conf.BaseURL,
-				Expires:  time.Now().Add(time.Duration(u.accessTime * b1)),
-				HttpOnly: true,
-			}
-			refreshCookie := &http.Cookie{
-				Name:     "refresh_token",
-				Value:    refreshToken,
-				Path:     userAuthGroup,
-				Expires:  time.Now().Add(time.Duration(u.refreshTime * b1)),
-				HttpOnly: true,
-			}
-
-			c.SetCookie(accessCookie)
-			c.SetCookie(refreshCookie)
+			u.setAccessCookie(c, conf, accessToken)
+			u.setRefreshCookie(c, conf, refreshToken)
 
 			return c.JSON(http.StatusOK, &resUserAuth{
 				Valid:        true,
@@ -185,7 +203,9 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	r.POST("/exchange", func(c echo.Context) error {
 		ruser := &reqExchangeToken{}
-		if err := c.Bind(ruser); err != nil {
+		if t, err := getRefreshCookie(c); err == nil {
+			ruser.RefreshToken = t
+		} else if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := ruser.valid(); err != nil {
@@ -222,6 +242,8 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 			return err
 		}
 
+		u.setAccessCookie(c, conf, accessToken)
+
 		return c.JSON(http.StatusOK, &resUserAuth{
 			Valid:       true,
 			AccessToken: accessToken,
@@ -231,7 +253,9 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	r.POST("/refresh", func(c echo.Context) error {
 		ruser := &reqExchangeToken{}
-		if err := c.Bind(ruser); err != nil {
+		if t, err := getRefreshCookie(c); err == nil {
+			ruser.RefreshToken = t
+		} else if err := c.Bind(ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := ruser.valid(); err != nil {
@@ -280,6 +304,8 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
+
+		u.setRefreshCookie(c, conf, refreshToken)
 
 		return c.JSON(http.StatusOK, &resUserAuth{
 			Valid:        true,
