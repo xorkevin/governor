@@ -15,12 +15,12 @@ const (
 type (
 	// Conf is a configuration service for admins
 	Conf struct {
-		db *db.Database
+		db db.Database
 	}
 )
 
 // New creates a new Conf service
-func New(l *logrus.Logger, database *db.Database) *Conf {
+func New(l *logrus.Logger, database db.Database) *Conf {
 	l.Info("initialized conf service")
 
 	return &Conf{

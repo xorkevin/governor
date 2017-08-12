@@ -20,7 +20,7 @@ const (
 type (
 	// User is a user management service
 	User struct {
-		db                *db.Database
+		db                db.Database
 		cache             *cache.Cache
 		tokenizer         *token.Tokenizer
 		mailer            *mail.Mail
@@ -40,7 +40,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cache, m *mail.Mail) *User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch *cache.Cache, m *mail.Mail) *User {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cu := conf.Conf().GetStringMapString("user")
 	accessTime := time15m
@@ -63,7 +63,7 @@ func New(conf governor.Config, l *logrus.Logger, db *db.Database, ch *cache.Cach
 	l.Info("initialized user service")
 
 	return &User{
-		db:                db,
+		db:                database,
 		cache:             ch,
 		mailer:            m,
 		tokenizer:         token.New(ca["secret"], ca["issuer"]),

@@ -12,7 +12,11 @@ import (
 
 type (
 	// Database is a service wrapper around an sql.DB instance
-	Database struct {
+	Database interface {
+		DB() *sql.DB
+	}
+
+	database struct {
 		db *sql.DB
 	}
 )
@@ -22,7 +26,7 @@ const (
 )
 
 // New creates a new db service
-func New(c governor.Config, l *logrus.Logger) (*Database, error) {
+func New(c governor.Config, l *logrus.Logger) (Database, error) {
 	v := c.Conf()
 	pgconf := v.GetStringMapString("postgres")
 	pgarr := make([]string, 0, len(pgconf))
@@ -42,13 +46,13 @@ func New(c governor.Config, l *logrus.Logger) (*Database, error) {
 
 	l.Info("initialized database")
 
-	return &Database{
+	return &database{
 		db: db,
 	}, nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (db *Database) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (db *database) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	l.Info("mounted database")
 	return nil
 }
@@ -58,7 +62,7 @@ const (
 )
 
 // Health is a health check for the service
-func (db *Database) Health() *governor.Error {
+func (db *database) Health() *governor.Error {
 	if _, err := db.db.Exec("SELECT 1;"); err != nil {
 		return governor.NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
 	}
@@ -66,11 +70,11 @@ func (db *Database) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (db *Database) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (db *database) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
 // DB returns the sql database instance
-func (db *Database) DB() *sql.DB {
+func (db *database) DB() *sql.DB {
 	return db.db
 }
