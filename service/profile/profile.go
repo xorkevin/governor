@@ -94,14 +94,14 @@ type (
 	// Profile is a service for storing user profile information
 	Profile struct {
 		db    db.Database
-		cache *cache.Cache
+		cache cache.Cache
 		obj   *objstore.Bucket
 		gate  *gate.Gate
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch *cache.Cache, obj *objstore.Objstore) *Profile {
+func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj *objstore.Objstore) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
 	b, err := obj.GetBucketDefLoc(imageBucket)

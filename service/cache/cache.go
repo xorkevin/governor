@@ -10,7 +10,12 @@ import (
 
 type (
 	// Cache is a service wrapper around a redis instance
-	Cache struct {
+	Cache interface {
+		governor.Service
+		Cache() *redis.Client
+	}
+
+	redisCache struct {
 		cache *redis.Client
 	}
 )
@@ -20,7 +25,7 @@ const (
 )
 
 // New creates a new cache service
-func New(c governor.Config, l *logrus.Logger) (*Cache, error) {
+func New(c governor.Config, l *logrus.Logger) (Cache, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("redis")
 
@@ -37,13 +42,13 @@ func New(c governor.Config, l *logrus.Logger) (*Cache, error) {
 
 	l.Info("initialized cache")
 
-	return &Cache{
+	return &redisCache{
 		cache: cache,
 	}, nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (c *Cache) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (c *redisCache) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	l.Info("mounted cache")
 	return nil
 }
@@ -53,7 +58,7 @@ const (
 )
 
 // Health is a health check for the service
-func (c *Cache) Health() *governor.Error {
+func (c *redisCache) Health() *governor.Error {
 	if _, err := c.cache.Ping().Result(); err != nil {
 		return governor.NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
 	}
@@ -61,11 +66,11 @@ func (c *Cache) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (c *Cache) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (c *redisCache) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
 // Cache returns the cache instance
-func (c *Cache) Cache() *redis.Client {
+func (c *redisCache) Cache() *redis.Client {
 	return c.cache
 }

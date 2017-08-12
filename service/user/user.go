@@ -21,7 +21,7 @@ type (
 	// User is a user management service
 	User struct {
 		db                db.Database
-		cache             *cache.Cache
+		cache             cache.Cache
 		tokenizer         *token.Tokenizer
 		mailer            *mail.Mail
 		accessTime        int64
@@ -40,7 +40,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch *cache.Cache, m *mail.Mail) *User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m *mail.Mail) *User {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cu := conf.Conf().GetStringMapString("user")
 	accessTime := time15m

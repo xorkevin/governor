@@ -21,7 +21,7 @@ type (
 	// Post is a service for creating posts
 	Post struct {
 		db          db.Database
-		cache       *cache.Cache
+		cache       cache.Cache
 		gate        *gate.Gate
 		archiveTime int64
 	}
@@ -33,7 +33,7 @@ const (
 )
 
 // New creates a new Post service
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch *cache.Cache) *Post {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache) *Post {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
