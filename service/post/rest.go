@@ -316,9 +316,15 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		} else {
 			switch action {
 			case actionUpvote:
+				if originalVote.IsUp() {
+					return c.NoContent(http.StatusNoContent)
+				}
 				originalVote.Up()
 
 			case actionDownvote:
+				if originalVote.IsDown() {
+					return c.NoContent(http.StatusNoContent)
+				}
 				originalVote.Down()
 			}
 

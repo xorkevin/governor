@@ -189,6 +189,14 @@ func (m *Model) Down() {
 	m.Score = -1
 }
 
+func (m *Model) IsUp() bool {
+	return m.Score == 1
+}
+
+func (m *Model) IsDown() bool {
+	return m.Score == -1
+}
+
 const (
 	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
 )
