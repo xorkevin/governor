@@ -280,9 +280,15 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 			}
 			switch action {
 			case actionUpvote:
+				if originalVote.IsUp() {
+					return c.NoContent(http.StatusNoContent)
+				}
 				v.Up()
 
 			case actionDownvote:
+				if originalVote.IsDown() {
+					return c.NoContent(http.StatusNoContent)
+				}
 				v.Down()
 			}
 
