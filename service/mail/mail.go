@@ -11,7 +11,12 @@ import (
 
 type (
 	// Mail is a service wrapper around a mailer instance
-	Mail struct {
+	Mail interface {
+		governor.Service
+		Send(to, subject, body string) *governor.Error
+	}
+
+	goMail struct {
 		mailer      *gomail.Dialer
 		fromAddress string
 	}
@@ -22,7 +27,7 @@ const (
 )
 
 // New creates a new mailer service
-func New(c governor.Config, l *logrus.Logger) *Mail {
+func New(c governor.Config, l *logrus.Logger) Mail {
 	v := c.Conf()
 	rconf := v.GetStringMapString("mail")
 
@@ -36,25 +41,25 @@ func New(c governor.Config, l *logrus.Logger) *Mail {
 
 	l.Info("initialized mail service")
 
-	return &Mail{
+	return &goMail{
 		mailer:      m,
 		fromAddress: rconf["from_address"],
 	}
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (m *Mail) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (m *goMail) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	l.Info("mounted mail service")
 	return nil
 }
 
 // Health is a health check for the service
-func (m *Mail) Health() *governor.Error {
+func (m *goMail) Health() *governor.Error {
 	return nil
 }
 
 // Setup is run on service setup
-func (m *Mail) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (m *goMail) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
@@ -63,7 +68,7 @@ const (
 )
 
 // Send creates and sends a new message
-func (m *Mail) Send(to, subject, body string) *governor.Error {
+func (m *goMail) Send(to, subject, body string) *governor.Error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.fromAddress)
 	msg.SetHeader("To", to)
