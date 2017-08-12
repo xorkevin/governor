@@ -95,13 +95,13 @@ type (
 	Profile struct {
 		db    db.Database
 		cache cache.Cache
-		obj   *objstore.Bucket
+		obj   objstore.Bucket
 		gate  *gate.Gate
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj *objstore.Objstore) *Profile {
+func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore) *Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
 	b, err := obj.GetBucketDefLoc(imageBucket)

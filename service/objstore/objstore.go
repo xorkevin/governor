@@ -17,12 +17,25 @@ const (
 
 type (
 	// Objstore is an object store service
-	Objstore struct {
+	Objstore interface {
+		governor.Service
+		GetBucket(name, location string) (Bucket, *governor.Error)
+		GetBucketDefLoc(name string) (Bucket, *governor.Error)
+		DestroyBucket(name string) *governor.Error
+	}
+
+	minioObjstore struct {
 		store *minio.Client
 	}
 
 	// Bucket is a collection of items of the object store service
-	Bucket struct {
+	Bucket interface {
+		Put(name, contentType string, object io.Reader) *governor.Error
+		Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error)
+		Remove(name string) *governor.Error
+	}
+
+	minioBucket struct {
 		store    *minio.Client
 		name     string
 		location string
@@ -30,7 +43,7 @@ type (
 )
 
 // New creates a new object store service instance
-func New(c governor.Config, l *logrus.Logger) (*Objstore, error) {
+func New(c governor.Config, l *logrus.Logger) (Objstore, error) {
 	v := c.Conf()
 	minioconf := v.GetStringMapString("minio")
 	client, err := minio.New(minioconf["host"]+":"+minioconf["port"], minioconf["key_id"], minioconf["key_secret"], v.GetBool("minio.sslmode"))
@@ -47,13 +60,13 @@ func New(c governor.Config, l *logrus.Logger) (*Objstore, error) {
 	}
 
 	l.Info("initialized object store")
-	return &Objstore{
+	return &minioObjstore{
 		store: client,
 	}, nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (o *Objstore) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (o *minioObjstore) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	l.Info("mounted object store")
 	return nil
 }
@@ -63,7 +76,7 @@ const (
 )
 
 // Health is a health check for the service
-func (o *Objstore) Health() *governor.Error {
+func (o *minioObjstore) Health() *governor.Error {
 	if exists, err := o.store.BucketExists(canaryBucket); err != nil || !exists {
 		return governor.NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
 	}
@@ -71,16 +84,16 @@ func (o *Objstore) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (o *Objstore) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (o *minioObjstore) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
 // GetBucket creates a new bucket if it does not exist in the store and returns the bucket
-func (o *Objstore) GetBucket(name, location string) (*Bucket, *governor.Error) {
+func (o *minioObjstore) GetBucket(name, location string) (Bucket, *governor.Error) {
 	if err := initBucket(o.store, name, location); err != nil {
 		return nil, err
 	}
-	return &Bucket{
+	return &minioBucket{
 		store:    o.store,
 		name:     name,
 		location: location,
@@ -88,7 +101,7 @@ func (o *Objstore) GetBucket(name, location string) (*Bucket, *governor.Error) {
 }
 
 // DestroyBucket destroys the bucket if it exists
-func (o *Objstore) DestroyBucket(name string) *governor.Error {
+func (o *minioObjstore) DestroyBucket(name string) *governor.Error {
 	exists, err := o.store.BucketExists(name)
 	if err != nil {
 		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
@@ -102,7 +115,7 @@ func (o *Objstore) DestroyBucket(name string) *governor.Error {
 }
 
 // GetBucketDefLoc creates a new bucket if it does not exist at the default location in the store and returns the bucket
-func (o *Objstore) GetBucketDefLoc(name string) (*Bucket, *governor.Error) {
+func (o *minioObjstore) GetBucketDefLoc(name string) (Bucket, *governor.Error) {
 	return o.GetBucket(name, defaultLocation)
 }
 
@@ -131,7 +144,7 @@ const (
 )
 
 // Put puts a new object into the bucket
-func (b *Bucket) Put(name, contentType string, object io.Reader) *governor.Error {
+func (b *minioBucket) Put(name, contentType string, object io.Reader) *governor.Error {
 	if _, err := b.store.PutObject(b.name, name, object, contentType); err != nil {
 		return governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -139,7 +152,7 @@ func (b *Bucket) Put(name, contentType string, object io.Reader) *governor.Error
 }
 
 // Get gets an object from the bucket
-func (b *Bucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error) {
+func (b *minioBucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error) {
 	obj, err := b.store.GetObject(b.name, name)
 	if err != nil {
 		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
@@ -152,7 +165,7 @@ func (b *Bucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.E
 }
 
 // Remove removes an object from the bucket
-func (b *Bucket) Remove(name string) *governor.Error {
+func (b *minioBucket) Remove(name string) *governor.Error {
 	if err := b.store.RemoveObject(b.name, name); err != nil {
 		return governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
 	}
