@@ -94,7 +94,7 @@ func (r *reqPostGet) valid() *governor.Error {
 	return nil
 }
 
-func (p *Post) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc {
+func (p *postService) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc {
 	db := p.db.DB()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -131,7 +131,7 @@ func (p *Post) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc
 	}
 }
 
-func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
 	if err := p.mountComments(conf, r.Group(""), l); err != nil {

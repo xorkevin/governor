@@ -59,7 +59,7 @@ const (
 	refreshSubject        = "refresh"
 )
 
-func (u *User) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
+func (u *userService) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
@@ -69,7 +69,7 @@ func (u *User) setAccessCookie(c echo.Context, conf governor.Config, accessToken
 	})
 }
 
-func (u *User) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string) {
+func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -117,7 +117,7 @@ func rmRefreshCookie(c echo.Context) {
 	})
 }
 
-func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
+func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -73,7 +73,7 @@ func (u *User) confirmUser(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
+func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
@@ -123,7 +123,7 @@ func (u *User) postUser(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
+func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	reqid := &reqUserGetID{
@@ -158,7 +158,7 @@ func (u *User) putUser(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
+func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	reqid := &reqUserGetID{
@@ -194,7 +194,7 @@ func (u *User) putEmail(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
+func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	reqid := &reqUserGetID{
@@ -233,7 +233,7 @@ func (u *User) putPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
+func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -280,7 +280,7 @@ func (u *User) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
+func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
@@ -320,7 +320,7 @@ func (u *User) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) killSessions(c echo.Context, l *logrus.Logger) error {
+func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
 	reqid := &reqUserGetID{
@@ -352,7 +352,7 @@ func (u *User) killSessions(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *User) patchRank(c echo.Context, l *logrus.Logger) error {
+func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	reqid := &reqUserGetID{
@@ -458,7 +458,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 	return nil
 }
 
-func (u *User) deleteUser(c echo.Context, l *logrus.Logger) error {
+func (u *userService) deleteUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 

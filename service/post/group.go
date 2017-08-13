@@ -48,7 +48,7 @@ func (r *reqGroupGetPosts) valid() *governor.Error {
 	return nil
 }
 
-func (p *Post) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
 	r.GET("/:group", func(c echo.Context) error {

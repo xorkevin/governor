@@ -12,7 +12,7 @@ import (
 	"sort"
 )
 
-func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
+func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := &reqUserGetID{
@@ -42,7 +42,7 @@ func (u *User) getByID(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
+func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := &reqUserGetID{
@@ -75,7 +75,7 @@ func (u *User) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) getSessions(c echo.Context, l *logrus.Logger) error {
+func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
 	ruser := &reqUserGetID{
@@ -109,7 +109,7 @@ func (u *User) getSessions(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) getByUsername(c echo.Context, l *logrus.Logger) error {
+func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := &reqUserGetUsername{
@@ -139,7 +139,7 @@ func (u *User) getByUsername(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *User) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
+func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := &reqUserGetUsername{

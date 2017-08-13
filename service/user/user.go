@@ -19,7 +19,11 @@ const (
 
 type (
 	// User is a user management service
-	User struct {
+	User interface {
+		governor.Service
+	}
+
+	userService struct {
 		db                db.Database
 		cache             cache.Cache
 		tokenizer         *token.Tokenizer
@@ -40,7 +44,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail) *User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail) User {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cu := conf.Conf().GetStringMapString("user")
 	accessTime := time15m
@@ -62,7 +66,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 
 	l.Info("initialized user service")
 
-	return &User{
+	return &userService{
 		db:                database,
 		cache:             ch,
 		mailer:            m,
@@ -81,7 +85,7 @@ const (
 )
 
 // Mount is a collection of routes for accessing and modifying user data
-func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	if err := u.mountRest(conf, r.Group("/user"), l); err != nil {
 		return err
 	}
@@ -95,12 +99,12 @@ func (u *User) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 }
 
 // Health is a check for service health
-func (u *User) Health() *governor.Error {
+func (u *userService) Health() *governor.Error {
 	return nil
 }
 
 // Setup is run on service setup
-func (u *User) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname)
 	if err != nil {
 		err.AddTrace(moduleID)

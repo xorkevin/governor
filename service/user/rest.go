@@ -209,7 +209,7 @@ func (r *reqUserGetID) valid() *governor.Error {
 	return hasUserid(r.Userid)
 }
 
-func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	// new user routes
 	r.POST("", func(c echo.Context) error {
 		return u.confirmUser(c, l)

@@ -19,7 +19,11 @@ const (
 
 type (
 	// Post is a service for creating posts
-	Post struct {
+	Post interface {
+		governor.Service
+	}
+
+	postService struct {
 		db          db.Database
 		cache       cache.Cache
 		gate        gate.Gate
@@ -33,7 +37,7 @@ const (
 )
 
 // New creates a new Post service
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache) *Post {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache) Post {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
@@ -43,7 +47,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 
 	l.Info("initialized post service")
 
-	return &Post{
+	return &postService{
 		db:          database,
 		cache:       ch,
 		gate:        gate.New(ca["secret"], ca["issuer"]),
@@ -58,7 +62,7 @@ const (
 )
 
 // Mount is a collection of routes for accessing and modifying post data
-func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	if err := p.mountRest(conf, r.Group("/p"), l); err != nil {
 		return err
 	}
@@ -72,12 +76,12 @@ func (p *Post) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) erro
 }
 
 // Health is a check for service health
-func (p *Post) Health() *governor.Error {
+func (p *postService) Health() *governor.Error {
 	return nil
 }
 
 // Setup is run on service setup
-func (p *Post) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (p *postService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if err := postmodel.Setup(p.db.DB()); err != nil {
 		err.AddTrace(moduleID)
 		return err

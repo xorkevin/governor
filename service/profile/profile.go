@@ -92,7 +92,11 @@ const (
 
 type (
 	// Profile is a service for storing user profile information
-	Profile struct {
+	Profile interface {
+		governor.Service
+	}
+
+	profileService struct {
 		db    db.Database
 		cache cache.Cache
 		obj   objstore.Bucket
@@ -101,7 +105,7 @@ type (
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore) *Profile {
+func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore) Profile {
 	ca := conf.Conf().GetStringMapString("userauth")
 
 	b, err := obj.GetBucketDefLoc(imageBucket)
@@ -111,7 +115,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache,
 
 	l.Info("initialized profile service")
 
-	return &Profile{
+	return &profileService{
 		db:    db,
 		cache: ch,
 		obj:   b,
@@ -120,7 +124,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache,
 }
 
 // Mount is a collection of routes for accessing and modifying profile data
-func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 	ch := p.cache.Cache()
 
@@ -338,12 +342,12 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 }
 
 // Health is a check for service health
-func (p *Profile) Health() *governor.Error {
+func (p *profileService) Health() *governor.Error {
 	return nil
 }
 
 // Setup is run on service setup
-func (p *Profile) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (p *profileService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if err := profilemodel.Setup(p.db.DB()); err != nil {
 		err.AddTrace(moduleID)
 		return err

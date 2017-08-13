@@ -137,7 +137,7 @@ func (r *reqGetCommentChildren) valid() *governor.Error {
 	return nil
 }
 
-func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
 	r.POST("/:postid/c", func(c echo.Context) error {
