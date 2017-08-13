@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
@@ -347,7 +348,7 @@ func (u *User) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 				Valid:  true,
 				Claims: c.Get("user").(*token.Claims),
 			})
-		}, u.gate.User())
+		}, gate.User(u.gate))
 	}
 
 	return nil

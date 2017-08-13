@@ -22,7 +22,7 @@ type (
 	Post struct {
 		db          db.Database
 		cache       cache.Cache
-		gate        *gate.Gate
+		gate        gate.Gate
 		archiveTime int64
 	}
 )

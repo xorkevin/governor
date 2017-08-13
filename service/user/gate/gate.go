@@ -19,16 +19,21 @@ const (
 
 type (
 	// Gate creates new middleware to gate routes
-	Gate struct {
+	Gate interface {
+		Authenticate(v Validator, subject string) echo.MiddlewareFunc
+	}
+
+	gateService struct {
 		tokenizer *token.Tokenizer
 	}
+
 	// Validator is a function to check the authorization of a user
 	Validator func(c echo.Context, claims token.Claims) bool
 )
 
 // New returns a new Gate
-func New(secret, issuer string) *Gate {
-	return &Gate{
+func New(secret, issuer string) Gate {
+	return &gateService{
 		tokenizer: token.New(secret, issuer),
 	}
 }
@@ -53,7 +58,7 @@ func rmAccessCookie(c echo.Context) {
 }
 
 // Authenticate builds a middleware function to validate tokens and set claims
-func (g *Gate) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
+func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			var accessToken string
@@ -82,7 +87,7 @@ func (g *Gate) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 }
 
 // Owner is a middleware function to validate if a user owns the accessed resource
-func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
+func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -94,7 +99,7 @@ func (g *Gate) Owner(idparam string) echo.MiddlewareFunc {
 
 // OwnerF is a middleware function to validate if a user owns the accessed resource
 // idfunc should return the userid
-func (g *Gate) OwnerF(idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func OwnerF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -112,7 +117,7 @@ func (g *Gate) OwnerF(idfunc func(echo.Context) (string, *governor.Error)) echo.
 }
 
 // Admin is a middleware function to validate if a user is an admin
-func (g *Gate) Admin() echo.MiddlewareFunc {
+func Admin(g Gate) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -123,7 +128,7 @@ func (g *Gate) Admin() echo.MiddlewareFunc {
 }
 
 // User is a middleware function to validate if the request is made by a user
-func (g *Gate) User() echo.MiddlewareFunc {
+func User(g Gate) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -134,7 +139,7 @@ func (g *Gate) User() echo.MiddlewareFunc {
 }
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by the owner or an admin
-func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
+func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -146,7 +151,7 @@ func (g *Gate) OwnerOrAdmin(idparam string) echo.MiddlewareFunc {
 
 // OwnerModOrAdminF is a middleware function to validate if the request is made by the owner or a moderator
 // idfunc should return the userid and the group_tag
-func (g *Gate) OwnerModOrAdminF(idfunc func(echo.Context) (string, string, *governor.Error)) echo.MiddlewareFunc {
+func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -168,7 +173,7 @@ func (g *Gate) OwnerModOrAdminF(idfunc func(echo.Context) (string, string, *gove
 
 // ModOrAdminF is a middleware function to validate if the request is made by the moderator of a group or an admin
 // idfunc should return the group_tag
-func (g *Gate) ModOrAdminF(idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -189,7 +194,7 @@ func (g *Gate) ModOrAdminF(idfunc func(echo.Context) (string, *governor.Error)) 
 }
 
 // UserOrBan is a middleware function to validate if the request is made by a user and check if the user is banned from the group
-func (g *Gate) UserOrBan(idparam string) echo.MiddlewareFunc {
+func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -201,7 +206,7 @@ func (g *Gate) UserOrBan(idparam string) echo.MiddlewareFunc {
 
 // UserOrBanF is a middleware function to validate if the request is made by a user and check if the user is banned from the group
 // idfunc should return the group_tag
-func (g *Gate) UserOrBanF(idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func UserOrBanF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -219,7 +224,7 @@ func (g *Gate) UserOrBanF(idfunc func(echo.Context) (string, *governor.Error)) e
 }
 
 // System is a middleware function to validate if the request is made by a system
-func (g *Gate) System() echo.MiddlewareFunc {
+func System(g Gate) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {

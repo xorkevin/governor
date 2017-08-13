@@ -96,7 +96,7 @@ type (
 		db    db.Database
 		cache cache.Cache
 		obj   objstore.Bucket
-		gate  *gate.Gate
+		gate  gate.Gate
 	}
 )
 
@@ -157,7 +157,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.JSON(http.StatusCreated, &resProfileUpdate{
 			Userid: userid,
 		})
-	}, p.gate.Owner("id"))
+	}, gate.Owner(p.gate, "id"))
 
 	r.PUT("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileModel{}
@@ -187,7 +187,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.Owner("id"))
+	}, gate.Owner(p.gate, "id"))
 
 	r.PUT("/:id/image", func(c echo.Context) error {
 		userid := c.Get("userid").(string)
@@ -207,7 +207,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		return c.JSON(http.StatusOK, &resProfileImageChange{
 			Key: sessionKey,
 		})
-	}, p.gate.Owner("id"))
+	}, gate.Owner(p.gate, "id"))
 
 	r.POST("/:id/image/:key", func(c echo.Context) error {
 		file, err := c.FormFile("image")
@@ -287,7 +287,7 @@ func (p *Profile) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) e
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.gate.OwnerOrAdmin("id"))
+	}, gate.OwnerOrAdmin(p.gate, "id"))
 
 	r.GET("/:id", func(c echo.Context) error {
 		rprofile := &reqProfileGetID{

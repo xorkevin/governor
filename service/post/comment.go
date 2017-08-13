@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor/service/post/comment/model"
 	"github.com/hackform/governor/service/post/model"
 	"github.com/hackform/governor/service/post/vote/model"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -171,7 +172,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		return c.JSON(http.StatusCreated, resUpdateComment{
 			Commentid: commentid,
 		})
-	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), gate.UserOrBanF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
@@ -196,7 +197,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), gate.OwnerF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		rcomm := &reqGetComment{
 			Postid:    c.Param("postid"),
 			Commentid: c.Param("commentid"),
@@ -330,7 +331,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), gate.UserOrBanF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
@@ -344,7 +345,7 @@ func (p *Post) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logg
 		}
 
 		return nil
-	}, p.archiveGate("postid", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
+	}, p.archiveGate("postid", false), gate.OwnerModOrAdminF(p.gate, func(c echo.Context) (string, string, *governor.Error) {
 		post := c.Get("postmodel").(*postmodel.Model)
 		m, err := commentmodel.GetByIDB64(db, c.Param("commentid"), c.Param("postid"))
 		if err != nil {

@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -235,35 +236,35 @@ func (u *User) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 
 	ri.GET("/:id/private", func(c echo.Context) error {
 		return u.getByIDPrivate(c, l)
-	}, u.gate.OwnerOrAdmin("id"))
+	}, gate.OwnerOrAdmin(u.gate, "id"))
 
 	ri.GET("/:id/sessions", func(c echo.Context) error {
 		return u.getSessions(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	ri.PUT("/:id", func(c echo.Context) error {
 		return u.putUser(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	ri.PUT("/:id/email", func(c echo.Context) error {
 		return u.putEmail(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	ri.PUT("/:id/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	ri.DELETE("/:id/sessions", func(c echo.Context) error {
 		return u.killSessions(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	ri.PATCH("/:id/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
-	}, u.gate.User())
+	}, gate.User(u.gate))
 
 	ri.DELETE("/:id", func(c echo.Context) error {
 		return u.deleteUser(c, l)
-	}, u.gate.Owner("id"))
+	}, gate.Owner(u.gate, "id"))
 
 	// username routes
 	rn := r.Group("/name")

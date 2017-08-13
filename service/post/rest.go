@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/model"
 	"github.com/hackform/governor/service/post/vote/model"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -176,7 +177,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		return c.JSON(http.StatusCreated, &resPostUpdate{
 			Postid: postid,
 		})
-	}, p.gate.UserOrBan("group"))
+	}, gate.UserOrBan(p.gate, "group"))
 
 	r.PUT("/:postid", func(c echo.Context) error {
 		rpost := &reqPostPut{}
@@ -198,7 +199,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", true), p.gate.OwnerF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), gate.OwnerF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.UserIDBase64()
 	}))
@@ -237,7 +238,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", false), p.gate.ModOrAdminF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", false), gate.ModOrAdminF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
@@ -345,7 +346,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", true), p.gate.UserOrBanF(func(c echo.Context) (string, *governor.Error) {
+	}, p.archiveGate("postid", true), gate.UserOrBanF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		return m.Tag, nil
 	}))
@@ -359,7 +360,7 @@ func (p *Post) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) 
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, p.archiveGate("postid", false), p.gate.OwnerModOrAdminF(func(c echo.Context) (string, string, *governor.Error) {
+	}, p.archiveGate("postid", false), gate.OwnerModOrAdminF(p.gate, func(c echo.Context) (string, string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
 		s, err := m.UserIDBase64()
 		if err != nil {

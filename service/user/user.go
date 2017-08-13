@@ -28,7 +28,7 @@ type (
 		refreshTime       int64
 		confirmTime       int64
 		passwordResetTime int64
-		gate              *gate.Gate
+		gate              gate.Gate
 	}
 )
 
