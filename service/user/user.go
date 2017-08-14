@@ -44,7 +44,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail) User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, g gate.Gate) User {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cu := conf.Conf().GetStringMapString("user")
 	accessTime := time15m
@@ -75,7 +75,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		refreshTime:       refreshTime,
 		confirmTime:       confirmTime,
 		passwordResetTime: passwordResetTime,
-		gate:              gate.New(ca["secret"], ca["issuer"]),
+		gate:              g,
 	}
 }
 

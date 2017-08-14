@@ -18,6 +18,8 @@ import (
 	"github.com/hackform/governor/service/profile/conf"
 	"github.com/hackform/governor/service/user"
 	"github.com/hackform/governor/service/user/conf"
+	"github.com/hackform/governor/service/user/gate"
+	"github.com/hackform/governor/service/user/gate/conf"
 )
 
 func main() {
@@ -52,6 +54,12 @@ func main() {
 		return
 	}
 	fmt.Println("- mail")
+
+	if err = gateconf.Conf(&config); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	fmt.Println("- gate")
 
 	if err = userconf.Conf(&config); err != nil {
 		fmt.Printf(err.Error())
@@ -103,6 +111,8 @@ func main() {
 
 	mailService := mail.New(config, g.Logger())
 
+	gateService := gate.New(config, g.Logger())
+
 	if err := g.MountRoute("/null/database", dbService); err != nil {
 		fmt.Println(err)
 		return
@@ -128,17 +138,17 @@ func main() {
 		return
 	}
 
-	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService)); err != nil {
+	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService)); err != nil {
+	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService)); err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService)); err != nil {
+	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService)); err != nil {
 		fmt.Println(err)
 		return
 	}

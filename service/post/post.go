@@ -37,8 +37,7 @@ const (
 )
 
 // New creates a new Post service
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache) Post {
-	ca := conf.Conf().GetStringMapString("userauth")
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, g gate.Gate) Post {
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
 	if duration, err := time.ParseDuration(cp["archive_time"]); err == nil {
@@ -50,7 +49,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	return &postService{
 		db:          database,
 		cache:       ch,
-		gate:        gate.New(ca["secret"], ca["issuer"]),
+		gate:        g,
 		archiveTime: archiveTime,
 	}
 }

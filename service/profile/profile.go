@@ -105,9 +105,7 @@ type (
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore) Profile {
-	ca := conf.Conf().GetStringMapString("userauth")
-
+func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore, g gate.Gate) Profile {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
 		l.Errorf("failed to get bucket: %s\n", err.Error())
@@ -119,7 +117,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache,
 		db:    db,
 		cache: ch,
 		obj:   b,
-		gate:  gate.New(ca["secret"], ca["issuer"]),
+		gate:  g,
 	}
 }
 
