@@ -1,6 +1,8 @@
 package cachecontrol
 
 import (
+	"fmt"
+	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"strconv"
 )
@@ -8,7 +10,7 @@ import (
 type (
 	// CacheControl is a service for managing http cache-control headers
 	CacheControl interface {
-		Control(public, revalidate bool, maxage int) echo.MiddlewareFunc
+		Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc
 		NoStore() echo.MiddlewareFunc
 	}
 
@@ -22,16 +24,18 @@ func New() CacheControl {
 }
 
 const (
-	ccHeader  = "Cache-Control"
-	ccPublic  = "public"
-	ccPrivate = "private"
-	ccNoCache = "no-cache"
-	ccNoStore = "no-store"
-	ccMaxAge  = "max-age"
+	ccHeader    = "Cache-Control"
+	ccPublic    = "public"
+	ccPrivate   = "private"
+	ccNoCache   = "no-cache"
+	ccNoStore   = "no-store"
+	ccMaxAge    = "max-age"
+	ccEtagH     = "ETag"
+	ccEtagValue = `"%s"`
 )
 
 // Control creates a middleware function to cache the response
-func (c *cacheControl) Control(public, revalidate bool, maxage int) echo.MiddlewareFunc {
+func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if err := next(c); err != nil {
@@ -54,13 +58,17 @@ func (c *cacheControl) Control(public, revalidate bool, maxage int) echo.Middlew
 				resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
 			}
 
+			if etag, err := etagfunc(c); err != nil && etag != "" {
+				resheader.Set(ccEtagH, fmt.Sprintf(ccEtagValue, etag))
+			}
+
 			return nil
 		}
 	}
 }
 
 // NoStore creates a middleware function to deny caching responses
-func (c *cacheControl) NoStore() echo.MiddlewareFunc {
+func (cc *cacheControl) NoStore() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if err := next(c); err != nil {
