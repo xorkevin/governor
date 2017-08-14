@@ -74,13 +74,3 @@ func (c *cacheControl) NoStore() echo.MiddlewareFunc {
 		}
 	}
 }
-
-// NoStore creates a middleware function to deny caching responses
-func NoStore(c CacheControl) echo.MiddlewareFunc {
-	return c.NoStore()
-}
-
-// Revalidate creates a middleware function to revalidate the response on every request
-func Revalidate(c CacheControl) echo.MiddlewareFunc {
-	return c.Control(true, true, -1)
-}
