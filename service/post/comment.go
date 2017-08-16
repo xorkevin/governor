@@ -161,6 +161,21 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		}
 		userid := c.Get("userid").(string)
 
+		if rcomms.Parentid != postid {
+			parentcomment, err := commentmodel.GetByIDB64(db, rcomms.Parentid, postid)
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDComments)
+				return err
+			}
+
+			if parentcomment.Content == deleteEscapeSequence {
+				return governor.NewErrorUser(moduleIDComments, "comment deleted", 0, http.StatusBadRequest)
+			}
+		}
+
 		mComment, err := commentmodel.New(userid, postid, rcomms.Parentid, rcomms.Content)
 		if err != nil {
 			err.AddTrace(moduleIDComments)
