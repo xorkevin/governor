@@ -267,7 +267,12 @@ func GetScoreByID(db *sql.DB, itemid []byte) (int32, int32, *governor.Error) {
 	var d int32
 
 	if rows, err := db.Query(sqlGetScore, itemid); err == nil {
-		defer rows.Close()
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}()
 		for rows.Next() {
 			var j int16
 			if err = rows.Scan(&j); err != nil {
@@ -309,7 +314,12 @@ func GetVotesGroupByUser(db *sql.DB, userid, group string) ([]ModelInfo, *govern
 	m := []ModelInfo{}
 
 	if rows, err := db.Query(sqlGetVotesGroup, user.Bytes(), group, postidNullVal); err == nil {
-		defer rows.Close()
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}()
 		for rows.Next() {
 			i := ModelInfo{}
 			if err = rows.Scan(&i.Itemid, &i.Userid, &i.Score); err != nil {
@@ -353,7 +363,12 @@ func GetVotesThreadByUser(db *sql.DB, userid, postid string) ([]ModelInfo, *gove
 	m := []ModelInfo{}
 
 	if rows, err := db.Query(sqlGetVotesThread, user.Bytes(), post.Bytes()); err == nil {
-		defer rows.Close()
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}()
 		for rows.Next() {
 			i := ModelInfo{}
 			if err = rows.Scan(&i.Itemid, &i.Userid, &i.Score); err != nil {
@@ -425,6 +440,40 @@ func (m *Model) Delete(db *sql.DB) *governor.Error {
 	_, err := db.Exec(sqlDelete, m.Voteid())
 	if err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
+	moduleIDModDelPost = moduleIDModel + ".DeletePostVotes"
+)
+
+var (
+	sqlDeletePost = fmt.Sprintf("DELETE FROM %s WHERE postid=$1;", tableName)
+)
+
+// DeletePostVotes deletes all the votes of a post
+func DeletePostVotes(db *sql.DB, postid []byte) *governor.Error {
+	_, err := db.Exec(sqlDeletePost, postid)
+	if err != nil {
+		return governor.NewError(moduleIDModDelPost, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
+	moduleIDModDelItem = moduleIDModel + ".DeleteItemVotes"
+)
+
+var (
+	sqlDeleteItem = fmt.Sprintf("DELETE FROM %s WHERE itemid=$1;", tableName)
+)
+
+// DeleteItemVotes deletes all the votes of an item
+func DeleteItemVotes(db *sql.DB, itemid []byte) *governor.Error {
+	_, err := db.Exec(sqlDeleteItem, itemid)
+	if err != nil {
+		return governor.NewError(moduleIDModDelItem, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }

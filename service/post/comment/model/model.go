@@ -227,7 +227,12 @@ func GetChildren(db *sql.DB, parentid, postid string, limit, offset int) (ModelS
 
 	m := make(ModelSlice, 0, limit)
 	if rows, err := db.Query(sqlGetChildren, c.Bytes(), p.Bytes(), limit, offset); err == nil {
-		defer rows.Close()
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}()
 		for rows.Next() {
 			i := Model{}
 			if err = rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
@@ -263,7 +268,12 @@ func GetResponses(db *sql.DB, postid string, limit, offset int) (ModelSlice, *go
 
 	m := make(ModelSlice, 0, limit)
 	if rows, err := db.Query(sqlGetResponses, p.Bytes(), limit, offset); err == nil {
-		defer rows.Close()
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}()
 		for rows.Next() {
 			i := Model{}
 			if err = rows.Scan(&i.Commentid, &i.Parentid, &i.Postid, &i.Userid, &i.Content, &i.Up, &i.Down, &i.Absolute, &i.Score, &i.CreationTime); err != nil {
@@ -334,6 +344,23 @@ func (m *Model) Delete(db *sql.DB) *governor.Error {
 	_, err := db.Exec(sqlDelete, m.Commentid)
 	if err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
+	moduleIDModDelPost = moduleIDModel + ".DeletePostComments"
+)
+
+var (
+	sqlDeletePost = fmt.Sprintf("DELETE FROM %s WHERE postid=$1;", tableName)
+)
+
+// DeletePostComments deletes all the comments of a post
+func DeletePostComments(db *sql.DB, postid []byte) *governor.Error {
+	_, err := db.Exec(sqlDeletePost, postid)
+	if err != nil {
+		return governor.NewError(moduleIDModDelPost, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }
