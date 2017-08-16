@@ -3,6 +3,7 @@ package post
 import (
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/post/comment/model"
 	"github.com/hackform/governor/service/post/model"
 	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/gate"
@@ -353,6 +354,16 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	r.DELETE("/:postid", func(c echo.Context) error {
 		m := c.Get("postmodel").(*postmodel.Model)
+
+		if err := votemodel.DeletePostVotes(db, m.Postid); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
+
+		if err := commentmodel.DeletePostComments(db, m.Postid); err != nil {
+			err.AddTrace(moduleIDPost)
+			return err
+		}
 
 		if err := m.Delete(db); err != nil {
 			err.AddTrace(moduleIDPost)

@@ -12,6 +12,10 @@ import (
 	"strconv"
 )
 
+const (
+	deleteEscapeSequence = "%deleted"
+)
+
 type (
 	reqPostComment struct {
 		Parentid string `json:"parentid"`
@@ -257,6 +261,10 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 			return err
 		}
 
+		if comm.Content == deleteEscapeSequence {
+			return governor.NewErrorUser(moduleIDComments, "comment deleted", 0, http.StatusBadRequest)
+		}
+
 		var originalVote *votemodel.Model
 
 		switch action {
@@ -339,7 +347,19 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 	r.DELETE("/:postid/c/:commentid", func(c echo.Context) error {
 		mComment := c.Get("commentmodel").(*commentmodel.Model)
 
-		if err := mComment.Delete(db); err != nil {
+		if err := votemodel.DeleteItemVotes(db, mComment.Commentid); err != nil {
+			err.AddTrace(moduleIDComments)
+			return err
+		}
+
+		mComment.Content = deleteEscapeSequence
+		mComment.Userid = []byte{0, 0}
+		mComment.Up = 0
+		mComment.Down = 0
+		mComment.Absolute = 0
+		mComment.Score = 0
+
+		if err := mComment.Update(db); err != nil {
 			err.AddTrace(moduleIDComments)
 			return err
 		}

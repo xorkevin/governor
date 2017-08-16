@@ -65,7 +65,7 @@ func validContent(content string) *governor.Error {
 	if len(content) > lengthCapL2 {
 		return governor.NewErrorUser(moduleIDReqValid, "content exceeds max length", 0, http.StatusBadRequest)
 	}
-	if strings.Contains(content, editEscapeSequence) {
+	if strings.Contains(content, editEscapeSequence) || content == deleteEscapeSequence {
 		return governor.NewErrorUser(moduleIDReqValid, "content contains illegal characters", 0, http.StatusBadRequest)
 	}
 	return nil
