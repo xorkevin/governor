@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
+	"net/http"
 	"strconv"
+	"strings"
 )
 
 type (
@@ -24,20 +26,37 @@ func New() CacheControl {
 }
 
 const (
-	ccHeader    = "Cache-Control"
-	ccPublic    = "public"
-	ccPrivate   = "private"
-	ccNoCache   = "no-cache"
-	ccNoStore   = "no-store"
-	ccMaxAge    = "max-age"
-	ccEtagH     = "ETag"
-	ccEtagValue = `"%s"`
+	ccHeader       = "Cache-Control"
+	ccPublic       = "public"
+	ccPrivate      = "private"
+	ccNoCache      = "no-cache"
+	ccNoStore      = "no-store"
+	ccMaxAge       = "max-age"
+	ccEtagH        = "ETag"
+	ccEtagValue    = `"%s"`
+	ccIfNoneMatchH = "If-None-Match"
+	moduleID       = "cachecontrol"
 )
 
 // Control creates a middleware function to cache the response
 func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			etag := ""
+
+			if tag, err := etagfunc(c); err == nil {
+				etag = tag
+			} else {
+				err.AddTrace(moduleID)
+				return err
+			}
+
+			if val := c.Request().Header.Get(ccIfNoneMatchH); etag != "" && val != "" {
+				if strings.Contains(val, etag) {
+					return c.NoContent(http.StatusNotModified)
+				}
+			}
+
 			if err := next(c); err != nil {
 				return err
 			}
@@ -58,7 +77,7 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 				resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
 			}
 
-			if etag, err := etagfunc(c); err != nil && etag != "" {
+			if etag != "" {
 				resheader.Set(ccEtagH, fmt.Sprintf(ccEtagValue, etag))
 			}
 
