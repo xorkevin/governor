@@ -49,7 +49,6 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 			if tag, err := etagfunc(c); err == nil {
 				etag = tag
 			} else {
-				err.AddTrace(moduleID)
 				return err
 			}
 
@@ -57,10 +56,6 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 				if strings.Contains(val, etag) {
 					return c.NoContent(http.StatusNotModified)
 				}
-			}
-
-			if err := next(c); err != nil {
-				return err
 			}
 
 			resheader := c.Response().Header()
@@ -83,7 +78,7 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 				resheader.Set(ccEtagH, fmt.Sprintf(ccEtagValue, etag))
 			}
 
-			return nil
+			return next(c)
 		}
 	}
 }

@@ -31,6 +31,7 @@ type (
 	// Bucket is a collection of items of the object store service
 	Bucket interface {
 		Put(name, contentType string, object io.Reader) *governor.Error
+		Stat(name string) (*minio.ObjectInfo, *governor.Error)
 		Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error)
 		Remove(name string) *governor.Error
 	}
@@ -151,17 +152,26 @@ func (b *minioBucket) Put(name, contentType string, object io.Reader) *governor.
 	return nil
 }
 
+// Stat returns metadata of an object from the bucket
+func (b *minioBucket) Stat(name string) (*minio.ObjectInfo, *governor.Error) {
+	objInfo, err := b.store.StatObject(b.name, name)
+	if err != nil {
+		return nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
+	}
+	return &objInfo, nil
+}
+
 // Get gets an object from the bucket
 func (b *minioBucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error) {
-	obj, err := b.store.GetObject(b.name, name)
+	objInfo, err := b.store.StatObject(b.name, name)
 	if err != nil {
 		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
 	}
-	objinfo, err := obj.Stat()
+	obj, err := b.store.GetObject(b.name, name)
 	if err != nil {
 		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
 	}
-	return obj, &objinfo, nil
+	return obj, &objInfo, nil
 }
 
 // Remove removes an object from the bucket

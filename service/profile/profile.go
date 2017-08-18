@@ -322,15 +322,11 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	}))
 
 	r.GET("/:id/image", func(c echo.Context) error {
-		obj := c.Get("image").(io.Reader)
-		contentType := c.Get("image-type").(string)
-		return c.Stream(http.StatusOK, contentType, obj)
-	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
 		rprofile := &reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
-			return "", err
+			return err
 		}
 
 		obj, objinfo, err := p.obj.Get(rprofile.Userid + "-profile")
@@ -339,11 +335,25 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 				err.SetErrorUser()
 			}
 			err.AddTrace(moduleID)
+			return err
+		}
+		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
+	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+		rprofile := &reqProfileGetID{
+			Userid: c.Param("id"),
+		}
+		if err := rprofile.valid(); err != nil {
 			return "", err
 		}
 
-		c.Set("image", obj)
-		c.Set("image-type", objinfo.ContentType)
+		objinfo, err := p.obj.Stat(rprofile.Userid + "-profile")
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return "", err
+		}
 
 		return objinfo.ETag, nil
 	}))
