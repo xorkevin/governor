@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	moduleIDHealth = "govhealth"
+)
+
 type (
 	// Health is a health service for monitoring
 	health struct {
@@ -69,6 +73,9 @@ func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 				"response": "pong",
 			}).Info("Ping")
 			return c.String(http.StatusOK, "Pong")
+		})
+		r.GET("/error", func(c echo.Context) error {
+			return NewError(moduleIDHealth, "test error", 0, http.StatusBadRequest)
 		})
 	}
 

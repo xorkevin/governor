@@ -5,6 +5,8 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"net/http/httputil"
+	"time"
 )
 
 const (
@@ -122,18 +124,28 @@ func errorHandler(i *echo.Echo, l *logrus.Logger) echo.HTTPErrorHandler {
 	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
 		origErr := err
 		if err, ok := err.(*Error); ok {
+			request := ""
+			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
+				request = bytes.NewBuffer(r).String()
+			}
 			switch err.Level() {
 			case levelError:
 				l.WithFields(logrus.Fields{
-					"origin": err.Origin(),
-					"source": err.Source(),
-					"code":   err.Code(),
+					"origin":   err.Origin(),
+					"source":   err.Source(),
+					"code":     err.Code(),
+					"endpoint": c.Path(),
+					"time":     time.Now().String(),
+					"request":  request,
 				}).Error(err.Message())
 			case levelWarn:
 				l.WithFields(logrus.Fields{
-					"origin": err.Origin(),
-					"source": err.Source(),
-					"code":   err.Code(),
+					"origin":   err.Origin(),
+					"source":   err.Source(),
+					"code":     err.Code(),
+					"endpoint": c.Path(),
+					"time":     time.Now().String(),
+					"request":  request,
 				}).Warn(err.Message())
 			}
 			if err := c.JSON(err.Status(), &responseError{
