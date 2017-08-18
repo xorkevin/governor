@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cache/conf"
+	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/db/conf"
@@ -113,6 +114,8 @@ func main() {
 
 	gateService := gate.New(config, g.Logger())
 
+	cacheControlService := cachecontrol.New(config, g.Logger())
+
 	if err := g.MountRoute("/null/database", dbService); err != nil {
 		fmt.Println(err)
 		return
@@ -143,7 +146,7 @@ func main() {
 		return
 	}
 
-	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService)); err != nil {
+	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService, cacheControlService)); err != nil {
 		fmt.Println(err)
 		return
 	}

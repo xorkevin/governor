@@ -3,6 +3,7 @@ package profile
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
+	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/profile/model"
@@ -88,6 +89,7 @@ func (r *reqProfileImage) valid() *governor.Error {
 const (
 	moduleID    = "profile"
 	imageBucket = "profile-image"
+	hour6       = 21600
 )
 
 type (
@@ -101,11 +103,12 @@ type (
 		cache cache.Cache
 		obj   objstore.Bucket
 		gate  gate.Gate
+		cc    cachecontrol.CacheControl
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore, g gate.Gate) Profile {
+func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore, g gate.Gate, cc cachecontrol.CacheControl) Profile {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
 		l.Errorf("failed to get bucket: %s\n", err.Error())
@@ -118,6 +121,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache,
 		cache: ch,
 		obj:   b,
 		gate:  g,
+		cc:    cc,
 	}
 }
 
@@ -313,14 +317,20 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			Bio:   m.Bio,
 			Image: m.Image,
 		})
-	})
+	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	r.GET("/:id/image", func(c echo.Context) error {
+		obj := c.Get("image").(io.Reader)
+		contentType := c.Get("image-type").(string)
+		return c.Stream(http.StatusOK, contentType, obj)
+	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
 		rprofile := &reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
-			return err
+			return "", err
 		}
 
 		obj, objinfo, err := p.obj.Get(rprofile.Userid + "-profile")
@@ -329,10 +339,14 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 				err.SetErrorUser()
 			}
 			err.AddTrace(moduleID)
-			return err
+			return "", err
 		}
-		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	})
+
+		c.Set("image", obj)
+		c.Set("image-type", objinfo.ContentType)
+
+		return objinfo.ETag, nil
+	}))
 
 	l.Info("mounted profile service")
 
