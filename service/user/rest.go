@@ -209,6 +209,10 @@ func (r *reqUserGetID) valid() *governor.Error {
 	return hasUserid(r.Userid)
 }
 
+const (
+	hour6 = 21600
+)
+
 func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	// new user routes
 	r.POST("", func(c echo.Context) error {
@@ -232,11 +236,16 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	ri.GET("/:id", func(c echo.Context) error {
 		return u.getByID(c, l)
-	})
+	}, u.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	ri.GET("/:id/private", func(c echo.Context) error {
 		return u.getByIDPrivate(c, l)
-	}, gate.OwnerOrAdmin(u.gate, "id"))
+	}, gate.OwnerOrAdmin(u.gate, "id"),
+		u.cc.Control(false, false, hour6, func(c echo.Context) (string, *governor.Error) {
+			return "", nil
+		}))
 
 	ri.GET("/:id/sessions", func(c echo.Context) error {
 		return u.getSessions(c, l)
@@ -271,7 +280,9 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
-	})
+	}, u.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {

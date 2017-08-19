@@ -141,7 +141,7 @@ func main() {
 		return
 	}
 
-	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService)); err != nil {
+	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService, cacheControlService)); err != nil {
 		fmt.Println(err)
 		return
 	}
