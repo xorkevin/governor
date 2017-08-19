@@ -151,7 +151,7 @@ func main() {
 		return
 	}
 
-	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService)); err != nil {
+	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)); err != nil {
 		fmt.Println(err)
 		return
 	}

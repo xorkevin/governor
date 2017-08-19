@@ -460,7 +460,9 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		return c.JSON(http.StatusOK, &resGetComments{
 			Comments: k,
 		})
-	})
+	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	r.GET("/:postid/c/:commentid", func(c echo.Context) error {
 		rcomms := &reqGetComment{}
@@ -508,7 +510,9 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		r.Edited = edited
 
 		return c.JSON(http.StatusOK, r)
-	})
+	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	r.GET("/:postid/c/:commentid/children", func(c echo.Context) error {
 		var amt, ofs int
@@ -575,7 +579,9 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		return c.JSON(http.StatusOK, &resGetComments{
 			Comments: k,
 		})
-	})
+	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 
 	return nil
 }

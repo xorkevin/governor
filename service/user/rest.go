@@ -210,7 +210,7 @@ func (r *reqUserGetID) valid() *governor.Error {
 }
 
 const (
-	hour6 = 21600
+	min2 = 120
 )
 
 func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
@@ -236,14 +236,14 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	ri.GET("/:id", func(c echo.Context) error {
 		return u.getByID(c, l)
-	}, u.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+	}, u.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
 		return "", nil
 	}))
 
 	ri.GET("/:id/private", func(c echo.Context) error {
 		return u.getByIDPrivate(c, l)
 	}, gate.OwnerOrAdmin(u.gate, "id"),
-		u.cc.Control(false, false, hour6, func(c echo.Context) (string, *governor.Error) {
+		u.cc.Control(false, false, min2, func(c echo.Context) (string, *governor.Error) {
 			return "", nil
 		}))
 
@@ -280,7 +280,7 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
-	}, u.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+	}, u.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
 		return "", nil
 	}))
 

@@ -426,6 +426,8 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		r.Edited = edited
 
 		return c.JSON(http.StatusOK, r)
-	})
+	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
+		return "", nil
+	}))
 	return nil
 }

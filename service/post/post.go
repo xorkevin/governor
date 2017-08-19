@@ -3,6 +3,7 @@ package post
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
+	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/post/comment/model"
 	"github.com/hackform/governor/service/post/model"
@@ -27,6 +28,7 @@ type (
 		db          db.Database
 		cache       cache.Cache
 		gate        gate.Gate
+		cc          cachecontrol.CacheControl
 		archiveTime int64
 	}
 )
@@ -34,10 +36,11 @@ type (
 const (
 	time4month int64 = 9676800
 	b1               = 1000000000
+	min2             = 120
 )
 
 // New creates a new Post service
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, g gate.Gate) Post {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, g gate.Gate, cc cachecontrol.CacheControl) Post {
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
 	if duration, err := time.ParseDuration(cp["archive_time"]); err == nil {
@@ -50,6 +53,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		db:          database,
 		cache:       ch,
 		gate:        g,
+		cc:          cc,
 		archiveTime: archiveTime,
 	}
 }
