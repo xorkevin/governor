@@ -41,7 +41,7 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 
 	l.Info("initialized mail service")
 
-	return &goMail{
+	gm := &goMail{
 		host:        rconf["host"],
 		port:        v.GetInt("mail.port"),
 		username:    rconf["username"],
@@ -50,8 +50,12 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 		bufferSize:  v.GetInt("mail.buffer_size"),
 		workerSize:  v.GetInt("mail.worker_size"),
 		fromAddress: rconf["from_address"],
-		msgc:        make(chan *gomail.Message),
+		msgc:        make(chan *gomail.Message, v.GetInt("mail.buffer_size")),
 	}
+
+	gm.startWorkers(l)
+
+	return gm
 }
 
 func (m *goMail) dialer() *gomail.Dialer {
@@ -66,38 +70,56 @@ func (m *goMail) dialer() *gomail.Dialer {
 	return d
 }
 
-func (m *goMail) mailWorker(l *logrus.Logger, ch <-chan *gomail.Message) {
+func (m *goMail) mailWorker(l *logrus.Logger) {
 	d := m.dialer()
+	var sender gomail.SendCloser
 
-	var s gomail.SendCloser
-	var err error
-	open := false
 	for {
 		select {
-		case m, ok := <-ch:
+		case m, ok := <-m.msgc:
 			if !ok {
 				return
 			}
-			if !open {
-				if s, err = d.Dial(); err != nil {
-					panic(err)
+			if sender == nil {
+				if s, err := d.Dial(); err == nil {
+					sender = s
+				} else {
+					l.Error(err)
 				}
-				open = true
 			}
-			if err := gomail.Send(s, m); err != nil {
+			if err := gomail.Send(sender, m); err != nil {
 				l.Error(err)
 			}
-		// Close the connection to the SMTP server if no email was sent in
-		// the last 30 seconds.
+
 		case <-time.After(30 * time.Second):
-			if open {
-				if err := s.Close(); err != nil {
-					panic(err)
+			if sender != nil {
+				if err := sender.Close(); err != nil {
+					l.Error(err)
 				}
-				open = false
+				sender = nil
 			}
 		}
 	}
+}
+
+func (m *goMail) startWorkers(l *logrus.Logger) {
+	for i := 0; i < m.workerSize; i++ {
+		go m.mailWorker(l)
+	}
+}
+
+const (
+	moduleIDenqueue = moduleID + ".enqueue"
+)
+
+func (m *goMail) enqueue(msg *gomail.Message) *governor.Error {
+	select {
+	case m.msgc <- msg:
+	default:
+		return governor.NewError(moduleIDenqueue, "email service experiencing load", 0, http.StatusInternalServerError)
+	}
+
+	return nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
@@ -117,10 +139,10 @@ func (m *goMail) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.R
 }
 
 const (
-	moduleIDSend = moduleID + ".send"
+	moduleIDSend = moduleID + ".Send"
 )
 
-// Send creates and sends a new message
+// Send creates and enqueues a new message to be sent
 func (m *goMail) Send(to, subject, body string) *governor.Error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.fromAddress)
@@ -128,9 +150,5 @@ func (m *goMail) Send(to, subject, body string) *governor.Error {
 	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/html", body)
 
-	//if err := m.mailer.DialAndSend(msg); err != nil {
-	//	return governor.NewError(moduleIDSend, err.Error(), 0, http.StatusInternalServerError)
-	//}
-
-	return nil
+	return m.enqueue(msg)
 }
