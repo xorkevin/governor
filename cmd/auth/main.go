@@ -17,6 +17,7 @@ import (
 	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
 	"github.com/hackform/governor/service/profile/conf"
+	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user"
 	"github.com/hackform/governor/service/user/conf"
 	"github.com/hackform/governor/service/user/gate"
@@ -108,6 +109,11 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 		return
+	}
+
+	templateService, err := template.New(config, g.Logger())
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	mailService := mail.New(config, g.Logger())
