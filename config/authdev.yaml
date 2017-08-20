@@ -39,5 +39,7 @@ mail:
   port: 1025
   from_address: gov@hack.com
   insecure: true
+  buffer_size: 1024
+  worker_size: 2
 post:
   archive_time: 2688h
