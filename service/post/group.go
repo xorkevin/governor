@@ -63,7 +63,7 @@ func (p *postService) mountGroup(conf governor.Config, r *echo.Group, l *logrus.
 		} else {
 			return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
 		}
-		rgroup := &reqGroupGetPosts{
+		rgroup := reqGroupGetPosts{
 			Group:  c.Param("group"),
 			Amount: amt,
 			Offset: ofs,
@@ -100,7 +100,7 @@ func (p *postService) mountGroup(conf governor.Config, r *echo.Group, l *logrus.
 			})
 		}
 
-		return c.JSON(http.StatusOK, &resGroupPosts{
+		return c.JSON(http.StatusOK, resGroupPosts{
 			Posts: posts,
 		})
 	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {

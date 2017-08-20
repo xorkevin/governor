@@ -145,8 +145,8 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 	db := p.db.DB()
 
 	r.POST("/:postid/c", func(c echo.Context) error {
-		rcomms := &reqPostComment{}
-		if err := c.Bind(rcomms); err != nil {
+		rcomms := reqPostComment{}
+		if err := c.Bind(&rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := rcomms.valid(); err != nil {
@@ -197,8 +197,8 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 	}))
 
 	r.PUT("/:postid/c/:commentid", func(c echo.Context) error {
-		rcomms := &reqPutComment{}
-		if err := c.Bind(rcomms); err != nil {
+		rcomms := reqPutComment{}
+		if err := c.Bind(&rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := rcomms.valid(); err != nil {
@@ -217,7 +217,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 
 		return c.NoContent(http.StatusNoContent)
 	}, p.archiveGate("postid", true), gate.OwnerF(p.gate, func(c echo.Context) (string, *governor.Error) {
-		rcomm := &reqGetComment{
+		rcomm := reqGetComment{
 			Postid:    c.Param("postid"),
 			Commentid: c.Param("commentid"),
 		}
@@ -238,7 +238,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 	}))
 
 	r.PATCH("/:postid/c/:commentid/:action", func(c echo.Context) error {
-		rcomm := &reqCommentAction{
+		rcomm := reqCommentAction{
 			Commentid: c.Param("commentid"),
 			Action:    c.Param("action"),
 		}
@@ -411,7 +411,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		} else {
 			return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
 		}
-		rcomms := &reqGetComments{
+		rcomms := reqGetComments{
 			Postid: c.Param("postid"),
 			Amount: amt,
 			Offset: ofs,
@@ -457,7 +457,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 			k = append(k, r)
 		}
 
-		return c.JSON(http.StatusOK, &resGetComments{
+		return c.JSON(http.StatusOK, resGetComments{
 			Comments: k,
 		})
 	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
@@ -465,8 +465,8 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 	}))
 
 	r.GET("/:postid/c/:commentid", func(c echo.Context) error {
-		rcomms := &reqGetComment{}
-		if err := c.Bind(rcomms); err != nil {
+		rcomms := reqGetComment{}
+		if err := c.Bind(&rcomms); err != nil {
 			return governor.NewErrorUser(moduleIDComments, err.Error(), 0, http.StatusBadRequest)
 		}
 		rcomms.Postid = c.Param("postid")
@@ -488,7 +488,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		parentid, _ := comment.ParentIDBase64()
 		postid, _ := comment.PostIDBase64()
 		userid, _ := comment.UserIDBase64()
-		r := &resGetComment{
+		r := resGetComment{
 			Commentid:    commentid,
 			Parentid:     parentid,
 			Postid:       postid,
@@ -526,7 +526,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 		} else {
 			return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
 		}
-		rcomms := &reqGetCommentChildren{
+		rcomms := reqGetCommentChildren{
 			Postid:    c.Param("postid"),
 			Commentid: c.Param("commentid"),
 			Amount:    amt,
@@ -576,7 +576,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logr
 			k = append(k, r)
 		}
 
-		return c.JSON(http.StatusOK, &resGetComments{
+		return c.JSON(http.StatusOK, resGetComments{
 			Comments: k,
 		})
 	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {

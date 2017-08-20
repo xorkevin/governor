@@ -111,7 +111,8 @@ func main() {
 		return
 	}
 
-	templateService, err := template.New(config, g.Logger())
+	//templateService, err := template.New(config, g.Logger())
+	_, err = template.New(config, g.Logger())
 	if err != nil {
 		fmt.Println(err)
 	}

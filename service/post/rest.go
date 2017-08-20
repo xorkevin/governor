@@ -1,7 +1,6 @@
 package post
 
 import (
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/comment/model"
 	"github.com/hackform/governor/service/post/model"
@@ -99,7 +98,7 @@ func (p *postService) archiveGate(idparam string, checkLocked bool) echo.Middlew
 	db := p.db.DB()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			rpost := &reqPostGet{
+			rpost := reqPostGet{
 				Postid: c.Param(idparam),
 			}
 			if err := rpost.valid(); err != nil {
@@ -140,8 +139,8 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	}
 
 	r.POST("/g/:group", func(c echo.Context) error {
-		rpost := &reqPostPost{}
-		if err := c.Bind(rpost); err != nil {
+		rpost := reqPostPost{}
+		if err := c.Bind(&rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
 		}
 		rpost.Tag = c.Param("group")
@@ -175,14 +174,14 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 			"title":  m.Title,
 		}).Info("post created")
 
-		return c.JSON(http.StatusCreated, &resPostUpdate{
+		return c.JSON(http.StatusCreated, resPostUpdate{
 			Postid: postid,
 		})
 	}, gate.UserOrBan(p.gate, "group"))
 
 	r.PUT("/:postid", func(c echo.Context) error {
-		rpost := &reqPostPut{}
-		if err := c.Bind(rpost); err != nil {
+		rpost := reqPostPut{}
+		if err := c.Bind(&rpost); err != nil {
 			return governor.NewErrorUser(moduleIDPost, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := rpost.valid(); err != nil {
@@ -206,7 +205,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	}))
 
 	r.PATCH("/:postid/mod/:action", func(c echo.Context) error {
-		rpost := &reqPostAction{
+		rpost := reqPostAction{
 			Action: c.Param("action"),
 		}
 		if err := rpost.valid(); err != nil {
@@ -245,7 +244,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	}))
 
 	r.PATCH("/:postid/:action", func(c echo.Context) error {
-		rpost := &reqPostAction{
+		rpost := reqPostAction{
 			Action: c.Param("action"),
 		}
 		if err := rpost.valid(); err != nil {
@@ -382,10 +381,9 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	}))
 
 	r.GET("/:postid", func(c echo.Context) error {
-		rpost := &reqPostGet{
+		rpost := reqPostGet{
 			Postid: c.Param("postid"),
 		}
-		fmt.Println("postid", c.Param("postid"))
 		if err := rpost.valid(); err != nil {
 			return err
 		}
@@ -402,7 +400,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		postid, _ := m.IDBase64()
 		userid, _ := m.UserIDBase64()
 
-		r := &resPost{
+		r := resPost{
 			Postid:       postid,
 			Userid:       userid,
 			Tag:          m.Tag,

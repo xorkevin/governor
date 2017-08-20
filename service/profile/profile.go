@@ -131,8 +131,8 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	ch := p.cache.Cache()
 
 	r.POST("/:id", func(c echo.Context) error {
-		rprofile := &reqProfileModel{}
-		if err := c.Bind(rprofile); err != nil {
+		rprofile := reqProfileModel{}
+		if err := c.Bind(&rprofile); err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
 		rprofile.Userid = c.Param("id")
@@ -140,7 +140,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 
-		m := &profilemodel.Model{
+		m := profilemodel.Model{
 			Email: rprofile.Email,
 			Bio:   rprofile.Bio,
 		}
@@ -160,14 +160,14 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 		userid, _ := m.IDBase64()
 
-		return c.JSON(http.StatusCreated, &resProfileUpdate{
+		return c.JSON(http.StatusCreated, resProfileUpdate{
 			Userid: userid,
 		})
 	}, gate.Owner(p.gate, "id"))
 
 	r.PUT("/:id", func(c echo.Context) error {
-		rprofile := &reqProfileModel{}
-		if err := c.Bind(rprofile); err != nil {
+		rprofile := reqProfileModel{}
+		if err := c.Bind(&rprofile); err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
 		rprofile.Userid = c.Param("id")
@@ -210,7 +210,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
 		}
 
-		return c.JSON(http.StatusOK, &resProfileImageChange{
+		return c.JSON(http.StatusOK, resProfileImageChange{
 			Key: sessionKey,
 		})
 	}, gate.Owner(p.gate, "id"))
@@ -239,7 +239,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 				}).Error(gerr.Message())
 			}
 		}(image)
-		rprofile := &reqProfileImage{
+		rprofile := reqProfileImage{
 			Userid:    c.Param("id"),
 			Image:     image,
 			ImageType: mediaType,
@@ -271,7 +271,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	})
 
 	r.DELETE("/:id", func(c echo.Context) error {
-		rprofile := &reqProfileGetID{
+		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
@@ -296,7 +296,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	}, gate.OwnerOrAdmin(p.gate, "id"))
 
 	r.GET("/:id", func(c echo.Context) error {
-		rprofile := &reqProfileGetID{
+		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
@@ -312,7 +312,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 
-		return c.JSON(http.StatusOK, &resProfileModel{
+		return c.JSON(http.StatusOK, resProfileModel{
 			Email: m.Email,
 			Bio:   m.Bio,
 			Image: m.Image,
@@ -322,7 +322,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	}))
 
 	r.GET("/:id/image", func(c echo.Context) error {
-		rprofile := &reqProfileGetID{
+		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
@@ -339,7 +339,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		}
 		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
 	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
-		rprofile := &reqProfileGetID{
+		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
 		if err := rprofile.valid(); err != nil {
