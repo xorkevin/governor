@@ -21,8 +21,8 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 	mailer := u.mailer
 
-	ruser := &reqUserPost{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPost{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -67,7 +67,7 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	return c.JSON(http.StatusCreated, &resUserUpdate{
+	return c.JSON(http.StatusCreated, resUserUpdate{
 		Userid:   userid,
 		Username: m.Username,
 	})
@@ -77,8 +77,8 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
-	ruser := &reqUserPostConfirm{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPostConfirm{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -90,9 +90,9 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 
-	m := &usermodel.Model{}
+	m := usermodel.Model{}
 	b := bytes.NewBufferString(gobUser)
-	if err := gob.NewDecoder(b).Decode(m); err != nil {
+	if err := gob.NewDecoder(b).Decode(&m); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -117,7 +117,7 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 		"username": m.Username,
 	}).Info("user created")
 
-	return c.JSON(http.StatusCreated, &resUserUpdate{
+	return c.JSON(http.StatusCreated, resUserUpdate{
 		Userid:   userid,
 		Username: m.Username,
 	})
@@ -126,14 +126,14 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := &reqUserGetID{
+	reqid := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserPut{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPut{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -161,14 +161,14 @@ func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := &reqUserGetID{
+	reqid := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserPutEmail{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPutEmail{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -197,14 +197,14 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := &reqUserGetID{
+	reqid := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserPutPassword{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPutPassword{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -238,8 +238,8 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 	mailer := u.mailer
 
-	ruser := &reqForgotPassword{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqForgotPassword{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -284,8 +284,8 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
-	ruser := &reqForgotPasswordReset{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqForgotPasswordReset{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -323,14 +323,14 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
-	reqid := &reqUserGetID{
+	reqid := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserRmSessions{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserRmSessions{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -355,14 +355,14 @@ func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := &reqUserGetID{
+	reqid := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserPutRank{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserPutRank{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {
@@ -468,8 +468,8 @@ func (u *userService) deleteUser(c echo.Context, l *logrus.Logger) error {
 	if err := reqid.valid(); err != nil {
 		return err
 	}
-	ruser := &reqUserDelete{}
-	if err := c.Bind(ruser); err != nil {
+	ruser := reqUserDelete{}
+	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
 	if err := ruser.valid(); err != nil {

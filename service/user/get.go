@@ -15,7 +15,7 @@ import (
 func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	ruser := &reqUserGetID{
+	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := ruser.valid(); err != nil {
@@ -32,7 +32,7 @@ func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	return c.JSON(http.StatusOK, &resUserGetPublic{
+	return c.JSON(http.StatusOK, resUserGetPublic{
 		Userid:       userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
@@ -45,7 +45,7 @@ func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	ruser := &reqUserGetID{
+	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := ruser.valid(); err != nil {
@@ -62,7 +62,7 @@ func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	return c.JSON(http.StatusOK, &resUserGet{
+	return c.JSON(http.StatusOK, resUserGet{
 		resUserGetPublic: resUserGetPublic{
 			Userid:       userid,
 			Username:     m.Username,
@@ -78,7 +78,7 @@ func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
-	ruser := &reqUserGetID{
+	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := ruser.valid(); err != nil {
@@ -104,7 +104,7 @@ func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 	}
 	sort.Sort(sort.Reverse(sarr))
 
-	return c.JSON(http.StatusOK, &resUserGetSessions{
+	return c.JSON(http.StatusOK, resUserGetSessions{
 		Sessions: sarr,
 	})
 }
@@ -112,7 +112,7 @@ func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	ruser := &reqUserGetUsername{
+	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
 	if err := ruser.valid(); err != nil {
@@ -129,7 +129,7 @@ func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	return c.JSON(http.StatusOK, &resUserGetPublic{
+	return c.JSON(http.StatusOK, resUserGetPublic{
 		Userid:       userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
@@ -142,7 +142,7 @@ func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	ruser := &reqUserGetUsername{
+	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
 	if err := ruser.valid(); err != nil {
@@ -159,7 +159,7 @@ func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error
 
 	userid, _ := m.IDBase64()
 
-	return c.JSON(http.StatusOK, &resUserGet{
+	return c.JSON(http.StatusOK, resUserGet{
 		resUserGetPublic: resUserGetPublic{
 			Userid:       userid,
 			Username:     m.Username,

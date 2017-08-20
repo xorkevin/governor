@@ -123,8 +123,8 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 	mailer := u.mailer
 
 	r.POST("/login", func(c echo.Context) error {
-		ruser := &reqUserAuth{}
-		if err := c.Bind(ruser); err != nil {
+		ruser := reqUserAuth{}
+		if err := c.Bind(&ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
 		if t, err := getRefreshCookie(c); err == nil {
@@ -209,7 +209,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			u.setAccessCookie(c, conf, accessToken)
 			u.setRefreshCookie(c, conf, refreshToken)
 
-			return c.JSON(http.StatusOK, &resUserAuth{
+			return c.JSON(http.StatusOK, resUserAuth{
 				Valid:        true,
 				AccessToken:  accessToken,
 				RefreshToken: refreshToken,
@@ -220,16 +220,16 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			})
 		}
 
-		return c.JSON(http.StatusUnauthorized, &resUserAuth{
+		return c.JSON(http.StatusUnauthorized, resUserAuth{
 			Valid: false,
 		})
 	})
 
 	r.POST("/exchange", func(c echo.Context) error {
-		ruser := &reqExchangeToken{}
+		ruser := reqExchangeToken{}
 		if t, err := getRefreshCookie(c); err == nil {
 			ruser.RefreshToken = t
-		} else if err := c.Bind(ruser); err != nil {
+		} else if err := c.Bind(&ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := ruser.valid(); err != nil {
@@ -254,7 +254,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 		// check the refresh token
 		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 		if !validToken {
-			return c.JSON(http.StatusUnauthorized, &resUserAuth{
+			return c.JSON(http.StatusUnauthorized, resUserAuth{
 				Valid: false,
 			})
 		}
@@ -268,7 +268,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 
 		u.setAccessCookie(c, conf, accessToken)
 
-		return c.JSON(http.StatusOK, &resUserAuth{
+		return c.JSON(http.StatusOK, resUserAuth{
 			Valid:       true,
 			AccessToken: accessToken,
 			Claims:      claims,
@@ -276,10 +276,10 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 	})
 
 	r.POST("/refresh", func(c echo.Context) error {
-		ruser := &reqExchangeToken{}
+		ruser := reqExchangeToken{}
 		if t, err := getRefreshCookie(c); err == nil {
 			ruser.RefreshToken = t
-		} else if err := c.Bind(ruser); err != nil {
+		} else if err := c.Bind(&ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
 		if err := ruser.valid(); err != nil {
@@ -304,7 +304,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 		// check the refresh token
 		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 		if !validToken {
-			return c.JSON(http.StatusUnauthorized, &resUserAuth{
+			return c.JSON(http.StatusUnauthorized, resUserAuth{
 				Valid: false,
 			})
 		}
@@ -331,7 +331,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 
 		u.setRefreshCookie(c, conf, refreshToken)
 
-		return c.JSON(http.StatusOK, &resUserAuth{
+		return c.JSON(http.StatusOK, resUserAuth{
 			Valid:        true,
 			RefreshToken: refreshToken,
 		})
