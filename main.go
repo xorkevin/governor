@@ -68,6 +68,7 @@ func New(config Config) (*Server, error) {
 			return strings.HasPrefix(path, config.BaseURL+"/") || config.BaseURL == path
 		},
 	}))
+	i.Use(middleware.RequestID())
 	l.Info("initialized middleware")
 
 	healthService := newHealth()
