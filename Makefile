@@ -3,6 +3,7 @@ VERSION=v0.1.0
 API_PORT=8080
 FSS_PORT=3000
 BASEDIR=public
+TEMPLATEDIR=templates
 PACKAGE=github.com/hackform/governor
 
 
@@ -71,7 +72,7 @@ docker-build: build
 	docker build -f ./cmd/auth/Dockerfile -t $(AUTH_IMAGE_NAME):$(VERSION) -t $(AUTH_IMAGE_NAME):latest .
 
 docker-run:
-	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) --network=$(DOCKER_NETWORK) \
+	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) -v $$(pwd)/$(TEMPLATEDIR):/$(TEMPLATEDIR) --network=$(DOCKER_NETWORK) \
 		-p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
 
 docker-stop:
