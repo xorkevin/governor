@@ -4,6 +4,7 @@ mode: DEBUG
 port: 8080
 baseurl: /api
 publicdir: public
+templatedir: templates
 allow_origins:
   - http://localhost
 postgres:
