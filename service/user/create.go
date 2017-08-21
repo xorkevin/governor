@@ -16,6 +16,18 @@ import (
 	"time"
 )
 
+type (
+	emailNewUser struct {
+		FirstName string
+		Key       string
+	}
+)
+
+const (
+	newUserTemplate = "newuser"
+	newUserSubject  = "newuser_subject"
+)
+
 func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
@@ -60,7 +72,23 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	if err := mailer.Send(m.Email, "Confirm your account", "key: "+sessionKey); err != nil {
+	emdata := emailNewUser{
+		FirstName: m.FirstName,
+		Key:       sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(newUserTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(newUserSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(m.Email, subj, em); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
