@@ -117,6 +117,20 @@ func rmRefreshCookie(c echo.Context) {
 	})
 }
 
+type (
+	emailNewLogin struct {
+		SessionID string
+		IP        string
+		UserAgent string
+		Time      string
+	}
+)
+
+const (
+	newLoginTemplate = "newlogin"
+	newLoginSubject  = "newlogin_subject"
+)
+
 func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
@@ -189,7 +203,25 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 					return err
 				}
 				if !isMember {
-					if err := mailer.Send(m.Email, "New Login", "New login from "+s.IP+" with the useragent: "+s.UserAgent); err != nil {
+					emdata := emailNewLogin{
+						SessionID: s.SessionID,
+						IP:        s.IP,
+						Time:      time.Unix(s.Time, 0).String(),
+						UserAgent: s.UserAgent,
+					}
+
+					em, err := u.tpl.ExecuteHTML(newLoginTemplate, emdata)
+					if err != nil {
+						err.AddTrace(moduleIDAuth)
+						return err
+					}
+					subj, err := u.tpl.ExecuteHTML(newLoginSubject, emdata)
+					if err != nil {
+						err.AddTrace(moduleIDAuth)
+						return err
+					}
+
+					if err := mailer.Send(m.Email, subj, em); err != nil {
 						err.AddTrace(moduleIDAuth)
 						return err
 					}

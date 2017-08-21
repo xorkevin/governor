@@ -6,6 +6,7 @@ import (
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/mail"
+	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/token"
@@ -35,6 +36,7 @@ type (
 		passwordResetTime int64
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
+		tpl               template.Template
 	}
 )
 
@@ -46,7 +48,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) User {
 	ca := conf.Conf().GetStringMapString("userauth")
 	cu := conf.Conf().GetStringMapString("user")
 	accessTime := time15m
@@ -77,6 +79,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		refreshTime:       refreshTime,
 		confirmTime:       confirmTime,
 		passwordResetTime: passwordResetTime,
+		tpl:               tpl,
 		gate:              g,
 		cc:                cc,
 	}

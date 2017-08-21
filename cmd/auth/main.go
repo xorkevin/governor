@@ -70,8 +70,7 @@ func main() {
 	objstoreService, err := objstore.New(config, g.Logger())
 	governor.Must(err)
 
-	//templateService, err := template.New(config, g.Logger())
-	_, err = template.New(config, g.Logger())
+	templateService, err := template.New(config, g.Logger())
 	governor.Must(err)
 
 	mailService := mail.New(config, g.Logger())
@@ -85,7 +84,7 @@ func main() {
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
 	governor.Must(g.MountRoute("/null/mail", mailService))
 	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
-	governor.Must(g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService, cacheControlService)))
+	governor.Must(g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, templateService, gateService, cacheControlService)))
 	governor.Must(g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService, cacheControlService)))
 	governor.Must(g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)))
 
