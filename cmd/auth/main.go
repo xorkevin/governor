@@ -115,6 +115,7 @@ func main() {
 	_, err = template.New(config, g.Logger())
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
 	mailService := mail.New(config, g.Logger())

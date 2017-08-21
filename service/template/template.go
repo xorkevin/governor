@@ -2,10 +2,12 @@ package template
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/sirupsen/logrus"
 	htmlTemplate "html/template"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -28,9 +30,17 @@ type (
 func New(conf governor.Config, l *logrus.Logger) (Template, error) {
 
 	t, err := htmlTemplate.ParseGlob(conf.TemplateDir + "/*.html")
-
 	if err != nil {
-		return nil, err
+		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", conf.TemplateDir+"/*.html") {
+			l.Warn("template: no templates loaded")
+			t = htmlTemplate.New("default")
+		} else {
+			return nil, err
+		}
+	}
+
+	if k := t.DefinedTemplates(); k != "" {
+		l.Info("template: " + strings.TrimLeft(k, "; "))
 	}
 
 	l.Info("initialized template service")
