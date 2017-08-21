@@ -21,11 +21,24 @@ type (
 		FirstName string
 		Key       string
 	}
+
+	emailForgotPass struct {
+		Username string
+		Key      string
+	}
+
+	emailPassReset struct {
+		Username string
+	}
 )
 
 const (
-	newUserTemplate = "newuser"
-	newUserSubject  = "newuser_subject"
+	newUserTemplate    = "newuser"
+	newUserSubject     = "newuser_subject"
+	forgotPassTemplate = "forgotpass"
+	forgotPassSubject  = "forgotpass_subject"
+	passResetTemplate  = "passreset"
+	passResetSubject   = "passreset_subject"
 )
 
 func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
@@ -300,7 +313,23 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	if err := mailer.Send(m.Email, "Password reset", "key: "+sessionKey); err != nil {
+	emdata := emailForgotPass{
+		Username: m.Username,
+		Key:      sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(forgotPassTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(forgotPassSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(m.Email, subj, em); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -311,6 +340,7 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
+	mailer := u.mailer
 
 	ruser := reqForgotPasswordReset{}
 	if err := c.Bind(&ruser); err != nil {
@@ -340,6 +370,27 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 		err.AddTrace(moduleIDUser)
 		return err
 	}
+
+	emdata := emailPassReset{
+		Username: m.Username,
+	}
+
+	em, err := u.tpl.ExecuteHTML(passResetTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(passResetSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(m.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
 	if err := m.Update(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
