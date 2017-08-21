@@ -106,3 +106,11 @@ func (s *Server) Start() error {
 func (s *Server) Logger() *logrus.Logger {
 	return s.log
 }
+
+// Must ensures that the operation must succeed
+func Must(err error) {
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+}

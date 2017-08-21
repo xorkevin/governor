@@ -35,6 +35,7 @@ func New(conf governor.Config, l *logrus.Logger) (Template, error) {
 			l.Warn("template: no templates loaded")
 			t = htmlTemplate.New("default")
 		} else {
+			l.Errorf("error creating Template: %s\n", err)
 			return nil, err
 		}
 	}

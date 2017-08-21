@@ -26,97 +26,53 @@ import (
 
 func main() {
 	config, err := governor.NewConfig("auth")
-	if err != nil {
-		fmt.Printf("error reading config: %s\n", err)
-		return
-	}
+	governor.Must(err)
+
 	fmt.Println("created new config")
 	fmt.Println("loading config defaults:")
 
-	if err = dbconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(dbconf.Conf(&config))
 	fmt.Println("- db")
 
-	if err = cacheconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(cacheconf.Conf(&config))
 	fmt.Println("- cache")
 
-	if err = objstoreconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(objstoreconf.Conf(&config))
 	fmt.Println("- objstore")
 
-	if err = mailconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(mailconf.Conf(&config))
 	fmt.Println("- mail")
 
-	if err = gateconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(gateconf.Conf(&config))
 	fmt.Println("- gate")
 
-	if err = userconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(userconf.Conf(&config))
 	fmt.Println("- user")
 
-	if err = profileconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(profileconf.Conf(&config))
 	fmt.Println("- profile")
 
-	if err = postconf.Conf(&config); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(postconf.Conf(&config))
 	fmt.Println("- post")
 
-	if err = config.Init(); err != nil {
-		fmt.Printf(err.Error())
-		return
-	}
+	governor.Must(config.Init())
 	fmt.Println("config loaded")
 
 	g, err := governor.New(config)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(err)
 
 	dbService, err := db.New(config, g.Logger())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(err)
 
 	cacheService, err := cache.New(config, g.Logger())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(err)
 
 	objstoreService, err := objstore.New(config, g.Logger())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(err)
 
 	//templateService, err := template.New(config, g.Logger())
 	_, err = template.New(config, g.Logger())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(err)
 
 	mailService := mail.New(config, g.Logger())
 
@@ -124,48 +80,14 @@ func main() {
 
 	cacheControlService := cachecontrol.New(config, g.Logger())
 
-	if err := g.MountRoute("/null/database", dbService); err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(g.MountRoute("/null/database", dbService))
+	governor.Must(g.MountRoute("/null/cache", cacheService))
+	governor.Must(g.MountRoute("/null/objstore", objstoreService))
+	governor.Must(g.MountRoute("/null/mail", mailService))
+	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
+	governor.Must(g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService, cacheControlService)))
+	governor.Must(g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService, cacheControlService)))
+	governor.Must(g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)))
 
-	if err := g.MountRoute("/null/cache", cacheService); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/null/objstore", objstoreService); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/null/mail", mailService); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/conf", conf.New(g.Logger(), dbService)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, gateService, cacheControlService)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, cacheService, objstoreService, gateService, cacheControlService)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	if err := g.Start(); err != nil {
-		fmt.Println(err)
-		return
-	}
+	governor.Must(g.Start())
 }

@@ -49,14 +49,14 @@ func New(c governor.Config, l *logrus.Logger) (Objstore, error) {
 	minioconf := v.GetStringMapString("minio")
 	client, err := minio.New(minioconf["host"]+":"+minioconf["port"], minioconf["key_id"], minioconf["key_secret"], v.GetBool("minio.sslmode"))
 	if err != nil {
-		l.Errorf("error creating object store: %s\n", err)
+		l.Errorf("error creating Object Store: %s\n", err)
 		return nil, err
 	}
 
 	client.SetAppInfo(c.Appname, c.Version)
 
 	if err := initBucket(client, canaryBucket, defaultLocation); err != nil {
-		l.Error(err.Error())
+		l.Errorf("error creating Object Store: %s\n", err)
 		return nil, err
 	}
 
