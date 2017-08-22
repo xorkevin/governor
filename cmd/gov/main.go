@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	config, err := governor.NewConfig("auth")
+	config, err := governor.NewConfig("config")
 	governor.Must(err)
 
 	fmt.Println("created new config")

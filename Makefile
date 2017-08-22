@@ -8,18 +8,16 @@ PACKAGE=github.com/hackform/governor
 
 
 # CMD
-BIN_OUT=bin
-
-## auth
-AUTH_NAME=auth
-AUTH_PATH=cmd/auth/main.go
-AUTH_BIN_PATH=$(BIN_OUT)/$(AUTH_NAME)
+BIN_DIR=bin
+BIN_NAME=gov
+MAIN_PATH=cmd/gov/main.go
+BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
 
 # DOCKER
 DOCKER_NETWORK=governornetwork
-AUTH_IMAGE_NAME=governorauth
-AUTH_CONTAINER_NAME=gauth
+IMAGE_NAME=governor
+CONTAINER_NAME=govc
 
 
 # DEV_POSTGRES
@@ -51,17 +49,17 @@ test:
 	go test -cover $$(go list ./... | grep -v "^$(PACKAGE)/vendor/")
 
 dev:
-	go run $(AUTH_PATH) --config authdev
+	go run $(MAIN_PATH) --config configdev
 
 clean:
-	if [ -d $(BIN_OUT) ]; then rm -r $(BIN_OUT); fi
+	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
 
-build-auth:
-	mkdir -p $(BIN_OUT)
-	if [ -f $(AUTH_BIN_PATH) ]; then rm $(AUTH_BIN_PATH);	fi
-	CGO_ENABLED=0 go build -a -tags netgo -ldflags '-w -s' -o $(AUTH_BIN_PATH) $(AUTH_PATH)
+build-bin:
+	mkdir -p $(BIN_DIR)
+	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH);	fi
+	CGO_ENABLED=0 go build -a -tags netgo -ldflags '-w -s' -o $(BIN_PATH) $(MAIN_PATH)
 
-build: clean build-auth
+build: clean build-bin
 
 
 ## docker
@@ -69,15 +67,15 @@ docker-setup:
 	docker network create -d bridge $(DOCKER_NETWORK)
 
 docker-build: build
-	docker build -f ./cmd/auth/Dockerfile -t $(AUTH_IMAGE_NAME):$(VERSION) -t $(AUTH_IMAGE_NAME):latest .
+	docker build -f ./cmd/gov/Dockerfile -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest .
 
 docker-run:
-	docker run -d --name $(AUTH_CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) -v $$(pwd)/$(TEMPLATEDIR):/$(TEMPLATEDIR) --network=$(DOCKER_NETWORK) \
-		-p $(API_PORT):$(API_PORT) $(AUTH_IMAGE_NAME)
+	docker run -d --name $(CONTAINER_NAME) -v $$(pwd)/$(BASEDIR):/$(BASEDIR) -v $$(pwd)/$(TEMPLATEDIR):/$(TEMPLATEDIR) --network=$(DOCKER_NETWORK) \
+		-p $(API_PORT):$(API_PORT) $(IMAGE_NAME)
 
 docker-stop:
-	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=running)" ]; then docker stop $(AUTH_CONTAINER_NAME); fi
-	if [ "$$(docker ps -q -f name=$(AUTH_CONTAINER_NAME) -f status=exited)" ]; then docker rm $(AUTH_CONTAINER_NAME); fi
+	if [ "$$(docker ps -q -f name=$(CONTAINER_NAME) -f status=running)" ]; then docker stop $(CONTAINER_NAME); fi
+	if [ "$$(docker ps -q -f name=$(CONTAINER_NAME) -f status=exited)" ]; then docker rm $(CONTAINER_NAME); fi
 
 docker-restart: docker-stop docker-run
 

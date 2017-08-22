@@ -26,7 +26,7 @@ minio:
   port: 9000
   sslmode: false
 userauth:
-  issuer: governor_auth
+  issuer: governor
   secret: secret
   duration: 15m
   refresh_duration: 168h
