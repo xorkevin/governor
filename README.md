@@ -1,5 +1,5 @@
 # governor
-internal org management tooling
+yet another microservice framework
 
 #### confirm dev setup
 
