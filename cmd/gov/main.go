@@ -88,7 +88,7 @@ func main() {
 	governor.Must(g.MountRoute("/null/mail", mailService))
 	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
 	governor.Must(g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, templateService, gateService, cacheControlService)))
-	governor.Must(g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageloaderService, imageService, cacheControlService)))
+	governor.Must(g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)))
 	governor.Must(g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)))
 
 	governor.Must(g.Start())

@@ -191,7 +191,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, gate.Owner(p.gate, "id"), p.img.LoadJpeg("image", 200000, 50, "image", "imageb64"))
+	}, gate.Owner(p.gate, "id"), p.img.LoadJpeg("image", 256, 256, true, 50, "image", "imageb64"))
 
 	r.DELETE("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{

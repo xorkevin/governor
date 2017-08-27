@@ -62,6 +62,10 @@
   branch = "master"
 
 [[constraint]]
+  name = "golang.org/x/image/draw"
+  branch = "master"
+
+[[constraint]]
   name = "gopkg.in/gomail.v2"
   branch = "v2"
 
