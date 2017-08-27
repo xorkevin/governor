@@ -28,18 +28,33 @@ const (
 
 	dataURIPrefixJpeg = "data:image/jpeg;base64,"
 
-	thumbnailWidth  = 42
-	thumbnailHeight = 24
+	defaultThumbnailWidth  = 42
+	defaultThumbnailHeight = 24
+	defaultQuality         = 85
+	defaultContextField    = "image"
+	defaultThumbnailField  = "thumbnail"
 )
 
 type (
 	// Image is a service for managing image uploads
 	Image interface {
-		LoadJpeg(formField string, width, height int, crop bool, quality int, contextField, contextFieldThumb string) echo.MiddlewareFunc
+		LoadJpeg(formField string, opt Options) echo.MiddlewareFunc
 	}
 
 	imageService struct {
 		log *logrus.Logger
+	}
+
+	Options struct {
+		Width          int
+		Height         int
+		ThumbWidth     int
+		ThumbHeight    int
+		Quality        int
+		ThumbQuality   int
+		Crop           bool
+		ContextField   string
+		ThumbnailField string
 	}
 )
 
@@ -58,22 +73,43 @@ const (
 
 // LoadJpeg reads an image from a form and places it into context as a jpeg
 // sizeLimit is measured in bytes
-func (im *imageService) LoadJpeg(formField string, width, height int, crop bool, quality int, contextField, contextFieldThumb string) echo.MiddlewareFunc {
+func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareFunc {
 	if formField == "" {
 		panic("formField cannot be an empty string")
 	}
-	if width < 1 || height < 1 {
+	if opt.Width < 0 || opt.Height < 0 {
 		panic("width and height must be a positive integer")
 	}
-	if quality < 1 || quality > 100 {
+	if opt.ThumbWidth < 0 || opt.ThumbHeight < 0 {
+		panic("width and height must be a positive integer")
+	}
+	if opt.Width == 0 || opt.Height == 0 {
+		opt.Width = defaultThumbnailWidth
+		opt.Height = defaultThumbnailHeight
+	}
+	if opt.ThumbWidth == 0 || opt.ThumbHeight == 0 {
+		opt.ThumbWidth = defaultThumbnailWidth
+		opt.ThumbHeight = defaultThumbnailHeight
+	}
+	if opt.Quality < 0 || opt.Quality > 100 {
 		panic("quality must be between 1 and 100")
 	}
-	if contextField == "" {
-		panic("contextField cannot be an empty string")
+	if opt.ThumbQuality < 0 || opt.ThumbQuality > 100 {
+		panic("quality must be between 1 and 100")
 	}
-	if contextFieldThumb == "" {
-		panic("contextFieldB64 cannot be an empty string")
+	if opt.Quality == 0 {
+		opt.Quality = defaultQuality
 	}
+	if opt.ThumbQuality == 0 {
+		opt.Quality = defaultQuality
+	}
+	if opt.ContextField == "" {
+		opt.ContextField = defaultContextField
+	}
+	if opt.ThumbnailField == "" {
+		opt.ThumbnailField = defaultThumbnailField
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			file, err := c.FormFile(formField)
@@ -129,29 +165,32 @@ func (im *imageService) LoadJpeg(formField string, width, height int, crop bool,
 				}
 			}
 
-			if crop {
-				img = resizeImgCrop(img, width, height)
+			if opt.Crop {
+				img = resizeImgCrop(img, opt.Width, opt.Height)
 			} else {
-				img = resizeImg(img, width, height)
+				img = resizeImg(img, opt.Width, opt.Height)
 			}
 
-			thumb := resizeImg(img, thumbnailWidth, thumbnailHeight)
+			thumb := resizeImg(img, opt.ThumbWidth, opt.ThumbHeight)
 
 			b := &bytes.Buffer{}
 			b2 := &bytes.Buffer{}
-			opt := jpeg.Options{
-				Quality: quality,
+			j := jpeg.Options{
+				Quality: opt.Quality,
 			}
-			if err := jpeg.Encode(b, img, &opt); err != nil {
+			j2 := jpeg.Options{
+				Quality: opt.ThumbQuality,
+			}
+			if err := jpeg.Encode(b, img, &j); err != nil {
 				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
 			}
-			if err := jpeg.Encode(b2, thumb, &opt); err != nil {
+			if err := jpeg.Encode(b2, thumb, &j2); err != nil {
 				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
 			}
 			b64 := base64.StdEncoding.EncodeToString(b2.Bytes())
 
-			c.Set(contextField, b)
-			c.Set(contextFieldThumb, dataURIPrefixJpeg+b64)
+			c.Set(opt.ContextField, b)
+			c.Set(opt.ThumbnailField, dataURIPrefixJpeg+b64)
 
 			return next(c)
 		}

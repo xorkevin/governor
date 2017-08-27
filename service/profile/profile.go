@@ -165,8 +165,8 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	}, gate.User(p.gate))
 
 	r.POST("/image", func(c echo.Context) error {
-		img, _ := c.Get("image").(io.Reader)
-		img64, _ := c.Get("imageb64").(string)
+		img := c.Get("image").(io.Reader)
+		thumb64 := c.Get("thumbnail").(string)
 		userid := c.Get("userid").(string)
 
 		m, err := profilemodel.GetByIDB64(db, userid)
@@ -183,14 +183,24 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 
-		m.Image = img64
+		m.Image = thumb64
 		if err := m.Update(db); err != nil {
 			err.AddTrace(moduleID)
 			return err
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, gate.User(p.gate), p.img.LoadJpeg("image", 256, 256, true, 50, "image", "imageb64"))
+	}, gate.User(p.gate), p.img.LoadJpeg("image", image.Options{
+		Width:          384,
+		Height:         384,
+		ThumbWidth:     32,
+		ThumbHeight:    32,
+		Quality:        85,
+		ThumbQuality:   65,
+		Crop:           true,
+		ContextField:   "image",
+		ThumbnailField: "thumbnail",
+	}))
 
 	r.DELETE("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
