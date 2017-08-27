@@ -251,15 +251,15 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.getSessions(c, l)
 	}, gate.User(u.gate))
 
-	ri.PUT("/:id", func(c echo.Context) error {
+	ri.PUT("", func(c echo.Context) error {
 		return u.putUser(c, l)
-	}, gate.Owner(u.gate, "id"))
+	}, gate.User(u.gate))
 
-	ri.PUT("/:id/email", func(c echo.Context) error {
+	ri.PUT("/email", func(c echo.Context) error {
 		return u.putEmail(c, l)
-	}, gate.Owner(u.gate, "id"))
+	}, gate.User(u.gate))
 
-	ri.PUT("/:id/password", func(c echo.Context) error {
+	ri.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
 	}, gate.Owner(u.gate, "id"))
 
@@ -267,7 +267,7 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.killSessions(c, l)
 	}, gate.User(u.gate))
 
-	ri.PATCH("/:id/rank", func(c echo.Context) error {
+	ri.PATCH("/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
 	}, gate.User(u.gate))
 

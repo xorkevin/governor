@@ -167,12 +167,8 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
+
 	ruser := reqUserPut{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -181,7 +177,7 @@ func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	m, err := usermodel.GetByIDB64(db, userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -202,12 +198,8 @@ func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
+
 	ruser := reqUserPutEmail{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -216,7 +208,7 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	m, err := usermodel.GetByIDB64(db, userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -238,12 +230,8 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
+
 	ruser := reqUserPutPassword{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -252,7 +240,7 @@ func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	m, err := usermodel.GetByIDB64(db, userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -430,12 +418,8 @@ func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
+
 	ruser := reqUserPutRank{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -452,14 +436,14 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	editAddRank, _ := rank.FromStringUser(ruser.Add)
 	editRemoveRank, _ := rank.FromStringUser(ruser.Remove)
 
-	if err := canUpdateRank(editAddRank, updaterRank, reqid.Userid, updaterClaims.Userid, updaterRank.Has(rank.TagAdmin)); err != nil {
+	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterClaims.Userid, updaterRank.Has(rank.TagAdmin)); err != nil {
 		return err
 	}
-	if err := canUpdateRank(editRemoveRank, updaterRank, reqid.Userid, updaterClaims.Userid, updaterRank.Has(rank.TagAdmin)); err != nil {
+	if err := canUpdateRank(editRemoveRank, updaterRank, userid, updaterClaims.Userid, updaterRank.Has(rank.TagAdmin)); err != nil {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, reqid.Userid)
+	m, err := usermodel.GetByIDB64(db, userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -480,7 +464,6 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	}
 	if editRemoveRank.Has("admin") {
 		t, _ := time.Now().MarshalText()
-		userid, _ := m.IDBase64()
 		l.WithFields(logrus.Fields{
 			"time":     string(t),
 			"origin":   moduleIDUser,
