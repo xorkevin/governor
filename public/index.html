@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Login</title>
+</head>
+<body>
+  <h1>Login</h1>
+
+  <input id="username" placeholder="username"/>
+  <input id="password" type="password" placeholder="password"/>
+  <button id="login" onclick="login()">Login</button>
+
+  <script>
+    function login(){
+      fetch("/api/u/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value
+        })
+      }).then(function(res){
+        console.log("Login:", res.status);
+        return res.json();
+      }).then(function (data) {
+        console.log("Login:", data);
+      }).catch(function (error) {
+        console.log("Login failed:", error);
+      });
+    }
+  </script>
+</body>
+</html>

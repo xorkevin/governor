@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>File Upload</title>
+</head>
+<body>
+  <h1>File Upload</h1>
+
+  <form action="/api/profile/image" method="POST" enctype="multipart/form-data">
+    File: <input type="file" name="image"/><br/>
+    <input type="submit" value="Submit"/>
+  </form>
+
+  <h2>B64 Tester</h2>
+  <input id="b64"/>
+  <button onclick="b64ToImage()">Test</button>
+  <img id="testImage"/>
+
+  <script>
+    function b64ToImage(){
+      document.getElementById("testImage").src = document.getElementById("b64").value
+    }
+  </script>
+</body>
+</html>
