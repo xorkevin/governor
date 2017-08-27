@@ -95,6 +95,10 @@ func (r *reqPostGet) valid() *governor.Error {
 }
 
 func (p *postService) archiveGate(idparam string, checkLocked bool) echo.MiddlewareFunc {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+
 	db := p.db.DB()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

@@ -93,6 +93,10 @@ func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareF
 
 // Owner is a middleware function to validate if a user owns the accessed resource
 func Owner(g Gate, idparam string) echo.MiddlewareFunc {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -145,6 +149,10 @@ func User(g Gate) echo.MiddlewareFunc {
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by the owner or an admin
 func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -200,6 +208,10 @@ func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) ec
 
 // UserOrBan is a middleware function to validate if the request is made by a user and check if the user is banned from the group
 func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {

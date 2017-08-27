@@ -42,6 +42,10 @@ const (
 
 // Control creates a middleware function to cache the response
 func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+	if maxage < 0 {
+		panic("maxage cannot be negative")
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			etag := ""
