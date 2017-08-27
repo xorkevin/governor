@@ -129,7 +129,12 @@ func (im *imageService) LoadJpeg(formField string, width, height int, crop bool,
 				}
 			}
 
-			img = resizeImg(img, width, height)
+			if crop {
+				img = resizeImgCrop(img, width, height)
+			} else {
+				img = resizeImg(img, width, height)
+			}
+
 			thumb := resizeImg(img, thumbnailWidth, thumbnailHeight)
 
 			b := &bytes.Buffer{}
@@ -182,24 +187,36 @@ func resizeImg(img goimg.Image, width, height int) goimg.Image {
 
 func resizeImgCrop(img goimg.Image, width, height int) goimg.Image {
 	s := img.Bounds().Size()
-	if s.X < width && s.Y < height {
-		return img
-	}
 
-	var targetWidth, targetHeight int
+	var targetWidth, targetHeight, imgWidth, imgHeight int
 	targetRatio := float32(width) / float32(height)
 	origRatio := float32(s.X) / float32(s.Y)
+
+	var imgBounds goimg.Rectangle
+
 	if origRatio < targetRatio {
-		targetHeight = height
-		targetWidth = minInt(int(float32(targetHeight)*origRatio), width)
+		imgWidth = s.X
+		imgHeight = minInt(int(float32(imgWidth)/targetRatio), s.Y)
+		k := (s.Y - imgHeight) / 2
+		imgBounds = goimg.Rect(0, k, imgWidth, k+imgHeight)
 	} else {
+		imgHeight = s.Y
+		imgWidth = minInt(int(float32(imgHeight)*targetRatio), s.X)
+		k := (s.X - imgWidth) / 2
+		imgBounds = goimg.Rect(k, 0, k+imgWidth, imgHeight)
+	}
+
+	if s.X > width && s.Y > height {
 		targetWidth = width
-		targetHeight = minInt(int(float32(targetWidth)/origRatio), height)
+		targetHeight = height
+	} else {
+		targetWidth = imgWidth
+		targetHeight = imgHeight
 	}
 
 	target := goimg.NewNRGBA(goimg.Rect(0, 0, targetWidth, targetHeight))
 	draw.Draw(target, target.Bounds(), goimg.White, goimg.ZP, draw.Src)
-	draw.ApproxBiLinear.Scale(target, target.Bounds(), img, img.Bounds(), draw.Src, nil)
+	draw.ApproxBiLinear.Scale(target, target.Bounds(), img, imgBounds, draw.Src, nil)
 
 	return target
 }

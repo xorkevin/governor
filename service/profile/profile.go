@@ -165,7 +165,6 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 	}, gate.Owner(p.gate, "id"))
 
 	r.POST("/:id/image", func(c echo.Context) error {
-
 		img, _ := c.Get("image").(io.Reader)
 		img64, _ := c.Get("imageb64").(string)
 		userid := c.Param("id")
