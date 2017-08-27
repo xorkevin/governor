@@ -81,6 +81,8 @@ docker-run:
 docker-stop:
 	if [ "$$(docker ps -q -f name=$(CONTAINER_NAME) -f status=running)" ]; \
 		then docker stop $(CONTAINER_NAME); fi
+	if [ "$$(docker ps -q -f name=$(CONTAINER_NAME) -f status=created)" ]; \
+		then docker rm $(CONTAINER_NAME); fi
 	if [ "$$(docker ps -q -f name=$(CONTAINER_NAME) -f status=exited)" ]; \
 		then docker rm $(CONTAINER_NAME); fi
 
@@ -102,6 +104,8 @@ pg-run:
 pg-stop:
 	if [ "$$(docker ps -q -f name=$(POSTGRES_CONTAINER) -f status=running)" ]; \
 		then docker stop $(POSTGRES_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(POSTGRES_CONTAINER) -f status=created)" ]; \
+		then docker rm $(POSTGRES_CONTAINER); fi
 	if [ "$$(docker ps -q -f name=$(POSTGRES_CONTAINER) -f status=exited)" ]; \
 		then docker rm $(POSTGRES_CONTAINER); fi
 
@@ -121,6 +125,8 @@ redis-run:
 redis-stop:
 	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=running)" ]; \
 		then docker stop $(REDIS_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=created)" ]; \
+		then docker rm $(REDIS_CONTAINER); fi
 	if [ "$$(docker ps -q -f name=$(REDIS_CONTAINER) -f status=exited)" ]; \
 		then docker rm $(REDIS_CONTAINER); fi
 
@@ -144,6 +150,8 @@ minio-run:
 minio-stop:
 	if [ "$$(docker ps -q -f name=$(MINIO_CONTAINER) -f status=running)" ]; \
 		then docker stop $(MINIO_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(MINIO_CONTAINER) -f status=created)" ]; \
+		then docker rm $(MINIO_CONTAINER); fi
 	if [ "$$(docker ps -q -f name=$(MINIO_CONTAINER) -f status=exited)" ]; \
 		then docker rm $(MINIO_CONTAINER); fi
 
@@ -158,6 +166,8 @@ mail-run:
 mail-stop:
 	if [ "$$(docker ps -q -f name=$(MAIL_CONTAINER) -f status=running)" ]; \
 		then docker stop $(MAIL_CONTAINER); fi
+	if [ "$$(docker ps -q -f name=$(MAIL_CONTAINER) -f status=created)" ]; \
+		then docker rm $(MAIL_CONTAINER); fi
 	if [ "$$(docker ps -q -f name=$(MAIL_CONTAINER) -f status=exited)" ]; \
 		then docker rm $(MAIL_CONTAINER); fi
 
