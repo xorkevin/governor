@@ -2,19 +2,16 @@ package profile
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/db"
+	"github.com/hackform/governor/service/image"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"io"
-	"mime"
 	"net/http"
-	"time"
 )
 
 type (
@@ -28,13 +25,6 @@ type (
 		Bio    string `json:"bio"`
 	}
 
-	reqProfileImage struct {
-		Userid    string `json:"-"`
-		Image     io.Reader
-		ImageType string
-		Key       string
-	}
-
 	resProfileUpdate struct {
 		Userid string `json:"userid"`
 	}
@@ -43,10 +33,6 @@ type (
 		Email string `json:"contact_email"`
 		Bio   string `json:"bio"`
 		Image string `json:"image"`
-	}
-
-	resProfileImageChange struct {
-		Key string `json:"key"`
 	}
 )
 
@@ -70,22 +56,6 @@ func (r *reqProfileModel) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqProfileImage) valid() *governor.Error {
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validImage(r.Image); err != nil {
-		return err
-	}
-	if err := validImageType(r.ImageType); err != nil {
-		return err
-	}
-	if err := validKey(r.Key); err != nil {
-		return err
-	}
-	return nil
-}
-
 const (
 	moduleID    = "profile"
 	imageBucket = "profile-image"
@@ -99,16 +69,16 @@ type (
 	}
 
 	profileService struct {
-		db    db.Database
-		cache cache.Cache
-		obj   objstore.Bucket
-		gate  gate.Gate
-		cc    cachecontrol.CacheControl
+		db   db.Database
+		obj  objstore.Bucket
+		gate gate.Gate
+		img  image.Image
+		cc   cachecontrol.CacheControl
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache, obj objstore.Objstore, g gate.Gate, cc cachecontrol.CacheControl) Profile {
+func New(conf governor.Config, l *logrus.Logger, db db.Database, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) Profile {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
 		l.Errorf("failed to get bucket: %s\n", err.Error())
@@ -117,18 +87,17 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, ch cache.Cache,
 	l.Info("initialized profile service")
 
 	return &profileService{
-		db:    db,
-		cache: ch,
-		obj:   b,
-		gate:  g,
-		cc:    cc,
+		db:   db,
+		obj:  b,
+		gate: g,
+		img:  img,
+		cc:   cc,
 	}
 }
 
 // Mount is a collection of routes for accessing and modifying profile data
 func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
-	ch := p.cache.Cache()
 
 	r.POST("/:id", func(c echo.Context) error {
 		rprofile := reqProfileModel{}
@@ -195,80 +164,34 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return c.NoContent(http.StatusNoContent)
 	}, gate.Owner(p.gate, "id"))
 
-	r.PUT("/:id/image", func(c echo.Context) error {
-		userid := c.Get("userid").(string)
+	r.POST("/:id/image", func(c echo.Context) error {
 
-		// create a new key for the session
-		key, err := uid.NewU(0, 16)
+		img, _ := c.Get("image").(io.Reader)
+		img64, _ := c.Get("imageb64").(string)
+		userid := c.Param("id")
+
+		m, err := profilemodel.GetByIDB64(db, userid)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
 			err.AddTrace(moduleID)
 			return err
 		}
-		sessionKey := key.Base64()
 
-		if err := ch.Set("profileimage-"+userid, sessionKey, time.Second*300).Err(); err != nil {
-			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
-		}
-
-		return c.JSON(http.StatusOK, resProfileImageChange{
-			Key: sessionKey,
-		})
-	}, gate.Owner(p.gate, "id"))
-
-	r.POST("/:id/image/:key", func(c echo.Context) error {
-		file, err := c.FormFile("image")
-		if err != nil {
-			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
-		}
-		mediaType, _, err := mime.ParseMediaType(file.Header.Get("Content-Type"))
-		if err != nil {
-			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
-		}
-		image, err := file.Open()
-		if err != nil {
-			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
-		}
-		defer func(c io.Closer) {
-			err := c.Close()
-			if err != nil {
-				gerr := governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
-				l.WithFields(logrus.Fields{
-					"origin": gerr.Origin(),
-					"source": gerr.Source(),
-					"code":   gerr.Code(),
-				}).Error(gerr.Message())
-			}
-		}(image)
-		rprofile := reqProfileImage{
-			Userid:    c.Param("id"),
-			Image:     image,
-			ImageType: mediaType,
-			Key:       c.Param("key"),
-		}
-		if err := rprofile.valid(); err != nil {
+		if err := p.obj.Put(userid+"-profile", image.MediaTypeJpeg, img); err != nil {
+			err.AddTrace(moduleID)
 			return err
 		}
 
-		key, err := ch.Get("profileimage-" + rprofile.Userid).Result()
-		if err != nil {
-			return governor.NewErrorUser(moduleID, "profile not found: "+err.Error(), 0, http.StatusBadRequest)
-		}
-
-		if rprofile.Key != key {
-			return governor.NewErrorUser(moduleID, "improper key", 0, http.StatusBadRequest)
-		}
-
-		if err := ch.Del("profileimage-" + rprofile.Userid).Err(); err != nil {
-			return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
-		}
-
-		if err := p.obj.Put(rprofile.Userid+"-profile", rprofile.ImageType, image); err != nil {
+		m.Image = img64
+		if err := m.Update(db); err != nil {
 			err.AddTrace(moduleID)
 			return err
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	})
+	}, gate.Owner(p.gate, "id"), p.img.LoadJpeg("image", 200000, 50, "image", "imageb64"))
 
 	r.DELETE("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
