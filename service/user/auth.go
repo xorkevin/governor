@@ -65,7 +65,7 @@ func (u *userService) setAccessCookie(c echo.Context, conf governor.Config, acce
 		Value:    accessToken,
 		Path:     conf.BaseURL,
 		Expires:  time.Now().Add(time.Duration(u.accessTime * b1)),
-		HttpOnly: true,
+		HttpOnly: false,
 	})
 }
 
@@ -75,7 +75,7 @@ func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, ref
 		Value:    refreshToken,
 		Path:     conf.BaseURL + "/u/auth",
 		Expires:  time.Now().AddDate(0, 6, 0),
-		HttpOnly: true,
+		HttpOnly: false,
 	})
 }
 

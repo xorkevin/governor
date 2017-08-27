@@ -402,12 +402,8 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
+
 	ruser := reqUserRmSessions{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -417,7 +413,7 @@ func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 	}
 
 	s := session.Session{
-		Userid: reqid.Userid,
+		Userid: userid,
 	}
 
 	if err := ch.Del(ruser.SessionIDs...).Err(); err != nil {

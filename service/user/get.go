@@ -78,15 +78,10 @@ func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
-	ruser := reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
+	userid := c.Get("userid").(string)
 
 	s := session.Session{
-		Userid: ruser.Userid,
+		Userid: userid,
 	}
 
 	var sarr session.Slice
