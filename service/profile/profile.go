@@ -99,12 +99,12 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, obj objstore.Ob
 func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := p.db.DB()
 
-	r.POST("/:id", func(c echo.Context) error {
+	r.POST("", func(c echo.Context) error {
 		rprofile := reqProfileModel{}
 		if err := c.Bind(&rprofile); err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
-		rprofile.Userid = c.Param("id")
+		rprofile.Userid = c.Get("userid").(string)
 		if err := rprofile.valid(); err != nil {
 			return err
 		}
@@ -132,14 +132,14 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return c.JSON(http.StatusCreated, resProfileUpdate{
 			Userid: userid,
 		})
-	}, gate.Owner(p.gate, "id"))
+	}, gate.User(p.gate))
 
-	r.PUT("/:id", func(c echo.Context) error {
+	r.PUT("", func(c echo.Context) error {
 		rprofile := reqProfileModel{}
 		if err := c.Bind(&rprofile); err != nil {
 			return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
 		}
-		rprofile.Userid = c.Param("id")
+		rprofile.Userid = c.Get("userid").(string)
 		if err := rprofile.valid(); err != nil {
 			return err
 		}
@@ -162,12 +162,12 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, gate.Owner(p.gate, "id"))
+	}, gate.User(p.gate))
 
-	r.POST("/:id/image", func(c echo.Context) error {
+	r.POST("/image", func(c echo.Context) error {
 		img, _ := c.Get("image").(io.Reader)
 		img64, _ := c.Get("imageb64").(string)
-		userid := c.Param("id")
+		userid := c.Get("userid").(string)
 
 		m, err := profilemodel.GetByIDB64(db, userid)
 		if err != nil {
@@ -190,7 +190,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		}
 
 		return c.NoContent(http.StatusNoContent)
-	}, gate.Owner(p.gate, "id"), p.img.LoadJpeg("image", 256, 256, true, 50, "image", "imageb64"))
+	}, gate.User(p.gate), p.img.LoadJpeg("image", 256, 256, true, 50, "image", "imageb64"))
 
 	r.DELETE("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{

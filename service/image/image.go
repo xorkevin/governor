@@ -138,13 +138,17 @@ func (im *imageService) LoadJpeg(formField string, width, height int, crop bool,
 			thumb := resizeImg(img, thumbnailWidth, thumbnailHeight)
 
 			b := &bytes.Buffer{}
+			b2 := &bytes.Buffer{}
 			opt := jpeg.Options{
 				Quality: quality,
 			}
-			if err := jpeg.Encode(b, thumb, &opt); err != nil {
+			if err := jpeg.Encode(b, img, &opt); err != nil {
 				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
 			}
-			b64 := base64.StdEncoding.EncodeToString(b.Bytes())
+			if err := jpeg.Encode(b2, thumb, &opt); err != nil {
+				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
+			}
+			b64 := base64.StdEncoding.EncodeToString(b2.Bytes())
 
 			c.Set(contextField, b)
 			c.Set(contextFieldThumb, dataURIPrefixJpeg+b64)
