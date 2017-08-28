@@ -42,7 +42,8 @@ type (
 	}
 
 	reqUserPutEmailVerify struct {
-		Key string `json:"key"`
+		Key      string `json:"key"`
+		Password string `json:"password"`
 	}
 
 	reqUserPutPassword struct {
@@ -139,6 +140,9 @@ func (r *reqUserPutEmail) valid() *governor.Error {
 
 func (r *reqUserPutEmailVerify) valid() *governor.Error {
 	if err := hasToken(r.Key); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil

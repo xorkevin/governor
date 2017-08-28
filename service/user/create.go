@@ -61,6 +61,10 @@ const (
 	emailChangeNotifySubject  = "emailchangenotify_subject"
 )
 
+const (
+	emailChangeEscapeSequence = "%email%"
+)
+
 func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
@@ -252,7 +256,7 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	}
 	sessionKey := key.Base64()
 
-	if err := ch.Set(sessionKey, userid+"%email%"+ruser.Email, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionKey, userid+emailChangeEscapeSequence+ruser.Email, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -315,7 +319,7 @@ func (u *userService) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 	var userid, email string
 
 	if result, err := ch.Get(ruser.Key).Result(); err == nil {
-		k := strings.SplitN(result, "%email%", 2)
+		k := strings.SplitN(result, emailChangeEscapeSequence, 2)
 		if len(k) != 2 {
 			return governor.NewError(moduleIDUser, "incorrect sessionKey value in cache during email verification", 0, http.StatusInternalServerError)
 		}
@@ -332,6 +336,10 @@ func (u *userService) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 		}
 		err.AddTrace(moduleIDUser)
 		return err
+	}
+
+	if !m.ValidatePass(ruser.Password) {
+		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 
 	if err := ch.Del(ruser.Key).Err(); err != nil {
