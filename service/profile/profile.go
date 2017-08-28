@@ -59,7 +59,7 @@ func (r *reqProfileModel) valid() *governor.Error {
 const (
 	moduleID    = "profile"
 	imageBucket = "profile-image"
-	hour6       = 21600
+	hour1       = 3600
 )
 
 type (
@@ -249,9 +249,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			Bio:   m.Bio,
 			Image: m.Image,
 		})
-	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
-		return "", nil
-	}))
+	}, p.cc.Control(true, false, hour1, nil))
 
 	r.GET("/:id/image", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
@@ -270,7 +268,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	}, p.cc.Control(true, false, hour6, func(c echo.Context) (string, *governor.Error) {
+	}, p.cc.Control(true, false, hour1, func(c echo.Context) (string, *governor.Error) {
 		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}

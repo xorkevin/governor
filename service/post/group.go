@@ -103,8 +103,6 @@ func (p *postService) mountGroup(conf governor.Config, r *echo.Group, l *logrus.
 		return c.JSON(http.StatusOK, resGroupPosts{
 			Posts: posts,
 		})
-	}, p.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
-		return "", nil
-	}))
+	}, p.cc.Control(true, false, min2, nil))
 	return nil
 }

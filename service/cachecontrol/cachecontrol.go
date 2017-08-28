@@ -50,10 +50,12 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 		return func(c echo.Context) error {
 			etag := ""
 
-			if tag, err := etagfunc(c); err == nil {
-				etag = tag
-			} else {
-				return err
+			if etagfunc != nil {
+				if tag, err := etagfunc(c); err == nil {
+					etag = tag
+				} else {
+					return err
+				}
 			}
 
 			if val := c.Request().Header.Get(ccIfNoneMatchH); etag != "" && val != "" {
@@ -74,9 +76,7 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 				resheader.Add(ccHeader, ccNoCache)
 			}
 
-			if maxage >= 0 {
-				resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
-			}
+			resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
 
 			if etag != "" {
 				resheader.Set(ccEtagH, fmt.Sprintf(ccEtagValue, etag))

@@ -210,7 +210,8 @@ func (r *reqUserGetID) valid() *governor.Error {
 }
 
 const (
-	min2 = 120
+	min15 = 900
+	min1  = 60
 )
 
 func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
@@ -222,6 +223,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.postUser(c, l)
 	})
 
+	r.GET("", func(c echo.Context) error {
+		return u.getByIDPersonal(c, l)
+	}, gate.User(u.gate))
+
 	// password reset
 	r.PUT("/password/forgot", func(c echo.Context) error {
 		return u.forgotPassword(c, l)
@@ -231,45 +236,40 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.forgotPasswordReset(c, l)
 	})
 
+	r.GET("/sessions", func(c echo.Context) error {
+		return u.getSessions(c, l)
+	}, gate.User(u.gate))
+
+	r.PUT("", func(c echo.Context) error {
+		return u.putUser(c, l)
+	}, gate.User(u.gate))
+
+	r.PUT("/email", func(c echo.Context) error {
+		return u.putEmail(c, l)
+	}, gate.User(u.gate))
+
+	r.PUT("/password", func(c echo.Context) error {
+		return u.putPassword(c, l)
+	}, gate.Owner(u.gate, "id"))
+
+	r.DELETE("/sessions", func(c echo.Context) error {
+		return u.killSessions(c, l)
+	}, gate.User(u.gate))
+
+	r.PATCH("/rank", func(c echo.Context) error {
+		return u.patchRank(c, l)
+	}, gate.User(u.gate))
+
 	// id routes
 	ri := r.Group("/id")
 
 	ri.GET("/:id", func(c echo.Context) error {
 		return u.getByID(c, l)
-	}, u.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
-		return "", nil
-	}))
+	}, u.cc.Control(true, false, min15, nil))
 
 	ri.GET("/:id/private", func(c echo.Context) error {
 		return u.getByIDPrivate(c, l)
-	}, gate.OwnerOrAdmin(u.gate, "id"),
-		u.cc.Control(false, false, min2, func(c echo.Context) (string, *governor.Error) {
-			return "", nil
-		}))
-
-	ri.GET("/sessions", func(c echo.Context) error {
-		return u.getSessions(c, l)
-	}, gate.User(u.gate))
-
-	ri.PUT("", func(c echo.Context) error {
-		return u.putUser(c, l)
-	}, gate.User(u.gate))
-
-	ri.PUT("/email", func(c echo.Context) error {
-		return u.putEmail(c, l)
-	}, gate.User(u.gate))
-
-	ri.PUT("/password", func(c echo.Context) error {
-		return u.putPassword(c, l)
-	}, gate.Owner(u.gate, "id"))
-
-	ri.DELETE("/sessions", func(c echo.Context) error {
-		return u.killSessions(c, l)
-	}, gate.User(u.gate))
-
-	ri.PATCH("/rank", func(c echo.Context) error {
-		return u.patchRank(c, l)
-	}, gate.User(u.gate))
+	}, gate.Admin(u.gate))
 
 	ri.DELETE("/:id", func(c echo.Context) error {
 		return u.deleteUser(c, l)
@@ -280,9 +280,7 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
-	}, u.cc.Control(true, false, min2, func(c echo.Context) (string, *governor.Error) {
-		return "", nil
-	}))
+	}, u.cc.Control(true, false, min15, nil))
 
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {

@@ -42,6 +42,32 @@ func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
+func (u *userService) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
+	userid := c.Get("userid").(string)
+
+	m, err := usermodel.GetByIDB64(db, userid)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		return err
+	}
+
+	return c.JSON(http.StatusOK, resUserGet{
+		resUserGetPublic: resUserGetPublic{
+			Userid:       userid,
+			Username:     m.Username,
+			Tags:         m.Tags,
+			FirstName:    m.FirstName,
+			LastName:     m.LastName,
+			CreationTime: m.CreationTime,
+		},
+		Email: m.Email,
+	})
+}
+
 func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
