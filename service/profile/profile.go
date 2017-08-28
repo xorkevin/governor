@@ -59,7 +59,8 @@ func (r *reqProfileModel) valid() *governor.Error {
 const (
 	moduleID    = "profile"
 	imageBucket = "profile-image"
-	hour1       = 3600
+	min1        = 60
+	min15       = 900
 )
 
 type (
@@ -227,6 +228,25 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return c.NoContent(http.StatusNoContent)
 	}, gate.OwnerOrAdmin(p.gate, "id"))
 
+	r.GET("", func(c echo.Context) error {
+		userid := c.Get("userid").(string)
+
+		m, err := profilemodel.GetByIDB64(db, userid)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return err
+		}
+
+		return c.JSON(http.StatusOK, resProfileModel{
+			Email: m.Email,
+			Bio:   m.Bio,
+			Image: m.Image,
+		})
+	}, gate.User(p.gate))
+
 	r.GET("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
@@ -249,7 +269,35 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			Bio:   m.Bio,
 			Image: m.Image,
 		})
-	}, p.cc.Control(true, false, hour1, nil))
+	}, p.cc.Control(true, false, min15, nil))
+
+	r.GET("/image", func(c echo.Context) error {
+		userid := c.Get("userid").(string)
+
+		obj, objinfo, err := p.obj.Get(userid + "-profile")
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleID)
+			return err
+		}
+		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
+	}, gate.User(p.gate),
+		p.cc.Control(true, false, min1, func(c echo.Context) (string, *governor.Error) {
+			userid := c.Get("userid").(string)
+
+			objinfo, err := p.obj.Stat(userid + "-profile")
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleID)
+				return "", err
+			}
+
+			return objinfo.ETag, nil
+		}))
 
 	r.GET("/:id/image", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
@@ -268,7 +316,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	}, p.cc.Control(true, false, hour1, func(c echo.Context) (string, *governor.Error) {
+	}, p.cc.Control(false, true, min15, func(c echo.Context) (string, *governor.Error) {
 		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
