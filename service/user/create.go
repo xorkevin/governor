@@ -30,15 +30,28 @@ type (
 	emailPassReset struct {
 		Username string
 	}
+
+	emailPassChange struct {
+		Username string
+		Key      string
+	}
+
+	emailEmailChange struct {
+		Username string
+	}
 )
 
 const (
-	newUserTemplate    = "newuser"
-	newUserSubject     = "newuser_subject"
-	forgotPassTemplate = "forgotpass"
-	forgotPassSubject  = "forgotpass_subject"
-	passResetTemplate  = "passreset"
-	passResetSubject   = "passreset_subject"
+	newUserTemplate     = "newuser"
+	newUserSubject      = "newuser_subject"
+	forgotPassTemplate  = "forgotpass"
+	forgotPassSubject   = "forgotpass_subject"
+	passResetTemplate   = "passreset"
+	passResetSubject    = "passreset_subject"
+	passChangeTemplate  = "passchange"
+	passChangeSubject   = "passchange_subject"
+	emailChangeTemplate = "emailchange"
+	emailChangeSubject  = "emailchange_subject"
 )
 
 func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
@@ -229,6 +242,8 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 
 func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
+	ch := u.cache.Cache()
+	mailer := u.mailer
 
 	userid := c.Get("userid").(string)
 
@@ -255,6 +270,39 @@ func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	if err := ch.Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	emdata := emailPassChange{
+		Username: m.Username,
+		Key:      sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(passChangeTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(passChangeSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(m.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
 	if err = m.Update(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -377,6 +425,10 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 	if err := mailer.Send(m.Email, subj, em); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
+	}
+
+	if err := ch.Del(ruser.Key).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	if err := m.Update(db); err != nil {

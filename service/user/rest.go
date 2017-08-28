@@ -250,7 +250,7 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 
 	r.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
-	}, gate.Owner(u.gate, "id"))
+	}, gate.User(u.gate))
 
 	r.DELETE("/sessions", func(c echo.Context) error {
 		return u.killSessions(c, l)
