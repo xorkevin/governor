@@ -245,7 +245,8 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			Bio:   m.Bio,
 			Image: m.Image,
 		})
-	}, gate.User(p.gate))
+	}, gate.User(p.gate),
+		p.cc.Control(true, false, min1, nil))
 
 	r.GET("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
@@ -316,7 +317,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	}, p.cc.Control(false, true, min15, func(c echo.Context) (string, *governor.Error) {
+	}, p.cc.Control(true, false, min15, func(c echo.Context) (string, *governor.Error) {
 		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
 		}
