@@ -41,6 +41,10 @@ type (
 		Password string `json:"password"`
 	}
 
+	reqUserPutEmailVerify struct {
+		Key string `json:"key"`
+	}
+
 	reqUserPutPassword struct {
 		NewPassword string `json:"new_password"`
 		OldPassword string `json:"old_password"`
@@ -128,6 +132,13 @@ func (r *reqUserPutEmail) valid() *governor.Error {
 		return err
 	}
 	if err := hasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqUserPutEmailVerify) valid() *governor.Error {
+	if err := hasToken(r.Key); err != nil {
 		return err
 	}
 	return nil
@@ -247,6 +258,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	r.PUT("/email", func(c echo.Context) error {
 		return u.putEmail(c, l)
 	}, gate.User(u.gate))
+
+	r.PUT("/email/verify", func(c echo.Context) error {
+		return u.putEmailVerify(c, l)
+	})
 
 	r.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)

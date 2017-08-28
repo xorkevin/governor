@@ -38,20 +38,27 @@ type (
 
 	emailEmailChange struct {
 		Username string
+		Key      string
+	}
+
+	emailEmailChangeNotify struct {
+		Username string
 	}
 )
 
 const (
-	newUserTemplate     = "newuser"
-	newUserSubject      = "newuser_subject"
-	forgotPassTemplate  = "forgotpass"
-	forgotPassSubject   = "forgotpass_subject"
-	passResetTemplate   = "passreset"
-	passResetSubject    = "passreset_subject"
-	passChangeTemplate  = "passchange"
-	passChangeSubject   = "passchange_subject"
-	emailChangeTemplate = "emailchange"
-	emailChangeSubject  = "emailchange_subject"
+	newUserTemplate           = "newuser"
+	newUserSubject            = "newuser_subject"
+	forgotPassTemplate        = "forgotpass"
+	forgotPassSubject         = "forgotpass_subject"
+	passResetTemplate         = "passreset"
+	passResetSubject          = "passreset_subject"
+	passChangeTemplate        = "passchange"
+	passChangeSubject         = "passchange_subject"
+	emailChangeTemplate       = "emailchange"
+	emailChangeSubject        = "emailchange_subject"
+	emailChangeNotifyTemplate = "emailchangenotify"
+	emailChangeNotifySubject  = "emailchangenotify_subject"
 )
 
 func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
@@ -210,6 +217,8 @@ func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 
 func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
+	ch := u.cache.Cache()
+	mailer := u.mailer
 
 	userid := c.Get("userid").(string)
 
@@ -229,10 +238,107 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
+	if m.Email == ruser.Email {
+		return governor.NewErrorUser(moduleIDUser, "emails cannot be the same", 0, http.StatusBadRequest)
+	}
 	if !m.ValidatePass(ruser.Password) {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
-	m.Email = ruser.Email
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	if err := ch.Set(sessionKey, userid+"%email%"+ruser.Email, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	emdata := emailEmailChange{
+		Username: m.Username,
+		Key:      sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(emailChangeTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(emailChangeSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	emdatanotify := emailEmailChangeNotify{
+		Username: m.Username,
+	}
+
+	emnotify, err := u.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subjnotify, err := u.tpl.ExecuteHTML(emailChangeNotifySubject, emdatanotify)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(m.Email, subjnotify, emnotify); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := mailer.Send(ruser.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (u *userService) putEmailVerify(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+	ch := u.cache.Cache()
+
+	ruser := reqUserPutEmailVerify{}
+	if err := c.Bind(&ruser); err != nil {
+		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	var userid, email string
+
+	if result, err := ch.Get(ruser.Key).Result(); err == nil {
+		k := strings.SplitN(result, "%email%", 2)
+		if len(k) != 2 {
+			return governor.NewError(moduleIDUser, "incorrect sessionKey value in cache during email verification", 0, http.StatusInternalServerError)
+		}
+		userid = k[0]
+		email = k[1]
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	m, err := usermodel.GetByIDB64(db, userid)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := ch.Del(ruser.Key).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	m.Email = email
 	if err = m.Update(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
