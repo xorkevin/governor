@@ -11,18 +11,18 @@ postgres:
   user: postgres
   password: admin
   dbname: governor
-  host: gpostgres
+  host: postgres
   port: 5432
   sslmode: disable
 redis:
   password: admin
   dbname: 0
-  host: gredis
+  host: redis
   port: 6379
 minio:
   key_id: admin
   key_secret: adminsecret
-  host: gminio
+  host: minio
   port: 9000
   sslmode: false
 userauth:
@@ -36,7 +36,7 @@ user:
 mail:
   username: test
   password: test
-  host: gmail
+  host: mail
   port: 1025
   # port: 587
   from_address: gov@hack.com

@@ -1,0 +1,40 @@
+version: "3.3"
+
+services:
+  postgres:
+    image: postgres:alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASS:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-governor}
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    command: redis-server --requirepass ${REDIS_PASS:-admin}
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    command: server /export
+    volumes:
+      - miniodata:/export
+      - minioconfig:/root/.minio
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_KEY:-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET:-adminsecret}
+    restart: unless-stopped
+
+  mail:
+    image: mailhog/mailhog
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  minioconfig:

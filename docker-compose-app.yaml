@@ -1,0 +1,17 @@
+version: "3.3"
+
+services:
+  governor:
+    image: governor:latest
+    volumes:
+      - ./config:/config
+      - ./public:/public
+      - ./templates:/templates
+    depends_on:
+      - "postgres"
+      - "redis"
+      - "minio"
+      - "mail"
+    ports:
+      - 8080:8080
+    restart: unless-stopped
