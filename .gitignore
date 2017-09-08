@@ -26,4 +26,5 @@ _testmain.go
 .idea/
 
 vendor/
+vendor.orig/
 bin/

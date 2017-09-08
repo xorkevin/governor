@@ -6,7 +6,8 @@ baseurl: /api
 publicdir: public
 templatedir: templates
 allow_origins:
-  - http://localhost
+  - http://localhost:3000
+  - http://localhost:3030
 postgres:
   user: postgres
   password: admin

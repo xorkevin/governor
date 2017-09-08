@@ -45,6 +45,7 @@ type (
 		log *logrus.Logger
 	}
 
+	// Options represent the image options of the loaded image
 	Options struct {
 		Width          int
 		Height         int
