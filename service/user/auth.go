@@ -123,6 +123,11 @@ func rmRefreshCookie(c echo.Context) {
 		Expires: time.Now(),
 		Value:   "",
 	})
+	c.SetCookie(&http.Cookie{
+		Name:    "refresh_valid",
+		Value:   "",
+		Expires: time.Now(),
+	})
 }
 
 type (
@@ -379,6 +384,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 
 	r.POST("/logout", func(c echo.Context) error {
 		rmAccessCookie(c)
+		rmRefreshCookie(c)
 		return c.NoContent(http.StatusNoContent)
 	})
 
