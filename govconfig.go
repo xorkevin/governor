@@ -8,15 +8,16 @@ import (
 type (
 	// Config is the server configuration
 	Config struct {
-		config      *viper.Viper
-		Appname     string
-		Version     string
-		LogLevel    int
-		Port        string
-		BaseURL     string
-		PublicDir   string
-		TemplateDir string
-		Origins     []string
+		config        *viper.Viper
+		Appname       string
+		Version       string
+		LogLevel      int
+		Port          string
+		BaseURL       string
+		PublicDir     string
+		TemplateDir   string
+		FrontendProxy []string
+		Origins       []string
 	}
 )
 
@@ -42,13 +43,8 @@ func (c *Config) Init() error {
 	c.BaseURL = c.config.GetString("baseurl")
 	c.PublicDir = c.config.GetString("publicdir")
 	c.TemplateDir = c.config.GetString("templatedir")
-	origins := c.config.GetStringSlice("allow_origins")
-	if len(origins) == 0 {
-		// this effectively will not match any origin
-		c.Origins = []string{""}
-	} else {
-		c.Origins = origins
-	}
+	c.FrontendProxy = c.config.GetStringSlice("frontend_proxy")
+	c.Origins = c.config.GetStringSlice("allow_origins")
 	return nil
 }
 
@@ -65,7 +61,8 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")
 	v.SetDefault("templatedir", "templates")
-	v.SetDefault("allow_origins", []string{""})
+	v.SetDefault("frontend_proxy", []string{})
+	v.SetDefault("allow_origins", []string{})
 
 	v.SetConfigName(*configFilename)
 	v.AddConfigPath("./config")

@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/sirupsen/logrus"
+	"net/url"
 	"strings"
 )
 
@@ -46,28 +47,58 @@ func New(config Config) (*Server, error) {
 	i.Binder = requestBinder()
 	l.Info("added custom request binder")
 	i.Pre(middleware.RemoveTrailingSlash())
+
 	if config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 			Format: "time=${time_rfc3339}, method=${method}, uri=${uri}, status=${status}, latency=${latency_human}\n",
 		}))
 	}
+
 	i.Use(middleware.BodyLimit("2M"))
-	i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     config.Origins,
-		AllowCredentials: true,
-	}))
+
+	if len(config.Origins) > 0 {
+		i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins:     config.Origins,
+			AllowCredentials: true,
+		}))
+	}
+
 	i.Use(middleware.Recover())
 	i.Use(middleware.Gzip())
-	i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Root:   config.PublicDir,
-		Index:  "index.html",
-		Browse: false,
-		HTML5:  true,
-		Skipper: func(c echo.Context) bool {
-			path := c.Request().URL.EscapedPath()
-			return strings.HasPrefix(path, config.BaseURL+"/") || config.BaseURL == path
-		},
-	}))
+
+	apiMiddlewareSkipper := func(c echo.Context) bool {
+		path := c.Request().URL.EscapedPath()
+		return strings.HasPrefix(path, config.BaseURL+"/") || config.BaseURL == path
+	}
+	if len(config.FrontendProxy) > 0 {
+		targets := make([]*middleware.ProxyTarget, 0, len(config.FrontendProxy))
+		for _, i := range config.FrontendProxy {
+			if u, err := url.Parse(i); err == nil {
+				targets = append(targets, &middleware.ProxyTarget{
+					URL: u,
+				})
+			} else {
+				l.Warnf("could not add frontend proxy %s: %s", i, err.Error())
+			}
+		}
+		if len(targets) > 0 {
+			i.Use(middleware.ProxyWithConfig(middleware.ProxyConfig{
+				Balancer: &middleware.RoundRobinBalancer{
+					Targets: targets,
+				},
+				Skipper: apiMiddlewareSkipper,
+			}))
+		}
+	} else {
+		i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+			Root:    config.PublicDir,
+			Index:   "index.html",
+			Browse:  false,
+			HTML5:   true,
+			Skipper: apiMiddlewareSkipper,
+		}))
+	}
+
 	i.Use(middleware.RequestID())
 	l.Info("initialized middleware")
 

@@ -5,6 +5,8 @@ port: 8080
 baseurl: /api
 publicdir: public
 templatedir: templates
+frontend_proxy:
+  - http://localhost:3031
 allow_origins:
   - http://localhost:3000
   - http://localhost:3001
