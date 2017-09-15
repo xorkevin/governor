@@ -39,6 +39,26 @@ func New(orgname string) (*Model, *governor.Error) {
 }
 
 const (
+	moduleIDModGet = moduleIDModel + ".Get"
+)
+
+var (
+	sqlGet = fmt.Sprintf("SELECT orgname, creation_time FROM %s WHERE config=$1;", tableName)
+)
+
+// Get returns the conf model
+func Get(db *sql.DB) (*Model, *governor.Error) {
+	mConf := &Model{}
+	if err := db.QueryRow(sqlGet, rowID).Scan(&mConf.Orgname, &mConf.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, governor.NewError(moduleIDModGet, "no conf found with that id", 2, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return mConf, nil
+}
+
+const (
 	moduleIDModIns = moduleIDModel + ".Insert"
 )
 
@@ -57,7 +77,7 @@ const (
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (config, orgname, creation_time) = ($1, $2, $3) WHERE config = $1;", tableName), rowID, m.Orgname, m.CreationTime)
+	_, err := db.Exec(fmt.Sprintf("UPDATE %s SET (orgname, creation_time) = ($2, $3) WHERE config = $1;", tableName), rowID, m.Orgname, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}

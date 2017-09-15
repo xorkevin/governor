@@ -67,9 +67,17 @@ type (
 	}
 )
 
+var (
+	setupRun = false
+)
+
 // Mount is a collection of routes
 func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 	r.POST("", func(c echo.Context) error {
+		if setupRun {
+			return NewError(moduleIDSetup, "setup already run", 128, http.StatusForbidden)
+		}
+
 		rsetup := &ReqSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
 			return NewErrorUser(moduleIDSetup, err.Error(), 0, http.StatusBadRequest)
@@ -80,6 +88,9 @@ func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 
 		for _, service := range s.services {
 			if err := service.Setup(conf, l, *rsetup); err != nil {
+				if err.Code() == 128 {
+					setupRun = true
+				}
 				err.AddTrace(moduleIDSetup)
 				return err
 			}

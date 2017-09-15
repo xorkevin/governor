@@ -9,6 +9,7 @@ import (
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -162,12 +163,14 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mUser := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	var authtags []string
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, pq.Array(&authtags), &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
+	mUser.Auth.Tags = strings.Join(authtags, ",")
 	return mUser, nil
 }
 
@@ -182,12 +185,14 @@ var (
 // GetByUsername returns a user model with the given username
 func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
-	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Auth.Tags, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	var authtags []string
+	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, pq.Array(&authtags), &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
+	mUser.Auth.Tags = strings.Join(authtags, ",")
 	return mUser, nil
 }
 
@@ -201,7 +206,7 @@ var (
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Userid, m.Username, pq.Array(strings.Split(m.Auth.Tags, ",")), m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -225,7 +230,7 @@ var (
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, m.Auth.Tags, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, pq.Array(strings.Split(m.Auth.Tags, ",")), m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -254,7 +259,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags VARCHAR(4096) NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags VARCHAR(255)[] NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new User table
