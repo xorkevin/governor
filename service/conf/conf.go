@@ -6,6 +6,7 @@ import (
 	"github.com/hackform/governor/service/db"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
+	"net/http"
 )
 
 const (
@@ -45,11 +46,8 @@ func (c *confService) Health() *governor.Error {
 
 // Setup is run on service setup
 func (c *confService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
-	if _, err := confmodel.Get(c.db); err == nil {
+	if _, err := confmodel.Get(c.db.DB()); err == nil {
 		return governor.NewError(moduleID, "setup already run", 128, http.StatusForbidden)
-	} else if err.Code() != 2 {
-		err.AddTrace(moduleID)
-		return err
 	}
 
 	mconf, err := confmodel.New(rsetup.Orgname)
