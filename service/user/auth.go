@@ -64,25 +64,28 @@ func (u *userService) setAccessCookie(c echo.Context, conf governor.Config, acce
 		Name:     "access_token",
 		Value:    accessToken,
 		Path:     conf.BaseURL,
-		Expires:  time.Now().Add(time.Duration(u.accessTime * b1)),
+		MaxAge:   int(u.accessTime),
 		HttpOnly: false,
 	})
 }
 
+const (
+	month6 = 43200 * 365
+)
+
 func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string) {
-	t := time.Now().AddDate(0, 6, 0) // adds 6 months
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     conf.BaseURL + "/u/auth",
-		Expires:  t,
+		MaxAge:   month6,
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_valid",
 		Value:    "valid",
 		Path:     "/",
-		Expires:  t,
+		MaxAge:   month6,
 		HttpOnly: false,
 	})
 }
@@ -109,24 +112,27 @@ func getRefreshCookie(c echo.Context) (string, error) {
 	return cookie.Value, nil
 }
 
-func rmAccessCookie(c echo.Context) {
+func rmAccessCookie(c echo.Context, conf governor.Config) {
 	c.SetCookie(&http.Cookie{
-		Name:    "access_token",
-		Expires: time.Now(),
-		Value:   "",
+		Name:   "access_token",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   conf.BaseURL,
 	})
 }
 
-func rmRefreshCookie(c echo.Context) {
+func rmRefreshCookie(c echo.Context, conf governor.Config) {
 	c.SetCookie(&http.Cookie{
-		Name:    "refresh_token",
-		Expires: time.Now(),
-		Value:   "",
+		Name:   "refresh_token",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   conf.BaseURL + "/u/auth",
 	})
 	c.SetCookie(&http.Cookie{
-		Name:    "refresh_valid",
-		Value:   "",
-		Expires: time.Now(),
+		Name:   "refresh_valid",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   "/",
 	})
 }
 
@@ -383,8 +389,8 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 	})
 
 	r.POST("/logout", func(c echo.Context) error {
-		rmAccessCookie(c)
-		rmRefreshCookie(c)
+		rmAccessCookie(c, conf)
+		rmRefreshCookie(c, conf)
 		return c.NoContent(http.StatusNoContent)
 	})
 
