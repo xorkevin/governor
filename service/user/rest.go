@@ -275,10 +275,6 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.killSessions(c, l)
 	}, gate.User(u.gate))
 
-	r.PATCH("/rank", func(c echo.Context) error {
-		return u.patchRank(c, l)
-	}, gate.User(u.gate))
-
 	// id routes
 	ri := r.Group("/id")
 
@@ -289,6 +285,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	ri.GET("/:id/private", func(c echo.Context) error {
 		return u.getByIDPrivate(c, l)
 	}, gate.Admin(u.gate))
+
+	ri.PATCH("/:id/rank", func(c echo.Context) error {
+		return u.patchRank(c, l)
+	}, gate.User(u.gate))
 
 	ri.DELETE("/:id", func(c echo.Context) error {
 		return u.deleteUser(c, l)
