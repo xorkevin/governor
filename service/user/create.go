@@ -583,6 +583,7 @@ func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 
 func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
+	ch := u.cache.Cache()
 
 	reqid := reqUserGetID{
 		Userid: c.Param("id"),
@@ -625,21 +626,19 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 
 	if editAddRank.Has("admin") {
 		t, _ := time.Now().MarshalText()
-		userid, _ := m.IDBase64()
 		l.WithFields(logrus.Fields{
 			"time":     string(t),
 			"origin":   moduleIDUser,
-			"userid":   userid,
+			"userid":   reqid.Userid,
 			"username": m.Username,
 		}).Info("admin status added")
 	}
 	if editRemoveRank.Has("admin") {
 		t, _ := time.Now().MarshalText()
-		userid, _ := m.IDBase64()
 		l.WithFields(logrus.Fields{
 			"time":     string(t),
 			"origin":   moduleIDUser,
-			"userid":   userid,
+			"userid":   reqid.Userid,
 			"username": m.Username,
 		}).Info("admin status removed")
 	}
@@ -647,6 +646,32 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	finalRank, _ := rank.FromStringUser(m.Auth.Tags)
 	finalRank.Add(editAddRank)
 	finalRank.Remove(editRemoveRank)
+
+	s := session.Session{
+		Userid: reqid.Userid,
+	}
+
+	var sarr []string
+	if sgobs, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+		sarr = make([]string, 0, len(sgobs))
+		for _, v := range sgobs {
+			s := session.Session{}
+			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
+				return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+			}
+			sarr = append(sarr, s.SessionID)
+		}
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := ch.Del(sarr...).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := ch.HDel(s.UserKey(), sarr...).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
 
 	m.Auth.Tags = finalRank.Stringify()
 	if err = m.Update(db); err != nil {
