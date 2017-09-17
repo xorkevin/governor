@@ -31,9 +31,6 @@ type (
 		AccessToken  string        `json:"access_token,omitempty"`
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		Claims       *token.Claims `json:"claims,omitempty"`
-		Username     string        `json:"username,omitempty"`
-		FirstName    string        `json:"first_name,omitempty"`
-		LastName     string        `json:"last_name,omitempty"`
 	}
 )
 
@@ -265,9 +262,6 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 				AccessToken:  accessToken,
 				RefreshToken: refreshToken,
 				Claims:       claims,
-				Username:     m.Username,
-				FirstName:    m.FirstName,
-				LastName:     m.LastName,
 			})
 		}
 
