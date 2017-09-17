@@ -70,7 +70,7 @@ const (
 	month6 = 43200 * 365
 )
 
-func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string) {
+func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -81,6 +81,13 @@ func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, ref
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_valid",
 		Value:    "valid",
+		Path:     "/",
+		MaxAge:   month6,
+		HttpOnly: false,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     "auth_tags",
+		Value:    authTags,
 		Path:     "/",
 		MaxAge:   month6,
 		HttpOnly: false,
@@ -127,6 +134,12 @@ func rmRefreshCookie(c echo.Context, conf governor.Config) {
 	})
 	c.SetCookie(&http.Cookie{
 		Name:   "refresh_valid",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   "/",
+	})
+	c.SetCookie(&http.Cookie{
+		Name:   "auth_tags",
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   "/",
@@ -255,7 +268,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			}
 
 			u.setAccessCookie(c, conf, accessToken)
-			u.setRefreshCookie(c, conf, refreshToken)
+			u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
 
 			return c.JSON(http.StatusOK, resUserAuth{
 				Valid:        true,
@@ -374,7 +387,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
-		u.setRefreshCookie(c, conf, refreshToken)
+		u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
 
 		return c.JSON(http.StatusOK, resUserAuth{
 			Valid:        true,
