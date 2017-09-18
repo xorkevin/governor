@@ -197,7 +197,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		ThumbWidth:     32,
 		ThumbHeight:    32,
 		Quality:        85,
-		ThumbQuality:   65,
+		ThumbQuality:   85,
 		Crop:           true,
 		ContextField:   "image",
 		ThumbnailField: "thumbnail",
