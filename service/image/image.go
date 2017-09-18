@@ -188,7 +188,7 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 			if err := jpeg.Encode(b2, thumb, &j2); err != nil {
 				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
 			}
-			b64 := base64.StdEncoding.EncodeToString(b2.Bytes())
+			b64 := base64.RawStdEncoding.EncodeToString(b2.Bytes())
 
 			c.Set(opt.ContextField, b)
 			c.Set(opt.ThumbnailField, dataURIPrefixJpeg+b64)
