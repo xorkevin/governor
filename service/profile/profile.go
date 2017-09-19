@@ -245,8 +245,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			Bio:   m.Bio,
 			Image: m.Image,
 		})
-	}, gate.User(p.gate),
-		p.cc.Control(false, false, min1, nil))
+	}, gate.User(p.gate))
 
 	r.GET("/:id", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
