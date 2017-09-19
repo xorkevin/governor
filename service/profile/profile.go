@@ -272,34 +272,6 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		})
 	}, p.cc.Control(true, false, min15, nil))
 
-	r.GET("/image", func(c echo.Context) error {
-		userid := c.Get("userid").(string)
-
-		obj, objinfo, err := p.obj.Get(userid + "-profile")
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleID)
-			return err
-		}
-		return c.Stream(http.StatusOK, objinfo.ContentType, obj)
-	}, gate.User(p.gate),
-		p.cc.Control(false, false, min1, func(c echo.Context) (string, *governor.Error) {
-			userid := c.Get("userid").(string)
-
-			objinfo, err := p.obj.Stat(userid + "-profile")
-			if err != nil {
-				if err.Code() == 2 {
-					err.SetErrorUser()
-				}
-				err.AddTrace(moduleID)
-				return "", err
-			}
-
-			return objinfo.ETag, nil
-		}))
-
 	r.GET("/:id/image", func(c echo.Context) error {
 		rprofile := reqProfileGetID{
 			Userid: c.Param("id"),
