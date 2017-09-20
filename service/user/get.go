@@ -160,6 +160,39 @@ func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
+func (u *userService) getByUsernamePrivate(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
+	ruser := reqUserGetUsername{
+		Username: c.Param("username"),
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	m, err := usermodel.GetByUsername(db, ruser.Username)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		return err
+	}
+
+	userid, _ := m.IDBase64()
+
+	return c.JSON(http.StatusOK, resUserGet{
+		resUserGetPublic: resUserGetPublic{
+			Userid:       userid,
+			Username:     m.Username,
+			Tags:         m.Tags,
+			FirstName:    m.FirstName,
+			LastName:     m.LastName,
+			CreationTime: m.CreationTime,
+		},
+		Email: m.Email,
+	})
+}
+
 func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 

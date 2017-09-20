@@ -301,6 +301,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 		return u.getByUsername(c, l)
 	}, u.cc.Control(true, false, min15, nil))
 
+	rn.GET("/:username/private", func(c echo.Context) error {
+		return u.getByUsernamePrivate(c, l)
+	}, gate.Admin(u.gate))
+
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {
 			return u.getByUsernameDebug(c, l)
