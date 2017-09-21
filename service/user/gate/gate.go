@@ -9,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const (
@@ -26,6 +25,7 @@ type (
 
 	gateService struct {
 		tokenizer *token.Tokenizer
+		baseurl   string
 	}
 
 	// Validator is a function to check the authorization of a user
@@ -40,6 +40,7 @@ func New(conf governor.Config, l *logrus.Logger) Gate {
 
 	return &gateService{
 		tokenizer: token.New(ca["secret"], ca["issuer"]),
+		baseurl:   conf.BaseURL,
 	}
 }
 
@@ -54,11 +55,12 @@ func getAccessCookie(c echo.Context) (string, error) {
 	return cookie.Value, nil
 }
 
-func rmAccessCookie(c echo.Context) {
+func rmAccessCookie(c echo.Context, baseurl string) {
 	c.SetCookie(&http.Cookie{
-		Name:    "access_token",
-		Expires: time.Now(),
-		Value:   "",
+		Name:   "access_token",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   baseurl,
 	})
 }
 
@@ -78,7 +80,7 @@ func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareF
 			}
 			validToken, claims := g.tokenizer.Validate(accessToken, subject, "")
 			if !validToken {
-				rmAccessCookie(c)
+				rmAccessCookie(c, g.baseurl)
 				return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
 			}
 			if !v(c, *claims) {
