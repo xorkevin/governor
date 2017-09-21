@@ -37,18 +37,17 @@ func New(m *usermodel.Model, c echo.Context) (*Session, *governor.Error) {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
-	return FromSessionID(id.Base64(), m, c)
-}
-
-// FromSessionID creates a new session from an existing sessionID
-func FromSessionID(sessionID string, m *usermodel.Model, c echo.Context) (*Session, *governor.Error) {
-	key, err := uid.NewU(0, 16)
+	userid, err := m.IDBase64()
 	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
+	return FromSessionID(id.Base64(), userid, c)
+}
 
-	userid, err := m.IDBase64()
+// FromSessionID creates a new session from an existing sessionID
+func FromSessionID(sessionID string, userid string, c echo.Context) (*Session, *governor.Error) {
+	key, err := uid.NewU(0, 16)
 	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err

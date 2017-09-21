@@ -186,12 +186,14 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 		}
 		if m.ValidatePass(ruser.Password) {
 			sessionID := ""
+			userid := ""
 			// if session_id is provided, is in cache, and is valid, set it as the sessionID
 			if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken); ok {
 				if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 					if _, err := ch.Get(s[0]).Result(); err == nil {
 						if id, err := uid.FromBase64(4, 8, 4, s[0]); err == nil {
 							sessionID = id.Base64()
+							userid = claims.Userid
 						}
 					}
 				}
@@ -205,7 +207,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 					return err
 				}
 			} else {
-				if s, err = session.FromSessionID(sessionID, m, c); err != nil {
+				if s, err = session.FromSessionID(sessionID, userid, c); err != nil {
 					err.AddTrace(moduleIDAuth)
 					return err
 				}
@@ -296,11 +298,13 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 
 		sessionID := ""
 		sessionKey := ""
+		userid := ""
 		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken); ok {
 			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 				if key, err := ch.Get(s[0]).Result(); err == nil {
 					sessionID = s[0]
 					sessionKey = key
+					userid = claims.Userid
 				}
 			}
 		}
@@ -315,6 +319,20 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			return c.JSON(http.StatusUnauthorized, resUserAuth{
 				Valid: false,
 			})
+		}
+
+		s, err := session.FromSessionID(sessionID, userid, c)
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+		sessionGob, err := s.ToGob()
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+		if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
+			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
 		// generate a new accessToken from the refreshToken claims
