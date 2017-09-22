@@ -82,13 +82,18 @@ func main() {
 
 	cacheControlService := cachecontrol.New(config, g.Logger())
 
+	userService := user.New(config, g.Logger(), dbService, cacheService, mailService, templateService, gateService, cacheControlService)
+
+	profileService := profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)
+	userService.RegisterHook(profileService)
+
 	governor.Must(g.MountRoute("/null/database", dbService))
 	governor.Must(g.MountRoute("/null/cache", cacheService))
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
 	governor.Must(g.MountRoute("/null/mail", mailService))
 	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
-	governor.Must(g.MountRoute("/u", user.New(config, g.Logger(), dbService, cacheService, mailService, templateService, gateService, cacheControlService)))
-	governor.Must(g.MountRoute("/profile", profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)))
+	governor.Must(g.MountRoute("/u", userService))
+	governor.Must(g.MountRoute("/profile", profileService))
 	governor.Must(g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)))
 
 	governor.Must(g.Start())
