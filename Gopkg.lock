@@ -2,38 +2,14 @@
 
 
 [[projects]]
-  branch = "master"
-  name = "github.com/armon/consul-api"
-  packages = ["."]
-  revision = "dcfedd50ed5334f96adee43fc88518a4f095e15c"
-
-[[projects]]
-  name = "github.com/cheggaaa/pb"
-  packages = ["."]
-  revision = "180c76fdb3025713f501cd481e47810a9c715bd7"
-  version = "v2.0.1"
-
-[[projects]]
-  name = "github.com/coreos/etcd"
-  packages = ["client","pkg/pathutil","pkg/srv","pkg/types","version"]
-  revision = "bb66589f8cf18960c7f3d56b1b83753caeed9c7a"
-  version = "v3.2.7"
-
-[[projects]]
-  name = "github.com/coreos/go-semver"
-  packages = ["semver"]
-  revision = "8ab6407b697782a06568d4b7f1db25550ec2e4c6"
-  version = "v0.2.0"
-
-[[projects]]
   name = "github.com/davecgh/go-spew"
-  packages = ["spew","spew/testdata"]
+  packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
   version = "v1.1.0"
 
 [[projects]]
   name = "github.com/dgrijalva/jwt-go"
-  packages = [".","request","test"]
+  packages = ["."]
   revision = "d2709f9f1f31ebcda9651b03077758c1f3a0018c"
   version = "v3.0.0"
 
@@ -63,27 +39,9 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/gopherjs/gopherjs"
-  packages = ["js"]
-  revision = "b40cd48c38f9a18eb3db20d163bad78de12cf0b7"
-
-[[projects]]
-  branch = "master"
   name = "github.com/hashicorp/hcl"
-  packages = [".","hcl/ast","hcl/parser","hcl/printer","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token","testhelper"]
+  packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
   revision = "8f6b1344a92ff8877cf24a5de9177bf7d0a2a187"
-
-[[projects]]
-  name = "github.com/jtolds/gls"
-  packages = ["."]
-  revision = "77f18212c9c7edc9bd6a33d383a7b545ce62f064"
-  version = "v4.2.1"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/kr/fs"
-  packages = ["."]
-  revision = "2788f0dbd16903de03cb8186e5c7d97b69ad387b"
 
 [[projects]]
   name = "github.com/labstack/echo"
@@ -105,7 +63,7 @@
 
 [[projects]]
   name = "github.com/magiconair/properties"
-  packages = [".","assert"]
+  packages = ["."]
   revision = "be5ece7dd465ab0765a9682137865547526d1dfb"
   version = "v1.7.3"
 
@@ -140,18 +98,6 @@
   revision = "d0303fe809921458f417bcf828397a65db30a7e4"
 
 [[projects]]
-  name = "github.com/onsi/ginkgo"
-  packages = [".","config","internal/codelocation","internal/containernode","internal/failer","internal/leafnodes","internal/remote","internal/spec","internal/spec_iterator","internal/specrunner","internal/suite","internal/testingtproxy","internal/writer","reporters","reporters/stenographer","reporters/stenographer/support/go-colorable","reporters/stenographer/support/go-isatty","types"]
-  revision = "9eda700730cba42af70d53180f9dcce9266bc2bc"
-  version = "v1.4.0"
-
-[[projects]]
-  name = "github.com/onsi/gomega"
-  packages = [".","format","internal/assertion","internal/asyncassertion","internal/oraclematcher","internal/testingtsupport","matchers","matchers/support/goraph/bipartitegraph","matchers/support/goraph/edge","matchers/support/goraph/node","matchers/support/goraph/util","types"]
-  revision = "c893efa28eb45626cdaa76c9f653b62488858837"
-  version = "v1.2.0"
-
-[[projects]]
   name = "github.com/pelletier/go-buffruneio"
   packages = ["."]
   revision = "c37440a7cf42ac63b919c752ca73a85067e05992"
@@ -164,18 +110,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  name = "github.com/pkg/errors"
-  packages = ["."]
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
-
-[[projects]]
-  name = "github.com/pkg/sftp"
-  packages = ["."]
-  revision = "98203f5a8333288eb3163b7c667d4260fe1333e9"
-  version = "1.0.0"
-
-[[projects]]
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
@@ -186,18 +120,6 @@
   packages = ["."]
   revision = "f006c2ac4710855cf0f916dd6b77acf6b048dc6e"
   version = "v1.0.3"
-
-[[projects]]
-  name = "github.com/smartystreets/assertions"
-  packages = [".","internal/go-render/render","internal/oglematchers"]
-  revision = "9c0ea8acbc1d8ad689f9e6fe0c1fa5838e0cabc2"
-  version = "1.7.0"
-
-[[projects]]
-  name = "github.com/smartystreets/goconvey"
-  packages = ["convey","convey/gotest","convey/reporting"]
-  revision = "9e8dc3f972df6c8fcc0375ef492c24d0bb204857"
-  version = "1.6.3"
 
 [[projects]]
   branch = "master"
@@ -230,22 +152,10 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/stretchr/objx"
-  packages = ["."]
-  revision = "1a9d0bb9f541897e62256577b352fdbc1fb4fd94"
-
-[[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert","http","mock","require"]
+  packages = ["assert"]
   revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
   version = "v1.1.4"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/ugorji/go"
-  packages = ["codec"]
-  revision = "8c0409fcbb70099c748d71f714529204975f6c3f"
 
 [[projects]]
   branch = "master"
@@ -261,57 +171,27 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/xordataexchange/crypt"
-  packages = ["backend","backend/consul","backend/etcd","config","encoding/secconf"]
-  revision = "b2862e3d0a775f18c7cfe02273500ae307b61218"
-
-[[projects]]
-  branch = "master"
   name = "golang.org/x/crypto"
-  packages = ["acme","acme/autocert","blowfish","cast5","chacha20poly1305/internal/chacha20","cryptobyte","curve25519","ed25519","ed25519/internal/edwards25519","hkdf","md4","nacl/auth","nacl/box","nacl/secretbox","openpgp","openpgp/armor","openpgp/elgamal","openpgp/errors","openpgp/packet","openpgp/s2k","pbkdf2","pkcs12/internal/rc2","poly1305","ripemd160","salsa20/salsa","scrypt","ssh","ssh/agent","ssh/terminal","ssh/testdata"]
+  packages = ["acme","acme/autocert","pbkdf2","scrypt","ssh/terminal"]
   revision = "81e90905daefcd6fd217b62423c0908922eadb30"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/image"
-  packages = ["draw","font","font/basicfont","font/gofont/gobold","font/gofont/gomono","font/gofont/goregular","font/plan9font","font/sfnt","math/f64","math/fixed","riff","tiff/lzw","vector","vp8","vp8l","webp"]
+  packages = ["draw","math/f64"]
   revision = "e20db36d77bd0cb36cea8fe49d5c37d82d21591f"
 
 [[projects]]
   branch = "master"
-  name = "golang.org/x/net"
-  packages = ["context","html","html/atom","html/charset"]
-  revision = "66aacef3dd8a676686c7ae3716979581e8b03c47"
-
-[[projects]]
-  branch = "master"
   name = "golang.org/x/sys"
-  packages = ["plan9","unix","windows","windows/registry","windows/svc","windows/svc/debug","windows/svc/eventlog","windows/svc/mgr"]
+  packages = ["unix","windows"]
   revision = "5513e650ab47a692d3a036d49be8fa52ddd09b65"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
-  packages = ["cases","collate","collate/build","currency","encoding","encoding/charmap","encoding/htmlindex","encoding/ianaindex","encoding/internal","encoding/internal/enctest","encoding/internal/identifier","encoding/japanese","encoding/korean","encoding/simplifiedchinese","encoding/traditionalchinese","encoding/unicode","feature/plural","internal","internal/catmsg","internal/colltab","internal/export/idna","internal/format","internal/gen","internal/number","internal/stringset","internal/tag","internal/testtext","internal/triegen","internal/ucd","internal/utf8internal","language","language/display","message","message/catalog","runes","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable","unicode/runenames","width"]
+  packages = ["internal/gen","internal/triegen","internal/ucd","transform","unicode/cldr","unicode/norm"]
   revision = "bd91bbf73e9a4a801adbfb97133c992678533126"
-
-[[projects]]
-  branch = "master"
-  name = "golang.org/x/tools"
-  packages = ["go/ast/astutil","go/buildutil","go/loader"]
-  revision = "3b1faeda9afbcba128c2d794b38ffe7982141139"
-
-[[projects]]
-  name = "gopkg.in/VividCortex/ewma.v1"
-  packages = ["."]
-  revision = "b24eb346a94c3ba12c1da1e564dbac1b498a77ce"
-  version = "v1.1.1"
-
-[[projects]]
-  name = "gopkg.in/airbrake/gobrake.v2"
-  packages = ["."]
-  revision = "668876711219e8b0206e2994bf0a59d889c775aa"
-  version = "v2.0.9"
 
 [[projects]]
   branch = "v3"
@@ -320,52 +200,10 @@
   revision = "2caba252f4dc53eaf6b553000885530023f54623"
 
 [[projects]]
-  branch = "v1"
-  name = "gopkg.in/check.v1"
-  packages = ["."]
-  revision = "20d25e2804050c1cd24a7eea1e7a6447dd0e74ec"
-
-[[projects]]
-  name = "gopkg.in/cheggaaa/pb.v2"
-  packages = ["termutil"]
-  revision = "1af3d14a5db95b9a9d344f9b6731cc0221ad3696"
-  version = "v2.0.3"
-
-[[projects]]
-  name = "gopkg.in/fatih/color.v1"
-  packages = ["."]
-  revision = "9131ab34cf20d2f6d83fdc67168a5430d1c7dc23"
-  version = "v1.4.1"
-
-[[projects]]
-  name = "gopkg.in/gemnasium/logrus-airbrake-hook.v2"
-  packages = ["."]
-  revision = "e928b033a891c0175fb643d5aa0779e86325eb12"
-  version = "v2.1.2"
-
-[[projects]]
   branch = "v2"
   name = "gopkg.in/gomail.v2"
   packages = ["."]
   revision = "81ebce5c23dfd25c6c67194b37d3dd3f338c98b1"
-
-[[projects]]
-  name = "gopkg.in/mattn/go-colorable.v0"
-  packages = ["."]
-  revision = "941b50ebc6efddf4c41c8e4537a5f68a4e686b24"
-  version = "v0.0.8"
-
-[[projects]]
-  name = "gopkg.in/mattn/go-isatty.v0"
-  packages = ["."]
-  revision = "3a115632dcd687f9c8cd01679c83a06a0e21c1f3"
-  version = "v0.0.1"
-
-[[projects]]
-  name = "gopkg.in/mattn/go-runewidth.v0"
-  packages = ["."]
-  revision = "9e777a8366cce605130a531d2cd6363d07ad7317"
-  version = "v0.0.2"
 
 [[projects]]
   branch = "v2"
@@ -376,6 +214,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2b7d7e02d158f366326caec45991697320effb9cdda17975150ce7f1fcb5532a"
+  inputs-digest = "7315c03d00e885a68efffba5d26cc030ffa8babba8ab4f544a5d9e194e6ddaeb"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -21,6 +21,7 @@ type (
 	Tokenizer struct {
 		secret []byte
 		issuer string
+		parser *jwt.Parser
 	}
 )
 
@@ -33,6 +34,7 @@ func New(secret, issuer string) *Tokenizer {
 	return &Tokenizer{
 		secret: []byte(secret),
 		issuer: issuer,
+		parser: &jwt.Parser{},
 	}
 }
 
@@ -90,7 +92,7 @@ const (
 
 // Validate returns whether a token is valid or not
 func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
-	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	if token, err := t.parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
@@ -105,11 +107,35 @@ func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
 	return false, nil
 }
 
-// GetClaims returns the claims of a token without verifying
-func (t *Tokenizer) GetClaims(tokenString string) (bool, *Claims) {
-	if token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) { return t.secret, nil }); err == nil {
+// Validate returns whether a token is valid or not skipping validating time claims
+func (t *Tokenizer) ValidateSkipTime(tokenString, subject, id string) (bool, *Claims) {
+	if token, err := t.parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		return t.secret, nil
+	}); err == nil {
 		if claims, ok := token.Claims.(*Claims); ok {
-			return true, claims
+			if claims.VerifyIssuer(t.issuer, true) && claims.Subject == subject && claims.Id == id {
+				return true, claims
+			}
+		}
+	}
+	return false, nil
+}
+
+// GetClaims returns the claims of a token without verifying time or id claims
+func (t *Tokenizer) GetClaims(tokenString string, subject string) (bool, *Claims) {
+	if token, err := t.parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		return t.secret, nil
+	}); err == nil {
+		if claims, ok := token.Claims.(*Claims); ok {
+			if claims.VerifyIssuer(t.issuer, true) && claims.Subject == subject {
+				return true, claims
+			}
 		}
 	}
 	return false, nil
