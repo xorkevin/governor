@@ -23,7 +23,7 @@ type (
 	// User is a user management service
 	User interface {
 		governor.Service
-		RegisterHook(hook UserHook)
+		RegisterHook(hook Hook)
 	}
 
 	userService struct {
@@ -38,14 +38,14 @@ type (
 		tpl               template.Template
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
-		hooks             []UserHook
+		hooks             []Hook
 	}
 
 	// HookBind is a function that binds a request to a struct
 	HookBind func(i interface{}) error
 
-	// UserHook is a service that can hook onto the user create and destroy pipelines
-	UserHook interface {
+	// Hook is a service that can hook onto the user create and destroy pipelines
+	Hook interface {
 		UserCreateHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
 		UserDeleteHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
 	}
@@ -93,7 +93,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		tpl:               tpl,
 		gate:              g,
 		cc:                cc,
-		hooks:             []UserHook{},
+		hooks:             []Hook{},
 	}
 }
 
@@ -150,6 +150,6 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 }
 
 // RegisterHook adds a hook to the user create and destroy pipelines
-func (u *userService) RegisterHook(hook UserHook) {
+func (u *userService) RegisterHook(hook Hook) {
 	u.hooks = append(u.hooks, hook)
 }
