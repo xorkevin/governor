@@ -183,19 +183,22 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			sessionID := ""
 			userid := ""
 			isMember := false
-			// if session_id is provided, is in list of user sessions, and is valid, set it as the sessionID
+			// if claims userid matches model, session_id is provided,
+			// is in list of user sessions, and is valid, set it as the sessionID
 			// the session can be expired by time
 			if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-				if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-					usersession := session.Session{
-						Userid: claims.Userid,
-					}
-					userkey := usersession.UserKey()
-					if isM, err := ch.HExists(userkey, s[0]).Result(); err == nil && isM {
-						if id, err := uid.FromBase64(4, 8, 4, s[0]); err == nil {
-							sessionID = id.Base64()
-							userid = claims.Userid
-							isMember = isM
+				if ub64, err := m.IDBase64(); err == nil && ub64 == claims.Userid {
+					if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+						usersession := session.Session{
+							Userid: claims.Userid,
+						}
+						userkey := usersession.UserKey()
+						if isM, err := ch.HExists(userkey, s[0]).Result(); err == nil && isM {
+							if id, err := uid.FromBase64(4, 8, 4, s[0]); err == nil {
+								sessionID = id.Base64()
+								userid = claims.Userid
+								isMember = isM
+							}
 						}
 					}
 				}
