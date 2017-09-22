@@ -23,6 +23,7 @@ type (
 	// User is a user management service
 	User interface {
 		governor.Service
+		RegisterHook(hook UserHook)
 	}
 
 	userService struct {
@@ -34,9 +35,19 @@ type (
 		refreshTime       int64
 		confirmTime       int64
 		passwordResetTime int64
+		tpl               template.Template
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
-		tpl               template.Template
+		hooks             []UserHook
+	}
+
+	// HookBind is a function that binds a request to a struct
+	HookBind func(i interface{}) error
+
+	// UserHook is a service that can hook onto the user create and destroy pipelines
+	UserHook interface {
+		UserCreateHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
+		UserDeleteHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
 	}
 )
 
@@ -82,6 +93,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		tpl:               tpl,
 		gate:              g,
 		cc:                cc,
+		hooks:             []UserHook{},
 	}
 }
 
@@ -135,4 +147,9 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 	}).Info("inserted new admin into users")
 
 	return nil
+}
+
+// RegisterHook adds a hook to the user create and destroy pipelines
+func (u *userService) RegisterHook(hook UserHook) {
+	u.hooks = append(u.hooks, hook)
 }

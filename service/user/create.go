@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 	"time"
 )
@@ -173,8 +174,27 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	t, _ := time.Now().MarshalText()
 	userid, _ := m.IDBase64()
+
+	for _, i := range u.hooks {
+		if err := i.UserCreateHook(c.Bind, userid, l); err != nil {
+			err.AddTrace(moduleIDUser)
+			request := ""
+			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
+				request = bytes.NewBuffer(r).String()
+			}
+			l.WithFields(logrus.Fields{
+				"origin":   err.Origin(),
+				"source":   err.Source(),
+				"code":     err.Code(),
+				"endpoint": c.Path(),
+				"time":     time.Now().String(),
+				"request":  request,
+			}).Error("userhook create error:" + err.Message())
+		}
+	}
+
+	t, _ := time.Now().MarshalText()
 	l.WithFields(logrus.Fields{
 		"time":     string(t),
 		"origin":   moduleIDUser,
@@ -777,6 +797,26 @@ func (u *userService) deleteUser(c echo.Context, l *logrus.Logger) error {
 	if err := m.Delete(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
+	}
+
+	userid, _ := m.IDBase64()
+
+	for _, i := range u.hooks {
+		if err := i.UserDeleteHook(c.Bind, userid, l); err != nil {
+			err.AddTrace(moduleIDUser)
+			request := ""
+			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
+				request = bytes.NewBuffer(r).String()
+			}
+			l.WithFields(logrus.Fields{
+				"origin":   err.Origin(),
+				"source":   err.Source(),
+				"code":     err.Code(),
+				"endpoint": c.Path(),
+				"time":     time.Now().String(),
+				"request":  request,
+			}).Error("userhook delete error:" + err.Message())
+		}
 	}
 
 	return c.NoContent(http.StatusNoContent)
