@@ -54,7 +54,7 @@ func New(config Config) (*Server, error) {
 		}))
 	}
 
-	i.Use(middleware.BodyLimit("2M"))
+	i.Use(middleware.Gzip())
 
 	if len(config.Origins) > 0 {
 		i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
@@ -63,8 +63,8 @@ func New(config Config) (*Server, error) {
 		}))
 	}
 
+	i.Use(middleware.BodyLimit("2M"))
 	i.Use(middleware.Recover())
-	i.Use(middleware.Gzip())
 
 	apiMiddlewareSkipper := func(c echo.Context) bool {
 		path := c.Request().URL.EscapedPath()

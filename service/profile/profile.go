@@ -167,7 +167,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return c.NoContent(http.StatusNoContent)
 	}, gate.User(p.gate))
 
-	r.POST("/image", func(c echo.Context) error {
+	r.PUT("/image", func(c echo.Context) error {
 		img := c.Get("image").(io.Reader)
 		thumb64 := c.Get("thumbnail").(string)
 		userid := c.Get("userid").(string)
