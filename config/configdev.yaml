@@ -5,6 +5,7 @@ port: 8080
 baseurl: /api
 publicdir: public
 templatedir: templates
+max_req_size: 2M
 allow_origins:
   - http://localhost:3000
   - http://localhost:3001

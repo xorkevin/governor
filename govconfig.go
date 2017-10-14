@@ -16,6 +16,7 @@ type (
 		BaseURL       string
 		PublicDir     string
 		TemplateDir   string
+		MaxReqSize    string
 		FrontendProxy []string
 		Origins       []string
 	}
@@ -43,6 +44,7 @@ func (c *Config) Init() error {
 	c.BaseURL = c.config.GetString("baseurl")
 	c.PublicDir = c.config.GetString("publicdir")
 	c.TemplateDir = c.config.GetString("templatedir")
+	c.MaxReqSize = c.config.GetString("max_req_size")
 	c.FrontendProxy = c.config.GetStringSlice("frontend_proxy")
 	c.Origins = c.config.GetStringSlice("allow_origins")
 	return nil
@@ -61,6 +63,7 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")
 	v.SetDefault("templatedir", "templates")
+	v.SetDefault("max_req_size", "2M")
 	v.SetDefault("frontend_proxy", []string{})
 	v.SetDefault("allow_origins", []string{})
 

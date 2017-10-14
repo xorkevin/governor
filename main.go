@@ -63,7 +63,7 @@ func New(config Config) (*Server, error) {
 		}))
 	}
 
-	i.Use(middleware.BodyLimit("2M"))
+	i.Use(middleware.BodyLimit(config.MaxReqSize))
 	i.Use(middleware.Recover())
 
 	apiMiddlewareSkipper := func(c echo.Context) bool {
