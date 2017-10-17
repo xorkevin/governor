@@ -1,6 +1,5 @@
 # METADATA
 VERSION=v0.1.0
-PACKAGE=github.com/hackform/governor
 
 
 # CMD
@@ -19,7 +18,15 @@ all: build
 
 
 test:
-	go test -cover $$(go list ./... | grep -v "^$(PACKAGE)/vendor/")
+	go test -cover ./...
+
+fmt:
+	go fmt ./...
+
+vet:
+	go vet ./...
+
+prepare: fmt vet
 
 dev:
 	go run $(MAIN_PATH) --config configdev
