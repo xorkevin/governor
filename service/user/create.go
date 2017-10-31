@@ -664,10 +664,6 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 		}).Info("admin status removed")
 	}
 
-	finalRank, _ := rank.FromStringUser(m.Auth.Tags)
-	finalRank.Add(editAddRank)
-	finalRank.Remove(editRemoveRank)
-
 	diff := make(map[string]int)
 	for k, v := range editAddRank {
 		if v {
@@ -707,12 +703,6 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	}
 
 	if err := m.UpdateRoles(db, diff); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	// TODO: deprecate storing roles in user model
-	m.Auth.Tags = finalRank.Stringify()
-	if err = m.Update(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
