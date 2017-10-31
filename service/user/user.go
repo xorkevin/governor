@@ -9,6 +9,7 @@ import (
 	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
@@ -135,6 +136,12 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 		return err
 	}
 	l.Info("created new user table")
+
+	if err := rolemodel.Setup(u.db.DB()); err != nil {
+		err.AddTrace(moduleID)
+		return err
+	}
+	l.Info("created new userrole table")
 
 	if err := madmin.Insert(u.db.DB()); err != nil {
 		err.AddTrace(moduleID)

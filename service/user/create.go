@@ -667,6 +667,18 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	finalRank.Add(editAddRank)
 	finalRank.Remove(editRemoveRank)
 
+	diff := make(map[string]int)
+	for k, v := range editAddRank {
+		if v {
+			diff[k] = 1
+		}
+	}
+	for k, v := range editRemoveRank {
+		if v {
+			diff[k] = 2
+		}
+	}
+
 	s := session.Session{
 		Userid: reqid.Userid,
 	}
@@ -698,6 +710,10 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
+
+	for k, v := range diff {
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
