@@ -211,7 +211,7 @@ func (u *userService) getUsersByRole(c echo.Context, l *logrus.Logger) error {
 	}
 
 	ruser := reqGetRoleUserList{
-		Role:   c.QueryParam("role"),
+		Role:   c.Param("role"),
 		Amount: amt,
 		Offset: ofs,
 	}
