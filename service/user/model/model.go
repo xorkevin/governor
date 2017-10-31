@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
@@ -19,6 +20,13 @@ const (
 	tableName     = "users"
 	moduleID      = "usermodel"
 	moduleIDModel = moduleID + ".Model"
+)
+
+const (
+	// RoleAdd indicates adding a role in diff
+	RoleAdd = iota
+	// RoleRemove indicates removing a role in diff
+	RoleRemove
 )
 
 type (
@@ -198,6 +206,32 @@ func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 }
 
 const (
+	moduleIDModInsRoles = moduleIDModel + ".InsertRoles"
+)
+
+// InsertRoles inserts the model's roles into the db
+func (m *Model) InsertRoles(db *sql.DB) *governor.Error {
+	idb64, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDModInsRoles)
+		return err
+	}
+	roles := strings.Split(m.Auth.Tags, ",")
+	for _, i := range roles {
+		rModel, err := rolemodel.New(idb64, i)
+		if err != nil {
+			err.AddTrace(moduleIDModInsRoles)
+			return err
+		}
+		if err := rModel.Insert(db); err != nil {
+			err.AddTrace(moduleIDModInsRoles)
+			return err
+		}
+	}
+	return nil
+}
+
+const (
 	moduleIDModIns = moduleIDModel + ".Insert"
 )
 
@@ -216,6 +250,51 @@ func (m *Model) Insert(db *sql.DB) *governor.Error {
 			default:
 				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 			}
+		}
+	}
+	if err := m.InsertRoles(db); err != nil {
+		err.AddTrace(moduleIDModIns)
+		return err
+	}
+	return nil
+}
+
+const (
+	moduleIDModUpRoles = moduleIDModel + ".UpdateRoles"
+)
+
+// UpdateRoles updates the model's roles into the db
+func (m *Model) UpdateRoles(db *sql.DB, diff map[string]int) *governor.Error {
+	idb64, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDModUpRoles)
+		return err
+	}
+	for k, v := range diff {
+		if originalRole, err := rolemodel.GetByID(db, idb64, k); err == nil {
+			switch v {
+			case 2:
+				if err := originalRole.Delete(db); err != nil {
+					err.AddTrace(moduleIDModUpRoles)
+					return err
+				}
+			}
+		} else if err.Code() == 2 {
+			switch v {
+			case 1:
+				if roleM, err := rolemodel.New(idb64, k); err == nil {
+					if err := roleM.Insert(db); err != nil {
+						err.AddTrace(moduleIDModUpRoles)
+						return err
+					}
+				} else {
+					err.AddTrace(moduleIDModUpRoles)
+					return err
+				}
+			}
+		} else {
+			err.AddTrace(moduleIDModUpRoles)
+			return err
 		}
 	}
 	return nil

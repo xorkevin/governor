@@ -671,12 +671,12 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 	diff := make(map[string]int)
 	for k, v := range editAddRank {
 		if v {
-			diff[k] = 1
+			diff[k] = usermodel.RoleAdd
 		}
 	}
 	for k, v := range editRemoveRank {
 		if v {
-			diff[k] = 2
+			diff[k] = usermodel.RoleRemove
 		}
 	}
 
@@ -706,34 +706,10 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	for k, v := range diff {
-		if originalRole, err := rolemodel.GetByID(db, reqid.Userid, k); err == nil {
-			switch v {
-			case 2:
-				if err := originalRole.Delete(db); err != nil {
-					err.AddTrace(moduleIDUser)
-					return err
-				}
-			}
-		} else if err.Code() == 2 {
-			switch v {
-			case 1:
-				if roleM, err := rolemodel.New(reqid.Userid, k); err == nil {
-					if err := roleM.Insert(db); err != nil {
-						err.AddTrace(moduleIDUser)
-						return err
-					}
-				} else {
-					err.AddTrace(moduleIDUser)
-					return err
-				}
-			}
-		} else {
-			err.AddTrace(moduleIDUser)
-			return err
-		}
+	if err := m.UpdateRoles(db, diff); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
 	}
-
 	// TODO: deprecate storing roles in user model
 	m.Auth.Tags = finalRank.Stringify()
 	if err = m.Update(db); err != nil {

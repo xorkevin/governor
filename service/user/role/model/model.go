@@ -96,6 +96,38 @@ func GetByRole(db *sql.DB, role string, limit, offset int) ([]string, *governor.
 }
 
 const (
+	moduleIDModGetUser = moduleIDModel + ".GetUserRoles"
+)
+
+var (
+	sqlGetUser = fmt.Sprintf("SELECT role FROM %s WHERE userid=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", tableName)
+)
+
+// GetUserRoles returns a list of a user's roles
+func GetUserRoles(db *sql.DB, userid string, limit, offset int) ([]string, *governor.Error) {
+	m := make([]string, 0, limit)
+	rows, err := db.Query(sqlGetUser, userid, limit, offset)
+	if err != nil {
+		return nil, governor.NewError(moduleIDModGetUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, governor.NewError(moduleIDModGetUser, err.Error(), 0, http.StatusInternalServerError)
+		}
+		m = append(m, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, governor.NewError(moduleIDModGetUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return m, nil
+}
+
+const (
 	moduleIDModIns = moduleIDModel + ".Insert"
 )
 
