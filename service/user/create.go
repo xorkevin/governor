@@ -694,12 +694,13 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	if err := ch.Del(sarr...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := ch.HDel(s.UserKey(), sarr...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	if len(sarr) > 0 {
+		if err := ch.Del(sarr...).Err(); err != nil {
+			return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		}
+		if err := ch.HDel(s.UserKey(), sarr...).Err(); err != nil {
+			return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		}
 	}
 
 	if err := m.UpdateRoles(db, diff); err != nil {

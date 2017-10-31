@@ -296,7 +296,7 @@ func (m *Model) UpdateRoles(db *sql.DB, diff map[string]int) *governor.Error {
 	for k, v := range diff {
 		if originalRole, err := rolemodel.GetByID(db, idb64, k); err == nil {
 			switch v {
-			case 2:
+			case RoleRemove:
 				if err := originalRole.Delete(db); err != nil {
 					err.AddTrace(moduleIDModUpRoles)
 					return err
@@ -304,7 +304,7 @@ func (m *Model) UpdateRoles(db *sql.DB, diff map[string]int) *governor.Error {
 			}
 		} else if err.Code() == 2 {
 			switch v {
-			case 1:
+			case RoleAdd:
 				if roleM, err := rolemodel.New(idb64, k); err == nil {
 					if err := roleM.Insert(db); err != nil {
 						err.AddTrace(moduleIDModUpRoles)
