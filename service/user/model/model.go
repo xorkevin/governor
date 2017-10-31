@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
@@ -248,8 +249,18 @@ var (
 
 // Delete deletes the model in the db
 func (m *Model) Delete(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlDelete, m.Userid)
+	idb64, err := m.IDBase64()
 	if err != nil {
+		err.AddTrace(moduleIDModDel)
+		return err
+	}
+
+	if err := rolemodel.DeleteUserRoles(db, idb64); err != nil {
+		err.AddTrace(moduleIDModDel)
+		return err
+	}
+
+	if _, err := db.Exec(sqlDelete, m.Userid); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
