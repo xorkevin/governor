@@ -151,11 +151,31 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 }
 
 const (
+	moduleIDModGetRoles = moduleIDModel + ".GetRoles"
+)
+
+// GetRoles gets the roles of the user for the model
+func (m *Model) GetRoles(db *sql.DB) *governor.Error {
+	idb64, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDModGetRoles)
+		return err
+	}
+	roles, err := rolemodel.GetUserRoles(db, idb64, 1024, 0)
+	if err != nil {
+		err.AddTrace(moduleIDModGetRoles)
+		return err
+	}
+	m.Auth.Tags = strings.Join(roles, ",")
+	return nil
+}
+
+const (
 	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", tableName)
 )
 
 // ParseB64ToUID converts a userid in base64 into a UID
@@ -172,14 +192,16 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 	}
 	mUser := &Model{}
 	var authtags []string
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, pq.Array(&authtags), &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
-	// TODO: get tags from userroles table
-	mUser.Auth.Tags = strings.Join(authtags, ",")
+	if err := mUser.GetRoles(db); err != nil {
+		err.AddTrace(moduleIDModGet64)
+		return nil, err
+	}
 	return mUser, nil
 }
 
@@ -188,20 +210,23 @@ const (
 )
 
 var (
-	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", tableName)
+	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", tableName)
 )
 
 // GetByUsername returns a user model with the given username
 func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	var authtags []string
-	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, pq.Array(&authtags), &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
-	mUser.Auth.Tags = strings.Join(authtags, ",")
+	if err := mUser.GetRoles(db); err != nil {
+		err.AddTrace(moduleIDModGet64)
+		return nil, err
+	}
 	return mUser, nil
 }
 
@@ -236,12 +261,12 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", tableName)
 )
 
 // Insert inserts the model into the db
 func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Userid, m.Username, pq.Array(strings.Split(m.Auth.Tags, ",")), m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlInsert, m.Userid, m.Username, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -305,12 +330,12 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, auth_tags, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7, $8) WHERE userid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;", tableName)
 )
 
 // Update updates the model in the db
 func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, pq.Array(strings.Split(m.Auth.Tags, ",")), m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -338,8 +363,7 @@ const (
 )
 
 var (
-	// TODO: deprecate storing authtags in users table
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags VARCHAR(255)[] NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new User table
