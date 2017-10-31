@@ -170,6 +170,7 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		}
 		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
 	}
+	// TODO: get tags from userroles table
 	mUser.Auth.Tags = strings.Join(authtags, ",")
 	return mUser, nil
 }
@@ -259,6 +260,7 @@ const (
 )
 
 var (
+	// TODO: deprecate storing authtags in users table
 	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, auth_tags VARCHAR(255)[] NOT NULL, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 

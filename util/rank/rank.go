@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	moduleID = "rank"
+	moduleID      = "rank"
+	rankLengthCap = 128
 )
 
 // Tags for user rank
@@ -99,7 +100,7 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 	rankArray := strings.Split(rankString, ",")
 	r := make(Rank, len(rankArray))
 	for _, i := range rankArray {
-		if !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
+		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
 		}
 		r[i] = true

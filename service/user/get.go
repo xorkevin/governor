@@ -5,11 +5,13 @@ import (
 	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"sort"
+	"strconv"
 )
 
 func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
@@ -190,6 +192,45 @@ func (u *userService) getByUsernamePrivate(c echo.Context, l *logrus.Logger) err
 			CreationTime: m.CreationTime,
 		},
 		Email: m.Email,
+	})
+}
+
+func (u *userService) getUsersByRole(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
+	var amt, ofs int
+	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
+		amt = amount
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+	}
+	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
+		ofs = offset
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+	}
+
+	ruser := reqGetRoleUserList{
+		Role:   c.QueryParam("role"),
+		Amount: amt,
+		Offset: ofs,
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	userids, err := rolemodel.GetByRole(db, ruser.Role, ruser.Amount, ruser.Offset)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if len(userids) == 0 {
+		return c.NoContent(http.StatusNotFound)
+	}
+
+	return c.JSON(http.StatusOK, resUserList{
+		Users: userids,
 	})
 }
 

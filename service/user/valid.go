@@ -11,6 +11,7 @@ const (
 	moduleIDReqValid = moduleID + ".reqvalid"
 	lengthCap        = 128
 	lengthCapLarge   = 4096
+	amountCap        = 1024
 )
 
 var (
@@ -100,6 +101,27 @@ func hasToken(token string) *governor.Error {
 func hasIDs(ids []string) *governor.Error {
 	if len(ids) < 1 {
 		return governor.NewErrorUser(moduleIDReqValid, "ids must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validAmount(amt int) *governor.Error {
+	if amt < 1 || amt > amountCap {
+		return governor.NewErrorUser(moduleIDReqValid, "amount is invalid", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validOffset(offset int) *governor.Error {
+	if offset < 0 {
+		return governor.NewErrorUser(moduleIDReqValid, "offset is invalid", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validRole(role string) *governor.Error {
+	if len(role) < 0 || len(role) > lengthCap {
+		return governor.NewErrorUser(moduleIDReqValid, "role is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
 }

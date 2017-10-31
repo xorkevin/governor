@@ -197,6 +197,12 @@ type (
 		Userid string `json:"-"`
 	}
 
+	reqGetRoleUserList struct {
+		Role   string
+		Amount int
+		Offset int
+	}
+
 	resUserGetPublic struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
@@ -214,6 +220,10 @@ type (
 	resUserGetSessions struct {
 		Sessions []session.Session `json:"active_sessions"`
 	}
+
+	resUserList struct {
+		Users []string `json:"users"`
+	}
 )
 
 func (r *reqUserGetUsername) valid() *governor.Error {
@@ -222,6 +232,19 @@ func (r *reqUserGetUsername) valid() *governor.Error {
 
 func (r *reqUserGetID) valid() *governor.Error {
 	return hasUserid(r.Userid)
+}
+
+func (r *reqGetRoleUserList) valid() *governor.Error {
+	if err := validRole(r.Role); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
 }
 
 const (
@@ -274,6 +297,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	r.DELETE("/sessions", func(c echo.Context) error {
 		return u.killSessions(c, l)
 	}, gate.User(u.gate))
+
+	r.GET("/role/:role", func(c echo.Context) error {
+		return u.getUsersByRole(c, l)
+	})
 
 	// id routes
 	ri := r.Group("/id")

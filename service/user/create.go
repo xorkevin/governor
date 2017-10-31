@@ -3,7 +3,6 @@ package user
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/role/model"
@@ -707,26 +706,13 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	m.Auth.Tags = finalRank.Stringify()
-	if err = m.Update(db); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
 	for k, v := range diff {
-		t, _ := time.Now().MarshalText()
-		logrusErr := l.WithFields(logrus.Fields{
-			"time":     string(t),
-			"origin":   moduleIDUser,
-			"userid":   reqid.Userid,
-			"username": m.Username,
-		})
-
 		if originalRole, err := rolemodel.GetByID(db, reqid.Userid, k); err == nil {
 			switch v {
 			case 2:
 				if err := originalRole.Delete(db); err != nil {
-					logrusErr.Error(fmt.Sprintf("failed to delete role %s: %s", k, err.Error()))
+					err.AddTrace(moduleIDUser)
+					return err
 				}
 			}
 		} else if err.Code() == 2 {
@@ -734,15 +720,25 @@ func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
 			case 1:
 				if roleM, err := rolemodel.New(reqid.Userid, k); err == nil {
 					if err := roleM.Insert(db); err != nil {
-						logrusErr.Error(fmt.Sprintf("failed to insert role %s: %s", k, err.Error()))
+						err.AddTrace(moduleIDUser)
+						return err
 					}
 				} else {
-					logrusErr.Error(fmt.Sprintf("failed to create role %s: %s", k, err.Error()))
+					err.AddTrace(moduleIDUser)
+					return err
 				}
 			}
 		} else {
-			logrusErr.Error(fmt.Sprintf("failed while getting role %s from db: %s", k, err.Error()))
+			err.AddTrace(moduleIDUser)
+			return err
 		}
+	}
+
+	// TODO: deprecate storing roles in user model
+	m.Auth.Tags = finalRank.Stringify()
+	if err = m.Update(db); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
 	}
 
 	return c.NoContent(http.StatusNoContent)
