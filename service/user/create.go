@@ -837,6 +837,11 @@ func (u *userService) deleteUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
+	if err := rolemodel.DeleteUserRoles(db, reqid.Userid); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
 	if err := m.Delete(db); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
