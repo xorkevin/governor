@@ -191,7 +191,6 @@ func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mUser := &Model{}
-	var authtags []string
 	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
@@ -216,7 +215,6 @@ var (
 // GetByUsername returns a user model with the given username
 func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
-	var authtags []string
 	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 2, http.StatusNotFound)
