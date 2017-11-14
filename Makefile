@@ -29,15 +29,15 @@ vet:
 prepare: fmt vet
 
 dev:
-	go run $(MAIN_PATH) --config configdev
+	go run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
 
 clean:
 	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
 
 build-bin:
 	mkdir -p $(BIN_DIR)
-	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH);	fi
-	CGO_ENABLED=0 go build -a -tags netgo -ldflags '-w -s' -o $(BIN_PATH) $(MAIN_PATH)
+	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH); fi
+	CGO_ENABLED=0 go build -a -tags netgo -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
 build: clean build-bin
 

@@ -25,8 +25,13 @@ import (
 	"github.com/hackform/governor/service/user/gate/conf"
 )
 
+var (
+	// Build hash to be passed in at compile time
+	GitHash string
+)
+
 func main() {
-	config, err := governor.NewConfig("config")
+	config, err := governor.NewConfig("config", GitHash)
 	governor.Must(err)
 
 	fmt.Println("created new config")

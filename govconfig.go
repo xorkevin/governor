@@ -11,6 +11,7 @@ type (
 		config        *viper.Viper
 		Appname       string
 		Version       string
+		VersionHash   string
 		LogLevel      int
 		Port          string
 		BaseURL       string
@@ -51,7 +52,7 @@ func (c *Config) Init() error {
 }
 
 // NewConfig creates a new server configuration
-func NewConfig(confFilenameDefault string) (Config, error) {
+func NewConfig(confFilenameDefault string, versionhash string) (Config, error) {
 	configFilename := pflag.String("config", confFilenameDefault, "name of config file in config directory")
 	pflag.Parse()
 
@@ -76,6 +77,7 @@ func NewConfig(confFilenameDefault string) (Config, error) {
 	v.AutomaticEnv()
 
 	return Config{
-		config: v,
+		config:      v,
+		VersionHash: versionhash,
 	}, nil
 }
