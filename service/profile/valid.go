@@ -13,8 +13,7 @@ const (
 )
 
 var (
-	emailRegex    = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
-	urlImageRegex = regexp.MustCompile(`^https?://(?:[a-z0-9\-]+\.)+[a-z]{2,6}(?:/[^/#?]+)+\.(?:jpg|gif|png)$`)
+	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
 func hasUserid(userid string) *governor.Error {
