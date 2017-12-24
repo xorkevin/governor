@@ -64,3 +64,7 @@
 [[constraint]]
   name = "github.com/minio/minio-go"
   version = "3.0.2"
+
+[[constraint]]
+  name = "github.com/boombuler/barcode"
+  version = "1.0.0"

@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/boombuler/barcode"
+  packages = [".","qr","utils"]
+  revision = "3cfea5ab600ae37946be2b763b8ec2c1cf2d272d"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -214,6 +220,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7315c03d00e885a68efffba5d26cc030ffa8babba8ab4f544a5d9e194e6ddaeb"
+  inputs-digest = "b99a4ec68ae4c3d13b5979444367ef55578f499db285be2bf1c49c52012e66d2"
   solver-name = "gps-cdcl"
   solver-version = 1
