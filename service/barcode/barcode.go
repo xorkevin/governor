@@ -23,7 +23,7 @@ const (
 type (
 	// Generator is a service that encodes data into barcodes
 	Generator interface {
-		Generate(data string, transport int) (*bytes.Buffer, *governor.Error)
+		GenerateBarcode(transport int, data string) (*bytes.Buffer, *governor.Error)
 	}
 
 	barcodeService struct {
@@ -48,8 +48,8 @@ const (
 	moduleIDGenerate = moduleID + ".Generate"
 )
 
-// Generate encodes data as a barcode image represented by a bytes Buffer
-func (b *barcodeService) Generate(data string, transport int) (*bytes.Buffer, *governor.Error) {
+// GenerateBarcode encodes data as a barcode image represented by a bytes Buffer
+func (b *barcodeService) GenerateBarcode(transport int, data string) (*bytes.Buffer, *governor.Error) {
 	switch transport {
 	case TransportQRCode:
 		qrCode, err := qr.Encode(data, qr.H, qr.Unicode)
