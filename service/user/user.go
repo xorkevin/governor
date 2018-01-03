@@ -25,7 +25,7 @@ type (
 	User interface {
 		governor.Service
 		RegisterHook(hook Hook)
-		SendUserEmail(id, subj, body string) *governor.Error
+		GetUser(userid string) (*usermodel.Model, *governor.Error)
 	}
 
 	userService struct {
@@ -162,23 +162,12 @@ func (u *userService) RegisterHook(hook Hook) {
 	u.hooks = append(u.hooks, hook)
 }
 
-const (
-	moduleIDSendUserEmail = moduleID + ".SendUserEmail"
-)
-
-// SendUserEmail sends an email to the user with the specified id
-func (u *userService) SendUserEmail(userid, subj, body string) *governor.Error {
+// GetUser gets and returns a user with the specified id
+func (u *userService) GetUser(userid string) (*usermodel.Model, *governor.Error) {
 	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDSendUserEmail)
-		return err
+		err.AddTrace(moduleID)
+		return nil, err
 	}
-	if err := u.mailer.Send(m.Email, subj, body); err != nil {
-		err.AddTrace(moduleIDSendUserEmail)
-		return err
-	}
-	return nil
+	return m, nil
 }
