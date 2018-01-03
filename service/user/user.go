@@ -25,6 +25,7 @@ type (
 	User interface {
 		governor.Service
 		RegisterHook(hook Hook)
+		SendUserEmail(id, subj, body string) *governor.Error
 	}
 
 	userService struct {
@@ -159,4 +160,25 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 // RegisterHook adds a hook to the user create and destroy pipelines
 func (u *userService) RegisterHook(hook Hook) {
 	u.hooks = append(u.hooks, hook)
+}
+
+const (
+	moduleIDSendUserEmail = moduleID + ".SendUserEmail"
+)
+
+// SendUserEmail sends an email to the user with the specified id
+func (u *userService) SendUserEmail(userid, subj, body string) *governor.Error {
+	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleIDSendUserEmail)
+		return err
+	}
+	if err := u.mailer.Send(m.Email, subj, body); err != nil {
+		err.AddTrace(moduleIDSendUserEmail)
+		return err
+	}
+	return nil
 }
