@@ -41,7 +41,7 @@ build-bin:
 
 build: clean build-bin
 
-build-docker: build
+build-docker:
 	docker build -f ./cmd/gov/Dockerfile -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest .
 
 
