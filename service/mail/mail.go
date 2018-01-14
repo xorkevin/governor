@@ -85,7 +85,7 @@ func (m *goMail) mailWorker(l *logrus.Logger) {
 			if !ok {
 				return
 			}
-			if sender == nil || mailSent >= cap {
+			if sender == nil || mailSent >= cap && cap > 0 {
 				if s, err := d.Dial(); err == nil {
 					sender = s
 					mailSent = 0
