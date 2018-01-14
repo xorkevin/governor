@@ -84,7 +84,8 @@ func (m *goMail) mailWorker(l *logrus.Logger) {
 				if s, err := d.Dial(); err == nil {
 					sender = s
 				} else {
-					l.Error(err)
+					l.Errorf("Failed to dial smtp server: %s", err)
+					break
 				}
 			}
 			if err := gomail.Send(sender, m); err != nil {
