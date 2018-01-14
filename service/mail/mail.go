@@ -63,6 +63,7 @@ func (m *goMail) dialer() *gomail.Dialer {
 
 	if m.insecure {
 		d.TLSConfig = &tls.Config{
+			ServerName:         m.host,
 			InsecureSkipVerify: true,
 		}
 	}

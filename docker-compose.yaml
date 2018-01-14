@@ -32,6 +32,8 @@ services:
   mail:
     image: mailhog/mailhog
     restart: unless-stopped
+    ports:
+      - 8025:8025
 
 volumes:
   pgdata:
