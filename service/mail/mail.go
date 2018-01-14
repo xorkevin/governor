@@ -25,6 +25,7 @@ type (
 		insecure    bool
 		bufferSize  int
 		workerSize  int
+		connMsgCap  int
 		fromAddress string
 		msgc        chan *gomail.Message
 	}
@@ -49,6 +50,7 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 		insecure:    v.GetBool("mail.insecure"),
 		bufferSize:  v.GetInt("mail.buffer_size"),
 		workerSize:  v.GetInt("mail.worker_size"),
+		connMsgCap:  v.GetInt("mail.conn_msg_cap"),
 		fromAddress: rconf["from_address"],
 		msgc:        make(chan *gomail.Message, v.GetInt("mail.buffer_size")),
 	}
@@ -74,6 +76,7 @@ func (m *goMail) dialer() *gomail.Dialer {
 func (m *goMail) mailWorker(l *logrus.Logger) {
 	d := m.dialer()
 	var sender gomail.SendCloser
+	mailSent := 0
 
 	for {
 		select {
@@ -81,9 +84,10 @@ func (m *goMail) mailWorker(l *logrus.Logger) {
 			if !ok {
 				return
 			}
-			if sender == nil {
+			if sender == nil || mailSent >= m.connMsgCap {
 				if s, err := d.Dial(); err == nil {
 					sender = s
+					mailSent = 0
 				} else {
 					l.Errorf("Failed to dial smtp server: %s", err)
 				}
@@ -92,6 +96,7 @@ func (m *goMail) mailWorker(l *logrus.Logger) {
 				if err := gomail.Send(sender, m); err != nil {
 					l.Error(err)
 				}
+				mailSent++
 			}
 
 		case <-time.After(30 * time.Second):
