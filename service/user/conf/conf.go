@@ -8,7 +8,8 @@ import (
 // Conf loads in the default
 func Conf(c *governor.Config) error {
 	v := c.Conf()
-	v.SetDefault("user.confirm_duration", "24h")
-	v.SetDefault("user.password_reset_duration", "24h")
+	v.SetDefault("user.confirm_duration", "1h")
+	v.SetDefault("user.password_reset_duration", "1h")
+	v.SetDefault("user.new_login_email", true)
 	return gateconf.Conf(c)
 }

@@ -289,7 +289,7 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 				err.AddTrace(moduleIDAuth)
 				return err
 			}
-			if !isMember {
+			if u.newLoginEmail && !isMember {
 				emdata := emailNewLogin{
 					SessionID: s.SessionID,
 					IP:        s.IP,

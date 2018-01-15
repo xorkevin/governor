@@ -37,6 +37,7 @@ type (
 		refreshTime       int64
 		confirmTime       int64
 		passwordResetTime int64
+		newLoginEmail     bool
 		tpl               template.Template
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
@@ -92,6 +93,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		refreshTime:       refreshTime,
 		confirmTime:       confirmTime,
 		passwordResetTime: passwordResetTime,
+		newLoginEmail:     conf.Conf().GetBool("user.new_login_email"),
 		tpl:               tpl,
 		gate:              g,
 		cc:                cc,

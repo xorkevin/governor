@@ -32,8 +32,9 @@ userauth:
   duration: 15m
   refresh_duration: 168h
 user:
-  confirm_duration: 24h
-  password_reset_duration: 24h
+  confirm_duration: 1h
+  password_reset_duration: 1h
+  new_login_email: true
 mail:
   host: mail
   port: 1025
