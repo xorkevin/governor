@@ -29,8 +29,8 @@ func validUsername(username string) *governor.Error {
 	return nil
 }
 
-func validPassword(password string) *governor.Error {
-	if len(password) < 10 || len(password) > lengthCap {
+func validPassword(password string, size int) *governor.Error {
+	if len(password) < size || len(password) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
 	}
 	return nil

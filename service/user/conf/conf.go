@@ -11,5 +11,6 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("user.confirm_duration", "1h")
 	v.SetDefault("user.password_reset_duration", "1h")
 	v.SetDefault("user.new_login_email", true)
+	v.SetDefault("user.password_min_size", 8)
 	return gateconf.Conf(c)
 }

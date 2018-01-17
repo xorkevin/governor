@@ -76,7 +76,7 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(); err != nil {
+	if err := ruser.valid(u.passwordMinSize); err != nil {
 		return err
 	}
 
@@ -386,7 +386,7 @@ func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(); err != nil {
+	if err := ruser.valid(u.passwordMinSize); err != nil {
 		return err
 	}
 
@@ -517,7 +517,7 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(); err != nil {
+	if err := ruser.valid(u.passwordMinSize); err != nil {
 		return err
 	}
 

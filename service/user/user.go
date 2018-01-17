@@ -38,6 +38,7 @@ type (
 		confirmTime       int64
 		passwordResetTime int64
 		newLoginEmail     bool
+		passwordMinSize   int
 		tpl               template.Template
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
@@ -63,8 +64,9 @@ const (
 
 // New creates a new User
 func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) User {
-	ca := conf.Conf().GetStringMapString("userauth")
-	cu := conf.Conf().GetStringMapString("user")
+	c := conf.Conf()
+	ca := c.GetStringMapString("userauth")
+	cu := c.GetStringMapString("user")
 	accessTime := time15m
 	refreshTime := time7d
 	confirmTime := time24h
@@ -93,7 +95,8 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		refreshTime:       refreshTime,
 		confirmTime:       confirmTime,
 		passwordResetTime: passwordResetTime,
-		newLoginEmail:     conf.Conf().GetBool("user.new_login_email"),
+		newLoginEmail:     c.GetBool("user.new_login_email"),
+		passwordMinSize:   c.GetInt("user.password_min_size"),
 		tpl:               tpl,
 		gate:              g,
 		cc:                cc,

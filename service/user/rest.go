@@ -72,11 +72,11 @@ type (
 	}
 )
 
-func (r *reqUserPost) valid() *governor.Error {
+func (r *reqUserPost) valid(passlen int) *governor.Error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
-	if err := validPassword(r.Password); err != nil {
+	if err := validPassword(r.Password, passlen); err != nil {
 		return err
 	}
 	if err := validEmail(r.Email); err != nil {
@@ -105,11 +105,11 @@ func (r *reqForgotPassword) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqForgotPasswordReset) valid() *governor.Error {
+func (r *reqForgotPasswordReset) valid(passlen int) *governor.Error {
 	if err := hasToken(r.Key); err != nil {
 		return err
 	}
-	if err := validPassword(r.NewPassword); err != nil {
+	if err := validPassword(r.NewPassword, passlen); err != nil {
 		return err
 	}
 	return nil
@@ -148,8 +148,8 @@ func (r *reqUserPutEmailVerify) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqUserPutPassword) valid() *governor.Error {
-	if err := validPassword(r.NewPassword); err != nil {
+func (r *reqUserPutPassword) valid(passlen int) *governor.Error {
+	if err := validPassword(r.NewPassword, passlen); err != nil {
 		return err
 	}
 	if err := hasPassword(r.OldPassword); err != nil {

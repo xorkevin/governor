@@ -38,6 +38,7 @@ user:
   confirm_duration: 1h
   password_reset_duration: 1h
   new_login_email: true
+  password_min_size: 8
 mail:
   host: localhost
   port: 1025
