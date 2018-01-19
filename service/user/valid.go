@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/rank"
 	"net/http"
@@ -31,7 +32,7 @@ func validUsername(username string) *governor.Error {
 
 func validPassword(password string, size int) *governor.Error {
 	if len(password) < size || len(password) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "password must be longer than 9 chars", 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, fmt.Sprintf("password must be longer than %d chars", size), 0, http.StatusBadRequest)
 	}
 	return nil
 }

@@ -71,7 +71,7 @@
   branch = "master"
   name = "github.com/lib/pq"
   packages = [".","oid"]
-  revision = "83612a56d3dd153a94a629cd64925371c9adad78"
+  revision = "27ea5d92de30060e7121ddd543fe14e9a327e0cc"
 
 [[projects]]
   name = "github.com/magiconair/properties"
@@ -112,8 +112,8 @@
 [[projects]]
   name = "github.com/pelletier/go-toml"
   packages = ["."]
-  revision = "16398bac157da96aa88f98a2df640c7f32af1da2"
-  version = "v1.0.1"
+  revision = "acdc4509485b587f5e675510c4f2c63e90ff68a8"
+  version = "v1.1.0"
 
 [[projects]]
   name = "github.com/pmezard/go-difflib"
