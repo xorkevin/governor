@@ -32,7 +32,7 @@ func validUsername(username string) *governor.Error {
 
 func validPassword(password string, size int) *governor.Error {
 	if len(password) < size || len(password) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, fmt.Sprintf("password must be longer than %d chars", size), 0, http.StatusBadRequest)
+		return governor.NewErrorUser(moduleIDReqValid, fmt.Sprintf("password must be at least %d chars", size), 0, http.StatusBadRequest)
 	}
 	return nil
 }
