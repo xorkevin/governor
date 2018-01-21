@@ -186,6 +186,8 @@ func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
 
 type (
 	emailNewLogin struct {
+		FirstName string
+		Username  string
 		SessionID string
 		IP        string
 		UserAgent string
@@ -291,6 +293,8 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 			}
 			if u.newLoginEmail && !isMember {
 				emdata := emailNewLogin{
+					FirstName: m.FirstName,
+					Username:  m.Username,
 					SessionID: s.SessionID,
 					IP:        s.IP,
 					Time:      time.Unix(s.Time, 0).String(),

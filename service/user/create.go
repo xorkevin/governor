@@ -21,30 +21,36 @@ import (
 type (
 	emailNewUser struct {
 		FirstName string
+		Username  string
 		Key       string
 	}
 
 	emailForgotPass struct {
-		Username string
-		Key      string
+		FirstName string
+		Username  string
+		Key       string
 	}
 
 	emailPassReset struct {
-		Username string
+		FirstName string
+		Username  string
 	}
 
 	emailPassChange struct {
-		Username string
-		Key      string
+		FirstName string
+		Username  string
+		Key       string
 	}
 
 	emailEmailChange struct {
-		Username string
-		Key      string
+		FirstName string
+		Username  string
+		Key       string
 	}
 
 	emailEmailChangeNotify struct {
-		Username string
+		FirstName string
+		Username  string
 	}
 )
 
@@ -113,6 +119,7 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 
 	emdata := emailNewUser{
 		FirstName: m.FirstName,
+		Username:  m.Username,
 		Key:       sessionKey,
 	}
 
@@ -282,8 +289,9 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	}
 
 	emdata := emailEmailChange{
-		Username: m.Username,
-		Key:      sessionKey,
+		FirstName: m.FirstName,
+		Username:  m.Username,
+		Key:       sessionKey,
 	}
 
 	em, err := u.tpl.ExecuteHTML(emailChangeTemplate, emdata)
@@ -298,7 +306,8 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	}
 
 	emdatanotify := emailEmailChangeNotify{
-		Username: m.Username,
+		FirstName: m.FirstName,
+		Username:  m.Username,
 	}
 
 	emnotify, err := u.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
@@ -418,8 +427,9 @@ func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	}
 
 	emdata := emailPassChange{
-		Username: m.Username,
-		Key:      sessionKey,
+		FirstName: m.FirstName,
+		Username:  m.Username,
+		Key:       sessionKey,
 	}
 
 	em, err := u.tpl.ExecuteHTML(passChangeTemplate, emdata)
@@ -485,8 +495,9 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	}
 
 	emdata := emailForgotPass{
-		Username: m.Username,
-		Key:      sessionKey,
+		FirstName: m.FirstName,
+		Username:  m.Username,
+		Key:       sessionKey,
 	}
 
 	em, err := u.tpl.ExecuteHTML(forgotPassTemplate, emdata)
@@ -543,7 +554,8 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 	}
 
 	emdata := emailPassReset{
-		Username: m.Username,
+		FirstName: m.FirstName,
+		Username:  m.Username,
 	}
 
 	em, err := u.tpl.ExecuteHTML(passResetTemplate, emdata)
