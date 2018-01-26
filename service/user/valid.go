@@ -45,6 +45,9 @@ func validEmail(email string) *governor.Error {
 }
 
 func validFirstName(firstname string) *governor.Error {
+	if len(firstname) == 0 {
+		return governor.NewErrorUser(moduleIDReqValid, "first name must be provided", 0, http.StatusBadRequest)
+	}
 	if len(firstname) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "first name is too long", 0, http.StatusBadRequest)
 	}
@@ -52,6 +55,9 @@ func validFirstName(firstname string) *governor.Error {
 }
 
 func validLastName(lastname string) *governor.Error {
+	if len(lastname) == 0 {
+		return governor.NewErrorUser(moduleIDReqValid, "last name must be provided", 0, http.StatusBadRequest)
+	}
 	if len(lastname) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "last name is too long", 0, http.StatusBadRequest)
 	}
