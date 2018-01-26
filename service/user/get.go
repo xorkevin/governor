@@ -266,3 +266,51 @@ func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error
 		Email: m.Email,
 	})
 }
+
+func (u *userService) getAllUserInfo(c echo.Context, l *logrus.Logger) error {
+	db := u.db.DB()
+
+	var amt, ofs int
+	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
+		amt = amount
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+	}
+	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
+		ofs = offset
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+	}
+
+	ruser := reqGetUserEmails{
+		Amount: amt,
+		Offset: ofs,
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	infoSlice, err := usermodel.GetGroup(db, ruser.Amount, ruser.Offset)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if len(infoSlice) == 0 {
+		return c.NoContent(http.StatusNotFound)
+	}
+
+	info := make(userInfoSlice, 0, len(infoSlice))
+	for _, i := range infoSlice {
+		useruid, _ := i.IDBase64()
+
+		info = append(info, resUserInfo{
+			Userid: useruid,
+			Email:  i.Email,
+		})
+	}
+
+	return c.JSON(http.StatusOK, resUserInfoList{
+		Users: info,
+	})
+}

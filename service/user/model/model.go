@@ -61,6 +61,12 @@ type (
 		LastName     string `json:"last_name"`
 		CreationTime int64  `json:"creation_time"`
 	}
+
+	// Info is the metadata of a user
+	Info struct {
+		Userid []byte `json:"userid"`
+		Email  string `json:"email"`
+	}
 )
 
 const (
@@ -150,6 +156,16 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 	return u.Base64(), nil
 }
 
+// IDBase64 returns the userid as a base64 encoded string
+func (m *Info) IDBase64() (string, *governor.Error) {
+	u, err := ParseUIDToB64(m.Userid)
+	if err != nil {
+		err.AddTrace(moduleIDModB64)
+		return "", err
+	}
+	return u.Base64(), nil
+}
+
 const (
 	moduleIDModGetRoles = moduleIDModel + ".GetRoles"
 )
@@ -168,6 +184,38 @@ func (m *Model) GetRoles(db *sql.DB) *governor.Error {
 	}
 	m.Auth.Tags = strings.Join(roles, ",")
 	return nil
+}
+
+const (
+	moduleIDModGetGroup = moduleIDModel + ".GetGroup"
+)
+
+var (
+	sqlGetGroup = fmt.Sprintf("SELECT userid, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", tableName)
+)
+
+// GetGroup gets information from each user
+func GetGroup(db *sql.DB, limit, offset int) ([]Info, *governor.Error) {
+	m := make([]Info, 0, limit)
+	rows, err := db.Query(sqlGetGroup, limit, offset)
+	if err != nil {
+		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		i := Info{}
+		if err := rows.Scan(&i.Userid, &i.Email); err != nil {
+			return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
+		}
+		m = append(m, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return m, nil
 }
 
 const (

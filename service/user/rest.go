@@ -203,6 +203,11 @@ type (
 		Offset int
 	}
 
+	reqGetUserEmails struct {
+		Amount int
+		Offset int
+	}
+
 	resUserGetPublic struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
@@ -224,6 +229,17 @@ type (
 	resUserList struct {
 		Users []string `json:"users"`
 	}
+
+	resUserInfo struct {
+		Userid string `json:"userid"`
+		Email  string `json:"email"`
+	}
+
+	userInfoSlice []resUserInfo
+
+	resUserInfoList struct {
+		Users userInfoSlice `json:"users"`
+	}
 )
 
 func (r *reqUserGetUsername) valid() *governor.Error {
@@ -238,6 +254,16 @@ func (r *reqGetRoleUserList) valid() *governor.Error {
 	if err := validRole(r.Role); err != nil {
 		return err
 	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqGetUserEmails) valid() *governor.Error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
@@ -301,6 +327,10 @@ func (u *userService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 	r.GET("/role/:role", func(c echo.Context) error {
 		return u.getUsersByRole(c, l)
 	})
+
+	r.GET("/all", func(c echo.Context) error {
+		return u.getAllUserInfo(c, l)
+	}, gate.Admin(u.gate))
 
 	// id routes
 	ri := r.Group("/id")
