@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	groupRegex = regexp.MustCompile(`^[a-z][a-z0-9.-_]+$`)
+	groupRegex = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
 )
 
 func hasPostid(postid string) *governor.Error {

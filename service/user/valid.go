@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	userRegex  = regexp.MustCompile(`^[a-z][a-z0-9.-_]+$`)
+	userRegex  = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
