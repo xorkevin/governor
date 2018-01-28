@@ -265,12 +265,36 @@ func GetByUsername(db *sql.DB, username string) (*Model, *governor.Error) {
 	mUser := &Model{}
 	if err := db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that username", 2, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGetUN, "no user found with that username", 2, http.StatusNotFound)
 		}
-		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDModGetUN, err.Error(), 0, http.StatusInternalServerError)
 	}
 	if err := mUser.GetRoles(db); err != nil {
-		err.AddTrace(moduleIDModGet64)
+		err.AddTrace(moduleIDModGetUN)
+		return nil, err
+	}
+	return mUser, nil
+}
+
+const (
+	moduleIDModGetEm = moduleIDModel + ".GetByEmail"
+)
+
+var (
+	sqlGetByEmail = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE email=$1;", tableName)
+)
+
+// GetByEmail returns a user model with the given email
+func GetByEmail(db *sql.DB, email string) (*Model, *governor.Error) {
+	mUser := &Model{}
+	if err := db.QueryRow(sqlGetByEmail, email).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, governor.NewError(moduleIDModGetEm, "no user found with that email", 2, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGetEm, err.Error(), 0, http.StatusInternalServerError)
+	}
+	if err := mUser.GetRoles(db); err != nil {
+		err.AddTrace(moduleIDModGetEm)
 		return nil, err
 	}
 	return mUser, nil
@@ -409,7 +433,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new User table

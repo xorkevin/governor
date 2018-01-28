@@ -95,6 +95,15 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 		return governor.NewErrorUser(moduleIDUser, "username is already taken", 0, http.StatusBadRequest)
 	}
 
+	m2, err = usermodel.GetByEmail(db, ruser.Email)
+	if err != nil && err.Code() != 2 {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	if m2 != nil && m2.Email == ruser.Email {
+		return governor.NewErrorUser(moduleIDUser, "email is already used by another account", 0, http.StatusBadRequest)
+	}
+
 	m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
