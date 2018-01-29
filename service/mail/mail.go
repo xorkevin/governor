@@ -27,6 +27,7 @@ type (
 		workerSize  int
 		connMsgCap  int
 		fromAddress string
+		fromName    string
 		msgc        chan *gomail.Message
 	}
 )
@@ -52,6 +53,7 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 		workerSize:  v.GetInt("mail.worker_size"),
 		connMsgCap:  v.GetInt("mail.conn_msg_cap"),
 		fromAddress: rconf["from_address"],
+		fromName:    rconf["from_name"],
 		msgc:        make(chan *gomail.Message, v.GetInt("mail.buffer_size")),
 	}
 
@@ -154,7 +156,11 @@ const (
 // Send creates and enqueues a new message to be sent
 func (m *goMail) Send(to, subject, body string) *governor.Error {
 	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.fromAddress)
+	if len(m.fromName) > 0 {
+		msg.SetAddressHeader("From", m.fromAddress, m.fromName)
+	} else {
+		msg.SetHeader("From", m.fromAddress)
+	}
 	msg.SetHeader("To", to)
 	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/html", body)

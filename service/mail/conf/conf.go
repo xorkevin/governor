@@ -16,5 +16,6 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("mail.worker_size", 2)
 	v.SetDefault("mail.conn_msg_cap", 0)
 	v.SetDefault("mail.from_address", "")
+	v.SetDefault("mail.from_name", "")
 	return nil
 }

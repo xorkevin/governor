@@ -43,6 +43,7 @@ mail:
   host: localhost
   port: 1025
   from_address: gov@hack.com
+  from_name: Hackform
   insecure: true
   buffer_size: 1024
   worker_size: 2
