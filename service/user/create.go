@@ -473,17 +473,34 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(); err != nil {
-		return err
+	isEmail := false
+	if err := ruser.validEmail(); err == nil {
+		isEmail = true
 	}
-
-	m, err := usermodel.GetByUsername(db, ruser.Username)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+	var m *usermodel.Model
+	if isEmail {
+		mu, err := usermodel.GetByEmail(db, ruser.Username)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDUser)
+			return err
 		}
-		err.AddTrace(moduleIDUser)
-		return err
+		m = mu
+	} else {
+		if err := ruser.valid(); err != nil {
+			return err
+		}
+		mu, err := usermodel.GetByUsername(db, ruser.Username)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDUser)
+			return err
+		}
+		m = mu
 	}
 
 	key, err := uid.NewU(0, 16)

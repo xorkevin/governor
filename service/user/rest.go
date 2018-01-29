@@ -105,6 +105,13 @@ func (r *reqForgotPassword) valid() *governor.Error {
 	return nil
 }
 
+func (r *reqForgotPassword) validEmail() *governor.Error {
+	if err := validEmail(r.Username); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *reqForgotPasswordReset) valid(passlen int) *governor.Error {
 	if err := hasToken(r.Key); err != nil {
 		return err
