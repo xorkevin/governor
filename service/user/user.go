@@ -73,17 +73,32 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	passwordResetTime := time24h
 	if duration, err := time.ParseDuration(ca["duration"]); err == nil {
 		accessTime = duration.Nanoseconds() / b1
+		l.Infof("auth: duration: %ds", accessTime)
+	} else {
+		l.Warnf("auth: failed to parse duration: %s", ca["duration"])
 	}
 	if duration, err := time.ParseDuration(ca["refresh_duration"]); err == nil {
 		refreshTime = duration.Nanoseconds() / b1
+		l.Infof("auth: refresh_duration: %ds", refreshTime)
+	} else {
+		l.Warnf("auth: failed to parse refresh_duration: %s", ca["refresh_duration"])
 	}
 	if duration, err := time.ParseDuration(cu["confirm_duration"]); err == nil {
 		confirmTime = duration.Nanoseconds() / b1
+		l.Infof("auth: confirm_duration: %ds", confirmTime)
+	} else {
+		l.Warnf("auth: failed to parse confirm_duration: %s", ca["confirm_duration"])
 	}
 	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err == nil {
 		passwordResetTime = duration.Nanoseconds() / b1
+		l.Infof("auth: password_reset_duration: %ds", passwordResetTime)
+	} else {
+		l.Warnf("auth: failed to parse password_reset_duration: %s", ca["password_reset_duration"])
 	}
+	l.Infof("auth: issuer: %s", ca["issuer"])
 
+	l.Infof("user: new_login_email: %t", c.GetBool("user.new_login_email"))
+	l.Infof("user: password_min_size: %d", c.GetInt("user.password_min_size"))
 	l.Info("initialized user service")
 
 	return &userService{

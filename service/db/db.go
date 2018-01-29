@@ -45,6 +45,7 @@ func New(c governor.Config, l *logrus.Logger) (Database, error) {
 		return nil, err
 	}
 
+	l.Infof("db: connected to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"])
 	l.Info("initialized database")
 
 	return &postgresDB{

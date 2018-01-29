@@ -60,6 +60,7 @@ func New(c governor.Config, l *logrus.Logger) (Objstore, error) {
 		return nil, err
 	}
 
+	l.Infof("objstore: connected to %s:%s", minioconf["host"], minioconf["port"])
 	l.Info("initialized object store")
 	return &minioObjstore{
 		store: client,

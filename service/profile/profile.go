@@ -87,6 +87,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, obj objstore.Ob
 		l.Errorf("failed to get bucket: %s\n", err.Error())
 	}
 
+	l.Infof("profile: image bucket: %s", imageBucket)
 	l.Info("initialized profile service")
 
 	return &profileService{

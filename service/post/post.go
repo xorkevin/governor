@@ -47,6 +47,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 		archiveTime = duration.Nanoseconds() / b1
 	}
 
+	l.Infof("post: archive_time: %s", cp["archive_time"])
 	l.Info("initialized post service")
 
 	return &postService{

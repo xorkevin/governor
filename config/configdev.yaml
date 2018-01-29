@@ -47,5 +47,6 @@ mail:
   insecure: true
   buffer_size: 1024
   worker_size: 2
+  conn_msg_cap: 100
 post:
   archive_time: 2688h

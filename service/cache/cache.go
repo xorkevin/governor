@@ -40,6 +40,7 @@ func New(c governor.Config, l *logrus.Logger) (Cache, error) {
 		return nil, err
 	}
 
+	l.Infof("cache: connected to %s:%s", rconf["host"], rconf["port"])
 	l.Info("initialized cache")
 
 	return &redisCache{
