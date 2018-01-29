@@ -45,6 +45,16 @@ func (r *reqUserAuth) valid() *governor.Error {
 	return nil
 }
 
+func (r *reqUserAuth) validEmail() *governor.Error {
+	if err := validEmail(r.Username); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *reqExchangeToken) valid() *governor.Error {
 	if err := hasToken(r.RefreshToken); err != nil {
 		return err
@@ -210,16 +220,34 @@ func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.L
 		if err := c.Bind(&ruser); err != nil {
 			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
 		}
-		if err := ruser.valid(); err != nil {
-			return err
+		isEmail := false
+		if err := ruser.validEmail(); err == nil {
+			isEmail = true
 		}
-		m, err := usermodel.GetByUsername(db, ruser.Username)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
+		var m *usermodel.Model
+		if isEmail {
+			mu, err := usermodel.GetByEmail(db, ruser.Username)
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDAuth)
+				return err
 			}
-			err.AddTrace(moduleIDAuth)
-			return err
+			m = mu
+		} else {
+			if err := ruser.valid(); err != nil {
+				return err
+			}
+			mu, err := usermodel.GetByUsername(db, ruser.Username)
+			if err != nil {
+				if err.Code() == 2 {
+					err.SetErrorUser()
+				}
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+			m = mu
 		}
 		userid, err := m.IDBase64()
 		if err != nil {
