@@ -42,7 +42,7 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 	rconf := v.GetStringMapString("mail")
 
 	l.Infof("mail: smtp server: %s:%s", rconf["host"], rconf["port"])
-	l.Infof("mail: buffser_size: %d", v.GetInt("mail.buffer_size"))
+	l.Infof("mail: buffer_size: %d", v.GetInt("mail.buffer_size"))
 	l.Infof("mail: worker_size: %d", v.GetInt("mail.worker_size"))
 	l.Infof("mail: conn_msg_cap: %d", v.GetInt("mail.conn_msg_cap"))
 	l.Infof("mail: from: %s <%s>", rconf["from_name"], rconf["from_address"])
