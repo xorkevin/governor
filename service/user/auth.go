@@ -210,7 +210,7 @@ const (
 	newLoginSubject  = "newlogin_subject"
 )
 
-func (u *userService) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer

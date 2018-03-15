@@ -73,7 +73,7 @@ const (
 	emailChangeEscapeSequence = "%email%"
 )
 
-func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -156,7 +156,7 @@ func (u *userService) confirmUser(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) postUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
@@ -225,7 +225,7 @@ func (u *userService) postUser(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) putUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	userid := c.Get("userid").(string)
@@ -256,7 +256,7 @@ func (u *userService) putUser(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -343,7 +343,7 @@ func (u *userService) putEmail(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) putEmailVerify(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
@@ -393,7 +393,7 @@ func (u *userService) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -464,7 +464,7 @@ func (u *userService) putPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -545,7 +545,7 @@ func (u *userService) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
@@ -612,7 +612,7 @@ func (u *userService) forgotPasswordReset(c echo.Context, l *logrus.Logger) erro
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) killSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
 	userid := c.Get("userid").(string)
@@ -640,7 +640,7 @@ func (u *userService) killSessions(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userService) patchRank(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 
@@ -781,7 +781,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 	return nil
 }
 
-func (u *userService) deleteUser(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) deleteUser(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 

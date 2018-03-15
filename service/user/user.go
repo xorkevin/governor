@@ -50,6 +50,10 @@ type (
 		hooks             []Hook
 	}
 
+	userRouter struct {
+		userService
+	}
+
 	// HookBind is a function that binds a request to a struct
 	HookBind func(i interface{}) error
 
@@ -124,6 +128,12 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	}
 }
 
+func (u *userService) newRouter() *userRouter {
+	return &userRouter{
+		*u,
+	}
+}
+
 const (
 	moduleIDUser = moduleID + ".user"
 	moduleIDAuth = moduleID + ".auth"
@@ -131,10 +141,11 @@ const (
 
 // Mount is a collection of routes for accessing and modifying user data
 func (u *userService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	if err := u.mountRest(conf, r.Group("/user"), l); err != nil {
+	ur := u.newRouter()
+	if err := ur.mountRest(conf, r.Group("/user"), l); err != nil {
 		return err
 	}
-	if err := u.mountAuth(conf, r.Group("/auth"), l); err != nil {
+	if err := ur.mountAuth(conf, r.Group("/auth"), l); err != nil {
 		return err
 	}
 
