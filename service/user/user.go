@@ -23,9 +23,14 @@ const (
 type (
 	// User is a user management service
 	User interface {
-		governor.Service
-		RegisterHook(hook Hook)
 		GetUser(userid string) (*usermodel.Model, *governor.Error)
+	}
+
+	// Service is the public interface for the user service server
+	Service interface {
+		governor.Service
+		User
+		RegisterHook(hook Hook)
 	}
 
 	userService struct {
@@ -63,7 +68,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) User {
+func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) Service {
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")

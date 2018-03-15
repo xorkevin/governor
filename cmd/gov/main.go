@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	// Build hash to be passed in at compile time
+	// GitHash is the git hash to be passed in at compile time
 	GitHash string
 )
 
