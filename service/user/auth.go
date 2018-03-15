@@ -210,364 +210,390 @@ const (
 	newLoginSubject  = "newlogin_subject"
 )
 
-func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
 	db := u.db.DB()
 	ch := u.cache.Cache()
 	mailer := u.mailer
 
-	r.POST("/login", func(c echo.Context) error {
-		ruser := reqUserAuth{}
-		if err := c.Bind(&ruser); err != nil {
-			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
-		}
-		isEmail := false
-		if err := ruser.validEmail(); err == nil {
-			isEmail = true
-		}
-		var m *usermodel.Model
-		if isEmail {
-			mu, err := usermodel.GetByEmail(db, ruser.Username)
-			if err != nil {
-				if err.Code() == 2 {
-					err.SetErrorUser()
-				}
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			m = mu
-		} else {
-			if err := ruser.valid(); err != nil {
-				return err
-			}
-			mu, err := usermodel.GetByUsername(db, ruser.Username)
-			if err != nil {
-				if err.Code() == 2 {
-					err.SetErrorUser()
-				}
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			m = mu
-		}
-		userid, err := m.IDBase64()
+	ruser := reqUserAuth{}
+	if err := c.Bind(&ruser); err != nil {
+		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+	}
+	isEmail := false
+	if err := ruser.validEmail(); err == nil {
+		isEmail = true
+	}
+	var m *usermodel.Model
+	if isEmail {
+		mu, err := usermodel.GetByEmail(db, ruser.Username)
 		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
-		if t, err := getSessionCookie(c, userid); err == nil {
-			ruser.SessionToken = t
-		}
-
-		if m.ValidatePass(ruser.Password) {
-			sessionID := ""
-			isMember := false
-			// if claims userid matches model, session_id is provided,
-			// is in list of user sessions, set it as the sessionID
-			// the session can be expired by time
-			if ok, claims := u.tokenizer.GetClaims(ruser.SessionToken, sessionSubject); ok {
-				if userid == claims.Userid {
-					usersession := session.Session{
-						Userid: claims.Userid,
-					}
-					userkey := usersession.UserKey()
-					if isM, err := ch.HExists(userkey, claims.Id).Result(); err == nil && isM {
-						sessionID = claims.Id
-						isMember = isM
-					} else {
-						if err != nil {
-						}
-					}
-				}
-			}
-
-			var s *session.Session
-			if sessionID == "" {
-				// otherwise, create a new sessionID
-				if s, err = session.New(m, c); err != nil {
-					err.AddTrace(moduleIDAuth)
-					return err
-				}
-			} else {
-				if s, err = session.FromSessionID(sessionID, userid, c); err != nil {
-					err.AddTrace(moduleIDAuth)
-					return err
-				}
-			}
-
-			// generate an access token
-			accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			// generate a refresh token with the sessionKey
-			refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			// generate a session token
-			sessionToken, _, err := u.tokenizer.Generate(m, u.refreshTime, sessionSubject, s.SessionID)
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-
-			// store the session in cache
-			sessionGob, err := s.ToGob()
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			if u.newLoginEmail && !isMember {
-				emdata := emailNewLogin{
-					FirstName: m.FirstName,
-					Username:  m.Username,
-					SessionID: s.SessionID,
-					IP:        s.IP,
-					Time:      time.Unix(s.Time, 0).String(),
-					UserAgent: s.UserAgent,
-				}
-
-				em, err := u.tpl.ExecuteHTML(newLoginTemplate, emdata)
-				if err != nil {
-					err.AddTrace(moduleIDAuth)
-					return err
-				}
-				subj, err := u.tpl.ExecuteHTML(newLoginSubject, emdata)
-				if err != nil {
-					err.AddTrace(moduleIDAuth)
-					return err
-				}
-
-				if err := mailer.Send(m.Email, subj, em); err != nil {
-					err.AddTrace(moduleIDAuth)
-					return err
-				}
-			}
-
-			// add to list of user sessions
-			if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-			}
-
-			// set the session id and key into cache
-			if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
-				return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-			}
-
-			u.setAccessCookie(c, conf, accessToken)
-			u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
-			u.setSessionCookie(c, conf, sessionToken, userid)
-
-			return c.JSON(http.StatusOK, resUserAuth{
-				Valid:        true,
-				AccessToken:  accessToken,
-				RefreshToken: refreshToken,
-				SessionToken: sessionToken,
-				Claims:       claims,
-			})
-		}
-
-		return c.JSON(http.StatusUnauthorized, resUserAuth{
-			Valid: false,
-		})
-	})
-
-	r.POST("/exchange", func(c echo.Context) error {
-		ruser := reqExchangeToken{}
-		if t, err := getRefreshCookie(c); err == nil {
-			ruser.RefreshToken = t
-		} else if err := c.Bind(&ruser); err != nil {
-			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
-		}
+		m = mu
+	} else {
 		if err := ruser.valid(); err != nil {
 			return err
 		}
+		mu, err := usermodel.GetByUsername(db, ruser.Username)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+		m = mu
+	}
+	userid, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+	if t, err := getSessionCookie(c, userid); err == nil {
+		ruser.SessionToken = t
+	}
 
+	if m.ValidatePass(ruser.Password) {
 		sessionID := ""
-		sessionKey := ""
-		userid := ""
-		// if session_id is provided, is in cache, and is valid, set it as the sessionID
-		// the session cannot be expired
-		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-				if key, err := ch.Get(s[0]).Result(); err == nil {
-					sessionID = s[0]
-					sessionKey = key
-					userid = claims.Userid
+		isMember := false
+		// if claims userid matches model, session_id is provided,
+		// is in list of user sessions, set it as the sessionID
+		// the session can be expired by time
+		if ok, claims := u.tokenizer.GetClaims(ruser.SessionToken, sessionSubject); ok {
+			if userid == claims.Userid {
+				usersession := session.Session{
+					Userid: claims.Userid,
+				}
+				userkey := usersession.UserKey()
+				if isM, err := ch.HExists(userkey, claims.Id).Result(); err == nil && isM {
+					sessionID = claims.Id
+					isMember = isM
+				} else {
+					if err != nil {
+					}
 				}
 			}
 		}
 
+		var s *session.Session
 		if sessionID == "" {
-			return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+			// otherwise, create a new sessionID
+			if s, err = session.New(m, c); err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+		} else {
+			if s, err = session.FromSessionID(sessionID, userid, c); err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
 		}
 
-		// check the refresh token
-		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
-		if !validToken {
-			return c.JSON(http.StatusUnauthorized, resUserAuth{
-				Valid: false,
-			})
-		}
-
-		s, err := session.FromSessionID(sessionID, userid, c)
+		// generate an access token
+		accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
+		// generate a refresh token with the sessionKey
+		refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+		// generate a session token
+		sessionToken, _, err := u.tokenizer.Generate(m, u.refreshTime, sessionSubject, s.SessionID)
+		if err != nil {
+			err.AddTrace(moduleIDAuth)
+			return err
+		}
+
+		// store the session in cache
 		sessionGob, err := s.ToGob()
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
+		if u.newLoginEmail && !isMember {
+			emdata := emailNewLogin{
+				FirstName: m.FirstName,
+				Username:  m.Username,
+				SessionID: s.SessionID,
+				IP:        s.IP,
+				Time:      time.Unix(s.Time, 0).String(),
+				UserAgent: s.UserAgent,
+			}
+
+			em, err := u.tpl.ExecuteHTML(newLoginTemplate, emdata)
+			if err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+			subj, err := u.tpl.ExecuteHTML(newLoginSubject, emdata)
+			if err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+
+			if err := mailer.Send(m.Email, subj, em); err != nil {
+				err.AddTrace(moduleIDAuth)
+				return err
+			}
+		}
+
+		// add to list of user sessions
 		if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
-		// generate a new accessToken from the refreshToken claims
-		accessToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-
-		u.setAccessCookie(c, conf, accessToken)
-
-		return c.JSON(http.StatusOK, resUserAuth{
-			Valid:       true,
-			AccessToken: accessToken,
-			Claims:      claims,
-		})
-	})
-
-	r.POST("/refresh", func(c echo.Context) error {
-		ruser := reqExchangeToken{}
-		if t, err := getRefreshCookie(c); err == nil {
-			ruser.RefreshToken = t
-		} else if err := c.Bind(&ruser); err != nil {
-			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
-		}
-		if err := ruser.valid(); err != nil {
-			return err
-		}
-
-		sessionID := ""
-		sessionKey := ""
-		userid := ""
-		// if session_id is provided, is in cache, and is valid, set it as the sessionID
-		// the session cannot be expired
-		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-				if key, err := ch.Get(s[0]).Result(); err == nil {
-					sessionID = s[0]
-					sessionKey = key
-					userid = claims.Userid
-				}
-			}
-		}
-
-		if sessionID == "" {
-			return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
-		}
-
-		// check the refresh token
-		validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
-		if !validToken {
-			return c.JSON(http.StatusUnauthorized, resUserAuth{
-				Valid: false,
-			})
-		}
-
-		// create a new key for the session
-		key, err := uid.NewU(0, 16)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-		sessionKey = key.Base64()
-
-		// generate a new refreshToken from the refreshToken claims
-		refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-
-		// generate a new sessionToken from the refreshToken claims
-		sessionToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, sessionSubject, sessionID)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-
 		// set the session id and key into cache
-		if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
+		u.setAccessCookie(c, conf, accessToken)
 		u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
 		u.setSessionCookie(c, conf, sessionToken, userid)
 
 		return c.JSON(http.StatusOK, resUserAuth{
 			Valid:        true,
+			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
+			SessionToken: sessionToken,
+			Claims:       claims,
 		})
+	}
+
+	return c.JSON(http.StatusUnauthorized, resUserAuth{
+		Valid: false,
+	})
+}
+
+func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+	ch := u.cache.Cache()
+
+	ruser := reqExchangeToken{}
+	if t, err := getRefreshCookie(c); err == nil {
+		ruser.RefreshToken = t
+	} else if err := c.Bind(&ruser); err != nil {
+		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	sessionID := ""
+	sessionKey := ""
+	userid := ""
+	// if session_id is provided, is in cache, and is valid, set it as the sessionID
+	// the session cannot be expired
+	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+			if key, err := ch.Get(s[0]).Result(); err == nil {
+				sessionID = s[0]
+				sessionKey = key
+				userid = claims.Userid
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+	}
+
+	// check the refresh token
+	validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	if !validToken {
+		return c.JSON(http.StatusUnauthorized, resUserAuth{
+			Valid: false,
+		})
+	}
+
+	s, err := session.FromSessionID(sessionID, userid, c)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+	sessionGob, err := s.ToGob()
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+	if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
+		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	// generate a new accessToken from the refreshToken claims
+	accessToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+
+	u.setAccessCookie(c, conf, accessToken)
+
+	return c.JSON(http.StatusOK, resUserAuth{
+		Valid:       true,
+		AccessToken: accessToken,
+		Claims:      claims,
+	})
+}
+
+func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+	ch := u.cache.Cache()
+
+	ruser := reqExchangeToken{}
+	if t, err := getRefreshCookie(c); err == nil {
+		ruser.RefreshToken = t
+	} else if err := c.Bind(&ruser); err != nil {
+		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	sessionID := ""
+	sessionKey := ""
+	userid := ""
+	// if session_id is provided, is in cache, and is valid, set it as the sessionID
+	// the session cannot be expired
+	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+			if key, err := ch.Get(s[0]).Result(); err == nil {
+				sessionID = s[0]
+				sessionKey = key
+				userid = claims.Userid
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+	}
+
+	// check the refresh token
+	validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	if !validToken {
+		return c.JSON(http.StatusUnauthorized, resUserAuth{
+			Valid: false,
+		})
+	}
+
+	// create a new key for the session
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+	sessionKey = key.Base64()
+
+	// generate a new refreshToken from the refreshToken claims
+	refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+
+	// generate a new sessionToken from the refreshToken claims
+	sessionToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, sessionSubject, sessionID)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return err
+	}
+
+	// set the session id and key into cache
+	if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
+	u.setSessionCookie(c, conf, sessionToken, userid)
+
+	return c.JSON(http.StatusOK, resUserAuth{
+		Valid:        true,
+		RefreshToken: refreshToken,
+	})
+}
+
+func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+	ch := u.cache.Cache()
+
+	ruser := reqExchangeToken{}
+	if t, err := getRefreshCookie(c); err == nil {
+		ruser.RefreshToken = t
+	} else if err := c.Bind(&ruser); err != nil {
+		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	sessionID := ""
+	sessionKey := ""
+	// if session_id is provided, is in cache, and is valid, set it as the sessionID
+	// the session can be expired by time
+	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+			if key, err := ch.Get(s[0]).Result(); err == nil {
+				sessionID = s[0]
+				sessionKey = key
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+	}
+
+	// check the refresh token
+	validToken, _ := u.tokenizer.ValidateSkipTime(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	if !validToken {
+		return c.JSON(http.StatusUnauthorized, resUserAuth{
+			Valid: false,
+		})
+	}
+
+	// delete the session in cache
+	if err := ch.Del(sessionID).Err(); err != nil {
+		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	rmAccessCookie(c, conf)
+	rmRefreshCookie(c, conf)
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (u *userRouter) decodeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+	return c.JSON(http.StatusOK, resUserAuth{
+		Valid:  true,
+		Claims: c.Get("user").(*token.Claims),
+	})
+}
+
+func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	r.POST("/login", func(c echo.Context) error {
+		return u.loginUser(c, conf, l)
+	})
+
+	r.POST("/exchange", func(c echo.Context) error {
+		return u.exchangeToken(c, conf, l)
+	})
+
+	r.POST("/refresh", func(c echo.Context) error {
+		return u.refreshToken(c, conf, l)
 	})
 
 	r.POST("/logout", func(c echo.Context) error {
-		ruser := reqExchangeToken{}
-		if t, err := getRefreshCookie(c); err == nil {
-			ruser.RefreshToken = t
-		} else if err := c.Bind(&ruser); err != nil {
-			return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
-		}
-		if err := ruser.valid(); err != nil {
-			return err
-		}
-
-		sessionID := ""
-		sessionKey := ""
-		// if session_id is provided, is in cache, and is valid, set it as the sessionID
-		// the session can be expired by time
-		if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-			if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-				if key, err := ch.Get(s[0]).Result(); err == nil {
-					sessionID = s[0]
-					sessionKey = key
-				}
-			}
-		}
-
-		if sessionID == "" {
-			return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
-		}
-
-		// check the refresh token
-		validToken, _ := u.tokenizer.ValidateSkipTime(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
-		if !validToken {
-			return c.JSON(http.StatusUnauthorized, resUserAuth{
-				Valid: false,
-			})
-		}
-
-		// delete the session in cache
-		if err := ch.Del(sessionID).Err(); err != nil {
-			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-		}
-
-		rmAccessCookie(c, conf)
-		rmRefreshCookie(c, conf)
-		return c.NoContent(http.StatusNoContent)
+		return u.loginUser(c, conf, l)
 	})
 
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
-			return c.JSON(http.StatusOK, resUserAuth{
-				Valid:  true,
-				Claims: c.Get("user").(*token.Claims),
-			})
+			return u.decodeToken(c, conf, l)
 		}, gate.User(u.gate))
 	}
 
