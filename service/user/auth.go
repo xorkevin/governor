@@ -68,7 +68,7 @@ const (
 	sessionSubject        = "session"
 )
 
-func (u *userService) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
+func (u *userRouter) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
@@ -82,7 +82,7 @@ const (
 	month6 = 43200 * 365
 )
 
-func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string) {
+func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -106,7 +106,7 @@ func (u *userService) setRefreshCookie(c echo.Context, conf governor.Config, ref
 	})
 }
 
-func (u *userService) setSessionCookie(c echo.Context, conf governor.Config, sessionToken, userid string) {
+func (u *userRouter) setSessionCookie(c echo.Context, conf governor.Config, sessionToken, userid string) {
 	ub64 := strings.TrimRight(userid, "=")
 	c.SetCookie(&http.Cookie{
 		Name:     "session_token_" + ub64,

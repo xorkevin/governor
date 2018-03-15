@@ -14,7 +14,7 @@ import (
 	"strconv"
 )
 
-func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByID(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := reqUserGetID{
@@ -44,7 +44,7 @@ func (u *userService) getByID(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	userid := c.Get("userid").(string)
@@ -70,7 +70,7 @@ func (u *userService) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := reqUserGetID{
@@ -103,7 +103,7 @@ func (u *userService) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getSessions(c echo.Context, l *logrus.Logger) error {
 	ch := u.cache.Cache()
 
 	userid := c.Get("userid").(string)
@@ -132,7 +132,7 @@ func (u *userService) getSessions(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByUsername(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := reqUserGetUsername{
@@ -162,7 +162,7 @@ func (u *userService) getByUsername(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getByUsernamePrivate(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByUsernamePrivate(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := reqUserGetUsername{
@@ -195,7 +195,7 @@ func (u *userService) getByUsernamePrivate(c echo.Context, l *logrus.Logger) err
 	})
 }
 
-func (u *userService) getUsersByRole(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getUsersByRole(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	var amt, ofs int
@@ -234,7 +234,7 @@ func (u *userService) getUsersByRole(c echo.Context, l *logrus.Logger) error {
 	})
 }
 
-func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	ruser := reqUserGetUsername{
@@ -267,7 +267,7 @@ func (u *userService) getByUsernameDebug(c echo.Context, l *logrus.Logger) error
 	})
 }
 
-func (u *userService) getAllUserInfo(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) getAllUserInfo(c echo.Context, l *logrus.Logger) error {
 	db := u.db.DB()
 
 	var amt, ofs int
