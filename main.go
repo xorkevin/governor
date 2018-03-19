@@ -84,10 +84,8 @@ func New(config Config) (*Server, error) {
 		}
 		if len(targets) > 0 {
 			i.Use(middleware.ProxyWithConfig(middleware.ProxyConfig{
-				Balancer: &middleware.RoundRobinBalancer{
-					Targets: targets,
-				},
-				Skipper: apiMiddlewareSkipper,
+				Balancer: middleware.NewRoundRobinBalancer(targets),
+				Skipper:  apiMiddlewareSkipper,
 			}))
 		}
 	} else {

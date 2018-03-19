@@ -68,3 +68,7 @@
 [[constraint]]
   name = "github.com/boombuler/barcode"
   version = "1.0.0"
+
+[[constraint]]
+  name = "github.com/gorilla/websocket"
+  version = "1.2.0"
