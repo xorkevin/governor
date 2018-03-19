@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/hackform/governor"
 	"github.com/sirupsen/logrus"
@@ -87,13 +88,22 @@ const (
 func (w *websocketService) Broadcast(channel string, msg interface{}) *governor.Error {
 	c, validChannel := w.channels[channel]
 	if !validChannel {
-		return governor.NewError(moduleID, "Invalid channel", 2, http.StatusNotFound)
+		return governor.NewError(moduleIDBroadcast, "Invalid channel", 2, http.StatusNotFound)
+	}
+	m, err := json.Marshal(msg)
+	if err != nil {
+		return governor.NewError(moduleIDBroadcast, err.Error(), 0, http.StatusInternalServerError)
+	}
+	p, err := websocket.NewPreparedMessage(websocket.TextMessage, m)
+	if err != nil {
+		return governor.NewError(moduleIDBroadcast, err.Error(), 0, http.StatusInternalServerError)
 	}
 	for listener := range c.listeners {
-		if err := listener.conn.WriteJSON(msg); err != nil {
+		if err := listener.conn.WritePreparedMessage(p); err != nil {
 			w.logger.WithFields(logrus.Fields{
 				"origin": moduleIDBroadcast,
 			}).Errorf("Failed to send websocket message: %s", err.Error())
+			listener.Close()
 		}
 	}
 	return nil
@@ -135,6 +145,7 @@ const (
 // Read reads a message to json
 func (c *Conn) Read(msg interface{}) *governor.Error {
 	if err := c.conn.ReadJSON(msg); err != nil {
+		c.Close()
 		return governor.NewError(moduleIDConnRead, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
