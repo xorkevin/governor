@@ -24,7 +24,6 @@ type (
 	websocketService struct {
 		channels map[string]*channel
 		upgrader *websocket.Upgrader
-		logger   *logrus.Logger
 	}
 
 	channel struct {
@@ -76,6 +75,9 @@ func (w *websocketService) Unsubscribe(conn *Conn) {
 	for _, channel := range conn.channels {
 		if c, ok := w.channels[channel]; ok {
 			delete(c.listeners, conn)
+			if len(c.listeners) == 0 {
+				delete(w.channels, channel)
+			}
 		}
 	}
 }
@@ -88,7 +90,7 @@ const (
 func (w *websocketService) Broadcast(channel string, msg interface{}) *governor.Error {
 	c, validChannel := w.channels[channel]
 	if !validChannel {
-		return governor.NewError(moduleIDBroadcast, "Invalid channel", 2, http.StatusNotFound)
+		return nil
 	}
 	m, err := json.Marshal(msg)
 	if err != nil {
@@ -100,9 +102,6 @@ func (w *websocketService) Broadcast(channel string, msg interface{}) *governor.
 	}
 	for listener := range c.listeners {
 		if err := listener.conn.WritePreparedMessage(p); err != nil {
-			w.logger.WithFields(logrus.Fields{
-				"origin": moduleIDBroadcast,
-			}).Errorf("Failed to send websocket message: %s", err.Error())
 			listener.Close()
 		}
 	}
