@@ -6,6 +6,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"sync"
 )
 
 const (
@@ -22,7 +23,7 @@ type (
 	}
 
 	websocketService struct {
-		channels map[string]*channel
+		channels sync.Map
 		upgrader *websocket.Upgrader
 	}
 
@@ -44,28 +45,30 @@ func New(conf governor.Config, l *logrus.Logger) Websocket {
 	l.Info("initialized websocket service")
 
 	return &websocketService{
-		channels: make(map[string]*channel),
+		channels: sync.Map{},
 		upgrader: &websocket.Upgrader{},
 	}
 }
 
-func (w *websocketService) getChannel(channel string) *channel {
-	if c, ok := w.channels[channel]; ok {
-		return c
-	}
-	c := newChannel(channel)
-	w.channels[channel] = c
-	return c
+func (w *websocketService) upsertChannel(s string) *channel {
+	c := newChannel(s)
+	a, _ := w.channels.LoadOrStore(s, c)
+	return a.(*channel)
 }
 
-func (w *websocketService) removeChannel(channel string) {
-	delete(w.channels, channel)
+func (w *websocketService) getChannel(s string) (*channel, bool) {
+	a, b := w.channels.Load(s)
+	return a.(*channel), b
+}
+
+func (w *websocketService) removeChannel(s string) {
+	w.channels.Delete(s)
 }
 
 // Subscribe adds a websocket connection to a channel
 func (w *websocketService) Subscribe(conn *Conn) {
 	for _, channel := range conn.channels {
-		c := w.getChannel(channel)
+		c := w.upsertChannel(channel)
 		c.listeners[conn] = true
 	}
 }
@@ -73,10 +76,11 @@ func (w *websocketService) Subscribe(conn *Conn) {
 // Unsubscribe removes a websocket connection from a channel
 func (w *websocketService) Unsubscribe(conn *Conn) {
 	for _, channel := range conn.channels {
-		if c, ok := w.channels[channel]; ok {
+		if c, ok := w.getChannel(channel); ok {
 			delete(c.listeners, conn)
 			if len(c.listeners) == 0 {
-				delete(w.channels, channel)
+				// TODO: listeners may not be 0 here
+				w.removeChannel(channel)
 			}
 		}
 	}
@@ -88,7 +92,7 @@ const (
 
 // Broadcast sends a message to all websocket connections in a channel
 func (w *websocketService) Broadcast(channel string, msg interface{}) *governor.Error {
-	c, validChannel := w.channels[channel]
+	c, validChannel := w.getChannel(channel)
 	if !validChannel {
 		return nil
 	}
