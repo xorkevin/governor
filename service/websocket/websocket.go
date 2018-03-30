@@ -62,7 +62,10 @@ func (w *websocketService) upsertChannel(s string) *channel {
 
 func (w *websocketService) getChannel(s string) (*channel, bool) {
 	a, b := w.channels.Load(s)
-	return a.(*channel), b
+	if !b {
+		return nil, false
+	}
+	return a.(*channel), true
 }
 
 func (w *websocketService) removeChannel(s string) {
