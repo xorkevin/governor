@@ -1,21 +1,18 @@
 # METADATA
 VERSION=v0.1.0
 
-
 # CMD
 BIN_DIR=bin
 BIN_NAME=gov
 MAIN_PATH=cmd/gov/main.go
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
-
 # DOCKER
 IMAGE_NAME=governor
 
-
+.PHONY: all test fmt vet prepare dev clean build-bin build build-docker produp proddown devup devdown docker-clean
 
 all: build
-
 
 test:
 	go test -cover ./...
