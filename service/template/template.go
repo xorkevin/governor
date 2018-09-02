@@ -28,7 +28,6 @@ type (
 
 // New creates a new Template
 func New(conf governor.Config, l *logrus.Logger) (Template, error) {
-
 	t, err := htmlTemplate.ParseGlob(conf.TemplateDir + "/*.html")
 	if err != nil {
 		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", conf.TemplateDir+"/*.html") {

@@ -48,8 +48,8 @@ func New(conf governor.Config, l *logrus.Logger) Websocket {
 		channels: sync.Map{},
 		upgrader: &websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-        return true
-    	},
+				return true
+			},
 		},
 	}
 }
