@@ -10,23 +10,35 @@ BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 # DOCKER
 IMAGE_NAME=governor
 
-.PHONY: all test fmt vet prepare dev clean build-bin build build-docker produp proddown devup devdown docker-clean
+EXT?=0
+
+GO=go
+ifeq ($(EXT),1)
+	GOROOT=$(TOOLCHAIN_GOROOT)
+	GO=$(TOOLCHAIN_GOBIN)
+endif
+
+.PHONY: all version test fmt vet prepare dev clean build-bin build build-docker produp proddown devup devdown docker-clean toolchain toolclean
 
 all: build
 
+version:
+	@$(GO) version
+	@$(GO) env
+
 test:
-	go test -cover ./...
+	$(GO) test -cover ./...
 
 fmt:
-	go fmt ./...
+	$(GO) fmt ./...
 
 vet:
-	go vet ./...
+	$(GO) vet ./...
 
 prepare: fmt vet
 
 dev:
-	go run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
+	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
 
 clean:
 	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
@@ -34,7 +46,7 @@ clean:
 build-bin:
 	mkdir -p $(BIN_DIR)
 	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH); fi
-	CGO_ENABLED=0 go build -a -tags netgo -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
+	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
 build: clean build-bin
 
@@ -64,3 +76,23 @@ docker-clean:
 		then docker rm $$(docker ps -q -f status=exited); fi
 	if [ "$$(docker ps -q -f status=created)" ]; \
 		then docker rm $$(docker ps -q -f status=created); fi
+
+## local go installation
+TOOLCHAIN_DIR=toolchain
+TOOLCHAIN_GO_DIR=$(TOOLCHAIN_DIR)/go
+TOOLCHAIN_TAR=$(TOOLCHAIN_DIR)/go.tar.gz
+TOOLCHAIN_GOROOT=$(TOOLCHAIN_GO_DIR)/go
+TOOLCHAIN_GOBIN=$(TOOLCHAIN_GOROOT)/bin/go
+
+TOOLCHAIN_URL=https://dl.google.com/go/go1.11.linux-amd64.tar.gz
+
+toolchain:
+	mkdir -p $(TOOLCHAIN_DIR)
+	if [ ! -x $(TOOLCHAIN_GO_DIR) ]; then \
+		wget -q --show-progress $(TOOLCHAIN_URL) -O $(TOOLCHAIN_TAR); \
+		mkdir -p $(TOOLCHAIN_GO_DIR); \
+		tar xzf $(TOOLCHAIN_TAR) -C $(TOOLCHAIN_GO_DIR); \
+	fi;
+
+toolclean:
+	rm -rf $(TOOLCHAIN_DIR)
