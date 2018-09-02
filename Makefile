@@ -18,7 +18,7 @@ ifeq ($(EXT),1)
 	GO=$(TOOLCHAIN_GOBIN)
 endif
 
-.PHONY: all version test fmt vet prepare dev clean build-bin build build-docker produp proddown devup devdown docker-clean toolchain toolclean
+.PHONY: all version test fmt vet prepare update
 
 all: build
 
@@ -37,6 +37,11 @@ vet:
 
 prepare: fmt vet
 
+update:
+	$(GO) get -u
+
+.PHONY: dev clean build-bin build
+
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
 
@@ -50,11 +55,13 @@ build-bin:
 
 build: clean build-bin
 
+
+## docker
+.PHONY: build-docker produp proddown devup devdown docker-clean
+
 build-docker:
 	docker build -f ./cmd/gov/Dockerfile -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest .
 
-
-## docker
 produp:
 	docker-compose -f docker-compose.yaml -f docker-compose-app.yaml up -d
 
@@ -77,6 +84,7 @@ docker-clean:
 	if [ "$$(docker ps -q -f status=created)" ]; \
 		then docker rm $$(docker ps -q -f status=created); fi
 
+
 ## local go installation
 TOOLCHAIN_DIR=toolchain
 TOOLCHAIN_GO_DIR=$(TOOLCHAIN_DIR)/go
@@ -85,6 +93,8 @@ TOOLCHAIN_GOROOT=$(TOOLCHAIN_GO_DIR)/go
 TOOLCHAIN_GOBIN=$(TOOLCHAIN_GOROOT)/bin/go
 
 TOOLCHAIN_URL=https://dl.google.com/go/go1.11.linux-amd64.tar.gz
+
+.PHONY: toolchain toolclean
 
 toolchain:
 	mkdir -p $(TOOLCHAIN_DIR)

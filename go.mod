@@ -1,0 +1,41 @@
+module github.com/hackform/governor
+
+require (
+	github.com/boombuler/barcode v1.0.0
+	github.com/davecgh/go-spew v1.1.0
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4
+	github.com/fatih/color v1.6.0
+	github.com/fsnotify/fsnotify v1.4.7
+	github.com/go-ini/ini v1.33.0
+	github.com/go-redis/redis v6.10.2+incompatible
+	github.com/gorilla/websocket v1.2.0
+	github.com/hashicorp/hcl v0.0.0-20180320202055-f40e974e75af
+	github.com/labstack/echo v0.0.0-20180316170059-a5d81b8d4a62
+	github.com/labstack/gommon v0.0.0-20180312174116-6fe1405d73ec
+	github.com/lib/pq v0.0.0-20180327071824-d34b9ff171c2
+	github.com/magiconair/properties v1.7.6
+	github.com/mattn/go-colorable v0.0.9
+	github.com/mattn/go-isatty v0.0.3
+	github.com/minio/go-homedir v0.0.0-20171204175109-4d76aabb80b2
+	github.com/minio/minio-go v0.0.0-20170912212908-4e0f567303d4
+	github.com/mitchellh/mapstructure v0.0.0-20180220230111-00c29f56e238
+	github.com/pelletier/go-toml v1.1.0
+	github.com/pmezard/go-difflib v1.0.0
+	github.com/sirupsen/logrus v1.0.5
+	github.com/spf13/afero v1.0.2
+	github.com/spf13/cast v1.2.0
+	github.com/spf13/jwalterweatherman v0.0.0-20180109140146-7c0cea34c8ec
+	github.com/spf13/pflag v1.0.0
+	github.com/spf13/viper v1.0.2
+	github.com/stretchr/testify v1.2.1
+	github.com/valyala/bytebufferpool v0.0.0-20160817181652-e746df99fe4a
+	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4
+	golang.org/x/crypto v0.0.0-20180322175230-88942b9c40a4
+	golang.org/x/image v0.0.0-20180314180248-f3a9b89b59de
+	golang.org/x/sys v0.0.0-20180329131831-378d26f46672
+	golang.org/x/text v0.3.0
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc
+	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
+	gopkg.in/yaml.v2 v2.2.1
+)
