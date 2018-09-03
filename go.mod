@@ -8,7 +8,8 @@ require (
 	github.com/fatih/color v1.7.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-ini/ini v1.38.2
-	github.com/go-redis/redis v6.14.0+incompatible
+	github.com/go-mail/mail v0.0.0-20180731213649-a0242b2233b4
+	github.com/go-redis/redis v6.14.1+incompatible
 	github.com/gorilla/websocket v1.4.0
 	github.com/hashicorp/hcl v1.0.0
 	github.com/labstack/echo v3.2.2-0.20180412143600-6d227dfea4d2+incompatible
@@ -39,6 +40,5 @@ require (
 	golang.org/x/text v0.3.0
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/yaml.v2 v2.2.1
 )

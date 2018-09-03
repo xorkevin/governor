@@ -2,10 +2,10 @@ package mail
 
 import (
 	"crypto/tls"
+	gomail "github.com/go-mail/mail"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/gomail.v2"
 	"net/http"
 	"time"
 )
