@@ -12,6 +12,7 @@ import (
 const (
 	moduleID            = "fileloader"
 	defaultContextField = "file"
+	defaultContextField = "filesize"
 )
 
 type (
@@ -27,6 +28,7 @@ type (
 	// Options represent the options to load the file
 	Options struct {
 		ContextField string
+		SizeField    string
 		MimeType     []string
 	}
 )
@@ -51,6 +53,9 @@ func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareF
 	}
 	if opt.ContextField == "" {
 		opt.ContextField = defaultContextField
+	}
+	if opt.SizeField == "" {
+		opt.SizeField = defaultSizeField
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -94,6 +99,7 @@ func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareF
 			}(src)
 
 			c.Set(opt.ContextField, src)
+			c.Set(opt.SizeField, file.Size)
 
 			return next(c)
 		}
