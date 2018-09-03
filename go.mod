@@ -36,7 +36,7 @@ require (
 	golang.org/x/crypto v0.0.0-20180830192347-182538f80094
 	golang.org/x/image v0.0.0-20180708004352-c73c2afc3b81
 	golang.org/x/net v0.0.0-20180826012351-8a410e7b638d // indirect
-	golang.org/x/sys v0.0.0-20180831094639-fa5fdf94c789
+	golang.org/x/sys v0.0.0-20180903171548-1b7396714020
 	golang.org/x/text v0.3.0
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
