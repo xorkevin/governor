@@ -12,7 +12,7 @@ import (
 const (
 	moduleID            = "fileloader"
 	defaultContextField = "file"
-	defaultContextField = "filesize"
+	defaultSizeField    = "filesize"
 )
 
 type (
