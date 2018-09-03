@@ -18,7 +18,7 @@ ifeq ($(EXT),1)
 	GO=$(TOOLCHAIN_GOBIN)
 endif
 
-.PHONY: all version test fmt vet prepare update
+.PHONY: all version test fmt vet prepare
 
 all: build
 
@@ -36,9 +36,6 @@ vet:
 	$(GO) vet ./...
 
 prepare: fmt vet
-
-update:
-	$(GO) get -u
 
 .PHONY: dev clean build-bin build
 

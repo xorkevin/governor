@@ -170,6 +170,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.PUT("/image", func(c echo.Context) error {
 		img := c.Get("image").(io.Reader)
+		imgSize := c.Get("imagesize").(int64)
 		thumb64 := c.Get("thumbnail").(string)
 		userid := c.Get("userid").(string)
 
@@ -182,7 +183,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 			return err
 		}
 
-		if err := p.obj.Put(userid+"-profile", image.MediaTypeJpeg, img); err != nil {
+		if err := p.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
 			err.AddTrace(moduleID)
 			return err
 		}
@@ -203,6 +204,7 @@ func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Lo
 		ThumbQuality:   85,
 		Crop:           true,
 		ContextField:   "image",
+		SizeField:      "imagesize",
 		ThumbnailField: "thumbnail",
 	}))
 

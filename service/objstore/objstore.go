@@ -30,7 +30,7 @@ type (
 
 	// Bucket is a collection of items of the object store service
 	Bucket interface {
-		Put(name, contentType string, object io.Reader) *governor.Error
+		Put(name, contentType string, size int64, object io.Reader) *governor.Error
 		Stat(name string) (*minio.ObjectInfo, *governor.Error)
 		Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error)
 		Remove(name string) *governor.Error
@@ -146,8 +146,8 @@ const (
 )
 
 // Put puts a new object into the bucket
-func (b *minioBucket) Put(name, contentType string, object io.Reader) *governor.Error {
-	if _, err := b.store.PutObject(b.name, name, object, contentType); err != nil {
+func (b *minioBucket) Put(name, contentType string, size int64, object io.Reader) *governor.Error {
+	if _, err := b.store.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
 		return governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -155,7 +155,7 @@ func (b *minioBucket) Put(name, contentType string, object io.Reader) *governor.
 
 // Stat returns metadata of an object from the bucket
 func (b *minioBucket) Stat(name string) (*minio.ObjectInfo, *governor.Error) {
-	objInfo, err := b.store.StatObject(b.name, name)
+	objInfo, err := b.store.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
 	}
@@ -164,11 +164,11 @@ func (b *minioBucket) Stat(name string) (*minio.ObjectInfo, *governor.Error) {
 
 // Get gets an object from the bucket
 func (b *minioBucket) Get(name string) (*minio.Object, *minio.ObjectInfo, *governor.Error) {
-	objInfo, err := b.store.StatObject(b.name, name)
+	objInfo, err := b.store.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 2, http.StatusNotFound)
 	}
-	obj, err := b.store.GetObject(b.name, name)
+	obj, err := b.store.GetObject(b.name, name, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, nil, governor.NewError(moduleIDBucket, err.Error(), 0, http.StatusInternalServerError)
 	}

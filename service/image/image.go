@@ -32,6 +32,7 @@ const (
 	defaultThumbnailHeight = 24
 	defaultQuality         = 85
 	defaultContextField    = "image"
+	defaultSizeField       = "imagesize"
 	defaultThumbnailField  = "thumbnail"
 )
 
@@ -55,6 +56,7 @@ type (
 		ThumbQuality   int
 		Crop           bool
 		ContextField   string
+		SizeField      string
 		ThumbnailField string
 	}
 )
@@ -106,6 +108,9 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 	}
 	if opt.ContextField == "" {
 		opt.ContextField = defaultContextField
+	}
+	if opt.SizeField == "" {
+		opt.SizeField = defaultSizeField
 	}
 	if opt.ThumbnailField == "" {
 		opt.ThumbnailField = defaultThumbnailField
@@ -191,6 +196,7 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 			b64 := base64.RawStdEncoding.EncodeToString(b2.Bytes())
 
 			c.Set(opt.ContextField, b)
+			c.Set(opt.SizeField, int64(b.Len()))
 			c.Set(opt.ThumbnailField, dataURIPrefixJpeg+b64)
 
 			return next(c)
