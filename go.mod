@@ -11,8 +11,8 @@ require (
 	github.com/go-redis/redis v6.14.0+incompatible
 	github.com/gorilla/websocket v1.4.0
 	github.com/hashicorp/hcl v1.0.0
-	github.com/labstack/echo v0.0.0-20180316170059-a5d81b8d4a62
-	github.com/labstack/gommon v0.0.0-20180312174116-6fe1405d73ec
+	github.com/labstack/echo v3.2.2-0.20180412143600-6d227dfea4d2+incompatible
+	github.com/labstack/gommon v0.2.2-0.20180613044413-d6898124de91
 	github.com/lib/pq v1.0.0
 	github.com/magiconair/properties v1.8.0
 	github.com/mattn/go-colorable v0.0.9
