@@ -215,20 +215,6 @@ type (
 		Offset int
 	}
 
-	resUserGetPublic struct {
-		Userid       string `json:"userid"`
-		Username     string `json:"username"`
-		Tags         string `json:"auth_tags"`
-		FirstName    string `json:"first_name"`
-		LastName     string `json:"last_name"`
-		CreationTime int64  `json:"creation_time"`
-	}
-
-	resUserGet struct {
-		resUserGetPublic
-		Email string `json:"email"`
-	}
-
 	resUserGetSessions struct {
 		Sessions []session.Session `json:"active_sessions"`
 	}
@@ -294,9 +280,7 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return u.postUser(c, l)
 	})
 
-	r.GET("", func(c echo.Context) error {
-		return u.getByIDPersonal(c, l)
-	}, gate.User(u.gate))
+	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
 
 	// password reset
 	r.PUT("/password/forgot", func(c echo.Context) error {
@@ -309,15 +293,15 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.GET("/sessions", func(c echo.Context) error {
 		return u.getSessions(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	r.PUT("", func(c echo.Context) error {
 		return u.putUser(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	r.PUT("/email", func(c echo.Context) error {
 		return u.putEmail(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	r.PUT("/email/verify", func(c echo.Context) error {
 		return u.putEmailVerify(c, l)
@@ -325,11 +309,11 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	r.DELETE("/sessions", func(c echo.Context) error {
 		return u.killSessions(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	r.GET("/role/:role", func(c echo.Context) error {
 		return u.getUsersByRole(c, l)
@@ -337,37 +321,33 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.GET("/all", func(c echo.Context) error {
 		return u.getAllUserInfo(c, l)
-	}, gate.Admin(u.gate))
+	}, gate.Admin(u.service.gate))
 
 	// id routes
 	ri := r.Group("/id")
 
-	ri.GET("/:id", func(c echo.Context) error {
-		return u.getByID(c, l)
-	}, u.cc.Control(true, false, min15, nil))
+	ri.GET("/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
 
-	ri.GET("/:id/private", func(c echo.Context) error {
-		return u.getByIDPrivate(c, l)
-	}, gate.Admin(u.gate))
+	ri.GET("/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
 
 	ri.PATCH("/:id/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
-	}, gate.User(u.gate))
+	}, gate.User(u.service.gate))
 
 	ri.DELETE("/:id", func(c echo.Context) error {
 		return u.deleteUser(c, l)
-	}, gate.Owner(u.gate, "id"))
+	}, gate.Owner(u.service.gate, "id"))
 
 	// username routes
 	rn := r.Group("/name")
 
 	rn.GET("/:username", func(c echo.Context) error {
 		return u.getByUsername(c, l)
-	}, u.cc.Control(true, false, min15, nil))
+	}, u.service.cc.Control(true, false, min15, nil))
 
 	rn.GET("/:username/private", func(c echo.Context) error {
 		return u.getByUsernamePrivate(c, l)
-	}, gate.Admin(u.gate))
+	}, gate.Admin(u.service.gate))
 
 	if conf.IsDebug() {
 		rn.GET("/:username/debug", func(c echo.Context) error {

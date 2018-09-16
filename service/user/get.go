@@ -14,9 +14,7 @@ import (
 	"strconv"
 )
 
-func (u *userRouter) getByID(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-
+func (u *userRouter) getByID(c echo.Context) error {
 	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -24,7 +22,7 @@ func (u *userRouter) getByID(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, ruser.Userid)
+	res, err := u.service.GetByIdPublic(ruser.Userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -32,24 +30,13 @@ func (u *userRouter) getByID(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	userid, _ := m.IDBase64()
-
-	return c.JSON(http.StatusOK, resUserGetPublic{
-		Userid:       userid,
-		Username:     m.Username,
-		Tags:         m.Tags,
-		FirstName:    m.FirstName,
-		LastName:     m.LastName,
-		CreationTime: m.CreationTime,
-	})
+	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-
+func (u *userRouter) getByIDPersonal(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
-	m, err := usermodel.GetByIDB64(db, userid)
+	res, err := u.service.GetById(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -57,22 +44,10 @@ func (u *userRouter) getByIDPersonal(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, resUserGet{
-		resUserGetPublic: resUserGetPublic{
-			Userid:       userid,
-			Username:     m.Username,
-			Tags:         m.Tags,
-			FirstName:    m.FirstName,
-			LastName:     m.LastName,
-			CreationTime: m.CreationTime,
-		},
-		Email: m.Email,
-	})
+	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-
+func (u *userRouter) getByIDPrivate(c echo.Context) error {
 	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -80,7 +55,7 @@ func (u *userRouter) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, ruser.Userid)
+	res, err := u.service.GetById(ruser.Userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -88,23 +63,11 @@ func (u *userRouter) getByIDPrivate(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	userid, _ := m.IDBase64()
-
-	return c.JSON(http.StatusOK, resUserGet{
-		resUserGetPublic: resUserGetPublic{
-			Userid:       userid,
-			Username:     m.Username,
-			Tags:         m.Tags,
-			FirstName:    m.FirstName,
-			LastName:     m.LastName,
-			CreationTime: m.CreationTime,
-		},
-		Email: m.Email,
-	})
+	return c.JSON(http.StatusOK, res)
 }
 
 func (u *userRouter) getSessions(c echo.Context, l *logrus.Logger) error {
-	ch := u.cache.Cache()
+	ch := u.service.cache.Cache()
 
 	userid := c.Get("userid").(string)
 
@@ -133,7 +96,7 @@ func (u *userRouter) getSessions(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) getByUsername(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
@@ -163,7 +126,7 @@ func (u *userRouter) getByUsername(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) getByUsernamePrivate(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
@@ -196,7 +159,7 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context, l *logrus.Logger) erro
 }
 
 func (u *userRouter) getUsersByRole(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	var amt, ofs int
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
@@ -235,7 +198,7 @@ func (u *userRouter) getUsersByRole(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) getByUsernameDebug(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
@@ -268,7 +231,7 @@ func (u *userRouter) getByUsernameDebug(c echo.Context, l *logrus.Logger) error 
 }
 
 func (u *userRouter) getAllUserInfo(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	var amt, ofs int
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {

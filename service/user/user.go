@@ -34,6 +34,7 @@ type (
 	}
 
 	userService struct {
+		logger            *logrus.Logger
 		db                db.Database
 		cache             cache.Cache
 		tokenizer         *token.Tokenizer
@@ -51,7 +52,7 @@ type (
 	}
 
 	userRouter struct {
-		userService
+		service userService
 	}
 
 	// HookBind is a function that binds a request to a struct
@@ -111,6 +112,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	l.Info("initialized user service")
 
 	return &userService{
+		logger:            l,
 		db:                database,
 		cache:             ch,
 		mailer:            m,
@@ -130,7 +132,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 
 func (u *userService) newRouter() *userRouter {
 	return &userRouter{
-		*u,
+		service: *u,
 	}
 }
 
@@ -196,14 +198,4 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 // RegisterHook adds a hook to the user create and destroy pipelines
 func (u *userService) RegisterHook(hook Hook) {
 	u.hooks = append(u.hooks, hook)
-}
-
-// GetUser gets and returns a user with the specified id
-func (u *userService) GetUser(userid string) (*usermodel.Model, *governor.Error) {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
-	if err != nil {
-		err.AddTrace(moduleID)
-		return nil, err
-	}
-	return m, nil
 }

@@ -73,7 +73,7 @@ func (u *userRouter) setAccessCookie(c echo.Context, conf governor.Config, acces
 		Name:     "access_token",
 		Value:    accessToken,
 		Path:     conf.BaseURL,
-		MaxAge:   int(u.accessTime),
+		MaxAge:   int(u.service.accessTime),
 		HttpOnly: false,
 	})
 }
@@ -211,9 +211,9 @@ const (
 )
 
 func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	ruser := reqUserAuth{}
 	if err := c.Bind(&ruser); err != nil {
@@ -263,7 +263,7 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 		// if claims userid matches model, session_id is provided,
 		// is in list of user sessions, set it as the sessionID
 		// the session can be expired by time
-		if ok, claims := u.tokenizer.GetClaims(ruser.SessionToken, sessionSubject); ok {
+		if ok, claims := u.service.tokenizer.GetClaims(ruser.SessionToken, sessionSubject); ok {
 			if userid == claims.Userid {
 				usersession := session.Session{
 					Userid: claims.Userid,
@@ -294,19 +294,19 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 		}
 
 		// generate an access token
-		accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
+		accessToken, claims, err := u.service.tokenizer.Generate(m, u.service.accessTime, authenticationSubject, "")
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
 		// generate a refresh token with the sessionKey
-		refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
+		refreshToken, _, err := u.service.tokenizer.Generate(m, u.service.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
 		// generate a session token
-		sessionToken, _, err := u.tokenizer.Generate(m, u.refreshTime, sessionSubject, s.SessionID)
+		sessionToken, _, err := u.service.tokenizer.Generate(m, u.service.refreshTime, sessionSubject, s.SessionID)
 		if err != nil {
 			err.AddTrace(moduleIDAuth)
 			return err
@@ -318,7 +318,7 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
-		if u.newLoginEmail && !isMember {
+		if u.service.newLoginEmail && !isMember {
 			emdata := emailNewLogin{
 				FirstName: m.FirstName,
 				Username:  m.Username,
@@ -328,12 +328,12 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 				UserAgent: s.UserAgent,
 			}
 
-			em, err := u.tpl.ExecuteHTML(newLoginTemplate, emdata)
+			em, err := u.service.tpl.ExecuteHTML(newLoginTemplate, emdata)
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
 			}
-			subj, err := u.tpl.ExecuteHTML(newLoginSubject, emdata)
+			subj, err := u.service.tpl.ExecuteHTML(newLoginSubject, emdata)
 			if err != nil {
 				err.AddTrace(moduleIDAuth)
 				return err
@@ -351,7 +351,7 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 		}
 
 		// set the session id and key into cache
-		if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.service.refreshTime*b1)).Err(); err != nil {
 			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 		}
 
@@ -374,7 +374,7 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 }
 
 func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	ch := u.cache.Cache()
+	ch := u.service.cache.Cache()
 
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
@@ -391,7 +391,7 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 	userid := ""
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session cannot be expired
-	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+	if ok, claims := u.service.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 			if key, err := ch.Get(s[0]).Result(); err == nil {
 				sessionID = s[0]
@@ -406,7 +406,7 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 	}
 
 	// check the refresh token
-	validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	validToken, claims := u.service.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 	if !validToken {
 		return c.JSON(http.StatusUnauthorized, resUserAuth{
 			Valid: false,
@@ -428,7 +428,7 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 	}
 
 	// generate a new accessToken from the refreshToken claims
-	accessToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
+	accessToken, err := u.service.tokenizer.GenerateFromClaims(claims, u.service.accessTime, authenticationSubject, "")
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return err
@@ -444,7 +444,7 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 }
 
 func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	ch := u.cache.Cache()
+	ch := u.service.cache.Cache()
 
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
@@ -461,7 +461,7 @@ func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logru
 	userid := ""
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session cannot be expired
-	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+	if ok, claims := u.service.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 			if key, err := ch.Get(s[0]).Result(); err == nil {
 				sessionID = s[0]
@@ -476,7 +476,7 @@ func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logru
 	}
 
 	// check the refresh token
-	validToken, claims := u.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	validToken, claims := u.service.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 	if !validToken {
 		return c.JSON(http.StatusUnauthorized, resUserAuth{
 			Valid: false,
@@ -492,21 +492,21 @@ func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logru
 	sessionKey = key.Base64()
 
 	// generate a new refreshToken from the refreshToken claims
-	refreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
+	refreshToken, err := u.service.tokenizer.GenerateFromClaims(claims, u.service.refreshTime, refreshSubject, sessionID+":"+sessionKey)
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return err
 	}
 
 	// generate a new sessionToken from the refreshToken claims
-	sessionToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, sessionSubject, sessionID)
+	sessionToken, err := u.service.tokenizer.GenerateFromClaims(claims, u.service.refreshTime, sessionSubject, sessionID)
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return err
 	}
 
 	// set the session id and key into cache
-	if err := ch.Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionID, sessionKey, time.Duration(u.service.refreshTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -520,7 +520,7 @@ func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logru
 }
 
 func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	ch := u.cache.Cache()
+	ch := u.service.cache.Cache()
 
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
@@ -536,7 +536,7 @@ func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.
 	sessionKey := ""
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
-	if ok, claims := u.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
+	if ok, claims := u.service.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 			if key, err := ch.Get(s[0]).Result(); err == nil {
 				sessionID = s[0]
@@ -550,7 +550,7 @@ func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.
 	}
 
 	// check the refresh token
-	validToken, _ := u.tokenizer.ValidateSkipTime(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
+	validToken, _ := u.service.tokenizer.ValidateSkipTime(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
 	if !validToken {
 		return c.JSON(http.StatusUnauthorized, resUserAuth{
 			Valid: false,
@@ -594,7 +594,7 @@ func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Lo
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
 			return u.decodeToken(c, conf, l)
-		}, gate.User(u.gate))
+		}, gate.User(u.service.gate))
 	}
 
 	return nil

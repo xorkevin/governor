@@ -74,15 +74,15 @@ const (
 )
 
 func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	ruser := reqUserPost{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(u.passwordMinSize); err != nil {
+	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err
 	}
 
@@ -122,7 +122,7 @@ func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
 	}
 	sessionKey := key.Base64()
 
-	if err := ch.Set(sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionKey, b.String(), time.Duration(u.service.confirmTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -132,12 +132,12 @@ func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
 		Key:       sessionKey,
 	}
 
-	em, err := u.tpl.ExecuteHTML(newUserTemplate, emdata)
+	em, err := u.service.tpl.ExecuteHTML(newUserTemplate, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subj, err := u.tpl.ExecuteHTML(newUserSubject, emdata)
+	subj, err := u.service.tpl.ExecuteHTML(newUserSubject, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -157,8 +157,8 @@ func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) postUser(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
 
 	ruser := reqUserPostConfirm{}
 	if err := c.Bind(&ruser); err != nil {
@@ -193,7 +193,7 @@ func (u *userRouter) postUser(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	for _, i := range u.hooks {
+	for _, i := range u.service.hooks {
 		if err := i.UserCreateHook(c.Bind, userid, l); err != nil {
 			err.AddTrace(moduleIDUser)
 			request := ""
@@ -226,7 +226,7 @@ func (u *userRouter) postUser(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) putUser(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
+	db := u.service.db.DB()
 
 	userid := c.Get("userid").(string)
 
@@ -257,9 +257,9 @@ func (u *userRouter) putUser(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	userid := c.Get("userid").(string)
 
@@ -293,7 +293,7 @@ func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 	}
 	sessionKey := key.Base64()
 
-	if err := ch.Set(sessionKey, userid+emailChangeEscapeSequence+ruser.Email, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionKey, userid+emailChangeEscapeSequence+ruser.Email, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -303,12 +303,12 @@ func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 		Key:       sessionKey,
 	}
 
-	em, err := u.tpl.ExecuteHTML(emailChangeTemplate, emdata)
+	em, err := u.service.tpl.ExecuteHTML(emailChangeTemplate, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subj, err := u.tpl.ExecuteHTML(emailChangeSubject, emdata)
+	subj, err := u.service.tpl.ExecuteHTML(emailChangeSubject, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -319,12 +319,12 @@ func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 		Username:  m.Username,
 	}
 
-	emnotify, err := u.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
+	emnotify, err := u.service.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subjnotify, err := u.tpl.ExecuteHTML(emailChangeNotifySubject, emdatanotify)
+	subjnotify, err := u.service.tpl.ExecuteHTML(emailChangeNotifySubject, emdatanotify)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -344,8 +344,8 @@ func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) putEmailVerify(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
 
 	ruser := reqUserPutEmailVerify{}
 	if err := c.Bind(&ruser); err != nil {
@@ -394,9 +394,9 @@ func (u *userRouter) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	userid := c.Get("userid").(string)
 
@@ -404,7 +404,7 @@ func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(u.passwordMinSize); err != nil {
+	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err
 	}
 
@@ -431,7 +431,7 @@ func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 	}
 	sessionKey := key.Base64()
 
-	if err := ch.Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionKey, userid, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -441,12 +441,12 @@ func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 		Key:       sessionKey,
 	}
 
-	em, err := u.tpl.ExecuteHTML(passChangeTemplate, emdata)
+	em, err := u.service.tpl.ExecuteHTML(passChangeTemplate, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subj, err := u.tpl.ExecuteHTML(passChangeSubject, emdata)
+	subj, err := u.service.tpl.ExecuteHTML(passChangeSubject, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -465,9 +465,9 @@ func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	ruser := reqForgotPassword{}
 	if err := c.Bind(&ruser); err != nil {
@@ -516,7 +516,7 @@ func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	if err := ch.Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := ch.Set(sessionKey, userid, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -526,12 +526,12 @@ func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
 		Key:       sessionKey,
 	}
 
-	em, err := u.tpl.ExecuteHTML(forgotPassTemplate, emdata)
+	em, err := u.service.tpl.ExecuteHTML(forgotPassTemplate, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subj, err := u.tpl.ExecuteHTML(forgotPassSubject, emdata)
+	subj, err := u.service.tpl.ExecuteHTML(forgotPassSubject, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -546,15 +546,15 @@ func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
-	mailer := u.mailer
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
+	mailer := u.service.mailer
 
 	ruser := reqForgotPasswordReset{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
-	if err := ruser.valid(u.passwordMinSize); err != nil {
+	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err
 	}
 
@@ -584,12 +584,12 @@ func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error
 		Username:  m.Username,
 	}
 
-	em, err := u.tpl.ExecuteHTML(passResetTemplate, emdata)
+	em, err := u.service.tpl.ExecuteHTML(passResetTemplate, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	subj, err := u.tpl.ExecuteHTML(passResetSubject, emdata)
+	subj, err := u.service.tpl.ExecuteHTML(passResetSubject, emdata)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
@@ -613,7 +613,7 @@ func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error
 }
 
 func (u *userRouter) killSessions(c echo.Context, l *logrus.Logger) error {
-	ch := u.cache.Cache()
+	ch := u.service.cache.Cache()
 
 	userid := c.Get("userid").(string)
 
@@ -641,8 +641,8 @@ func (u *userRouter) killSessions(c echo.Context, l *logrus.Logger) error {
 }
 
 func (u *userRouter) patchRank(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
 
 	reqid := reqUserGetID{
 		Userid: c.Param("id"),
@@ -782,8 +782,8 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 }
 
 func (u *userRouter) deleteUser(c echo.Context, l *logrus.Logger) error {
-	db := u.db.DB()
-	ch := u.cache.Cache()
+	db := u.service.db.DB()
+	ch := u.service.cache.Cache()
 
 	reqid := &reqUserGetID{
 		Userid: c.Param("id"),
@@ -854,7 +854,7 @@ func (u *userRouter) deleteUser(c echo.Context, l *logrus.Logger) error {
 
 	userid, _ := m.IDBase64()
 
-	for _, i := range u.hooks {
+	for _, i := range u.service.hooks {
 		if err := i.UserDeleteHook(c.Bind, userid, l); err != nil {
 			err.AddTrace(moduleIDUser)
 			request := ""
