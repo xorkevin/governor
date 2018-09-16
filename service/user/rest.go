@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 )
@@ -214,25 +213,6 @@ type (
 		Amount int
 		Offset int
 	}
-
-	resUserGetSessions struct {
-		Sessions []session.Session `json:"active_sessions"`
-	}
-
-	resUserList struct {
-		Users []string `json:"users"`
-	}
-
-	resUserInfo struct {
-		Userid string `json:"userid"`
-		Email  string `json:"email"`
-	}
-
-	userInfoSlice []resUserInfo
-
-	resUserInfoList struct {
-		Users userInfoSlice `json:"users"`
-	}
 )
 
 func (r *reqUserGetUsername) valid() *governor.Error {
@@ -272,6 +252,19 @@ const (
 )
 
 func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
+	r.GET("/id/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
+	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
+	r.GET("/name/:username", u.getByUsername, u.service.cc.Control(true, false, min15, nil))
+	r.GET("/name/:username/private", u.getByUsernamePrivate, gate.Admin(u.service.gate))
+
+	r.GET("/role/:role", u.getUsersByRole)
+	r.GET("/all", u.getAllUserInfo, gate.Admin(u.service.gate))
+
+	if conf.IsDebug() {
+		r.GET("/name/:username/debug", u.getByUsernameDebug)
+	}
+
 	// new user routes
 	r.POST("", func(c echo.Context) error {
 		return u.confirmUser(c, l)
@@ -279,8 +272,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	r.POST("/confirm", func(c echo.Context) error {
 		return u.postUser(c, l)
 	})
-
-	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
 
 	// password reset
 	r.PUT("/password/forgot", func(c echo.Context) error {
@@ -291,9 +282,7 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return u.forgotPasswordReset(c, l)
 	})
 
-	r.GET("/sessions", func(c echo.Context) error {
-		return u.getSessions(c, l)
-	}, gate.User(u.service.gate))
+	r.GET("/sessions", u.getSessions, gate.User(u.service.gate))
 
 	r.PUT("", func(c echo.Context) error {
 		return u.putUser(c, l)
@@ -315,45 +304,13 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 		return u.killSessions(c, l)
 	}, gate.User(u.service.gate))
 
-	r.GET("/role/:role", func(c echo.Context) error {
-		return u.getUsersByRole(c, l)
-	})
-
-	r.GET("/all", func(c echo.Context) error {
-		return u.getAllUserInfo(c, l)
-	}, gate.Admin(u.service.gate))
-
-	// id routes
-	ri := r.Group("/id")
-
-	ri.GET("/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
-
-	ri.GET("/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
-
-	ri.PATCH("/:id/rank", func(c echo.Context) error {
+	r.PATCH("/id/:id/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
 	}, gate.User(u.service.gate))
 
-	ri.DELETE("/:id", func(c echo.Context) error {
+	r.DELETE("/id/:id", func(c echo.Context) error {
 		return u.deleteUser(c, l)
 	}, gate.Owner(u.service.gate, "id"))
-
-	// username routes
-	rn := r.Group("/name")
-
-	rn.GET("/:username", func(c echo.Context) error {
-		return u.getByUsername(c, l)
-	}, u.service.cc.Control(true, false, min15, nil))
-
-	rn.GET("/:username/private", func(c echo.Context) error {
-		return u.getByUsernamePrivate(c, l)
-	}, gate.Admin(u.service.gate))
-
-	if conf.IsDebug() {
-		rn.GET("/:username/debug", func(c echo.Context) error {
-			return u.getByUsernameDebug(c, l)
-		})
-	}
 
 	return nil
 }
