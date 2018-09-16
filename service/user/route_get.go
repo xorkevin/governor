@@ -150,15 +150,6 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getSessions(c echo.Context) error {
-	userid := c.Get("userid").(string)
-	res, err := u.service.GetSessions(userid)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, res)
-}
-
 func (u *userRouter) getUsersByRole(c echo.Context) error {
 	var amt, ofs int
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
@@ -253,7 +244,6 @@ func (u *userRouter) mountGet(conf governor.Config, r *echo.Group) error {
 	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
 	r.GET("/name/:username", u.getByUsername, u.service.cc.Control(true, false, min15, nil))
 	r.GET("/name/:username/private", u.getByUsernamePrivate, gate.Admin(u.service.gate))
-	r.GET("/sessions", u.getSessions, gate.User(u.service.gate))
 	r.GET("/role/:role", u.getUsersByRole)
 	r.GET("/all", u.getAllUserInfo, gate.Admin(u.service.gate))
 	if conf.IsDebug() {

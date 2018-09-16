@@ -50,10 +50,6 @@ type (
 		OldPassword string `json:"old_password"`
 	}
 
-	reqUserRmSessions struct {
-		SessionIDs []string `json:"session_ids"`
-	}
-
 	reqUserPutRank struct {
 		Add    string `json:"add"`
 		Remove string `json:"remove"`
@@ -164,13 +160,6 @@ func (r *reqUserPutPassword) valid(passlen int) *governor.Error {
 	return nil
 }
 
-func (r *reqUserRmSessions) valid() *governor.Error {
-	if err := hasIDs(r.SessionIDs); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *reqUserPutRank) valid() *governor.Error {
 	if err := validRank(r.Add); err != nil {
 		return err
@@ -201,6 +190,10 @@ const (
 
 func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	if err := u.mountGet(conf, r); err != nil {
+		return err
+	}
+
+	if err := u.mountSession(conf, r); err != nil {
 		return err
 	}
 
@@ -235,10 +228,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
-	}, gate.User(u.service.gate))
-
-	r.DELETE("/sessions", func(c echo.Context) error {
-		return u.killSessions(c, l)
 	}, gate.User(u.service.gate))
 
 	r.PATCH("/id/:id/rank", func(c echo.Context) error {

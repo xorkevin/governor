@@ -612,34 +612,6 @@ func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) killSessions(c echo.Context, l *logrus.Logger) error {
-	ch := u.service.cache.Cache()
-
-	userid := c.Get("userid").(string)
-
-	ruser := reqUserRmSessions{}
-	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
-	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
-
-	s := session.Session{
-		Userid: userid,
-	}
-
-	if err := ch.Del(ruser.SessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := ch.HDel(s.UserKey(), ruser.SessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	return c.NoContent(http.StatusNoContent)
-}
-
 func (u *userRouter) patchRank(c echo.Context, l *logrus.Logger) error {
 	db := u.service.db.DB()
 	ch := u.service.cache.Cache()
