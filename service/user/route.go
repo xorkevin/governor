@@ -194,75 +194,14 @@ func (r *reqUserDelete) valid() *governor.Error {
 	return nil
 }
 
-type (
-	reqUserGetUsername struct {
-		Username string `json:"-"`
-	}
-
-	reqUserGetID struct {
-		Userid string `json:"-"`
-	}
-
-	reqGetRoleUserList struct {
-		Role   string
-		Amount int
-		Offset int
-	}
-
-	reqGetUserEmails struct {
-		Amount int
-		Offset int
-	}
-)
-
-func (r *reqUserGetUsername) valid() *governor.Error {
-	return hasUsername(r.Username)
-}
-
-func (r *reqUserGetID) valid() *governor.Error {
-	return hasUserid(r.Userid)
-}
-
-func (r *reqGetRoleUserList) valid() *governor.Error {
-	if err := validRole(r.Role); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqGetUserEmails) valid() *governor.Error {
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
 const (
 	min15 = 900
 	min1  = 60
 )
 
 func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
-	r.GET("/id/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
-	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
-	r.GET("/name/:username", u.getByUsername, u.service.cc.Control(true, false, min15, nil))
-	r.GET("/name/:username/private", u.getByUsernamePrivate, gate.Admin(u.service.gate))
-
-	r.GET("/role/:role", u.getUsersByRole)
-	r.GET("/all", u.getAllUserInfo, gate.Admin(u.service.gate))
-
-	if conf.IsDebug() {
-		r.GET("/name/:username/debug", u.getByUsernameDebug)
+	if err := u.mountGet(conf, r); err != nil {
+		return err
 	}
 
 	// new user routes
@@ -281,8 +220,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	r.PUT("/password/forgot/reset", func(c echo.Context) error {
 		return u.forgotPasswordReset(c, l)
 	})
-
-	r.GET("/sessions", u.getSessions, gate.User(u.service.gate))
 
 	r.PUT("", func(c echo.Context) error {
 		return u.putUser(c, l)
