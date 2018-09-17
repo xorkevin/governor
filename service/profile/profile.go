@@ -334,12 +334,12 @@ func (p *profileService) Setup(conf governor.Config, l *logrus.Logger, rsetup go
 }
 
 // UserCreateHook creates a new profile on new user
-func (p *profileService) UserCreateHook(bind user.HookBind, userid string, l *logrus.Logger) *governor.Error {
+func (p *profileService) UserCreateHook(props user.HookProps) *governor.Error {
 	db := p.db.DB()
 
 	m := profilemodel.Model{}
 
-	if err := m.SetIDB64(userid); err != nil {
+	if err := m.SetIDB64(props.Userid); err != nil {
 		err.SetErrorUser()
 		return err
 	}
@@ -356,7 +356,7 @@ func (p *profileService) UserCreateHook(bind user.HookBind, userid string, l *lo
 }
 
 // UserDeleteHook deletes the profile on delete user
-func (p *profileService) UserDeleteHook(bind user.HookBind, userid string, l *logrus.Logger) *governor.Error {
+func (p *profileService) UserDeleteHook(userid string) *governor.Error {
 	db := p.db.DB()
 
 	m, err := profilemodel.GetByIDB64(db, userid)

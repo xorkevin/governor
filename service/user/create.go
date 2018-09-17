@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
@@ -13,18 +12,11 @@ import (
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"net/http/httputil"
 	"strings"
 	"time"
 )
 
 type (
-	emailNewUser struct {
-		FirstName string
-		Username  string
-		Key       string
-	}
-
 	emailForgotPass struct {
 		FirstName string
 		Username  string
@@ -55,8 +47,6 @@ type (
 )
 
 const (
-	newUserTemplate           = "newuser"
-	newUserSubject            = "newuser_subject"
 	forgotPassTemplate        = "forgotpass"
 	forgotPassSubject         = "forgotpass_subject"
 	passResetTemplate         = "passreset"
@@ -72,158 +62,6 @@ const (
 const (
 	emailChangeEscapeSequence = "%email%"
 )
-
-func (u *userRouter) confirmUser(c echo.Context, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
-
-	ruser := reqUserPost{}
-	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
-	}
-	if err := ruser.valid(u.service.passwordMinSize); err != nil {
-		return err
-	}
-
-	m2, err := usermodel.GetByUsername(db, ruser.Username)
-	if err != nil && err.Code() != 2 {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	if m2 != nil && m2.Username == ruser.Username {
-		return governor.NewErrorUser(moduleIDUser, "username is already taken", 0, http.StatusBadRequest)
-	}
-
-	m2, err = usermodel.GetByEmail(db, ruser.Email)
-	if err != nil && err.Code() != 2 {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	if m2 != nil && m2.Email == ruser.Email {
-		return governor.NewErrorUser(moduleIDUser, "email is already used by another account", 0, http.StatusBadRequest)
-	}
-
-	m, err := usermodel.NewBaseUser(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	b := bytes.Buffer{}
-	if err := gob.NewEncoder(&b).Encode(m); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	key, err := uid.NewU(0, 16)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	sessionKey := key.Base64()
-
-	if err := ch.Set(sessionKey, b.String(), time.Duration(u.service.confirmTime*b1)).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	emdata := emailNewUser{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-		Key:       sessionKey,
-	}
-
-	em, err := u.service.tpl.ExecuteHTML(newUserTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.service.tpl.ExecuteHTML(newUserSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(m.Email, subj, em); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	userid, _ := m.IDBase64()
-
-	return c.JSON(http.StatusCreated, resUserUpdate{
-		Userid:   userid,
-		Username: m.Username,
-	})
-}
-
-func (u *userRouter) postUser(c echo.Context, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-
-	ruser := reqUserPostConfirm{}
-	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
-	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
-
-	gobUser, err := ch.Get(ruser.Key).Result()
-	if err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
-	}
-
-	m := usermodel.Model{}
-	b := bytes.NewBufferString(gobUser)
-	if err := gob.NewDecoder(b).Decode(&m); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := m.Insert(db); err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := ch.Del(ruser.Key).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	userid, _ := m.IDBase64()
-
-	for _, i := range u.service.hooks {
-		if err := i.UserCreateHook(c.Bind, userid, l); err != nil {
-			err.AddTrace(moduleIDUser)
-			request := ""
-			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
-				request = bytes.NewBuffer(r).String()
-			}
-			l.WithFields(logrus.Fields{
-				"origin":   err.Origin(),
-				"source":   err.Source(),
-				"code":     err.Code(),
-				"endpoint": c.Path(),
-				"time":     time.Now().String(),
-				"request":  request,
-			}).Error("userhook create error:" + err.Message())
-		}
-	}
-
-	t, _ := time.Now().MarshalText()
-	l.WithFields(logrus.Fields{
-		"time":     string(t),
-		"origin":   moduleIDUser,
-		"userid":   userid,
-		"username": m.Username,
-	}).Info("user created")
-
-	return c.JSON(http.StatusCreated, resUserUpdate{
-		Userid:   userid,
-		Username: m.Username,
-	})
-}
 
 func (u *userRouter) putUser(c echo.Context, l *logrus.Logger) error {
 	db := u.service.db.DB()
@@ -751,98 +589,4 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 		}
 	}
 	return nil
-}
-
-func (u *userRouter) deleteUser(c echo.Context, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-
-	reqid := &reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
-	ruser := reqUserDelete{}
-	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
-	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
-
-	if reqid.Userid != ruser.Userid {
-		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
-	}
-
-	m, err := usermodel.GetByIDB64(db, reqid.Userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if m.Username != ruser.Username {
-		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
-	}
-
-	if !m.ValidatePass(ruser.Password) {
-		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
-	}
-
-	s := session.Session{
-		Userid: reqid.Userid,
-	}
-
-	var sessionIDs []string
-	if smap, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
-		sessionIDs = make([]string, 0, len(smap))
-		for k := range smap {
-			sessionIDs = append(sessionIDs, k)
-		}
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := ch.Del(sessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := ch.HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := rolemodel.DeleteUserRoles(db, reqid.Userid); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := m.Delete(db); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	userid, _ := m.IDBase64()
-
-	for _, i := range u.service.hooks {
-		if err := i.UserDeleteHook(c.Bind, userid, l); err != nil {
-			err.AddTrace(moduleIDUser)
-			request := ""
-			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
-				request = bytes.NewBuffer(r).String()
-			}
-			l.WithFields(logrus.Fields{
-				"origin":   err.Origin(),
-				"source":   err.Source(),
-				"code":     err.Code(),
-				"endpoint": c.Path(),
-				"time":     time.Now().String(),
-				"request":  request,
-			}).Error("userhook delete error:" + err.Message())
-		}
-	}
-
-	return c.NoContent(http.StatusNoContent)
 }

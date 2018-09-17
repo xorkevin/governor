@@ -8,18 +8,6 @@ import (
 )
 
 type (
-	reqUserPost struct {
-		Username  string `json:"username"`
-		Password  string `json:"password"`
-		Email     string `json:"email"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-	}
-
-	reqUserPostConfirm struct {
-		Key string `json:"key"`
-	}
-
 	reqForgotPassword struct {
 		Username string `json:"username"`
 	}
@@ -55,43 +43,11 @@ type (
 		Remove string `json:"remove"`
 	}
 
-	reqUserDelete struct {
-		Userid   string `json:"userid"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-
 	resUserUpdate struct {
 		Userid   string `json:"userid"`
 		Username string `json:"username"`
 	}
 )
-
-func (r *reqUserPost) valid(passlen int) *governor.Error {
-	if err := validUsername(r.Username); err != nil {
-		return err
-	}
-	if err := validPassword(r.Password, passlen); err != nil {
-		return err
-	}
-	if err := validEmail(r.Email); err != nil {
-		return err
-	}
-	if err := validFirstName(r.FirstName); err != nil {
-		return err
-	}
-	if err := validLastName(r.LastName); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserPostConfirm) valid() *governor.Error {
-	if err := hasToken(r.Key); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (r *reqForgotPassword) valid() *governor.Error {
 	if err := validUsername(r.Username); err != nil {
@@ -170,19 +126,6 @@ func (r *reqUserPutRank) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqUserDelete) valid() *governor.Error {
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := hasUsername(r.Username); err != nil {
-		return err
-	}
-	if err := hasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
-
 const (
 	min15 = 900
 	min1  = 60
@@ -192,18 +135,12 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	if err := u.mountGet(conf, r); err != nil {
 		return err
 	}
-
 	if err := u.mountSession(conf, r); err != nil {
 		return err
 	}
-
-	// new user routes
-	r.POST("", func(c echo.Context) error {
-		return u.confirmUser(c, l)
-	})
-	r.POST("/confirm", func(c echo.Context) error {
-		return u.postUser(c, l)
-	})
+	if err := u.mountCreate(conf, r); err != nil {
+		return err
+	}
 
 	// password reset
 	r.PUT("/password/forgot", func(c echo.Context) error {
@@ -233,10 +170,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	r.PATCH("/id/:id/rank", func(c echo.Context) error {
 		return u.patchRank(c, l)
 	}, gate.User(u.service.gate))
-
-	r.DELETE("/id/:id", func(c echo.Context) error {
-		return u.deleteUser(c, l)
-	}, gate.Owner(u.service.gate, "id"))
 
 	return nil
 }

@@ -55,13 +55,19 @@ type (
 		service userService
 	}
 
-	// HookBind is a function that binds a request to a struct
-	HookBind func(i interface{}) error
+	// HookProps are properties of the user passed on to each hook
+	HookProps struct {
+		Userid    string
+		Username  string
+		Email     string
+		FirstName string
+		LastName  string
+	}
 
 	// Hook is a service that can hook onto the user create and destroy pipelines
 	Hook interface {
-		UserCreateHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
-		UserDeleteHook(bind HookBind, userid string, l *logrus.Logger) *governor.Error
+		UserCreateHook(props HookProps) *governor.Error
+		UserDeleteHook(userid string) *governor.Error
 	}
 )
 
