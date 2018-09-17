@@ -141,6 +141,9 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	if err := u.mountCreate(conf, r); err != nil {
 		return err
 	}
+	if err := u.mountEdit(conf, r); err != nil {
+		return err
+	}
 
 	// password reset
 	r.PUT("/password/forgot", func(c echo.Context) error {
@@ -150,10 +153,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 	r.PUT("/password/forgot/reset", func(c echo.Context) error {
 		return u.forgotPasswordReset(c, l)
 	})
-
-	r.PUT("", func(c echo.Context) error {
-		return u.putUser(c, l)
-	}, gate.User(u.service.gate))
 
 	r.PUT("/email", func(c echo.Context) error {
 		return u.putEmail(c, l)
@@ -165,10 +164,6 @@ func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Lo
 
 	r.PUT("/password", func(c echo.Context) error {
 		return u.putPassword(c, l)
-	}, gate.User(u.service.gate))
-
-	r.PATCH("/id/:id/rank", func(c echo.Context) error {
-		return u.patchRank(c, l)
 	}, gate.User(u.service.gate))
 
 	return nil
