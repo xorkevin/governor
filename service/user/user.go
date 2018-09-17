@@ -23,7 +23,7 @@ const (
 type (
 	// User is a user management service
 	User interface {
-		GetUser(userid string) (*usermodel.Model, *governor.Error)
+		GetByID(userid string) (*ResUserGet, *governor.Error)
 	}
 
 	// Service is the public interface for the user service server

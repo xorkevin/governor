@@ -6,18 +6,8 @@ import (
 	"github.com/hackform/governor/service/user/role/model"
 )
 
-// GetUser gets and returns a user with the specified id
-func (u *userService) GetUser(userid string) (*usermodel.Model, *governor.Error) {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return nil, err
-	}
-	return m, nil
-}
-
 type (
-	resUserGetPublic struct {
+	ResUserGetPublic struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
 		Tags         string `json:"auth_tags"`
@@ -27,9 +17,9 @@ type (
 	}
 )
 
-func getUserPublicFields(m *usermodel.Model) *resUserGetPublic {
+func getUserPublicFields(m *usermodel.Model) *ResUserGetPublic {
 	userid, _ := m.IDBase64()
-	return &resUserGetPublic{
+	return &ResUserGetPublic{
 		Userid:       userid,
 		Username:     m.Username,
 		Tags:         m.Tags,
@@ -40,21 +30,21 @@ func getUserPublicFields(m *usermodel.Model) *resUserGetPublic {
 }
 
 type (
-	resUserGet struct {
-		resUserGetPublic
+	ResUserGet struct {
+		ResUserGetPublic
 		Email string `json:"email"`
 	}
 )
 
-func getUserFields(m *usermodel.Model) *resUserGet {
-	return &resUserGet{
-		resUserGetPublic: *getUserPublicFields(m),
+func getUserFields(m *usermodel.Model) *ResUserGet {
+	return &ResUserGet{
+		ResUserGetPublic: *getUserPublicFields(m),
 		Email:            m.Email,
 	}
 }
 
-// GetByIdPublic gets and returns the public fields of the user
-func (u *userService) GetByIdPublic(userid string) (*resUserGetPublic, *governor.Error) {
+// GetByIDPublic gets and returns the public fields of the user
+func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor.Error) {
 	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
@@ -63,8 +53,8 @@ func (u *userService) GetByIdPublic(userid string) (*resUserGetPublic, *governor
 	return getUserPublicFields(m), nil
 }
 
-// GetById gets and returns all fields of the user
-func (u *userService) GetById(userid string) (*resUserGet, *governor.Error) {
+// GetByID gets and returns all fields of the user
+func (u *userService) GetByID(userid string) (*ResUserGet, *governor.Error) {
 	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
@@ -74,7 +64,7 @@ func (u *userService) GetById(userid string) (*resUserGet, *governor.Error) {
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
-func (u *userService) GetByUsernamePublic(username string) (*resUserGetPublic, *governor.Error) {
+func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, *governor.Error) {
 	m, err := usermodel.GetByUsername(u.db.DB(), username)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
@@ -84,7 +74,7 @@ func (u *userService) GetByUsernamePublic(username string) (*resUserGetPublic, *
 }
 
 // GetByUsername gets and returns all fields of the user
-func (u *userService) GetByUsername(username string) (*resUserGet, *governor.Error) {
+func (u *userService) GetByUsername(username string) (*ResUserGet, *governor.Error) {
 	m, err := usermodel.GetByUsername(u.db.DB(), username)
 	if err != nil {
 		err.AddTrace(moduleIDUser)

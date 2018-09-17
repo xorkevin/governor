@@ -68,7 +68,7 @@ func (u *userRouter) getByID(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByIdPublic(ruser.Userid)
+	res, err := u.service.GetByIDPublic(ruser.Userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -82,7 +82,7 @@ func (u *userRouter) getByID(c echo.Context) error {
 func (u *userRouter) getByIDPersonal(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
-	res, err := u.service.GetById(userid)
+	res, err := u.service.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -101,7 +101,7 @@ func (u *userRouter) getByIDPrivate(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetById(ruser.Userid)
+	res, err := u.service.GetByID(ruser.Userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
