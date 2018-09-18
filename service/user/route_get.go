@@ -8,6 +8,10 @@ import (
 	"strconv"
 )
 
+const (
+	min15 = 900
+)
+
 type (
 	reqUserGetID struct {
 		Userid string `json:"-"`

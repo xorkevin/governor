@@ -2,12 +2,11 @@ package user
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -58,11 +57,19 @@ const (
 	emailChangeEscapeSequence = "%email%"
 )
 
-func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
+type (
+	reqUserPutEmail struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
 
+	reqUserPutEmailVerify struct {
+		Key      string `json:"key"`
+		Password string `json:"password"`
+	}
+)
+
+func (u *userRouter) putEmail(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
 	ruser := reqUserPutEmail{}
@@ -73,82 +80,33 @@ func (u *userRouter) putEmail(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
+	if err := u.service.UpdateEmail(userid, ruser.Email, ruser.Password); err != nil {
 		return err
 	}
-	if m.Email == ruser.Email {
-		return governor.NewErrorUser(moduleIDUser, "emails cannot be the same", 0, http.StatusBadRequest)
-	}
-	if !m.ValidatePass(ruser.Password) {
-		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
-	}
-
-	key, err := uid.NewU(0, 16)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	sessionKey := key.Base64()
-
-	if err := ch.Set(sessionKey, userid+emailChangeEscapeSequence+ruser.Email, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	emdata := emailEmailChange{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-		Key:       sessionKey,
-	}
-
-	em, err := u.service.tpl.ExecuteHTML(emailChangeTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.service.tpl.ExecuteHTML(emailChangeSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	emdatanotify := emailEmailChangeNotify{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-	}
-
-	emnotify, err := u.service.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subjnotify, err := u.service.tpl.ExecuteHTML(emailChangeNotifySubject, emdatanotify)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(m.Email, subjnotify, emnotify); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(ruser.Email, subj, em); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) putEmailVerify(c echo.Context, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
+func (r *reqUserPutEmail) valid() *governor.Error {
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (r *reqUserPutEmailVerify) valid() *governor.Error {
+	if err := hasToken(r.Key); err != nil {
+		return err
+	}
+	if err := hasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *userRouter) putEmailVerify(c echo.Context) error {
 	ruser := reqUserPutEmailVerify{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -157,45 +115,63 @@ func (u *userRouter) putEmailVerify(c echo.Context, l *logrus.Logger) error {
 		return err
 	}
 
-	var userid, email string
-
-	if result, err := ch.Get(ruser.Key).Result(); err == nil {
-		k := strings.SplitN(result, emailChangeEscapeSequence, 2)
-		if len(k) != 2 {
-			return governor.NewError(moduleIDUser, "incorrect sessionKey value in cache during email verification", 0, http.StatusInternalServerError)
-		}
-		userid = k[0]
-		email = k[1]
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	m, err := usermodel.GetByIDB64(db, userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if !m.ValidatePass(ruser.Password) {
-		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
-	}
-
-	if err := ch.Del(ruser.Key).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	m.Email = email
-	if err = m.Update(db); err != nil {
-		err.AddTrace(moduleIDUser)
+	if err := u.service.CommitEmail(ruser.Key, ruser.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
+type (
+	reqUserPutPassword struct {
+		NewPassword string `json:"new_password"`
+		OldPassword string `json:"old_password"`
+	}
+
+	reqForgotPassword struct {
+		Username string `json:"username"`
+	}
+
+	reqForgotPasswordReset struct {
+		Key         string `json:"key"`
+		NewPassword string `json:"new_password"`
+	}
+)
+
+func (r *reqUserPutPassword) valid(passlen int) *governor.Error {
+	if err := validPassword(r.NewPassword, passlen); err != nil {
+		return err
+	}
+	if err := hasPassword(r.OldPassword); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqForgotPassword) valid() *governor.Error {
+	if err := validUsername(r.Username); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqForgotPassword) validEmail() *governor.Error {
+	if err := validEmail(r.Username); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqForgotPasswordReset) valid(passlen int) *governor.Error {
+	if err := hasToken(r.Key); err != nil {
+		return err
+	}
+	if err := validPassword(r.NewPassword, passlen); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *userRouter) putPassword(c echo.Context) error {
 	db := u.service.db.DB()
 	ch := u.service.cache.Cache()
 	mailer := u.service.mailer
@@ -266,7 +242,7 @@ func (u *userRouter) putPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) forgotPassword(c echo.Context) error {
 	db := u.service.db.DB()
 	ch := u.service.cache.Cache()
 	mailer := u.service.mailer
@@ -347,7 +323,7 @@ func (u *userRouter) forgotPassword(c echo.Context, l *logrus.Logger) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error {
+func (u *userRouter) forgotPasswordReset(c echo.Context) error {
 	db := u.service.db.DB()
 	ch := u.service.cache.Cache()
 	mailer := u.service.mailer
@@ -412,4 +388,13 @@ func (u *userRouter) forgotPasswordReset(c echo.Context, l *logrus.Logger) error
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (u *userRouter) mountEditSecure(conf governor.Config, r *echo.Group) error {
+	r.PUT("/email", u.putEmail, gate.User(u.service.gate))
+	r.PUT("/email/verify", u.putEmailVerify)
+	r.PUT("/password", u.putPassword, gate.User(u.service.gate))
+	r.PUT("/password/forgot", u.forgotPassword)
+	r.PUT("/password/forgot/reset", u.forgotPasswordReset)
+	return nil
 }

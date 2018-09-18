@@ -26,6 +26,13 @@ const (
 	newUserSubject  = "newuser_subject"
 )
 
+type (
+	resUserUpdate struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+	}
+)
+
 // CreateUser creates a new user and places it into the cache
 func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.Error) {
 	m2, err := usermodel.GetByUsername(u.db.DB(), ruser.Username)

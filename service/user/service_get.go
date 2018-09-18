@@ -7,6 +7,7 @@ import (
 )
 
 type (
+	// ResUserGetPublic holds the public fields of a user
 	ResUserGetPublic struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
@@ -30,6 +31,7 @@ func getUserPublicFields(m *usermodel.Model) *ResUserGetPublic {
 }
 
 type (
+	// ResUserGet holds all the fields of a user
 	ResUserGet struct {
 		ResUserGetPublic
 		Email string `json:"email"`

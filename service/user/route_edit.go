@@ -9,6 +9,42 @@ import (
 	"net/http"
 )
 
+type (
+	reqUserPut struct {
+		Username  string `json:"username"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
+	reqUserPutRank struct {
+		Add    string `json:"add"`
+		Remove string `json:"remove"`
+	}
+)
+
+func (r *reqUserPut) valid() *governor.Error {
+	if err := validUsername(r.Username); err != nil {
+		return err
+	}
+	if err := validFirstName(r.FirstName); err != nil {
+		return err
+	}
+	if err := validLastName(r.LastName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reqUserPutRank) valid() *governor.Error {
+	if err := validRank(r.Add); err != nil {
+		return err
+	}
+	if err := validRank(r.Remove); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (u *userRouter) putUser(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
