@@ -3,58 +3,8 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"net/http"
-	"time"
-)
-
-type (
-	emailForgotPass struct {
-		FirstName string
-		Username  string
-		Key       string
-	}
-
-	emailPassReset struct {
-		FirstName string
-		Username  string
-	}
-
-	emailPassChange struct {
-		FirstName string
-		Username  string
-		Key       string
-	}
-
-	emailEmailChange struct {
-		FirstName string
-		Username  string
-		Key       string
-	}
-
-	emailEmailChangeNotify struct {
-		FirstName string
-		Username  string
-	}
-)
-
-const (
-	forgotPassTemplate        = "forgotpass"
-	forgotPassSubject         = "forgotpass_subject"
-	passResetTemplate         = "passreset"
-	passResetSubject          = "passreset_subject"
-	passChangeTemplate        = "passchange"
-	passChangeSubject         = "passchange_subject"
-	emailChangeTemplate       = "emailchange"
-	emailChangeSubject        = "emailchange_subject"
-	emailChangeNotifyTemplate = "emailchangenotify"
-	emailChangeNotifySubject  = "emailchangenotify_subject"
-)
-
-const (
-	emailChangeEscapeSequence = "%email%"
 )
 
 type (
@@ -172,10 +122,6 @@ func (r *reqForgotPasswordReset) valid(passlen int) *governor.Error {
 }
 
 func (u *userRouter) putPassword(c echo.Context) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
-
 	userid := c.Get("userid").(string)
 
 	ruser := reqUserPutPassword{}
@@ -186,67 +132,13 @@ func (u *userRouter) putPassword(c echo.Context) error {
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(db, userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	if !m.ValidatePass(ruser.OldPassword) {
-		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
-	}
-	if err = m.RehashPass(ruser.NewPassword); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	key, err := uid.NewU(0, 16)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	sessionKey := key.Base64()
-
-	if err := ch.Set(sessionKey, userid, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	emdata := emailPassChange{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-		Key:       sessionKey,
-	}
-
-	em, err := u.service.tpl.ExecuteHTML(passChangeTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.service.tpl.ExecuteHTML(passChangeSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(m.Email, subj, em); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err = m.Update(db); err != nil {
-		err.AddTrace(moduleIDUser)
+	if err := u.service.UpdatePassword(userid, ruser.NewPassword, ruser.OldPassword); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *userRouter) forgotPassword(c echo.Context) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
-
 	ruser := reqForgotPassword{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -254,80 +146,17 @@ func (u *userRouter) forgotPassword(c echo.Context) error {
 	isEmail := false
 	if err := ruser.validEmail(); err == nil {
 		isEmail = true
-	}
-	var m *usermodel.Model
-	if isEmail {
-		mu, err := usermodel.GetByEmail(db, ruser.Username)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDUser)
-			return err
-		}
-		m = mu
-	} else {
-		if err := ruser.valid(); err != nil {
-			return err
-		}
-		mu, err := usermodel.GetByUsername(db, ruser.Username)
-		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDUser)
-			return err
-		}
-		m = mu
-	}
-
-	key, err := uid.NewU(0, 16)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	sessionKey := key.Base64()
-
-	userid, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDUser)
+	} else if err := ruser.valid(); err != nil {
 		return err
 	}
 
-	if err := ch.Set(sessionKey, userid, time.Duration(u.service.passwordResetTime*b1)).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	emdata := emailForgotPass{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-		Key:       sessionKey,
-	}
-
-	em, err := u.service.tpl.ExecuteHTML(forgotPassTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
+	if err := u.service.ForgotPassword(ruser.Username, isEmail); err != nil {
 		return err
 	}
-	subj, err := u.service.tpl.ExecuteHTML(forgotPassSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(m.Email, subj, em); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
 	return c.NoContent(http.StatusNoContent)
 }
 
 func (u *userRouter) forgotPasswordReset(c echo.Context) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
-
 	ruser := reqForgotPasswordReset{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
@@ -336,57 +165,9 @@ func (u *userRouter) forgotPasswordReset(c echo.Context) error {
 		return err
 	}
 
-	userid := ""
-	if result, err := ch.Get(ruser.Key).Result(); err == nil {
-		userid = result
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	m, err := usermodel.GetByIDB64(db, userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleIDUser)
+	if err := u.service.ResetPassword(ruser.Key, ruser.NewPassword); err != nil {
 		return err
 	}
-
-	if err := m.RehashPass(ruser.NewPassword); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	emdata := emailPassReset{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-	}
-
-	em, err := u.service.tpl.ExecuteHTML(passResetTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.service.tpl.ExecuteHTML(passResetSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := mailer.Send(m.Email, subj, em); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := ch.Del(ruser.Key).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := m.Update(db); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
 	return c.NoContent(http.StatusNoContent)
 }
 

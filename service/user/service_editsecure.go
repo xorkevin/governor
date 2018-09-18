@@ -9,6 +9,30 @@ import (
 	"time"
 )
 
+type (
+	emailEmailChange struct {
+		FirstName string
+		Username  string
+		Key       string
+	}
+
+	emailEmailChangeNotify struct {
+		FirstName string
+		Username  string
+	}
+)
+
+const (
+	emailChangeTemplate       = "emailchange"
+	emailChangeSubject        = "emailchange_subject"
+	emailChangeNotifyTemplate = "emailchangenotify"
+	emailChangeNotifySubject  = "emailchangenotify_subject"
+)
+
+const (
+	emailChangeEscapeSequence = "%email%"
+)
+
 // UpdateEmail creates a pending user email update
 func (u *userService) UpdateEmail(userid string, newEmail string, password string) *governor.Error {
 	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
@@ -116,6 +140,213 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 
 	m.Email = email
 	if err = m.Update(u.db.DB()); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	return nil
+}
+
+type (
+	emailPassChange struct {
+		FirstName string
+		Username  string
+		Key       string
+	}
+
+	emailForgotPass struct {
+		FirstName string
+		Username  string
+		Key       string
+	}
+
+	emailPassReset struct {
+		FirstName string
+		Username  string
+	}
+)
+
+const (
+	passChangeTemplate = "passchange"
+	passChangeSubject  = "passchange_subject"
+	forgotPassTemplate = "forgotpass"
+	forgotPassSubject  = "forgotpass_subject"
+	passResetTemplate  = "passreset"
+	passResetSubject   = "passreset_subject"
+)
+
+// UpdatePassword updates the password
+func (u *userService) UpdatePassword(userid string, newPassword string, oldPassword string) *governor.Error {
+	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	if !m.ValidatePass(oldPassword) {
+		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
+	}
+	if err = m.RehashPass(newPassword); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	if err := u.cache.Cache().Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	emdata := emailPassChange{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+		Key:       sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(passChangeTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(passChangeSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err = m.Update(u.db.DB()); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	return nil
+}
+
+// ForgotPassword invokes the forgot password reset procedure
+func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Error {
+	var m *usermodel.Model
+	if isEmail {
+		mu, err := usermodel.GetByEmail(u.db.DB(), username)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDUser)
+			return err
+		}
+		m = mu
+	} else {
+		mu, err := usermodel.GetByUsername(u.db.DB(), username)
+		if err != nil {
+			if err.Code() == 2 {
+				err.SetErrorUser()
+			}
+			err.AddTrace(moduleIDUser)
+			return err
+		}
+		m = mu
+	}
+
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	sessionKey := key.Base64()
+
+	userid, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := u.cache.Cache().Set(sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	emdata := emailForgotPass{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+		Key:       sessionKey,
+	}
+
+	em, err := u.tpl.ExecuteHTML(forgotPassTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(forgotPassSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	return nil
+}
+
+// ResetPassword completes the forgot password procedure
+func (u *userService) ResetPassword(key string, newPassword string) *governor.Error {
+	userid := ""
+	if result, err := u.cache.Cache().Get(key).Result(); err == nil {
+		userid = result
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := m.RehashPass(newPassword); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	emdata := emailPassReset{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+	}
+
+	em, err := u.tpl.ExecuteHTML(passResetTemplate, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+	subj, err := u.tpl.ExecuteHTML(passResetSubject, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
+	if err := u.cache.Cache().Del(key).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if err := m.Update(u.db.DB()); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
