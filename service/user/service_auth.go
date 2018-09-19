@@ -264,11 +264,42 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	// TODO: audit adding session token and claims
 	return true, &resUserAuth{
 		Valid:        true,
 		RefreshToken: newRefreshToken,
 		SessionToken: sessionToken,
 		Claims:       claims,
 	}, nil
+}
+
+// Logout removes the user session in cache
+func (u *userService) Logout(refreshToken string) (bool, *governor.Error) {
+	sessionID := ""
+	sessionKey := ""
+	// if session_id is provided, is in cache, and is valid, set it as the sessionID
+	// the session can be expired by time
+	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
+		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+			if key, err := u.cache.Cache().Get(s[0]).Result(); err == nil {
+				sessionID = s[0]
+				sessionKey = key
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return false, governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+	}
+
+	// check the refresh token
+	validToken, _ := u.tokenizer.ValidateSkipTime(refreshToken, refreshSubject, sessionID+":"+sessionKey)
+	if !validToken {
+		return false, nil
+	}
+
+	// delete the session in cache
+	if err := u.cache.Cache().Del(sessionID).Err(); err != nil {
+		return false, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return true, nil
 }

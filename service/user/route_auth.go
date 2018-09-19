@@ -259,7 +259,7 @@ func (u *userRouter) exchangeToken(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+func (u *userRouter) refreshToken(c echo.Context) error {
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
@@ -283,9 +283,7 @@ func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logru
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	ch := u.service.cache.Cache()
-
+func (u *userRouter) logoutUser(c echo.Context) error {
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
@@ -296,38 +294,18 @@ func (u *userRouter) logoutUser(c echo.Context, conf governor.Config, l *logrus.
 		return err
 	}
 
-	sessionID := ""
-	sessionKey := ""
-	// if session_id is provided, is in cache, and is valid, set it as the sessionID
-	// the session can be expired by time
-	if ok, claims := u.service.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-			if key, err := ch.Get(s[0]).Result(); err == nil {
-				sessionID = s[0]
-				sessionKey = key
-			}
-		}
+	ok, err := u.service.Logout(ruser.RefreshToken)
+	if err != nil {
+		return err
 	}
-
-	if sessionID == "" {
-		return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
-	}
-
-	// check the refresh token
-	validToken, _ := u.service.tokenizer.ValidateSkipTime(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
-	if !validToken {
+	if !ok {
 		return c.JSON(http.StatusUnauthorized, resUserAuth{
 			Valid: false,
 		})
 	}
 
-	// delete the session in cache
-	if err := ch.Del(sessionID).Err(); err != nil {
-		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	rmAccessCookie(c, conf)
-	rmRefreshCookie(c, conf)
+	rmAccessCookie(c, u.service.config)
+	rmRefreshCookie(c, u.service.config)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -341,14 +319,8 @@ func (u *userRouter) decodeToken(c echo.Context, conf governor.Config, l *logrus
 func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	r.POST("/login", u.loginUser)
 	r.POST("/exchange", u.exchangeToken)
-
-	r.POST("/refresh", func(c echo.Context) error {
-		return u.refreshToken(c, conf, l)
-	})
-
-	r.POST("/logout", func(c echo.Context) error {
-		return u.logoutUser(c, conf, l)
-	})
+	r.POST("/refresh", u.refreshToken)
+	r.POST("/logout", u.logoutUser)
 
 	if conf.IsDebug() {
 		r.GET("/decode", func(c echo.Context) error {
