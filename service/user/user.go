@@ -34,6 +34,7 @@ type (
 	}
 
 	userService struct {
+		config            governor.Config
 		logger            *logrus.Logger
 		db                db.Database
 		cache             cache.Cache
@@ -118,6 +119,7 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	l.Info("initialized user service")
 
 	return &userService{
+		config:            conf,
 		logger:            l,
 		db:                database,
 		cache:             ch,
@@ -150,7 +152,7 @@ const (
 // Mount is a collection of routes for accessing and modifying user data
 func (u *userService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
 	ur := u.newRouter()
-	if err := ur.mountRest(conf, r.Group("/user"), l); err != nil {
+	if err := ur.mountRoute(conf, r.Group("/user")); err != nil {
 		return err
 	}
 	if err := ur.mountAuth(conf, r.Group("/auth"), l); err != nil {

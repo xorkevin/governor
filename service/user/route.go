@@ -3,10 +3,9 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 )
 
-func (u *userRouter) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userRouter) mountRoute(conf governor.Config, r *echo.Group) error {
 	if err := u.mountGet(conf, r); err != nil {
 		return err
 	}

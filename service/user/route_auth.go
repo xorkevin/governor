@@ -185,7 +185,7 @@ func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
 	})
 }
 
-func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+func (u *userRouter) loginUser(c echo.Context) error {
 	ruser := reqUserAuth{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
@@ -232,9 +232,9 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 		return c.JSON(http.StatusUnauthorized, res)
 	}
 
-	u.setAccessCookie(c, conf, res.AccessToken)
-	u.setRefreshCookie(c, conf, res.RefreshToken, res.Claims.AuthTags)
-	u.setSessionCookie(c, conf, res.SessionToken, userid)
+	u.setAccessCookie(c, u.service.config, res.AccessToken)
+	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags)
+	u.setSessionCookie(c, u.service.config, res.SessionToken, userid)
 
 	return c.JSON(http.StatusOK, res)
 }
@@ -441,9 +441,7 @@ func (u *userRouter) decodeToken(c echo.Context, conf governor.Config, l *logrus
 }
 
 func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	r.POST("/login", func(c echo.Context) error {
-		return u.loginUser(c, conf, l)
-	})
+	r.POST("/login", u.loginUser)
 
 	r.POST("/exchange", func(c echo.Context) error {
 		return u.exchangeToken(c, conf, l)
