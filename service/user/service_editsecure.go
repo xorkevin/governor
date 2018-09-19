@@ -31,7 +31,7 @@ const (
 
 const (
 	emailChangeEscapeSequence = "%email%"
-	emailUpdateCachePrefix    = moduleID + ".updateemail:"
+	cachePrefixEmailUpdate    = moduleID + ".updateemail:"
 )
 
 // UpdateEmail creates a pending user email update
@@ -58,7 +58,7 @@ func (u *userService) UpdateEmail(userid string, newEmail string, password strin
 	}
 	sessionKey := key.Base64()
 
-	if err := u.cache.Cache().Set(emailUpdateCachePrefix+sessionKey, userid+emailChangeEscapeSequence+newEmail, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixEmailUpdate+sessionKey, userid+emailChangeEscapeSequence+newEmail, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -111,7 +111,7 @@ func (u *userService) UpdateEmail(userid string, newEmail string, password strin
 func (u *userService) CommitEmail(key string, password string) *governor.Error {
 	var userid, email string
 
-	if result, err := u.cache.Cache().Get(emailUpdateCachePrefix + key).Result(); err == nil {
+	if result, err := u.cache.Cache().Get(cachePrefixEmailUpdate + key).Result(); err == nil {
 		k := strings.SplitN(result, emailChangeEscapeSequence, 2)
 		if len(k) != 2 {
 			return governor.NewError(moduleIDUser, "incorrect sessionKey value in cache during email verification", 0, http.StatusInternalServerError)
@@ -135,7 +135,7 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 
-	if err := u.cache.Cache().Del(emailUpdateCachePrefix + key).Err(); err != nil {
+	if err := u.cache.Cache().Del(cachePrefixEmailUpdate + key).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -176,7 +176,7 @@ const (
 )
 
 const (
-	passwordUpdateCachePrefix = moduleID + ".updatepassword:"
+	cachePrefixPasswordUpdate = moduleID + ".updatepassword:"
 )
 
 // UpdatePassword updates the password
@@ -204,7 +204,7 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 	}
 	sessionKey := key.Base64()
 
-	if err := u.cache.Cache().Set(passwordUpdateCachePrefix+sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixPasswordUpdate+sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -275,7 +275,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Er
 		return err
 	}
 
-	if err := u.cache.Cache().Set(passwordUpdateCachePrefix+sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixPasswordUpdate+sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -306,7 +306,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Er
 // ResetPassword completes the forgot password procedure
 func (u *userService) ResetPassword(key string, newPassword string) *governor.Error {
 	userid := ""
-	if result, err := u.cache.Cache().Get(passwordUpdateCachePrefix + key).Result(); err == nil {
+	if result, err := u.cache.Cache().Get(cachePrefixPasswordUpdate + key).Result(); err == nil {
 		userid = result
 	} else {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
@@ -347,7 +347,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		return err
 	}
 
-	if err := u.cache.Cache().Del(passwordUpdateCachePrefix + key).Err(); err != nil {
+	if err := u.cache.Cache().Del(cachePrefixPasswordUpdate + key).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
