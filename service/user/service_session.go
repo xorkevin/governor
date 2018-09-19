@@ -47,3 +47,21 @@ func (u *userService) KillSessions(userid string, sessionIDs []string) *governor
 	}
 	return nil
 }
+
+func (u *userService) KillAllSessions(userid string) *governor.Error {
+	sessions, err := u.GetSessions(userid)
+	if err != nil {
+		return err
+	}
+
+	if len(sessions.Sessions) == 0 {
+		return nil
+	}
+
+	sessionIDs := make([]string, 0, len(sessions.Sessions))
+	for _, v := range sessions.Sessions {
+		sessionIDs = append(sessionIDs, v.SessionID)
+	}
+
+	return u.KillSessions(userid, sessionIDs)
+}

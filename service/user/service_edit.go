@@ -1,11 +1,8 @@
 package user
 
 import (
-	"bytes"
-	"encoding/gob"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/util/rank"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -80,33 +77,9 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		}
 	}
 
-	s := session.Session{
-		Userid: userid,
+	if err := u.KillAllSessions(userid); err != nil {
+		return err
 	}
-
-	var sarr []string
-	if sgobs, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
-		sarr = make([]string, 0, len(sgobs))
-		for _, v := range sgobs {
-			s := session.Session{}
-			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
-				return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-			}
-			sarr = append(sarr, s.SessionID)
-		}
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if len(sarr) > 0 {
-		if err := u.cache.Cache().Del(sarr...).Err(); err != nil {
-			return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-		}
-		if err := u.cache.Cache().HDel(s.UserKey(), sarr...).Err(); err != nil {
-			return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-		}
-	}
-
 	if err := m.UpdateRoles(u.db.DB(), diff); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
