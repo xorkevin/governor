@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/role/model"
-	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/util/uid"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -31,6 +30,10 @@ type (
 		Userid   string `json:"userid"`
 		Username string `json:"username"`
 	}
+)
+
+const (
+	cachePrefixNewUser = moduleID + ".newuser:"
 )
 
 // CreateUser creates a new user and places it into the cache
@@ -71,7 +74,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 	}
 	sessionKey := key.Base64()
 
-	if err := u.cache.Cache().Set(sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixNewUser+sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
 		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -106,7 +109,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 
 // CommitUser takes a user from the cache and places it into the db
 func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
-	gobUser, err := u.cache.Cache().Get(key).Result()
+	gobUser, err := u.cache.Cache().Get(cachePrefixNewUser + key).Result()
 	if err != nil {
 		return nil, governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
 	}
@@ -125,7 +128,7 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 		return nil, err
 	}
 
-	if err := u.cache.Cache().Del(key).Err(); err != nil {
+	if err := u.cache.Cache().Del(cachePrefixNewUser + key).Err(); err != nil {
 		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -177,31 +180,12 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	if m.Username != username {
 		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
 	}
-
 	if !m.ValidatePass(password) {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 
-	s := session.Session{
-		Userid: userid,
-	}
-
-	var sessionIDs []string
-	if smap, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
-		sessionIDs = make([]string, 0, len(smap))
-		for k := range smap {
-			sessionIDs = append(sessionIDs, k)
-		}
-	} else {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := u.cache.Cache().Del(sessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	if err := u.cache.Cache().HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
-		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	if err := u.KillAllSessions(userid); err != nil {
+		return err
 	}
 
 	if err := rolemodel.DeleteUserRoles(u.db.DB(), userid); err != nil {

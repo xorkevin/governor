@@ -49,18 +49,22 @@ func (u *userService) KillSessions(userid string, sessionIDs []string) *governor
 }
 
 func (u *userService) KillAllSessions(userid string) *governor.Error {
-	sessions, err := u.GetSessions(userid)
-	if err != nil {
-		return err
+	s := session.Session{
+		Userid: userid,
 	}
 
-	if len(sessions.Sessions) == 0 {
+	var sessionIDs []string
+	if smap, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
+		sessionIDs = make([]string, 0, len(smap))
+		for k := range smap {
+			sessionIDs = append(sessionIDs, k)
+		}
+	} else {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	if len(sessionIDs) == 0 {
 		return nil
-	}
-
-	sessionIDs := make([]string, 0, len(sessions.Sessions))
-	for _, v := range sessions.Sessions {
-		sessionIDs = append(sessionIDs, v.SessionID)
 	}
 
 	return u.KillSessions(userid, sessionIDs)
