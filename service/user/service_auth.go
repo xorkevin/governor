@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
+	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"strings"
 	"time"
@@ -206,5 +207,68 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 		Valid:       true,
 		AccessToken: accessToken,
 		Claims:      claims,
+	}, nil
+}
+
+// RefreshToken invalidates the previous refresh token and creates a new one
+func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *governor.Error) {
+	sessionID := ""
+	sessionKey := ""
+	// if session_id is provided, is in cache, and is valid, set it as the sessionID
+	// the session cannot be expired
+	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
+		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
+			if key, err := u.cache.Cache().Get(s[0]).Result(); err == nil {
+				sessionID = s[0]
+				sessionKey = key
+			}
+		}
+	}
+
+	if sessionID == "" {
+		return false, nil, governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+	}
+
+	// check the refresh token
+	validToken, claims := u.tokenizer.Validate(refreshToken, refreshSubject, sessionID+":"+sessionKey)
+	if !validToken {
+		return false, &resUserAuth{
+			Valid: false,
+		}, nil
+	}
+
+	// create a new key for the session
+	key, err := uid.NewU(0, 16)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return false, nil, err
+	}
+	sessionKey = key.Base64()
+
+	// generate a new refreshToken from the refreshToken claims
+	newRefreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return false, nil, err
+	}
+
+	// generate a new sessionToken from the refreshToken claims
+	sessionToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, sessionSubject, sessionID)
+	if err != nil {
+		err.AddTrace(moduleIDAuth)
+		return false, nil, err
+	}
+
+	// set the session id and key into cache
+	if err := u.cache.Cache().Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	}
+
+	// TODO: audit adding session token and claims
+	return true, &resUserAuth{
+		Valid:        true,
+		RefreshToken: newRefreshToken,
+		SessionToken: sessionToken,
+		Claims:       claims,
 	}, nil
 }
