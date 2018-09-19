@@ -85,6 +85,16 @@ func (u *userService) GetByUsername(username string) (*ResUserGet, *governor.Err
 	return getUserFields(m), nil
 }
 
+// GetByEmail gets and returns all fields of the user
+func (u *userService) GetByEmail(email string) (*ResUserGet, *governor.Error) {
+	m, err := usermodel.GetByEmail(u.db.DB(), email)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return nil, err
+	}
+	return getUserFields(m), nil
+}
+
 type (
 	resUserInfo struct {
 		Userid string `json:"userid"`

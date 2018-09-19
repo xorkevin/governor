@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/uid"
@@ -24,14 +23,6 @@ type (
 
 	reqExchangeToken struct {
 		RefreshToken string `json:"refresh_token"`
-	}
-
-	resUserAuth struct {
-		Valid        bool          `json:"valid"`
-		AccessToken  string        `json:"access_token,omitempty"`
-		RefreshToken string        `json:"refresh_token,omitempty"`
-		SessionToken string        `json:"session_token,omitempty"`
-		Claims       *token.Claims `json:"claims,omitempty"`
 	}
 )
 
@@ -194,27 +185,7 @@ func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
 	})
 }
 
-type (
-	emailNewLogin struct {
-		FirstName string
-		Username  string
-		SessionID string
-		IP        string
-		UserAgent string
-		Time      string
-	}
-)
-
-const (
-	newLoginTemplate = "newlogin"
-	newLoginSubject  = "newlogin_subject"
-)
-
 func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	db := u.service.db.DB()
-	ch := u.service.cache.Cache()
-	mailer := u.service.mailer
-
 	ruser := reqUserAuth{}
 	if err := c.Bind(&ruser); err != nil {
 		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
@@ -223,9 +194,10 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 	if err := ruser.validEmail(); err == nil {
 		isEmail = true
 	}
-	var m *usermodel.Model
+
+	userid := ""
 	if isEmail {
-		mu, err := usermodel.GetByEmail(db, ruser.Username)
+		m, err := u.service.GetByEmail(ruser.Username)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -233,12 +205,12 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
-		m = mu
+		userid = m.Userid
 	} else {
 		if err := ruser.valid(); err != nil {
 			return err
 		}
-		mu, err := usermodel.GetByUsername(db, ruser.Username)
+		m, err := u.service.GetByUsername(ruser.Username)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -246,131 +218,25 @@ func (u *userRouter) loginUser(c echo.Context, conf governor.Config, l *logrus.L
 			err.AddTrace(moduleIDAuth)
 			return err
 		}
-		m = mu
-	}
-	userid, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDAuth)
-		return err
+		userid = m.Userid
 	}
 	if t, err := getSessionCookie(c, userid); err == nil {
 		ruser.SessionToken = t
 	}
 
-	if m.ValidatePass(ruser.Password) {
-		sessionID := ""
-		isMember := false
-		// if claims userid matches model, session_id is provided,
-		// is in list of user sessions, set it as the sessionID
-		// the session can be expired by time
-		if ok, claims := u.service.tokenizer.GetClaims(ruser.SessionToken, sessionSubject); ok {
-			if userid == claims.Userid {
-				usersession := session.Session{
-					Userid: claims.Userid,
-				}
-				userkey := usersession.UserKey()
-				if isM, err := ch.HExists(userkey, claims.Id).Result(); err == nil && isM {
-					sessionID = claims.Id
-					isMember = isM
-				} else {
-					if err != nil {
-					}
-				}
-			}
-		}
-
-		var s *session.Session
-		if sessionID == "" {
-			// otherwise, create a new sessionID
-			if s, err = session.New(m, c); err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-		} else {
-			if s, err = session.FromSessionID(sessionID, userid, c); err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-		}
-
-		// generate an access token
-		accessToken, claims, err := u.service.tokenizer.Generate(m, u.service.accessTime, authenticationSubject, "")
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-		// generate a refresh token with the sessionKey
-		refreshToken, _, err := u.service.tokenizer.Generate(m, u.service.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-		// generate a session token
-		sessionToken, _, err := u.service.tokenizer.Generate(m, u.service.refreshTime, sessionSubject, s.SessionID)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-
-		// store the session in cache
-		sessionGob, err := s.ToGob()
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return err
-		}
-		if u.service.newLoginEmail && !isMember {
-			emdata := emailNewLogin{
-				FirstName: m.FirstName,
-				Username:  m.Username,
-				SessionID: s.SessionID,
-				IP:        s.IP,
-				Time:      time.Unix(s.Time, 0).String(),
-				UserAgent: s.UserAgent,
-			}
-
-			em, err := u.service.tpl.ExecuteHTML(newLoginTemplate, emdata)
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-			subj, err := u.service.tpl.ExecuteHTML(newLoginSubject, emdata)
-			if err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-
-			if err := mailer.Send(m.Email, subj, em); err != nil {
-				err.AddTrace(moduleIDAuth)
-				return err
-			}
-		}
-
-		// add to list of user sessions
-		if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-		}
-
-		// set the session id and key into cache
-		if err := ch.Set(s.SessionID, s.SessionKey, time.Duration(u.service.refreshTime*b1)).Err(); err != nil {
-			return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-		}
-
-		u.setAccessCookie(c, conf, accessToken)
-		u.setRefreshCookie(c, conf, refreshToken, claims.AuthTags)
-		u.setSessionCookie(c, conf, sessionToken, userid)
-
-		return c.JSON(http.StatusOK, resUserAuth{
-			Valid:        true,
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-			SessionToken: sessionToken,
-			Claims:       claims,
-		})
+	ok, res, err := u.service.Login(userid, ruser.Password, ruser.SessionToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, res)
 	}
 
-	return c.JSON(http.StatusUnauthorized, resUserAuth{
-		Valid: false,
-	})
+	u.setAccessCookie(c, conf, res.AccessToken)
+	u.setRefreshCookie(c, conf, res.RefreshToken, res.Claims.AuthTags)
+	u.setSessionCookie(c, conf, res.SessionToken, userid)
+
+	return c.JSON(http.StatusOK, res)
 }
 
 func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
@@ -413,7 +279,7 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 		})
 	}
 
-	s, err := session.FromSessionID(sessionID, userid, c)
+	s, err := session.FromSessionID(sessionID, userid, c.RealIP(), c.Request().Header.Get("User-Agent"))
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return err
@@ -588,7 +454,7 @@ func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Lo
 	})
 
 	r.POST("/logout", func(c echo.Context) error {
-		return u.loginUser(c, conf, l)
+		return u.logoutUser(c, conf, l)
 	})
 
 	if conf.IsDebug() {

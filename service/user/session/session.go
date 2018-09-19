@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/uid"
-	"github.com/labstack/echo"
 	"net/http"
 	"time"
 )
@@ -31,7 +30,7 @@ type (
 )
 
 // New creates a new session
-func New(m *usermodel.Model, c echo.Context) (*Session, *governor.Error) {
+func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, *governor.Error) {
 	id, err := uid.New(4, 8, 4, m.Userid)
 	if err != nil {
 		err.AddTrace(moduleID)
@@ -42,11 +41,11 @@ func New(m *usermodel.Model, c echo.Context) (*Session, *governor.Error) {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
-	return FromSessionID(id.Base64(), userid, c)
+	return FromSessionID(id.Base64(), userid, ipAddress, userAgent)
 }
 
 // FromSessionID creates a new session from an existing sessionID
-func FromSessionID(sessionID string, userid string, c echo.Context) (*Session, *governor.Error) {
+func FromSessionID(sessionID, userid, ipAddress, userAgent string) (*Session, *governor.Error) {
 	key, err := uid.NewU(0, 16)
 	if err != nil {
 		err.AddTrace(moduleID)
@@ -58,8 +57,8 @@ func FromSessionID(sessionID string, userid string, c echo.Context) (*Session, *
 		SessionID:  sessionID,
 		SessionKey: key.Base64(),
 		Time:       time.Now().Unix(),
-		IP:         c.RealIP(),
-		UserAgent:  c.Request().Header.Get("User-Agent"),
+		IP:         ipAddress,
+		UserAgent:  userAgent,
 	}, nil
 }
 
