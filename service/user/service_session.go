@@ -11,14 +11,12 @@ import (
 
 // GetSessions retrieves a list of user sessions
 func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor.Error) {
-	ch := u.cache.Cache()
-
 	s := session.Session{
 		Userid: userid,
 	}
 
 	var sarr session.Slice
-	if sgobs, err := ch.HGetAll(s.UserKey()).Result(); err == nil {
+	if sgobs, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
 		sarr = make(session.Slice, 0, len(sgobs))
 		for _, v := range sgobs {
 			s := session.Session{}
@@ -38,14 +36,13 @@ func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor
 }
 
 func (u *userService) KillSessions(userid string, sessionIDs []string) *governor.Error {
-	ch := u.cache.Cache()
 	s := session.Session{
 		Userid: userid,
 	}
-	if err := ch.Del(sessionIDs...).Err(); err != nil {
+	if err := u.cache.Cache().Del(sessionIDs...).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
-	if err := ch.HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
+	if err := u.cache.Cache().HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
