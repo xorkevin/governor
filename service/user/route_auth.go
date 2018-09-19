@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
@@ -240,8 +239,6 @@ func (u *userRouter) loginUser(c echo.Context) error {
 }
 
 func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
-	ch := u.service.cache.Cache()
-
 	ruser := reqExchangeToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
@@ -252,61 +249,16 @@ func (u *userRouter) exchangeToken(c echo.Context, conf governor.Config, l *logr
 		return err
 	}
 
-	sessionID := ""
-	sessionKey := ""
-	userid := ""
-	// if session_id is provided, is in cache, and is valid, set it as the sessionID
-	// the session cannot be expired
-	if ok, claims := u.service.tokenizer.GetClaims(ruser.RefreshToken, refreshSubject); ok {
-		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-			if key, err := ch.Get(s[0]).Result(); err == nil {
-				sessionID = s[0]
-				sessionKey = key
-				userid = claims.Userid
-			}
-		}
-	}
-
-	if sessionID == "" {
-		return governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
-	}
-
-	// check the refresh token
-	validToken, claims := u.service.tokenizer.Validate(ruser.RefreshToken, refreshSubject, sessionID+":"+sessionKey)
-	if !validToken {
-		return c.JSON(http.StatusUnauthorized, resUserAuth{
-			Valid: false,
-		})
-	}
-
-	s, err := session.FromSessionID(sessionID, userid, c.RealIP(), c.Request().Header.Get("User-Agent"))
+	ok, res, err := u.service.ExchangeToken(ruser.RefreshToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return err
 	}
-	sessionGob, err := s.ToGob()
-	if err != nil {
-		err.AddTrace(moduleIDAuth)
-		return err
-	}
-	if err := ch.HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, res)
 	}
 
-	// generate a new accessToken from the refreshToken claims
-	accessToken, err := u.service.tokenizer.GenerateFromClaims(claims, u.service.accessTime, authenticationSubject, "")
-	if err != nil {
-		err.AddTrace(moduleIDAuth)
-		return err
-	}
-
-	u.setAccessCookie(c, conf, accessToken)
-
-	return c.JSON(http.StatusOK, resUserAuth{
-		Valid:       true,
-		AccessToken: accessToken,
-		Claims:      claims,
-	})
+	u.setAccessCookie(c, u.service.config, res.AccessToken)
+	return c.JSON(http.StatusOK, res)
 }
 
 func (u *userRouter) refreshToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
