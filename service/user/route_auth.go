@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 )
@@ -309,24 +308,20 @@ func (u *userRouter) logoutUser(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) decodeToken(c echo.Context, conf governor.Config, l *logrus.Logger) error {
+func (u *userRouter) decodeToken(c echo.Context) error {
 	return c.JSON(http.StatusOK, resUserAuth{
 		Valid:  true,
 		Claims: c.Get("user").(*token.Claims),
 	})
 }
 
-func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userRouter) mountAuth(conf governor.Config, r *echo.Group) error {
 	r.POST("/login", u.loginUser)
 	r.POST("/exchange", u.exchangeToken)
 	r.POST("/refresh", u.refreshToken)
 	r.POST("/logout", u.logoutUser)
-
 	if conf.IsDebug() {
-		r.GET("/decode", func(c echo.Context) error {
-			return u.decodeToken(c, conf, l)
-		}, gate.User(u.service.gate))
+		r.GET("/decode", u.decodeToken, gate.User(u.service.gate))
 	}
-
 	return nil
 }

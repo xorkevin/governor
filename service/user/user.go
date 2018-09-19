@@ -155,12 +155,10 @@ func (u *userService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logge
 	if err := ur.mountRoute(conf, r.Group("/user")); err != nil {
 		return err
 	}
-	if err := ur.mountAuth(conf, r.Group("/auth"), l); err != nil {
+	if err := ur.mountAuth(conf, r.Group("/auth")); err != nil {
 		return err
 	}
-
 	l.Info("mounted user service")
-
 	return nil
 }
 
