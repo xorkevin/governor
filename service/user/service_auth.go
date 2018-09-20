@@ -146,7 +146,7 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 	// the session cannot be expired
 	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-			if key, err := u.cache.Cache().Get(s[0]).Result(); err == nil {
+			if key, err := u.GetSessionKey(s[0]); err == nil {
 				sessionID = s[0]
 				sessionKey = key
 				userid = claims.Userid
@@ -166,18 +166,14 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 		}, nil
 	}
 
+	// update the user session with a new latest time
 	s, err := session.FromSessionID(sessionID, userid, ipAddress, userAgent)
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
-	sessionGob, err := s.ToGob()
-	if err != nil {
-		err.AddTrace(moduleIDAuth)
+	if err := u.UpdateUserSession(s); err != nil {
 		return false, nil, err
-	}
-	if err := u.cache.Cache().HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	// generate a new accessToken from the refreshToken claims
@@ -202,7 +198,7 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 	// the session cannot be expired
 	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-			if key, err := u.cache.Cache().Get(s[0]).Result(); err == nil {
+			if key, err := u.GetSessionKey(s[0]); err == nil {
 				sessionID = s[0]
 				sessionKey = key
 			}
@@ -244,8 +240,8 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 	}
 
 	// set the session id and key into cache
-	if err := u.cache.Cache().Set(sessionID, sessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
-		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if err := u.UpdateSessionKey(sessionID, sessionKey, time.Duration(u.refreshTime*b1)); err != nil {
+		return false, nil, err
 	}
 
 	return true, &resUserAuth{
@@ -264,7 +260,7 @@ func (u *userService) Logout(refreshToken string) (bool, *governor.Error) {
 	// the session can be expired by time
 	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
-			if key, err := u.cache.Cache().Get(s[0]).Result(); err == nil {
+			if key, err := u.GetSessionKey(s[0]); err == nil {
 				sessionID = s[0]
 				sessionKey = key
 			}
@@ -282,8 +278,8 @@ func (u *userService) Logout(refreshToken string) (bool, *governor.Error) {
 	}
 
 	// delete the session in cache
-	if err := u.cache.Cache().Del(sessionID).Err(); err != nil {
-		return false, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if err := u.EndSession(sessionID); err != nil {
+		return false, err
 	}
 	return true, nil
 }

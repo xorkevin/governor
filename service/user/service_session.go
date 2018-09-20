@@ -36,6 +36,23 @@ func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor
 	}, nil
 }
 
+// GetSessionKey retrieves the key of a session
+func (u *userService) GetSessionKey(sessionID string) (string, *governor.Error) {
+	key, err := u.cache.Cache().Get(sessionID).Result()
+	if err != nil {
+		return "", governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return key, nil
+}
+
+// EndSession ends the session of a user
+func (u *userService) EndSession(sessionID string) *governor.Error {
+	if err := u.cache.Cache().Del(sessionID).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
 // KillSessions terminates sessions of a user
 func (u *userService) KillSessions(userid string, sessionIDs []string) *governor.Error {
 	s := session.Session{
@@ -85,21 +102,36 @@ func (u *userService) SessionExists(userid, sessionID string) (bool, *governor.E
 	return ok, nil
 }
 
-// AddSession adds a session to the cache
-func (u *userService) AddSession(s *session.Session, cacheDuration time.Duration) *governor.Error {
-	// store the session in cache
+// UpdateUserSession updates a user session
+func (u *userService) UpdateUserSession(s *session.Session) *governor.Error {
 	sessionGob, err := s.ToGob()
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
+		err.AddTrace(moduleIDUser)
 		return err
 	}
-	// add to list of user sessions
 	if err := u.cache.Cache().HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+// UpdateSessionKey updates the key of a session
+func (u *userService) UpdateSessionKey(sessionID string, sessionKey string, cacheDuration time.Duration) *governor.Error {
+	if err := u.cache.Cache().Set(sessionID, sessionKey, cacheDuration).Err(); err != nil {
+		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+// AddSession adds a session to the cache
+func (u *userService) AddSession(s *session.Session, cacheDuration time.Duration) *governor.Error {
+	// add to list of user sessions
+	if err := u.UpdateUserSession(s); err != nil {
+		return err
 	}
 	// set the session id and key into cache
-	if err := u.cache.Cache().Set(s.SessionID, s.SessionKey, cacheDuration).Err(); err != nil {
-		return governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if err := u.UpdateSessionKey(s.SessionID, s.SessionKey, cacheDuration); err != nil {
+		return err
 	}
 	return nil
 }
