@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	cachePrefixUserSession = moduleID + ".usersession:"
+	cachePrefixSession     = moduleID + ".session:"
+)
+
 // GetSessions retrieves a list of user sessions
 func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor.Error) {
 	s := session.Session{
@@ -17,7 +22,7 @@ func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor
 	}
 
 	var sarr session.Slice
-	if sgobs, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
+	if sgobs, err := u.cache.Cache().HGetAll(cachePrefixUserSession + s.UserKey()).Result(); err == nil {
 		sarr = make(session.Slice, 0, len(sgobs))
 		for _, v := range sgobs {
 			s := session.Session{}
@@ -38,7 +43,7 @@ func (u *userService) GetSessions(userid string) (*resUserGetSessions, *governor
 
 // GetSessionKey retrieves the key of a session
 func (u *userService) GetSessionKey(sessionID string) (string, *governor.Error) {
-	key, err := u.cache.Cache().Get(sessionID).Result()
+	key, err := u.cache.Cache().Get(cachePrefixSession + sessionID).Result()
 	if err != nil {
 		return "", governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -47,7 +52,7 @@ func (u *userService) GetSessionKey(sessionID string) (string, *governor.Error) 
 
 // EndSession ends the session of a user
 func (u *userService) EndSession(sessionID string) *governor.Error {
-	if err := u.cache.Cache().Del(sessionID).Err(); err != nil {
+	if err := u.cache.Cache().Del(cachePrefixSession + sessionID).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -58,10 +63,14 @@ func (u *userService) KillSessions(userid string, sessionIDs []string) *governor
 	s := session.Session{
 		Userid: userid,
 	}
-	if err := u.cache.Cache().Del(sessionIDs...).Err(); err != nil {
+	ids := make([]string, 0, len(sessionIDs))
+	for _, i := range sessionIDs {
+		ids = append(ids, cachePrefixSession+i)
+	}
+	if err := u.cache.Cache().Del(ids...).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
-	if err := u.cache.Cache().HDel(s.UserKey(), sessionIDs...).Err(); err != nil {
+	if err := u.cache.Cache().HDel(cachePrefixUserSession+s.UserKey(), sessionIDs...).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -74,7 +83,7 @@ func (u *userService) KillAllSessions(userid string) *governor.Error {
 	}
 
 	var sessionIDs []string
-	if smap, err := u.cache.Cache().HGetAll(s.UserKey()).Result(); err == nil {
+	if smap, err := u.cache.Cache().HGetAll(cachePrefixUserSession + s.UserKey()).Result(); err == nil {
 		sessionIDs = make([]string, 0, len(smap))
 		for k := range smap {
 			sessionIDs = append(sessionIDs, k)
@@ -92,10 +101,10 @@ func (u *userService) KillAllSessions(userid string) *governor.Error {
 
 // SessionExists checks if a session of a user exists
 func (u *userService) SessionExists(userid, sessionID string) (bool, *governor.Error) {
-	usersession := session.Session{
+	s := session.Session{
 		Userid: userid,
 	}
-	ok, err := u.cache.Cache().HExists(usersession.UserKey(), sessionID).Result()
+	ok, err := u.cache.Cache().HExists(cachePrefixUserSession+s.UserKey(), sessionID).Result()
 	if err != nil {
 		return false, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -109,7 +118,7 @@ func (u *userService) UpdateUserSession(s *session.Session) *governor.Error {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	if err := u.cache.Cache().HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
+	if err := u.cache.Cache().HSet(cachePrefixUserSession+s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -117,7 +126,7 @@ func (u *userService) UpdateUserSession(s *session.Session) *governor.Error {
 
 // UpdateSessionKey updates the key of a session
 func (u *userService) UpdateSessionKey(sessionID string, sessionKey string, cacheDuration time.Duration) *governor.Error {
-	if err := u.cache.Cache().Set(sessionID, sessionKey, cacheDuration).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixSession+sessionID, sessionKey, cacheDuration).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
