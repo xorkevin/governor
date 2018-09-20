@@ -57,11 +57,7 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 	// the session can be expired by time
 	if ok, claims := u.tokenizer.GetClaims(sessionToken, sessionSubject); ok {
 		if userid == claims.Userid {
-			usersession := session.Session{
-				Userid: claims.Userid,
-			}
-			userkey := usersession.UserKey()
-			if isM, err := u.cache.Cache().HExists(userkey, claims.Id).Result(); err == nil && isM {
+			if isM, err := u.SessionExists(userid, claims.Id); err == nil && isM {
 				sessionID = claims.Id
 				isMember = isM
 			}
@@ -101,12 +97,6 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 		return false, nil, err
 	}
 
-	// store the session in cache
-	sessionGob, err := s.ToGob()
-	if err != nil {
-		err.AddTrace(moduleIDAuth)
-		return false, nil, err
-	}
 	if u.newLoginEmail && !isMember {
 		emdata := emailNewLogin{
 			FirstName: m.FirstName,
@@ -134,14 +124,8 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 		}
 	}
 
-	// add to list of user sessions
-	if err := u.cache.Cache().HSet(s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
-	}
-
-	// set the session id and key into cache
-	if err := u.cache.Cache().Set(s.SessionID, s.SessionKey, time.Duration(u.refreshTime*b1)).Err(); err != nil {
-		return false, nil, governor.NewError(moduleIDAuth, err.Error(), 0, http.StatusInternalServerError)
+	if err := u.AddSession(s, time.Duration(u.refreshTime*b1)); err != nil {
+		return false, nil, err
 	}
 
 	return true, &resUserAuth{
