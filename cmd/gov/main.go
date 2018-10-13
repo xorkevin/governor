@@ -23,6 +23,8 @@ import (
 	"github.com/hackform/governor/service/user/conf"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/gate/conf"
+	"github.com/hackform/governor/service/user/model"
+	"github.com/hackform/governor/service/user/role/model"
 )
 
 var (
@@ -87,7 +89,10 @@ func main() {
 
 	cacheControlService := cachecontrol.New(config, g.Logger())
 
-	userService := user.New(config, g.Logger(), dbService, cacheService, mailService, templateService, gateService, cacheControlService)
+	roleModelService := rolemodel.New(dbService)
+	userModelService := usermodel.New(dbService, roleModelService)
+
+	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, templateService, gateService, cacheControlService)
 
 	profileService := profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)
 	userService.RegisterHook(profileService)

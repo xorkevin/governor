@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/service/user/role/model"
 )
 
 type (
@@ -47,7 +46,7 @@ func getUserFields(m *usermodel.Model) *ResUserGet {
 
 // GetByIDPublic gets and returns the public fields of the user
 func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor.Error) {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -57,7 +56,7 @@ func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor
 
 // GetByID gets and returns all fields of the user
 func (u *userService) GetByID(userid string) (*ResUserGet, *governor.Error) {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -67,7 +66,7 @@ func (u *userService) GetByID(userid string) (*ResUserGet, *governor.Error) {
 
 // GetByUsernamePublic gets and returns the public fields of the user
 func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, *governor.Error) {
-	m, err := usermodel.GetByUsername(u.db.DB(), username)
+	m, err := u.repo.GetByUsername(username)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -77,7 +76,7 @@ func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, *
 
 // GetByUsername gets and returns all fields of the user
 func (u *userService) GetByUsername(username string) (*ResUserGet, *governor.Error) {
-	m, err := usermodel.GetByUsername(u.db.DB(), username)
+	m, err := u.repo.GetByUsername(username)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -87,7 +86,7 @@ func (u *userService) GetByUsername(username string) (*ResUserGet, *governor.Err
 
 // GetByEmail gets and returns all fields of the user
 func (u *userService) GetByEmail(email string) (*ResUserGet, *governor.Error) {
-	m, err := usermodel.GetByEmail(u.db.DB(), email)
+	m, err := u.repo.GetByEmail(email)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -110,7 +109,7 @@ type (
 
 // GetInfoAll gets and returns info for all users
 func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, *governor.Error) {
-	infoSlice, err := usermodel.GetGroup(u.db.DB(), amount, offset)
+	infoSlice, err := u.repo.GetGroup(amount, offset)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -139,7 +138,7 @@ type (
 
 // GetIDsByRole retrieves a list of user ids by role
 func (u *userService) GetIDsByRole(role string, amount int, offset int) (*resUserList, *governor.Error) {
-	userids, err := rolemodel.GetByRole(u.db.DB(), role, amount, offset)
+	userids, err := u.rolerepo.GetByRole(role, amount, offset)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err

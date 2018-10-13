@@ -38,10 +38,10 @@ type (
 	}
 )
 
-func New(database db.Database) (Repo, *governor.Error) {
+func New(database db.Database) Repo {
 	return &repo{
 		db: database.DB(),
-	}, nil
+	}
 }
 
 const (

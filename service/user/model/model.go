@@ -94,11 +94,11 @@ type (
 )
 
 // New creates a new user repository
-func New(database db.Database, rolerepo rolemodel.Repo) (Repo, *governor.Error) {
+func New(database db.Database, rolerepo rolemodel.Repo) Repo {
 	return &repo{
 		db:       database.DB(),
 		rolerepo: rolerepo,
-	}, nil
+	}
 }
 
 const (

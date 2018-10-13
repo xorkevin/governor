@@ -10,6 +10,7 @@ import (
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/role/model"
 	"github.com/hackform/governor/service/user/token"
+	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"time"
@@ -170,20 +171,20 @@ func (u *userService) Health() *governor.Error {
 
 // Setup is run on service setup
 func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
-	madmin, err := usermodel.NewAdmin(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname)
+	madmin, err := u.repo.New(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname, rank.Admin())
 	if err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 	l.Info("created new admin model")
 
-	if err := usermodel.Setup(u.repo.Setup()); err != nil {
+	if err := u.repo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 	l.Info("created new user table")
 
-	if err := rolemodel.Setup(u.rolerepo.Setup()); err != nil {
+	if err := u.rolerepo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
