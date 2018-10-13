@@ -33,6 +33,7 @@ type (
 	// Repo is a user repository
 	Repo interface {
 		New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, *governor.Error)
+		NewEmpty() Model
 		GetRoles(m *Model) *governor.Error
 		GetGroup(limit, offset int) ([]Info, *governor.Error)
 		GetByIDB64(idb64 string) (*Model, *governor.Error)
@@ -133,6 +134,10 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 			CreationTime: time.Now().Unix(),
 		},
 	}, nil
+}
+
+func (r *repo) NewEmpty() Model {
+	return Model{}
 }
 
 // ValidatePass validates the password against a hash

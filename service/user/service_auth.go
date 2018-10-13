@@ -2,7 +2,6 @@ package user
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/session"
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/uid"
@@ -39,7 +38,7 @@ type (
 
 // Login authenticates a user and returns auth tokens
 func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent string) (bool, *resUserAuth, *governor.Error) {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return false, nil, err

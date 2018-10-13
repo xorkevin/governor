@@ -36,6 +36,7 @@ type (
 		config            governor.Config
 		logger            *logrus.Logger
 		repo              usermodel.Repo
+		rolerepo          rolemodel.Repo
 		cache             cache.Cache
 		tokenizer         *token.Tokenizer
 		mailer            mail.Mail
