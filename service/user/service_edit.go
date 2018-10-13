@@ -2,7 +2,6 @@ package user
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/rank"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 )
 
 func (u *userService) UpdateUser(userid string, ruser reqUserPut) *governor.Error {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -22,7 +21,7 @@ func (u *userService) UpdateUser(userid string, ruser reqUserPut) *governor.Erro
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
-	if err = m.Update(u.db.DB()); err != nil {
+	if err = u.repo.Update(m); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -37,7 +36,7 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		return err
 	}
 
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -68,19 +67,19 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 	diff := make(map[string]int)
 	for k, v := range editAddRank {
 		if v {
-			diff[k] = usermodel.RoleAdd
+			diff[k] = u.repo.RoleAddAction()
 		}
 	}
 	for k, v := range editRemoveRank {
 		if v {
-			diff[k] = usermodel.RoleRemove
+			diff[k] = u.repo.RoleRemoveAction()
 		}
 	}
 
 	if err := u.KillAllSessions(userid); err != nil {
 		return err
 	}
-	if err := m.UpdateRoles(u.db.DB(), diff); err != nil {
+	if err := u.repo.UpdateRoles(m, diff); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}

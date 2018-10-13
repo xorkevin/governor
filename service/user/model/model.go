@@ -23,10 +23,10 @@ const (
 )
 
 const (
-	// RoleAdd indicates adding a role in diff
-	RoleAdd = iota
-	// RoleRemove indicates removing a role in diff
-	RoleRemove
+	// roleAdd indicates adding a role in diff
+	roleAdd = iota
+	// roleRemove indicates removing a role in diff
+	roleRemove
 )
 
 type (
@@ -44,6 +44,8 @@ type (
 		Update(m *Model) *governor.Error
 		Delete(m *Model) *governor.Error
 		Setup() *governor.Error
+		RoleAddAction() int
+		RoleRemoveAction() int
 	}
 
 	repo struct {
@@ -390,7 +392,7 @@ func (r *repo) UpdateRoles(m *Model, diff map[string]int) *governor.Error {
 	for k, v := range diff {
 		if originalRole, err := r.rolerepo.GetByID(idb64, k); err == nil {
 			switch v {
-			case RoleRemove:
+			case roleRemove:
 				if err := r.rolerepo.Delete(originalRole); err != nil {
 					err.AddTrace(moduleIDModUpRoles)
 					return err
@@ -398,7 +400,7 @@ func (r *repo) UpdateRoles(m *Model, diff map[string]int) *governor.Error {
 			}
 		} else if err.Code() == 2 {
 			switch v {
-			case RoleAdd:
+			case roleAdd:
 				if roleM, err := r.rolerepo.New(idb64, k); err == nil {
 					if err := r.rolerepo.Insert(roleM); err != nil {
 						err.AddTrace(moduleIDModUpRoles)
@@ -465,4 +467,14 @@ func (r *repo) Setup() *governor.Error {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
+}
+
+// RoleRemoveAction returns the action to add a role
+func (r *repo) RoleAddAction() int {
+	return roleAdd
+}
+
+// RoleRemoveAction returns the action to remove a role
+func (r *repo) RoleRemoveAction() int {
+	return roleRemove
 }
