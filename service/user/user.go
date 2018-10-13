@@ -4,7 +4,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cachecontrol"
-	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user/gate"
@@ -36,7 +35,7 @@ type (
 	userService struct {
 		config            governor.Config
 		logger            *logrus.Logger
-		db                db.Database
+		repo              usermodel.Repo
 		cache             cache.Cache
 		tokenizer         *token.Tokenizer
 		mailer            mail.Mail
@@ -80,7 +79,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) Service {
+func New(conf governor.Config, l *logrus.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) Service {
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
@@ -121,7 +120,8 @@ func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.
 	return &userService{
 		config:            conf,
 		logger:            l,
-		db:                database,
+		repo:              repo,
+		rolerepo:          rolerepo,
 		cache:             ch,
 		mailer:            m,
 		tokenizer:         token.New(ca["secret"], ca["issuer"]),
@@ -176,19 +176,19 @@ func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 	}
 	l.Info("created new admin model")
 
-	if err := usermodel.Setup(u.db.DB()); err != nil {
+	if err := usermodel.Setup(u.repo.Setup()); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 	l.Info("created new user table")
 
-	if err := rolemodel.Setup(u.db.DB()); err != nil {
+	if err := rolemodel.Setup(u.rolerepo.Setup()); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 	l.Info("created new userrole table")
 
-	if err := madmin.Insert(u.db.DB()); err != nil {
+	if err := u.repo.Insert(madmin); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}

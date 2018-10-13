@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/db"
 	"github.com/lib/pq"
 	"net/http"
 )
@@ -15,6 +16,21 @@ const (
 )
 
 type (
+	Repo interface {
+		New(userid, role string) (*Model, *governor.Error)
+		GetByID(userid, role string) (*Model, *governor.Error)
+		GetByRole(role string, limit, offset int) ([]string, *governor.Error)
+		GetUserRoles(userid string, limit, offset int) ([]string, *governor.Error)
+		Insert(m *Model) *governor.Error
+		Update(m *Model) *governor.Error
+		Delete(m *Model) *governor.Error
+		DeleteUserRoles(userid string) *governor.Error
+		Setup() *governor.Error
+	}
+
+	repo struct {
+		db *sql.DB
+	}
 	// Model is the db User role model
 	Model struct {
 		Userid string `json:"userid"`
@@ -22,12 +38,18 @@ type (
 	}
 )
 
+func New(database db.Database) (Repo, *governor.Error) {
+	return &repo{
+		db: database.DB(),
+	}, nil
+}
+
 const (
 	moduleIDModNew = moduleIDModel + ".New"
 )
 
 // New creates a new User role Model
-func New(userid, role string) (*Model, *governor.Error) {
+func (r *repo) New(userid, role string) (*Model, *governor.Error) {
 	return &Model{
 		Userid: userid,
 		Role:   role,
@@ -52,9 +74,9 @@ var (
 )
 
 // GetByID returns a user role model with the given id
-func GetByID(db *sql.DB, userid, role string) (*Model, *governor.Error) {
+func (r *repo) GetByID(userid, role string) (*Model, *governor.Error) {
 	m := &Model{}
-	if err := db.QueryRow(sqlGetByID, roleid(userid, role)).Scan(&m.Userid, &m.Role); err != nil {
+	if err := r.db.QueryRow(sqlGetByID, roleid(userid, role)).Scan(&m.Userid, &m.Role); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet, "role not found for user", 2, http.StatusNotFound)
 		}
@@ -72,9 +94,9 @@ var (
 )
 
 // GetByRole returns a list of userids with the given role
-func GetByRole(db *sql.DB, role string, limit, offset int) ([]string, *governor.Error) {
+func (r *repo) GetByRole(role string, limit, offset int) ([]string, *governor.Error) {
 	m := make([]string, 0, limit)
-	rows, err := db.Query(sqlGetByRole, role, limit, offset)
+	rows, err := r.db.Query(sqlGetByRole, role, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetRole, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -104,9 +126,9 @@ var (
 )
 
 // GetUserRoles returns a list of a user's roles
-func GetUserRoles(db *sql.DB, userid string, limit, offset int) ([]string, *governor.Error) {
+func (r *repo) GetUserRoles(userid string, limit, offset int) ([]string, *governor.Error) {
 	m := make([]string, 0, limit)
-	rows, err := db.Query(sqlGetUser, userid, limit, offset)
+	rows, err := r.db.Query(sqlGetUser, userid, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetUser, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -136,8 +158,8 @@ var (
 )
 
 // Insert inserts the model into the db
-func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Roleid(), m.Userid, m.Role)
+func (r *repo) Insert(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlInsert, m.Roleid(), m.Userid, m.Role)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -160,8 +182,8 @@ var (
 )
 
 // Update updates the model in the db
-func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Roleid(), m.Userid, m.Role)
+func (r *repo) Update(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlUpdate, m.Roleid(), m.Userid, m.Role)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -177,8 +199,8 @@ var (
 )
 
 // Delete deletes the model in the db
-func (m *Model) Delete(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlDelete, m.Roleid())
+func (r *repo) Delete(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlDelete, m.Roleid())
 	if err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -194,8 +216,8 @@ var (
 )
 
 // DeleteUserRoles deletes all the roles of a user
-func DeleteUserRoles(db *sql.DB, userid string) *governor.Error {
-	_, err := db.Exec(sqlDeleteItem, userid)
+func (r *repo) DeleteUserRoles(userid string) *governor.Error {
+	_, err := r.db.Exec(sqlDeleteItem, userid)
 	if err != nil {
 		return governor.NewError(moduleIDModDelUser, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -211,8 +233,8 @@ var (
 )
 
 // Setup creates a new User role table
-func Setup(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlSetup)
+func (r *repo) Setup() *governor.Error {
+	_, err := r.db.Exec(sqlSetup)
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
