@@ -2,7 +2,6 @@ package user
 
 import (
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"strings"
@@ -36,7 +35,7 @@ const (
 
 // UpdateEmail creates a pending user email update
 func (u *userService) UpdateEmail(userid string, newEmail string, password string) *governor.Error {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -122,7 +121,7 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -140,7 +139,7 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 	}
 
 	m.Email = email
-	if err = m.Update(u.db.DB()); err != nil {
+	if err = u.repo.Update(m); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -181,7 +180,7 @@ const (
 
 // UpdatePassword updates the password
 func (u *userService) UpdatePassword(userid string, newPassword string, oldPassword string) *governor.Error {
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -230,7 +229,7 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 		return err
 	}
 
-	if err = m.Update(u.db.DB()); err != nil {
+	if err = u.repo.Update(m); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -239,9 +238,9 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 
 // ForgotPassword invokes the forgot password reset procedure
 func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Error {
-	var m *usermodel.Model
+	m := u.repo.NewEmptyPtr()
 	if isEmail {
-		mu, err := usermodel.GetByEmail(u.db.DB(), username)
+		mu, err := u.repo.GetByEmail(username)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -251,7 +250,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Er
 		}
 		m = mu
 	} else {
-		mu, err := usermodel.GetByUsername(u.db.DB(), username)
+		mu, err := u.repo.GetByUsername(username)
 		if err != nil {
 			if err.Code() == 2 {
 				err.SetErrorUser()
@@ -312,7 +311,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	m, err := usermodel.GetByIDB64(u.db.DB(), userid)
+	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -351,7 +350,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	if err := m.Update(u.db.DB()); err != nil {
+	if err := u.repo.Update(m); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
