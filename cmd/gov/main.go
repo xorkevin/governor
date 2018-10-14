@@ -89,9 +89,8 @@ func main() {
 
 	cacheControlService := cachecontrol.New(config, g.Logger())
 
-	roleModelService := rolemodel.New(dbService)
-	userModelService := usermodel.New(dbService, roleModelService)
-
+	roleModelService := rolemodel.New(config, g.Logger(), dbService)
+	userModelService := usermodel.New(config, g.Logger(), dbService, roleModelService)
 	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, templateService, gateService, cacheControlService)
 
 	profileService := profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)
