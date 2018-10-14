@@ -29,6 +29,24 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET:-adminsecret}
     restart: unless-stopped
 
+  messenger:
+    image: nats-streaming:linux
+    command: -sc config/messenger.conf
+    volumes:
+      - ./config:/config
+    depends_on:
+      - "messagestore"
+
+  messagestore:
+    image: postgres:alpine
+    volumes:
+      - messagestoredata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${MSG_STORE_USER:-nss}
+      POSTGRES_PASSWORD: ${MSG_STORE_PASS:-admin}
+      POSTGRES_DB: ${MSG_STORE_DB:-nss_db}
+    restart: unless-stopped
+
   mail:
     image: mailhog/mailhog
     restart: unless-stopped
@@ -40,3 +58,4 @@ volumes:
   redisdata:
   miniodata:
   minioconfig:
+  messagestoredata:

@@ -11,6 +11,7 @@ services:
       - "postgres"
       - "redis"
       - "minio"
+      - "messenger"
       - "mail"
     ports:
       - 8080:8080

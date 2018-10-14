@@ -13,6 +13,15 @@ services:
     ports:
       - 9000:9000
 
+  messenger:
+    ports:
+      - 4222:4222
+      - 8222:8222
+
+  messagestore:
+    ports:
+      - 5433:5432
+
   mail:
     ports:
       - 1025:1025
