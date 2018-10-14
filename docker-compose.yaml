@@ -31,7 +31,7 @@ services:
 
   messenger:
     image: nats-streaming:linux
-    command: -sc config/messenger.conf
+    command: -cid nss --store sql --sql_driver postgres --sql_source "user=${MSG_STORE_USER:-nss} password=${MSG_STORE_PASS:-admin} dbname=${MSG_STORE_DB:-nss_db} host=messagestore port=5432 sslmode=disable"
     volumes:
       - ./config:/config
     depends_on:
