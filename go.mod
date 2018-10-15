@@ -6,6 +6,7 @@ require (
 	github.com/go-ini/ini v1.38.3 // indirect
 	github.com/go-mail/mail v0.0.0-20180731213649-a0242b2233b4
 	github.com/go-redis/redis v6.14.1+incompatible
+	github.com/gogo/protobuf v1.1.1 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
 	github.com/labstack/echo v3.2.2-0.20180412143600-6d227dfea4d2+incompatible
 	github.com/labstack/gommon v0.2.7 // indirect
@@ -15,6 +16,9 @@ require (
 	github.com/minio/minio-go v6.0.8+incompatible
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
+	github.com/nats-io/go-nats v1.6.0 // indirect
+	github.com/nats-io/go-nats-streaming v0.4.0
+	github.com/nats-io/nuid v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.1.1
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.2.1

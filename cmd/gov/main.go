@@ -12,6 +12,8 @@ import (
 	"github.com/hackform/governor/service/image"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
+	"github.com/hackform/governor/service/msgqueue"
+	"github.com/hackform/governor/service/msgqueue/conf"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/objstore/conf"
 	"github.com/hackform/governor/service/post"
@@ -48,6 +50,9 @@ func main() {
 	governor.Must(objstoreconf.Conf(&config))
 	fmt.Println("- objstore")
 
+	governor.Must(msgqueueconf.Conf(&config))
+	fmt.Println("- msgqueue")
+
 	governor.Must(mailconf.Conf(&config))
 	fmt.Println("- mail")
 
@@ -78,6 +83,9 @@ func main() {
 	objstoreService, err := objstore.New(config, g.Logger())
 	governor.Must(err)
 
+	queueService, err := msgqueue.New(config, g.Logger())
+	governor.Must(err)
+
 	templateService, err := template.New(config, g.Logger())
 	governor.Must(err)
 
@@ -99,6 +107,7 @@ func main() {
 	governor.Must(g.MountRoute("/null/database", dbService))
 	governor.Must(g.MountRoute("/null/cache", cacheService))
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
+	governor.Must(g.MountRoute("/null/msgqueue", queueService))
 	governor.Must(g.MountRoute("/null/mail", mailService))
 	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
 	governor.Must(g.MountRoute("/u", userService))

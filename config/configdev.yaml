@@ -29,6 +29,11 @@ minio:
   host: localhost
   port: 9000
   sslmode: false
+nats:
+  host: localhost
+  port: 4222
+  cluster: nss
+  clientid: governor
 userauth:
   issuer: governor
   secret: secret
