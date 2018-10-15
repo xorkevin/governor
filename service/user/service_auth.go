@@ -105,19 +105,7 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 			Time:      time.Unix(s.Time, 0).String(),
 			UserAgent: s.UserAgent,
 		}
-
-		em, err := u.tpl.ExecuteHTML(newLoginTemplate, emdata)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return false, nil, err
-		}
-		subj, err := u.tpl.ExecuteHTML(newLoginSubject, emdata)
-		if err != nil {
-			err.AddTrace(moduleIDAuth)
-			return false, nil, err
-		}
-
-		if err := u.mailer.Send(m.Email, subj, em); err != nil {
+		if err := u.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
 			err.AddTrace(moduleIDAuth)
 			return false, nil, err
 		}

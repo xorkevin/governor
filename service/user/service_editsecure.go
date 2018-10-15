@@ -61,45 +61,21 @@ func (u *userService) UpdateEmail(userid string, newEmail string, password strin
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
+	emdatanotify := emailEmailChangeNotify{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+	}
+	if err := u.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	}
+
 	emdata := emailEmailChange{
 		FirstName: m.FirstName,
 		Username:  m.Username,
 		Key:       sessionKey,
 	}
-
-	em, err := u.tpl.ExecuteHTML(emailChangeTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.tpl.ExecuteHTML(emailChangeSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	emdatanotify := emailEmailChangeNotify{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-	}
-
-	emnotify, err := u.tpl.ExecuteHTML(emailChangeNotifyTemplate, emdatanotify)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subjnotify, err := u.tpl.ExecuteHTML(emailChangeNotifySubject, emdatanotify)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.mailer.Send(m.Email, subjnotify, emnotify); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.mailer.Send(newEmail, subj, em); err != nil {
+	if err := u.mailer.Send(newEmail, emailChangeNotifySubject, emailChangeTemplate, emdata); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -212,19 +188,7 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 		Username:  m.Username,
 		Key:       sessionKey,
 	}
-
-	em, err := u.tpl.ExecuteHTML(passChangeTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.tpl.ExecuteHTML(passChangeSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+	if err := u.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -283,19 +247,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Er
 		Username:  m.Username,
 		Key:       sessionKey,
 	}
-
-	em, err := u.tpl.ExecuteHTML(forgotPassTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.tpl.ExecuteHTML(forgotPassSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+	if err := u.mailer.Send(m.Email, forgotPassSubject, forgotPassTemplate, emdata); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -329,19 +281,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-
-	em, err := u.tpl.ExecuteHTML(passResetTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-	subj, err := u.tpl.ExecuteHTML(passResetSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+	if err := u.mailer.Send(m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}

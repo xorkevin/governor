@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	gomail "github.com/go-mail/mail"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/template"
 	"github.com/labstack/echo"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -14,10 +15,11 @@ type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
 		governor.Service
-		Send(to, subject, body string) *governor.Error
+		Send(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error
 	}
 
 	goMail struct {
+		tpl         template.Template
 		host        string
 		port        int
 		username    string
@@ -37,7 +39,7 @@ const (
 )
 
 // New creates a new mailer service
-func New(c governor.Config, l *logrus.Logger) Mail {
+func New(c governor.Config, l *logrus.Logger, tpl template.Template) Mail {
 	v := c.Conf()
 	rconf := v.GetStringMapString("mail")
 
@@ -49,6 +51,7 @@ func New(c governor.Config, l *logrus.Logger) Mail {
 	l.Info("initialized mail service")
 
 	gm := &goMail{
+		tpl:         tpl,
 		host:        rconf["host"],
 		port:        v.GetInt("mail.port"),
 		username:    rconf["username"],
@@ -128,14 +131,34 @@ const (
 	moduleIDenqueue = moduleID + ".enqueue"
 )
 
-func (m *goMail) enqueue(msg *gomail.Message) *governor.Error {
-	select {
-	case m.msgc <- msg:
-	default:
-		return governor.NewError(moduleIDenqueue, "email service experiencing load", 0, http.StatusInternalServerError)
+func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error {
+	body, err := m.tpl.ExecuteHTML(bodytpl, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDenqueue)
+		return err
+	}
+	subject, err := m.tpl.ExecuteHTML(subjecttpl, emdata)
+	if err != nil {
+		err.AddTrace(moduleIDenqueue)
+		return err
 	}
 
-	return nil
+	msg := gomail.NewMessage()
+	if len(m.fromName) > 0 {
+		msg.SetAddressHeader("From", m.fromAddress, m.fromName)
+	} else {
+		msg.SetHeader("From", m.fromAddress)
+	}
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", subject)
+	msg.SetBody("text/html", body)
+
+	select {
+	case m.msgc <- msg:
+		return nil
+	case <-time.After(30 * time.Second):
+		return governor.NewError(moduleIDenqueue, "email service experiencing load", 0, http.StatusInternalServerError)
+	}
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
@@ -159,16 +182,6 @@ const (
 )
 
 // Send creates and enqueues a new message to be sent
-func (m *goMail) Send(to, subject, body string) *governor.Error {
-	msg := gomail.NewMessage()
-	if len(m.fromName) > 0 {
-		msg.SetAddressHeader("From", m.fromAddress, m.fromName)
-	} else {
-		msg.SetHeader("From", m.fromAddress)
-	}
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", subject)
-	msg.SetBody("text/html", body)
-
-	return m.enqueue(msg)
+func (m *goMail) Send(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error {
+	return m.enqueue(to, subjecttpl, bodytpl, emdata)
 }

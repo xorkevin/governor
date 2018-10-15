@@ -82,19 +82,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 		Username:  m.Username,
 		Key:       sessionKey,
 	}
-
-	em, err := u.tpl.ExecuteHTML(newUserTemplate, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return nil, err
-	}
-	subj, err := u.tpl.ExecuteHTML(newUserSubject, emdata)
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return nil, err
-	}
-
-	if err := u.mailer.Send(m.Email, subj, em); err != nil {
+	if err := u.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
 	}

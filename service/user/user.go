@@ -5,7 +5,6 @@ import (
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/mail"
-	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/role/model"
@@ -47,7 +46,6 @@ type (
 		passwordResetTime int64
 		newLoginEmail     bool
 		passwordMinSize   int
-		tpl               template.Template
 		gate              gate.Gate
 		cc                cachecontrol.CacheControl
 		hooks             []Hook
@@ -81,7 +79,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, tpl template.Template, g gate.Gate, cc cachecontrol.CacheControl) Service {
+func New(conf governor.Config, l *logrus.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
@@ -133,7 +131,6 @@ func New(conf governor.Config, l *logrus.Logger, repo usermodel.Repo, rolerepo r
 		passwordResetTime: passwordResetTime,
 		newLoginEmail:     c.GetBool("user.new_login_email"),
 		passwordMinSize:   c.GetInt("user.password_min_size"),
-		tpl:               tpl,
 		gate:              g,
 		cc:                cc,
 		hooks:             []Hook{},

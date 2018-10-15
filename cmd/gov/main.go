@@ -81,7 +81,7 @@ func main() {
 	templateService, err := template.New(config, g.Logger())
 	governor.Must(err)
 
-	mailService := mail.New(config, g.Logger())
+	mailService := mail.New(config, g.Logger(), templateService)
 
 	gateService := gate.New(config, g.Logger())
 
@@ -91,7 +91,7 @@ func main() {
 
 	roleModelService := rolemodel.New(config, g.Logger(), dbService)
 	userModelService := usermodel.New(config, g.Logger(), dbService, roleModelService)
-	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, templateService, gateService, cacheControlService)
+	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
 
 	profileService := profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)
 	userService.RegisterHook(profileService)
