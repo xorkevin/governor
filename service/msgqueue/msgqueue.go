@@ -7,6 +7,7 @@ import (
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strings"
 )
 
 type (
@@ -36,9 +37,10 @@ func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
+	clientidstr := strings.TrimRight(clientid.Base64(), "=")
 
 	var conn stan.Conn
-	if connection, err := stan.Connect(rconf["cluster"], clientid.Base64(), func(options *stan.Options) error {
+	if connection, err := stan.Connect(rconf["cluster"], clientidstr, func(options *stan.Options) error {
 		options.NatsURL = "nats://" + rconf["host"] + ":" + rconf["port"]
 		return nil
 	}); err == nil {

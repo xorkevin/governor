@@ -59,7 +59,7 @@ const (
 )
 
 // New creates a new mailer service
-func New(c governor.Config, l *logrus.Logger, tpl template.Template, queue msgqueue.Msgqueue) (Mail, *governor.Error) {
+func New(c governor.Config, l *logrus.Logger, tpl template.Template, queue msgqueue.Msgqueue) (Mail, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("mail")
 
@@ -163,7 +163,7 @@ func (m *goMail) mailSubscriber(msg *stan.Msg) {
 
 	emdata := map[string]string{}
 	b1 := bytes.NewBufferString(emmsg.Emdata)
-	if err := json.NewDecoder(b1).Decode(emdata); err != nil {
+	if err := json.NewDecoder(b1).Decode(&emdata); err != nil {
 		m.logger.Error(governor.NewError(moduleIDmailSubscriber, "Failed to decode emdata: "+err.Error(), 0, http.StatusInternalServerError))
 		return
 	}
