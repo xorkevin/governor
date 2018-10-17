@@ -89,7 +89,8 @@ func main() {
 	templateService, err := template.New(config, g.Logger())
 	governor.Must(err)
 
-	mailService := mail.New(config, g.Logger(), templateService)
+	mailService, err := mail.New(config, g.Logger(), templateService, queueService)
+	governor.Must(err)
 
 	gateService := gate.New(config, g.Logger())
 
