@@ -2,9 +2,11 @@ package msgqueue
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/sirupsen/logrus"
+	"net/http"
 )
 
 type (
@@ -12,6 +14,7 @@ type (
 	Msgqueue interface {
 		governor.Service
 		Queue() stan.Conn
+		Close() *governor.Error
 	}
 
 	msgQueue struct {
@@ -28,11 +31,19 @@ func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("nats")
 
-	conn, err := stan.Connect(rconf["cluster"], rconf["clientid"], func(options *stan.Options) error {
+	clientid, err := uid.NewU(8, 8)
+	if err != nil {
+		err.AddTrace(moduleID)
+		return nil, err
+	}
+
+	var conn stan.Conn
+	if connection, err := stan.Connect(rconf["cluster"], clientid.Base64(), func(options *stan.Options) error {
 		options.NatsURL = "nats://" + rconf["host"] + ":" + rconf["port"]
 		return nil
-	})
-	if err != nil {
+	}); err == nil {
+		conn = connection
+	} else {
 		l.Errorf("error creating connection to NATS: %s\n", err)
 		return nil, err
 	}
@@ -64,4 +75,12 @@ func (q *msgQueue) Setup(conf governor.Config, l *logrus.Logger, rsetup governor
 // Queue returns the queue client instance
 func (q *msgQueue) Queue() stan.Conn {
 	return q.queue
+}
+
+// Close closes the client connection
+func (q *msgQueue) Close() *governor.Error {
+	if err := q.queue.Close(); err != nil {
+		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
 }
