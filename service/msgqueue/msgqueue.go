@@ -8,18 +8,32 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
 		governor.Service
-		Queue() stan.Conn
+		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, *governor.Error)
+		Publish(queueid string, msgdata []byte) *governor.Error
 		Close() *governor.Error
 	}
 
 	msgQueue struct {
-		queue stan.Conn
+		logger *logrus.Logger
+		queue  stan.Conn
+	}
+
+	Subscription interface {
+		Close() *governor.Error
+	}
+
+	subscription struct {
+		logger    *logrus.Logger
+		sub       stan.Subscription
+		lastAcked uint64
+		worker    func(data []byte)
 	}
 )
 
@@ -54,7 +68,8 @@ func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
 	l.Info("initialized msgqueue")
 
 	return &msgQueue{
-		queue: conn,
+		logger: l,
+		queue:  conn,
 	}, nil
 }
 
@@ -74,15 +89,75 @@ func (q *msgQueue) Setup(conf governor.Config, l *logrus.Logger, rsetup governor
 	return nil
 }
 
-// Queue returns the queue client instance
-func (q *msgQueue) Queue() stan.Conn {
-	return q.queue
+const (
+	moduleIDsubscriber = moduleID + "Subscription.subscriber"
+)
+
+func (s *subscription) subscriber(msg *stan.Msg) {
+	for {
+		local := s.lastAcked
+		if msg.Sequence <= local {
+			return
+		}
+		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
+			if err := msg.Ack(); err != nil {
+				s.logger.Error(governor.NewError(moduleIDsubscriber, "Failed to ack message: "+err.Error(), 0, http.StatusInternalServerError))
+			}
+			s.worker(msg.Data)
+			return
+		}
+	}
 }
+
+const (
+	moduleIDSubcriptionClose = moduleID + ".Subscription.Close"
+)
+
+// Close closes the subscription
+func (s *subscription) Close() *governor.Error {
+	if err := s.sub.Close(); err != nil {
+		return governor.NewError(moduleIDSubcriptionClose, "Failed to close subscription: "+err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
+	moduleIDSubscribeQueue = moduleID + ".SubscribeQueue"
+)
+
+// SubscribeQueue subscribes to a queue
+func (q *msgQueue) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, *governor.Error) {
+	msub := &subscription{
+		logger: q.logger,
+		worker: worker,
+	}
+	sub, err := q.queue.QueueSubscribe(queueid, queuegroup, msub.subscriber, stan.DurableName(queuegroup+"-durable"), stan.SetManualAckMode())
+	if err != nil {
+		return nil, governor.NewError(moduleIDSubscribeQueue, "Failed to create subscription: "+err.Error(), 0, http.StatusInternalServerError)
+	}
+	msub.sub = sub
+	return msub, nil
+}
+
+const (
+	moduleIDPublish = moduleID + ".Publish"
+)
+
+func (q *msgQueue) Publish(queueid string, msgdata []byte) *governor.Error {
+	if err := q.queue.Publish(queueid, msgdata); err != nil {
+		return governor.NewError(moduleIDPublish, "Failed to publish message: "+err.Error(), 0, http.StatusInternalServerError)
+	}
+	return nil
+}
+
+const (
+	moduleIDClose = moduleID + ".Close"
+)
 
 // Close closes the client connection
 func (q *msgQueue) Close() *governor.Error {
 	if err := q.queue.Close(); err != nil {
-		return governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError(moduleIDClose, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }

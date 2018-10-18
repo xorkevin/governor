@@ -10,16 +10,14 @@ import (
 	"github.com/hackform/governor/service/msgqueue"
 	"github.com/hackform/governor/service/template"
 	"github.com/labstack/echo"
-	"github.com/nats-io/go-nats-streaming"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"time"
 )
 
 const (
-	govmailqueueid      = "governor-mail-queue"
-	govmailqueueworker  = "governor-mail-queue-worker"
-	govmailqueuedurable = "governor-mail-queue-durable"
+	govmailqueueid     = "gov-mail"
+	govmailqueueworker = "gov-mail-worker"
 )
 
 type (
@@ -153,9 +151,9 @@ const (
 	moduleIDmailSubscriber = moduleID + ".mailSubscriber"
 )
 
-func (m *goMail) mailSubscriber(msg *stan.Msg) {
+func (m *goMail) mailSubscriber(msgdata []byte) {
 	emmsg := mailmsg{}
-	b := bytes.NewBuffer(msg.Data)
+	b := bytes.NewBuffer(msgdata)
 	if err := gob.NewDecoder(b).Decode(&emmsg); err != nil {
 		m.logger.Error(governor.NewError(moduleIDmailSubscriber, "Failed to decode mailmsg: "+err.Error(), 0, http.StatusInternalServerError))
 		return
@@ -181,9 +179,9 @@ func (m *goMail) startWorkers() *governor.Error {
 	for i := 0; i < m.workerSize; i++ {
 		go m.mailWorker()
 	}
-	_, err := m.queue.Queue().QueueSubscribe(govmailqueueid, govmailqueueworker, m.mailSubscriber, stan.DurableName(govmailqueuedurable))
-	if err != nil {
-		return governor.NewError(moduleIDstartWorkers, err.Error(), 0, http.StatusInternalServerError)
+	if _, err := m.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, m.mailSubscriber); err != nil {
+		err.AddTrace(moduleIDstartWorkers)
+		return err
 	}
 	return nil
 }
@@ -258,8 +256,9 @@ func (m *goMail) Send(to, subjecttpl, bodytpl string, emdata interface{}) *gover
 	}); err != nil {
 		return governor.NewError(moduleIDSend, err.Error(), 0, http.StatusInternalServerError)
 	}
-	if err := m.queue.Queue().Publish(govmailqueueid, b.Bytes()); err != nil {
-		return governor.NewError(moduleIDSend, err.Error(), 0, http.StatusInternalServerError)
+	if err := m.queue.Publish(govmailqueueid, b.Bytes()); err != nil {
+		err.AddTrace(moduleIDSend)
+		return err
 	}
 	return nil
 }
