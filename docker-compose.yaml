@@ -47,12 +47,6 @@ services:
       POSTGRES_DB: ${MSG_STORE_DB:-nss_db}
     restart: unless-stopped
 
-  mail:
-    image: mailhog/mailhog
-    restart: unless-stopped
-    ports:
-      - 8025:8025
-
 volumes:
   pgdata:
   redisdata:

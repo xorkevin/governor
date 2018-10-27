@@ -12,7 +12,6 @@ services:
       - "redis"
       - "minio"
       - "messenger"
-      - "mail"
     ports:
       - 8080:8080
     restart: unless-stopped
