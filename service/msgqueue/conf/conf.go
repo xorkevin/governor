@@ -10,6 +10,5 @@ func Conf(c *governor.Config) error {
 	v.SetDefault("nats.host", "localhost")
 	v.SetDefault("nats.port", "4222")
 	v.SetDefault("nats.cluster", "nss")
-	v.SetDefault("nats.clientid", "governor")
 	return nil
 }

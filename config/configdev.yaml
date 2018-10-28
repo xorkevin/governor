@@ -33,7 +33,6 @@ nats:
   host: localhost
   port: 4222
   cluster: nss
-  clientid: governor
 userauth:
   issuer: governor
   secret: secret
