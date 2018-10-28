@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   postgres:
-    image: postgres:alpine
+    image: postgres:10-alpine
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
@@ -35,7 +35,7 @@ services:
       - "messagestore"
 
   messagestore:
-    image: postgres:alpine
+    image: postgres:10-alpine
     volumes:
       - messagestoredata:/var/lib/postgresql/data
     environment:
