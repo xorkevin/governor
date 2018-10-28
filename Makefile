@@ -52,6 +52,11 @@ build-bin:
 
 build: clean build-bin
 
+## gen
+.PHONY: gen
+
+gen:
+	./servicedef-gen.sh
 
 ## docker
 .PHONY: build-docker produp proddown devup devdown docker-clean
@@ -60,16 +65,16 @@ build-docker:
 	docker build -f ./cmd/gov/Dockerfile -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest .
 
 produp:
-	docker-compose -f docker-compose.yaml -f docker-compose-app.yaml up -d
+	docker-compose -f dc.main.yaml -f dc.prod.yaml -f dc.compose.yaml up -d
 
 proddown:
-	docker-compose -f docker-compose.yaml -f docker-compose-app.yaml down
+	docker-compose -f dc.main.yaml -f dc.prod.yaml -f dc.compose.yaml down
 
 devup:
-	docker-compose -f docker-compose.yaml -f docker-compose-dev.yaml up -d
+	docker-compose -f dc.main.yaml -f dc.dev.yaml up -d
 
 devdown:
-	docker-compose -f docker-compose.yaml -f docker-compose-dev.yaml down
+	docker-compose -f dc.main.yaml -f dc.dev.yaml down
 
 docker-clean:
 	if [ "$$(docker ps -q -f status=running)" ]; \
@@ -81,6 +86,14 @@ docker-clean:
 	if [ "$$(docker ps -q -f status=created)" ]; \
 		then docker rm $$(docker ps -q -f status=created); fi
 
+## service
+SERVICE_STACK=governor
+.PHONY: launch danger-land
+launch:
+	docker stack deploy -c defs/dc.gov.yaml $(SERVICE_STACK)
+
+danger-land:
+	docker stack rm $(SERVICE_STACK)
 
 ## local go installation
 TOOLCHAIN_DIR=toolchain

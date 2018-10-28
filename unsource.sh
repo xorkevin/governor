@@ -1,0 +1,12 @@
+unset POSTGRES_USER
+unset POSTGRES_PASS
+unset POSTGRES_DB
+
+unset REDIS_PASS
+
+unset MINIO_KEY
+unset MINIO_SECRET
+
+unset MSG_STORE_USER
+unset MSG_STORE_PASS
+unset MSG_STORE_DB

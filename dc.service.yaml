@@ -1,0 +1,17 @@
+version: "3.7"
+
+services:
+  governor:
+    networks:
+      - launch-net
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=launch-net"
+        - "traefik.port=8080"
+
+networks:
+  launch-net:
+    external: true
