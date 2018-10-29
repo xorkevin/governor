@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/lib/pq"
+	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -16,6 +18,19 @@ const (
 )
 
 type (
+	Repo interface {
+		New(userid, email, bio string) (*Model, *governor.Error)
+		GetByIDB64(idb64 string) (*Model, *governor.Error)
+		Insert(m *Model) *governor.Error
+		Update(m *Model) *governor.Error
+		Delete(m *Model) *governor.Error
+		Setup() *governor.Error
+	}
+
+	repo struct {
+		db *sql.DB
+	}
+
 	// Model is the db profile model
 	Model struct {
 		Userid []byte `json:"userid"`
@@ -24,6 +39,25 @@ type (
 		Image  string `json:"profile_image_url"`
 	}
 )
+
+func New(conf governor.Config, l *logrus.Logger, db db.Database) Repo {
+	l.Info("initialized profile model")
+	return &repo{
+		db: db.DB(),
+	}
+}
+
+func (r *repo) New(userid, email, bio string) (*Model, *governor.Error) {
+	m := Model{
+		Email: email,
+		Bio:   bio,
+	}
+	if err := m.SetIDB64(userid); err != nil {
+		err.SetErrorUser()
+		return nil, err
+	}
+	return &m, nil
+}
 
 const (
 	moduleIDModSetIDB64 = moduleIDModel + ".SetIDB64"
@@ -63,14 +97,14 @@ var (
 )
 
 // GetByIDB64 returns a profile model with the given base64 id
-func GetByIDB64(db *sql.DB, idb64 string) (*Model, *governor.Error) {
+func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 	u, err := usermodel.ParseB64ToUID(idb64)
 	if err != nil {
 		err.AddTrace(moduleIDModGet64)
 		return nil, err
 	}
 	mUser := &Model{}
-	if err := db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
+	if err := r.db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Email, &mUser.Bio, &mUser.Image); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no profile found with that id", 2, http.StatusNotFound)
 		}
@@ -88,8 +122,8 @@ var (
 )
 
 // Insert inserts the model into the db
-func (m *Model) Insert(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlInsert, m.Userid, m.Email, m.Bio, m.Image)
+func (r *repo) Insert(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlInsert, m.Userid, m.Email, m.Bio, m.Image)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -112,8 +146,8 @@ var (
 )
 
 // Update updates the model in the db
-func (m *Model) Update(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlUpdate, m.Userid, m.Email, m.Bio, m.Image)
+func (r *repo) Update(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlUpdate, m.Userid, m.Email, m.Bio, m.Image)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -129,8 +163,8 @@ var (
 )
 
 // Delete deletes the model in the db
-func (m *Model) Delete(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlDelete, m.Userid)
+func (r *repo) Delete(m *Model) *governor.Error {
+	_, err := r.db.Exec(sqlDelete, m.Userid)
 	if err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -146,8 +180,8 @@ var (
 )
 
 // Setup creates a new Profile table
-func Setup(db *sql.DB) *governor.Error {
-	_, err := db.Exec(sqlSetup)
+func (r *repo) Setup() *governor.Error {
+	_, err := r.db.Exec(sqlSetup)
 	if err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}

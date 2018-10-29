@@ -3,7 +3,6 @@ package profile
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cachecontrol"
-	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/image"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/profile/model"
@@ -28,7 +27,7 @@ type (
 	}
 
 	profileService struct {
-		db   db.Database
+		repo profilemodel.Repo
 		obj  objstore.Bucket
 		gate gate.Gate
 		img  image.Image
@@ -41,7 +40,7 @@ type (
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, db db.Database, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) Profile {
+func New(conf governor.Config, l *logrus.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) Profile {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
 		l.Errorf("failed to get bucket: %s\n", err.Error())
@@ -51,7 +50,7 @@ func New(conf governor.Config, l *logrus.Logger, db db.Database, obj objstore.Ob
 	l.Info("initialized profile service")
 
 	return &profileService{
-		db:   db,
+		repo: repo,
 		obj:  b,
 		gate: g,
 		img:  img,
@@ -84,7 +83,7 @@ func (p *profileService) Health() *governor.Error {
 
 // Setup is run on service setup
 func (p *profileService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
-	if err := profilemodel.Setup(p.db.DB()); err != nil {
+	if err := p.repo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}

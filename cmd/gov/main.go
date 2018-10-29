@@ -20,6 +20,7 @@ import (
 	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
 	"github.com/hackform/governor/service/profile/conf"
+	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/template"
 	"github.com/hackform/governor/service/user"
 	"github.com/hackform/governor/service/user/conf"
@@ -102,7 +103,8 @@ func main() {
 	userModelService := usermodel.New(config, g.Logger(), dbService, roleModelService)
 	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
 
-	profileService := profile.New(config, g.Logger(), dbService, objstoreService, gateService, imageService, cacheControlService)
+	profileModelService := profilemodel.New(config, g.Logger(), dbService)
+	profileService := profile.New(config, g.Logger(), profileModelService, objstoreService, gateService, imageService, cacheControlService)
 	userService.RegisterHook(profileService)
 
 	governor.Must(g.MountRoute("/null/database", dbService))

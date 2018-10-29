@@ -3,7 +3,6 @@ package profile
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/image"
-	"github.com/hackform/governor/service/profile/model"
 	"io"
 )
 
@@ -20,17 +19,12 @@ type (
 )
 
 func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUpdate, *governor.Error) {
-	m := profilemodel.Model{
-		Email: email,
-		Bio:   bio,
-	}
-
-	if err := m.SetIDB64(userid); err != nil {
-		err.SetErrorUser()
+	m, err := p.repo.New(userid, email, bio)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := m.Insert(p.db.DB()); err != nil {
+	if err := p.repo.Insert(m); err != nil {
 		if err.Code() == 3 {
 			err.SetErrorUser()
 		}
@@ -44,7 +38,7 @@ func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUp
 }
 
 func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Error {
-	m, err := profilemodel.GetByIDB64(p.db.DB(), userid)
+	m, err := p.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -56,7 +50,7 @@ func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Erro
 	m.Email = email
 	m.Bio = bio
 
-	if err := m.Update(p.db.DB()); err != nil {
+	if err := p.repo.Update(m); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
@@ -64,7 +58,7 @@ func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Erro
 }
 
 func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) *governor.Error {
-	m, err := profilemodel.GetByIDB64(p.db.DB(), userid)
+	m, err := p.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -79,7 +73,7 @@ func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64
 	}
 
 	m.Image = thumb64
-	if err := m.Update(p.db.DB()); err != nil {
+	if err := p.repo.Update(m); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
@@ -87,7 +81,7 @@ func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64
 }
 
 func (p *profileService) DeleteProfile(userid string) *governor.Error {
-	m, err := profilemodel.GetByIDB64(p.db.DB(), userid)
+	m, err := p.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -96,7 +90,7 @@ func (p *profileService) DeleteProfile(userid string) *governor.Error {
 		return err
 	}
 
-	if err := m.Delete(p.db.DB()); err != nil {
+	if err := p.repo.Delete(m); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
@@ -104,7 +98,7 @@ func (p *profileService) DeleteProfile(userid string) *governor.Error {
 }
 
 func (p *profileService) GetProfile(userid string) (*resProfileModel, *governor.Error) {
-	m, err := profilemodel.GetByIDB64(p.db.DB(), userid)
+	m, err := p.repo.GetByIDB64(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
