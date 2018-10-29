@@ -3,7 +3,6 @@ package profile
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/image"
-	"github.com/hackform/governor/service/profile/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"io"
@@ -83,23 +82,7 @@ func (p *profileRouter) updateImage(c echo.Context) error {
 	thumb64 := c.Get("thumbnail").(string)
 	userid := c.Get("userid").(string)
 
-	m, err := profilemodel.GetByIDB64(p.service.db.DB(), userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
-		return err
-	}
-
-	if err := p.service.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
-		err.AddTrace(moduleID)
-		return err
-	}
-
-	m.Image = thumb64
-	if err := m.Update(p.service.db.DB()); err != nil {
-		err.AddTrace(moduleID)
+	if err := p.service.UpdateImage(userid, img, imgSize, thumb64); err != nil {
 		return err
 	}
 
@@ -114,17 +97,7 @@ func (p *profileRouter) deleteProfile(c echo.Context) error {
 		return err
 	}
 
-	m, err := profilemodel.GetByIDB64(p.service.db.DB(), rprofile.Userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
-		return err
-	}
-
-	if err := m.Delete(p.service.db.DB()); err != nil {
-		err.AddTrace(moduleID)
+	if err := p.service.DeleteProfile(rprofile.Userid); err != nil {
 		return err
 	}
 
@@ -134,20 +107,12 @@ func (p *profileRouter) deleteProfile(c echo.Context) error {
 func (p *profileRouter) getOwnProfile(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
-	m, err := profilemodel.GetByIDB64(p.service.db.DB(), userid)
+	res, err := p.service.GetProfile(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
 		return err
 	}
 
-	return c.JSON(http.StatusOK, resProfileModel{
-		Email: m.Email,
-		Bio:   m.Bio,
-		Image: m.Image,
-	})
+	return c.JSON(http.StatusOK, res)
 }
 
 func (p *profileRouter) getProfile(c echo.Context) error {
@@ -158,20 +123,12 @@ func (p *profileRouter) getProfile(c echo.Context) error {
 		return err
 	}
 
-	m, err := profilemodel.GetByIDB64(p.service.db.DB(), rprofile.Userid)
+	res, err := p.service.GetProfile(rprofile.Userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
 		return err
 	}
 
-	return c.JSON(http.StatusOK, resProfileModel{
-		Email: m.Email,
-		Bio:   m.Bio,
-		Image: m.Image,
-	})
+	return c.JSON(http.StatusOK, res)
 }
 
 func (p *profileRouter) getProfileImage(c echo.Context) error {
