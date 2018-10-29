@@ -20,16 +20,6 @@ type (
 		Email  string `json:"contact_email"`
 		Bio    string `json:"bio"`
 	}
-
-	resProfileUpdate struct {
-		Userid string `json:"userid"`
-	}
-
-	resProfileModel struct {
-		Email string `json:"contact_email"`
-		Bio   string `json:"bio"`
-		Image string `json:"image"`
-	}
 )
 
 func (r *reqProfileGetID) valid() *governor.Error {
@@ -62,29 +52,12 @@ func (p *profileRouter) createProfile(c echo.Context) error {
 		return err
 	}
 
-	m := profilemodel.Model{
-		Email: rprofile.Email,
-		Bio:   rprofile.Bio,
-	}
-
-	if err := m.SetIDB64(rprofile.Userid); err != nil {
-		err.SetErrorUser()
+	res, err := p.service.CreateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio)
+	if err != nil {
 		return err
 	}
 
-	if err := m.Insert(p.service.db.DB()); err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
-		return err
-	}
-
-	userid, _ := m.IDBase64()
-
-	return c.JSON(http.StatusCreated, resProfileUpdate{
-		Userid: userid,
-	})
+	return c.JSON(http.StatusCreated, res)
 }
 
 func (p *profileRouter) updateProfile(c echo.Context) error {
@@ -97,20 +70,7 @@ func (p *profileRouter) updateProfile(c echo.Context) error {
 		return err
 	}
 
-	m, err := profilemodel.GetByIDB64(p.service.db.DB(), rprofile.Userid)
-	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
-		return err
-	}
-
-	m.Email = rprofile.Email
-	m.Bio = rprofile.Bio
-
-	if err := m.Update(p.service.db.DB()); err != nil {
-		err.AddTrace(moduleID)
+	if err := p.service.UpdateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio); err != nil {
 		return err
 	}
 
