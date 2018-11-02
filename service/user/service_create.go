@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"time"
 )
@@ -131,22 +130,17 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 	for _, i := range u.hooks {
 		if err := i.UserCreateHook(hookProps); err != nil {
 			err.AddTrace(moduleIDUser)
-			u.logger.WithFields(logrus.Fields{
-				"origin": err.Origin(),
+			u.logger.Error(err.Message(), err.Origin(), "userhook create error", err.Code(), map[string]string{
 				"source": err.Source(),
-				"code":   err.Code(),
-				"time":   time.Now().String(),
-			}).Error("userhook create error:" + err.Message())
+			})
 		}
 	}
 
 	t, _ := time.Now().MarshalText()
-	u.logger.WithFields(logrus.Fields{
-		"time":     string(t),
-		"origin":   moduleIDUser,
+	u.logger.Info("user created", moduleIDUser, "create user", 0, map[string]string{
 		"userid":   userid,
 		"username": m.Username,
-	}).Info("user created")
+	})
 
 	return &resUserUpdate{
 		Userid:   userid,
@@ -188,12 +182,9 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	for _, i := range u.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
 			err.AddTrace(moduleIDUser)
-			u.logger.WithFields(logrus.Fields{
-				"origin": err.Origin(),
+			u.logger.Error(err.Message(), err.Origin(), "userhook delete error", err.Code(), map[string]string{
 				"source": err.Source(),
-				"code":   err.Code(),
-				"time":   time.Now().String(),
-			}).Error("userhook delete error:" + err.Message())
+			})
 		}
 	}
 	return nil

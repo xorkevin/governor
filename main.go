@@ -5,7 +5,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
-	"github.com/sirupsen/logrus"
 	"net/url"
 	"strings"
 )
@@ -28,7 +27,7 @@ type (
 	// Server is an http gateway
 	Server struct {
 		i          *echo.Echo
-		log        *logrus.Logger
+		logger     Logger
 		h          *health
 		s          *setup
 		config     Config
@@ -36,17 +35,18 @@ type (
 	}
 )
 
+const (
+	moduleIDServer = "govserver"
+)
+
 // New creates a new Server
-func New(config Config) (*Server, error) {
-	l := newLogger(config)
-	l.Info("initialized logger")
+func New(config Config, l Logger) (*Server, error) {
 	i := echo.New()
-	l.Info("initialized server instance")
 	i.HideBanner = true
 	i.HTTPErrorHandler = errorHandler(i, l)
-	l.Info("initialized error handling")
+	l.Info("initialized error handling", moduleIDServer, "initialize error handler", 0, nil)
 	i.Binder = requestBinder()
-	l.Info("added custom request binder")
+	l.Info("added custom request binder", moduleIDServer, "initialize request binder", 0, nil)
 	i.Pre(middleware.RemoveTrailingSlash())
 
 	if config.IsDebug() {
@@ -79,7 +79,10 @@ func New(config Config) (*Server, error) {
 					URL: u,
 				})
 			} else {
-				l.Warnf("could not add frontend proxy %s: %s", i, err.Error())
+				l.Warn("could not add frontend proxy", moduleIDServer, "fail add proxy", 0, map[string]string{
+					"proxy": i,
+					"error": err.Error(),
+				})
 			}
 		}
 		if len(targets) > 0 {
@@ -99,27 +102,27 @@ func New(config Config) (*Server, error) {
 	}
 
 	i.Use(middleware.RequestID())
-	l.Info("initialized middleware")
+	l.Info("initialized middleware", moduleIDServer, "initialize middleware", 0, nil)
 
 	healthService := newHealth()
-	if err := healthService.Mount(config, i.Group(config.BaseURL+"/healthz"), l); err != nil {
+	if err := healthService.Mount(config, l, i.Group(config.BaseURL+"/healthz")); err != nil {
 		return nil, err
 	}
 	setupService := newSetup()
-	if err := setupService.Mount(config, i.Group(config.BaseURL+"/setupz"), l); err != nil {
+	if err := setupService.Mount(config, l, i.Group(config.BaseURL+"/setupz")); err != nil {
 		return nil, err
 	}
 
 	s := &Server{
 		i:          i,
-		log:        l,
+		logger:     l,
 		config:     config,
 		h:          healthService,
 		s:          setupService,
 		showBanner: true,
 	}
 
-	l.Info("server instance created")
+	l.Info("server instance created", moduleIDServer, "initialize server instance", 0, nil)
 	return s, nil
 }
 
@@ -130,11 +133,6 @@ func (s *Server) Start() error {
 	}
 	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
-}
-
-// Logger returns an instance to the logger
-func (s *Server) Logger() *logrus.Logger {
-	return s.log
 }
 
 // Must ensures that the operation must succeed

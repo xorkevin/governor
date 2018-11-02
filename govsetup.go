@@ -2,10 +2,8 @@ package governor
 
 import (
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"regexp"
-	"time"
 )
 
 const (
@@ -72,7 +70,7 @@ var (
 )
 
 // Mount is a collection of routes
-func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
+func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 	r.POST("", func(c echo.Context) error {
 		if setupRun {
 			return NewError(moduleIDSetup, "setup already run", 128, http.StatusForbidden)
@@ -96,9 +94,7 @@ func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 			}
 		}
 
-		l.WithFields(logrus.Fields{
-			"time": time.Now().String(),
-		}).Info("successfully setup services")
+		l.Info("successfully setup services", moduleIDSetup, "services setup", 0, nil)
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
 			Username:  rsetup.Username,
@@ -109,7 +105,7 @@ func (s *setup) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 		})
 	})
 
-	l.Info("mounted setup service")
+	l.Info("mounted setup service", moduleIDSetup, "mount setup service", 0, nil)
 	return nil
 }
 

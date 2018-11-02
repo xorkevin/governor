@@ -2,7 +2,6 @@ package governor
 
 import (
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"time"
 )
@@ -37,7 +36,7 @@ func newHealth() *health {
 }
 
 // Mount is a collection of routes for healthchecks
-func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
+func (h *health) Mount(conf Config, l Logger, r *echo.Group) error {
 	r.GET("/check", func(c echo.Context) error {
 		t, _ := time.Now().MarshalText()
 		if errs := h.check(); len(errs) > 0 {
@@ -65,13 +64,10 @@ func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 			return c.String(http.StatusOK, conf.Version)
 		})
 		r.GET("/ping", func(c echo.Context) error {
-			t, _ := time.Now().MarshalText()
-			l.WithFields(logrus.Fields{
-				"time":     string(t),
-				"service":  "health",
+			l.Debug("Ping", moduleIDHealth, "Pong", 0, map[string]string{
 				"request":  "ping",
 				"response": "pong",
-			}).Info("Ping")
+			})
 			return c.String(http.StatusOK, "Pong")
 		})
 		r.GET("/error", func(c echo.Context) error {
@@ -79,7 +75,7 @@ func (h *health) Mount(conf Config, r *echo.Group, l *logrus.Logger) error {
 		})
 	}
 
-	l.Info("mounted health checkpoint")
+	l.Info("mounted health checkpoint", moduleIDHealth, "mount health service", 0, nil)
 	return nil
 }
 

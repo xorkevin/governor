@@ -5,7 +5,6 @@ import (
 	"github.com/hackform/governor/service/conf/model"
 	"github.com/hackform/governor/service/db"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -25,8 +24,8 @@ type (
 )
 
 // New creates a new Conf service
-func New(l *logrus.Logger, database db.Database) Conf {
-	l.Info("initialized conf service")
+func New(l governor.Logger, database db.Database) Conf {
+	l.Info("initialized conf service", moduleID, "initialize conf service", 0, nil)
 
 	return &confService{
 		db: database,
@@ -34,8 +33,8 @@ func New(l *logrus.Logger, database db.Database) Conf {
 }
 
 // Mount is a collection of routes
-func (c *confService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted conf service")
+func (c *confService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted conf service", moduleID, "mont conf service", 0, nil)
 	return nil
 }
 
@@ -45,7 +44,7 @@ func (c *confService) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (c *confService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (c *confService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if _, err := confmodel.Get(c.db.DB()); err == nil {
 		return governor.NewError(moduleID, "setup already run", 128, http.StatusForbidden)
 	}
@@ -55,19 +54,17 @@ func (c *confService) Setup(conf governor.Config, l *logrus.Logger, rsetup gover
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new configuration model")
 
 	if err := confmodel.Setup(c.db.DB()); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new configuration table")
 
 	if err := mconf.Insert(c.db.DB()); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("inserted new configuration into config")
+	l.Info("created new configuration", moduleID, "create new configuration", 0, nil)
 
 	return nil
 }

@@ -1,10 +1,10 @@
 package cache
 
 import (
+	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -25,7 +25,7 @@ const (
 )
 
 // New creates a new cache service
-func New(c governor.Config, l *logrus.Logger) (Cache, error) {
+func New(c governor.Config, l governor.Logger) (Cache, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("redis")
 
@@ -36,12 +36,12 @@ func New(c governor.Config, l *logrus.Logger) (Cache, error) {
 	})
 
 	if _, err := cache.Ping().Result(); err != nil {
-		l.Errorf("error creating Cache: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail create cache", 0, nil)
 		return nil, err
 	}
 
-	l.Infof("cache: connected to %s:%s", rconf["host"], rconf["port"])
-	l.Info("initialized cache")
+	l.Info(fmt.Sprintf("cache: connected to %s:%s", rconf["host"], rconf["port"]), moduleID, "establish cache connection", 0, nil)
+	l.Info("initialized cache", moduleID, "initialize cache service", 0, nil)
 
 	return &redisCache{
 		cache: cache,
@@ -49,8 +49,8 @@ func New(c governor.Config, l *logrus.Logger) (Cache, error) {
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (c *redisCache) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted cache")
+func (c *redisCache) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted cache", moduleID, "mount cache service", 0, nil)
 	return nil
 }
 
@@ -67,7 +67,7 @@ func (c *redisCache) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (c *redisCache) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (c *redisCache) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 

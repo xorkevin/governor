@@ -2,10 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	_ "github.com/lib/pq" // depends upon postgres
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 )
@@ -27,7 +27,7 @@ const (
 )
 
 // New creates a new db service
-func New(c governor.Config, l *logrus.Logger) (Database, error) {
+func New(c governor.Config, l governor.Logger) (Database, error) {
 	v := c.Conf()
 	pgconf := v.GetStringMapString("postgres")
 	pgarr := make([]string, 0, len(pgconf))
@@ -37,16 +37,16 @@ func New(c governor.Config, l *logrus.Logger) (Database, error) {
 	postgresURL := strings.Join(pgarr, " ")
 	db, err := sql.Open("postgres", postgresURL)
 	if err != nil {
-		l.Errorf("error creating DB: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail create db", 0, nil)
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
-		l.Errorf("error creating DB: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail ping db", 0, nil)
 		return nil, err
 	}
 
-	l.Infof("db: connected to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"])
-	l.Info("initialized database")
+	l.Info(fmt.Sprintf("db: connected to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"]), moduleID, "establish db connection", 0, nil)
+	l.Info("initialized database", moduleID, "initialize database service", 0, nil)
 
 	return &postgresDB{
 		db: db,
@@ -54,8 +54,8 @@ func New(c governor.Config, l *logrus.Logger) (Database, error) {
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (db *postgresDB) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted database")
+func (db *postgresDB) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted database", moduleID, "mount database service", 0, nil)
 	return nil
 }
 
@@ -72,7 +72,7 @@ func (db *postgresDB) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (db *postgresDB) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (db *postgresDB) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 

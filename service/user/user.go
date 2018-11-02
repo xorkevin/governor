@@ -11,7 +11,6 @@ import (
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -34,7 +33,7 @@ type (
 
 	userService struct {
 		config            governor.Config
-		logger            *logrus.Logger
+		logger            governor.Logger
 		repo              usermodel.Repo
 		rolerepo          rolemodel.Repo
 		cache             cache.Cache
@@ -79,7 +78,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l *logrus.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
+func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
@@ -149,7 +148,7 @@ const (
 )
 
 // Mount is a collection of routes for accessing and modifying user data
-func (u *userService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (u *userService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
 	ur := u.newRouter()
 	if err := ur.mountRoute(conf, r.Group("/user")); err != nil {
 		return err
@@ -167,35 +166,34 @@ func (u *userService) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (u *userService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	madmin, err := u.repo.New(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname, rank.Admin())
 	if err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new admin model")
 
 	if err := u.repo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new user table")
+	l.Info("created new user table", moduleID, "create user table", 0, nil)
 
 	if err := u.rolerepo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new userrole table")
+	l.Info("created new userrole table", moduleID, "create userrole table", 0, nil)
 
 	if err := u.repo.Insert(madmin); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 	userid, _ := madmin.IDBase64()
-	l.WithFields(logrus.Fields{
+	l.Info("inserted new admin into users", moduleID, "insert new setup admin", 0, map[string]string{
 		"username": madmin.Username,
 		"userid":   userid,
-	}).Info("inserted new admin into users")
+	})
 
 	return nil
 }

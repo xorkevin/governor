@@ -1,10 +1,10 @@
 package objstore
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"github.com/minio/minio-go"
-	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 )
@@ -44,32 +44,32 @@ type (
 )
 
 // New creates a new object store service instance
-func New(c governor.Config, l *logrus.Logger) (Objstore, error) {
+func New(c governor.Config, l governor.Logger) (Objstore, error) {
 	v := c.Conf()
 	minioconf := v.GetStringMapString("minio")
 	client, err := minio.New(minioconf["host"]+":"+minioconf["port"], minioconf["key_id"], minioconf["key_secret"], v.GetBool("minio.sslmode"))
 	if err != nil {
-		l.Errorf("error creating Object Store: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail create objstore", 0, nil)
 		return nil, err
 	}
 
 	client.SetAppInfo(c.Appname, c.Version)
 
 	if err := initBucket(client, canaryBucket, defaultLocation); err != nil {
-		l.Errorf("error creating Object Store: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail create objstore", 0, nil)
 		return nil, err
 	}
 
-	l.Infof("objstore: connected to %s:%s", minioconf["host"], minioconf["port"])
-	l.Info("initialized object store")
+	l.Info(fmt.Sprintf("objstore: connected to %s:%s", minioconf["host"], minioconf["port"]), moduleID, "establish objstore connection", 0, nil)
+	l.Info("initialized object store", moduleID, "initialize objstore service", 0, nil)
 	return &minioObjstore{
 		store: client,
 	}, nil
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (o *minioObjstore) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted object store")
+func (o *minioObjstore) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted object store", moduleID, "mount objstore service", 0, nil)
 	return nil
 }
 
@@ -86,7 +86,7 @@ func (o *minioObjstore) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (o *minioObjstore) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (o *minioObjstore) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 

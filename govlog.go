@@ -97,16 +97,19 @@ func NewLogger(c Config) Logger {
 }
 
 func (l *govlogger) createFields(module, event string, code int, data map[string]string) logrus.Fields {
+	now, _ := time.Now().MarshalText()
 	fields := logrus.Fields{
-		"time":   time.Now().String(),
+		"time":   now,
 		"module": module,
 		"event":  event,
 	}
 	if code > 0 {
 		fields["code"] = code
 	}
-	for k, v := range data {
-		fields[k] = v
+	if data != nil {
+		for k, v := range data {
+			fields[k] = v
+		}
 	}
 	return fields
 }

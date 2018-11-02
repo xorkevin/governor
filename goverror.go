@@ -3,10 +3,8 @@ package governor
 import (
 	"bytes"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/httputil"
-	"time"
 )
 
 const (
@@ -120,7 +118,7 @@ func (e *Error) AddTrace(module string) {
 	e.source = append(e.source, module)
 }
 
-func errorHandler(i *echo.Echo, l *logrus.Logger) echo.HTTPErrorHandler {
+func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
 		origErr := err
 		if err, ok := err.(*Error); ok {
@@ -130,34 +128,28 @@ func errorHandler(i *echo.Echo, l *logrus.Logger) echo.HTTPErrorHandler {
 			}
 			switch err.Level() {
 			case levelError:
-				l.WithFields(logrus.Fields{
-					"origin":   err.Origin(),
+				l.Error(err.Message(), err.Origin(), err.Message(), err.Code(), map[string]string{
 					"source":   err.Source(),
-					"code":     err.Code(),
 					"endpoint": c.Path(),
-					"time":     time.Now().String(),
 					"request":  request,
-				}).Error(err.Message())
+				})
 			case levelWarn:
-				l.WithFields(logrus.Fields{
-					"origin":   err.Origin(),
+				l.Warn(err.Message(), err.Origin(), err.Message(), err.Code(), map[string]string{
 					"source":   err.Source(),
-					"code":     err.Code(),
 					"endpoint": c.Path(),
-					"time":     time.Now().String(),
 					"request":  request,
-				}).Warn(err.Message())
+				})
 			}
 			if err := c.JSON(err.Status(), &responseError{
 				Message: err.Message(),
 				Code:    err.Code(),
 			}); err != nil {
 				gerr := NewError(moduleIDErr, err.Error(), 0, http.StatusInternalServerError)
-				l.WithFields(logrus.Fields{
-					"origin": gerr.Origin(),
-					"source": gerr.Source(),
-					"code":   gerr.Code(),
-				}).Warn(gerr.Message())
+				l.Warn(gerr.Message(), gerr.Origin(), "fail return error response", gerr.Code(), map[string]string{
+					"source":   gerr.Source(),
+					"endpoint": c.Path(),
+					"request":  request,
+				})
 			}
 		} else {
 			i.DefaultHTTPErrorHandler(origErr, c)

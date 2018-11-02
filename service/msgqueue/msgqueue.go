@@ -1,11 +1,11 @@
 package msgqueue
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -21,7 +21,7 @@ type (
 	}
 
 	msgQueue struct {
-		logger *logrus.Logger
+		logger governor.Logger
 		queue  stan.Conn
 	}
 
@@ -30,7 +30,7 @@ type (
 	}
 
 	subscription struct {
-		logger    *logrus.Logger
+		logger    governor.Logger
 		sub       stan.Subscription
 		lastAcked uint64
 		worker    func(data []byte)
@@ -42,7 +42,7 @@ const (
 )
 
 // New creates a new cache service
-func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
+func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("nats")
 
@@ -60,12 +60,12 @@ func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
 	}); err == nil {
 		conn = connection
 	} else {
-		l.Errorf("error creating connection to NATS: %s\n", err)
+		l.Error(err.Error(), moduleID, "fail connect nats", 0, nil)
 		return nil, err
 	}
 
-	l.Infof("msgqueue: connected to %s:%s", rconf["host"], rconf["port"])
-	l.Info("initialized msgqueue")
+	l.Info(fmt.Sprintf("msgqueue: connected to %s:%s", rconf["host"], rconf["port"]), moduleID, "establish msgqueue connection", 0, nil)
+	l.Info("initialized msgqueue", moduleID, "initialize msgqueue serivce", 0, nil)
 
 	return &msgQueue{
 		logger: l,
@@ -74,8 +74,8 @@ func New(c governor.Config, l *logrus.Logger) (Msgqueue, error) {
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (q *msgQueue) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted msgqueue")
+func (q *msgQueue) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted msgqueue", moduleID, "mount msgqueue service", 0, nil)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (q *msgQueue) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (q *msgQueue) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (q *msgQueue) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
@@ -101,7 +101,7 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 		}
 		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
 			if err := msg.Ack(); err != nil {
-				s.logger.Error(governor.NewError(moduleIDsubscriber, "Failed to ack message: "+err.Error(), 0, http.StatusInternalServerError))
+				s.logger.Error(err.Error(), moduleIDsubscriber, "fail ack message", 0, nil)
 			}
 			s.worker(msg.Data)
 			return

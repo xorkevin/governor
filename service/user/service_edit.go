@@ -3,10 +3,8 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/rank"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
-	"time"
 )
 
 func (u *userService) UpdateUser(userid string, ruser reqUserPut) *governor.Error {
@@ -46,22 +44,16 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 	}
 
 	if editAddRank.Has("admin") {
-		t, _ := time.Now().MarshalText()
-		u.logger.WithFields(logrus.Fields{
-			"time":     string(t),
-			"origin":   moduleIDUser,
+		u.logger.Info("admin status added", moduleIDUser, "add admin status", 0, map[string]string{
 			"userid":   userid,
 			"username": m.Username,
-		}).Info("admin status added")
+		})
 	}
 	if editRemoveRank.Has("admin") {
-		t, _ := time.Now().MarshalText()
-		u.logger.WithFields(logrus.Fields{
-			"time":     string(t),
-			"origin":   moduleIDUser,
+		u.logger.Info("admin status removed", moduleIDUser, "remove admin status", 0, map[string]string{
 			"userid":   userid,
 			"username": m.Username,
-		}).Info("admin status removed")
+		})
 	}
 
 	diff := make(map[string]int)

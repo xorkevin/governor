@@ -10,8 +10,8 @@ import (
 	"github.com/hackform/governor/service/msgqueue"
 	"github.com/hackform/governor/service/template"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -28,7 +28,7 @@ type (
 	}
 
 	goMail struct {
-		logger      *logrus.Logger
+		logger      governor.Logger
 		tpl         template.Template
 		queue       msgqueue.Msgqueue
 		host        string
@@ -57,16 +57,19 @@ const (
 )
 
 // New creates a new mailer service
-func New(c governor.Config, l *logrus.Logger, tpl template.Template, queue msgqueue.Msgqueue) (Mail, error) {
+func New(c governor.Config, l governor.Logger, tpl template.Template, queue msgqueue.Msgqueue) (Mail, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("mail")
 
-	l.Infof("mail: smtp server: %s:%s", rconf["host"], rconf["port"])
-	l.Infof("mail: buffer_size: %d", v.GetInt("mail.buffer_size"))
-	l.Infof("mail: worker_size: %d", v.GetInt("mail.worker_size"))
-	l.Infof("mail: conn_msg_cap: %d", v.GetInt("mail.conn_msg_cap"))
-	l.Infof("mail: from: %s <%s>", rconf["from_name"], rconf["from_address"])
-	l.Info("initialized mail service")
+	l.Info("initialized mail service", moduleID, "initialize mail service", 0, map[string]string{
+		"smtp server host": rconf["host"],
+		"smtp server port": rconf["port"],
+		"buffer_size":      strconv.Itoa(v.GetInt("mail.buffer_size")),
+		"worker_size":      strconv.Itoa(v.GetInt("mail.worker_size")),
+		"conn_msg_cap":     strconv.Itoa(v.GetInt("mail.conn_msg_cap")),
+		"sender name":      rconf["from_name"],
+		"sender address":   rconf["from_address"],
+	})
 
 	gm := &goMail{
 		logger:      l,
@@ -126,12 +129,12 @@ func (m *goMail) mailWorker() {
 					sender = s
 					mailSent = 0
 				} else {
-					m.logger.Error(governor.NewError(moduleIDmailWorker, "Failed to start dial smtp server: "+err.Error(), 0, http.StatusInternalServerError))
+					m.logger.Error(err.Error(), moduleIDmailWorker, "fail dial smtp server", 0, nil)
 				}
 			}
 			if sender != nil {
 				if err := gomail.Send(sender, msg); err != nil {
-					m.logger.Error(governor.NewError(moduleIDmailWorker, "Failed to send to smtp server: "+err.Error(), 0, http.StatusInternalServerError))
+					m.logger.Error(err.Error(), moduleIDmailWorker, "fail send smtp server", 0, nil)
 				}
 				mailSent++
 			}
@@ -139,7 +142,7 @@ func (m *goMail) mailWorker() {
 		case <-time.After(30 * time.Second):
 			if sender != nil {
 				if err := sender.Close(); err != nil {
-					m.logger.Error(governor.NewError(moduleIDmailWorker, "Failed to close smtp client: "+err.Error(), 0, http.StatusInternalServerError))
+					m.logger.Error(err.Error(), moduleIDmailWorker, "fail close smtp client", 0, nil)
 				}
 				sender = nil
 			}
@@ -155,18 +158,18 @@ func (m *goMail) mailSubscriber(msgdata []byte) {
 	emmsg := mailmsg{}
 	b := bytes.NewBuffer(msgdata)
 	if err := gob.NewDecoder(b).Decode(&emmsg); err != nil {
-		m.logger.Error(governor.NewError(moduleIDmailSubscriber, "Failed to decode mailmsg: "+err.Error(), 0, http.StatusInternalServerError))
+		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail decode mailmsg", 0, nil)
 		return
 	}
 
 	emdata := map[string]string{}
 	b1 := bytes.NewBufferString(emmsg.Emdata)
 	if err := json.NewDecoder(b1).Decode(&emdata); err != nil {
-		m.logger.Error(governor.NewError(moduleIDmailSubscriber, "Failed to decode emdata: "+err.Error(), 0, http.StatusInternalServerError))
+		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail decode emdata", 0, nil)
 		return
 	}
 	if err := m.enqueue(emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
-		m.logger.Error(err)
+		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail enqueue mail", 0, nil)
 		return
 	}
 }
@@ -221,8 +224,8 @@ func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) *go
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
-func (m *goMail) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	l.Info("mounted mail service")
+func (m *goMail) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	l.Info("mounted mail service", moduleID, "mount mail service", 0, nil)
 	return nil
 }
 
@@ -232,7 +235,7 @@ func (m *goMail) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (m *goMail) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (m *goMail) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	return nil
 }
 
