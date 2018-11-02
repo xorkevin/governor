@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 )
@@ -33,10 +32,10 @@ type (
 )
 
 // New returns a new Gate
-func New(conf governor.Config, l *logrus.Logger) Gate {
+func New(conf governor.Config, l governor.Logger) Gate {
 	ca := conf.Conf().GetStringMapString("userauth")
 
-	l.Info("initialized gate service")
+	l.Info("initialized gate service", moduleID, "initialize gate service", 0, nil)
 
 	return &gateService{
 		tokenizer: token.New(ca["secret"], ca["issuer"]),

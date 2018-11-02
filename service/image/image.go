@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/image/draw"
 	goimg "image"
 	"image/gif"
@@ -43,7 +42,7 @@ type (
 	}
 
 	imageService struct {
-		log *logrus.Logger
+		log governor.Logger
 	}
 
 	// Options represent the image options of the loaded image
@@ -62,8 +61,8 @@ type (
 )
 
 // New returns a new image service
-func New(conf governor.Config, l *logrus.Logger) Image {
-	l.Info("initialized image service")
+func New(conf governor.Config, l governor.Logger) Image {
+	l.Info("initialized image service", moduleID, "initialize image service", 0, nil)
 
 	return &imageService{
 		log: l,
@@ -141,11 +140,10 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 				err := closer.Close()
 				if err != nil {
 					gerr := governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
-					im.log.WithFields(logrus.Fields{
-						"origin": gerr.Origin(),
+					gerr.AddTrace(moduleID)
+					im.log.Error(gerr.Message(), gerr.Origin(), "fail close image file", gerr.Code(), map[string]string{
 						"source": gerr.Source(),
-						"code":   gerr.Code(),
-					}).Error(gerr.Message())
+					})
 				}
 			}(src)
 

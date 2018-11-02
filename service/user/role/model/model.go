@@ -6,7 +6,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/lib/pq"
-	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -39,8 +38,8 @@ type (
 	}
 )
 
-func New(conf governor.Config, l *logrus.Logger, database db.Database) Repo {
-	l.Info("initialized user role model")
+func New(conf governor.Config, l governor.Logger, database db.Database) Repo {
+	l.Info("initialized user role model", moduleID, "initialize user role model", 0, nil)
 	return &repo{
 		db: database.DB(),
 	}

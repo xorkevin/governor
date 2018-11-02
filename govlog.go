@@ -99,7 +99,7 @@ func NewLogger(c Config) Logger {
 func (l *govlogger) createFields(module, event string, code int, data map[string]string) logrus.Fields {
 	now, _ := time.Now().MarshalText()
 	fields := logrus.Fields{
-		"time":   now,
+		"time":   string(now),
 		"module": module,
 		"event":  event,
 	}

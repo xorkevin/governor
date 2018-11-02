@@ -10,7 +10,6 @@ import (
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"time"
@@ -95,8 +94,8 @@ type (
 )
 
 // New creates a new user repository
-func New(conf governor.Config, l *logrus.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
-	l.Info("initialized user model")
+func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
+	l.Info("initialized user model", moduleID, "initialize user model", 0, nil)
 	return &repo{
 		db:       database.DB(),
 		rolerepo: rolerepo,

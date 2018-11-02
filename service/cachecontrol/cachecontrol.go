@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,8 +21,8 @@ type (
 )
 
 // New creates a new cache control service
-func New(config governor.Config, l *logrus.Logger) CacheControl {
-	l.Info("initialized cache control service")
+func New(config governor.Config, l governor.Logger) CacheControl {
+	l.Info("initialized cache control service", moduleID, "initialize cache control service", 0, nil)
 	return &cacheControl{}
 }
 

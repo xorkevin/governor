@@ -7,7 +7,6 @@ import (
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/lib/pq"
-	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -40,8 +39,8 @@ type (
 	}
 )
 
-func New(conf governor.Config, l *logrus.Logger, db db.Database) Repo {
-	l.Info("initialized profile model")
+func New(conf governor.Config, l governor.Logger, db db.Database) Repo {
+	l.Info("initialized profile model", moduleID, "initialize profile model", 0, nil)
 	return &repo{
 		db: db.DB(),
 	}

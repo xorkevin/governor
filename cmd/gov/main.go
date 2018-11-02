@@ -106,7 +106,8 @@ func main() {
 	userService := user.New(config, l, userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
 
 	profileModelService := profilemodel.New(config, l, dbService)
-	profileService := profile.New(config, l, profileModelService, objstoreService, gateService, imageService, cacheControlService)
+	profileService, err := profile.New(config, l, profileModelService, objstoreService, gateService, imageService, cacheControlService)
+	governor.Must(err)
 	userService.RegisterHook(profileService)
 
 	governor.Must(g.MountRoute("/null/database", dbService))
