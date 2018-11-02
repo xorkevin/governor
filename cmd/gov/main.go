@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/barcode"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cache/conf"
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/conf"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/db/conf"
+	"github.com/hackform/governor/service/fileloader"
 	"github.com/hackform/governor/service/image"
 	"github.com/hackform/governor/service/mail"
 	"github.com/hackform/governor/service/mail/conf"
@@ -28,6 +30,7 @@ import (
 	"github.com/hackform/governor/service/user/gate/conf"
 	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/service/user/role/model"
+	"github.com/hackform/governor/service/websocket"
 )
 
 var (
@@ -109,6 +112,10 @@ func main() {
 	profileService, err := profile.New(config, l, profileModelService, objstoreService, gateService, imageService, cacheControlService)
 	governor.Must(err)
 	userService.RegisterHook(profileService)
+
+	fileloader.New(config, l)
+	barcode.New(config, l)
+	websocket.New(config, l)
 
 	governor.Must(g.MountRoute("/null/database", dbService))
 	governor.Must(g.MountRoute("/null/cache", cacheService))

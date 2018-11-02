@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/hackform/governor"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 )
@@ -41,8 +40,8 @@ type (
 )
 
 // New creates a new Websocket service
-func New(conf governor.Config, l *logrus.Logger) Websocket {
-	l.Info("initialized websocket service")
+func New(conf governor.Config, l governor.Logger) Websocket {
+	l.Info("initialized websocket service", moduleID, "initialize websocket service", 0, nil)
 
 	return &websocketService{
 		channels: sync.Map{},

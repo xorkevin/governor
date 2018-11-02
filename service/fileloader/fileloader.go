@@ -3,7 +3,6 @@ package fileloader
 import (
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"io"
 	"mime"
 	"net/http"
@@ -22,7 +21,7 @@ type (
 	}
 
 	fileloaderService struct {
-		log *logrus.Logger
+		log governor.Logger
 	}
 
 	// Options represent the options to load the file
@@ -34,8 +33,8 @@ type (
 )
 
 // New returns a new fileloader service
-func New(conf governor.Config, l *logrus.Logger) FileLoader {
-	l.Info("initialized fileloader service")
+func New(conf governor.Config, l governor.Logger) FileLoader {
+	l.Info("initialized fileloader service", moduleID, "initialize fileloader service", 0, nil)
 
 	return &fileloaderService{
 		log: l,
@@ -90,11 +89,10 @@ func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareF
 				err := closer.Close()
 				if err != nil {
 					gerr := governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
-					f.log.WithFields(logrus.Fields{
-						"origin": gerr.Origin(),
+					gerr.AddTrace(moduleID)
+					f.log.Error(gerr.Message(), gerr.Origin(), "fail close file", gerr.Code(), map[string]string{
 						"source": gerr.Source(),
-						"code":   gerr.Code(),
-					}).Error(gerr.Message())
+					})
 				}
 			}(src)
 

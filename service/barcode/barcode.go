@@ -5,7 +5,6 @@ import (
 	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"github.com/hackform/governor"
-	"github.com/sirupsen/logrus"
 	"image/png"
 	"net/http"
 )
@@ -28,19 +27,17 @@ type (
 
 	barcodeService struct {
 		encoder *png.Encoder
-		log     *logrus.Logger
 	}
 )
 
 // New returns a new barcode service
-func New(conf governor.Config, l *logrus.Logger) Generator {
-	l.Info("initialized barcode service")
+func New(conf governor.Config, l governor.Logger) Generator {
+	l.Info("initialized barcode service", moduleID, "initialize barcode service", 0, nil)
 
 	return &barcodeService{
 		encoder: &png.Encoder{
 			CompressionLevel: png.BestCompression,
 		},
-		log: l,
 	}
 }
 
