@@ -9,7 +9,6 @@ import (
 	"github.com/hackform/governor/service/user"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -40,14 +39,16 @@ type (
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l *logrus.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) Profile {
+func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) (Profile, error) {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
-		l.Errorf("failed to get bucket: %s\n", err.Error())
+		err.AddTrace(moduleID)
+		return nil, err
 	}
 
-	l.Infof("profile: image bucket: %s", imageBucket)
-	l.Info("initialized profile service")
+	l.Info("initialized profile service", moduleID, "initialize profile service", 0, map[string]string{
+		"profile: image bucket": imageBucket,
+	})
 
 	return &profileService{
 		repo: repo,
@@ -55,7 +56,7 @@ func New(conf governor.Config, l *logrus.Logger, repo profilemodel.Repo, obj obj
 		gate: g,
 		img:  img,
 		cc:   cc,
-	}
+	}, nil
 }
 
 func (p *profileService) newRouter() *profileRouter {
@@ -65,14 +66,14 @@ func (p *profileService) newRouter() *profileRouter {
 }
 
 // Mount is a collection of routes for accessing and modifying profile data
-func (p *profileService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *profileService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
 	pr := p.newRouter()
 
 	if err := pr.mountProfileRoutes(conf, r); err != nil {
 		return err
 	}
 
-	l.Info("mounted profile service")
+	l.Info("mounted profile service", moduleID, "mount profile service", 0, nil)
 	return nil
 }
 
@@ -82,12 +83,12 @@ func (p *profileService) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (p *profileService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (p *profileService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if err := p.repo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new profile table")
+	l.Info("created new profile table", moduleID, "create profile table", 0, nil)
 	return nil
 }
 

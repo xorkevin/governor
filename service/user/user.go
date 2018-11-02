@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/cachecontrol"
@@ -11,6 +12,7 @@ import (
 	"github.com/hackform/governor/service/user/token"
 	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
+	"strconv"
 	"time"
 )
 
@@ -88,33 +90,33 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 	passwordResetTime := time24h
 	if duration, err := time.ParseDuration(ca["duration"]); err == nil {
 		accessTime = duration.Nanoseconds() / b1
-		l.Infof("auth: duration: %ds", accessTime)
 	} else {
-		l.Warnf("auth: failed to parse duration: %s", ca["duration"])
+		l.Warn(fmt.Sprintf("auth: failed to parse duration: %s", ca["duration"]), moduleID, "fail parse access duration", 0, nil)
 	}
 	if duration, err := time.ParseDuration(ca["refresh_duration"]); err == nil {
 		refreshTime = duration.Nanoseconds() / b1
-		l.Infof("auth: refresh_duration: %ds", refreshTime)
 	} else {
-		l.Warnf("auth: failed to parse refresh_duration: %s", ca["refresh_duration"])
+		l.Warn(fmt.Sprintf("auth: failed to parse refresh_duration: %s", ca["refresh_duration"]), moduleID, "fail parse refresh duration", 0, nil)
 	}
 	if duration, err := time.ParseDuration(cu["confirm_duration"]); err == nil {
 		confirmTime = duration.Nanoseconds() / b1
-		l.Infof("auth: confirm_duration: %ds", confirmTime)
 	} else {
-		l.Warnf("auth: failed to parse confirm_duration: %s", ca["confirm_duration"])
+		l.Warn(fmt.Sprintf("auth: failed to parse confirm_duration: %s", ca["confirm_duration"]), moduleID, "fail parse confirm duration", 0, nil)
 	}
 	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err == nil {
 		passwordResetTime = duration.Nanoseconds() / b1
-		l.Infof("auth: password_reset_duration: %ds", passwordResetTime)
 	} else {
-		l.Warnf("auth: failed to parse password_reset_duration: %s", ca["password_reset_duration"])
+		l.Warn(fmt.Sprintf("auth: failed to parse password_reset_duration: %s", ca["password_reset_duration"]), moduleID, "fail parse password reset duration", 0, nil)
 	}
-	l.Infof("auth: issuer: %s", ca["issuer"])
-
-	l.Infof("user: new_login_email: %t", c.GetBool("user.new_login_email"))
-	l.Infof("user: password_min_size: %d", c.GetInt("user.password_min_size"))
-	l.Info("initialized user service")
+	l.Info("initialized user service", moduleID, "initialize user service", 0, map[string]string{
+		"auth: duration (s)":                strconv.FormatInt(accessTime, 10),
+		"auth: refresh_duration (s)":        strconv.FormatInt(refreshTime, 10),
+		"auth: confirm_duration (s)":        strconv.FormatInt(confirmTime, 10),
+		"auth: password_reset_duration (s)": strconv.FormatInt(passwordResetTime, 10),
+		"auth: issuer":                      ca["issuer"],
+		"user: new_login_email":             strconv.FormatBool(c.GetBool("user.new_login_email")),
+		"user: password_min_size":           strconv.Itoa(c.GetInt("user.password_min_size")),
+	})
 
 	return &userService{
 		config:            conf,
@@ -156,7 +158,7 @@ func (u *userService) Mount(conf governor.Config, l governor.Logger, r *echo.Gro
 	if err := ur.mountAuth(conf, r.Group("/auth")); err != nil {
 		return err
 	}
-	l.Info("mounted user service")
+	l.Info("mounted user service", moduleID, "mount user service", 0, nil)
 	return nil
 }
 

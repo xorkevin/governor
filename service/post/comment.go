@@ -7,7 +7,6 @@ import (
 	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 )
@@ -141,7 +140,7 @@ func (r *reqGetCommentChildren) valid() *governor.Error {
 	return nil
 }
 
-func (p *postService) mountComments(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 	db := p.db.DB()
 
 	r.POST("/:postid/c", func(c echo.Context) error {

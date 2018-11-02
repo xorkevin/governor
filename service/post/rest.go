@@ -7,7 +7,6 @@ import (
 	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"time"
 )
@@ -135,10 +134,10 @@ func (p *postService) archiveGate(idparam string, checkLocked bool) echo.Middlew
 	}
 }
 
-func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountRest(conf governor.Config, r *echo.Group) error {
 	db := p.db.DB()
 
-	if err := p.mountComments(conf, r.Group(""), l); err != nil {
+	if err := p.mountComments(conf, r.Group("")); err != nil {
 		return err
 	}
 
@@ -167,16 +166,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group, l *logrus.L
 			return err
 		}
 
-		t, _ := time.Now().MarshalText()
 		postid, _ := m.IDBase64()
-		l.WithFields(logrus.Fields{
-			"time":   string(t),
-			"origin": moduleIDPost,
-			"postid": postid,
-			"userid": userid,
-			"group":  m.Tag,
-			"title":  m.Title,
-		}).Info("post created")
 
 		return c.JSON(http.StatusCreated, resPostUpdate{
 			Postid: postid,

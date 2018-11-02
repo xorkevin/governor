@@ -4,7 +4,6 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/model"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 )
@@ -48,7 +47,7 @@ func (r *reqGroupGetPosts) valid() *governor.Error {
 	return nil
 }
 
-func (p *postService) mountGroup(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
+func (p *postService) mountGroup(conf governor.Config, r *echo.Group) error {
 	db := p.db.DB()
 
 	r.GET("/:group", func(c echo.Context) error {

@@ -72,39 +72,41 @@ func main() {
 	governor.Must(config.Init())
 	fmt.Println("config loaded")
 
-	g, err := governor.New(config)
+	l := governor.NewLogger(config)
+
+	g, err := governor.New(config, l)
 	governor.Must(err)
 
-	dbService, err := db.New(config, g.Logger())
+	dbService, err := db.New(config, l)
 	governor.Must(err)
 
-	cacheService, err := cache.New(config, g.Logger())
+	cacheService, err := cache.New(config, l)
 	governor.Must(err)
 
-	objstoreService, err := objstore.New(config, g.Logger())
+	objstoreService, err := objstore.New(config, l)
 	governor.Must(err)
 
-	queueService, err := msgqueue.New(config, g.Logger())
+	queueService, err := msgqueue.New(config, l)
 	governor.Must(err)
 
-	templateService, err := template.New(config, g.Logger())
+	templateService, err := template.New(config, l)
 	governor.Must(err)
 
-	mailService, err := mail.New(config, g.Logger(), templateService, queueService)
+	mailService, err := mail.New(config, l, templateService, queueService)
 	governor.Must(err)
 
-	gateService := gate.New(config, g.Logger())
+	gateService := gate.New(config, l)
 
-	imageService := image.New(config, g.Logger())
+	imageService := image.New(config, l)
 
-	cacheControlService := cachecontrol.New(config, g.Logger())
+	cacheControlService := cachecontrol.New(config, l)
 
-	roleModelService := rolemodel.New(config, g.Logger(), dbService)
-	userModelService := usermodel.New(config, g.Logger(), dbService, roleModelService)
-	userService := user.New(config, g.Logger(), userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
+	roleModelService := rolemodel.New(config, l, dbService)
+	userModelService := usermodel.New(config, l, dbService, roleModelService)
+	userService := user.New(config, l, userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
 
-	profileModelService := profilemodel.New(config, g.Logger(), dbService)
-	profileService := profile.New(config, g.Logger(), profileModelService, objstoreService, gateService, imageService, cacheControlService)
+	profileModelService := profilemodel.New(config, l, dbService)
+	profileService := profile.New(config, l, profileModelService, objstoreService, gateService, imageService, cacheControlService)
 	userService.RegisterHook(profileService)
 
 	governor.Must(g.MountRoute("/null/database", dbService))
@@ -112,10 +114,10 @@ func main() {
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
 	governor.Must(g.MountRoute("/null/msgqueue", queueService))
 	governor.Must(g.MountRoute("/null/mail", mailService))
-	governor.Must(g.MountRoute("/conf", conf.New(g.Logger(), dbService)))
+	governor.Must(g.MountRoute("/conf", conf.New(l, dbService)))
 	governor.Must(g.MountRoute("/u", userService))
 	governor.Must(g.MountRoute("/profile", profileService))
-	governor.Must(g.MountRoute("/post", post.New(config, g.Logger(), dbService, cacheService, gateService, cacheControlService)))
+	governor.Must(g.MountRoute("/post", post.New(config, l, dbService, cacheService, gateService, cacheControlService)))
 
 	governor.Must(g.Start())
 }

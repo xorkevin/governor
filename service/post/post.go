@@ -10,7 +10,6 @@ import (
 	"github.com/hackform/governor/service/post/vote/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
-	"github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -40,15 +39,16 @@ const (
 )
 
 // New creates a new Post service
-func New(conf governor.Config, l *logrus.Logger, database db.Database, ch cache.Cache, g gate.Gate, cc cachecontrol.CacheControl) Post {
+func New(conf governor.Config, l governor.Logger, database db.Database, ch cache.Cache, g gate.Gate, cc cachecontrol.CacheControl) Post {
 	cp := conf.Conf().GetStringMapString("post")
 	archiveTime := time4month
 	if duration, err := time.ParseDuration(cp["archive_time"]); err == nil {
 		archiveTime = duration.Nanoseconds() / b1
 	}
 
-	l.Infof("post: archive_time: %s", cp["archive_time"])
-	l.Info("initialized post service")
+	l.Info("initialized post service", moduleID, "initialize post service", 0, map[string]string{
+		"post: archive_time (s)": cp["archive_time"],
+	})
 
 	return &postService{
 		db:          database,
@@ -66,15 +66,15 @@ const (
 )
 
 // Mount is a collection of routes for accessing and modifying post data
-func (p *postService) Mount(conf governor.Config, r *echo.Group, l *logrus.Logger) error {
-	if err := p.mountRest(conf, r.Group("/p"), l); err != nil {
+func (p *postService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	if err := p.mountRest(conf, r.Group("/p")); err != nil {
 		return err
 	}
-	if err := p.mountGroup(conf, r.Group("/g"), l); err != nil {
+	if err := p.mountGroup(conf, r.Group("/g")); err != nil {
 		return err
 	}
 
-	l.Info("mounted post service")
+	l.Info("mounted post service", moduleID, "mount post service", 0, nil)
 
 	return nil
 }
@@ -85,19 +85,19 @@ func (p *postService) Health() *governor.Error {
 }
 
 // Setup is run on service setup
-func (p *postService) Setup(conf governor.Config, l *logrus.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (p *postService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if err := postmodel.Setup(p.db.DB()); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new post table")
+	l.Info("created new post table", moduleID, "create post table", 0, nil)
 	if err := commentmodel.Setup(p.db.DB()); err != nil {
 		return err
 	}
-	l.Info("created new comment table")
+	l.Info("created new comment table", moduleID, "create comment table", 0, nil)
 	if err := votemodel.Setup(p.db.DB()); err != nil {
 		return err
 	}
-	l.Info("created new vote table")
+	l.Info("created new vote table", moduleID, "create vote table", 0, nil)
 	return nil
 }

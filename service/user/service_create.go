@@ -136,7 +136,6 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 		}
 	}
 
-	t, _ := time.Now().MarshalText()
 	u.logger.Info("user created", moduleIDUser, "create user", 0, map[string]string{
 		"userid":   userid,
 		"username": m.Username,
