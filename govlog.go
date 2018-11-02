@@ -34,6 +34,19 @@ func envToLevel(e string) int {
 	}
 }
 
+type (
+	Logger interface {
+		Debug(msg string, data map[string]string)
+		Info(msg string, data map[string]string)
+		Warn(msg string, data map[string]string)
+		Error(msg string, data map[string]string)
+		Fatal(msg string, data map[string]string)
+	}
+
+	govlogger struct {
+	}
+)
+
 func levelToLog(level int) logrus.Level {
 	switch level {
 	case levelDebug:
@@ -63,4 +76,19 @@ func newLogger(c Config) *logrus.Logger {
 	l.Out = os.Stdout
 	l.Level = levelToLog(c.LogLevel)
 	return l
+}
+
+func NewLogger(c Config) Logger {
+	return &govlogger{}
+}
+
+func (l *govlogger) Debug(msg string, data map[string]string) {
+}
+func (l *govlogger) Info(msg string, data map[string]string) {
+}
+func (l *govlogger) Warn(msg string, data map[string]string) {
+}
+func (l *govlogger) Error(msg string, data map[string]string) {
+}
+func (l *govlogger) Fatal(msg string, data map[string]string) {
 }
