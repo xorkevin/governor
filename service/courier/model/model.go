@@ -24,6 +24,7 @@ type (
 	Repo interface {
 		NewLink(linkid, url, creatorid string) (*LinkModel, *governor.Error)
 		NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error)
+		GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error)
 		GetLink(linkid string) (*LinkModel, *governor.Error)
 		InsertLink(m *LinkModel) *governor.Error
 		UpdateLink(m *LinkModel) *governor.Error
@@ -75,6 +76,48 @@ func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error) 
 	}
 	rawb64 := strings.TrimRight(mUID.Base64(), "=")
 	return r.NewLink(rawb64, url, creatorid)
+}
+
+const (
+	moduleIDLinkGetGroup = moduleIDLink + ".GetGroup"
+)
+
+const (
+	sqlLinkGetGroup = "SELECT linkid, url, creatorid, creation_time FROM %s %s ORDER BY creation_time %s LIMIT $1 OFFSET $2;"
+)
+
+// GetLinkGroup retrieves a group of links
+func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error) {
+	m := make([]LinkModel, 0, limit)
+
+	dir := "ASC"
+	if agedesc {
+		dir = "DESC"
+	}
+
+	cond := ""
+	if len(creatorid) > 0 {
+		cond = "WHERE creatorid=$3"
+	}
+	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkTableName, cond, dir), limit, offset, creatorid)
+	if err != nil {
+		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		i := LinkModel{}
+		if err := rows.Scan(&i.LinkID, &i.URL, &i.CreatorID, &i.CreationTime); err != nil {
+			return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
+		}
+		m = append(m, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return m, nil
 }
 
 const (
