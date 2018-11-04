@@ -8,6 +8,8 @@ import (
 	"github.com/hackform/governor/service/cache/conf"
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/conf"
+	"github.com/hackform/governor/service/courier"
+	"github.com/hackform/governor/service/courier/model"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/db/conf"
 	"github.com/hackform/governor/service/fileloader"
@@ -113,6 +115,9 @@ func main() {
 	governor.Must(err)
 	userService.RegisterHook(profileService)
 
+	courierModelService := couriermodel.New(config, l, dbService)
+	courierService := courier.New(config, l, courierModelService, cacheService, gateService)
+
 	fileloader.New(config, l)
 	barcode.New(config, l)
 	websocket.New(config, l)
@@ -125,6 +130,7 @@ func main() {
 	governor.Must(g.MountRoute("/conf", conf.New(l, dbService)))
 	governor.Must(g.MountRoute("/u", userService))
 	governor.Must(g.MountRoute("/profile", profileService))
+	governor.Must(g.MountRoute("/courier", courierService))
 	governor.Must(g.MountRoute("/post", post.New(config, l, dbService, cacheService, gateService, cacheControlService)))
 
 	governor.Must(g.Start())

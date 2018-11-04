@@ -39,13 +39,15 @@ type (
 	}
 )
 
+// New creates a new profile repo
 func New(conf governor.Config, l governor.Logger, db db.Database) Repo {
-	l.Info("initialized profile model", moduleID, "initialize profile model", 0, nil)
+	l.Info("initialized profile repo", moduleID, "initialize profile repo", 0, nil)
 	return &repo{
 		db: db.DB(),
 	}
 }
 
+// New creates a new profile model
 func (r *repo) New(userid, email, bio string) (*Model, *governor.Error) {
 	m := Model{
 		Email: email,

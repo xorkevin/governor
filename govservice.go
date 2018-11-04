@@ -15,7 +15,12 @@ type (
 
 // MountRoute mounts a service
 func (s *Server) MountRoute(path string, r Service, m ...echo.MiddlewareFunc) error {
+	return s.MountRoot(s.config.BaseURL+path, r, m...)
+}
+
+// MountRoot mounts a service at the root path
+func (s *Server) MountRoot(path string, r Service, m ...echo.MiddlewareFunc) error {
 	s.h.addService(r)
 	s.s.addService(r)
-	return r.Mount(s.config, s.logger, s.i.Group(s.config.BaseURL+path, m...))
+	return r.Mount(s.config, s.logger, s.i.Group(path, m...))
 }

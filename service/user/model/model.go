@@ -95,7 +95,7 @@ type (
 
 // New creates a new user repository
 func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
-	l.Info("initialized user model", moduleID, "initialize user model", 0, nil)
+	l.Info("initialized user repo", moduleID, "initialize user repo", 0, nil)
 	return &repo{
 		db:       database.DB(),
 		rolerepo: rolerepo,
