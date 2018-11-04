@@ -69,18 +69,6 @@ func logrusLevelToLog(level int) logrus.Level {
 	}
 }
 
-func newLogger(c Config) *logrus.Logger {
-	l := logrus.New()
-	if c.IsDebug() {
-		l.Formatter = &logrus.TextFormatter{}
-	} else {
-		l.Formatter = &logrus.JSONFormatter{}
-	}
-	l.Out = os.Stdout
-	l.Level = logrusLevelToLog(c.LogLevel)
-	return l
-}
-
 func NewLogger(c Config) Logger {
 	l := logrus.New()
 	if c.IsDebug() {
