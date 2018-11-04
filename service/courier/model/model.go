@@ -83,7 +83,7 @@ var (
 	sqlLinksSetup = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (linkid VARCHAR(64) PRIMARY KEY, url VARCHAR(2048) NOT NULL, creatorid VARCHAR(64), creation_time BIGINT NOT NULL);", linkTableName)
 )
 
-// Setup creates a new User table
+// Setup creates new Courier tables
 func (r *repo) Setup() *governor.Error {
 	_, err := r.db.Exec(sqlLinksSetup)
 	if err != nil {
