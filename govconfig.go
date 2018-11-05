@@ -20,6 +20,7 @@ type (
 		MaxReqSize    string
 		FrontendProxy []string
 		Origins       []string
+		RouteRewrite  map[string]string
 	}
 )
 
@@ -48,6 +49,7 @@ func (c *Config) Init() error {
 	c.MaxReqSize = c.config.GetString("max_req_size")
 	c.FrontendProxy = c.config.GetStringSlice("frontend_proxy")
 	c.Origins = c.config.GetStringSlice("allow_origins")
+	c.RouteRewrite = c.config.GetStringMapString("route_rewrite")
 	return nil
 }
 

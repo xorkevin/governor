@@ -11,6 +11,8 @@ allow_origins:
   - http://localhost:3001
   - http://localhost:3030
   - http://localhost:3031
+route_rewrite:
+  "/link/*": "/api/courier/link/$1"
 postgres:
   user: postgres
   password: admin

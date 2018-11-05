@@ -48,6 +48,10 @@ func New(config Config, l Logger) (*Server, error) {
 	i.Binder = requestBinder()
 	l.Info("added custom request binder", moduleIDServer, "initialize request binder", 0, nil)
 	i.Pre(middleware.RemoveTrailingSlash())
+	if len(config.RouteRewrite) > 0 {
+		l.Info("adding route rewriting rules", moduleIDServer, "add route rewrite rules", 0, config.RouteRewrite)
+		i.Pre(middleware.Rewrite(config.RouteRewrite))
+	}
 
 	if config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
