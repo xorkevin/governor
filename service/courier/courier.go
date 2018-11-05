@@ -44,8 +44,18 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cac
 	}
 }
 
+func (c *courierService) newRouter() *courierRouter {
+	return &courierRouter{
+		service: *c,
+	}
+}
+
 // Mount is a collection of routes for accessing and modifying courier data
 func (c *courierService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
+	cr := c.newRouter()
+	if err := cr.mountRoutes(conf, r); err != nil {
+		return err
+	}
 	l.Info("mounted courier service", moduleID, "mount courier service", 0, nil)
 	return nil
 }
