@@ -50,7 +50,7 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 		}
 		return err
 	}
-	return c.JSON(http.StatusOK, res)
+	return c.Redirect(http.StatusMovedPermanently, res.URL)
 }
 
 func (cr *courierRouter) createLink(c echo.Context) error {
@@ -96,6 +96,7 @@ func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error
 }
 
 func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
+	r.GET("/link/:linkid", cr.getLink)
 	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	return nil
