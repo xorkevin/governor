@@ -24,10 +24,11 @@ type (
 	Repo interface {
 		NewLink(linkid, url, creatorid string) (*LinkModel, *governor.Error)
 		NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error)
+		NewLinkEmpty() LinkModel
+		NewLinkEmptyPtr() *LinkModel
 		GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error)
 		GetLink(linkid string) (*LinkModel, *governor.Error)
 		InsertLink(m *LinkModel) *governor.Error
-		UpdateLink(m *LinkModel) *governor.Error
 		DeleteLink(m *LinkModel) *governor.Error
 		Setup() *governor.Error
 	}
@@ -78,6 +79,16 @@ func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error) 
 	return r.NewLink(rawb64, url, creatorid)
 }
 
+// NewLinkEmpty creates an empty link model
+func (r *repo) NewLinkEmpty() LinkModel {
+	return LinkModel{}
+}
+
+// NewLinkEmptyPtr creates an empty link model reference
+func (r *repo) NewLinkEmptyPtr() *LinkModel {
+	return &LinkModel{}
+}
+
 const (
 	moduleIDLinkGetGroup = moduleIDLink + ".GetGroup"
 )
@@ -99,6 +110,7 @@ func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) (
 	if len(creatorid) > 0 {
 		cond = "WHERE creatorid=$3"
 	}
+
 	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkTableName, cond, dir), limit, offset, creatorid)
 	if err != nil {
 		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
@@ -165,23 +177,6 @@ func (r *repo) InsertLink(m *LinkModel) *governor.Error {
 }
 
 const (
-	moduleIDLinkUp = moduleIDLink + ".Update"
-)
-
-var (
-	sqlLinkUpdate = fmt.Sprintf("UPDATE %s SET (url, creatorid, creation_time) = ($2, $3, $4) WHERE linkid=$1;", linkTableName)
-)
-
-// UpdateLink updates the link model in the db
-func (r *repo) UpdateLink(m *LinkModel) *governor.Error {
-	_, err := r.db.Exec(sqlLinkUpdate, m.LinkID, m.URL, m.CreatorID, m.CreationTime)
-	if err != nil {
-		return governor.NewError(moduleIDLinkUp, err.Error(), 0, http.StatusInternalServerError)
-	}
-	return nil
-}
-
-const (
 	moduleIDLinkDel = moduleIDLink + ".Del"
 )
 
@@ -202,7 +197,7 @@ const (
 )
 
 var (
-	sqlLinksSetup = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (linkid VARCHAR(64) PRIMARY KEY, url VARCHAR(2048) NOT NULL, creatorid VARCHAR(64), creation_time BIGINT NOT NULL);", linkTableName)
+	sqlLinksSetup = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (linkid VARCHAR(64) PRIMARY KEY, url VARCHAR(2048) NOT NULL, creatorid VARCHAR(64) NOT NULL, creation_time BIGINT NOT NULL);", linkTableName)
 )
 
 // Setup creates new Courier tables

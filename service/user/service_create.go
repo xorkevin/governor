@@ -107,9 +107,6 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 	}
 
 	if err := u.repo.Insert(&m); err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
-		}
 		err.AddTrace(moduleIDUser)
 		return nil, err
 	}
@@ -150,9 +147,6 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 func (u *userService) DeleteUser(userid string, username string, password string) *governor.Error {
 	m, err := u.repo.GetByIDB64(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		err.AddTrace(moduleIDUser)
 		return err
 	}
