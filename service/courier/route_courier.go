@@ -8,12 +8,20 @@ import (
 )
 
 type (
+	reqLinkGet struct {
+		LinkID string `json:"-"`
+	}
+
 	reqLinkPost struct {
 		CreatorID string `json:"-"`
 		LinkID    string `json:"linkid"`
 		URL       string `json:"url"`
 	}
 )
+
+func (r *reqLinkGet) valid() *governor.Error {
+	return hasLinkID(r.LinkID)
+}
 
 func (r *reqLinkPost) valid() *governor.Error {
 	if err := hasCreatorID(r.CreatorID); err != nil {
@@ -50,7 +58,28 @@ func (cr *courierRouter) createLink(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
+func (cr *courierRouter) deleteLink(c echo.Context) error {
+	rlink := reqLinkGet{
+		LinkID: c.Param("linkid"),
+	}
+	if err := rlink.valid(); err != nil {
+		return err
+	}
+	if err := cr.service.DeleteLink(rlink.LinkID); err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error) {
+	return "website", nil
+}
+
 func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
-	r.POST("/link", cr.createLink, gate.User(cr.service.gate))
+	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
+	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	return nil
 }

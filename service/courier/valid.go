@@ -47,3 +47,10 @@ func hasCreatorID(creatorid string) *governor.Error {
 	}
 	return nil
 }
+
+func hasLinkID(linkid string) *governor.Error {
+	if len(linkid) < 3 || len(linkid) > lengthCapLink {
+		return governor.NewErrorUser(moduleIDReqValid, "link must be longer than 2 chars", 0, http.StatusBadRequest)
+	}
+	return nil
+}
