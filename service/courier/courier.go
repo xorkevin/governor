@@ -25,9 +25,10 @@ type (
 	}
 
 	courierService struct {
-		repo  couriermodel.Repo
-		cache cache.Cache
-		gate  gate.Gate
+		repo         couriermodel.Repo
+		cache        cache.Cache
+		gate         gate.Gate
+		fallbackLink string
 	}
 
 	courierRouter struct {
@@ -37,10 +38,21 @@ type (
 
 // New creates a new Courier service
 func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cache.Cache, g gate.Gate) Service {
+	c := conf.Conf().GetStringMapString("courier")
+	fallbackLink := c["fallback_link"]
+	if len(fallbackLink) == 0 {
+		l.Warn("courier: fallback link is not set", moduleID, "fallback_link unset", 0, nil)
+	} else if err := validURL(fallbackLink); err != nil {
+		l.Warn(err.Message(), moduleID, "invalid fallback_link", 0, nil)
+	}
+	l.Info("initialized courier service", moduleID, "initialize courier service", 0, map[string]string{
+		"fallback_link": fallbackLink,
+	})
 	return &courierService{
-		repo:  repo,
-		cache: ch,
-		gate:  g,
+		repo:         repo,
+		cache:        ch,
+		gate:         g,
+		fallbackLink: fallbackLink,
 	}
 }
 

@@ -45,6 +45,9 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 	}
 	res, err := cr.service.GetLink(rlink.LinkID)
 	if err != nil {
+		if len(cr.service.fallbackLink) > 0 {
+			return c.Redirect(http.StatusMovedPermanently, cr.service.fallbackLink)
+		}
 		if err.Code() == 2 {
 			err.SetErrorUser()
 		}

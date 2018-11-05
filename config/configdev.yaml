@@ -43,6 +43,8 @@ user:
   password_reset_duration: 1h
   new_login_email: true
   password_min_size: 8
+courier:
+  fallback_link: localhost:8080
 mail:
   host: localhost
   port: 1025
