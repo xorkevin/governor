@@ -36,6 +36,23 @@ func (r *reqLinkPost) valid() *governor.Error {
 	return nil
 }
 
+func (cr *courierRouter) getLink(c echo.Context) error {
+	rlink := reqLinkGet{
+		LinkID: c.Param("linkid"),
+	}
+	if err := rlink.valid(); err != nil {
+		return err
+	}
+	res, err := cr.service.GetLink(rlink.LinkID)
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
 func (cr *courierRouter) createLink(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
