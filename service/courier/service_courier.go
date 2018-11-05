@@ -29,6 +29,32 @@ func (c *courierService) GetLink(linkid string) (*resGetLink, *governor.Error) {
 }
 
 type (
+	resLinkGroup struct {
+		Links []resGetLink `json:"links"`
+	}
+)
+
+func (c *courierService) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) (*resLinkGroup, *governor.Error) {
+	links, err := c.repo.GetLinkGroup(limit, offset, agedesc, creatorid)
+	if err != nil {
+		err.AddTrace(moduleID)
+		return nil, err
+	}
+	res := make([]resGetLink, 0, len(links))
+	for _, i := range links {
+		res = append(res, resGetLink{
+			LinkID:       i.LinkID,
+			URL:          i.URL,
+			CreatorID:    i.CreatorID,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resLinkGroup{
+		Links: res,
+	}, nil
+}
+
+type (
 	resCreateLink struct {
 		LinkID string `json:"linkid"`
 	}
