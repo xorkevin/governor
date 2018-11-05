@@ -34,6 +34,7 @@ type (
 	}
 )
 
+// GetLinkGroup retrieves a group of links
 func (c *courierService) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) (*resLinkGroup, *governor.Error) {
 	links, err := c.repo.GetLinkGroup(limit, offset, agedesc, creatorid)
 	if err != nil {

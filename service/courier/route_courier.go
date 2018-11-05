@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"net/http"
+	"strconv"
 )
 
 type (
@@ -56,6 +57,26 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 	return c.Redirect(http.StatusMovedPermanently, res.URL)
 }
 
+func (cr *courierRouter) getLinkGroup(c echo.Context) error {
+	var amt, ofs int
+	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
+		amt = amount
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+	}
+	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
+		ofs = offset
+	} else {
+		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+	}
+
+	res, err := cr.service.GetLinkGroup(amt, ofs, c.QueryParam("asc") != "true", c.QueryParam("creatorid"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
 func (cr *courierRouter) createLink(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
@@ -100,6 +121,7 @@ func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error
 
 func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
 	r.GET("/link/:linkid", cr.getLink)
+	r.GET("/link", cr.getLinkGroup, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	return nil
