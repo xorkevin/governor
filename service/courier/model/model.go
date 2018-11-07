@@ -100,6 +100,7 @@ const (
 // GetLinkGroup retrieves a group of links
 func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error) {
 	m := make([]LinkModel, 0, limit)
+	arguments := []interface{}{limit, offset}
 
 	dir := "ASC"
 	if agedesc {
@@ -109,9 +110,10 @@ func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) (
 	cond := ""
 	if len(creatorid) > 0 {
 		cond = "WHERE creatorid=$3"
+		arguments = append(arguments, creatorid)
 	}
 
-	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkTableName, cond, dir), limit, offset, creatorid)
+	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkTableName, cond, dir), arguments...)
 	if err != nil {
 		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}

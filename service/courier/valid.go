@@ -19,8 +19,11 @@ var (
 )
 
 func validLinkID(linkid string) *governor.Error {
-	if len(linkid) < 3 || len(linkid) > lengthCapLink {
-		return governor.NewErrorUser(moduleIDReqValid, "link must be longer than 2 chars and shorter than 64", 0, http.StatusBadRequest)
+	if len(linkid) == 0 {
+		return nil
+	}
+	if len(linkid) > lengthCapLink {
+		return governor.NewErrorUser(moduleIDReqValid, "link must be shorter than 64 characters", 0, http.StatusBadRequest)
 	}
 	if !linkRegex.MatchString(linkid) {
 		return governor.NewErrorUser(moduleIDReqValid, "link can only contain a-z,0-9,_,-", 0, http.StatusBadRequest)
