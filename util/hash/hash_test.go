@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func Test_Uid(t *testing.T) {
+func Test_Hash(t *testing.T) {
 	assert := assert.New(t)
 	pass := "password"
 
