@@ -1,16 +1,20 @@
 package courier
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/courier/model"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
+	"strconv"
+	"time"
 )
 
 const (
-	moduleID = "courier"
-	min1     = 60
+	moduleID       = "courier"
+	min1     int64 = 60
+	b1             = 1000000000
 )
 
 type (
@@ -30,6 +34,7 @@ type (
 		cache        cache.Cache
 		gate         gate.Gate
 		fallbackLink string
+		cacheTime    int64
 	}
 
 	courierRouter struct {
@@ -41,6 +46,12 @@ type (
 func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cache.Cache, g gate.Gate) Service {
 	c := conf.Conf().GetStringMapString("courier")
 	fallbackLink := c["fallback_link"]
+	cacheTime := min1
+	if duration, err := time.ParseDuration(c["cache_time"]); err == nil {
+		cacheTime = duration.Nanoseconds() / b1
+	} else {
+		l.Warn(fmt.Sprintf("failed to parse duration: %s", c["cache_time"]), moduleID, "fail parse cache duration", 0, nil)
+	}
 	if len(fallbackLink) == 0 {
 		l.Warn("courier: fallback link is not set", moduleID, "fallback_link unset", 0, nil)
 	} else if err := validURL(fallbackLink); err != nil {
@@ -48,6 +59,7 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cac
 	}
 	l.Info("initialized courier service", moduleID, "initialize courier service", 0, map[string]string{
 		"fallback_link": fallbackLink,
+		"cache_time":    strconv.FormatInt(cacheTime, 10),
 	})
 	return &courierService{
 		logger:       l,
@@ -55,6 +67,7 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cac
 		cache:        ch,
 		gate:         g,
 		fallbackLink: fallbackLink,
+		cacheTime:    cacheTime,
 	}
 }
 

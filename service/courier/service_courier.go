@@ -6,9 +6,7 @@ import (
 )
 
 const (
-	cachePrefixCourierLink       = moduleID + ".courierlink:"
-	linkCacheTime          int64 = 60
-	b1                           = 1000000000
+	cachePrefixCourierLink = moduleID + ".courierlink:"
 )
 
 type (
@@ -44,7 +42,7 @@ func (c *courierService) GetLinkFast(linkid string) (string, *governor.Error) {
 	if err != nil {
 		return "", err
 	}
-	if err := c.cache.Cache().Set(cacheLinkID, res.URL, time.Duration(60*b1)).Err(); err != nil {
+	if err := c.cache.Cache().Set(cacheLinkID, res.URL, time.Duration(c.cacheTime*b1)).Err(); err != nil {
 		c.logger.Error(err.Error(), moduleID, "fail cache linkid url", 0, nil)
 	}
 	return res.URL, nil

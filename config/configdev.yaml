@@ -47,6 +47,7 @@ user:
   password_min_size: 8
 courier:
   fallback_link: localhost:8080
+  cache_time: 1m
 mail:
   host: localhost
   port: 1025
