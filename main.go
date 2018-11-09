@@ -50,7 +50,11 @@ func New(config Config, l Logger) (*Server, error) {
 	i.Pre(middleware.RemoveTrailingSlash())
 	if len(config.RouteRewrite) > 0 {
 		l.Info("adding route rewriting rules", moduleIDServer, "add route rewrite rules", 0, config.RouteRewrite)
-		i.Pre(middleware.Rewrite(config.RouteRewrite))
+		rewriteRules := make(map[string]string, len(config.RouteRewrite))
+		for k, v := range config.RouteRewrite {
+			rewriteRules["^"+k] = v
+		}
+		i.Pre(middleware.Rewrite(rewriteRules))
 	}
 
 	if config.IsDebug() {
