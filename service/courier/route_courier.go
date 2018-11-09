@@ -57,6 +57,20 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
+func (cr *courierRouter) getLinkImage(c echo.Context) error {
+	rlink := reqLinkGet{
+		LinkID: c.Param("linkid"),
+	}
+	if err := rlink.valid(); err != nil {
+		return err
+	}
+	qrimage, contentType, err := cr.service.GetLinkImage(rlink.LinkID)
+	if err != nil {
+		return err
+	}
+	return c.Stream(http.StatusOK, contentType, qrimage)
+}
+
 func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 	var amt, ofs int
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
@@ -121,6 +135,7 @@ func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error
 
 func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
 	r.GET("/link/:linkid", cr.getLink)
+	r.GET("/link/:linkid/image", cr.getLinkImage)
 	r.GET("/link", cr.getLinkGroup, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))

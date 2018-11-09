@@ -3,6 +3,7 @@ package courier
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/barcode"
+	"io"
 	"time"
 )
 
@@ -48,6 +49,18 @@ func (c *courierService) GetLinkFast(linkid string) (string, *governor.Error) {
 		c.logger.Error(err.Error(), moduleID, "fail cache linkid url", 0, nil)
 	}
 	return res.URL, nil
+}
+
+func (c *courierService) GetLinkImage(linkid string) (io.Reader, string, *governor.Error) {
+	qrimage, objinfo, err := c.linkImageBucket.Get(linkid + "-qr")
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleID)
+		return nil, "", err
+	}
+	return qrimage, objinfo.ContentType, nil
 }
 
 type (
@@ -105,11 +118,19 @@ func (c *courierService) CreateLink(linkid, url, creatorid string) (*resCreateLi
 		err.AddTrace(moduleID)
 		return nil, err
 	}
-	_, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+linkid)
+	qrimage, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+linkid)
 	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
+	if err := c.linkImageBucket.Put(linkid+"-qr", mediaTypePNG, int64(qrimage.Len()), qrimage); err != nil {
+		err.AddTrace(moduleID)
+		c.logger.Error(err.Error(), moduleID, "fail add link qrcode image to objstore", 0, map[string]string{
+			"linkid": linkid,
+		})
+		return nil, err
+	}
+
 	return &resCreateLink{
 		LinkID: m.LinkID,
 	}, nil
@@ -125,6 +146,11 @@ func (c *courierService) DeleteLink(linkid string) *governor.Error {
 	if err := c.repo.DeleteLink(m); err != nil {
 		err.AddTrace(moduleID)
 		return err
+	}
+	if err := c.linkImageBucket.Remove(linkid + "-qr"); err != nil {
+		c.logger.Error(err.Error(), moduleID, "fail remove link qrcode image from objstore", 0, map[string]string{
+			"linkid": linkid,
+		})
 	}
 	return nil
 }
