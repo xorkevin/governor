@@ -2,6 +2,13 @@ package courier
 
 import (
 	"github.com/hackform/governor"
+	"time"
+)
+
+const (
+	cachePrefixCourierLink       = moduleID + ".courierlink:"
+	linkCacheTime          int64 = 60
+	b1                           = 1000000000
 )
 
 type (
@@ -26,6 +33,21 @@ func (c *courierService) GetLink(linkid string) (*resGetLink, *governor.Error) {
 		CreatorID:    m.CreatorID,
 		CreationTime: m.CreationTime,
 	}, nil
+}
+
+func (c *courierService) GetLinkFast(linkid string) (string, *governor.Error) {
+	cacheLinkID := cachePrefixCourierLink + linkid
+	if cachedURL, err := c.cache.Cache().Get(cacheLinkID).Result(); err == nil {
+		return cachedURL, nil
+	}
+	res, err := c.GetLink(linkid)
+	if err != nil {
+		return "", err
+	}
+	if err := c.cache.Cache().Set(cacheLinkID, res.URL, time.Duration(60*b1)).Err(); err != nil {
+		c.logger.Error(err.Error(), moduleID, "fail cache linkid url", 0, nil)
+	}
+	return res.URL, nil
 }
 
 type (

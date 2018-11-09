@@ -44,7 +44,7 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 	if err := rlink.valid(); err != nil {
 		return err
 	}
-	res, err := cr.service.GetLink(rlink.LinkID)
+	url, err := cr.service.GetLinkFast(rlink.LinkID)
 	if err != nil {
 		if len(cr.service.fallbackLink) > 0 {
 			return c.Redirect(http.StatusMovedPermanently, cr.service.fallbackLink)
@@ -54,7 +54,7 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 		}
 		return err
 	}
-	return c.Redirect(http.StatusMovedPermanently, res.URL)
+	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
 func (cr *courierRouter) getLinkGroup(c echo.Context) error {

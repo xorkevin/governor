@@ -25,6 +25,7 @@ type (
 	}
 
 	courierService struct {
+		logger       governor.Logger
 		repo         couriermodel.Repo
 		cache        cache.Cache
 		gate         gate.Gate
@@ -49,6 +50,7 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cac
 		"fallback_link": fallbackLink,
 	})
 	return &courierService{
+		logger:       l,
 		repo:         repo,
 		cache:        ch,
 		gate:         g,
