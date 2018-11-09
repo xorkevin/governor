@@ -115,11 +115,12 @@ func main() {
 	governor.Must(err)
 	userService.RegisterHook(profileService)
 
+	barcodeService := barcode.New(config, l)
 	courierModelService := couriermodel.New(config, l, dbService)
-	courierService := courier.New(config, l, courierModelService, cacheService, gateService)
+	courierService, err := courier.New(config, l, courierModelService, objstoreService, barcodeService, cacheService, gateService)
+	governor.Must(err)
 
 	fileloader.New(config, l)
-	barcode.New(config, l)
 	websocket.New(config, l)
 
 	governor.Must(g.MountRoute("/null/database", dbService))

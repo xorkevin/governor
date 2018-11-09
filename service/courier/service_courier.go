@@ -2,11 +2,13 @@ package courier
 
 import (
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/barcode"
 	"time"
 )
 
 const (
 	cachePrefixCourierLink = moduleID + ".courierlink:"
+	mediaTypePNG           = "image/png"
 )
 
 type (
@@ -100,6 +102,11 @@ func (c *courierService) CreateLink(linkid, url, creatorid string) (*resCreateLi
 		m = ml
 	}
 	if err := c.repo.InsertLink(m); err != nil {
+		err.AddTrace(moduleID)
+		return nil, err
+	}
+	_, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+linkid)
+	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err
 	}

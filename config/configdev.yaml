@@ -47,6 +47,7 @@ user:
   password_min_size: 8
 courier:
   fallback_link: localhost:8080
+  link_prefix: localhost:8080/link
   cache_time: 1m
 mail:
   host: localhost

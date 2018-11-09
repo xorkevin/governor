@@ -3,8 +3,10 @@ package courier
 import (
 	"fmt"
 	"github.com/hackform/governor"
+	"github.com/hackform/governor/service/barcode"
 	"github.com/hackform/governor/service/cache"
 	"github.com/hackform/governor/service/courier/model"
+	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"strconv"
@@ -12,9 +14,10 @@ import (
 )
 
 const (
-	moduleID       = "courier"
-	min1     int64 = 60
-	b1             = 1000000000
+	moduleID                = "courier"
+	linkImageBucketID       = "courier-link-image"
+	min1              int64 = 60
+	b1                      = 1000000000
 )
 
 type (
@@ -29,12 +32,15 @@ type (
 	}
 
 	courierService struct {
-		logger       governor.Logger
-		repo         couriermodel.Repo
-		cache        cache.Cache
-		gate         gate.Gate
-		fallbackLink string
-		cacheTime    int64
+		logger          governor.Logger
+		repo            couriermodel.Repo
+		linkImageBucket objstore.Bucket
+		barcode         barcode.Generator
+		cache           cache.Cache
+		gate            gate.Gate
+		fallbackLink    string
+		linkPrefix      string
+		cacheTime       int64
 	}
 
 	courierRouter struct {
@@ -43,9 +49,10 @@ type (
 )
 
 // New creates a new Courier service
-func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cache.Cache, g gate.Gate) Service {
+func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store objstore.Objstore, code barcode.Generator, ch cache.Cache, g gate.Gate) (Service, error) {
 	c := conf.Conf().GetStringMapString("courier")
 	fallbackLink := c["fallback_link"]
+	linkPrefix := c["link_prefix"]
 	cacheTime := min1
 	if duration, err := time.ParseDuration(c["cache_time"]); err == nil {
 		cacheTime = duration.Nanoseconds() / b1
@@ -57,18 +64,34 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, ch cac
 	} else if err := validURL(fallbackLink); err != nil {
 		l.Warn(err.Message(), moduleID, "invalid fallback_link", 0, nil)
 	}
+	if len(linkPrefix) == 0 {
+		l.Warn("courier: link prefix is not set", moduleID, "link_prefix unset", 0, nil)
+	} else if err := validURL(linkPrefix); err != nil {
+		l.Warn(err.Message(), moduleID, "invalid link_prefix", 0, nil)
+	}
+
+	linkImageBucket, err := store.GetBucketDefLoc(linkImageBucketID)
+	if err != nil {
+		err.AddTrace(moduleID)
+		return nil, err
+	}
+
 	l.Info("initialized courier service", moduleID, "initialize courier service", 0, map[string]string{
 		"fallback_link": fallbackLink,
+		"link_prefix":   linkPrefix,
 		"cache_time":    strconv.FormatInt(cacheTime, 10),
 	})
 	return &courierService{
-		logger:       l,
-		repo:         repo,
-		cache:        ch,
-		gate:         g,
-		fallbackLink: fallbackLink,
-		cacheTime:    cacheTime,
-	}
+		logger:          l,
+		repo:            repo,
+		linkImageBucket: linkImageBucket,
+		barcode:         code,
+		cache:           ch,
+		gate:            g,
+		fallbackLink:    fallbackLink,
+		linkPrefix:      linkPrefix,
+		cacheTime:       cacheTime,
+	}, nil
 }
 
 func (c *courierService) newRouter() *courierRouter {
