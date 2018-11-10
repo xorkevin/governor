@@ -5,6 +5,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/barcode"
 	"github.com/hackform/governor/service/cache"
+	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/courier/model"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/user/gate"
@@ -18,6 +19,7 @@ const (
 	linkImageBucketID       = "courier-link-image"
 	min1              int64 = 60
 	b1                      = 1000000000
+	min15                   = 900
 )
 
 type (
@@ -38,6 +40,7 @@ type (
 		barcode         barcode.Generator
 		cache           cache.Cache
 		gate            gate.Gate
+		cc              cachecontrol.CacheControl
 		fallbackLink    string
 		linkPrefix      string
 		cacheTime       int64
@@ -49,7 +52,7 @@ type (
 )
 
 // New creates a new Courier service
-func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store objstore.Objstore, code barcode.Generator, ch cache.Cache, g gate.Gate) (Service, error) {
+func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store objstore.Objstore, code barcode.Generator, ch cache.Cache, g gate.Gate, cc cachecontrol.CacheControl) (Service, error) {
 	c := conf.Conf().GetStringMapString("courier")
 	fallbackLink := c["fallback_link"]
 	linkPrefix := c["link_prefix"]
@@ -88,6 +91,7 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store 
 		barcode:         code,
 		cache:           ch,
 		gate:            g,
+		cc:              cc,
 		fallbackLink:    fallbackLink,
 		linkPrefix:      linkPrefix,
 		cacheTime:       cacheTime,

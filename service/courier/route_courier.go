@@ -133,9 +133,29 @@ func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error
 	return "website", nil
 }
 
+func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, *governor.Error) {
+	rlink := reqLinkGet{
+		LinkID: c.Param("linkid"),
+	}
+	if err := rlink.valid(); err != nil {
+		return "", err
+	}
+
+	objinfo, err := cr.service.linkImageBucket.Stat(rlink.LinkID + "-qr")
+	if err != nil {
+		if err.Code() == 2 {
+			err.SetErrorUser()
+		}
+		err.AddTrace(moduleID)
+		return "", err
+	}
+
+	return objinfo.ETag, nil
+}
+
 func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
 	r.GET("/link/:linkid", cr.getLink)
-	r.GET("/link/:linkid/image", cr.getLinkImage)
+	r.GET("/link/:linkid/image", cr.getLinkImage, cr.service.cc.Control(true, false, min15, cr.getLinkImageCC))
 	r.GET("/link", cr.getLinkGroup, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
 	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))

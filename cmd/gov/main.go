@@ -117,7 +117,7 @@ func main() {
 
 	barcodeService := barcode.New(config, l)
 	courierModelService := couriermodel.New(config, l, dbService)
-	courierService, err := courier.New(config, l, courierModelService, objstoreService, barcodeService, cacheService, gateService)
+	courierService, err := courier.New(config, l, courierModelService, objstoreService, barcodeService, cacheService, gateService, cacheControlService)
 	governor.Must(err)
 
 	fileloader.New(config, l)
