@@ -96,14 +96,13 @@ func (u *userService) GetByEmail(email string) (*ResUserGet, *governor.Error) {
 
 type (
 	resUserInfo struct {
-		Userid string `json:"userid"`
-		Email  string `json:"email"`
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
 	}
 
-	userInfoSlice []resUserInfo
-
 	resUserInfoList struct {
-		Users userInfoSlice `json:"users"`
+		Users []resUserInfo `json:"users"`
 	}
 )
 
@@ -115,17 +114,52 @@ func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, *gov
 		return nil, err
 	}
 
-	info := make(userInfoSlice, 0, len(infoSlice))
+	info := make([]resUserInfo, 0, len(infoSlice))
 	for _, i := range infoSlice {
 		useruid, _ := i.IDBase64()
 
 		info = append(info, resUserInfo{
-			Userid: useruid,
-			Email:  i.Email,
+			Userid:   useruid,
+			Username: i.Username,
+			Email:    i.Email,
 		})
 	}
 
 	return &resUserInfoList{
+		Users: info,
+	}, nil
+}
+
+type (
+	resUserInfoPublic struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+	}
+
+	resUserInfoListPublic struct {
+		Users []resUserInfoPublic `json:"users"`
+	}
+)
+
+// GetInfoBulkPublic gets and returns public info for users
+func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, *governor.Error) {
+	infoSlice, err := u.repo.GetBulk(userids)
+	if err != nil {
+		err.AddTrace(moduleIDUser)
+		return nil, err
+	}
+
+	info := make([]resUserInfoPublic, 0, len(infoSlice))
+	for _, i := range infoSlice {
+		useruid, _ := i.IDBase64()
+
+		info = append(info, resUserInfoPublic{
+			Userid:   useruid,
+			Username: i.Username,
+		})
+	}
+
+	return &resUserInfoListPublic{
 		Users: info,
 	}, nil
 }

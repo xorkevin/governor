@@ -81,6 +81,13 @@ func hasUserid(userid string) *governor.Error {
 	return nil
 }
 
+func hasUserids(userids string) *governor.Error {
+	if len(userids) < 1 || len(userids) > lengthCapLarge {
+		return governor.NewErrorUser(moduleIDReqValid, "ids must be provided", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
 func hasUsername(username string) *governor.Error {
 	if len(username) < 1 || len(username) > lengthCap {
 		return governor.NewErrorUser(moduleIDReqValid, "username must be provided", 0, http.StatusBadRequest)

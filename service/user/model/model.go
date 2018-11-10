@@ -11,6 +11,7 @@ import (
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +38,7 @@ type (
 		NewEmptyPtr() *Model
 		GetRoles(m *Model) *governor.Error
 		GetGroup(limit, offset int) ([]Info, *governor.Error)
+		GetBulk(userids []string) ([]Info, *governor.Error)
 		GetByIDB64(idb64 string) (*Model, *governor.Error)
 		GetByUsername(username string) (*Model, *governor.Error)
 		GetByEmail(email string) (*Model, *governor.Error)
@@ -88,8 +90,9 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid []byte `json:"userid"`
-		Email  string `json:"email"`
+		Userid   []byte `json:"userid"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
 	}
 )
 
@@ -222,7 +225,7 @@ const (
 )
 
 var (
-	sqlGetGroup = fmt.Sprintf("SELECT userid, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", tableName)
+	sqlGetGroup = fmt.Sprintf("SELECT userid, username, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", tableName)
 )
 
 // GetGroup gets information from each user
@@ -238,13 +241,68 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
 	}()
 	for rows.Next() {
 		i := Info{}
-		if err := rows.Scan(&i.Userid, &i.Email); err != nil {
+		if err := rows.Scan(&i.Userid, &i.Username, &i.Email); err != nil {
 			return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
 		}
 		m = append(m, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return m, nil
+}
+
+const (
+	moduleIDModGetBulk = moduleID + ".GetBulk"
+)
+
+const (
+	sqlGetBulk = "SELECT userid, username, email FROM %s WHERE userid IN (VALUES %s);"
+)
+
+// GetBulk gets information from users
+func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
+	uids := make([]interface{}, 0, len(userids))
+	for _, i := range userids {
+		u, err := ParseB64ToUID(i)
+		if err != nil {
+			err.AddTrace(moduleIDModGetBulk)
+			err.SetErrorUser()
+			return nil, err
+		}
+		uids = append(uids, u.Bytes())
+	}
+
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(userids))
+	for i := range uids {
+		if i == 0 {
+			placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+"::BYTEA)")
+		} else {
+			placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
+		}
+	}
+
+	stmt := fmt.Sprintf(sqlGetBulk, tableName, strings.Join(placeholders, ","))
+
+	m := make([]Info, 0, len(userids))
+	rows, err := r.db.Query(stmt, uids...)
+	if err != nil {
+		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		i := Info{}
+		if err := rows.Scan(&i.Userid, &i.Username, &i.Email); err != nil {
+			return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
+		}
+		m = append(m, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil
 }
