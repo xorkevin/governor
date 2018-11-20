@@ -102,17 +102,17 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 			}
 		} else {
 			switch k[0] {
-			case rank.TagMod:
+			case rank.TagModPrefix:
 				// cannot edit mod group rank if not an admin and not a moderator of that group
 				if !isAdmin && !updater.HasMod(k[1]) {
 					return governor.NewErrorUser(moduleIDUser, "forbidden rank edit", 0, http.StatusForbidden)
 				}
-			case rank.TagBan:
+			case rank.TagBanPrefix:
 				// cannot edit ban group rank if not an admin and not a moderator of that group
 				if !isAdmin && !updater.HasMod(k[1]) {
 					return governor.NewErrorUser(moduleIDUser, "forbidden rank edit", 0, http.StatusForbidden)
 				}
-			case rank.TagUser:
+			case rank.TagUserPrefix:
 				// can only edit own id
 				if !isAdmin && editid != updaterid {
 					return governor.NewErrorUser(moduleIDUser, "forbidden rank edit", 0, http.StatusForbidden)

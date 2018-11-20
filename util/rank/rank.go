@@ -15,11 +15,14 @@ const (
 
 // Tags for user rank
 const (
-	TagUser   = "user"
-	TagBan    = "ban"
-	TagMod    = "mod"
-	TagAdmin  = "admin"
-	TagSystem = "system"
+	TagUser       = "user"
+	TagUserPrefix = "usr"
+	TagBan        = "ban"
+	TagBanPrefix  = "ban"
+	TagMod        = "mod"
+	TagModPrefix  = "mod"
+	TagAdmin      = "admin"
+	TagSystem     = "system"
 )
 
 type (
