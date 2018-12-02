@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+//go:generate go run ../../../gen/model.go -- Model
+
 const (
 	uidTimeSize = 8
 	uidRandSize = 8
