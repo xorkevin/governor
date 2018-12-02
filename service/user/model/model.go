@@ -60,14 +60,14 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       []byte `json:"userid"`
-		Username     string `json:"username"`
+		Userid       []byte `model:"userid" json:"userid"`
+		Username     string `model:"username" json:"username"`
 		AuthTags     string `json:"auth_tags"`
-		PassHash     []byte `json:"pass_hash"`
-		Email        string `json:"email"`
-		FirstName    string `json:"first_name"`
-		LastName     string `json:"last_name"`
-		CreationTime int64  `json:"creation_time"`
+		PassHash     []byte `model:"pass_hash" json:"pass_hash"`
+		Email        string `model:"email" json:"email"`
+		FirstName    string `model:"first_name" json:"first_name"`
+		LastName     string `model:"last_name" json:"last_name"`
+		CreationTime int64  `model:"creation_time" json:"creation_time"`
 	}
 
 	// Info is the metadata of a user

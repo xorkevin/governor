@@ -11,6 +11,11 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"strings"
+)
+
+const (
+	tagFieldName = "model"
 )
 
 func argError() {
@@ -43,9 +48,8 @@ func main() {
 	}
 	modelIdent := args[0]
 
-	fmt.Println("Package: ", gopackage)
-	fmt.Println("Source file: ", gofile)
-	fmt.Println("Model struct identifier: ", modelIdent)
+	fmt.Println("Generating model")
+	fmt.Printf("Package: %s; Source file: %s; Model struct ident: %s\n", gopackage, gofile, modelIdent)
 
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
@@ -58,16 +62,22 @@ func main() {
 
 	var modelDef *ast.StructType
 	for _, i := range root.Decls {
-		if typeDecl, ok := i.(*ast.GenDecl); ok && typeDecl.Tok == token.TYPE {
-			for _, j := range typeDecl.Specs {
-				if typeSpec, ok := j.(*ast.TypeSpec); ok {
-					if structType, ok := typeSpec.Type.(*ast.StructType); ok && !structType.Incomplete {
-						if typeSpec.Name.Name == modelIdent {
-							modelDef = structType
-							break
-						}
-					}
-				}
+		typeDecl, ok := i.(*ast.GenDecl)
+		if !ok || typeDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, j := range typeDecl.Specs {
+			typeSpec, ok := j.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if !ok || structType.Incomplete {
+				continue
+			}
+			if typeSpec.Name.Name == modelIdent {
+				modelDef = structType
+				break
 			}
 		}
 	}
@@ -78,13 +88,27 @@ func main() {
 
 	for _, field := range modelDef.Fields.List {
 		typeName := bytes.Buffer{}
-
 		if err := printer.Fprint(&typeName, fset, field.Type); err != nil {
 			log.Fatal(err)
 		}
 		tag := ""
 		if field.Tag != nil {
-			tag = field.Tag.Value
+			tags := strings.Fields(strings.Trim(field.Tag.Value, "`"))
+			for _, i := range tags {
+				tagFields := strings.Split(i, ":")
+				if len(tagFields) != 2 || tagFields[0] != tagFieldName {
+					continue
+				}
+				tagVal := strings.Trim(tagFields[1], "\"")
+				if len(tagVal) == 0 {
+					continue
+				}
+				tag = tagVal
+				break
+			}
+		}
+		if len(tag) == 0 {
+			continue
 		}
 		for _, name := range field.Names {
 			fmt.Printf("%s ", name.Name)
