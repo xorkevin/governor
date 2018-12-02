@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+//go:generate go run ../../../gen/model.go -- Repo Model
+
 const (
 	uidTimeSize = 8
 	uidRandSize = 8
@@ -58,30 +60,10 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		ID
-		Auth
-		Passhash
-		Props
-	}
-
-	// ID is user identification
-	ID struct {
-		Userid   []byte `json:"userid"`
-		Username string `json:"username"`
-	}
-
-	// Auth manages user permissions
-	Auth struct {
-		Tags string `json:"auth_tags"`
-	}
-
-	// Passhash controls the user password
-	Passhash struct {
-		Hash []byte `json:"pass_hash"`
-	}
-
-	// Props stores user info
-	Props struct {
+		Userid       []byte `json:"userid"`
+		Username     string `json:"username"`
+		AuthTags     string `json:"auth_tags"`
+		PassHash     []byte `json:"pass_hash"`
 		Email        string `json:"email"`
 		FirstName    string `json:"first_name"`
 		LastName     string `json:"last_name"`
@@ -124,22 +106,14 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 	}
 
 	return &Model{
-		ID: ID{
-			Userid:   mUID.Bytes(),
-			Username: username,
-		},
-		Auth: Auth{
-			Tags: ra.Stringify(),
-		},
-		Passhash: Passhash{
-			Hash: mHash,
-		},
-		Props: Props{
-			Email:        email,
-			FirstName:    firstname,
-			LastName:     lastname,
-			CreationTime: time.Now().Unix(),
-		},
+		Userid:       mUID.Bytes(),
+		Username:     username,
+		AuthTags:     ra.Stringify(),
+		PassHash:     mHash,
+		Email:        email,
+		FirstName:    firstname,
+		LastName:     lastname,
+		CreationTime: time.Now().Unix(),
 	}, nil
 }
 
@@ -153,7 +127,7 @@ func (r *repo) NewEmptyPtr() *Model {
 
 // ValidatePass validates the password against a hash
 func (m *Model) ValidatePass(password string) bool {
-	return hash.Verify(password, m.Passhash.Hash)
+	return hash.Verify(password, m.PassHash)
 }
 
 const (
@@ -167,7 +141,7 @@ func (m *Model) RehashPass(password string) *governor.Error {
 		err.AddTrace(moduleIDHash)
 		return err
 	}
-	m.Passhash.Hash = mHash
+	m.PassHash = mHash
 	return nil
 }
 
@@ -216,7 +190,7 @@ func (r *repo) GetRoles(m *Model) *governor.Error {
 		err.AddTrace(moduleIDModGetRoles)
 		return err
 	}
-	m.Auth.Tags = strings.Join(roles, ",")
+	m.AuthTags = strings.Join(roles, ",")
 	return nil
 }
 
@@ -328,7 +302,7 @@ func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	if err := r.db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
 		}
@@ -352,7 +326,7 @@ var (
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
 	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	if err := r.db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGetUN, "no user found with that username", 2, http.StatusNotFound)
 		}
@@ -376,7 +350,7 @@ var (
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, *governor.Error) {
 	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByEmail, email).Scan(&mUser.Userid, &mUser.Username, &mUser.Passhash.Hash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	if err := r.db.QueryRow(sqlGetByEmail, email).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, governor.NewError(moduleIDModGetEm, "no user found with that email", 2, http.StatusNotFound)
 		}
@@ -399,7 +373,7 @@ func (r *repo) insertRoles(m *Model) *governor.Error {
 		err.AddTrace(moduleIDModInsRoles)
 		return err
 	}
-	roles := strings.Split(m.Auth.Tags, ",")
+	roles := strings.Split(m.AuthTags, ",")
 	for _, i := range roles {
 		rModel, err := r.rolerepo.New(idb64, i)
 		if err != nil {
@@ -424,7 +398,7 @@ var (
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlInsert, m.Userid, m.Username, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := r.db.Exec(sqlInsert, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -493,7 +467,7 @@ var (
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlUpdate, m.Userid, m.Username, m.Passhash.Hash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := r.db.Exec(sqlUpdate, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}

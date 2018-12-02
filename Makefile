@@ -37,7 +37,10 @@ vet:
 
 prepare: fmt vet
 
-.PHONY: dev clean build-bin build
+.PHONY: gen dev clean build-bin build
+
+gen:
+	$(GO) generate ./...
 
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
@@ -52,10 +55,10 @@ build-bin:
 
 build: clean build-bin
 
-## gen
-.PHONY: gen
+## service def
+.PHONY: service
 
-gen:
+service:
 	./servicedef-gen.sh
 
 ## docker
