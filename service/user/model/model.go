@@ -194,10 +194,7 @@ func (r *repo) GetRoles(m *Model) *governor.Error {
 
 const (
 	moduleIDModGetGroup = moduleID + ".GetGroup"
-)
-
-const (
-	sqlGetGroup = "SELECT userid, username, email FROM " + modelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
+	sqlGetGroup         = "SELECT userid, username, email FROM " + modelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
 )
 
 // GetGroup gets information from each user
@@ -226,10 +223,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
 
 const (
 	moduleIDModGetBulk = moduleID + ".GetBulk"
-)
-
-const (
-	sqlGetBulk = "SELECT userid, username, email FROM " + modelTableName + " WHERE userid IN (VALUES %s);"
+	sqlGetBulk         = "SELECT userid, username, email FROM " + modelTableName + " WHERE userid IN (VALUES %s);"
 )
 
 // GetBulk gets information from users
@@ -333,10 +327,7 @@ func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
 
 const (
 	moduleIDModGetEm = moduleID + ".GetByEmail"
-)
-
-const (
-	sqlGetByEmail = "SELECT userid FROM " + modelTableName + " WHERE email=$1;"
+	sqlGetByEmail    = "SELECT userid FROM " + modelTableName + " WHERE email=$1;"
 )
 
 // GetByEmail returns a user model with the given email
@@ -385,9 +376,8 @@ func (r *repo) Insert(m *Model) *governor.Error {
 	if code, err := modelInsert(r.db, m); err != nil {
 		if code == 3 {
 			return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
-		} else {
-			return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 		}
+		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 	}
 	if err := r.insertRoles(m); err != nil {
 		err.AddTrace(moduleIDModIns)

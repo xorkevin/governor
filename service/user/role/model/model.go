@@ -2,15 +2,14 @@ package rolemodel
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
-	"github.com/lib/pq"
 	"net/http"
 )
 
+//go:generate go run ../../../../gen/model.go -- model_gen.go Model userroles
+
 const (
-	tableName     = "userroles"
 	moduleID      = "rolemodel"
 	moduleIDModel = moduleID + ".Model"
 )
@@ -33,8 +32,9 @@ type (
 	}
 	// Model is the db User role model
 	Model struct {
-		Userid string `json:"userid"`
-		Role   string `json:"role"`
+		roleid string `model:"roleid,VARCHAR(512) PRIMARY KEY"`
+		Userid string `model:"userid,VARCHAR(255) NOT NULL"`
+		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
 )
 
@@ -51,47 +51,41 @@ const (
 
 // New creates a new User role Model
 func (r *repo) New(userid, role string) (*Model, *governor.Error) {
-	return &Model{
+	m := &Model{
 		Userid: userid,
 		Role:   role,
-	}, nil
+	}
+	m.ensureRoleid()
+	return m, nil
 }
 
-func roleid(userid, role string) string {
-	return userid + role
-}
-
-// Roleid returns the combined userid and role
-func (m *Model) Roleid() string {
-	return roleid(m.Userid, m.Role)
+func (m *Model) ensureRoleid() string {
+	r := m.Userid + "|" + m.Role
+	m.roleid = r
+	return r
 }
 
 const (
 	moduleIDModGet = moduleIDModel + ".GetByID"
 )
 
-var (
-	sqlGetByID = fmt.Sprintf("SELECT userid, role FROM %s WHERE roleid=$1;", tableName)
-)
-
 // GetByID returns a user role model with the given id
 func (r *repo) GetByID(userid, role string) (*Model, *governor.Error) {
-	m := &Model{}
-	if err := r.db.QueryRow(sqlGetByID, roleid(userid, role)).Scan(&m.Userid, &m.Role); err != nil {
-		if err == sql.ErrNoRows {
+	var m *Model
+	if mRole, code, err := modelGet(r.db, (&Model{Userid: userid, Role: role}).ensureRoleid()); err != nil {
+		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "role not found for user", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mRole
 	}
 	return m, nil
 }
 
 const (
 	moduleIDModGetRole = moduleIDModel + ".GetByRole"
-)
-
-var (
-	sqlGetByRole = fmt.Sprintf("SELECT userid FROM %s WHERE role=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", tableName)
+	sqlGetByRole       = "SELECT userid FROM " + modelTableName + " WHERE role=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
 )
 
 // GetByRole returns a list of userids with the given role
@@ -120,10 +114,7 @@ func (r *repo) GetByRole(role string, limit, offset int) ([]string, *governor.Er
 
 const (
 	moduleIDModGetUser = moduleIDModel + ".GetUserRoles"
-)
-
-var (
-	sqlGetUser = fmt.Sprintf("SELECT role FROM %s WHERE userid=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", tableName)
+	sqlGetUser         = "SELECT role FROM " + modelTableName + " WHERE userid=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
 )
 
 // GetUserRoles returns a list of a user's roles
@@ -154,22 +145,14 @@ const (
 	moduleIDModIns = moduleIDModel + ".Insert"
 )
 
-var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (roleid, userid, role) VALUES ($1, $2, $3);", tableName)
-)
-
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlInsert, m.Roleid(), m.Userid, m.Role)
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
-			default:
-				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
-			}
+	m.ensureRoleid()
+	if code, err := modelInsert(r.db, m); err != nil {
+		if code == 3 {
+			return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 		}
+		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }
@@ -178,14 +161,10 @@ const (
 	moduleIDModUp = moduleIDModel + ".Update"
 )
 
-var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (roleid, userid, role) = ($1, $2, $3) WHERE roleid=$1;", tableName)
-)
-
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlUpdate, m.Roleid(), m.Userid, m.Role)
-	if err != nil {
+	m.ensureRoleid()
+	if err := modelUpdate(r.db, m); err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -195,14 +174,10 @@ const (
 	moduleIDModDel = moduleIDModel + ".Delete"
 )
 
-var (
-	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE roleid=$1;", tableName)
-)
-
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlDelete, m.Roleid())
-	if err != nil {
+	m.ensureRoleid()
+	if err := modelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -210,10 +185,7 @@ func (r *repo) Delete(m *Model) *governor.Error {
 
 const (
 	moduleIDModDelUser = moduleIDModel + ".DeleteUserRoles"
-)
-
-var (
-	sqlDeleteItem = fmt.Sprintf("DELETE FROM %s WHERE userid=$1;", tableName)
+	sqlDeleteItem      = "DELETE FROM " + modelTableName + " WHERE userid=$1;"
 )
 
 // DeleteUserRoles deletes all the roles of a user
@@ -229,14 +201,9 @@ const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 
-var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (roleid VARCHAR(512) PRIMARY KEY, userid VARCHAR(255) NOT NULL, role VARCHAR(255) NOT NULL);", tableName)
-)
-
 // Setup creates a new User role table
 func (r *repo) Setup() *governor.Error {
-	_, err := r.db.Exec(sqlSetup)
-	if err != nil {
+	if err := modelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
