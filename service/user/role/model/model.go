@@ -29,6 +29,7 @@ type (
 	repo struct {
 		db *sql.DB
 	}
+
 	// Model is the db User role model
 	Model struct {
 		roleid string `model:"roleid,VARCHAR(512) PRIMARY KEY"`
