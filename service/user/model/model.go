@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- Model
+//go:generate go run ../../../gen/model.go -- Model users
 
 const (
 	uidTimeSize = 8
@@ -60,14 +60,14 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       []byte `model:"userid" json:"userid"`
-		Username     string `model:"username" json:"username"`
-		AuthTags     string `json:"auth_tags"`
-		PassHash     []byte `model:"pass_hash" json:"pass_hash"`
-		Email        string `model:"email" json:"email"`
-		FirstName    string `model:"first_name" json:"first_name"`
-		LastName     string `model:"last_name" json:"last_name"`
-		CreationTime int64  `model:"creation_time" json:"creation_time"`
+		Userid       []byte `model:"userid,BYTEA PRIMARY KEY"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE"`
+		AuthTags     string
+		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL"`
+		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE"`
+		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL"`
+		LastName     string `model:"last_name,VARCHAR(255) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	// Info is the metadata of a user

@@ -11,11 +11,21 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 )
 
 const (
 	tagFieldName = "model"
+)
+
+type (
+	ModelField struct {
+		Ident  string
+		GoType string
+		DBName string
+		DBType string
+	}
 )
 
 func argError() {
@@ -43,13 +53,18 @@ func main() {
 		argError()
 	}
 	args := os.Args[argStart+1:]
-	if len(args) != 1 {
+	if len(args) != 2 {
 		argError()
 	}
 	modelIdent := args[0]
+	tableName := args[1]
 
 	fmt.Println("Generating model")
-	fmt.Printf("Package: %s; Source file: %s; Model struct ident: %s\n", gopackage, gofile, modelIdent)
+	fmt.Printf("Package: %s; ", gopackage)
+	fmt.Printf("Source file: %s; ", gofile)
+	fmt.Printf("Model struct ident: %s; ", modelIdent)
+	fmt.Printf("Table name: %s ", tableName)
+	fmt.Println()
 
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
@@ -86,33 +101,41 @@ func main() {
 		log.Fatal("Model struct not found")
 	}
 
+	fields := []ModelField{}
 	for _, field := range modelDef.Fields.List {
-		typeName := bytes.Buffer{}
-		if err := printer.Fprint(&typeName, fset, field.Type); err != nil {
-			log.Fatal(err)
-		}
-		tag := ""
-		if field.Tag != nil {
-			tags := strings.Fields(strings.Trim(field.Tag.Value, "`"))
-			for _, i := range tags {
-				tagFields := strings.Split(i, ":")
-				if len(tagFields) != 2 || tagFields[0] != tagFieldName {
-					continue
-				}
-				tagVal := strings.Trim(tagFields[1], "\"")
-				if len(tagVal) == 0 {
-					continue
-				}
-				tag = tagVal
-				break
-			}
-		}
-		if len(tag) == 0 {
+		if field.Tag == nil {
 			continue
 		}
-		for _, name := range field.Names {
-			fmt.Printf("%s ", name.Name)
+		structTag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
+		tagVal, ok := structTag.Lookup(tagFieldName)
+		if !ok {
+			continue
 		}
-		fmt.Printf("%s %s\n", typeName.String(), tag)
+		tags := strings.Split(tagVal, ",")
+		if len(tags) != 2 {
+			log.Fatal("Model field tag must be dbname,dbtype")
+		}
+		dbName := tags[0]
+		dbType := tags[1]
+
+		goType := bytes.Buffer{}
+		if err := printer.Fprint(&goType, fset, field.Type); err != nil {
+			log.Fatal(err)
+		}
+
+		if len(field.Names) != 1 {
+			log.Fatal("Only one field allowed per tag")
+		}
+
+		fields = append(fields, ModelField{
+			Ident:  field.Names[0].Name,
+			GoType: goType.String(),
+			DBName: dbName,
+			DBType: dbType,
+		})
+	}
+
+	for _, i := range fields {
+		fmt.Printf("%s %s %s %s\n", i.Ident, i.GoType, i.DBName, i.DBType)
 	}
 }
