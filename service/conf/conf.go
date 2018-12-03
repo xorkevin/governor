@@ -3,7 +3,6 @@ package conf
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/conf/model"
-	"github.com/hackform/governor/service/db"
 	"github.com/labstack/echo"
 	"net/http"
 )
@@ -19,16 +18,16 @@ type (
 	}
 
 	confService struct {
-		db db.Database
+		repo confmodel.Repo
 	}
 )
 
 // New creates a new Conf service
-func New(l governor.Logger, database db.Database) Conf {
+func New(conf governor.Config, l governor.Logger, repo confmodel.Repo) Conf {
 	l.Info("initialized conf service", moduleID, "initialize conf service", 0, nil)
 
 	return &confService{
-		db: database,
+		repo: repo,
 	}
 }
 
@@ -45,22 +44,22 @@ func (c *confService) Health() *governor.Error {
 
 // Setup is run on service setup
 func (c *confService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
-	if _, err := confmodel.Get(c.db.DB()); err == nil {
+	if _, err := c.repo.Get(); err == nil {
 		return governor.NewError(moduleID, "setup already run", 128, http.StatusForbidden)
 	}
 
-	mconf, err := confmodel.New(rsetup.Orgname)
+	mconf, err := c.repo.New(rsetup.Orgname)
 	if err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 
-	if err := confmodel.Setup(c.db.DB()); err != nil {
+	if err := c.repo.Setup(); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}
 
-	if err := mconf.Insert(c.db.DB()); err != nil {
+	if err := c.repo.Insert(mconf); err != nil {
 		err.AddTrace(moduleID)
 		return err
 	}

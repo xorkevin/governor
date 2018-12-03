@@ -8,6 +8,7 @@ import (
 	"github.com/hackform/governor/service/cache/conf"
 	"github.com/hackform/governor/service/cachecontrol"
 	"github.com/hackform/governor/service/conf"
+	"github.com/hackform/governor/service/conf/model"
 	"github.com/hackform/governor/service/courier"
 	"github.com/hackform/governor/service/courier/model"
 	"github.com/hackform/governor/service/db"
@@ -106,6 +107,9 @@ func main() {
 
 	cacheControlService := cachecontrol.New(config, l)
 
+	confModelService := confmodel.New(config, l, dbService)
+	confService := conf.New(config, l, confModelService)
+
 	roleModelService := rolemodel.New(config, l, dbService)
 	userModelService := usermodel.New(config, l, dbService, roleModelService)
 	userService := user.New(config, l, userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
@@ -128,7 +132,7 @@ func main() {
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
 	governor.Must(g.MountRoute("/null/msgqueue", queueService))
 	governor.Must(g.MountRoute("/null/mail", mailService))
-	governor.Must(g.MountRoute("/conf", conf.New(l, dbService)))
+	governor.Must(g.MountRoute("/conf", confService))
 	governor.Must(g.MountRoute("/u", userService))
 	governor.Must(g.MountRoute("/profile", profileService))
 	governor.Must(g.MountRoute("/courier", courierService))

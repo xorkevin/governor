@@ -11,7 +11,6 @@ import (
 //go:generate go run ../../../gen/model.go -- model_gen.go Model config
 
 const (
-	tableName     = "config"
 	configID      = 0
 	moduleID      = "confmodel"
 	moduleIDModel = moduleID + ".Model"
