@@ -20,6 +20,21 @@ func modelSetup(db *sql.DB) error {
 }
 
 const (
+	modelSQLGet = "SELECT {{.SQLDBNames}} FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};"
+)
+
+func modelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent}}, int, error) {
+	m := &{{.ModelIdent}}{}
+	if err := db.QueryRow(modelSQLGet, key).Scan({{.SQLIdentRefs}}); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+const (
 	modelSQLInsert = "INSERT INTO {{.TableName}} ({{.SQLDBNames}}) VALUES ({{.SQLPlaceholders}});"
 )
 

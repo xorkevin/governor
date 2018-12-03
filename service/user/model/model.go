@@ -196,8 +196,8 @@ const (
 	moduleIDModGetGroup = moduleID + ".GetGroup"
 )
 
-var (
-	sqlGetGroup = fmt.Sprintf("SELECT userid, username, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", modelTableName)
+const (
+	sqlGetGroup = "SELECT userid, username, email FROM " + modelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
 )
 
 // GetGroup gets information from each user
@@ -229,7 +229,7 @@ const (
 )
 
 const (
-	sqlGetBulk = "SELECT userid, username, email FROM %s WHERE userid IN (VALUES %s);"
+	sqlGetBulk = "SELECT userid, username, email FROM " + modelTableName + " WHERE userid IN (VALUES %s);"
 )
 
 // GetBulk gets information from users
@@ -255,7 +255,7 @@ func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
 		}
 	}
 
-	stmt := fmt.Sprintf(sqlGetBulk, modelTableName, strings.Join(placeholders, ","))
+	stmt := fmt.Sprintf(sqlGetBulk, strings.Join(placeholders, ","))
 
 	m := make([]Info, 0, len(userids))
 	rows, err := r.db.Query(stmt, uids...)
@@ -280,12 +280,25 @@ func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
 }
 
 const (
-	moduleIDModGet64 = moduleID + ".GetByIDB64"
+	moduleIDModGet = moduleID + ".Get"
 )
 
-var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", modelTableName)
-)
+func (r *repo) getByID(userid []byte) (*Model, *governor.Error) {
+	var m *Model
+	if mUser, code, err := modelGet(r.db, userid); err != nil {
+		if code == 2 {
+			return nil, governor.NewError(moduleIDModGet, "no user found with that id", 2, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mUser
+	}
+	if err := r.GetRoles(m); err != nil {
+		err.AddTrace(moduleIDModGet)
+		return nil, err
+	}
+	return m, nil
+}
 
 // ParseB64ToUID converts a userid in base64 into a UID
 func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
@@ -296,69 +309,46 @@ func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
 func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 	u, err := ParseB64ToUID(idb64)
 	if err != nil {
-		err.AddTrace(moduleIDModGet64)
+		err.AddTrace(moduleIDModGet)
 		return nil, err
 	}
-	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByIDB64, u.Bytes()).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGet64, "no user found with that id", 2, http.StatusNotFound)
-		}
-		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
-	}
-	if err := r.GetRoles(mUser); err != nil {
-		err.AddTrace(moduleIDModGet64)
-		return nil, err
-	}
-	return mUser, nil
+	return r.getByID(u.Bytes())
 }
 
 const (
-	moduleIDModGetUN = moduleID + ".GetByUsername"
-)
-
-var (
-	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", modelTableName)
+	sqlGetByUsername = "SELECT userid FROM " + modelTableName + " WHERE username=$1;"
 )
 
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
-	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByUsername, username).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	var userid []byte
+	if err := r.db.QueryRow(sqlGetByUsername, username).Scan(&userid); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGetUN, "no user found with that username", 2, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet, "no user found with that username", 2, http.StatusNotFound)
 		}
-		return nil, governor.NewError(moduleIDModGetUN, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
 	}
-	if err := r.GetRoles(mUser); err != nil {
-		err.AddTrace(moduleIDModGetUN)
-		return nil, err
-	}
-	return mUser, nil
+	return r.getByID(userid)
 }
 
 const (
 	moduleIDModGetEm = moduleID + ".GetByEmail"
 )
 
-var (
-	sqlGetByEmail = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE email=$1;", modelTableName)
+const (
+	sqlGetByEmail = "SELECT userid FROM " + modelTableName + " WHERE email=$1;"
 )
 
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, *governor.Error) {
-	mUser := &Model{}
-	if err := r.db.QueryRow(sqlGetByEmail, email).Scan(&mUser.Userid, &mUser.Username, &mUser.PassHash, &mUser.Email, &mUser.FirstName, &mUser.LastName, &mUser.CreationTime); err != nil {
+	var userid []byte
+	if err := r.db.QueryRow(sqlGetByEmail, email).Scan(&userid); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, governor.NewError(moduleIDModGetEm, "no user found with that email", 2, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet, "no user found with that email", 2, http.StatusNotFound)
 		}
-		return nil, governor.NewError(moduleIDModGetEm, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
 	}
-	if err := r.GetRoles(mUser); err != nil {
-		err.AddTrace(moduleIDModGetEm)
-		return nil, err
-	}
-	return mUser, nil
+	return r.getByID(userid)
 }
 
 const (

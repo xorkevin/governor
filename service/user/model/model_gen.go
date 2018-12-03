@@ -20,6 +20,21 @@ func modelSetup(db *sql.DB) error {
 }
 
 const (
+	modelSQLGet = "SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE userid = $1;"
+)
+
+func modelGet(db *sql.DB, key []byte) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow(modelSQLGet, key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+const (
 	modelSQLInsert = "INSERT INTO users (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);"
 )
 
