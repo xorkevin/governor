@@ -500,14 +500,9 @@ const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 
-var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", modelTableName)
-)
-
 // Setup creates a new User table
 func (r *repo) Setup() *governor.Error {
-	_, err := r.db.Exec(sqlSetup)
-	if err != nil {
+	if err := modelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

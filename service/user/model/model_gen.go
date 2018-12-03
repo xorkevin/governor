@@ -9,11 +9,20 @@ const (
 	modelTableName = "users"
 )
 
-var (
+const (
 	modelSQLDelete = "DELETE FROM users WHERE userid = $1;"
 )
 
 func modelDelete(db *sql.DB, m *Model) error {
 	_, err := db.Exec(modelSQLDelete, m.Userid)
+	return err
+}
+
+const (
+	modelSQLSetup = "CREATE TABLE users (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);"
+)
+
+func modelSetup(db *sql.DB) error {
+	_, err := db.Exec(modelSQLSetup)
 	return err
 }

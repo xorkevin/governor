@@ -37,6 +37,7 @@ type (
 		ModelIdent string
 		TableName  string
 		PrimaryKey ModelField
+		SQLSetup   string
 	}
 )
 
@@ -162,6 +163,9 @@ func main() {
 
 	hasPK := false
 	var primaryKey ModelField
+
+	sqlDefFields := make([]string, 0, len(fields))
+
 	fmt.Println("Detected fields:")
 	for _, i := range fields {
 		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
@@ -172,11 +176,14 @@ func main() {
 			hasPK = true
 			primaryKey = i
 		}
+		sqlDefFields = append(sqlDefFields, fmt.Sprintf("%s %s", i.DBName, i.DBType))
 	}
 
 	if !hasPK {
 		log.Fatal("Model does not contain a primary key")
 	}
+
+	sqlSetup := strings.Join(sqlDefFields, ", ")
 
 	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 	if err != nil {
@@ -191,6 +198,7 @@ func main() {
 		ModelIdent: modelIdent,
 		TableName:  tableName,
 		PrimaryKey: primaryKey,
+		SQLSetup:   sqlSetup,
 	}
 	if err := tpl.Execute(genFileWriter, tplData); err != nil {
 		log.Fatal(err)
