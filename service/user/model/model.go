@@ -16,12 +16,11 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- Model users
+//go:generate go run ../../../gen/model.go -- model_gen.go Model users
 
 const (
 	uidTimeSize = 8
 	uidRandSize = 8
-	tableName   = "users"
 	moduleID    = "usermodel"
 )
 
@@ -199,7 +198,7 @@ const (
 )
 
 var (
-	sqlGetGroup = fmt.Sprintf("SELECT userid, username, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", tableName)
+	sqlGetGroup = fmt.Sprintf("SELECT userid, username, email FROM %s ORDER BY userid ASC LIMIT $1 OFFSET $2;", modelTableName)
 )
 
 // GetGroup gets information from each user
@@ -257,7 +256,7 @@ func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
 		}
 	}
 
-	stmt := fmt.Sprintf(sqlGetBulk, tableName, strings.Join(placeholders, ","))
+	stmt := fmt.Sprintf(sqlGetBulk, modelTableName, strings.Join(placeholders, ","))
 
 	m := make([]Info, 0, len(userids))
 	rows, err := r.db.Query(stmt, uids...)
@@ -286,7 +285,7 @@ const (
 )
 
 var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", tableName)
+	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE userid=$1;", modelTableName)
 )
 
 // ParseB64ToUID converts a userid in base64 into a UID
@@ -320,7 +319,7 @@ const (
 )
 
 var (
-	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", tableName)
+	sqlGetByUsername = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE username=$1;", modelTableName)
 )
 
 // GetByUsername returns a user model with the given username
@@ -344,7 +343,7 @@ const (
 )
 
 var (
-	sqlGetByEmail = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE email=$1;", tableName)
+	sqlGetByEmail = fmt.Sprintf("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM %s WHERE email=$1;", modelTableName)
 )
 
 // GetByEmail returns a user model with the given email
@@ -393,7 +392,7 @@ const (
 )
 
 var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", tableName)
+	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", modelTableName)
 )
 
 // Insert inserts the model into the db
@@ -462,7 +461,7 @@ const (
 )
 
 var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;", tableName)
+	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;", modelTableName)
 )
 
 // Update updates the model in the db
@@ -479,11 +478,22 @@ const (
 )
 
 var (
-	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE userid = $1;", tableName)
+	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE userid = $1;", modelTableName)
 )
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
+	idb64, err := m.IDBase64()
+	if err != nil {
+		err.AddTrace(moduleIDModDel)
+		return err
+	}
+
+	if err := r.rolerepo.DeleteUserRoles(idb64); err != nil {
+		err.AddTrace(moduleIDModDel)
+		return err
+	}
+
 	if _, err := r.db.Exec(sqlDelete, m.Userid); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -495,7 +505,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (userid BYTEA PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash BYTEA NOT NULL, email VARCHAR(4096) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);", modelTableName)
 )
 
 // Setup creates a new User table

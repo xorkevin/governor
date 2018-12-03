@@ -18,7 +18,7 @@ ifeq ($(EXT),1)
 	GO=$(TOOLCHAIN_GOBIN)
 endif
 
-.PHONY: all version test fmt vet prepare
+.PHONY: all version test fmt vet generate prepare
 
 all: build
 
@@ -35,12 +35,14 @@ fmt:
 vet:
 	$(GO) vet ./...
 
+generate:
+	$(GO) generate ./...
+
 prepare: fmt vet
 
 .PHONY: gen dev clean build-bin build
 
-gen:
-	$(GO) generate ./...
+gen: generate fmt
 
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev

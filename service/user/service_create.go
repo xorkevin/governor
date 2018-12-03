@@ -162,11 +162,6 @@ func (u *userService) DeleteUser(userid string, username string, password string
 		return err
 	}
 
-	if err := u.rolerepo.DeleteUserRoles(userid); err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
 	if err := u.repo.Delete(m); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err

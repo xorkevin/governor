@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	tagFieldName      = "model"
-	outputTpl         = "gen/model.template"
-	generatedFilepath = "model_gen.go"
+	tagFieldName = "model"
+	outputTpl    = "gen/model.template"
 )
 
 type (
@@ -35,11 +34,12 @@ type (
 	TemplateData struct {
 		Generator string
 		Package   string
+		TableName string
 	}
 )
 
 func argError() {
-	log.Fatal("Arguments must be [Repo Model] which are the repository interface and model struct respectively")
+	log.Fatal("Arguments must be [output_file modelname tablename] which are the output filename, model struct identifier, and db table name respectively")
 }
 
 func main() {
@@ -67,14 +67,15 @@ func main() {
 		argError()
 	}
 	args := os.Args[argStart+1:]
-	if len(args) != 2 {
+	if len(args) != 3 {
 		argError()
 	}
-	modelIdent := args[0]
-	tableName := args[1]
+	generatedFilepath := args[0]
+	modelIdent := args[1]
+	tableName := args[2]
 
-	fmt.Println("Generating model")
 	fmt.Println(strings.Join([]string{
+		"Generating model",
 		fmt.Sprintf("Package: %s", gopackage),
 		fmt.Sprintf("Source file: %s", gofile),
 		fmt.Sprintf("Model ident: %s", modelIdent),
@@ -86,8 +87,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Printf("Generated file: %s\n", generatedFilepath)
 
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
@@ -173,9 +172,12 @@ func main() {
 	tplData := TemplateData{
 		Generator: "go generate",
 		Package:   gopackage,
+		TableName: tableName,
 	}
 	if err := tpl.Execute(genFileWriter, tplData); err != nil {
 		log.Fatal(err)
 	}
 	genFileWriter.Flush()
+
+	fmt.Printf("Generated file: %s\n", generatedFilepath)
 }
