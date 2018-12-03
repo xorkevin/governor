@@ -477,10 +477,6 @@ const (
 	moduleIDModDel = moduleID + ".Delete"
 )
 
-var (
-	sqlDelete = fmt.Sprintf("DELETE FROM %s WHERE userid = $1;", modelTableName)
-)
-
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
 	idb64, err := m.IDBase64()
@@ -494,7 +490,7 @@ func (r *repo) Delete(m *Model) *governor.Error {
 		return err
 	}
 
-	if _, err := r.db.Exec(sqlDelete, m.Userid); err != nil {
+	if err := modelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

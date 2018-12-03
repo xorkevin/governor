@@ -32,9 +32,11 @@ type (
 	}
 
 	TemplateData struct {
-		Generator string
-		Package   string
-		TableName string
+		Generator  string
+		Package    string
+		ModelIdent string
+		TableName  string
+		PrimaryKey ModelField
 	}
 )
 
@@ -149,17 +151,31 @@ func main() {
 			log.Fatal("Only one field allowed per tag")
 		}
 
-		fields = append(fields, ModelField{
+		m := ModelField{
 			Ident:  field.Names[0].Name,
 			GoType: goType.String(),
 			DBName: dbName,
 			DBType: dbType,
-		})
+		}
+		fields = append(fields, m)
 	}
 
+	hasPK := false
+	var primaryKey ModelField
 	fmt.Println("Detected fields:")
 	for _, i := range fields {
 		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
+		if strings.Contains(i.DBType, "PRIMARY KEY") {
+			if hasPK {
+				log.Fatal("Model cannot contain two primary keys")
+			}
+			hasPK = true
+			primaryKey = i
+		}
+	}
+
+	if !hasPK {
+		log.Fatal("Model does not contain a primary key")
 	}
 
 	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
@@ -170,9 +186,11 @@ func main() {
 	genFileWriter := bufio.NewWriter(genfile)
 
 	tplData := TemplateData{
-		Generator: "go generate",
-		Package:   gopackage,
-		TableName: tableName,
+		Generator:  "go generate",
+		Package:    gopackage,
+		ModelIdent: modelIdent,
+		TableName:  tableName,
+		PrimaryKey: primaryKey,
 	}
 	if err := tpl.Execute(genFileWriter, tplData); err != nil {
 		log.Fatal(err)
