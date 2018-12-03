@@ -21,7 +21,6 @@ type (
 		GetByRole(role string, limit, offset int) ([]string, *governor.Error)
 		GetUserRoles(userid string, limit, offset int) ([]string, *governor.Error)
 		Insert(m *Model) *governor.Error
-		Update(m *Model) *governor.Error
 		Delete(m *Model) *governor.Error
 		DeleteUserRoles(userid string) *governor.Error
 		Setup() *governor.Error
@@ -153,19 +152,6 @@ func (r *repo) Insert(m *Model) *governor.Error {
 			return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 		}
 		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
-	}
-	return nil
-}
-
-const (
-	moduleIDModUp = moduleIDModel + ".Update"
-)
-
-// Update updates the model in the db
-func (r *repo) Update(m *Model) *governor.Error {
-	m.ensureRoleid()
-	if err := modelUpdate(r.db, m); err != nil {
-		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }
