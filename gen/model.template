@@ -3,6 +3,7 @@ package {{.Package}}
 
 import (
 	"database/sql"
+	"github.com/lib/pq"
 )
 
 const (
@@ -19,11 +20,30 @@ func modelSetup(db *sql.DB) error {
 }
 
 const (
+	modelSQLInsert = "INSERT INTO {{.TableName}} ({{.SQLDBNames}}) VALUES ({{.SQLPlaceholders}});"
+)
+
+func modelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
+	_, err := db.Exec(modelSQLInsert, {{.SQLIdents}})
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+const (
 	modelSQLUpdate = "UPDATE {{.TableName}} SET ({{.SQLDBNames}}) = ({{.SQLPlaceholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};"
 )
 
 func modelUpdate(db *sql.DB, m *{{.ModelIdent}}) error {
-	_, err := db.Exec(sqlUpdate, {{.SQLIdents}})
+	_, err := db.Exec(modelSQLUpdate, {{.SQLIdents}})
 	return err
 }
 

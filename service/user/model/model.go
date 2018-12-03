@@ -9,7 +9,6 @@ import (
 	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
-	"github.com/lib/pq"
 	"net/http"
 	"strconv"
 	"strings"
@@ -391,21 +390,13 @@ const (
 	moduleIDModIns = moduleID + ".Insert"
 )
 
-var (
-	sqlInsert = fmt.Sprintf("INSERT INTO %s (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", modelTableName)
-)
-
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlInsert, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
-			default:
-				return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
-			}
+	if code, err := modelInsert(r.db, m); err != nil {
+		if code == 3 {
+			return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
+		} else {
+			return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 		}
 	}
 	if err := r.insertRoles(m); err != nil {

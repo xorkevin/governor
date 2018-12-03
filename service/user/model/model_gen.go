@@ -3,6 +3,7 @@ package usermodel
 
 import (
 	"database/sql"
+	"github.com/lib/pq"
 )
 
 const (
@@ -19,11 +20,30 @@ func modelSetup(db *sql.DB) error {
 }
 
 const (
+	modelSQLInsert = "INSERT INTO users (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);"
+)
+
+func modelInsert(db *sql.DB, m *Model) (int, error) {
+	_, err := db.Exec(modelSQLInsert, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+const (
 	modelSQLUpdate = "UPDATE users SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;"
 )
 
 func modelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec(sqlUpdate, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	_, err := db.Exec(modelSQLUpdate, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	return err
 }
 
