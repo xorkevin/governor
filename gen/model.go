@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"go/ast"
@@ -11,12 +12,16 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"text/template"
 )
 
 const (
-	tagFieldName = "model"
+	tagFieldName      = "model"
+	outputTpl         = "gen/model.template"
+	generatedFilepath = "model_gen.go"
 )
 
 type (
@@ -25,6 +30,11 @@ type (
 		GoType string
 		DBName string
 		DBType string
+	}
+
+	TemplateData struct {
+		Generator string
+		Package   string
 	}
 )
 
@@ -40,6 +50,10 @@ func main() {
 	gofile := os.Getenv("GOFILE")
 	if len(gofile) == 0 {
 		log.Fatal("Environment variable GOPACKAGE not provided by go generate")
+	}
+	workDir := os.Getenv("PWD")
+	if len(workDir) == 0 {
+		log.Fatal("Environment variable PWD not set")
 	}
 
 	argStart := -1
@@ -60,11 +74,20 @@ func main() {
 	tableName := args[1]
 
 	fmt.Println("Generating model")
-	fmt.Printf("Package: %s; ", gopackage)
-	fmt.Printf("Source file: %s; ", gofile)
-	fmt.Printf("Model struct ident: %s; ", modelIdent)
-	fmt.Printf("Table name: %s ", tableName)
-	fmt.Println()
+	fmt.Println(strings.Join([]string{
+		fmt.Sprintf("Package: %s", gopackage),
+		fmt.Sprintf("Source file: %s", gofile),
+		fmt.Sprintf("Model ident: %s", modelIdent),
+		fmt.Sprintf("Table name: %s", tableName),
+	}, "; "))
+	fmt.Printf("Working dir: %s\n", workDir)
+
+	tpl, err := template.ParseFiles(filepath.Join(workDir, outputTpl))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Generated file: %s\n", generatedFilepath)
 
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
@@ -135,7 +158,24 @@ func main() {
 		})
 	}
 
+	fmt.Println("Detected fields:")
 	for _, i := range fields {
-		fmt.Printf("%s %s %s %s\n", i.Ident, i.GoType, i.DBName, i.DBType)
+		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
 	}
+
+	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer genfile.Close()
+	genFileWriter := bufio.NewWriter(genfile)
+
+	tplData := TemplateData{
+		Generator: "go generate",
+		Package:   gopackage,
+	}
+	if err := tpl.Execute(genFileWriter, tplData); err != nil {
+		log.Fatal(err)
+	}
+	genFileWriter.Flush()
 }
