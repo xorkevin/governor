@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -32,12 +33,17 @@ type (
 	}
 
 	TemplateData struct {
-		Generator  string
-		Package    string
-		ModelIdent string
-		TableName  string
-		PrimaryKey ModelField
-		SQLSetup   string
+		Generator       string
+		Package         string
+		ModelIdent      string
+		TableName       string
+		PrimaryKey      ModelField
+		PKNum           string
+		SQLSetup        string
+		SQLDBNames      string
+		SQLPlaceholders string
+		SQLIdents       string
+		SQLIdentRefs    string
 	}
 )
 
@@ -162,28 +168,36 @@ func main() {
 	}
 
 	hasPK := false
+	pkNum := -1
 	var primaryKey ModelField
 
-	sqlDefFields := make([]string, 0, len(fields))
+	sqlDefs := make([]string, 0, len(fields))
+	sqlDBNames := make([]string, 0, len(fields))
+	sqlPlaceholders := make([]string, 0, len(fields))
+	sqlIdents := make([]string, 0, len(fields))
+	sqlIdentRefs := make([]string, 0, len(fields))
 
 	fmt.Println("Detected fields:")
-	for _, i := range fields {
+	for n, i := range fields {
 		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
 		if strings.Contains(i.DBType, "PRIMARY KEY") {
 			if hasPK {
 				log.Fatal("Model cannot contain two primary keys")
 			}
 			hasPK = true
+			pkNum = n + 1
 			primaryKey = i
 		}
-		sqlDefFields = append(sqlDefFields, fmt.Sprintf("%s %s", i.DBName, i.DBType))
+		sqlDefs = append(sqlDefs, fmt.Sprintf("%s %s", i.DBName, i.DBType))
+		sqlDBNames = append(sqlDBNames, i.DBName)
+		sqlPlaceholders = append(sqlPlaceholders, fmt.Sprintf("$%d", n+1))
+		sqlIdents = append(sqlIdents, fmt.Sprintf("m.%s", i.Ident))
+		sqlIdentRefs = append(sqlIdentRefs, fmt.Sprintf("&m.%s", i.Ident))
 	}
 
 	if !hasPK {
 		log.Fatal("Model does not contain a primary key")
 	}
-
-	sqlSetup := strings.Join(sqlDefFields, ", ")
 
 	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 	if err != nil {
@@ -193,12 +207,17 @@ func main() {
 	genFileWriter := bufio.NewWriter(genfile)
 
 	tplData := TemplateData{
-		Generator:  "go generate",
-		Package:    gopackage,
-		ModelIdent: modelIdent,
-		TableName:  tableName,
-		PrimaryKey: primaryKey,
-		SQLSetup:   sqlSetup,
+		Generator:       "go generate",
+		Package:         gopackage,
+		ModelIdent:      modelIdent,
+		TableName:       tableName,
+		PrimaryKey:      primaryKey,
+		PKNum:           "$" + strconv.Itoa(pkNum),
+		SQLSetup:        strings.Join(sqlDefs, ", "),
+		SQLDBNames:      strings.Join(sqlDBNames, ", "),
+		SQLPlaceholders: strings.Join(sqlPlaceholders, ", "),
+		SQLIdents:       strings.Join(sqlIdents, ", "),
+		SQLIdentRefs:    strings.Join(sqlIdentRefs, ", "),
 	}
 	if err := tpl.Execute(genFileWriter, tplData); err != nil {
 		log.Fatal(err)

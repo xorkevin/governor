@@ -460,14 +460,9 @@ const (
 	moduleIDModUp = moduleID + ".Update"
 )
 
-var (
-	sqlUpdate = fmt.Sprintf("UPDATE %s SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;", modelTableName)
-)
-
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	_, err := r.db.Exec(sqlUpdate, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
-	if err != nil {
+	if err := modelUpdate(r.db, m); err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

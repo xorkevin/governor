@@ -10,19 +10,28 @@ const (
 )
 
 const (
-	modelSQLDelete = "DELETE FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = $1;"
-)
-
-func modelDelete(db *sql.DB, m *{{.ModelIdent}}) error {
-	_, err := db.Exec(modelSQLDelete, m.{{.PrimaryKey.Ident}})
-	return err
-}
-
-const (
 	modelSQLSetup = "CREATE TABLE {{.TableName}} ({{.SQLSetup}});"
 )
 
 func modelSetup(db *sql.DB) error {
 	_, err := db.Exec(modelSQLSetup)
+	return err
+}
+
+const (
+	modelSQLUpdate = "UPDATE {{.TableName}} SET ({{.SQLDBNames}}) = ({{.SQLPlaceholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};"
+)
+
+func modelUpdate(db *sql.DB, m *{{.ModelIdent}}) error {
+	_, err := db.Exec(sqlUpdate, {{.SQLIdents}})
+	return err
+}
+
+const (
+	modelSQLDelete = "DELETE FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = $1;"
+)
+
+func modelDelete(db *sql.DB, m *{{.ModelIdent}}) error {
+	_, err := db.Exec(modelSQLDelete, m.{{.PrimaryKey.Ident}})
 	return err
 }
