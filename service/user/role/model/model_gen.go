@@ -7,25 +7,17 @@ import (
 )
 
 const (
-	modelTableName = "userroles"
+	roleModelTableName = "userroles"
 )
 
-const (
-	modelSQLSetup = "CREATE TABLE userroles (roleid VARCHAR(512) PRIMARY KEY, userid VARCHAR(255) NOT NULL, role VARCHAR(255) NOT NULL);"
-)
-
-func modelSetup(db *sql.DB) error {
-	_, err := db.Exec(modelSQLSetup)
+func roleModelSetup(db *sql.DB) error {
+	_, err := db.Exec("CREATE TABLE userroles (roleid VARCHAR(512) PRIMARY KEY, userid VARCHAR(255) NOT NULL, role VARCHAR(255) NOT NULL);")
 	return err
 }
 
-const (
-	modelSQLGet = "SELECT roleid, userid, role FROM userroles WHERE roleid = $1;"
-)
-
-func modelGet(db *sql.DB, key string) (*Model, int, error) {
+func roleModelGet(db *sql.DB, key string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow(modelSQLGet, key).Scan(&m.roleid, &m.Userid, &m.Role); err != nil {
+	if err := db.QueryRow("SELECT roleid, userid, role FROM userroles WHERE roleid = $1;", key).Scan(&m.roleid, &m.Userid, &m.Role); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -34,12 +26,8 @@ func modelGet(db *sql.DB, key string) (*Model, int, error) {
 	return m, 0, nil
 }
 
-const (
-	modelSQLInsert = "INSERT INTO userroles (roleid, userid, role) VALUES ($1, $2, $3);"
-)
-
-func modelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec(modelSQLInsert, m.roleid, m.Userid, m.Role)
+func roleModelInsert(db *sql.DB, m *Model) (int, error) {
+	_, err := db.Exec("INSERT INTO userroles (roleid, userid, role) VALUES ($1, $2, $3);", m.roleid, m.Userid, m.Role)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -53,20 +41,12 @@ func modelInsert(db *sql.DB, m *Model) (int, error) {
 	return 0, nil
 }
 
-const (
-	modelSQLUpdate = "UPDATE userroles SET (roleid, userid, role) = ($1, $2, $3) WHERE roleid = $1;"
-)
-
-func modelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLUpdate, m.roleid, m.Userid, m.Role)
+func roleModelUpdate(db *sql.DB, m *Model) error {
+	_, err := db.Exec("UPDATE userroles SET (roleid, userid, role) = ($1, $2, $3) WHERE roleid = $1;", m.roleid, m.Userid, m.Role)
 	return err
 }
 
-const (
-	modelSQLDelete = "DELETE FROM userroles WHERE roleid = $1;"
-)
-
-func modelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLDelete, m.roleid)
+func roleModelDelete(db *sql.DB, m *Model) error {
+	_, err := db.Exec("DELETE FROM userroles WHERE roleid = $1;", m.roleid)
 	return err
 }

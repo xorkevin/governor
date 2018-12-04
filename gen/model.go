@@ -35,6 +35,7 @@ type (
 	TemplateData struct {
 		Generator       string
 		Package         string
+		Prefix          string
 		ModelIdent      string
 		TableName       string
 		PrimaryKey      ModelField
@@ -48,7 +49,7 @@ type (
 )
 
 func argError() {
-	log.Fatal("Arguments must be [output_file modelname tablename] which are the output filename, model struct identifier, and db table name respectively")
+	log.Fatal("Arguments must be [output_file prefix modelname tablename] which are the output filename, generated function prefix, model struct identifier, and db table name respectively")
 }
 
 func main() {
@@ -76,12 +77,13 @@ func main() {
 		argError()
 	}
 	args := os.Args[argStart+1:]
-	if len(args) != 3 {
+	if len(args) != 4 {
 		argError()
 	}
 	generatedFilepath := args[0]
-	modelIdent := args[1]
-	tableName := args[2]
+	prefix := args[1]
+	modelIdent := args[2]
+	tableName := args[3]
 
 	fmt.Println(strings.Join([]string{
 		"Generating model",
@@ -209,6 +211,7 @@ func main() {
 	tplData := TemplateData{
 		Generator:       "go generate",
 		Package:         gopackage,
+		Prefix:          prefix,
 		ModelIdent:      modelIdent,
 		TableName:       tableName,
 		PrimaryKey:      primaryKey,

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go Model config
+//go:generate go run ../../../gen/model.go -- model_gen.go conf Model config
 
 const (
 	configID      = 0
@@ -60,7 +60,7 @@ const (
 // Get returns the conf model
 func (r *repo) Get() (*Model, *governor.Error) {
 	var m *Model
-	if mConfig, code, err := modelGet(r.db, configID); err != nil {
+	if mConfig, code, err := confModelGet(r.db, configID); err != nil {
 		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "no conf found with that id", 2, http.StatusNotFound)
 		}
@@ -77,7 +77,7 @@ const (
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	if _, err := modelInsert(r.db, m); err != nil {
+	if _, err := confModelInsert(r.db, m); err != nil {
 		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -89,7 +89,7 @@ const (
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	if err := modelUpdate(r.db, m); err != nil {
+	if err := confModelUpdate(r.db, m); err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -101,7 +101,7 @@ const (
 
 // Setup creates a new Config table
 func (r *repo) Setup() *governor.Error {
-	if err := modelSetup(r.db); err != nil {
+	if err := confModelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

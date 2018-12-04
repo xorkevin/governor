@@ -2,14 +2,13 @@ package profilemodel
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/model"
 	"net/http"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go Model profiles
+//go:generate go run ../../../gen/model.go -- model_gen.go profile Model profiles
 
 const (
 	moduleID      = "profilemodel"
@@ -91,10 +90,7 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 
 const (
 	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
-)
-
-var (
-	sqlGetByIDB64 = fmt.Sprintf("SELECT userid, contact_email, bio, profile_image_url FROM %s WHERE userid=$1;", modelTableName)
+	sqlGetByIDB64    = "SELECT userid, contact_email, bio, profile_image_url FROM " + profileModelTableName + " WHERE userid=$1;"
 )
 
 // GetByIDB64 returns a profile model with the given base64 id
@@ -105,7 +101,7 @@ func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 		return nil, err
 	}
 	var m *Model
-	if mProfile, code, err := modelGet(r.db, u.Bytes()); err != nil {
+	if mProfile, code, err := profileModelGet(r.db, u.Bytes()); err != nil {
 		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet64, "no profile found with that id", 2, http.StatusNotFound)
 		}
@@ -122,7 +118,7 @@ const (
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	if code, err := modelInsert(r.db, m); err != nil {
+	if code, err := profileModelInsert(r.db, m); err != nil {
 		if code == 3 {
 			return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 		}
@@ -137,7 +133,7 @@ const (
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	if err := modelUpdate(r.db, m); err != nil {
+	if err := profileModelUpdate(r.db, m); err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -149,7 +145,7 @@ const (
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
-	if err := modelDelete(r.db, m); err != nil {
+	if err := profileModelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -161,7 +157,7 @@ const (
 
 // Setup creates a new Profile table
 func (r *repo) Setup() *governor.Error {
-	if err := modelSetup(r.db); err != nil {
+	if err := profileModelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

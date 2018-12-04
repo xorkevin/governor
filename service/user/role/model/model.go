@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:generate go run ../../../../gen/model.go -- model_gen.go Model userroles
+//go:generate go run ../../../../gen/model.go -- model_gen.go role Model userroles
 
 const (
 	moduleID      = "rolemodel"
@@ -72,7 +72,7 @@ const (
 // GetByID returns a user role model with the given id
 func (r *repo) GetByID(userid, role string) (*Model, *governor.Error) {
 	var m *Model
-	if mRole, code, err := modelGet(r.db, (&Model{Userid: userid, Role: role}).ensureRoleid()); err != nil {
+	if mRole, code, err := roleModelGet(r.db, (&Model{Userid: userid, Role: role}).ensureRoleid()); err != nil {
 		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "role not found for user", 2, http.StatusNotFound)
 		}
@@ -85,7 +85,7 @@ func (r *repo) GetByID(userid, role string) (*Model, *governor.Error) {
 
 const (
 	moduleIDModGetRole = moduleIDModel + ".GetByRole"
-	sqlGetByRole       = "SELECT userid FROM " + modelTableName + " WHERE role=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
+	sqlGetByRole       = "SELECT userid FROM " + roleModelTableName + " WHERE role=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
 )
 
 // GetByRole returns a list of userids with the given role
@@ -114,7 +114,7 @@ func (r *repo) GetByRole(role string, limit, offset int) ([]string, *governor.Er
 
 const (
 	moduleIDModGetUser = moduleIDModel + ".GetUserRoles"
-	sqlGetUser         = "SELECT role FROM " + modelTableName + " WHERE userid=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
+	sqlGetUser         = "SELECT role FROM " + roleModelTableName + " WHERE userid=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
 )
 
 // GetUserRoles returns a list of a user's roles
@@ -148,7 +148,7 @@ const (
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
 	m.ensureRoleid()
-	if code, err := modelInsert(r.db, m); err != nil {
+	if code, err := roleModelInsert(r.db, m); err != nil {
 		if code == 3 {
 			return governor.NewErrorUser(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 		}
@@ -164,7 +164,7 @@ const (
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
 	m.ensureRoleid()
-	if err := modelDelete(r.db, m); err != nil {
+	if err := roleModelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -172,7 +172,7 @@ func (r *repo) Delete(m *Model) *governor.Error {
 
 const (
 	moduleIDModDelUser = moduleIDModel + ".DeleteUserRoles"
-	sqlDeleteItem      = "DELETE FROM " + modelTableName + " WHERE userid=$1;"
+	sqlDeleteItem      = "DELETE FROM " + roleModelTableName + " WHERE userid=$1;"
 )
 
 // DeleteUserRoles deletes all the roles of a user
@@ -190,7 +190,7 @@ const (
 
 // Setup creates a new User role table
 func (r *repo) Setup() *governor.Error {
-	if err := modelSetup(r.db); err != nil {
+	if err := roleModelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

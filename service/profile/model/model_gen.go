@@ -7,25 +7,17 @@ import (
 )
 
 const (
-	modelTableName = "profiles"
+	profileModelTableName = "profiles"
 )
 
-const (
-	modelSQLSetup = "CREATE TABLE profiles (userid BYTEA PRIMARY KEY, contact_email VARCHAR(4096), bio VARCHAR(4096), profile_image_url VARCHAR(4096));"
-)
-
-func modelSetup(db *sql.DB) error {
-	_, err := db.Exec(modelSQLSetup)
+func profileModelSetup(db *sql.DB) error {
+	_, err := db.Exec("CREATE TABLE profiles (userid BYTEA PRIMARY KEY, contact_email VARCHAR(4096), bio VARCHAR(4096), profile_image_url VARCHAR(4096));")
 	return err
 }
 
-const (
-	modelSQLGet = "SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid = $1;"
-)
-
-func modelGet(db *sql.DB, key []byte) (*Model, int, error) {
+func profileModelGet(db *sql.DB, key []byte) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow(modelSQLGet, key).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
+	if err := db.QueryRow("SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid = $1;", key).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -34,12 +26,8 @@ func modelGet(db *sql.DB, key []byte) (*Model, int, error) {
 	return m, 0, nil
 }
 
-const (
-	modelSQLInsert = "INSERT INTO profiles (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);"
-)
-
-func modelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec(modelSQLInsert, m.Userid, m.Email, m.Bio, m.Image)
+func profileModelInsert(db *sql.DB, m *Model) (int, error) {
+	_, err := db.Exec("INSERT INTO profiles (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", m.Userid, m.Email, m.Bio, m.Image)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -53,20 +41,12 @@ func modelInsert(db *sql.DB, m *Model) (int, error) {
 	return 0, nil
 }
 
-const (
-	modelSQLUpdate = "UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $1;"
-)
-
-func modelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLUpdate, m.Userid, m.Email, m.Bio, m.Image)
+func profileModelUpdate(db *sql.DB, m *Model) error {
+	_, err := db.Exec("UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $1;", m.Userid, m.Email, m.Bio, m.Image)
 	return err
 }
 
-const (
-	modelSQLDelete = "DELETE FROM profiles WHERE userid = $1;"
-)
-
-func modelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLDelete, m.Userid)
+func profileModelDelete(db *sql.DB, m *Model) error {
+	_, err := db.Exec("DELETE FROM profiles WHERE userid = $1;", m.Userid)
 	return err
 }

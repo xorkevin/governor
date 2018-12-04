@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go Model users
+//go:generate go run ../../../gen/model.go -- model_gen.go user Model users
 
 const (
 	uidTimeSize = 8
@@ -194,7 +194,7 @@ func (r *repo) GetRoles(m *Model) *governor.Error {
 
 const (
 	moduleIDModGetGroup = moduleID + ".GetGroup"
-	sqlGetGroup         = "SELECT userid, username, email FROM " + modelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
+	sqlGetGroup         = "SELECT userid, username, email FROM " + userModelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
 )
 
 // GetGroup gets information from each user
@@ -223,7 +223,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
 
 const (
 	moduleIDModGetBulk = moduleID + ".GetBulk"
-	sqlGetBulk         = "SELECT userid, username, email FROM " + modelTableName + " WHERE userid IN (VALUES %s);"
+	sqlGetBulk         = "SELECT userid, username, email FROM " + userModelTableName + " WHERE userid IN (VALUES %s);"
 )
 
 // GetBulk gets information from users
@@ -279,7 +279,7 @@ const (
 
 func (r *repo) getByID(userid []byte) (*Model, *governor.Error) {
 	var m *Model
-	if mUser, code, err := modelGet(r.db, userid); err != nil {
+	if mUser, code, err := userModelGet(r.db, userid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "no user found with that id", 2, http.StatusNotFound)
 		}
@@ -310,7 +310,7 @@ func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 }
 
 const (
-	sqlGetByUsername = "SELECT userid FROM " + modelTableName + " WHERE username=$1;"
+	sqlGetByUsername = "SELECT userid FROM " + userModelTableName + " WHERE username=$1;"
 )
 
 // GetByUsername returns a user model with the given username
@@ -327,7 +327,7 @@ func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
 
 const (
 	moduleIDModGetEm = moduleID + ".GetByEmail"
-	sqlGetByEmail    = "SELECT userid FROM " + modelTableName + " WHERE email=$1;"
+	sqlGetByEmail    = "SELECT userid FROM " + userModelTableName + " WHERE email=$1;"
 )
 
 // GetByEmail returns a user model with the given email
@@ -373,7 +373,7 @@ const (
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) *governor.Error {
-	if code, err := modelInsert(r.db, m); err != nil {
+	if code, err := userModelInsert(r.db, m); err != nil {
 		if code == 3 {
 			return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
 		}
@@ -433,7 +433,7 @@ const (
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) *governor.Error {
-	if err := modelUpdate(r.db, m); err != nil {
+	if err := userModelUpdate(r.db, m); err != nil {
 		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -456,7 +456,7 @@ func (r *repo) Delete(m *Model) *governor.Error {
 		return err
 	}
 
-	if err := modelDelete(r.db, m); err != nil {
+	if err := userModelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -468,7 +468,7 @@ const (
 
 // Setup creates a new User table
 func (r *repo) Setup() *governor.Error {
-	if err := modelSetup(r.db); err != nil {
+	if err := userModelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil

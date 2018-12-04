@@ -7,25 +7,17 @@ import (
 )
 
 const (
-	modelTableName = "config"
+	confModelTableName = "config"
 )
 
-const (
-	modelSQLSetup = "CREATE TABLE config (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);"
-)
-
-func modelSetup(db *sql.DB) error {
-	_, err := db.Exec(modelSQLSetup)
+func confModelSetup(db *sql.DB) error {
+	_, err := db.Exec("CREATE TABLE config (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	return err
 }
 
-const (
-	modelSQLGet = "SELECT config, orgname, creation_time FROM config WHERE config = $1;"
-)
-
-func modelGet(db *sql.DB, key int) (*Model, int, error) {
+func confModelGet(db *sql.DB, key int) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow(modelSQLGet, key).Scan(&m.config, &m.Orgname, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT config, orgname, creation_time FROM config WHERE config = $1;", key).Scan(&m.config, &m.Orgname, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -34,12 +26,8 @@ func modelGet(db *sql.DB, key int) (*Model, int, error) {
 	return m, 0, nil
 }
 
-const (
-	modelSQLInsert = "INSERT INTO config (config, orgname, creation_time) VALUES ($1, $2, $3);"
-)
-
-func modelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec(modelSQLInsert, m.config, m.Orgname, m.CreationTime)
+func confModelInsert(db *sql.DB, m *Model) (int, error) {
+	_, err := db.Exec("INSERT INTO config (config, orgname, creation_time) VALUES ($1, $2, $3);", m.config, m.Orgname, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -53,20 +41,12 @@ func modelInsert(db *sql.DB, m *Model) (int, error) {
 	return 0, nil
 }
 
-const (
-	modelSQLUpdate = "UPDATE config SET (config, orgname, creation_time) = ($1, $2, $3) WHERE config = $1;"
-)
-
-func modelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLUpdate, m.config, m.Orgname, m.CreationTime)
+func confModelUpdate(db *sql.DB, m *Model) error {
+	_, err := db.Exec("UPDATE config SET (config, orgname, creation_time) = ($1, $2, $3) WHERE config = $1;", m.config, m.Orgname, m.CreationTime)
 	return err
 }
 
-const (
-	modelSQLDelete = "DELETE FROM config WHERE config = $1;"
-)
-
-func modelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec(modelSQLDelete, m.config)
+func confModelDelete(db *sql.DB, m *Model) error {
+	_, err := db.Exec("DELETE FROM config WHERE config = $1;", m.config)
 	return err
 }

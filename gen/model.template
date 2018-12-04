@@ -7,25 +7,17 @@ import (
 )
 
 const (
-	modelTableName = "{{.TableName}}"
+	{{.Prefix}}ModelTableName = "{{.TableName}}"
 )
 
-const (
-	modelSQLSetup = "CREATE TABLE {{.TableName}} ({{.SQLSetup}});"
-)
-
-func modelSetup(db *sql.DB) error {
-	_, err := db.Exec(modelSQLSetup)
+func {{.Prefix}}ModelSetup(db *sql.DB) error {
+	_, err := db.Exec("CREATE TABLE {{.TableName}} ({{.SQLSetup}});")
 	return err
 }
 
-const (
-	modelSQLGet = "SELECT {{.SQLDBNames}} FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};"
-)
-
-func modelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent}}, int, error) {
+func {{.Prefix}}ModelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent}}, int, error) {
 	m := &{{.ModelIdent}}{}
-	if err := db.QueryRow(modelSQLGet, key).Scan({{.SQLIdentRefs}}); err != nil {
+	if err := db.QueryRow("SELECT {{.SQLDBNames}} FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", key).Scan({{.SQLIdentRefs}}); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -34,12 +26,8 @@ func modelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent}}, int, er
 	return m, 0, nil
 }
 
-const (
-	modelSQLInsert = "INSERT INTO {{.TableName}} ({{.SQLDBNames}}) VALUES ({{.SQLPlaceholders}});"
-)
-
-func modelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
-	_, err := db.Exec(modelSQLInsert, {{.SQLIdents}})
+func {{.Prefix}}ModelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
+	_, err := db.Exec("INSERT INTO {{.TableName}} ({{.SQLDBNames}}) VALUES ({{.SQLPlaceholders}});", {{.SQLIdents}})
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -53,20 +41,12 @@ func modelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
 	return 0, nil
 }
 
-const (
-	modelSQLUpdate = "UPDATE {{.TableName}} SET ({{.SQLDBNames}}) = ({{.SQLPlaceholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};"
-)
-
-func modelUpdate(db *sql.DB, m *{{.ModelIdent}}) error {
-	_, err := db.Exec(modelSQLUpdate, {{.SQLIdents}})
+func {{.Prefix}}ModelUpdate(db *sql.DB, m *{{.ModelIdent}}) error {
+	_, err := db.Exec("UPDATE {{.TableName}} SET ({{.SQLDBNames}}) = ({{.SQLPlaceholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", {{.SQLIdents}})
 	return err
 }
 
-const (
-	modelSQLDelete = "DELETE FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = $1;"
-)
-
-func modelDelete(db *sql.DB, m *{{.ModelIdent}}) error {
-	_, err := db.Exec(modelSQLDelete, m.{{.PrimaryKey.Ident}})
+func {{.Prefix}}ModelDelete(db *sql.DB, m *{{.ModelIdent}}) error {
+	_, err := db.Exec("DELETE FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = $1;", m.{{.PrimaryKey.Ident}})
 	return err
 }
