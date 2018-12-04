@@ -6,17 +6,17 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/util/uid"
-	"github.com/lib/pq"
 	"net/http"
 	"strings"
 	"time"
 )
 
+//go:generate go run ../../../gen/model.go -- modellink_gen.go link LinkModel courierlinks
+
 const (
-	uidRandSize   = 8
-	linkTableName = "courierlinks"
-	moduleID      = "couriermodel"
-	moduleIDLink  = moduleID + ".Link"
+	uidRandSize  = 8
+	moduleID     = "couriermodel"
+	moduleIDLink = moduleID + ".Link"
 )
 
 type (
@@ -39,10 +39,10 @@ type (
 
 	// LinkModel is the db link model
 	LinkModel struct {
-		LinkID       string `json:"linkid"`
-		URL          string `json:"url"`
-		CreatorID    string `json:"creatorid"`
-		CreationTime int64  `json:"creation_time"`
+		LinkID       string `model:"linkid,VARCHAR(64) PRIMARY KEY"`
+		URL          string `model:"url,VARCHAR(2048) NOT NULL"`
+		CreatorID    string `model:"creatorid,VARCHAR(64) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)"`
 	}
 )
 
@@ -91,10 +91,7 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 
 const (
 	moduleIDLinkGetGroup = moduleIDLink + ".GetGroup"
-)
-
-const (
-	sqlLinkGetGroup = "SELECT linkid, url, creatorid, creation_time FROM %s %s ORDER BY creation_time %s LIMIT $1 OFFSET $2;"
+	sqlLinkGetGroup      = "SELECT linkid, url, creatorid, creation_time FROM %s %s ORDER BY creation_time %s LIMIT $1 OFFSET $2;"
 )
 
 // GetLinkGroup retrieves a group of links
@@ -113,7 +110,7 @@ func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) (
 		arguments = append(arguments, creatorid)
 	}
 
-	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkTableName, cond, dir), arguments...)
+	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkModelTableName, cond, dir), arguments...)
 	if err != nil {
 		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -138,18 +135,16 @@ const (
 	moduleIDLinkGet = moduleIDLink + ".Get"
 )
 
-var (
-	sqlLinkGet = fmt.Sprintf("SELECT linkid, url, creatorid, creation_time FROM %s WHERE linkid=$1;", linkTableName)
-)
-
 // GetLink returns a link model with the given id
 func (r *repo) GetLink(linkid string) (*LinkModel, *governor.Error) {
-	m := &LinkModel{}
-	if err := r.db.QueryRow(sqlLinkGet, linkid).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
+	var m *LinkModel
+	if mLink, code, err := linkModelGet(r.db, linkid); err != nil {
+		if code == 2 {
 			return nil, governor.NewError(moduleIDLinkGet, "no link found with that id", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDLinkGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mLink
 	}
 	return m, nil
 }
@@ -158,22 +153,13 @@ const (
 	moduleIDLinkIns = moduleIDLink + ".Insert"
 )
 
-var (
-	sqlLinkInsert = fmt.Sprintf("INSERT INTO %s (linkid, url, creatorid, creation_time) VALUES ($1, $2, $3, $4);", linkTableName)
-)
-
 // InsertLink inserts the link model into the db
 func (r *repo) InsertLink(m *LinkModel) *governor.Error {
-	_, err := r.db.Exec(sqlLinkInsert, m.LinkID, m.URL, m.CreatorID, m.CreationTime)
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return governor.NewError(moduleIDLinkIns, err.Error(), 3, http.StatusBadRequest)
-			default:
-				return governor.NewError(moduleIDLinkIns, err.Error(), 0, http.StatusInternalServerError)
-			}
+	if code, err := linkModelInsert(r.db, m); err != nil {
+		if code == 3 {
+			return governor.NewError(moduleIDLinkIns, err.Error(), 3, http.StatusBadRequest)
 		}
+		return governor.NewError(moduleIDLinkIns, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
 }
@@ -182,13 +168,9 @@ const (
 	moduleIDLinkDel = moduleIDLink + ".Del"
 )
 
-var (
-	sqlLinkDelete = fmt.Sprintf("DELETE FROM %s WHERE linkid=$1;", linkTableName)
-)
-
 // DeleteLink deletes the link model in the db
 func (r *repo) DeleteLink(m *LinkModel) *governor.Error {
-	if _, err := r.db.Exec(sqlLinkDelete, m.LinkID); err != nil {
+	if err := linkModelDelete(r.db, m); err != nil {
 		return governor.NewError(moduleIDLinkDel, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
@@ -198,14 +180,9 @@ const (
 	moduleIDSetup = moduleID + ".Setup"
 )
 
-var (
-	sqlLinksSetup = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (linkid VARCHAR(64) PRIMARY KEY, url VARCHAR(2048) NOT NULL, creatorid VARCHAR(64) NOT NULL, creation_time BIGINT NOT NULL);", linkTableName)
-)
-
 // Setup creates new Courier tables
 func (r *repo) Setup() *governor.Error {
-	_, err := r.db.Exec(sqlLinksSetup)
-	if err != nil {
+	if err := linkModelSetup(r.db); err != nil {
 		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return nil
