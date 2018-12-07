@@ -13,6 +13,11 @@ type (
 		LinkID string `json:"-"`
 	}
 
+	reqLinkGetGroup struct {
+		Amount int `json:"-"`
+		Offset int `json:"-"`
+	}
+
 	reqLinkPost struct {
 		CreatorID string `json:"-"`
 		LinkID    string `json:"linkid"`
@@ -22,6 +27,16 @@ type (
 
 func (r *reqLinkGet) valid() *governor.Error {
 	return hasLinkID(r.LinkID)
+}
+
+func (r *reqLinkGetGroup) valid() *governor.Error {
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *reqLinkPost) valid() *governor.Error {
@@ -82,6 +97,14 @@ func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 		ofs = offset
 	} else {
 		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+	}
+
+	rlink := reqLinkGetGroup{
+		Amount: amt,
+		Offset: ofs,
+	}
+	if err := rlink.valid(); err != nil {
+		return err
 	}
 
 	res, err := cr.service.GetLinkGroup(amt, ofs, c.QueryParam("asc") != "true", c.QueryParam("creatorid"))

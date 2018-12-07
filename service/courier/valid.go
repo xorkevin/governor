@@ -12,6 +12,7 @@ const (
 	lengthCap        = 64
 	lengthCapLink    = 64
 	lengthCapURL     = 2048
+	amountCap        = 1024
 )
 
 var (
@@ -54,6 +55,20 @@ func hasCreatorID(creatorid string) *governor.Error {
 func hasLinkID(linkid string) *governor.Error {
 	if len(linkid) < 3 || len(linkid) > lengthCapLink {
 		return governor.NewErrorUser(moduleIDReqValid, "link must be longer than 2 chars", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validAmount(amt int) *governor.Error {
+	if amt < 1 || amt > amountCap {
+		return governor.NewErrorUser(moduleIDReqValid, "amount is invalid", 0, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validOffset(offset int) *governor.Error {
+	if offset < 0 {
+		return governor.NewErrorUser(moduleIDReqValid, "offset is invalid", 0, http.StatusBadRequest)
 	}
 	return nil
 }
