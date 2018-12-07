@@ -112,6 +112,11 @@ func main() {
 
 	defs := findStructs(gofile, []string{modelIdent})
 
+	modelDef := defs[modelIdent]
+	if modelDef.PrimaryKey == nil {
+		log.Fatal("Model does not contain a primary key")
+	}
+
 	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 	if err != nil {
 		log.Fatal(err)
@@ -119,7 +124,6 @@ func main() {
 	defer genfile.Close()
 	genFileWriter := bufio.NewWriter(genfile)
 
-	modelDef := defs[modelIdent]
 	tplData := TemplateData{
 		Generator:  "go generate",
 		Package:    gopackage,
@@ -237,10 +241,6 @@ func parseFields(modelDef *ast.StructType, fset *token.FileSet) ([]ModelField, *
 			pkNum = n + 1
 			primaryKey = i
 		}
-	}
-
-	if !hasPK {
-		log.Fatal("Model does not contain a primary key")
 	}
 
 	return fields, &primaryKey, pkNum
