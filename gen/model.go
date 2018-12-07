@@ -25,6 +25,13 @@ const (
 )
 
 type (
+	ModelDef struct {
+		Ident      string
+		Fields     []ModelField
+		PrimaryKey *ModelField
+		PKNum      int
+	}
+
 	ModelField struct {
 		Ident  string
 		GoType string
@@ -32,19 +39,23 @@ type (
 		DBType string
 	}
 
+	SQLStrings struct {
+		Setup        string
+		DBNames      string
+		Placeholders string
+		Idents       string
+		IdentRefs    string
+	}
+
 	TemplateData struct {
-		Generator       string
-		Package         string
-		Prefix          string
-		ModelIdent      string
-		TableName       string
-		PrimaryKey      ModelField
-		PKNum           string
-		SQLSetup        string
-		SQLDBNames      string
-		SQLPlaceholders string
-		SQLIdents       string
-		SQLIdentRefs    string
+		Generator  string
+		Package    string
+		Prefix     string
+		TableName  string
+		ModelIdent string
+		PrimaryKey ModelField
+		PKNum      string
+		SQL        SQLStrings
 	}
 )
 
@@ -99,6 +110,35 @@ func main() {
 		log.Fatal(err)
 	}
 
+	defs := findStructs(gofile, []string{modelIdent})
+
+	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer genfile.Close()
+	genFileWriter := bufio.NewWriter(genfile)
+
+	modelDef := defs[modelIdent]
+	tplData := TemplateData{
+		Generator:  "go generate",
+		Package:    gopackage,
+		Prefix:     prefix,
+		TableName:  tableName,
+		ModelIdent: modelDef.Ident,
+		PrimaryKey: *modelDef.PrimaryKey,
+		PKNum:      "$" + strconv.Itoa(modelDef.PKNum),
+		SQL:        *modelDef.genSQL(),
+	}
+	if err := tpl.Execute(genFileWriter, tplData); err != nil {
+		log.Fatal(err)
+	}
+	genFileWriter.Flush()
+
+	fmt.Printf("Generated file: %s\n", generatedFilepath)
+}
+
+func findStructs(gofile string, idents []string) map[string]ModelDef {
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
 	if err != nil {
@@ -108,32 +148,47 @@ func main() {
 		log.Fatal("No top level declarations")
 	}
 
-	var modelDef *ast.StructType
-	for _, i := range root.Decls {
-		typeDecl, ok := i.(*ast.GenDecl)
-		if !ok || typeDecl.Tok != token.TYPE {
-			continue
+	defs := map[string]ModelDef{}
+	for _, ident := range idents {
+		var modelDef *ast.StructType
+		for _, i := range root.Decls {
+			typeDecl, ok := i.(*ast.GenDecl)
+			if !ok || typeDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, j := range typeDecl.Specs {
+				typeSpec, ok := j.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok || structType.Incomplete {
+					continue
+				}
+				if typeSpec.Name.Name == ident {
+					modelDef = structType
+					break
+				}
+			}
 		}
-		for _, j := range typeDecl.Specs {
-			typeSpec, ok := j.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			structType, ok := typeSpec.Type.(*ast.StructType)
-			if !ok || structType.Incomplete {
-				continue
-			}
-			if typeSpec.Name.Name == modelIdent {
-				modelDef = structType
-				break
-			}
+
+		if modelDef == nil {
+			log.Fatal("Model struct not found")
+		}
+
+		fields, primaryField, pkNum := parseFields(modelDef, fset)
+		defs[ident] = ModelDef{
+			Ident:      ident,
+			Fields:     fields,
+			PrimaryKey: primaryField,
+			PKNum:      pkNum,
 		}
 	}
 
-	if modelDef == nil {
-		log.Fatal("Model struct not found")
-	}
+	return defs
+}
 
+func parseFields(modelDef *ast.StructType, fset *token.FileSet) ([]ModelField, *ModelField, int) {
 	fields := []ModelField{}
 	for _, field := range modelDef.Fields.List {
 		if field.Tag == nil {
@@ -173,15 +228,7 @@ func main() {
 	pkNum := -1
 	var primaryKey ModelField
 
-	sqlDefs := make([]string, 0, len(fields))
-	sqlDBNames := make([]string, 0, len(fields))
-	sqlPlaceholders := make([]string, 0, len(fields))
-	sqlIdents := make([]string, 0, len(fields))
-	sqlIdentRefs := make([]string, 0, len(fields))
-
-	fmt.Println("Detected fields:")
 	for n, i := range fields {
-		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
 		if strings.Contains(i.DBType, "PRIMARY KEY") {
 			if hasPK {
 				log.Fatal("Model cannot contain two primary keys")
@@ -190,6 +237,25 @@ func main() {
 			pkNum = n + 1
 			primaryKey = i
 		}
+	}
+
+	if !hasPK {
+		log.Fatal("Model does not contain a primary key")
+	}
+
+	return fields, &primaryKey, pkNum
+}
+
+func (m *ModelDef) genSQL() *SQLStrings {
+	sqlDefs := make([]string, 0, len(m.Fields))
+	sqlDBNames := make([]string, 0, len(m.Fields))
+	sqlPlaceholders := make([]string, 0, len(m.Fields))
+	sqlIdents := make([]string, 0, len(m.Fields))
+	sqlIdentRefs := make([]string, 0, len(m.Fields))
+
+	fmt.Println("Detected fields:")
+	for n, i := range m.Fields {
+		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
 		sqlDefs = append(sqlDefs, fmt.Sprintf("%s %s", i.DBName, i.DBType))
 		sqlDBNames = append(sqlDBNames, i.DBName)
 		sqlPlaceholders = append(sqlPlaceholders, fmt.Sprintf("$%d", n+1))
@@ -197,35 +263,11 @@ func main() {
 		sqlIdentRefs = append(sqlIdentRefs, fmt.Sprintf("&m.%s", i.Ident))
 	}
 
-	if !hasPK {
-		log.Fatal("Model does not contain a primary key")
+	return &SQLStrings{
+		Setup:        strings.Join(sqlDefs, ", "),
+		DBNames:      strings.Join(sqlDBNames, ", "),
+		Placeholders: strings.Join(sqlPlaceholders, ", "),
+		Idents:       strings.Join(sqlIdents, ", "),
+		IdentRefs:    strings.Join(sqlIdentRefs, ", "),
 	}
-
-	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer genfile.Close()
-	genFileWriter := bufio.NewWriter(genfile)
-
-	tplData := TemplateData{
-		Generator:       "go generate",
-		Package:         gopackage,
-		Prefix:          prefix,
-		ModelIdent:      modelIdent,
-		TableName:       tableName,
-		PrimaryKey:      primaryKey,
-		PKNum:           "$" + strconv.Itoa(pkNum),
-		SQLSetup:        strings.Join(sqlDefs, ", "),
-		SQLDBNames:      strings.Join(sqlDBNames, ", "),
-		SQLPlaceholders: strings.Join(sqlPlaceholders, ", "),
-		SQLIdents:       strings.Join(sqlIdents, ", "),
-		SQLIdentRefs:    strings.Join(sqlIdentRefs, ", "),
-	}
-	if err := tpl.Execute(genFileWriter, tplData); err != nil {
-		log.Fatal(err)
-	}
-	genFileWriter.Flush()
-
-	fmt.Printf("Generated file: %s\n", generatedFilepath)
 }

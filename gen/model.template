@@ -11,13 +11,13 @@ const (
 )
 
 func {{.Prefix}}ModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE {{.TableName}} ({{.SQLSetup}});")
+	_, err := db.Exec("CREATE TABLE {{.TableName}} ({{.SQL.Setup}});")
 	return err
 }
 
 func {{.Prefix}}ModelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent}}, int, error) {
 	m := &{{.ModelIdent}}{}
-	if err := db.QueryRow("SELECT {{.SQLDBNames}} FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", key).Scan({{.SQLIdentRefs}}); err != nil {
+	if err := db.QueryRow("SELECT {{.SQL.DBNames}} FROM {{.TableName}} WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", key).Scan({{.SQL.IdentRefs}}); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -27,7 +27,7 @@ func {{.Prefix}}ModelGet(db *sql.DB, key {{.PrimaryKey.GoType}}) (*{{.ModelIdent
 }
 
 func {{.Prefix}}ModelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
-	_, err := db.Exec("INSERT INTO {{.TableName}} ({{.SQLDBNames}}) VALUES ({{.SQLPlaceholders}});", {{.SQLIdents}})
+	_, err := db.Exec("INSERT INTO {{.TableName}} ({{.SQL.DBNames}}) VALUES ({{.SQL.Placeholders}});", {{.SQL.Idents}})
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -42,7 +42,7 @@ func {{.Prefix}}ModelInsert(db *sql.DB, m *{{.ModelIdent}}) (int, error) {
 }
 
 func {{.Prefix}}ModelUpdate(db *sql.DB, m *{{.ModelIdent}}) error {
-	_, err := db.Exec("UPDATE {{.TableName}} SET ({{.SQLDBNames}}) = ({{.SQLPlaceholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", {{.SQLIdents}})
+	_, err := db.Exec("UPDATE {{.TableName}} SET ({{.SQL.DBNames}}) = ({{.SQL.Placeholders}}) WHERE {{.PrimaryKey.DBName}} = {{.PKNum}};", {{.SQL.Idents}})
 	return err
 }
 

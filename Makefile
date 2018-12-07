@@ -40,9 +40,14 @@ generate:
 
 prepare: fmt vet
 
-.PHONY: gen dev clean build-bin build
+.PHONY: gen cleangen dev clean build-bin build
+
+GENSRC=$(shell find . -name '*_gen.go')
 
 gen: generate fmt
+
+cleangen:
+	rm $(GENSRC)
 
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
