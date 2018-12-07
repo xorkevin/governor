@@ -49,7 +49,7 @@ type (
 )
 
 func argError() {
-	log.Fatal("Arguments must be [output_file prefix modelname tablename] which are the output filename, generated function prefix, model struct identifier, and db table name respectively")
+	log.Fatal("Arguments must be [output_file prefix tablename modelname] which are the output filename, generated function prefix, db table name, and model struct identifier respectively")
 }
 
 func main() {
@@ -82,8 +82,8 @@ func main() {
 	}
 	generatedFilepath := args[0]
 	prefix := args[1]
-	modelIdent := args[2]
-	tableName := args[3]
+	tableName := args[2]
+	modelIdent := args[3]
 
 	fmt.Println(strings.Join([]string{
 		"Generating model",

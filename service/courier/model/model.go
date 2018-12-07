@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- modellink_gen.go link LinkModel courierlinks
+//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel
 
 const (
 	uidRandSize  = 8

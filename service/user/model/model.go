@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go user Model users
+//go:generate go run ../../../gen/model.go -- model_gen.go user users Model
 
 const (
 	uidTimeSize = 8

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go conf Model config
+//go:generate go run ../../../gen/model.go -- model_gen.go conf config Model
 
 const (
 	configID      = 0

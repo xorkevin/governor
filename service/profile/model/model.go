@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go profile Model profiles
+//go:generate go run ../../../gen/model.go -- model_gen.go profile profiles Model
 
 const (
 	moduleID      = "profilemodel"
