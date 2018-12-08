@@ -25,6 +25,12 @@ const (
 )
 
 type (
+	ASTField struct {
+		Ident  string
+		GoType string
+		Tags   []string
+	}
+
 	ModelDef struct {
 		Ident      string
 		Fields     []ModelField
@@ -105,16 +111,11 @@ func main() {
 	}, "; "))
 	fmt.Printf("Working dir: %s\n", workDir)
 
+	modelDef := findStructs(gofile, modelIdent)
+
 	tpl, err := template.ParseFiles(filepath.Join(workDir, outputTpl))
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	defs := findStructs(gofile, []string{modelIdent})
-
-	modelDef := defs[modelIdent]
-	if modelDef.PrimaryKey == nil {
-		log.Fatal("Model does not contain a primary key")
 	}
 
 	genfile, err := os.OpenFile(generatedFilepath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
@@ -142,7 +143,7 @@ func main() {
 	fmt.Printf("Generated file: %s\n", generatedFilepath)
 }
 
-func findStructs(gofile string, idents []string) map[string]ModelDef {
+func findStructs(gofile string, modelIdent string) ModelDef {
 	fset := token.NewFileSet()
 	root, err := parser.ParseFile(fset, gofile, nil, parser.AllErrors)
 	if err != nil {
@@ -152,48 +153,49 @@ func findStructs(gofile string, idents []string) map[string]ModelDef {
 		log.Fatal("No top level declarations")
 	}
 
-	defs := map[string]ModelDef{}
-	for _, ident := range idents {
-		var modelDef *ast.StructType
-		for _, i := range root.Decls {
-			typeDecl, ok := i.(*ast.GenDecl)
-			if !ok || typeDecl.Tok != token.TYPE {
+	modelDef := findStruct(modelIdent, root.Decls)
+
+	modelASTFields := findFields(modelDef, fset)
+
+	modelFields, primaryField, pkNum := parseModelFields(modelASTFields)
+	if primaryField == nil {
+		log.Fatal("Model does not contain a primary key")
+	}
+	return ModelDef{
+		Ident:      modelIdent,
+		Fields:     modelFields,
+		PrimaryKey: primaryField,
+		PKNum:      pkNum,
+	}
+}
+
+func findStruct(ident string, decls []ast.Decl) *ast.StructType {
+	for _, i := range decls {
+		typeDecl, ok := i.(*ast.GenDecl)
+		if !ok || typeDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, j := range typeDecl.Specs {
+			typeSpec, ok := j.(*ast.TypeSpec)
+			if !ok {
 				continue
 			}
-			for _, j := range typeDecl.Specs {
-				typeSpec, ok := j.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				structType, ok := typeSpec.Type.(*ast.StructType)
-				if !ok || structType.Incomplete {
-					continue
-				}
-				if typeSpec.Name.Name == ident {
-					modelDef = structType
-					break
-				}
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if !ok || structType.Incomplete {
+				continue
 			}
-		}
-
-		if modelDef == nil {
-			log.Fatal("Model struct not found")
-		}
-
-		fields, primaryField, pkNum := parseFields(modelDef, fset)
-		defs[ident] = ModelDef{
-			Ident:      ident,
-			Fields:     fields,
-			PrimaryKey: primaryField,
-			PKNum:      pkNum,
+			if typeSpec.Name.Name == ident {
+				return structType
+			}
 		}
 	}
 
-	return defs
+	log.Fatal(ident + " struct not found")
+	return nil
 }
 
-func parseFields(modelDef *ast.StructType, fset *token.FileSet) ([]ModelField, *ModelField, int) {
-	fields := []ModelField{}
+func findFields(modelDef *ast.StructType, fset *token.FileSet) []ASTField {
+	fields := []ASTField{}
 	for _, field := range modelDef.Fields.List {
 		if field.Tag == nil {
 			continue
@@ -204,11 +206,6 @@ func parseFields(modelDef *ast.StructType, fset *token.FileSet) ([]ModelField, *
 			continue
 		}
 		tags := strings.Split(tagVal, ",")
-		if len(tags) != 2 {
-			log.Fatal("Model field tag must be dbname,dbtype")
-		}
-		dbName := tags[0]
-		dbType := tags[1]
 
 		goType := bytes.Buffer{}
 		if err := printer.Fprint(&goType, fset, field.Type); err != nil {
@@ -219,28 +216,43 @@ func parseFields(modelDef *ast.StructType, fset *token.FileSet) ([]ModelField, *
 			log.Fatal("Only one field allowed per tag")
 		}
 
-		m := ModelField{
+		m := ASTField{
 			Ident:  field.Names[0].Name,
 			GoType: goType.String(),
-			DBName: dbName,
-			DBType: dbType,
+			Tags:   tags,
 		}
 		fields = append(fields, m)
 	}
+	return fields
+}
 
+func parseModelFields(astfields []ASTField) ([]ModelField, *ModelField, int) {
 	hasPK := false
 	pkNum := -1
 	var primaryKey ModelField
 
-	for n, i := range fields {
-		if strings.Contains(i.DBType, "PRIMARY KEY") {
+	fields := []ModelField{}
+	for n, i := range astfields {
+		if len(i.Tags) != 2 {
+			log.Fatal("Model field tag must be dbname,dbtype")
+		}
+		dbName := i.Tags[0]
+		dbType := i.Tags[1]
+		f := ModelField{
+			Ident:  i.Ident,
+			GoType: i.GoType,
+			DBName: dbName,
+			DBType: dbType,
+		}
+		if strings.Contains(dbType, "PRIMARY KEY") {
 			if hasPK {
 				log.Fatal("Model cannot contain two primary keys")
 			}
 			hasPK = true
 			pkNum = n + 1
-			primaryKey = i
+			primaryKey = f
 		}
+		fields = append(fields, f)
 	}
 
 	return fields, &primaryKey, pkNum
