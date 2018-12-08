@@ -50,3 +50,25 @@ func userModelDelete(db *sql.DB, m *Model) error {
 	_, err := db.Exec("DELETE FROM users WHERE userid = $1;", m.Userid)
 	return err
 }
+
+func userModelGetModelByUsername(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE username = $1;", key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+func userModelGetModelByEmail(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE email = $1;", key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}

@@ -14,14 +14,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"text/template"
 )
 
 const (
-	tagFieldName = "model"
-	outputTpl    = "gen/model.template"
+	tagFieldName   = "model"
+	modelOutputTpl = "gen/model.template"
+	queryOutputTpl = "gen/model_query_single.template"
 )
 
 type (
@@ -32,10 +32,10 @@ type (
 	}
 
 	ModelDef struct {
-		Ident      string
-		Fields     []ModelField
-		PrimaryKey *ModelField
-		PKNum      int
+		Ident       string
+		Fields      []ModelField
+		PrimaryKey  ModelField
+		QueryFields []QueryField
 	}
 
 	ModelField struct {
@@ -43,9 +43,17 @@ type (
 		GoType string
 		DBName string
 		DBType string
+		Num    int
 	}
 
-	SQLStrings struct {
+	QueryField struct {
+		Ident  string
+		GoType string
+		DBName string
+		Num    int
+	}
+
+	ModelSQLStrings struct {
 		Setup        string
 		DBNames      string
 		Placeholders string
@@ -53,15 +61,27 @@ type (
 		IdentRefs    string
 	}
 
-	TemplateData struct {
+	ModelTemplateData struct {
 		Generator  string
 		Package    string
 		Prefix     string
 		TableName  string
 		ModelIdent string
 		PrimaryKey ModelField
-		PKNum      string
-		SQL        SQLStrings
+		SQL        ModelSQLStrings
+	}
+
+	QuerySQLStrings struct {
+		DBNames   string
+		IdentRefs string
+	}
+
+	QueryTemplateData struct {
+		Prefix       string
+		TableName    string
+		ModelIdent   string
+		PrimaryField QueryField
+		SQL          QuerySQLStrings
 	}
 )
 
@@ -113,7 +133,12 @@ func main() {
 
 	modelDef := findStructs(gofile, modelIdent)
 
-	tpl, err := template.ParseFiles(filepath.Join(workDir, outputTpl))
+	tplmodel, err := template.ParseFiles(filepath.Join(workDir, modelOutputTpl))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tplquery, err := template.ParseFiles(filepath.Join(workDir, queryOutputTpl))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -125,19 +150,33 @@ func main() {
 	defer genfile.Close()
 	genFileWriter := bufio.NewWriter(genfile)
 
-	tplData := TemplateData{
+	tplData := ModelTemplateData{
 		Generator:  "go generate",
 		Package:    gopackage,
 		Prefix:     prefix,
 		TableName:  tableName,
 		ModelIdent: modelDef.Ident,
-		PrimaryKey: *modelDef.PrimaryKey,
-		PKNum:      "$" + strconv.Itoa(modelDef.PKNum),
-		SQL:        *modelDef.genSQL(),
+		PrimaryKey: modelDef.PrimaryKey,
+		SQL:        modelDef.genModelSQL(),
 	}
-	if err := tpl.Execute(genFileWriter, tplData); err != nil {
+	if err := tplmodel.Execute(genFileWriter, tplData); err != nil {
 		log.Fatal(err)
 	}
+
+	querySQLStrings := modelDef.genQuerySQL()
+	for _, i := range modelDef.QueryFields {
+		tplData := QueryTemplateData{
+			Prefix:       prefix,
+			TableName:    tableName,
+			ModelIdent:   modelDef.Ident,
+			PrimaryField: i,
+			SQL:          querySQLStrings,
+		}
+		if err := tplquery.Execute(genFileWriter, tplData); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	genFileWriter.Flush()
 
 	fmt.Printf("Generated file: %s\n", generatedFilepath)
@@ -157,15 +196,13 @@ func findStructs(gofile string, modelIdent string) ModelDef {
 
 	modelASTFields := findFields(modelDef, fset)
 
-	modelFields, primaryField, pkNum := parseModelFields(modelASTFields)
-	if primaryField == nil {
-		log.Fatal("Model does not contain a primary key")
-	}
+	modelFields, primaryField, queryFields := parseModelFields(modelASTFields)
+
 	return ModelDef{
-		Ident:      modelIdent,
-		Fields:     modelFields,
-		PrimaryKey: primaryField,
-		PKNum:      pkNum,
+		Ident:       modelIdent,
+		Fields:      modelFields,
+		PrimaryKey:  primaryField,
+		QueryFields: queryFields,
 	}
 }
 
@@ -226,39 +263,101 @@ func findFields(modelDef *ast.StructType, fset *token.FileSet) []ASTField {
 	return fields
 }
 
-func parseModelFields(astfields []ASTField) ([]ModelField, *ModelField, int) {
+func parseModelFields(astfields []ASTField) ([]ModelField, ModelField, []QueryField) {
 	hasPK := false
-	pkNum := -1
 	var primaryKey ModelField
+	queryFields := []QueryField{}
 
 	fields := []ModelField{}
 	for n, i := range astfields {
-		if len(i.Tags) != 2 {
-			log.Fatal("Model field tag must be dbname,dbtype")
+		if len(i.Tags) < 2 || len(i.Tags) > 3 {
+			log.Fatal("Model field tag must be dbname,dbtype,flag(optional)")
 		}
 		dbName := i.Tags[0]
 		dbType := i.Tags[1]
+		if len(dbName) == 0 {
+			log.Fatal(i.Ident + " dbname not set")
+		}
+		if len(dbType) == 0 {
+			log.Fatal(i.Ident + " dbtype not set")
+		}
 		f := ModelField{
 			Ident:  i.Ident,
 			GoType: i.GoType,
 			DBName: dbName,
 			DBType: dbType,
+			Num:    n + 1,
 		}
 		if strings.Contains(dbType, "PRIMARY KEY") {
 			if hasPK {
 				log.Fatal("Model cannot contain two primary keys")
 			}
 			hasPK = true
-			pkNum = n + 1
 			primaryKey = f
 		}
 		fields = append(fields, f)
+		if len(i.Tags) == 3 && parseFlag(i.Tags[2]) == flagGet {
+			queryFields = append(queryFields, QueryField{
+				Ident:  i.Ident,
+				GoType: i.GoType,
+				DBName: dbName,
+				Num:    n + 1,
+			})
+		}
 	}
 
-	return fields, &primaryKey, pkNum
+	if !hasPK {
+		log.Fatal("Model does not contain a primary key")
+	}
+
+	return fields, primaryKey, queryFields
 }
 
-func (m *ModelDef) genSQL() *SQLStrings {
+//func parseQueryFields(astfields []ASTField) ([]QueryField, []QueryField) {
+//	hasQF := false
+//	queryFields := []QueryField{}
+//
+//	fields := []QueryField{}
+//	for n, i := range astfields {
+//		if len(i.Tags) < 1 || len(i.Tags) > 2 {
+//			log.Fatal("Field tag must be dbname,flag(optional)")
+//		}
+//		dbName := i.Tags[0]
+//		f := QueryField{
+//			Ident:  i.Ident,
+//			GoType: i.GoType,
+//			DBName: dbName,
+//			Num:    n + 1,
+//		}
+//		fields = append(fields, f)
+//		if len(i.Tags) == 2 && parseFlag(i.Tags[1]) == flagGet {
+//			hasQF = true
+//			queryFields = append(queryFields, f)
+//		}
+//	}
+//
+//	if !hasQF {
+//		log.Fatal("Query does not contain a query field")
+//	}
+//
+//	return fields, queryFields
+//}
+
+const (
+	flagGet = iota
+)
+
+func parseFlag(flag string) int {
+	switch flag {
+	case "get":
+		return flagGet
+	default:
+		log.Fatal("Illegal flag " + flag)
+	}
+	return -1
+}
+
+func (m *ModelDef) genModelSQL() ModelSQLStrings {
 	sqlDefs := make([]string, 0, len(m.Fields))
 	sqlDBNames := make([]string, 0, len(m.Fields))
 	sqlPlaceholders := make([]string, 0, len(m.Fields))
@@ -275,11 +374,28 @@ func (m *ModelDef) genSQL() *SQLStrings {
 		sqlIdentRefs = append(sqlIdentRefs, fmt.Sprintf("&m.%s", i.Ident))
 	}
 
-	return &SQLStrings{
+	return ModelSQLStrings{
 		Setup:        strings.Join(sqlDefs, ", "),
 		DBNames:      strings.Join(sqlDBNames, ", "),
 		Placeholders: strings.Join(sqlPlaceholders, ", "),
 		Idents:       strings.Join(sqlIdents, ", "),
 		IdentRefs:    strings.Join(sqlIdentRefs, ", "),
+	}
+}
+
+func (m *ModelDef) genQuerySQL() QuerySQLStrings {
+	sqlDBNames := make([]string, 0, len(m.Fields))
+	sqlIdentRefs := make([]string, 0, len(m.Fields))
+
+	fmt.Println("Detected fields:")
+	for _, i := range m.Fields {
+		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
+		sqlDBNames = append(sqlDBNames, i.DBName)
+		sqlIdentRefs = append(sqlIdentRefs, fmt.Sprintf("&m.%s", i.Ident))
+	}
+
+	return QuerySQLStrings{
+		DBNames:   strings.Join(sqlDBNames, ", "),
+		IdentRefs: strings.Join(sqlIdentRefs, ", "),
 	}
 }

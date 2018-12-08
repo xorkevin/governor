@@ -59,10 +59,10 @@ type (
 	// Model is the db User model
 	Model struct {
 		Userid       []byte `model:"userid,BYTEA PRIMARY KEY"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE,get"`
 		AuthTags     string
 		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL"`
-		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE"`
+		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE,get"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
@@ -277,16 +277,7 @@ const (
 	moduleIDModGet = moduleID + ".Get"
 )
 
-func (r *repo) getByID(userid []byte) (*Model, *governor.Error) {
-	var m *Model
-	if mUser, code, err := userModelGet(r.db, userid); err != nil {
-		if code == 2 {
-			return nil, governor.NewError(moduleIDModGet, "no user found with that id", 2, http.StatusNotFound)
-		}
-		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
-	} else {
-		m = mUser
-	}
+func (r *repo) getApplyRoles(m *Model) (*Model, *governor.Error) {
 	if err := r.GetRoles(m); err != nil {
 		err.AddTrace(moduleIDModGet)
 		return nil, err
@@ -306,40 +297,45 @@ func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
 		err.AddTrace(moduleIDModGet)
 		return nil, err
 	}
-	return r.getByID(u.Bytes())
+	userid := u.Bytes()
+	var m *Model
+	if mUser, code, err := userModelGet(r.db, userid); err != nil {
+		if code == 2 {
+			return nil, governor.NewError(moduleIDModGet, "no user found with that id", 2, http.StatusNotFound)
+		}
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mUser
+	}
+	return r.getApplyRoles(m)
 }
-
-const (
-	sqlGetByUsername = "SELECT userid FROM " + userModelTableName + " WHERE username=$1;"
-)
 
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
-	var userid []byte
-	if err := r.db.QueryRow(sqlGetByUsername, username).Scan(&userid); err != nil {
-		if err == sql.ErrNoRows {
+	var m *Model
+	if mUser, code, err := userModelGetModelByUsername(r.db, username); err != nil {
+		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "no user found with that username", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mUser
 	}
-	return r.getByID(userid)
+	return r.getApplyRoles(m)
 }
-
-const (
-	moduleIDModGetEm = moduleID + ".GetByEmail"
-	sqlGetByEmail    = "SELECT userid FROM " + userModelTableName + " WHERE email=$1;"
-)
 
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, *governor.Error) {
-	var userid []byte
-	if err := r.db.QueryRow(sqlGetByEmail, email).Scan(&userid); err != nil {
-		if err == sql.ErrNoRows {
+	var m *Model
+	if mUser, code, err := userModelGetModelByEmail(r.db, email); err != nil {
+		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "no user found with that email", 2, http.StatusNotFound)
 		}
 		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+	} else {
+		m = mUser
 	}
-	return r.getByID(userid)
+	return r.getApplyRoles(m)
 }
 
 const (
