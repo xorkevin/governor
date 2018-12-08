@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:generate go run ../../../../gen/model.go -- model_gen.go role userroles Model
+//go:generate go run ../../../../gen/model.go -- model_gen.go role userroles Model useridByRole
 
 const (
 	moduleID      = "rolemodel"
@@ -35,6 +35,11 @@ type (
 		roleid string `model:"roleid,VARCHAR(512) PRIMARY KEY"`
 		Userid string `model:"userid,VARCHAR(255) NOT NULL"`
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
+	}
+
+	useridByRole struct {
+		roleid string `model:"roleid,getgroupeq,ASC,role"`
+		Userid string `model:"userid"`
 	}
 )
 
@@ -85,31 +90,19 @@ func (r *repo) GetByID(userid, role string) (*Model, *governor.Error) {
 
 const (
 	moduleIDModGetRole = moduleIDModel + ".GetByRole"
-	sqlGetByRole       = "SELECT userid FROM " + roleModelTableName + " WHERE role=$1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;"
 )
 
 // GetByRole returns a list of userids with the given role
 func (r *repo) GetByRole(role string, limit, offset int) ([]string, *governor.Error) {
-	m := make([]string, 0, limit)
-	rows, err := r.db.Query(sqlGetByRole, role, limit, offset)
+	m, err := roleModelGetuseridByRoleGroupByroleid(r.db, role, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetRole, err.Error(), 0, http.StatusInternalServerError)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, governor.NewError(moduleIDModGetRole, err.Error(), 0, http.StatusInternalServerError)
-		}
-		m = append(m, s)
+	userids := make([]string, 0, len(m))
+	for _, i := range m {
+		userids = append(userids, i.Userid)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, governor.NewError(moduleIDModGetRole, err.Error(), 0, http.StatusInternalServerError)
-	}
-	return m, nil
+	return userids, nil
 }
 
 const (

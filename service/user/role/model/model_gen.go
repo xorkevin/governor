@@ -50,3 +50,26 @@ func roleModelDelete(db *sql.DB, m *Model) error {
 	_, err := db.Exec("DELETE FROM userroles WHERE roleid = $1;", m.roleid)
 	return err
 }
+
+func roleModelGetuseridByRoleGroupByroleid(db *sql.DB, key string, limit, offset int) ([]useridByRole, error) {
+	res := make([]useridByRole, 0, limit)
+	rows, err := db.Query("SELECT roleid, userid FROM userroles WHERE role = $1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", key, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := useridByRole{}
+		if err := rows.Scan(&m.roleid, &m.Userid); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
