@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go user users Model
+//go:generate go run ../../../gen/model.go -- model_gen.go user users Model Info
 
 const (
 	uidTimeSize = 8
@@ -70,9 +70,9 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   []byte `json:"userid"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
+		Userid   []byte `model:"userid,getgroup,ASC"`
+		Username string `model:"username"`
+		Email    string `model:"email"`
 	}
 )
 
@@ -194,28 +194,12 @@ func (r *repo) GetRoles(m *Model) *governor.Error {
 
 const (
 	moduleIDModGetGroup = moduleID + ".GetGroup"
-	sqlGetGroup         = "SELECT userid, username, email FROM " + userModelTableName + " ORDER BY userid ASC LIMIT $1 OFFSET $2;"
 )
 
 // GetGroup gets information from each user
 func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
-	m := make([]Info, 0, limit)
-	rows, err := r.db.Query(sqlGetGroup, limit, offset)
+	m, err := userModelGetInfoGroupByUserid(r.db, limit, offset)
 	if err != nil {
-		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		i := Info{}
-		if err := rows.Scan(&i.Userid, &i.Username, &i.Email); err != nil {
-			return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
-		}
-		m = append(m, i)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil
