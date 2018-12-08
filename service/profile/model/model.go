@@ -90,7 +90,6 @@ func (m *Model) IDBase64() (string, *governor.Error) {
 
 const (
 	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
-	sqlGetByIDB64    = "SELECT userid, contact_email, bio, profile_image_url FROM " + profileModelTableName + " WHERE userid=$1;"
 )
 
 // GetByIDB64 returns a profile model with the given base64 id
