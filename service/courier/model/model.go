@@ -96,7 +96,6 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 
 const (
 	moduleIDLinkGetGroup = moduleIDLink + ".GetGroup"
-	sqlLinkGetGroup      = "SELECT linkid, url, creatorid, creation_time FROM %s %s ORDER BY creation_time %s LIMIT $1 OFFSET $2;"
 )
 
 // GetLinkGroup retrieves a group of links
