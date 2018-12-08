@@ -2,7 +2,6 @@ package couriermodel
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/util/uid"
@@ -11,7 +10,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel
+//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel linkByCreator
 
 const (
 	uidRandSize  = 8
@@ -26,7 +25,7 @@ type (
 		NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error)
 		NewLinkEmpty() LinkModel
 		NewLinkEmptyPtr() *LinkModel
-		GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error)
+		GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *governor.Error)
 		GetLink(linkid string) (*LinkModel, *governor.Error)
 		InsertLink(m *LinkModel) *governor.Error
 		DeleteLink(m *LinkModel) *governor.Error
@@ -42,7 +41,13 @@ type (
 		LinkID       string `model:"linkid,VARCHAR(64) PRIMARY KEY"`
 		URL          string `model:"url,VARCHAR(2048) NOT NULL"`
 		CreatorID    string `model:"creatorid,VARCHAR(64) NOT NULL"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL),getgroup,DESC"`
+	}
+
+	linkByCreator struct {
+		LinkID       string `model:"linkid"`
+		URL          string `model:"url"`
+		CreationTime int64  `model:"creation_time,getgroupeq,DESC,creatorid"`
 	}
 )
 
@@ -95,37 +100,26 @@ const (
 )
 
 // GetLinkGroup retrieves a group of links
-func (r *repo) GetLinkGroup(limit, offset int, agedesc bool, creatorid string) ([]LinkModel, *governor.Error) {
-	m := make([]LinkModel, 0, limit)
-	arguments := []interface{}{limit, offset}
-
-	dir := "ASC"
-	if agedesc {
-		dir = "DESC"
-	}
-
-	cond := ""
+func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *governor.Error) {
 	if len(creatorid) > 0 {
-		cond = "WHERE creatorid=$3"
-		arguments = append(arguments, creatorid)
-	}
-
-	rows, err := r.db.Query(fmt.Sprintf(sqlLinkGetGroup, linkModelTableName, cond, dir), arguments...)
-	if err != nil {
-		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		i := LinkModel{}
-		if err := rows.Scan(&i.LinkID, &i.URL, &i.CreatorID, &i.CreationTime); err != nil {
+		m, err := linkModelGetlinkByCreatorGroupByCreationTime(r.db, creatorid, limit, offset)
+		if err != nil {
 			return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 		}
-		m = append(m, i)
+		links := make([]LinkModel, 0, len(m))
+		for _, i := range m {
+			links = append(links, LinkModel{
+				LinkID:       i.LinkID,
+				URL:          i.URL,
+				CreatorID:    creatorid,
+				CreationTime: i.CreationTime,
+			})
+		}
+		return links, nil
 	}
-	if err := rows.Err(); err != nil {
+
+	m, err := linkModelGetLinkModelGroupByCreationTime(r.db, limit, offset)
+	if err != nil {
 		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil

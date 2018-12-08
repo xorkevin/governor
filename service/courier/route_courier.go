@@ -107,7 +107,7 @@ func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 		return err
 	}
 
-	res, err := cr.service.GetLinkGroup(amt, ofs, c.QueryParam("asc") != "true", c.QueryParam("creatorid"))
+	res, err := cr.service.GetLinkGroup(amt, ofs, c.QueryParam("creatorid"))
 	if err != nil {
 		return err
 	}

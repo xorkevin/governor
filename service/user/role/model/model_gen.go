@@ -73,3 +73,26 @@ func roleModelGetuseridByRoleGroupByroleid(db *sql.DB, key string, limit, offset
 	}
 	return res, nil
 }
+
+func roleModelGetroleByUseridGroupByroleid(db *sql.DB, key string, limit, offset int) ([]roleByUserid, error) {
+	res := make([]roleByUserid, 0, limit)
+	rows, err := db.Query("SELECT roleid, role FROM userroles WHERE userid = $1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", key, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := roleByUserid{}
+		if err := rows.Scan(&m.roleid, &m.Role); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}

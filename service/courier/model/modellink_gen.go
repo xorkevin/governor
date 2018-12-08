@@ -50,3 +50,49 @@ func linkModelDelete(db *sql.DB, m *LinkModel) error {
 	_, err := db.Exec("DELETE FROM courierlinks WHERE linkid = $1;", m.LinkID)
 	return err
 }
+
+func linkModelGetLinkModelGroupByCreationTime(db *sql.DB, limit, offset int) ([]LinkModel, error) {
+	res := make([]LinkModel, 0, limit)
+	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM courierlinks ORDER BY creation_time DESC LIMIT $1 OFFSET $2;", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := LinkModel{}
+		if err := rows.Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func linkModelGetlinkByCreatorGroupByCreationTime(db *sql.DB, key string, limit, offset int) ([]linkByCreator, error) {
+	res := make([]linkByCreator, 0, limit)
+	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time DESC LIMIT $2 OFFSET $3;", key, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := linkByCreator{}
+		if err := rows.Scan(&m.LinkID, &m.URL, &m.CreationTime); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
