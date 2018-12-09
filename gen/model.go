@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	tagFieldName          = "model"
+	modelTagName          = "model"
+	queryTagName          = "query"
 	modelOutputTpl        = "gen/model.template"
 	queryOutputTpl        = "gen/model_query_single.template"
 	queryGroupOutputTpl   = "gen/model_query_group.template"
@@ -34,10 +35,9 @@ type (
 	}
 
 	ModelDef struct {
-		Ident       string
-		Fields      []ModelField
-		PrimaryKey  ModelField
-		QueryFields []QueryField
+		Ident      string
+		Fields     []ModelField
+		PrimaryKey ModelField
 	}
 
 	QueryDef struct {
@@ -193,33 +193,6 @@ func main() {
 		fmt.Printf("- %s %s\n", i.Ident, i.GoType)
 	}
 
-	querySQLStrings := modelDef.genQuerySQL()
-	for _, i := range modelDef.QueryFields {
-		tplData := QueryTemplateData{
-			Prefix:       prefix,
-			TableName:    tableName,
-			ModelIdent:   modelDef.Ident,
-			PrimaryField: i,
-			SQL:          querySQLStrings,
-		}
-		switch i.Mode {
-		case flagGet:
-			if err := tplquery.Execute(genFileWriter, tplData); err != nil {
-				log.Fatal(err)
-			}
-		case flagGetGroup:
-			if err := tplquerygroup.Execute(genFileWriter, tplData); err != nil {
-				log.Fatal(err)
-			}
-		case flagGetGroupEq:
-			tplData.Condition = i.Cond
-			tplData.ConditionType = seenFields[i.Cond]
-			if err := tplquerygroupeq.Execute(genFileWriter, tplData); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
 	for _, queryDef := range queryDefs {
 		fmt.Println("Detected query " + queryDef.Ident + " fields:")
 		for _, i := range queryDef.Fields {
@@ -268,11 +241,11 @@ func parseDefinitions(gofile string, modelIdent string, queryIdents []string) (M
 		log.Fatal("No top level declarations")
 	}
 
-	modelFields, primaryField, queryFields, seenFields := parseModelFields(findFields(findStruct(modelIdent, root.Decls), fset))
+	modelFields, primaryField, seenFields := parseModelFields(findFields(modelTagName, findStruct(modelIdent, root.Decls), fset))
 
 	queryDefs := []QueryDef{}
 	for _, ident := range queryIdents {
-		fields, queries := parseQueryFields(findFields(findStruct(ident, root.Decls), fset), seenFields)
+		fields, queries := parseQueryFields(findFields(queryTagName, findStruct(ident, root.Decls), fset), seenFields)
 		queryDefs = append(queryDefs, QueryDef{
 			Ident:       ident,
 			Fields:      fields,
@@ -281,10 +254,9 @@ func parseDefinitions(gofile string, modelIdent string, queryIdents []string) (M
 	}
 
 	return ModelDef{
-		Ident:       modelIdent,
-		Fields:      modelFields,
-		PrimaryKey:  primaryField,
-		QueryFields: queryFields,
+		Ident:      modelIdent,
+		Fields:     modelFields,
+		PrimaryKey: primaryField,
 	}, queryDefs, seenFields
 }
 
@@ -313,14 +285,14 @@ func findStruct(ident string, decls []ast.Decl) *ast.StructType {
 	return nil
 }
 
-func findFields(modelDef *ast.StructType, fset *token.FileSet) []ASTField {
+func findFields(tagName string, modelDef *ast.StructType, fset *token.FileSet) []ASTField {
 	fields := []ASTField{}
 	for _, field := range modelDef.Fields.List {
 		if field.Tag == nil {
 			continue
 		}
 		structTag := reflect.StructTag(strings.Trim(field.Tag.Value, "`"))
-		tagVal, ok := structTag.Lookup(tagFieldName)
+		tagVal, ok := structTag.Lookup(tagName)
 		if !ok {
 			continue
 		}
@@ -345,17 +317,16 @@ func findFields(modelDef *ast.StructType, fset *token.FileSet) []ASTField {
 	return fields
 }
 
-func parseModelFields(astfields []ASTField) ([]ModelField, ModelField, []QueryField, map[string]string) {
+func parseModelFields(astfields []ASTField) ([]ModelField, ModelField, map[string]string) {
 	hasPK := false
 	var primaryKey ModelField
-	queryFields := []QueryField{}
 
 	seenFields := map[string]string{}
 
 	fields := []ModelField{}
 	for n, i := range astfields {
-		if len(i.Tags) < 2 || len(i.Tags) > 5 {
-			log.Fatal("Model field tag must be dbname,dbtype,flag(optional),order(optional),eqcond(optional)")
+		if len(i.Tags) != 2 {
+			log.Fatal("Model field tag must be dbname,dbtype")
 		}
 		dbName := i.Tags[0]
 		dbType := i.Tags[1]
@@ -384,59 +355,13 @@ func parseModelFields(astfields []ASTField) ([]ModelField, ModelField, []QueryFi
 			primaryKey = f
 		}
 		fields = append(fields, f)
-		if len(i.Tags) > 2 {
-			tagflag := parseFlag(i.Tags[2])
-			switch tagflag {
-			case flagGet:
-				queryFields = append(queryFields, QueryField{
-					Ident:  i.Ident,
-					GoType: i.GoType,
-					DBName: dbName,
-					Num:    n + 1,
-					Mode:   tagflag,
-				})
-			case flagGetGroup:
-				if len(i.Tags) < 4 {
-					log.Fatal("Must provide order for field " + i.Ident)
-				}
-				order := i.Tags[3]
-				validOrder(order)
-				queryFields = append(queryFields, QueryField{
-					Ident:  i.Ident,
-					GoType: i.GoType,
-					DBName: dbName,
-					Num:    n + 1,
-					Mode:   tagflag,
-					Order:  order,
-				})
-			case flagGetGroupEq:
-				if len(i.Tags) < 4 {
-					log.Fatal("Must provide order for field " + i.Ident)
-				}
-				if len(i.Tags) < 5 {
-					log.Fatal("Must provide field for eq condition for field " + i.Ident)
-				}
-				order := i.Tags[3]
-				cond := i.Tags[4]
-				validOrder(order)
-				queryFields = append(queryFields, QueryField{
-					Ident:  i.Ident,
-					GoType: i.GoType,
-					DBName: dbName,
-					Num:    n + 1,
-					Mode:   tagflag,
-					Order:  order,
-					Cond:   cond,
-				})
-			}
-		}
 	}
 
 	if !hasPK {
 		log.Fatal("Model does not contain a primary key")
 	}
 
-	return fields, primaryKey, queryFields, seenFields
+	return fields, primaryKey, seenFields
 }
 
 func parseQueryFields(astfields []ASTField, seenFields map[string]string) ([]QueryField, []QueryField) {

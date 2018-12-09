@@ -38,13 +38,13 @@ type (
 	}
 
 	useridByRole struct {
-		roleid string `model:"roleid,getgroupeq,ASC,role"`
-		Userid string `model:"userid"`
+		roleid string `query:"roleid,getgroupeq,ASC,role"`
+		Userid string `query:"userid"`
 	}
 
 	roleByUserid struct {
-		roleid string `model:"roleid,getgroupeq,ASC,userid"`
-		Role   string `model:"role"`
+		roleid string `query:"roleid,getgroupeq,ASC,userid"`
+		Role   string `query:"role"`
 	}
 )
 

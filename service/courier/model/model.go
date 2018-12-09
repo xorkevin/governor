@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel linkByCreator
+//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel LinkModel linkByCreator
 
 const (
 	uidRandSize  = 8
@@ -38,16 +38,16 @@ type (
 
 	// LinkModel is the db link model
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(64) PRIMARY KEY"`
-		URL          string `model:"url,VARCHAR(2048) NOT NULL"`
-		CreatorID    string `model:"creatorid,VARCHAR(64) NOT NULL"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL),getgroup,DESC"`
+		LinkID       string `model:"linkid,VARCHAR(64) PRIMARY KEY" query:"linkid"`
+		URL          string `model:"url,VARCHAR(2048) NOT NULL" query:"url"`
+		CreatorID    string `model:"creatorid,VARCHAR(64) NOT NULL" query:"creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)" query:"creation_time,getgroup,DESC"`
 	}
 
 	linkByCreator struct {
-		LinkID       string `model:"linkid"`
-		URL          string `model:"url"`
-		CreationTime int64  `model:"creation_time,getgroupeq,DESC,creatorid"`
+		LinkID       string `query:"linkid"`
+		URL          string `query:"url"`
+		CreationTime int64  `query:"creation_time,getgroupeq,DESC,creatorid"`
 	}
 )
 

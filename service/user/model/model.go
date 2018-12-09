@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- model_gen.go user users Model Info
+//go:generate go run ../../../gen/model.go -- model_gen.go user users Model Model Info
 
 const (
 	uidTimeSize = 8
@@ -58,21 +58,21 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       []byte `model:"userid,BYTEA PRIMARY KEY"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE,get"`
+		Userid       []byte `model:"userid,BYTEA PRIMARY KEY" query:"userid"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
 		AuthTags     string
-		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL"`
-		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE,get"`
-		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL"`
-		LastName     string `model:"last_name,VARCHAR(255) NOT NULL"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
+		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL" query:"pass_hash"`
+		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE" query:"email,get"`
+		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
+		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   []byte `model:"userid,getgroup,ASC"`
-		Username string `model:"username"`
-		Email    string `model:"email"`
+		Userid   []byte `query:"userid,getgroup,ASC"`
+		Username string `query:"username"`
+		Email    string `query:"email"`
 	}
 )
 
