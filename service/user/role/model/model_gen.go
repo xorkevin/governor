@@ -51,9 +51,13 @@ func roleModelDelete(db *sql.DB, m *Model) error {
 	return err
 }
 
-func roleModelGetuseridByRoleGroupByroleid(db *sql.DB, key string, limit, offset int) ([]useridByRole, error) {
-	res := make([]useridByRole, 0, limit)
-	rows, err := db.Query("SELECT roleid, userid FROM userroles WHERE role = $1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", key, limit, offset)
+func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qUserid, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]qUserid, 0, limit)
+	rows, err := db.Query("SELECT userid FROM userroles WHERE role = $1 ORDER BY userid $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +66,8 @@ func roleModelGetuseridByRoleGroupByroleid(db *sql.DB, key string, limit, offset
 		}
 	}()
 	for rows.Next() {
-		m := useridByRole{}
-		if err := rows.Scan(&m.roleid, &m.Userid); err != nil {
+		m := qUserid{}
+		if err := rows.Scan(&m.Userid); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -74,9 +78,13 @@ func roleModelGetuseridByRoleGroupByroleid(db *sql.DB, key string, limit, offset
 	return res, nil
 }
 
-func roleModelGetroleByUseridGroupByroleid(db *sql.DB, key string, limit, offset int) ([]roleByUserid, error) {
-	res := make([]roleByUserid, 0, limit)
-	rows, err := db.Query("SELECT roleid, role FROM userroles WHERE userid = $1 ORDER BY roleid ASC LIMIT $2 OFFSET $3;", key, limit, offset)
+func roleModelGetqRoleEqUseridOrdRole(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qRole, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]qRole, 0, limit)
+	rows, err := db.Query("SELECT role FROM userroles WHERE userid = $1 ORDER BY role $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +93,8 @@ func roleModelGetroleByUseridGroupByroleid(db *sql.DB, key string, limit, offset
 		}
 	}()
 	for rows.Next() {
-		m := roleByUserid{}
-		if err := rows.Scan(&m.roleid, &m.Role); err != nil {
+		m := qRole{}
+		if err := rows.Scan(&m.Role); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

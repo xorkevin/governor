@@ -73,9 +73,13 @@ func userModelGetModelByEmail(db *sql.DB, key string) (*Model, int, error) {
 	return m, 0, nil
 }
 
-func userModelGetInfoGroupByUserid(db *sql.DB, limit, offset int) ([]Info, error) {
+func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]Info, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid ASC LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid $1 LIMIT $2 OFFSET $3;", order, limit, offset)
 	if err != nil {
 		return nil, err
 	}

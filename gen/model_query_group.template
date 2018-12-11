@@ -1,7 +1,11 @@
 
-func {{.Prefix}}ModelGet{{.ModelIdent}}GroupBy{{.PrimaryField.Ident}}(db *sql.DB, limit, offset int) ([]{{.ModelIdent}}, error) {
+func {{.Prefix}}ModelGet{{.ModelIdent}}Ord{{.PrimaryField.Ident}}(db *sql.DB, orderasc bool, limit, offset int) ([]{{.ModelIdent}}, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
 	res := make([]{{.ModelIdent}}, 0, limit)
-	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} ORDER BY {{.PrimaryField.DBName}} {{.PrimaryField.Order}} LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} ORDER BY {{.PrimaryField.DBName}} $1 LIMIT $2 OFFSET $3;", order, limit, offset)
 	if err != nil {
 		return nil, err
 	}

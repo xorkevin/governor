@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel LinkModel linkByCreator
+//go:generate go run ../../../gen/model.go -- modellink_gen.go link courierlinks LinkModel LinkModel qLink
 
 const (
 	uidRandSize  = 8
@@ -41,13 +41,13 @@ type (
 		LinkID       string `model:"linkid,VARCHAR(64) PRIMARY KEY" query:"linkid"`
 		URL          string `model:"url,VARCHAR(2048) NOT NULL" query:"url"`
 		CreatorID    string `model:"creatorid,VARCHAR(64) NOT NULL" query:"creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)" query:"creation_time,getgroup,DESC"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)" query:"creation_time,getgroup"`
 	}
 
-	linkByCreator struct {
+	qLink struct {
 		LinkID       string `query:"linkid"`
 		URL          string `query:"url"`
-		CreationTime int64  `query:"creation_time,getgroupeq,DESC,creatorid"`
+		CreationTime int64  `query:"creation_time,getgroupeq,creatorid"`
 	}
 )
 
@@ -101,7 +101,7 @@ const (
 // GetLinkGroup retrieves a group of links
 func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *governor.Error) {
 	if len(creatorid) > 0 {
-		m, err := linkModelGetlinkByCreatorGroupByCreationTime(r.db, creatorid, limit, offset)
+		m, err := linkModelGetqLinkEqCreatorIDOrdCreationTime(r.db, creatorid, false, limit, offset)
 		if err != nil {
 			return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 		}
@@ -117,7 +117,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *
 		return links, nil
 	}
 
-	m, err := linkModelGetLinkModelGroupByCreationTime(r.db, limit, offset)
+	m, err := linkModelGetLinkModelOrdCreationTime(r.db, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}

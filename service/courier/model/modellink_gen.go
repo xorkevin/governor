@@ -51,9 +51,13 @@ func linkModelDelete(db *sql.DB, m *LinkModel) error {
 	return err
 }
 
-func linkModelGetLinkModelGroupByCreationTime(db *sql.DB, limit, offset int) ([]LinkModel, error) {
+func linkModelGetLinkModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]LinkModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
 	res := make([]LinkModel, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM courierlinks ORDER BY creation_time DESC LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM courierlinks ORDER BY creation_time $1 LIMIT $2 OFFSET $3;", order, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -74,9 +78,13 @@ func linkModelGetLinkModelGroupByCreationTime(db *sql.DB, limit, offset int) ([]
 	return res, nil
 }
 
-func linkModelGetlinkByCreatorGroupByCreationTime(db *sql.DB, key string, limit, offset int) ([]linkByCreator, error) {
-	res := make([]linkByCreator, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time DESC LIMIT $2 OFFSET $3;", key, limit, offset)
+func linkModelGetqLinkEqCreatorIDOrdCreationTime(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qLink, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]qLink, 0, limit)
+	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +93,7 @@ func linkModelGetlinkByCreatorGroupByCreationTime(db *sql.DB, key string, limit,
 		}
 	}()
 	for rows.Next() {
-		m := linkByCreator{}
+		m := qLink{}
 		if err := rows.Scan(&m.LinkID, &m.URL, &m.CreationTime); err != nil {
 			return nil, err
 		}

@@ -70,7 +70,7 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   []byte `query:"userid,getgroup,ASC"`
+		Userid   []byte `query:"userid,getgroup"`
 		Username string `query:"username"`
 		Email    string `query:"email"`
 	}
@@ -198,7 +198,7 @@ const (
 
 // GetGroup gets information from each user
 func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
-	m, err := userModelGetInfoGroupByUserid(r.db, limit, offset)
+	m, err := userModelGetInfoOrdUserid(r.db, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
 	}

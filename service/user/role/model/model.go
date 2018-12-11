@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:generate go run ../../../../gen/model.go -- model_gen.go role userroles Model useridByRole roleByUserid
+//go:generate go run ../../../../gen/model.go -- model_gen.go role userroles Model qUserid qRole
 
 const (
 	moduleID      = "rolemodel"
@@ -37,14 +37,12 @@ type (
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
 
-	useridByRole struct {
-		roleid string `query:"roleid,getgroupeq,ASC,role"`
-		Userid string `query:"userid"`
+	qUserid struct {
+		Userid string `query:"userid,getgroupeq,role"`
 	}
 
-	roleByUserid struct {
-		roleid string `query:"roleid,getgroupeq,ASC,userid"`
-		Role   string `query:"role"`
+	qRole struct {
+		Role string `query:"role,getgroupeq,userid"`
 	}
 )
 
@@ -99,7 +97,7 @@ const (
 
 // GetByRole returns a list of userids with the given role
 func (r *repo) GetByRole(role string, limit, offset int) ([]string, *governor.Error) {
-	m, err := roleModelGetuseridByRoleGroupByroleid(r.db, role, limit, offset)
+	m, err := roleModelGetqUseridEqRoleOrdUserid(r.db, role, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetRole, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -116,7 +114,7 @@ const (
 
 // GetUserRoles returns a list of a user's roles
 func (r *repo) GetUserRoles(userid string, limit, offset int) ([]string, *governor.Error) {
-	m, err := roleModelGetroleByUseridGroupByroleid(r.db, userid, limit, offset)
+	m, err := roleModelGetqRoleEqUseridOrdRole(r.db, userid, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetUser, err.Error(), 0, http.StatusInternalServerError)
 	}
