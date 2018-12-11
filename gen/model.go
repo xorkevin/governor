@@ -385,14 +385,18 @@ func parseQueryFields(astfields []ASTField, seenFields map[string]ModelField) ([
 			f.Mode = tagflag
 			switch tagflag {
 			case flagGetGroupEq:
-				if len(i.Tags) < 3 {
-					log.Fatal("Must provide field for eq condition for field " + i.Ident)
+				if len(i.Tags) != 3 {
+					log.Fatal("Field tag must be dbname,flag,eqcond for field " + i.Ident)
 				}
 				cond := i.Tags[2]
 				if modelField, ok := seenFields[cond]; ok {
 					f.Cond = modelField
 				} else {
 					log.Fatal("Invalid eq condition field for field " + i.Ident)
+				}
+			default:
+				if len(i.Tags) != 2 {
+					log.Fatal("Field tag must be dbname,flag for field " + i.Ident)
 				}
 			}
 			queryFields = append(queryFields, f)
