@@ -11,7 +11,7 @@ const (
 )
 
 func roleModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE userroles (roleid VARCHAR(512) PRIMARY KEY, userid VARCHAR(255) NOT NULL, role VARCHAR(255) NOT NULL);")
+	_, err := db.Exec("CREATE TABLE userroles (roleid VARCHAR(511) PRIMARY KEY, userid VARCHAR(255) NOT NULL, role VARCHAR(255) NOT NULL);")
 	return err
 }
 

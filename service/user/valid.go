@@ -11,6 +11,7 @@ import (
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
 	lengthCap        = 128
+	lengthCapEmail   = 255
 	lengthCapLarge   = 4096
 	amountCap        = 1024
 )
@@ -38,7 +39,7 @@ func validPassword(password string, size int) *governor.Error {
 }
 
 func validEmail(email string) *governor.Error {
-	if !emailRegex.MatchString(email) || len(email) > lengthCapLarge {
+	if !emailRegex.MatchString(email) || len(email) > lengthCapEmail {
 		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
 	}
 	return nil

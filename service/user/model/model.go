@@ -62,7 +62,7 @@ type (
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
 		AuthTags     string
 		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL" query:"pass_hash"`
-		Email        string `model:"email,VARCHAR(4096) NOT NULL UNIQUE" query:"email,get"`
+		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,get"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`

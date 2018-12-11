@@ -32,9 +32,9 @@ type (
 	// Model is the db profile model
 	Model struct {
 		Userid []byte `model:"userid,BYTEA PRIMARY KEY"`
-		Email  string `model:"contact_email,VARCHAR(4096)"`
-		Bio    string `model:"bio,VARCHAR(4096)"`
-		Image  string `model:"profile_image_url,VARCHAR(4096)"`
+		Email  string `model:"contact_email,VARCHAR(255)"`
+		Bio    string `model:"bio,VARCHAR(4095)"`
+		Image  string `model:"profile_image_url,VARCHAR(4095)"`
 	}
 )
 
