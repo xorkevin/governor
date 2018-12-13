@@ -11,7 +11,7 @@ const (
 )
 
 func linkModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(63) NOT NULL, creation_time BIGINT NOT NULL));")
+	_, err := db.Exec("CREATE TABLE courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	return err
 }
 
@@ -57,7 +57,7 @@ func linkModelGetLinkModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offs
 		order = "ASC"
 	}
 	res := make([]LinkModel, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM courierlinks ORDER BY creation_time $1 LIMIT $2 OFFSET $3;", order, limit, offset)
+	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM courierlinks ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func linkModelGetqLinkEqCreatorIDOrdCreationTime(db *sql.DB, key string, orderas
 		order = "ASC"
 	}
 	res := make([]qLink, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
+	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
 	if err != nil {
 		return nil, err
 	}

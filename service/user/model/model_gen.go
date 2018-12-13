@@ -79,7 +79,7 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid $1 LIMIT $2 OFFSET $3;", order, limit, offset)
+	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}

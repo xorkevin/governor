@@ -5,7 +5,7 @@ func {{.Prefix}}ModelGet{{.ModelIdent}}Eq{{.PrimaryField.Cond.Ident}}Ord{{.Prima
 		order = "ASC"
 	}
 	res := make([]{{.ModelIdent}}, 0, limit)
-	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} WHERE {{.PrimaryField.Cond.DBName}} = $1 ORDER BY {{.PrimaryField.DBName}} $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
+	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} WHERE {{.PrimaryField.Cond.DBName}} = $1 ORDER BY {{.PrimaryField.DBName}} "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
 	if err != nil {
 		return nil, err
 	}

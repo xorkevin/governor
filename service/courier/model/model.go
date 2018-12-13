@@ -40,8 +40,8 @@ type (
 	LinkModel struct {
 		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
-		CreatorID    string `model:"creatorid,VARCHAR(63) NOT NULL" query:"creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL)" query:"creation_time,getgroup"`
+		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup"`
 	}
 
 	qLink struct {

@@ -5,7 +5,7 @@ func {{.Prefix}}ModelGet{{.ModelIdent}}Ord{{.PrimaryField.Ident}}(db *sql.DB, or
 		order = "ASC"
 	}
 	res := make([]{{.ModelIdent}}, 0, limit)
-	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} ORDER BY {{.PrimaryField.DBName}} $1 LIMIT $2 OFFSET $3;", order, limit, offset)
+	rows, err := db.Query("SELECT {{.SQL.DBNames}} FROM {{.TableName}} ORDER BY {{.PrimaryField.DBName}} "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}

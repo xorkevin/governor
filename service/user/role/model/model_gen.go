@@ -57,7 +57,7 @@ func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, key string, orderasc bool, l
 		order = "ASC"
 	}
 	res := make([]qUserid, 0, limit)
-	rows, err := db.Query("SELECT userid FROM userroles WHERE role = $1 ORDER BY userid $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
+	rows, err := db.Query("SELECT userid FROM userroles WHERE role = $1 ORDER BY userid "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func roleModelGetqRoleEqUseridOrdRole(db *sql.DB, key string, orderasc bool, lim
 		order = "ASC"
 	}
 	res := make([]qRole, 0, limit)
-	rows, err := db.Query("SELECT role FROM userroles WHERE userid = $1 ORDER BY role $2 LIMIT $3 OFFSET $4;", key, order, limit, offset)
+	rows, err := db.Query("SELECT role FROM userroles WHERE userid = $1 ORDER BY role "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
 	if err != nil {
 		return nil, err
 	}
