@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
-	"github.com/hackform/governor/service/user/model"
 	"net/http"
 )
 
@@ -18,7 +17,7 @@ const (
 type (
 	Repo interface {
 		New(userid, email, bio string) (*Model, *governor.Error)
-		GetByIDB64(idb64 string) (*Model, *governor.Error)
+		GetByID(userid string) (*Model, *governor.Error)
 		Insert(m *Model) *governor.Error
 		Update(m *Model) *governor.Error
 		Delete(m *Model) *governor.Error
@@ -31,7 +30,7 @@ type (
 
 	// Model is the db profile model
 	Model struct {
-		Userid []byte `model:"userid,BYTEA PRIMARY KEY"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY"`
 		Email  string `model:"contact_email,VARCHAR(255)"`
 		Bio    string `model:"bio,VARCHAR(4095)"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)"`
@@ -48,63 +47,25 @@ func New(conf governor.Config, l governor.Logger, db db.Database) Repo {
 
 // New creates a new profile model
 func (r *repo) New(userid, email, bio string) (*Model, *governor.Error) {
-	m := Model{
-		Email: email,
-		Bio:   bio,
-	}
-	if err := m.SetIDB64(userid); err != nil {
-		err.SetErrorUser()
-		return nil, err
-	}
-	return &m, nil
+	return &Model{
+		Userid: userid,
+		Email:  email,
+		Bio:    bio,
+	}, nil
 }
 
 const (
-	moduleIDModSetIDB64 = moduleIDModel + ".SetIDB64"
+	moduleIDModGet = moduleIDModel + ".GetByID"
 )
 
-// SetIDB64 sets the userid of the model from a base64 value
-func (m *Model) SetIDB64(idb64 string) *governor.Error {
-	u, err := usermodel.ParseB64ToUID(idb64)
-	if err != nil {
-		err.AddTrace(moduleIDModSetIDB64)
-		return err
-	}
-	m.Userid = u.Bytes()
-	return nil
-}
-
-const (
-	moduleIDModB64 = moduleIDModel + ".IDBase64"
-)
-
-// IDBase64 returns the userid as a base64 encoded string
-func (m *Model) IDBase64() (string, *governor.Error) {
-	u, err := usermodel.ParseUIDToB64(m.Userid)
-	if err != nil {
-		err.AddTrace(moduleIDModB64)
-		return "", err
-	}
-	return u.Base64(), nil
-}
-
-const (
-	moduleIDModGet64 = moduleIDModel + ".GetByIDB64"
-)
-
-// GetByIDB64 returns a profile model with the given base64 id
-func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
-	u, err := usermodel.ParseB64ToUID(idb64)
-	if err != nil {
-		err.AddTrace(moduleIDModGet64)
-		return nil, err
-	}
+// GetByID returns a profile model with the given base64 id
+func (r *repo) GetByID(userid string) (*Model, *governor.Error) {
 	var m *Model
-	if mProfile, code, err := profileModelGet(r.db, u.Bytes()); err != nil {
+	if mProfile, code, err := profileModelGet(r.db, userid); err != nil {
 		if code == 2 {
-			return nil, governor.NewError(moduleIDModGet64, "no profile found with that id", 2, http.StatusNotFound)
+			return nil, governor.NewError(moduleIDModGet, "no profile found with that id", 2, http.StatusNotFound)
 		}
-		return nil, governor.NewError(moduleIDModGet64, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
 	} else {
 		m = mProfile
 	}

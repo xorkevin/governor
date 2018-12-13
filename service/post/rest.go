@@ -195,7 +195,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group) error {
 		return c.NoContent(http.StatusNoContent)
 	}, p.archiveGate("postid", true), gate.OwnerF(p.gate, func(c echo.Context) (string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
-		return m.UserIDBase64()
+		return m.Userid, nil
 	}))
 
 	r.PATCH("/:postid/mod/:action", func(c echo.Context) error {
@@ -366,12 +366,7 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group) error {
 		return c.NoContent(http.StatusNoContent)
 	}, p.archiveGate("postid", false), gate.OwnerModOrAdminF(p.gate, func(c echo.Context) (string, string, *governor.Error) {
 		m := c.Get("postmodel").(*postmodel.Model)
-		s, err := m.UserIDBase64()
-		if err != nil {
-			err.AddTrace(moduleIDPost)
-			return "", "", err
-		}
-		return s, m.Tag, nil
+		return m.Userid, m.Tag, nil
 	}))
 
 	r.GET("/:postid", func(c echo.Context) error {
@@ -392,11 +387,10 @@ func (p *postService) mountRest(conf governor.Config, r *echo.Group) error {
 		}
 
 		postid, _ := m.IDBase64()
-		userid, _ := m.UserIDBase64()
 
 		r := resPost{
 			Postid:       postid,
-			Userid:       userid,
+			Userid:       m.Userid,
 			Tag:          m.Tag,
 			Title:        m.Title,
 			Locked:       m.Locked,

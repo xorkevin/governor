@@ -33,7 +33,7 @@ type (
 	// Model is the db User role model
 	Model struct {
 		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY"`
-		Userid string `model:"userid,VARCHAR(255) NOT NULL"`
+		Userid string `model:"userid,VARCHAR(31) NOT NULL"`
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
 

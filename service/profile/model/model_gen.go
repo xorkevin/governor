@@ -11,11 +11,11 @@ const (
 )
 
 func profileModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE profiles (userid BYTEA PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
+	_, err := db.Exec("CREATE TABLE profiles (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
 	return err
 }
 
-func profileModelGet(db *sql.DB, key []byte) (*Model, int, error) {
+func profileModelGet(db *sql.DB, key string) (*Model, int, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid = $1;", key).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
 		if err == sql.ErrNoRows {

@@ -86,9 +86,8 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 		return nil, err
 	}
 
-	userid, _ := m.IDBase64()
 	return &resUserUpdate{
-		Userid:   userid,
+		Userid:   m.Userid,
 		Username: m.Username,
 	}, nil
 }
@@ -115,9 +114,8 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	userid, _ := m.IDBase64()
 	hookProps := HookProps{
-		Userid:    userid,
+		Userid:    m.Userid,
 		Username:  m.Username,
 		Email:     m.Email,
 		FirstName: m.FirstName,
@@ -134,18 +132,18 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 	}
 
 	u.logger.Info("user created", moduleIDUser, "create user", 0, map[string]string{
-		"userid":   userid,
+		"userid":   m.Userid,
 		"username": m.Username,
 	})
 
 	return &resUserUpdate{
-		Userid:   userid,
+		Userid:   m.Userid,
 		Username: m.Username,
 	}, nil
 }
 
 func (u *userService) DeleteUser(userid string, username string, password string) *governor.Error {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return err

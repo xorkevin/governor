@@ -233,7 +233,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 			return "", err
 		}
 		c.Set("commentmodel", m)
-		return m.UserIDBase64()
+		return m.Userid, nil
 	}))
 
 	r.PATCH("/:postid/c/:commentid/:action", func(c echo.Context) error {
@@ -367,7 +367,7 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 		}
 
 		mComment.Content = deleteEscapeSequence
-		mComment.Userid = []byte{0, 0}
+		mComment.Userid = ""
 		mComment.Up = 0
 		mComment.Down = 0
 		mComment.Absolute = 0
@@ -389,13 +389,8 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 			err.AddTrace(moduleIDComments)
 			return "", "", err
 		}
-		s, err := m.UserIDBase64()
-		if err != nil {
-			err.AddTrace(moduleIDPost)
-			return "", "", err
-		}
 		c.Set("commentmodel", m)
-		return s, post.Tag, nil
+		return m.Userid, post.Tag, nil
 	}))
 
 	r.GET("/:postid/c", func(c echo.Context) error {
@@ -431,12 +426,11 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 			commentid, _ := i.IDBase64()
 			parentid, _ := i.ParentIDBase64()
 			postid, _ := i.PostIDBase64()
-			userid, _ := i.UserIDBase64()
 			r := resGetComment{
 				Commentid:    commentid,
 				Parentid:     parentid,
 				Postid:       postid,
-				Userid:       userid,
+				Userid:       i.Userid,
 				Up:           i.Up,
 				Down:         i.Down,
 				Absolute:     i.Absolute,
@@ -484,12 +478,11 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 		commentid, _ := comment.IDBase64()
 		parentid, _ := comment.ParentIDBase64()
 		postid, _ := comment.PostIDBase64()
-		userid, _ := comment.UserIDBase64()
 		r := resGetComment{
 			Commentid:    commentid,
 			Parentid:     parentid,
 			Postid:       postid,
-			Userid:       userid,
+			Userid:       comment.Userid,
 			Up:           comment.Up,
 			Down:         comment.Down,
 			Absolute:     comment.Absolute,
@@ -546,12 +539,11 @@ func (p *postService) mountComments(conf governor.Config, r *echo.Group) error {
 			commentid, _ := i.IDBase64()
 			parentid, _ := i.ParentIDBase64()
 			postid, _ := i.PostIDBase64()
-			userid, _ := i.UserIDBase64()
 			r := resGetComment{
 				Commentid:    commentid,
 				Parentid:     parentid,
 				Postid:       postid,
-				Userid:       userid,
+				Userid:       i.Userid,
 				Up:           i.Up,
 				Down:         i.Down,
 				Absolute:     i.Absolute,

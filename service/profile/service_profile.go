@@ -38,7 +38,7 @@ func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUp
 }
 
 func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Error {
-	m, err := p.repo.GetByIDB64(userid)
+	m, err := p.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -58,7 +58,7 @@ func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Erro
 }
 
 func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) *governor.Error {
-	m, err := p.repo.GetByIDB64(userid)
+	m, err := p.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -81,7 +81,7 @@ func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64
 }
 
 func (p *profileService) DeleteProfile(userid string) *governor.Error {
-	m, err := p.repo.GetByIDB64(userid)
+	m, err := p.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -98,7 +98,7 @@ func (p *profileService) DeleteProfile(userid string) *governor.Error {
 }
 
 func (p *profileService) GetProfile(userid string) (*resProfileModel, *governor.Error) {
-	m, err := p.repo.GetByIDB64(userid)
+	m, err := p.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()

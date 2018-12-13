@@ -44,11 +44,6 @@ const (
 
 // Generate returns a new jwt token from a user model
 func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id string) (string, *Claims, *governor.Error) {
-	userid, err := u.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleTokenGenerate)
-		return "", nil, err
-	}
 	now := time.Now().Unix()
 	claims := &Claims{
 		StandardClaims: jwt.StandardClaims{
@@ -58,7 +53,7 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 			IssuedAt:  now,
 			ExpiresAt: now + duration,
 		},
-		Userid:   userid,
+		Userid:   u.Userid,
 		AuthTags: u.AuthTags,
 	}
 	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)

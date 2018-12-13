@@ -38,7 +38,7 @@ type (
 
 // Login authenticates a user and returns auth tokens
 func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent string) (bool, *resUserAuth, *governor.Error) {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDAuth)
 		return false, nil, err

@@ -18,9 +18,8 @@ type (
 )
 
 func getUserPublicFields(m *usermodel.Model) *ResUserGetPublic {
-	userid, _ := m.IDBase64()
 	return &ResUserGetPublic{
-		Userid:       userid,
+		Userid:       m.Userid,
 		Username:     m.Username,
 		AuthTags:     m.AuthTags,
 		FirstName:    m.FirstName,
@@ -46,7 +45,7 @@ func getUserFields(m *usermodel.Model) *ResUserGet {
 
 // GetByIDPublic gets and returns the public fields of the user
 func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor.Error) {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -56,7 +55,7 @@ func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor
 
 // GetByID gets and returns all fields of the user
 func (u *userService) GetByID(userid string) (*ResUserGet, *governor.Error) {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		err.AddTrace(moduleIDUser)
 		return nil, err
@@ -116,10 +115,8 @@ func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, *gov
 
 	info := make([]resUserInfo, 0, len(infoSlice))
 	for _, i := range infoSlice {
-		useruid, _ := i.IDBase64()
-
 		info = append(info, resUserInfo{
-			Userid:   useruid,
+			Userid:   i.Userid,
 			Username: i.Username,
 			Email:    i.Email,
 		})
@@ -151,10 +148,8 @@ func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPubli
 
 	info := make([]resUserInfoPublic, 0, len(infoSlice))
 	for _, i := range infoSlice {
-		useruid, _ := i.IDBase64()
-
 		info = append(info, resUserInfoPublic{
-			Userid:   useruid,
+			Userid:   i.Userid,
 			Username: i.Username,
 		})
 	}

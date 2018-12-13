@@ -8,7 +8,7 @@ import (
 )
 
 func (u *userService) UpdateUser(userid string, ruser reqUserPut) *governor.Error {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -34,7 +34,7 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		return err
 	}
 
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()

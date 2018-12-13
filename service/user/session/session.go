@@ -31,17 +31,17 @@ type (
 
 // New creates a new session
 func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, *governor.Error) {
-	id, err := uid.New(4, 8, 4, m.Userid)
+	userid, err := usermodel.ParseB64ID(m.Userid)
 	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
-	userid, err := m.IDBase64()
+	id, err := uid.New(4, 8, 4, userid.Bytes())
 	if err != nil {
 		err.AddTrace(moduleID)
 		return nil, err
 	}
-	return FromSessionID(id.Base64(), userid, ipAddress, userAgent)
+	return FromSessionID(id.Base64(), m.Userid, ipAddress, userAgent)
 }
 
 // FromSessionID creates a new session from an existing sessionID

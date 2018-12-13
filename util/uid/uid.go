@@ -135,7 +135,7 @@ const (
 
 // FromBase64 creates a new UID from a base64 encoded string
 func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *governor.Error) {
-	b, err := base64.URLEncoding.DecodeString(ustring)
+	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
 		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -145,7 +145,7 @@ func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *gove
 
 // FromBase64TRSplit creates a new UID from a base64 encoded string with equal parts devoted to time and rand bytes
 func FromBase64TRSplit(ustring string) (*UID, *governor.Error) {
-	b, err := base64.URLEncoding.DecodeString(ustring)
+	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
 		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -175,20 +175,20 @@ func (u *UID) Rand() []byte {
 
 // Base64 returns the full raw bytes of an UID encoded in standard padded base64
 func (u *UID) Base64() string {
-	return base64.URLEncoding.EncodeToString(u.u)
+	return base64.RawURLEncoding.EncodeToString(u.u)
 }
 
 // TimeBase64 returns only the time bytes of an UID encoded in standard padded base64
 func (u *UID) TimeBase64() string {
-	return base64.URLEncoding.EncodeToString(u.Time())
+	return base64.RawURLEncoding.EncodeToString(u.Time())
 }
 
 // HashBase64 returns only the hash initialization bytes of an UID encoded in standard padded base64
 func (u *UID) HashBase64() string {
-	return base64.URLEncoding.EncodeToString(u.Hash())
+	return base64.RawURLEncoding.EncodeToString(u.Hash())
 }
 
 // RandBase64 returns only the random bytes of an UID encoded in standard padded base64
 func (u *UID) RandBase64() string {
-	return base64.URLEncoding.EncodeToString(u.Rand())
+	return base64.RawURLEncoding.EncodeToString(u.Rand())
 }

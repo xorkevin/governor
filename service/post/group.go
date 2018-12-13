@@ -84,11 +84,10 @@ func (p *postService) mountGroup(conf governor.Config, r *echo.Group) error {
 		posts := make(postInfoSlice, 0, len(postsSlice))
 		for _, i := range postsSlice {
 			postuid, _ := postmodel.ParseUIDToB64(i.Postid)
-			useruid, _ := postmodel.ParseUIDToB64(i.Userid)
 
 			posts = append(posts, resPostInfo{
 				Postid:       postuid.Base64(),
-				Userid:       useruid.Base64(),
+				Userid:       i.Userid,
 				Tag:          i.Tag,
 				Title:        i.Title,
 				Up:           i.Up,

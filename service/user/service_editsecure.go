@@ -35,7 +35,7 @@ const (
 
 // UpdateEmail creates a pending user email update
 func (u *userService) UpdateEmail(userid string, newEmail string, password string) *governor.Error {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -97,7 +97,7 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -156,7 +156,7 @@ const (
 
 // UpdatePassword updates the password
 func (u *userService) UpdatePassword(userid string, newPassword string, oldPassword string) *governor.Error {
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()
@@ -232,13 +232,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) *governor.Er
 	}
 	sessionKey := key.Base64()
 
-	userid, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return err
-	}
-
-	if err := u.cache.Cache().Set(cachePrefixPasswordUpdate+sessionKey, userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixPasswordUpdate+sessionKey, m.Userid, time.Duration(u.passwordResetTime*b1)).Err(); err != nil {
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
@@ -263,7 +257,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		return governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
-	m, err := u.repo.GetByIDB64(userid)
+	m, err := u.repo.GetByID(userid)
 	if err != nil {
 		if err.Code() == 2 {
 			err.SetErrorUser()

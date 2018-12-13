@@ -39,7 +39,7 @@ type (
 		GetRoles(m *Model) *governor.Error
 		GetGroup(limit, offset int) ([]Info, *governor.Error)
 		GetBulk(userids []string) ([]Info, *governor.Error)
-		GetByIDB64(idb64 string) (*Model, *governor.Error)
+		GetByID(userid string) (*Model, *governor.Error)
 		GetByUsername(username string) (*Model, *governor.Error)
 		GetByEmail(email string) (*Model, *governor.Error)
 		Insert(m *Model) *governor.Error
@@ -58,7 +58,7 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       []byte `model:"userid,BYTEA PRIMARY KEY" query:"userid"`
+		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
 		AuthTags     string
 		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL" query:"pass_hash"`
@@ -70,7 +70,7 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   []byte `query:"userid,getgroup"`
+		Userid   string `query:"userid,getgroup"`
 		Username string `query:"username"`
 		Email    string `query:"email"`
 	}
@@ -104,7 +104,7 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 	}
 
 	return &Model{
-		Userid:       mUID.Bytes(),
+		Userid:       mUID.Base64(),
 		Username:     username,
 		AuthTags:     ra.Stringify(),
 		PassHash:     mHash,
@@ -121,6 +121,10 @@ func (r *repo) NewEmpty() Model {
 
 func (r *repo) NewEmptyPtr() *Model {
 	return &Model{}
+}
+
+func ParseB64ID(userid string) (*uid.UID, *governor.Error) {
+	return uid.FromBase64(uidTimeSize, 0, uidRandSize, userid)
 }
 
 // ValidatePass validates the password against a hash
@@ -144,46 +148,12 @@ func (m *Model) RehashPass(password string) *governor.Error {
 }
 
 const (
-	moduleIDModB64 = moduleID + ".IDBase64"
-)
-
-// ParseUIDToB64 converts a UID userid into base64
-func ParseUIDToB64(userid []byte) (*uid.UID, *governor.Error) {
-	return uid.FromBytesTRSplit(userid)
-}
-
-// IDBase64 returns the userid as a base64 encoded string
-func (m *Model) IDBase64() (string, *governor.Error) {
-	u, err := ParseUIDToB64(m.Userid)
-	if err != nil {
-		err.AddTrace(moduleIDModB64)
-		return "", err
-	}
-	return u.Base64(), nil
-}
-
-// IDBase64 returns the userid as a base64 encoded string
-func (m *Info) IDBase64() (string, *governor.Error) {
-	u, err := ParseUIDToB64(m.Userid)
-	if err != nil {
-		err.AddTrace(moduleIDModB64)
-		return "", err
-	}
-	return u.Base64(), nil
-}
-
-const (
 	moduleIDModGetRoles = moduleID + ".GetRoles"
 )
 
 // GetRoles gets the roles of the user for the model
 func (r *repo) GetRoles(m *Model) *governor.Error {
-	idb64, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDModGetRoles)
-		return err
-	}
-	roles, err := r.rolerepo.GetUserRoles(idb64, 1024, 0)
+	roles, err := r.rolerepo.GetUserRoles(m.Userid, 1024, 0)
 	if err != nil {
 		err.AddTrace(moduleIDModGetRoles)
 		return err
@@ -212,31 +182,21 @@ const (
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
-	uids := make([]interface{}, 0, len(userids))
-	for _, i := range userids {
-		u, err := ParseB64ToUID(i)
-		if err != nil {
-			err.AddTrace(moduleIDModGetBulk)
-			err.SetErrorUser()
-			return nil, err
-		}
-		uids = append(uids, u.Bytes())
-	}
-
 	placeholderStart := 1
 	placeholders := make([]string, 0, len(userids))
-	for i := range uids {
-		if i == 0 {
-			placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+"::BYTEA)")
-		} else {
-			placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
-		}
+	for i := range userids {
+		placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
+	}
+
+	args := make([]interface{}, 0, len(userids))
+	for _, i := range userids {
+		args = append(args, i)
 	}
 
 	stmt := fmt.Sprintf(sqlGetBulk, strings.Join(placeholders, ","))
 
 	m := make([]Info, 0, len(userids))
-	rows, err := r.db.Query(stmt, uids...)
+	rows, err := r.db.Query(stmt, args...)
 	if err != nil {
 		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
 	}
@@ -269,19 +229,8 @@ func (r *repo) getApplyRoles(m *Model) (*Model, *governor.Error) {
 	return m, nil
 }
 
-// ParseB64ToUID converts a userid in base64 into a UID
-func ParseB64ToUID(idb64 string) (*uid.UID, *governor.Error) {
-	return uid.FromBase64TRSplit(idb64)
-}
-
-// GetByIDB64 returns a user model with the given base64 id
-func (r *repo) GetByIDB64(idb64 string) (*Model, *governor.Error) {
-	u, err := ParseB64ToUID(idb64)
-	if err != nil {
-		err.AddTrace(moduleIDModGet)
-		return nil, err
-	}
-	userid := u.Bytes()
+// GetByID returns a user model with the given base64 id
+func (r *repo) GetByID(userid string) (*Model, *governor.Error) {
 	var m *Model
 	if mUser, code, err := userModelGet(r.db, userid); err != nil {
 		if code == 2 {
@@ -327,14 +276,9 @@ const (
 )
 
 func (r *repo) insertRoles(m *Model) *governor.Error {
-	idb64, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDModInsRoles)
-		return err
-	}
 	roles := strings.Split(m.AuthTags, ",")
 	for _, i := range roles {
-		rModel, err := r.rolerepo.New(idb64, i)
+		rModel, err := r.rolerepo.New(m.Userid, i)
 		if err != nil {
 			err.AddTrace(moduleIDModInsRoles)
 			return err
@@ -372,13 +316,8 @@ const (
 
 // UpdateRoles updates the model's roles into the db
 func (r *repo) UpdateRoles(m *Model, diff map[string]int) *governor.Error {
-	idb64, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDModUpRoles)
-		return err
-	}
 	for k, v := range diff {
-		if originalRole, err := r.rolerepo.GetByID(idb64, k); err == nil {
+		if originalRole, err := r.rolerepo.GetByID(m.Userid, k); err == nil {
 			switch v {
 			case roleRemove:
 				if err := r.rolerepo.Delete(originalRole); err != nil {
@@ -389,7 +328,7 @@ func (r *repo) UpdateRoles(m *Model, diff map[string]int) *governor.Error {
 		} else if err.Code() == 2 {
 			switch v {
 			case roleAdd:
-				if roleM, err := r.rolerepo.New(idb64, k); err == nil {
+				if roleM, err := r.rolerepo.New(m.Userid, k); err == nil {
 					if err := r.rolerepo.Insert(roleM); err != nil {
 						err.AddTrace(moduleIDModUpRoles)
 						return err
@@ -425,13 +364,7 @@ const (
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) *governor.Error {
-	idb64, err := m.IDBase64()
-	if err != nil {
-		err.AddTrace(moduleIDModDel)
-		return err
-	}
-
-	if err := r.rolerepo.DeleteUserRoles(idb64); err != nil {
+	if err := r.rolerepo.DeleteUserRoles(m.Userid); err != nil {
 		err.AddTrace(moduleIDModDel)
 		return err
 	}

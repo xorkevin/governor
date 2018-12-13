@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
 	"net/http"
@@ -29,7 +28,7 @@ type (
 	// ModelInfo is the core vote information
 	ModelInfo struct {
 		Itemid []byte `json:"itemid"`
-		Userid []byte `json:"userid"`
+		Userid string `json:"userid"`
 		Score  int16  `json:"score"`
 	}
 )
@@ -52,17 +51,11 @@ func New(itemid, postid, group, userid string, score int16) (*Model, *governor.E
 		err.SetErrorUser()
 		return nil, err
 	}
-	user, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModNew)
-		err.SetErrorUser()
-		return nil, err
-	}
 
 	return &Model{
 		ModelInfo: ModelInfo{
 			Itemid: item.Bytes(),
-			Userid: user.Bytes(),
+			Userid: userid,
 			Score:  score,
 		},
 		Postid: post.Bytes(),
@@ -93,17 +86,11 @@ func NewPost(postid, group, userid string, score int16) (*Model, *governor.Error
 		err.SetErrorUser()
 		return nil, err
 	}
-	user, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModNew)
-		err.SetErrorUser()
-		return nil, err
-	}
 
 	return &Model{
 		ModelInfo: ModelInfo{
 			Itemid: post.Bytes(),
-			Userid: user.Bytes(),
+			Userid: userid,
 			Score:  score,
 		},
 		Postid: postidNullVal,
@@ -165,20 +152,6 @@ func (m *Model) PostIDBase64() (string, *governor.Error) {
 	return u.Base64(), nil
 }
 
-const (
-	moduleIDModUserB64 = moduleIDModel + ".UserIDBase64"
-)
-
-// UserIDBase64 returns the userid as a base64 encoded string
-func (m *Model) UserIDBase64() (string, *governor.Error) {
-	u, err := usermodel.ParseUIDToB64(m.Userid)
-	if err != nil {
-		err.AddTrace(moduleIDModUserB64)
-		return "", err
-	}
-	return u.Base64(), nil
-}
-
 // Up makes the vote an upvote
 func (m *Model) Up() {
 	m.Score = 1
@@ -218,16 +191,10 @@ func GetByIDB64(db *sql.DB, itemid, userid string) (*Model, *governor.Error) {
 		err.SetErrorUser()
 		return nil, err
 	}
-	user, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModGet64)
-		err.SetErrorUser()
-		return nil, err
-	}
 
 	v := ModelInfo{
 		Itemid: item.Bytes(),
-		Userid: user.Bytes(),
+		Userid: userid,
 		Score:  0,
 	}
 
@@ -304,16 +271,9 @@ var (
 
 // GetVotesGroupByUser returns the votes of a user for a group
 func GetVotesGroupByUser(db *sql.DB, userid, group string) ([]ModelInfo, *governor.Error) {
-	user, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModGetVotesGroup)
-		err.SetErrorUser()
-		return nil, err
-	}
-
 	m := []ModelInfo{}
 
-	if rows, err := db.Query(sqlGetVotesGroup, user.Bytes(), group, postidNullVal); err == nil {
+	if rows, err := db.Query(sqlGetVotesGroup, userid, group, postidNullVal); err == nil {
 		defer func() {
 			err := rows.Close()
 			if err != nil {
@@ -347,12 +307,6 @@ var (
 
 // GetVotesThreadByUser returns the votes of a user for a thread
 func GetVotesThreadByUser(db *sql.DB, userid, postid string) ([]ModelInfo, *governor.Error) {
-	user, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModGetVotesThread)
-		err.SetErrorUser()
-		return nil, err
-	}
 	post, err := ParseB64ToUID(postid)
 	if err != nil {
 		err.AddTrace(moduleIDModGetVotesThread)
@@ -362,7 +316,7 @@ func GetVotesThreadByUser(db *sql.DB, userid, postid string) ([]ModelInfo, *gove
 
 	m := []ModelInfo{}
 
-	if rows, err := db.Query(sqlGetVotesThread, user.Bytes(), post.Bytes()); err == nil {
+	if rows, err := db.Query(sqlGetVotesThread, userid, post.Bytes()); err == nil {
 		defer func() {
 			err := rows.Close()
 			if err != nil {
@@ -483,7 +437,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (voteid BYTEA PRIMARY KEY, itemid BYTEA NOT NULL, postid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, userid BYTEA NOT NULL, score SMALLINT NOT NULL, time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (voteid BYTEA PRIMARY KEY, itemid BYTEA NOT NULL, postid BYTEA NOT NULL, group_tag VARCHAR(255) NOT NULL, userid VARCHAR(31) NOT NULL, score SMALLINT NOT NULL, time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table

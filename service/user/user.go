@@ -191,10 +191,9 @@ func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup gove
 		err.AddTrace(moduleID)
 		return err
 	}
-	userid, _ := madmin.IDBase64()
 	l.Info("inserted new admin into users", moduleID, "insert new setup admin", 0, map[string]string{
 		"username": madmin.Username,
-		"userid":   userid,
+		"userid":   madmin.Userid,
 	})
 
 	return nil

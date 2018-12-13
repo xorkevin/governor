@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/post/vote/model"
-	"github.com/hackform/governor/service/user/model"
 	"github.com/hackform/governor/util/score"
 	"github.com/hackform/governor/util/uid"
 	"github.com/lib/pq"
@@ -27,7 +26,7 @@ type (
 		Commentid    []byte `json:"commentid"`
 		Parentid     []byte `json:"parentid"`
 		Postid       []byte `json:"postid"`
-		Userid       []byte `json:"userid"`
+		Userid       string `json:"userid"`
 		Content      string `json:"content"`
 		Up           int32  `json:"up"`
 		Down         int32  `json:"down"`
@@ -46,12 +45,6 @@ const (
 
 // New creates a new Comment Model
 func New(userid, postid, parentid, content string) (*Model, *governor.Error) {
-	u, err := ParseB64ToUID(userid)
-	if err != nil {
-		err.AddTrace(moduleIDModNew)
-		err.SetErrorUser()
-		return nil, err
-	}
 	post, err := ParseB64ToUID(postid)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
@@ -75,7 +68,7 @@ func New(userid, postid, parentid, content string) (*Model, *governor.Error) {
 		Commentid:    mUID.Bytes(),
 		Parentid:     parent.Bytes(),
 		Postid:       post.Bytes(),
-		Userid:       u.Bytes(),
+		Userid:       userid,
 		Content:      content,
 		Up:           0,
 		Down:         0,
@@ -127,20 +120,6 @@ func (m *Model) PostIDBase64() (string, *governor.Error) {
 	u, err := ParseUIDToB64(m.Postid)
 	if err != nil {
 		err.AddTrace(moduleIDModPostB64)
-		return "", err
-	}
-	return u.Base64(), nil
-}
-
-const (
-	moduleIDModUserB64 = moduleIDModel + ".UserIDBase64"
-)
-
-// UserIDBase64 returns the userid as a base64 encoded string
-func (m *Model) UserIDBase64() (string, *governor.Error) {
-	u, err := usermodel.ParseUIDToB64(m.Userid)
-	if err != nil {
-		err.AddTrace(moduleIDModUserB64)
 		return "", err
 	}
 	return u.Base64(), nil
@@ -370,7 +349,7 @@ const (
 )
 
 var (
-	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, postid BYTEA NOT NULL, userid BYTEA NOT NULL, content VARCHAR(131072) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
+	sqlSetup = fmt.Sprintf("CREATE TABLE %s (commentid BYTEA PRIMARY KEY, parentid BYTEA NOT NULL, postid BYTEA NOT NULL, userid VARCHAR(31) NOT NULL, content VARCHAR(131072) NOT NULL, up INT NOT NULL, down INT NOT NULL, absolute INT NOT NULL, score BIGINT NOT NULL, creation_time BIGINT NOT NULL);", tableName)
 )
 
 // Setup creates a new Post table
