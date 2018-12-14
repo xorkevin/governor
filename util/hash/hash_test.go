@@ -37,3 +37,11 @@ func Test_KDF(t *testing.T) {
 	// invalid param values
 	assert.False(VerifyKDF(key, "$s0$0,0,0$bogussaltvalue$bogushashvalue"), "invalid parameter values should fail")
 }
+
+func Benchmark_VerfyKDF(b *testing.B) {
+	key := "password"
+	h, _ := KDF(key)
+	for n := 0; n < b.N; n++ {
+		VerifyKDF(key, h)
+	}
+}

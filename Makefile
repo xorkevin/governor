@@ -35,6 +35,11 @@ test:
 coverage:
 	$(GO) tool cover -html $(COVERAGE)
 
+BENCHMARK_ARGS=-benchtime 5s -benchmem
+
+bench:
+	$(GO) test -bench . $(BENCHMARK_ARGS)
+
 fmt:
 	$(GO) fmt ./...
 

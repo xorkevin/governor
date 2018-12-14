@@ -21,7 +21,7 @@ const (
 
 const (
 	// 2016
-	// attack 0.19s, 64MB
+	// attack 0.17s, 64MB
 	// user 0.32s
 	scryptID             = "s0"
 	scryptHashLength     = 32
