@@ -61,7 +61,7 @@ type (
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
 		AuthTags     string
-		PassHash     []byte `model:"pass_hash,BYTEA NOT NULL" query:"pass_hash"`
+		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,get"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
@@ -97,7 +97,7 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 		return nil, err
 	}
 
-	mHash, err := hash.Hash(password)
+	mHash, err := hash.KDF(password)
 	if err != nil {
 		err.AddTrace(moduleIDModNew)
 		return nil, err
@@ -129,7 +129,7 @@ func ParseB64ID(userid string) (*uid.UID, *governor.Error) {
 
 // ValidatePass validates the password against a hash
 func (m *Model) ValidatePass(password string) bool {
-	return hash.Verify(password, m.PassHash)
+	return hash.VerifyKDF(password, m.PassHash)
 }
 
 const (
@@ -138,7 +138,7 @@ const (
 
 // RehashPass updates the password with a new hash
 func (m *Model) RehashPass(password string) *governor.Error {
-	mHash, err := hash.Hash(password)
+	mHash, err := hash.KDF(password)
 	if err != nil {
 		err.AddTrace(moduleIDHash)
 		return err
