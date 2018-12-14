@@ -5,18 +5,35 @@ import (
 	"testing"
 )
 
-func Test_Hash(t *testing.T) {
+func Test_KDF(t *testing.T) {
 	assert := assert.New(t)
-	pass := "password"
+	key := "password"
 
-	h, err := Hash(pass)
+	// success case
+	h, err := KDF(key)
 	assert.Nil(err, "hash should be successful")
-	assert.Len(h, versionLength+latestConfig.hashLength+latestConfig.saltLength, "hash should be of the proper length")
-	assert.True(Verify(pass, h), "password should be correct")
+	assert.True(VerifyKDF(key, h), "key should be correct")
 
-	c, err := newConfig(0)
-	assert.Nil(c, "bogus version should not produce config")
-	assert.Error(err, "bogus version should error")
-	assert.False(Verify("notpass", h), "incorrect password should fail")
-	assert.False(Verify(pass, []byte{}), "passhash of incorrect length should be false")
+	// invalid key
+	assert.False(VerifyKDF("notpass", h), "incorrect key should fail")
+
+	// invalid hash
+	assert.False(VerifyKDF(key, ""), "blank hash should fail")
+	assert.False(VerifyKDF(key, "$s0"), "invalid number of hash components should fail")
+
+	// invalid parameters
+	assert.False(VerifyKDF(key, "$s0$$$"), "invalid number of parameters should fail")
+	assert.False(VerifyKDF(key, "$s0$,,$$"), "invalid parameters should fail")
+	assert.False(VerifyKDF(key, "$s0$0,,$$"), "invalid parameters should fail")
+	assert.False(VerifyKDF(key, "$s0$0,0,$$"), "invalid parameters should fail")
+	assert.False(VerifyKDF(key, "$s0$0,0,0$$"), "invalid parameters should fail")
+
+	// invalid salt
+	assert.False(VerifyKDF(key, "$s0$0,0,0$bogus+salt+value$"), "invalid salt should fail")
+
+	// invalid hash
+	assert.False(VerifyKDF(key, "$s0$0,0,0$bogussaltvalue$bogus+hash+value"), "invalid hash should fail")
+
+	// invalid param values
+	assert.False(VerifyKDF(key, "$s0$0,0,0$bogussaltvalue$bogushashvalue"), "invalid parameter values should fail")
 }
