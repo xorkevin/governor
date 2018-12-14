@@ -15,7 +15,8 @@ func Test_Hash(t *testing.T) {
 	assert.True(Verify(pass, h), "password should be correct")
 
 	c, err := newConfig(0)
-	assert.Nil(c, "bogus version")
+	assert.Nil(c, "bogus version should not produce config")
+	assert.Error(err, "bogus version should error")
 	assert.False(Verify("notpass", h), "incorrect password should fail")
 	assert.False(Verify(pass, []byte{}), "passhash of incorrect length should be false")
 }
