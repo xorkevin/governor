@@ -43,33 +43,7 @@ var (
 		parallelFactor: 1,
 	}
 
-	// 2016
-	// attack 0.73s, 128MB
-	// user 1.2s
-	v011 = &config{
-		version:        11,
-		hashLength:     64,
-		saltLength:     64,
-		workFactor:     131072,
-		memBlocksize:   8,
-		parallelFactor: 2,
-	}
-
-	// 2016
-	// attack 0.054s, 16MB
-	// user 0.096s
-	v012 = &config{
-		version:        12,
-		hashLength:     64,
-		saltLength:     64,
-		workFactor:     16384,
-		memBlocksize:   8,
-		parallelFactor: 1,
-	}
-
-	latestConfig       = v010
-	latestConfigStrong = v011
-	latestConfigFast   = v012
+	latestConfig = v010
 )
 
 const (
@@ -80,17 +54,9 @@ func newConfig(version int) (*config, *governor.Error) {
 	switch version {
 	case v010.version:
 		return v010, nil
-	case v011.version:
-		return v011, nil
-	case v012.version:
-		return v012, nil
 	default:
 		return nil, governor.NewError(moduleIDConfig, fmt.Sprintf("%d is not a valid version number", version), 0, http.StatusBadRequest)
 	}
-}
-
-func (c *config) Version() int {
-	return c.version
 }
 
 const (
@@ -122,16 +88,6 @@ func hashC(c *config, password string) ([]byte, *governor.Error) {
 // Hash returns a new hash and salt for a given password
 func Hash(password string) ([]byte, *governor.Error) {
 	return hashC(latestConfig, password)
-}
-
-// Strong returns a stronger hash and salt for a given password
-func Strong(password string) ([]byte, *governor.Error) {
-	return hashC(latestConfigStrong, password)
-}
-
-// Fast returns a fast hash and salt for a given password
-func Fast(password string) ([]byte, *governor.Error) {
-	return hashC(latestConfigFast, password)
 }
 
 // Verify checks to see if the hash of the given password and salt matches the provided passhash

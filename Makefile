@@ -26,8 +26,14 @@ version:
 	@$(GO) version
 	@$(GO) env
 
+COVERAGE=cover.out
+COVERAGE_ARGS=-covermode count -coverprofile $(COVERAGE)
+
 test:
-	$(GO) test -v -cover ./...
+	$(GO) test -v -cover $(COVERAGE_ARGS) ./...
+
+coverage:
+	$(GO) tool cover -html $(COVERAGE)
 
 fmt:
 	$(GO) fmt ./...

@@ -30,3 +30,5 @@ vendor.orig/
 bin/
 toolchain/
 defs/
+
+*.out
