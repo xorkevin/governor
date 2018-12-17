@@ -6,9 +6,9 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/role/model"
-	"github.com/hackform/governor/util/hash"
 	"github.com/hackform/governor/util/rank"
 	"github.com/hackform/governor/util/uid"
+	"github.com/hackform/hunter2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +20,8 @@ import (
 const (
 	uidTimeSize = 8
 	uidRandSize = 8
+	passSaltLen = 32
+	passHashLen = 32
 	moduleID    = "usermodel"
 )
 
@@ -36,6 +38,8 @@ type (
 		New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, *governor.Error)
 		NewEmpty() Model
 		NewEmptyPtr() *Model
+		ValidatePass(password string, m *Model) (bool, *governor.Error)
+		RehashPass(m *Model, password string) *governor.Error
 		GetRoles(m *Model) *governor.Error
 		GetGroup(limit, offset int) ([]Info, *governor.Error)
 		GetBulk(userids []string) ([]Info, *governor.Error)
@@ -54,6 +58,8 @@ type (
 	repo struct {
 		db       *sql.DB
 		rolerepo rolemodel.Repo
+		hasher   *hunter2.ScryptHasher
+		verifier *hunter2.Verifier
 	}
 
 	// Model is the db User model
@@ -79,9 +85,16 @@ type (
 // New creates a new user repository
 func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
 	l.Info("initialized user repo", moduleID, "initialize user repo", 0, nil)
+
+	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.NewScryptDefaultConfig())
+	verifier := hunter2.NewVerifier()
+	verifier.RegisterHash(hasher)
+
 	return &repo{
 		db:       database.DB(),
 		rolerepo: rolerepo,
+		hasher:   hasher,
+		verifier: verifier,
 	}
 }
 
@@ -97,10 +110,11 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 		return nil, err
 	}
 
-	mHash, err := hash.KDF(password)
-	if err != nil {
-		err.AddTrace(moduleIDModNew)
-		return nil, err
+	mHash := ""
+	if h, err := r.hasher.Hash(password); err == nil {
+		mHash = h
+	} else {
+		return nil, governor.NewError(moduleIDModNew, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	return &Model{
@@ -127,21 +141,24 @@ func ParseB64ID(userid string) (*uid.UID, *governor.Error) {
 	return uid.FromBase64(uidTimeSize, 0, uidRandSize, userid)
 }
 
-// ValidatePass validates the password against a hash
-func (m *Model) ValidatePass(password string) bool {
-	return hash.VerifyKDF(password, m.PassHash)
-}
-
 const (
 	moduleIDHash = moduleID + ".Hash"
 )
 
-// RehashPass updates the password with a new hash
-func (m *Model) RehashPass(password string) *governor.Error {
-	mHash, err := hash.KDF(password)
+// ValidatePass validates the password against a hash
+func (r *repo) ValidatePass(password string, m *Model) (bool, *governor.Error) {
+	ok, err := r.verifier.Verify(password, m.PassHash)
 	if err != nil {
-		err.AddTrace(moduleIDHash)
-		return err
+		return false, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
+	}
+	return ok, nil
+}
+
+// RehashPass updates the password with a new hash
+func (r *repo) RehashPass(m *Model, password string) *governor.Error {
+	mHash, err := r.hasher.Hash(password)
+	if err != nil {
+		return governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
 	}
 	m.PassHash = mHash
 	return nil

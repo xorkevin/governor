@@ -152,7 +152,10 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	if m.Username != username {
 		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
 	}
-	if !m.ValidatePass(password) {
+	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	} else if !ok {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 

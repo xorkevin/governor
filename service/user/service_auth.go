@@ -43,7 +43,10 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
-	if !m.ValidatePass(password) {
+	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+		err.AddTrace(moduleIDAuth)
+		return false, nil, err
+	} else if !ok {
 		return false, &resUserAuth{
 			Valid: false,
 		}, nil

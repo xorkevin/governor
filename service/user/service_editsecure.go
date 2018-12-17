@@ -46,7 +46,10 @@ func (u *userService) UpdateEmail(userid string, newEmail string, password strin
 	if m.Email == newEmail {
 		return governor.NewErrorUser(moduleIDUser, "emails cannot be the same", 0, http.StatusBadRequest)
 	}
-	if !m.ValidatePass(password) {
+	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	} else if !ok {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 
@@ -106,7 +109,10 @@ func (u *userService) CommitEmail(key string, password string) *governor.Error {
 		return err
 	}
 
-	if !m.ValidatePass(password) {
+	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	} else if !ok {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
 
@@ -164,10 +170,13 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 		err.AddTrace(moduleIDUser)
 		return err
 	}
-	if !m.ValidatePass(oldPassword) {
+	if ok, err := u.repo.ValidatePass(oldPassword, m); err != nil {
+		err.AddTrace(moduleIDUser)
+		return err
+	} else if !ok {
 		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
 	}
-	if err = m.RehashPass(newPassword); err != nil {
+	if err := u.repo.RehashPass(m, newPassword); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
@@ -266,7 +275,7 @@ func (u *userService) ResetPassword(key string, newPassword string) *governor.Er
 		return err
 	}
 
-	if err := m.RehashPass(newPassword); err != nil {
+	if err := u.repo.RehashPass(m, newPassword); err != nil {
 		err.AddTrace(moduleIDUser)
 		return err
 	}
