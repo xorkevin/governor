@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-//go:generate forge -- model_gen.go conf config Model
+//go:generate forge model -m Model -t config -p conf -o model_gen.go
 
 const (
 	configID      = 0

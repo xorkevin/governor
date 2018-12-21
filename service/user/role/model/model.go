@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:generate forge -- model_gen.go role userroles Model qUserid qRole
+//go:generate forge model -m Model -t userroles -p role -o model_gen.go qUserid qRole
 
 const (
 	moduleID      = "rolemodel"

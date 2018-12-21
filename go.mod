@@ -14,7 +14,7 @@ require (
 	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
 	github.com/gorilla/websocket v1.4.0
-	github.com/hackform/hunter2 v0.0.0-20181217023536-874f1367fcc0
+	github.com/hackform/hunter2 v0.0.0-20181221031802-7c86ef7a5fc8
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
 	github.com/hashicorp/raft v1.0.0 // indirect
@@ -39,6 +39,7 @@ require (
 	github.com/sirupsen/logrus v1.2.0
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c // indirect
+	github.com/spf13/afero v1.2.0 // indirect
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.3.1
 	github.com/stretchr/testify v1.2.2
@@ -46,10 +47,9 @@ require (
 	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4 // indirect
 	golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9
 	golang.org/x/image v0.0.0-20181116024801-cd38e8056d9b
-	golang.org/x/net v0.0.0-20181217023233-e147a9138326 // indirect
+	golang.org/x/net v0.0.0-20181220203305-927f97764cc3 // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f // indirect
-	golang.org/x/sys v0.0.0-20181213200352-4d1cda033e06 // indirect
-	google.golang.org/appengine v1.3.0 // indirect
+	golang.org/x/sys v0.0.0-20181220204120-b00e65af1da0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/ini.v1 v1.39.3 // indirect

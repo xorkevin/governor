@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:generate forge -- model_gen.go profile profiles Model
+//go:generate forge model -m Model -t profiles -p profile -o model_gen.go
 
 const (
 	moduleID      = "profilemodel"
