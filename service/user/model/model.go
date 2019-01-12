@@ -2,7 +2,6 @@ package usermodel
 
 import (
 	"database/sql"
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"github.com/hackform/governor/service/user/role/model"
@@ -10,7 +9,6 @@ import (
 	"github.com/hackform/governor/util/uid"
 	"github.com/hackform/hunter2"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -76,7 +74,7 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   string `query:"userid,getgroup"`
+		Userid   string `query:"userid,getgroup;getgroupset"`
 		Username string `query:"username"`
 		Email    string `query:"email"`
 	}
@@ -194,41 +192,12 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
 
 const (
 	moduleIDModGetBulk = moduleID + ".GetBulk"
-	sqlGetBulk         = "SELECT userid, username, email FROM " + userModelTableName + " WHERE userid IN (VALUES %s);"
 )
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
-	placeholderStart := 1
-	placeholders := make([]string, 0, len(userids))
-	for i := range userids {
-		placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
-	}
-
-	args := make([]interface{}, 0, len(userids))
-	for _, i := range userids {
-		args = append(args, i)
-	}
-
-	stmt := fmt.Sprintf(sqlGetBulk, strings.Join(placeholders, ","))
-
-	m := make([]Info, 0, len(userids))
-	rows, err := r.db.Query(stmt, args...)
+	m, err := userModelGetInfoSetUserid(r.db, userids)
 	if err != nil {
-		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		i := Info{}
-		if err := rows.Scan(&i.Userid, &i.Username, &i.Email); err != nil {
-			return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
-		}
-		m = append(m, i)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
 	}
 	return m, nil

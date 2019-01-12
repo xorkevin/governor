@@ -4,6 +4,8 @@ package usermodel
 import (
 	"database/sql"
 	"github.com/lib/pq"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -80,6 +82,42 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 	}
 	res := make([]Info, 0, limit)
 	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Info{}
+		if err := rows.Scan(&m.Userid, &m.Username, &m.Email); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(keys))
+	for i := range keys {
+		placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
+	}
+
+	args := make([]interface{}, 0, len(keys))
+	for _, i := range keys {
+		args = append(args, i)
+	}
+
+	stmt := "SELECT userid, username, email FROM users WHERE userid IN (VALUES " + strings.Join(placeholders, ",") + ");"
+
+	res := make([]Info, 0, len(keys))
+	rows, err := db.Query(stmt, args...)
 	if err != nil {
 		return nil, err
 	}
