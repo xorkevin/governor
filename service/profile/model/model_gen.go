@@ -11,7 +11,7 @@ const (
 )
 
 func profileModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE profiles (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS profiles (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
 	return err
 }
 

@@ -11,7 +11,7 @@ const (
 )
 
 func confModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE config (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS config (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	return err
 }
 

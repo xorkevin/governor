@@ -11,7 +11,7 @@ const (
 )
 
 func linkModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	return err
 }
 
