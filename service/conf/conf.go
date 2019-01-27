@@ -46,6 +46,9 @@ func (c *confService) Health() *governor.Error {
 func (c *confService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
 	if _, err := c.repo.Get(); err == nil {
 		return governor.NewError(moduleID, "setup already run", 128, http.StatusForbidden)
+	} else if err.Code() != 2 {
+		err.AddTrace(moduleID)
+		return err
 	}
 
 	mconf, err := c.repo.New(rsetup.Orgname)
