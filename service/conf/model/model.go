@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
+	"github.com/lib/pq"
 	"net/http"
 	"time"
 )
@@ -63,6 +64,12 @@ func (r *repo) Get() (*Model, *governor.Error) {
 	if mConfig, code, err := confModelGet(r.db, configID); err != nil {
 		if code == 2 {
 			return nil, governor.NewError(moduleIDModGet, "no conf found with that id", 2, http.StatusNotFound)
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			// undefined_table error
+			if postgresErr.Code == "42P01" {
+				return nil, governor.NewError(moduleIDModGet, "no conf found with that id", 2, http.StatusNotFound)
+			}
 		}
 		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
 	} else {
