@@ -81,7 +81,7 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email FROM users ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 	}()
 	for rows.Next() {
 		m := Info{}
-		if err := rows.Scan(&m.Userid, &m.Username, &m.Email); err != nil {
+		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -114,7 +114,7 @@ func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
 		args = append(args, i)
 	}
 
-	stmt := "SELECT userid, username, email FROM users WHERE userid IN (VALUES " + strings.Join(placeholders, ",") + ");"
+	stmt := "SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES " + strings.Join(placeholders, ",") + ");"
 
 	res := make([]Info, 0, len(keys))
 	rows, err := db.Query(stmt, args...)
@@ -127,7 +127,7 @@ func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
 	}()
 	for rows.Next() {
 		m := Info{}
-		if err := rows.Scan(&m.Userid, &m.Username, &m.Email); err != nil {
+		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

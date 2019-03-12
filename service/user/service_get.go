@@ -129,8 +129,10 @@ func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, *gov
 
 type (
 	resUserInfoPublic struct {
-		Userid   string `json:"userid"`
-		Username string `json:"username"`
+		Userid    string `json:"userid"`
+		Username  string `json:"username"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
 	}
 
 	resUserInfoListPublic struct {
@@ -149,8 +151,10 @@ func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPubli
 	info := make([]resUserInfoPublic, 0, len(infoSlice))
 	for _, i := range infoSlice {
 		info = append(info, resUserInfoPublic{
-			Userid:   i.Userid,
-			Username: i.Username,
+			Userid:    i.Userid,
+			Username:  i.Username,
+			FirstName: i.FirstName,
+			LastName:  i.LastName,
 		})
 	}
 

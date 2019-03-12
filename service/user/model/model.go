@@ -74,9 +74,11 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid   string `query:"userid,getgroup;getgroupset"`
-		Username string `query:"username"`
-		Email    string `query:"email"`
+		Userid    string `query:"userid,getgroup;getgroupset"`
+		Username  string `query:"username"`
+		Email     string `query:"email"`
+		FirstName string `query:"first_name"`
+		LastName  string `query:"last_name"`
 	}
 )
 
