@@ -4,7 +4,10 @@ require (
 	cloud.google.com/go v0.37.0 // indirect
 	dmitri.shuralyov.com/app/changes v0.0.0-20181114035150-5af16e21babb // indirect
 	dmitri.shuralyov.com/service/change v0.0.0-20190301072032-c25fb47d71b3 // indirect
+	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20190312192040-a2a65ffce834 // indirect
 	github.com/Shopify/sarama v1.21.0 // indirect
+	github.com/aclements/go-gg v0.0.0-20170323211221-abd1f791f5ee // indirect
+	github.com/aclements/go-moremath v0.0.0-20180329182055-b1aff36309c7 // indirect
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
 	github.com/boombuler/barcode v1.0.0
 	github.com/coreos/etcd v3.3.12+incompatible // indirect
@@ -16,7 +19,6 @@ require (
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/go-redis/redis v6.15.2+incompatible
-	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/lint v0.0.0-20190301231843-5614ed5bae6f // indirect
 	github.com/golang/protobuf v1.3.0 // indirect
@@ -41,7 +43,8 @@ require (
 	github.com/labstack/gommon v0.2.8 // indirect
 	github.com/lib/pq v1.0.0
 	github.com/mattn/go-colorable v0.1.1 // indirect
-	github.com/mattn/go-isatty v0.0.6 // indirect
+	github.com/mattn/go-isatty v0.0.7 // indirect
+	github.com/mattn/go-sqlite3 v1.10.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.2 // indirect
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -52,6 +55,7 @@ require (
 	github.com/nats-io/nkeys v0.0.2 // indirect
 	github.com/nats-io/nuid v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
+	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/openzipkin/zipkin-go v0.1.5 // indirect
 	github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c // indirect
 	github.com/pkg/errors v0.8.1 // indirect
@@ -86,16 +90,15 @@ require (
 	go.etcd.io/bbolt v1.3.2 // indirect
 	go.opencensus.io v0.19.1 // indirect
 	go4.org v0.0.0-20190218023631-ce4c26f7be8e // indirect
-	golang.org/x/build v0.0.0-20190311235527-86650285478d // indirect
+	golang.org/x/build v0.0.0-20190313011104-9e52fcec6fa8 // indirect
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
-	golang.org/x/exp v0.0.0-20190306152737-a1d7652674e8 // indirect
+	golang.org/x/exp v0.0.0-20190312203227-4b39c73a6495 // indirect
 	golang.org/x/image v0.0.0-20190227222117-0694c2d4d067
 	golang.org/x/lint v0.0.0-20190301231843-5614ed5bae6f // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421 // indirect
-	golang.org/x/perf v0.0.0-20190306144031-151b6387e3f2 // indirect
-	golang.org/x/sys v0.0.0-20190311152110-c8c8c57fd1e1 // indirect
+	golang.org/x/perf v0.0.0-20190312170614-0655857e383f // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	golang.org/x/tools v0.0.0-20190311215038-5c2858a9cfe5 // indirect
+	golang.org/x/tools v0.0.0-20190312170243-e65039ee4138 // indirect
 	google.golang.org/genproto v0.0.0-20190307195333-5fe7a883aa19 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/ini.v1 v1.42.0 // indirect
