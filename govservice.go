@@ -8,8 +8,8 @@ type (
 	// Service is an interface for services
 	Service interface {
 		Mount(c Config, l Logger, r *echo.Group) error
-		Health() *Error
-		Setup(c Config, l Logger, rsetup ReqSetupPost) *Error
+		Health() error
+		Setup(c Config, l Logger, rsetup ReqSetupPost) error
 	}
 )
 

@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-const (
-	moduleIDHealth = "govhealth"
-)
-
 type (
 	// Health is a health service for monitoring
 	health struct {
@@ -17,9 +13,6 @@ type (
 	}
 
 	errRes struct {
-		Origin  string `json:"origin"`
-		Source  string `json:"source"`
-		Code    int    `json:"code"`
 		Message string `json:"message"`
 	}
 
@@ -43,10 +36,7 @@ func (h *health) Mount(conf Config, l Logger, r *echo.Group) error {
 			errReslist := []errRes{}
 			for _, i := range errs {
 				errReslist = append(errReslist, errRes{
-					Origin:  i.Origin(),
-					Source:  i.Source(),
-					Code:    i.Code(),
-					Message: i.Message(),
+					Message: i.Error(),
 				})
 			}
 			return c.JSON(http.StatusServiceUnavailable, &healthRes{
@@ -64,18 +54,18 @@ func (h *health) Mount(conf Config, l Logger, r *echo.Group) error {
 			return c.String(http.StatusOK, conf.Version)
 		})
 		r.GET("/ping", func(c echo.Context) error {
-			l.Debug("Ping", moduleIDHealth, "Pong", 0, map[string]string{
+			l.Debug("Ping", map[string]string{
 				"request":  "ping",
 				"response": "pong",
 			})
 			return c.String(http.StatusOK, "Pong")
 		})
 		r.GET("/error", func(c echo.Context) error {
-			return NewError(moduleIDHealth, "test error", 0, http.StatusBadRequest)
+			return NewError("test error", http.StatusBadRequest, nil)
 		})
 	}
 
-	l.Info("mounted health checkpoint", moduleIDHealth, "mount health service", 0, nil)
+	l.Info("mount health service", nil)
 	return nil
 }
 
@@ -83,8 +73,8 @@ func (h *health) addService(s Service) {
 	h.services = append(h.services, s)
 }
 
-func (h *health) check() []*Error {
-	k := []*Error{}
+func (h *health) check() []error {
+	k := []error{}
 	for _, i := range h.services {
 		if err := i.Health(); err != nil {
 			k = append(k, err)

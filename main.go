@@ -44,12 +44,12 @@ func New(config Config, l Logger) (*Server, error) {
 	i := echo.New()
 	i.HideBanner = true
 	i.HTTPErrorHandler = errorHandler(i, l)
-	l.Info("initialized error handling", moduleIDServer, "initialize error handler", 0, nil)
+	l.Info("initialize error handler", nil)
 	i.Binder = requestBinder()
-	l.Info("added custom request binder", moduleIDServer, "initialize request binder", 0, nil)
+	l.Info("initialize custom request binder", nil)
 	i.Pre(middleware.RemoveTrailingSlash())
 	if len(config.RouteRewrite) > 0 {
-		l.Info("adding route rewriting rules", moduleIDServer, "add route rewrite rules", 0, config.RouteRewrite)
+		l.Info("add route rewrite rules", config.RouteRewrite)
 		rewriteRules := make(map[string]string, len(config.RouteRewrite))
 		for k, v := range config.RouteRewrite {
 			rewriteRules["^"+k] = v
@@ -87,7 +87,7 @@ func New(config Config, l Logger) (*Server, error) {
 					URL: u,
 				})
 			} else {
-				l.Warn("could not add frontend proxy", moduleIDServer, "fail add proxy", 0, map[string]string{
+				l.Warn("fail add frontend proxy", map[string]string{
 					"proxy": i,
 					"error": err.Error(),
 				})
@@ -110,7 +110,7 @@ func New(config Config, l Logger) (*Server, error) {
 	}
 
 	i.Use(middleware.RequestID())
-	l.Info("initialized middleware", moduleIDServer, "initialize middleware", 0, nil)
+	l.Info("initialize middleware", nil)
 
 	healthService := newHealth()
 	if err := healthService.Mount(config, l, i.Group(config.BaseURL+"/healthz")); err != nil {
@@ -130,7 +130,7 @@ func New(config Config, l Logger) (*Server, error) {
 		showBanner: true,
 	}
 
-	l.Info("server instance created", moduleIDServer, "initialize server instance", 0, nil)
+	l.Info("initialize server instance", nil)
 	return s, nil
 }
 

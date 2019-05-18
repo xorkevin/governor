@@ -61,6 +61,10 @@ func (e *goverror) Error() string {
 	return fmt.Sprintf("%s: %s", e.message, e.err.Error())
 }
 
+func (e *goverror) Unwrap() error {
+	return e.err
+}
+
 func (e *goverror) Is(target interface{}) bool {
 	_, ok := target.(*goverror)
 	return ok
@@ -129,6 +133,10 @@ func (e *goverrorUser) Error() string {
 	return fmt.Sprintf("%s: %s", e.message, e.err.Error())
 }
 
+func (e *goverrorUser) Unwrap() error {
+	return e.err
+}
+
 func (e *goverrorUser) Is(target interface{}) bool {
 	_, ok := target.(*goverrorUser)
 	return ok
@@ -157,7 +165,11 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 		goverruser := goverrorUser{}
 		goverr := goverror{}
 		if xerrors.As(err, &goverruser) {
-			if reserr := c.JSON(goverruser.status, &responseError{
+			status := http.StatusInternalServerError
+			if goverruser.status != 0 {
+				status = goverruser.status
+			}
+			if reserr := c.JSON(status, &responseError{
 				Message: goverruser.message,
 			}); reserr != nil {
 				gerr := NewError("failed to send err message JSON", http.StatusInternalServerError, reserr)
@@ -174,7 +186,11 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 				"endpoint": c.Path(),
 				"request":  request,
 			})
-			if reserr := c.JSON(goverr.status, &responseError{
+			status := http.StatusInternalServerError
+			if goverr.status != 0 {
+				status = goverr.status
+			}
+			if reserr := c.JSON(status, &responseError{
 				Message: goverr.message,
 			}); reserr != nil {
 				gerr := NewError("failed to send err message JSON", http.StatusInternalServerError, reserr)
