@@ -4,19 +4,9 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
-	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/utime"
-	"net/http"
-)
-
-///////////////////////
-// Unique Identifier //
-///////////////////////
-
-const (
-	moduleID    = "uid"
-	moduleIDNew = moduleID + ".New"
 )
 
 type (
@@ -31,23 +21,22 @@ type (
 )
 
 // NewU creates a new UID without a hash input
-func NewU(timesize, randsize int) (*UID, *governor.Error) {
+func NewU(timesize, randsize int) (*UID, error) {
 	return New(timesize, 0, randsize, nil)
 }
 
 // New creates a new UID
-func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error) {
+func New(timesize, hashsize, randsize int, input []byte) (*UID, error) {
 	k := new(bytes.Buffer)
 
 	if timesize > 0 {
 		var t []byte
 		timestamp, err := utime.Timestamp()
 		if err != nil {
-			err.AddTrace(moduleIDNew)
 			return nil, err
 		}
 		if len(timestamp) < 1 {
-			return nil, governor.NewError(moduleIDNew, "No timestamp", 0, http.StatusInternalServerError)
+			return nil, errors.New("No timestamp")
 		}
 		t = make([]byte, timesize)
 		l := len(timestamp) - timesize
@@ -64,7 +53,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 	if hashsize > 0 {
 		var h []byte
 		if input == nil || len(input) < 1 {
-			return nil, governor.NewError(moduleIDNew, "No hash input provided", 0, http.StatusInternalServerError)
+			return nil, errors.New("No hash input provided")
 		}
 		h = make([]byte, hashsize)
 		l := len(input) - hashsize
@@ -82,7 +71,7 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 		r := make([]byte, randsize)
 		_, err := rand.Read(r)
 		if err != nil {
-			return nil, governor.NewError(moduleIDNew, err.Error(), 0, http.StatusInternalServerError)
+			return nil, err
 		}
 		k.Write(r)
 	} else {
@@ -98,15 +87,11 @@ func New(timesize, hashsize, randsize int, input []byte) (*UID, *governor.Error)
 	}, nil
 }
 
-const (
-	moduleIDFromBytes = moduleID + ".FromBytes"
-)
-
 // FromBytes creates a new UID from an existing byte slice
-func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Error) {
+func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, error) {
 	size := timesize + hashsize + randsize
 	if len(b) != size {
-		return nil, governor.NewError(moduleIDFromBytes, fmt.Sprintf("byte slice length %d does not match defined sizes %d", len(b), size), 0, http.StatusInternalServerError)
+		return nil, errors.New(fmt.Sprintf("Byte slice length %d does not match defined sizes %d", len(b), size))
 	}
 
 	return &UID{
@@ -119,9 +104,9 @@ func FromBytes(timesize, hashsize, randsize int, b []byte) (*UID, *governor.Erro
 }
 
 // FromBytesTRSplit creates a new UID from an existing byte slice with equal parts devoted to time and rand bytes
-func FromBytesTRSplit(b []byte) (*UID, *governor.Error) {
+func FromBytesTRSplit(b []byte) (*UID, error) {
 	if len(b)%2 != 0 {
-		return nil, governor.NewError(moduleIDFromBytes, fmt.Sprintf("byte slice length %d is not even", len(b)), 0, http.StatusInternalServerError)
+		return nil, errors.New(fmt.Sprintf("byte slice length %d is not even", len(b)))
 	}
 
 	t := len(b) / 2
@@ -129,25 +114,21 @@ func FromBytesTRSplit(b []byte) (*UID, *governor.Error) {
 	return FromBytes(t, 0, t, b)
 }
 
-const (
-	moduleIDFromBase64 = moduleID + ".FromBase64"
-)
-
 // FromBase64 creates a new UID from a base64 encoded string
-func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, *governor.Error) {
+func FromBase64(timeSize, hashSize, randomSize int, ustring string) (*UID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
+		return nil, err
 	}
 
 	return FromBytes(timeSize, hashSize, randomSize, b)
 }
 
 // FromBase64TRSplit creates a new UID from a base64 encoded string with equal parts devoted to time and rand bytes
-func FromBase64TRSplit(ustring string) (*UID, *governor.Error) {
+func FromBase64TRSplit(ustring string) (*UID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, governor.NewError(moduleIDFromBase64, err.Error(), 0, http.StatusInternalServerError)
+		return nil, err
 	}
 
 	return FromBytesTRSplit(b)

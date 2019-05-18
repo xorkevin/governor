@@ -61,7 +61,7 @@ func (h *health) Mount(conf Config, l Logger, r *echo.Group) error {
 			return c.String(http.StatusOK, "Pong")
 		})
 		r.GET("/error", func(c echo.Context) error {
-			return NewError("test error", http.StatusBadRequest, nil)
+			return NewError("Test error", http.StatusBadRequest, nil)
 		})
 	}
 

@@ -104,7 +104,7 @@ var (
 func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 	r.POST("", func(c echo.Context) error {
 		if setupRun {
-			return NewErrorUser("setup already run", http.StatusForbidden, nil)
+			return NewErrorUser("Setup already run", http.StatusForbidden, nil)
 		}
 
 		rsetup := &ReqSetupPost{}
@@ -121,7 +121,7 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 				if xerrors.Is(err, goverrsetup) {
 					setupRun = true
 					l.Warn("setup run again", nil)
-					return NewErrorUser("setup already run", http.StatusForbidden, err)
+					return NewErrorUser("Setup already run", http.StatusForbidden, err)
 				}
 				return err
 			}

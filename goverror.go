@@ -171,7 +171,7 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 			if reserr := c.JSON(status, &responseError{
 				Message: goverruser.message,
 			}); reserr != nil {
-				gerr := NewError("failed to send err message JSON", http.StatusInternalServerError, reserr)
+				gerr := NewError("Failed to send err message JSON", http.StatusInternalServerError, reserr)
 				l.Warn(gerr.Error(), map[string]string{
 					"endpoint": c.Path(),
 				})
@@ -192,7 +192,7 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 			if reserr := c.JSON(status, &responseError{
 				Message: goverr.message,
 			}); reserr != nil {
-				gerr := NewError("failed to send err message JSON", http.StatusInternalServerError, reserr)
+				gerr := NewError("Failed to send err message JSON", http.StatusInternalServerError, reserr)
 				l.Warn(gerr.Error(), map[string]string{
 					"endpoint": c.Path(),
 					"request":  request,
