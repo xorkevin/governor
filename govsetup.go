@@ -80,7 +80,7 @@ func (e *goverrorSetup) Unwrap() error {
 	return e.err
 }
 
-func (e *goverrorSetup) Is(target interface{}) bool {
+func (e *goverrorSetup) Is(target error) bool {
 	_, ok := target.(*goverrorSetup)
 	return ok
 }
@@ -117,8 +117,8 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 
 		for _, service := range s.services {
 			if err := service.Setup(conf, l, *rsetup); err != nil {
-				goverrsetup := goverrorSetup{}
-				if xerrors.Is(err, &goverrsetup) {
+				goverrsetup := &goverrorSetup{}
+				if xerrors.Is(err, goverrsetup) {
 					setupRun = true
 					l.Warn("setup run again", nil)
 					return NewErrorUser("setup already run", http.StatusForbidden, err)

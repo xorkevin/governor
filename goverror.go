@@ -29,8 +29,8 @@ func NewError(message string, status int, err error) error {
 	if message == "" || status == 0 {
 		m := ""
 		st := 0
-		goverr := goverror{}
-		goverruser := goverrorUser{}
+		goverr := &goverror{}
+		goverruser := &goverrorUser{}
 		if xerrors.As(err, &goverr) {
 			m = goverr.message
 			st = goverr.status
@@ -65,7 +65,7 @@ func (e *goverror) Unwrap() error {
 	return e.err
 }
 
-func (e *goverror) Is(target interface{}) bool {
+func (e *goverror) Is(target error) bool {
 	_, ok := target.(*goverror)
 	return ok
 }
@@ -101,8 +101,8 @@ func NewErrorUser(message string, status int, err error) error {
 	if message == "" || status == 0 {
 		m := ""
 		st := 0
-		goverruser := goverrorUser{}
-		goverr := goverror{}
+		goverruser := &goverrorUser{}
+		goverr := &goverror{}
 		if xerrors.As(err, &goverruser) {
 			m = goverruser.message
 			st = goverruser.status
@@ -137,7 +137,7 @@ func (e *goverrorUser) Unwrap() error {
 	return e.err
 }
 
-func (e *goverrorUser) Is(target interface{}) bool {
+func (e *goverrorUser) Is(target error) bool {
 	_, ok := target.(*goverrorUser)
 	return ok
 }
@@ -162,8 +162,8 @@ type (
 
 func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
-		goverruser := goverrorUser{}
-		goverr := goverror{}
+		goverruser := &goverrorUser{}
+		goverr := &goverror{}
 		if xerrors.As(err, &goverruser) {
 			status := http.StatusInternalServerError
 			if goverruser.status != 0 {
