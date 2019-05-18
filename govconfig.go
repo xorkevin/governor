@@ -3,6 +3,7 @@ package governor
 import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"io"
 )
 
 type (
@@ -13,6 +14,7 @@ type (
 		Version       string
 		VersionHash   string
 		LogLevel      int
+		LogOutput     io.Writer
 		Port          string
 		BaseURL       string
 		PublicDir     string
@@ -42,6 +44,7 @@ func (c *Config) Init() error {
 	c.Appname = c.config.GetString("appname")
 	c.Version = c.config.GetString("version")
 	c.LogLevel = envToLevel(c.config.GetString("mode"))
+	c.LogOutput = envToLogOutput(c.config.GetString("logoutput"))
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	c.PublicDir = c.config.GetString("publicdir")
@@ -62,6 +65,7 @@ func NewConfig(confFilenameDefault string, versionhash string) (Config, error) {
 	v.SetDefault("appname", "governor")
 	v.SetDefault("version", "version")
 	v.SetDefault("mode", "INFO")
+	v.SetDefault("logoutput", "STDOUT")
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")

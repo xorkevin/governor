@@ -156,7 +156,6 @@ func (e *goverrorUser) As(target interface{}) bool {
 type (
 	responseError struct {
 		Message string `json:"message"`
-		Code    int    `json:"code"`
 	}
 )
 

@@ -1,7 +1,9 @@
 package governor
 
 import (
+	"bytes"
 	"github.com/sirupsen/logrus"
+	"io"
 	"os"
 	"time"
 )
@@ -31,6 +33,17 @@ func envToLevel(e string) int {
 		return levelPanic
 	default:
 		return levelInfo
+	}
+}
+
+func envToLogOutput(e string) io.Writer {
+	switch e {
+	case "BUFFER":
+		return &bytes.Buffer{}
+	case "STDOUT":
+		return os.Stdout
+	default:
+		return os.Stdout
 	}
 }
 
@@ -75,7 +88,7 @@ func NewLogger(c Config) Logger {
 	} else {
 		l.Formatter = &logrus.JSONFormatter{}
 	}
-	l.Out = os.Stdout
+	l.Out = c.LogOutput
 	l.Level = logrusLevelToLog(c.LogLevel)
 	return &govlogger{
 		level:  c.LogLevel,
@@ -86,7 +99,7 @@ func NewLogger(c Config) Logger {
 func (l *govlogger) createFields(data map[string]string) logrus.Fields {
 	now, _ := time.Now().MarshalText()
 	fields := logrus.Fields{
-		"time": string(now),
+		"logtime": string(now),
 	}
 	if data != nil {
 		for k, v := range data {
