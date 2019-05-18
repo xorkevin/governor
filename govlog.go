@@ -13,7 +13,6 @@ const (
 	levelError
 	levelFatal
 	levelPanic
-	levelNoLog
 )
 
 func envToLevel(e string) int {
@@ -37,11 +36,11 @@ func envToLevel(e string) int {
 
 type (
 	Logger interface {
-		Debug(msg, module, event string, code int, data map[string]string)
-		Info(msg, module, event string, code int, data map[string]string)
-		Warn(msg, module, event string, code int, data map[string]string)
-		Error(msg, module, event string, code int, data map[string]string)
-		Fatal(msg, module, event string, code int, data map[string]string)
+		Debug(msg string, data map[string]string)
+		Info(msg string, data map[string]string)
+		Warn(msg string, data map[string]string)
+		Error(msg string, data map[string]string)
+		Fatal(msg string, data map[string]string)
 	}
 
 	govlogger struct {
@@ -84,15 +83,10 @@ func NewLogger(c Config) Logger {
 	}
 }
 
-func (l *govlogger) createFields(module, event string, code int, data map[string]string) logrus.Fields {
+func (l *govlogger) createFields(data map[string]string) logrus.Fields {
 	now, _ := time.Now().MarshalText()
 	fields := logrus.Fields{
-		"time":   string(now),
-		"module": module,
-		"event":  event,
-	}
-	if code > 0 {
-		fields["code"] = code
+		"time": string(now),
 	}
 	if data != nil {
 		for k, v := range data {
@@ -102,27 +96,27 @@ func (l *govlogger) createFields(module, event string, code int, data map[string
 	return fields
 }
 
-func (l *govlogger) Debug(msg, module, event string, code int, data map[string]string) {
-	fields := l.createFields(module, event, code, data)
+func (l *govlogger) Debug(msg string, data map[string]string) {
+	fields := l.createFields(data)
 	l.logger.WithFields(fields).Debug(msg)
 }
 
-func (l *govlogger) Info(msg, module, event string, code int, data map[string]string) {
-	fields := l.createFields(module, event, code, data)
+func (l *govlogger) Info(msg string, data map[string]string) {
+	fields := l.createFields(data)
 	l.logger.WithFields(fields).Info(msg)
 }
 
-func (l *govlogger) Warn(msg, module, event string, code int, data map[string]string) {
-	fields := l.createFields(module, event, code, data)
+func (l *govlogger) Warn(msg string, data map[string]string) {
+	fields := l.createFields(data)
 	l.logger.WithFields(fields).Warn(msg)
 }
 
-func (l *govlogger) Error(msg, module, event string, code int, data map[string]string) {
-	fields := l.createFields(module, event, code, data)
+func (l *govlogger) Error(msg string, data map[string]string) {
+	fields := l.createFields(data)
 	l.logger.WithFields(fields).Error(msg)
 }
 
-func (l *govlogger) Fatal(msg, module, event string, code int, data map[string]string) {
-	fields := l.createFields(module, event, code, data)
+func (l *govlogger) Fatal(msg string, data map[string]string) {
+	fields := l.createFields(data)
 	l.logger.WithFields(fields).Fatal(msg)
 }
