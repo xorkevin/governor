@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"bytes"
 	"github.com/sirupsen/logrus"
 	"io"
 	"os"
@@ -38,8 +37,6 @@ func envToLevel(e string) int {
 
 func envToLogOutput(e string) io.Writer {
 	switch e {
-	case "BUFFER":
-		return &bytes.Buffer{}
 	case "STDOUT":
 		return os.Stdout
 	default:
