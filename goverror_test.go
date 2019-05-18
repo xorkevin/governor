@@ -50,7 +50,7 @@ func TestNewError(t *testing.T) {
 	assert.Equal(usererr, k5.err, "error should have the err that was passed in")
 }
 
-func TestNewError_Error(t *testing.T) {
+func TestGoverror_Error(t *testing.T) {
 	assert := assert.New(t)
 
 	rootErr := errors.New("test root err")
@@ -62,7 +62,7 @@ func TestNewError_Error(t *testing.T) {
 	assert.Equal("test message", err3.Error(), "error string should its message if there are no causers")
 }
 
-func TestNewError_Unwrap(t *testing.T) {
+func TestGoverror_Unwrap(t *testing.T) {
 	assert := assert.New(t)
 
 	rootErr := errors.New("test root err")
@@ -73,7 +73,7 @@ func TestNewError_Unwrap(t *testing.T) {
 	assert.Equal(rootErr, k.Unwrap(), "error should return its direct causer when unwrapped")
 }
 
-func TestNewError_Is(t *testing.T) {
+func TestGoverror_Is(t *testing.T) {
 	assert := assert.New(t)
 
 	err := NewError("test message", 123, nil)
@@ -82,7 +82,7 @@ func TestNewError_Is(t *testing.T) {
 	assert.True(ok, "error should be a goverror")
 }
 
-func TestNewError_As(t *testing.T) {
+func TestGoverror_As(t *testing.T) {
 	assert := assert.New(t)
 
 	rootErr := errors.New("test root err")
