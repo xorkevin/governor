@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	moduleID      = "rank"
 	rankLengthCap = 128
 )
 

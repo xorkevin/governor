@@ -3,6 +3,7 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"golang.org/x/image/draw"
@@ -16,8 +17,6 @@ import (
 )
 
 const (
-	moduleID = "image"
-
 	// MediaTypeJpeg is the mime type for jpeg images
 	MediaTypeJpeg = "image/jpeg"
 	// MediaTypePng is the mime type for png images
@@ -62,16 +61,12 @@ type (
 
 // New returns a new image service
 func New(conf governor.Config, l governor.Logger) Image {
-	l.Info("initialized image service", moduleID, "initialize image service", 0, nil)
+	l.Info("initialize image service", nil)
 
 	return &imageService{
 		log: l,
 	}
 }
-
-const (
-	moduleIDLoad = moduleID + ".Load"
-)
 
 // LoadJpeg reads an image from a form and places it into context as a jpeg
 // sizeLimit is measured in bytes
@@ -119,30 +114,28 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 		return func(c echo.Context) error {
 			file, err := c.FormFile(formField)
 			if err != nil {
-				return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewErrorUser("Invalid file format", http.StatusBadRequest, err)
 			}
 
 			mediaType, _, err := mime.ParseMediaType(file.Header.Get("Content-Type"))
 			if err != nil {
-				return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewErrorUser("File does not have a media type", http.StatusBadRequest, err)
 			}
 			switch mediaType {
 			case MediaTypeJpeg, MediaTypePng, MediaTypeGif:
 			default:
-				return governor.NewErrorUser(moduleIDLoad, mediaType+" is unsupported", 0, http.StatusUnsupportedMediaType)
+				return governor.NewErrorUser(fmt.Sprintf("%s is unsupported", mediaType), http.StatusUnsupportedMediaType, nil)
 			}
 
 			src, err := file.Open()
 			if err != nil {
-				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
+				return governor.NewErrorUser("Failed to open file", http.StatusInternalServerError, err)
 			}
 			defer func(closer io.Closer) {
 				err := closer.Close()
 				if err != nil {
-					gerr := governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
-					gerr.AddTrace(moduleID)
-					im.log.Error(gerr.Message(), gerr.Origin(), "fail close image file", gerr.Code(), map[string]string{
-						"source": gerr.Source(),
+					im.log.Error("image: fail close image file", map[string]string{
+						"err": err.Error(),
 					})
 				}
 			}(src)
@@ -153,19 +146,19 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 				if i, err := jpeg.Decode(src); err == nil {
 					img = i
 				} else {
-					return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+					return governor.NewErrorUser("Invalid JPEG image", http.StatusBadRequest, err)
 				}
 			case MediaTypePng:
 				if i, err := png.Decode(src); err == nil {
 					img = i
 				} else {
-					return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+					return governor.NewErrorUser("Invalid PNG image", http.StatusBadRequest, err)
 				}
 			case MediaTypeGif:
 				if i, err := gif.Decode(src); err == nil {
 					img = i
 				} else {
-					return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+					return governor.NewErrorUser("Invalid GIF image", http.StatusBadRequest, err)
 				}
 			}
 
@@ -186,10 +179,10 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 				Quality: opt.ThumbQuality,
 			}
 			if err := jpeg.Encode(b, img, &j); err != nil {
-				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
+				return governor.NewError("Failed to encode JPEG image", http.StatusInternalServerError, err)
 			}
 			if err := jpeg.Encode(b2, thumb, &j2); err != nil {
-				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
+				return governor.NewError("Failed to encode JPEG thumbnail image", http.StatusInternalServerError, err)
 			}
 			b64 := base64.RawStdEncoding.EncodeToString(b2.Bytes())
 

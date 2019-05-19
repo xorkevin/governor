@@ -1,6 +1,7 @@
 package fileloader
 
 import (
+	"fmt"
 	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"io"
@@ -9,7 +10,6 @@ import (
 )
 
 const (
-	moduleID            = "fileloader"
 	defaultContextField = "file"
 	defaultSizeField    = "filesize"
 )
@@ -34,16 +34,12 @@ type (
 
 // New returns a new fileloader service
 func New(conf governor.Config, l governor.Logger) FileLoader {
-	l.Info("initialized fileloader service", moduleID, "initialize fileloader service", 0, nil)
+	l.Info("initialize fileloader service", nil)
 
 	return &fileloaderService{
 		log: l,
 	}
 }
-
-const (
-	moduleIDLoad = moduleID + ".Load"
-)
 
 // Load reads in a file from a form and places it into context
 func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareFunc {
@@ -61,12 +57,12 @@ func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareF
 		return func(c echo.Context) error {
 			file, err := c.FormFile(formField)
 			if err != nil {
-				return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewErrorUser("Invalid file format", http.StatusBadRequest, err)
 			}
 
 			mediaType, _, err := mime.ParseMediaType(file.Header.Get("Content-Type"))
 			if err != nil {
-				return governor.NewErrorUser(moduleIDLoad, err.Error(), 0, http.StatusBadRequest)
+				return governor.NewErrorUser("File does not have a media type", http.StatusBadRequest, err)
 			}
 			if opt.MimeType != nil && len(opt.MimeType) > 0 {
 				found := false
@@ -77,21 +73,19 @@ func (f *fileloaderService) Load(formField string, opt Options) echo.MiddlewareF
 					}
 				}
 				if !found {
-					return governor.NewErrorUser(moduleIDLoad, mediaType+" is unsupported", 0, http.StatusUnsupportedMediaType)
+					return governor.NewErrorUser(fmt.Sprintf("%s is unsupported", mediaType), http.StatusUnsupportedMediaType, nil)
 				}
 			}
 
 			src, err := file.Open()
 			if err != nil {
-				return governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
+				return governor.NewErrorUser("Failed to open file", http.StatusInternalServerError, err)
 			}
 			defer func(closer io.Closer) {
 				err := closer.Close()
 				if err != nil {
-					gerr := governor.NewError(moduleIDLoad, err.Error(), 0, http.StatusInternalServerError)
-					gerr.AddTrace(moduleID)
-					f.log.Error(gerr.Message(), gerr.Origin(), "fail close file", gerr.Code(), map[string]string{
-						"source": gerr.Source(),
+					f.log.Error("fileloader: fail close file", map[string]string{
+						"err": err.Error(),
 					})
 				}
 			}(src)

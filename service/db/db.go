@@ -22,10 +22,6 @@ type (
 	}
 )
 
-const (
-	moduleID = "database"
-)
-
 // New creates a new db service
 func New(c governor.Config, l governor.Logger) (Database, error) {
 	v := c.Conf()
@@ -37,16 +33,20 @@ func New(c governor.Config, l governor.Logger) (Database, error) {
 	postgresURL := strings.Join(pgarr, " ")
 	db, err := sql.Open("postgres", postgresURL)
 	if err != nil {
-		l.Error(err.Error(), moduleID, "fail create db", 0, nil)
+		l.Error("db: fail create db", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
-		l.Error(err.Error(), moduleID, "fail ping db", 0, nil)
+		l.Error("db: fail ping db", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 
-	l.Info(fmt.Sprintf("db: connected to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"]), moduleID, "establish db connection", 0, nil)
-	l.Info("initialized database", moduleID, "initialize database service", 0, nil)
+	l.Info(fmt.Sprintf("db: establish connection to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"]), nil)
+	l.Info("initialize database service", nil)
 
 	return &postgresDB{
 		db: db,
@@ -55,24 +55,20 @@ func New(c governor.Config, l governor.Logger) (Database, error) {
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (db *postgresDB) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mounted database", moduleID, "mount database service", 0, nil)
+	l.Info("mount database service", nil)
 	return nil
 }
 
-const (
-	moduleIDHealth = moduleID + ".health"
-)
-
 // Health is a health check for the service
-func (db *postgresDB) Health() *governor.Error {
+func (db *postgresDB) Health() error {
 	if _, err := db.db.Exec("SELECT 1;"); err != nil {
-		return governor.NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
+		return governor.NewError("Failed to connect to db", http.StatusServiceUnavailable, err)
 	}
 	return nil
 }
 
 // Setup is run on service setup
-func (db *postgresDB) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (db *postgresDB) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	return nil
 }
 

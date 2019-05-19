@@ -20,10 +20,6 @@ type (
 	}
 )
 
-const (
-	moduleID = "redis"
-)
-
 // New creates a new cache service
 func New(c governor.Config, l governor.Logger) (Cache, error) {
 	v := c.Conf()
@@ -36,12 +32,14 @@ func New(c governor.Config, l governor.Logger) (Cache, error) {
 	})
 
 	if _, err := cache.Ping().Result(); err != nil {
-		l.Error(err.Error(), moduleID, "fail create cache", 0, nil)
+		l.Error("cache: fail create cache", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 
-	l.Info(fmt.Sprintf("cache: connected to %s:%s", rconf["host"], rconf["port"]), moduleID, "establish cache connection", 0, nil)
-	l.Info("initialized cache", moduleID, "initialize cache service", 0, nil)
+	l.Info(fmt.Sprintf("cache: establish connection to %s:%s", rconf["host"], rconf["port"]), nil)
+	l.Info("initialize cache service", nil)
 
 	return &redisCache{
 		cache: cache,
@@ -50,24 +48,20 @@ func New(c governor.Config, l governor.Logger) (Cache, error) {
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (c *redisCache) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mounted cache", moduleID, "mount cache service", 0, nil)
+	l.Info("mount cache service", nil)
 	return nil
 }
 
-const (
-	moduleIDHealth = moduleID + ".health"
-)
-
 // Health is a health check for the service
-func (c *redisCache) Health() *governor.Error {
+func (c *redisCache) Health() error {
 	if _, err := c.cache.Ping().Result(); err != nil {
-		return governor.NewError(moduleIDHealth, err.Error(), 0, http.StatusServiceUnavailable)
+		return governor.NewError("Failed to connect to cache", http.StatusServiceUnavailable, err)
 	}
 	return nil
 }
 
 // Setup is run on service setup
-func (c *redisCache) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (c *redisCache) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	return nil
 }
 

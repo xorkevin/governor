@@ -8,17 +8,13 @@ import (
 	"sync"
 )
 
-const (
-	moduleID = "websocket"
-)
-
 type (
 	// Websocket is a websocket management service
 	Websocket interface {
 		Subscribe(conn *Conn)
 		Unsubscribe(conn *Conn)
-		Broadcast(channel string, msg interface{}) *governor.Error
-		NewConn(channels []string, w http.ResponseWriter, r *http.Request) (*Conn, *governor.Error)
+		Broadcast(channel string, msg interface{}) error
+		NewConn(channels []string, w http.ResponseWriter, r *http.Request) (*Conn, error)
 	}
 
 	websocketService struct {
@@ -41,7 +37,7 @@ type (
 
 // New creates a new Websocket service
 func New(conf governor.Config, l governor.Logger) Websocket {
-	l.Info("initialized websocket service", moduleID, "initialize websocket service", 0, nil)
+	l.Info("initialize websocket service", nil)
 
 	return &websocketService{
 		channels: sync.Map{},
@@ -92,23 +88,19 @@ func (w *websocketService) Unsubscribe(conn *Conn) {
 	}
 }
 
-const (
-	moduleIDBroadcast = moduleID + ".Broadcast"
-)
-
 // Broadcast sends a message to all websocket connections in a channel
-func (w *websocketService) Broadcast(channel string, msg interface{}) *governor.Error {
+func (w *websocketService) Broadcast(channel string, msg interface{}) error {
 	c, validChannel := w.getChannel(channel)
 	if !validChannel {
 		return nil
 	}
 	m, err := json.Marshal(msg)
 	if err != nil {
-		return governor.NewError(moduleIDBroadcast, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to encode JSON", http.StatusInternalServerError, err)
 	}
 	p, err := websocket.NewPreparedMessage(websocket.TextMessage, m)
 	if err != nil {
-		return governor.NewError(moduleIDBroadcast, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to create websocket message", http.StatusInternalServerError, err)
 	}
 	for listener := range c.listeners {
 		if err := listener.conn.WritePreparedMessage(p); err != nil {
@@ -125,17 +117,11 @@ func newChannel(id string) *channel {
 	}
 }
 
-const (
-	moduleIDConn = moduleID + ".Conn"
-
-	moduleIDConnNew = moduleIDConn + ".New"
-)
-
 // NewConn establishes a new websocket connection from an existing http connection
-func (w *websocketService) NewConn(channels []string, rw http.ResponseWriter, r *http.Request) (*Conn, *governor.Error) {
+func (w *websocketService) NewConn(channels []string, rw http.ResponseWriter, r *http.Request) (*Conn, error) {
 	ws, err := w.upgrader.Upgrade(rw, r, nil)
 	if err != nil {
-		return nil, governor.NewErrorUser(moduleIDConnNew, err.Error(), 0, http.StatusBadRequest)
+		return nil, governor.NewErrorUser("Failed to upgrade to websocket connection", http.StatusBadRequest, err)
 	}
 
 	c := &Conn{
@@ -147,15 +133,11 @@ func (w *websocketService) NewConn(channels []string, rw http.ResponseWriter, r 
 	return c, nil
 }
 
-const (
-	moduleIDConnRead = moduleIDConn + ".Read"
-)
-
 // Read reads a message to json
-func (c *Conn) Read(msg interface{}) *governor.Error {
+func (c *Conn) Read(msg interface{}) error {
 	if err := c.conn.ReadJSON(msg); err != nil {
 		c.Close()
-		return governor.NewError(moduleIDConnRead, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to parse JSON message", http.StatusInternalServerError, err)
 	}
 	return nil
 }
