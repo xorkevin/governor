@@ -84,10 +84,6 @@ func (r Rank) Remove(other Rank) {
 	}
 }
 
-const (
-	moduleIDFromString = moduleID + ".fromstring"
-)
-
 var (
 	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
 	rankRegexUser  = regexp.MustCompile(`^usr_[a-z][a-z0-9.-_]+$`)
@@ -96,7 +92,7 @@ var (
 )
 
 // FromStringUser creates a new User Rank from a string
-func FromStringUser(rankString string) (Rank, *governor.Error) {
+func FromStringUser(rankString string) (Rank, error) {
 	if len(rankString) < 1 {
 		return Rank{}, nil
 	}
@@ -104,7 +100,7 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 	r := make(Rank, len(rankArray))
 	for _, i := range rankArray {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
+			return Rank{}, governor.NewErrorUser("Illegal rank string", http.StatusBadRequest, nil)
 		}
 		r[i] = true
 	}
@@ -112,7 +108,7 @@ func FromStringUser(rankString string) (Rank, *governor.Error) {
 }
 
 // FromStringGroup creates a new Group Rank from a string
-func FromStringGroup(rankString string) (Rank, *governor.Error) {
+func FromStringGroup(rankString string) (Rank, error) {
 	if len(rankString) < 1 {
 		return Rank{}, nil
 	}
@@ -120,7 +116,7 @@ func FromStringGroup(rankString string) (Rank, *governor.Error) {
 	r := make(Rank, len(rankArray))
 	for _, i := range rankArray {
 		if !rankRegexGroup.MatchString(i) {
-			return Rank{}, governor.NewErrorUser(moduleIDFromString, "illegal rank string", 0, http.StatusBadRequest)
+			return Rank{}, governor.NewErrorUser("Illegal rank string", http.StatusBadRequest, nil)
 		}
 		r[i] = true
 	}

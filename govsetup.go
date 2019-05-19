@@ -120,7 +120,7 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 				goverrsetup := &goverrorSetup{}
 				if xerrors.Is(err, goverrsetup) {
 					setupRun = true
-					l.Warn("setup run again", nil)
+					l.Warn("govsetup: setup run again", nil)
 					return NewErrorUser("Setup already run", http.StatusForbidden, err)
 				}
 				return err

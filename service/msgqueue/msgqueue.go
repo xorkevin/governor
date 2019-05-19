@@ -15,9 +15,9 @@ type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
 		governor.Service
-		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, *governor.Error)
-		Publish(queueid string, msgdata []byte) *governor.Error
-		Close() *governor.Error
+		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
+		Publish(queueid string, msgdata []byte) error
+		Close() error
 	}
 
 	msgQueue struct {
@@ -26,7 +26,7 @@ type (
 	}
 
 	Subscription interface {
-		Close() *governor.Error
+		Close() error
 	}
 
 	subscription struct {
@@ -48,8 +48,7 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 
 	clientid, err := uid.NewU(8, 8)
 	if err != nil {
-		err.AddTrace(moduleID)
-		return nil, err
+		return nil, governor.NewError("Failed to get new uid", http.StatusInternalServerError, err)
 	}
 	clientidstr := strings.TrimRight(clientid.Base64(), "=")
 
@@ -60,12 +59,14 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	}); err == nil {
 		conn = connection
 	} else {
-		l.Error(err.Error(), moduleID, "fail connect nats", 0, nil)
+		l.Error("Fail connect nats", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 
-	l.Info(fmt.Sprintf("msgqueue: connected to %s:%s", rconf["host"], rconf["port"]), moduleID, "establish msgqueue connection", 0, nil)
-	l.Info("initialized msgqueue", moduleID, "initialize msgqueue serivce", 0, nil)
+	l.Info(fmt.Sprintf("msgqueue: establish connection to %s:%s", rconf["host"], rconf["port"]), nil)
+	l.Info("initialize msgqueue serivce", nil)
 
 	return &msgQueue{
 		logger: l,
@@ -75,23 +76,19 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (q *msgQueue) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mounted msgqueue", moduleID, "mount msgqueue service", 0, nil)
+	l.Info("mount msgqueue service", nil)
 	return nil
 }
 
 // Health is a health check for the service
-func (q *msgQueue) Health() *governor.Error {
+func (q *msgQueue) Health() error {
 	return nil
 }
 
 // Setup is run on service setup
-func (q *msgQueue) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (q *msgQueue) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	return nil
 }
-
-const (
-	moduleIDsubscriber = moduleID + "Subscription.subscriber"
-)
 
 func (s *subscription) subscriber(msg *stan.Msg) {
 	for {
@@ -101,7 +98,7 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 		}
 		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
 			if err := msg.Ack(); err != nil {
-				s.logger.Error(err.Error(), moduleIDsubscriber, "fail ack message", 0, nil)
+				s.logger.Error("msgqueue: subscriber: Fail ack message", nil)
 			}
 			s.worker(msg.Data)
 			return
@@ -109,43 +106,31 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 	}
 }
 
-const (
-	moduleIDSubcriptionClose = moduleID + ".Subscription.Close"
-)
-
 // Close closes the subscription
-func (s *subscription) Close() *governor.Error {
+func (s *subscription) Close() error {
 	if err := s.sub.Close(); err != nil {
-		return governor.NewError(moduleIDSubcriptionClose, "Failed to close subscription: "+err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-const (
-	moduleIDSubscribeQueue = moduleID + ".SubscribeQueue"
-)
-
 // SubscribeQueue subscribes to a queue
-func (q *msgQueue) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, *governor.Error) {
+func (q *msgQueue) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
 	msub := &subscription{
 		logger: q.logger,
 		worker: worker,
 	}
 	sub, err := q.queue.QueueSubscribe(queueid, queuegroup, msub.subscriber, stan.DurableName(queuegroup+"-durable"), stan.SetManualAckMode())
 	if err != nil {
-		return nil, governor.NewError(moduleIDSubscribeQueue, "Failed to create subscription: "+err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to create subscription", http.StatusInternalServerError, err)
 	}
 	msub.sub = sub
 	return msub, nil
 }
 
-const (
-	moduleIDPublish = moduleID + ".Publish"
-)
-
-func (q *msgQueue) Publish(queueid string, msgdata []byte) *governor.Error {
+func (q *msgQueue) Publish(queueid string, msgdata []byte) error {
 	if err := q.queue.Publish(queueid, msgdata); err != nil {
-		return governor.NewError(moduleIDPublish, "Failed to publish message: "+err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to publish message: ", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -155,9 +140,9 @@ const (
 )
 
 // Close closes the client connection
-func (q *msgQueue) Close() *governor.Error {
+func (q *msgQueue) Close() error {
 	if err := q.queue.Close(); err != nil {
-		return governor.NewError(moduleIDClose, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to close client connection", http.StatusInternalServerError, err)
 	}
 	return nil
 }

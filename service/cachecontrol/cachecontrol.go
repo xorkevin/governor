@@ -12,7 +12,7 @@ import (
 type (
 	// CacheControl is a service for managing http cache-control headers
 	CacheControl interface {
-		Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc
+		Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc
 		NoStore() echo.MiddlewareFunc
 	}
 
@@ -22,7 +22,7 @@ type (
 
 // New creates a new cache control service
 func New(config governor.Config, l governor.Logger) CacheControl {
-	l.Info("initialized cache control service", moduleID, "initialize cache control service", 0, nil)
+	l.Info("initialize cache control service", nil)
 	return &cacheControl{}
 }
 
@@ -40,7 +40,7 @@ const (
 )
 
 // Control creates a middleware function to cache the response
-func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	if maxage < 0 {
 		panic("maxage cannot be negative")
 	}

@@ -16,8 +16,8 @@ const (
 type (
 	// Template is a templating service
 	Template interface {
-		Execute(templateName string, data interface{}) (string, *governor.Error)
-		ExecuteHTML(filename string, data interface{}) (string, *governor.Error)
+		Execute(templateName string, data interface{}) (string, error)
+		ExecuteHTML(filename string, data interface{}) (string, error)
 	}
 
 	templateService struct {
@@ -30,19 +30,19 @@ func New(conf governor.Config, l governor.Logger) (Template, error) {
 	t, err := htmlTemplate.ParseGlob(conf.TemplateDir + "/*.html")
 	if err != nil {
 		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", conf.TemplateDir+"/*.html") {
-			l.Warn("template: no templates loaded", moduleID, "no templates loaded", 0, nil)
+			l.Warn("template: no templates loaded", nil)
 			t = htmlTemplate.New("default")
 		} else {
-			l.Error(fmt.Sprintf("error creating Template: %s", err), moduleID, "fail create template", 0, nil)
+			l.Error(fmt.Sprintf("template: error creating Template: %s", err), nil)
 			return nil, err
 		}
 	}
 
 	if k := t.DefinedTemplates(); k != "" {
-		l.Info(fmt.Sprintf("template: %s", strings.TrimLeft(k, "; ")), moduleID, "load templates", 0, nil)
+		l.Info(fmt.Sprintf("template: load templates: %s", strings.TrimLeft(k, "; ")), nil)
 	}
 
-	l.Info("initialized template service", moduleID, "initialize template service", 0, nil)
+	l.Info("initialize template service", nil)
 
 	return &templateService{
 		t: t,
@@ -54,15 +54,15 @@ const (
 )
 
 // Execute executes a template and returns the templated string
-func (t *templateService) Execute(templateName string, data interface{}) (string, *governor.Error) {
+func (t *templateService) Execute(templateName string, data interface{}) (string, error) {
 	b := bytes.Buffer{}
 	if err := t.t.ExecuteTemplate(&b, templateName, data); err != nil {
-		return "", governor.NewError(moduleIDExecute, err.Error(), 0, http.StatusInternalServerError)
+		return "", governor.NewError("Failed executing template", http.StatusInternalServerError, err)
 	}
 	return b.String(), nil
 }
 
 // ExecuteHTML executes an html file and returns the templated string
-func (t *templateService) ExecuteHTML(filename string, data interface{}) (string, *governor.Error) {
+func (t *templateService) ExecuteHTML(filename string, data interface{}) (string, error) {
 	return t.Execute(filename+".html", data)
 }

@@ -54,7 +54,7 @@ func (h *health) Mount(conf Config, l Logger, r *echo.Group) error {
 			return c.String(http.StatusOK, conf.Version)
 		})
 		r.GET("/ping", func(c echo.Context) error {
-			l.Debug("Ping", map[string]string{
+			l.Debug("govhealth: Ping", map[string]string{
 				"request":  "ping",
 				"response": "pong",
 			})
