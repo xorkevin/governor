@@ -21,8 +21,6 @@ import (
 	"github.com/hackform/governor/service/msgqueue/conf"
 	"github.com/hackform/governor/service/objstore"
 	"github.com/hackform/governor/service/objstore/conf"
-	"github.com/hackform/governor/service/post"
-	"github.com/hackform/governor/service/post/conf"
 	"github.com/hackform/governor/service/profile"
 	"github.com/hackform/governor/service/profile/conf"
 	"github.com/hackform/governor/service/profile/model"
@@ -71,9 +69,6 @@ func main() {
 
 	governor.Must(profileconf.Conf(&config))
 	fmt.Println("- profile")
-
-	governor.Must(postconf.Conf(&config))
-	fmt.Println("- post")
 
 	governor.Must(config.Init())
 	fmt.Println("config loaded")
@@ -136,7 +131,6 @@ func main() {
 	governor.Must(g.MountRoute("/u", userService))
 	governor.Must(g.MountRoute("/profile", profileService))
 	governor.Must(g.MountRoute("/courier", courierService))
-	governor.Must(g.MountRoute("/post", post.New(config, l, dbService, cacheService, gateService, cacheControlService)))
 
 	governor.Must(g.Start())
 }
