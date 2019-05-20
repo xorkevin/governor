@@ -13,23 +13,21 @@ import (
 //go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel qLink
 
 const (
-	uidRandSize  = 8
-	moduleID     = "couriermodel"
-	moduleIDLink = moduleID + ".Link"
+	uidRandSize = 8
 )
 
 type (
 	// Repo is a courier repository
 	Repo interface {
-		NewLink(linkid, url, creatorid string) (*LinkModel, *governor.Error)
-		NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error)
+		NewLink(linkid, url, creatorid string) (*LinkModel, error)
+		NewLinkAuto(url, creatorid string) (*LinkModel, error)
 		NewLinkEmpty() LinkModel
 		NewLinkEmptyPtr() *LinkModel
-		GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *governor.Error)
-		GetLink(linkid string) (*LinkModel, *governor.Error)
-		InsertLink(m *LinkModel) *governor.Error
-		DeleteLink(m *LinkModel) *governor.Error
-		Setup() *governor.Error
+		GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error)
+		GetLink(linkid string) (*LinkModel, error)
+		InsertLink(m *LinkModel) error
+		DeleteLink(m *LinkModel) error
+		Setup() error
 	}
 
 	repo struct {
@@ -53,18 +51,14 @@ type (
 
 // New creates a new courier repo
 func New(config governor.Config, l governor.Logger, d db.Database) Repo {
-	l.Info("initialized courier repo", moduleID, "initialize courier repo", 0, nil)
+	l.Info("initialize courier repo", nil)
 	return &repo{
 		db: d.DB(),
 	}
 }
 
-const (
-	moduleIDLinkNew = moduleIDLink + ".New"
-)
-
 // NewLink creates a new link model
-func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, *governor.Error) {
+func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, error) {
 	return &LinkModel{
 		LinkID:       linkid,
 		URL:          url,
@@ -74,11 +68,10 @@ func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, *governor.Err
 }
 
 // NewLinkAuto creates a new courier model with the link id randomly generated
-func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, *governor.Error) {
+func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, error) {
 	mUID, err := uid.NewU(0, uidRandSize)
 	if err != nil {
-		err.AddTrace(moduleIDLinkNew)
-		return nil, err
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	rawb64 := strings.TrimRight(mUID.Base64(), "=")
 	return r.NewLink(rawb64, url, creatorid)
@@ -94,16 +87,12 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 	return &LinkModel{}
 }
 
-const (
-	moduleIDLinkGetGroup = moduleIDLink + ".GetGroup"
-)
-
 // GetLinkGroup retrieves a group of links
-func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *governor.Error) {
+func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error) {
 	if len(creatorid) > 0 {
 		m, err := linkModelGetqLinkEqCreatorIDOrdCreationTime(r.db, creatorid, false, limit, offset)
 		if err != nil {
-			return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
+			return nil, governor.NewError("Failed to get links of a creator", http.StatusInternalServerError, err)
 		}
 		links := make([]LinkModel, 0, len(m))
 		for _, i := range m {
@@ -119,64 +108,48 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, *
 
 	m, err := linkModelGetLinkModelOrdCreationTime(r.db, false, limit, offset)
 	if err != nil {
-		return nil, governor.NewError(moduleIDLinkGetGroup, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get links", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
 
-const (
-	moduleIDLinkGet = moduleIDLink + ".Get"
-)
-
 // GetLink returns a link model with the given id
-func (r *repo) GetLink(linkid string) (*LinkModel, *governor.Error) {
+func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	var m *LinkModel
 	if mLink, code, err := linkModelGet(r.db, linkid); err != nil {
 		if code == 2 {
-			return nil, governor.NewError(moduleIDLinkGet, "no link found with that id", 2, http.StatusNotFound)
+			return nil, governor.NewError("No link found with that id", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError(moduleIDLinkGet, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get link", http.StatusInternalServerError, err)
 	} else {
 		m = mLink
 	}
 	return m, nil
 }
 
-const (
-	moduleIDLinkIns = moduleIDLink + ".Insert"
-)
-
 // InsertLink inserts the link model into the db
-func (r *repo) InsertLink(m *LinkModel) *governor.Error {
+func (r *repo) InsertLink(m *LinkModel) error {
 	if code, err := linkModelInsert(r.db, m); err != nil {
 		if code == 3 {
-			return governor.NewError(moduleIDLinkIns, err.Error(), 3, http.StatusBadRequest)
+			return governor.NewError("Link id must be unique", http.StatusBadRequest, err)
 		}
-		return governor.NewError(moduleIDLinkIns, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to insert link", http.StatusInternalServerError, err)
 	}
 	return nil
 }
-
-const (
-	moduleIDLinkDel = moduleIDLink + ".Del"
-)
 
 // DeleteLink deletes the link model in the db
-func (r *repo) DeleteLink(m *LinkModel) *governor.Error {
+func (r *repo) DeleteLink(m *LinkModel) error {
 	if err := linkModelDelete(r.db, m); err != nil {
-		return governor.NewError(moduleIDLinkDel, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to delete link", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-const (
-	moduleIDSetup = moduleID + ".Setup"
-)
-
 // Setup creates new Courier tables
-func (r *repo) Setup() *governor.Error {
+func (r *repo) Setup() error {
 	if err := linkModelSetup(r.db); err != nil {
-		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to setup link model", http.StatusInternalServerError, err)
 	}
 	return nil
 }

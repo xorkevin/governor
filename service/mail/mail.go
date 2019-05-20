@@ -24,7 +24,7 @@ type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
 		governor.Service
-		Send(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error
+		Send(to, subjecttpl, bodytpl string, emdata interface{}) error
 	}
 
 	goMail struct {
@@ -52,16 +52,12 @@ type (
 	}
 )
 
-const (
-	moduleID = "mail"
-)
-
 // New creates a new mailer service
 func New(c governor.Config, l governor.Logger, tpl template.Template, queue msgqueue.Msgqueue) (Mail, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("mail")
 
-	l.Info("initialized mail service", moduleID, "initialize mail service", 0, map[string]string{
+	l.Info("initialize mail service", map[string]string{
 		"smtp server host": rconf["host"],
 		"smtp server port": rconf["port"],
 		"buffer_size":      strconv.Itoa(v.GetInt("mail.buffer_size")),
@@ -108,10 +104,6 @@ func (m *goMail) dialer() *gomail.Dialer {
 	return d
 }
 
-const (
-	moduleIDmailWorker = moduleID + ".mailWorker"
-)
-
 func (m *goMail) mailWorker() {
 	cap := m.connMsgCap
 	d := m.dialer()
@@ -129,12 +121,16 @@ func (m *goMail) mailWorker() {
 					sender = s
 					mailSent = 0
 				} else {
-					m.logger.Error(err.Error(), moduleIDmailWorker, "fail dial smtp server", 0, nil)
+					m.logger.Error("mail: mailWorker: fail dial smtp server", map[string]string{
+						"err": err.Error(),
+					})
 				}
 			}
 			if sender != nil {
 				if err := gomail.Send(sender, msg); err != nil {
-					m.logger.Error(err.Error(), moduleIDmailWorker, "fail send smtp server", 0, nil)
+					m.logger.Error("mail: mailWorker: fail send smtp server", map[string]string{
+						"err": err.Error(),
+					})
 				}
 				mailSent++
 			}
@@ -142,7 +138,9 @@ func (m *goMail) mailWorker() {
 		case <-time.After(30 * time.Second):
 			if sender != nil {
 				if err := sender.Close(); err != nil {
-					m.logger.Error(err.Error(), moduleIDmailWorker, "fail close smtp client", 0, nil)
+					m.logger.Error("mail: mailWorker: fail close smtp client", map[string]string{
+						"err": err.Error(),
+					})
 				}
 				sender = nil
 			}
@@ -150,59 +148,50 @@ func (m *goMail) mailWorker() {
 	}
 }
 
-const (
-	moduleIDmailSubscriber = moduleID + ".mailSubscriber"
-)
-
 func (m *goMail) mailSubscriber(msgdata []byte) {
 	emmsg := mailmsg{}
 	b := bytes.NewBuffer(msgdata)
 	if err := gob.NewDecoder(b).Decode(&emmsg); err != nil {
-		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail decode mailmsg", 0, nil)
+		m.logger.Error("mail: mailSubscriber: fail decode mailmsg", map[string]string{
+			"err": err.Error(),
+		})
 		return
 	}
 
 	emdata := map[string]string{}
 	b1 := bytes.NewBufferString(emmsg.Emdata)
 	if err := json.NewDecoder(b1).Decode(&emdata); err != nil {
-		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail decode emdata", 0, nil)
+		m.logger.Error("mail: mailSubscriber: fail decode emdata", map[string]string{
+			"err": err.Error(),
+		})
 		return
 	}
 	if err := m.enqueue(emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
-		m.logger.Error(err.Error(), moduleIDmailSubscriber, "fail enqueue mail", 0, nil)
+		m.logger.Error("mail: mailSubscriber: fail enqueue mail", map[string]string{
+			"err": err.Error(),
+		})
 		return
 	}
 }
 
-const (
-	moduleIDstartWorkers = moduleID + ".startWorkers"
-)
-
-func (m *goMail) startWorkers() *governor.Error {
+func (m *goMail) startWorkers() error {
 	for i := 0; i < m.workerSize; i++ {
 		go m.mailWorker()
 	}
 	if _, err := m.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, m.mailSubscriber); err != nil {
-		err.AddTrace(moduleIDstartWorkers)
-		return err
+		return governor.NewError("Failed to subscribe to queue", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-const (
-	moduleIDenqueue = moduleID + ".enqueue"
-)
-
-func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error {
+func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) error {
 	body, err := m.tpl.ExecuteHTML(bodytpl, emdata)
 	if err != nil {
-		err.AddTrace(moduleIDenqueue)
-		return err
+		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
 	}
 	subject, err := m.tpl.ExecuteHTML(subjecttpl, emdata)
 	if err != nil {
-		err.AddTrace(moduleIDenqueue)
-		return err
+		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
 	}
 
 	msg := gomail.NewMessage()
@@ -219,35 +208,31 @@ func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) *go
 	case m.msgc <- msg:
 		return nil
 	case <-time.After(30 * time.Second):
-		return governor.NewError(moduleIDenqueue, "email service experiencing load", 0, http.StatusInternalServerError)
+		return governor.NewError("Email service experiencing load", http.StatusInternalServerError, nil)
 	}
 }
 
 // Mount is a place to mount routes to satisfy the Service interface
 func (m *goMail) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mounted mail service", moduleID, "mount mail service", 0, nil)
+	l.Info("mount mail service", nil)
 	return nil
 }
 
 // Health is a health check for the service
-func (m *goMail) Health() *governor.Error {
+func (m *goMail) Health() error {
 	return nil
 }
 
 // Setup is run on service setup
-func (m *goMail) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (m *goMail) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	return nil
 }
 
-const (
-	moduleIDSend = moduleID + ".Send"
-)
-
 // Send creates and enqueues a new message to be sent
-func (m *goMail) Send(to, subjecttpl, bodytpl string, emdata interface{}) *governor.Error {
+func (m *goMail) Send(to, subjecttpl, bodytpl string, emdata interface{}) error {
 	datastring := bytes.Buffer{}
 	if err := json.NewEncoder(&datastring).Encode(emdata); err != nil {
-		return governor.NewError(moduleIDSend, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
 	}
 
 	b := bytes.Buffer{}
@@ -257,11 +242,10 @@ func (m *goMail) Send(to, subjecttpl, bodytpl string, emdata interface{}) *gover
 		Bodytpl:    bodytpl,
 		Emdata:     datastring.String(),
 	}); err != nil {
-		return governor.NewError(moduleIDSend, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to encode email to gob", http.StatusInternalServerError, err)
 	}
 	if err := m.queue.Publish(govmailqueueid, b.Bytes()); err != nil {
-		err.AddTrace(moduleIDSend)
-		return err
+		return governor.NewError("Failed to push gob to message queue", http.StatusInternalServerError, err)
 	}
 	return nil
 }
