@@ -25,11 +25,11 @@ type (
 	}
 )
 
-func (r *reqLinkGet) valid() *governor.Error {
+func (r *reqLinkGet) valid() error {
 	return hasLinkID(r.LinkID)
 }
 
-func (r *reqLinkGetGroup) valid() *governor.Error {
+func (r *reqLinkGetGroup) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (r *reqLinkGetGroup) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqLinkPost) valid() *governor.Error {
+func (r *reqLinkPost) valid() error {
 	if err := hasCreatorID(r.CreatorID); err != nil {
 		return err
 	}
@@ -63,9 +63,6 @@ func (cr *courierRouter) getLink(c echo.Context) error {
 	if err != nil {
 		if len(cr.service.fallbackLink) > 0 {
 			return c.Redirect(http.StatusMovedPermanently, cr.service.fallbackLink)
-		}
-		if err.Code() == 2 {
-			err.SetErrorUser()
 		}
 		return err
 	}
@@ -91,12 +88,12 @@ func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
 		amt = amount
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err)
 	}
 	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
 		ofs = offset
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err)
 	}
 
 	rlink := reqLinkGetGroup{
@@ -119,7 +116,7 @@ func (cr *courierRouter) createLink(c echo.Context) error {
 
 	rlink := reqLinkPost{}
 	if err := c.Bind(&rlink); err != nil {
-		return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	rlink.CreatorID = userid
 	if err := rlink.valid(); err != nil {
@@ -128,9 +125,6 @@ func (cr *courierRouter) createLink(c echo.Context) error {
 
 	res, err := cr.service.CreateLink(rlink.LinkID, rlink.URL, rlink.CreatorID)
 	if err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 	return c.JSON(http.StatusCreated, res)
@@ -144,19 +138,16 @@ func (cr *courierRouter) deleteLink(c echo.Context) error {
 		return err
 	}
 	if err := cr.service.DeleteLink(rlink.LinkID); err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, *governor.Error) {
+func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, error) {
 	return "website", nil
 }
 
-func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, *governor.Error) {
+func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, error) {
 	rlink := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -166,10 +157,9 @@ func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, *governor.Error
 
 	objinfo, err := cr.service.linkImageBucket.Stat(rlink.LinkID + "-qr")
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return "", governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return "", err
 	}
 

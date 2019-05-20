@@ -123,7 +123,7 @@ func (o *minioObjstore) GetBucketDefLoc(name string) (Bucket, error) {
 func initBucket(client *minio.Client, name, location string) error {
 	exists, err := client.BucketExists(name)
 	if err != nil {
-		return governor.NewError("Failed to find bucket", http.StatusNotFound, err)
+		return governor.NewError("Failed to query if bucket exists", http.StatusNotFound, err)
 	}
 	if !exists {
 		if err := client.MakeBucket(name, location); err != nil {

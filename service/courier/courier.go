@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	moduleID                = "courier"
 	linkImageBucketID       = "courier-link-image"
 	min1              int64 = 60
 	b1                      = 1000000000
@@ -60,26 +59,32 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store 
 	if duration, err := time.ParseDuration(c["cache_time"]); err == nil {
 		cacheTime = duration.Nanoseconds() / b1
 	} else {
-		l.Warn(fmt.Sprintf("failed to parse duration: %s", c["cache_time"]), moduleID, "fail parse cache duration", 0, nil)
+		l.Warn(fmt.Sprintf("courier: fail parse cache duration: %s", c["cache_time"]), nil)
 	}
 	if len(fallbackLink) == 0 {
-		l.Warn("courier: fallback link is not set", moduleID, "fallback_link unset", 0, nil)
+		l.Warn("courier: fallback_link is not set", nil)
 	} else if err := validURL(fallbackLink); err != nil {
-		l.Warn(err.Message(), moduleID, "invalid fallback_link", 0, nil)
+		l.Warn("invalid fallback_link", map[string]string{
+			"err": err.Error(),
+		})
 	}
 	if len(linkPrefix) == 0 {
-		l.Warn("courier: link prefix is not set", moduleID, "link_prefix unset", 0, nil)
+		l.Warn("courier: link_prefix is not set", nil)
 	} else if err := validURL(linkPrefix); err != nil {
-		l.Warn(err.Message(), moduleID, "invalid link_prefix", 0, nil)
+		l.Warn("invalid link_prefix", map[string]string{
+			"err": err.Error(),
+		})
 	}
 
 	linkImageBucket, err := store.GetBucketDefLoc(linkImageBucketID)
 	if err != nil {
-		err.AddTrace(moduleID)
+		l.Error("fail get image bucket", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 
-	l.Info("initialized courier service", moduleID, "initialize courier service", 0, map[string]string{
+	l.Info("initialize courier service", map[string]string{
 		"fallback_link": fallbackLink,
 		"link_prefix":   linkPrefix,
 		"cache_time":    strconv.FormatInt(cacheTime, 10),
@@ -110,21 +115,20 @@ func (c *courierService) Mount(conf governor.Config, l governor.Logger, r *echo.
 	if err := cr.mountRoutes(conf, r); err != nil {
 		return err
 	}
-	l.Info("mounted courier service", moduleID, "mount courier service", 0, nil)
+	l.Info("mount courier service", nil)
 	return nil
 }
 
 // Health is a check for service health
-func (c *courierService) Health() *governor.Error {
+func (c *courierService) Health() error {
 	return nil
 }
 
 // Setup is run on service setup
-func (c *courierService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (c *courierService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	if err := c.repo.Setup(); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new courier links table", moduleID, "create courierlinks table", 0, nil)
+	l.Info("create courierlinks table", nil)
 	return nil
 }
