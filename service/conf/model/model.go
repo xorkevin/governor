@@ -75,7 +75,7 @@ func (r *repo) Get() (*Model, error) {
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
 	if _, err := confModelInsert(r.db, m); err != nil {
-		return governor.NewError("Failed to insert conf model", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to insert conf", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func (r *repo) Insert(m *Model) error {
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
 	if err := confModelUpdate(r.db, m); err != nil {
-		return governor.NewError("Failed to update conf model", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to update conf", http.StatusInternalServerError, err)
 	}
 	return nil
 }

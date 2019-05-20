@@ -31,7 +31,7 @@ type (
 	Bucket interface {
 		Put(name, contentType string, size int64, object io.Reader) error
 		Stat(name string) (*minio.ObjectInfo, error)
-		Get(name string) (*minio.Object, *minio.ObjectInfo, int, error)
+		Get(name string) (*minio.Object, *minio.ObjectInfo, error)
 		Remove(name string) error
 	}
 
@@ -158,16 +158,16 @@ func (b *minioBucket) Stat(name string) (*minio.ObjectInfo, error) {
 }
 
 // Get gets an object from the bucket
-func (b *minioBucket) Get(name string) (*minio.Object, *minio.ObjectInfo, int, error) {
+func (b *minioBucket) Get(name string) (*minio.Object, *minio.ObjectInfo, error) {
 	objInfo, err := b.store.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, nil, 2, governor.NewError("Failed to find object", http.StatusNotFound, err)
+		return nil, nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
 	}
 	obj, err := b.store.GetObject(b.name, name, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, nil, 0, governor.NewError("Failed to retrieve object", http.StatusInternalServerError, err)
+		return nil, nil, governor.NewError("Failed to retrieve object", http.StatusInternalServerError, err)
 	}
-	return obj, &objInfo, 0, nil
+	return obj, &objInfo, nil
 }
 
 // Remove removes an object from the bucket

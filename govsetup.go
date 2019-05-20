@@ -1,9 +1,7 @@
 package governor
 
 import (
-	"fmt"
 	"github.com/labstack/echo"
-	"golang.org/x/xerrors"
 	"net/http"
 	"regexp"
 )
@@ -61,40 +59,7 @@ type (
 		Version   string `json:"version"`
 		Orgname   string `json:"orgname"`
 	}
-
-	goverrorSetup struct {
-		message string
-		status  int
-		err     error
-	}
 )
-
-func (e *goverrorSetup) Error() string {
-	if e.err == nil {
-		return e.message
-	}
-	return fmt.Sprintf("%s: %s", e.message, e.err.Error())
-}
-
-func (e *goverrorSetup) Unwrap() error {
-	return e.err
-}
-
-func (e *goverrorSetup) Is(target error) bool {
-	_, ok := target.(*goverrorSetup)
-	return ok
-}
-
-func (e *goverrorSetup) As(target interface{}) bool {
-	err, ok := target.(*goverrorSetup)
-	if !ok {
-		return false
-	}
-	err.message = e.message
-	err.status = e.status
-	err.err = e.err
-	return true
-}
 
 var (
 	setupRun = false
@@ -117,11 +82,10 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 
 		for _, service := range s.services {
 			if err := service.Setup(conf, l, *rsetup); err != nil {
-				goverrsetup := &goverrorSetup{}
-				if xerrors.Is(err, goverrsetup) {
+				if ErrorStatus(err) == http.StatusForbidden {
 					setupRun = true
 					l.Warn("govsetup: setup run again", nil)
-					return NewErrorUser("Setup already run", http.StatusForbidden, err)
+					return err
 				}
 				return err
 			}
