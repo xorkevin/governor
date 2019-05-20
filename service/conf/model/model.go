@@ -17,7 +17,7 @@ const (
 
 type (
 	Repo interface {
-		New(orgname string) (*Model, error)
+		New(orgname string) *Model
 		Get() (*Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
@@ -44,12 +44,12 @@ func New(conf governor.Config, l governor.Logger, database db.Database) Repo {
 }
 
 // New creates a new Conf Model
-func (r *repo) New(orgname string) (*Model, error) {
+func (r *repo) New(orgname string) *Model {
 	return &Model{
 		config:       configID,
 		Orgname:      orgname,
 		CreationTime: time.Now().Unix(),
-	}, nil
+	}
 }
 
 // Get returns the conf model

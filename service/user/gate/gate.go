@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	moduleID              = "user.middleware"
-	moduleIDAuth          = moduleID + ".gate"
 	authenticationSubject = "authentication"
 )
 
@@ -35,7 +33,7 @@ type (
 func New(conf governor.Config, l governor.Logger) Gate {
 	ca := conf.Conf().GetStringMapString("userauth")
 
-	l.Info("initialized gate service", moduleID, "initialize gate service", 0, nil)
+	l.Info("initialize gate service", nil)
 
 	return &gateService{
 		tokenizer: token.New(ca["secret"], ca["issuer"]),
@@ -73,17 +71,17 @@ func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareF
 			} else {
 				h := strings.Split(c.Request().Header.Get("Authorization"), " ")
 				if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
-					return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
+					return governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 				}
 				accessToken = h[1]
 			}
 			validToken, claims := g.tokenizer.Validate(accessToken, subject, "")
 			if !validToken {
 				rmAccessCookie(c, g.baseurl)
-				return governor.NewErrorUser(moduleIDAuth, "user is not authorized", 0, http.StatusUnauthorized)
+				return governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 			}
 			if !v(c, *claims) {
-				return governor.NewErrorUser(moduleIDAuth, "user is forbidden", 0, http.StatusForbidden)
+				return governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
 			}
 			c.Set("user", claims)
 			c.Set("userid", claims.Userid)
@@ -109,7 +107,7 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 
 // OwnerF is a middleware function to validate if a user owns the accessed resource
 // idfunc should return the userid
-func OwnerF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func OwnerF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -165,7 +163,7 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 
 // OwnerModOrAdminF is a middleware function to validate if the request is made by the owner or a moderator
 // idfunc should return the userid and the group_tag
-func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, *governor.Error)) echo.MiddlewareFunc {
+func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -187,7 +185,7 @@ func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, *govern
 
 // ModOrAdminF is a middleware function to validate if the request is made by the moderator of a group or an admin
 // idfunc should return the group_tag
-func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -224,7 +222,7 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 
 // UserOrBanF is a middleware function to validate if the request is made by a user and check if the user is banned from the group
 // idfunc should return the group_tag
-func UserOrBanF(g Gate, idfunc func(echo.Context) (string, *governor.Error)) echo.MiddlewareFunc {
+func UserOrBanF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {

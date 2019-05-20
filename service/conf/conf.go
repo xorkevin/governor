@@ -46,10 +46,7 @@ func (c *confService) Setup(conf governor.Config, l governor.Logger, rsetup gove
 		return err
 	}
 
-	mconf, err := c.repo.New(rsetup.Orgname)
-	if err != nil {
-		return err
-	}
+	mconf := c.repo.New(rsetup.Orgname)
 
 	if err := c.repo.Setup(); err != nil {
 		return err

@@ -30,26 +30,23 @@ type (
 )
 
 // New creates a new session
-func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, *governor.Error) {
+func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, error) {
 	userid, err := usermodel.ParseB64ID(m.Userid)
 	if err != nil {
-		err.AddTrace(moduleID)
-		return nil, err
+		return nil, governor.NewError("Failed to parse userid", http.StatusBadRequest, err)
 	}
 	id, err := uid.New(4, 8, 4, userid.Bytes())
 	if err != nil {
-		err.AddTrace(moduleID)
-		return nil, err
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	return FromSessionID(id.Base64(), m.Userid, ipAddress, userAgent)
 }
 
 // FromSessionID creates a new session from an existing sessionID
-func FromSessionID(sessionID, userid, ipAddress, userAgent string) (*Session, *governor.Error) {
+func FromSessionID(sessionID, userid, ipAddress, userAgent string) (*Session, error) {
 	key, err := uid.NewU(0, 16)
 	if err != nil {
-		err.AddTrace(moduleID)
-		return nil, err
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 
 	return &Session{
@@ -63,10 +60,10 @@ func FromSessionID(sessionID, userid, ipAddress, userAgent string) (*Session, *g
 }
 
 // ToGob returns the session object as a gob
-func (s *Session) ToGob() (string, *governor.Error) {
+func (s *Session) ToGob() (string, error) {
 	b := bytes.Buffer{}
 	if err := gob.NewEncoder(&b).Encode(s); err != nil {
-		return "", governor.NewError(moduleID, err.Error(), 0, http.StatusInternalServerError)
+		return "", governor.NewError("Failed to encode session to gob", http.StatusInternalServerError, err)
 	}
 	return b.String(), nil
 }

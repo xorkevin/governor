@@ -25,10 +25,6 @@ type (
 	}
 )
 
-const (
-	moduleToken = "token"
-)
-
 // New creates a new Tokenizer
 func New(secret, issuer string) *Tokenizer {
 	return &Tokenizer{
@@ -38,12 +34,8 @@ func New(secret, issuer string) *Tokenizer {
 	}
 }
 
-const (
-	moduleTokenGenerate = moduleToken + ".generate"
-)
-
 // Generate returns a new jwt token from a user model
-func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id string) (string, *Claims, *governor.Error) {
+func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id string) (string, *Claims, error) {
 	now := time.Now().Unix()
 	claims := &Claims{
 		StandardClaims: jwt.StandardClaims{
@@ -56,34 +48,26 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 		Userid:   u.Userid,
 		AuthTags: u.AuthTags,
 	}
-	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
-	if errjwt != nil {
-		return "", nil, governor.NewError(moduleTokenGenerate, errjwt.Error(), 0, http.StatusInternalServerError)
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
+	if err != nil {
+		return "", nil, governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
 	}
 	return token, claims, nil
 }
 
-const (
-	moduleTokenGenerateFromClaims = moduleToken + ".generatefromclaims"
-)
-
 // GenerateFromClaims creates a new jwt from a set of claims
-func (t *Tokenizer) GenerateFromClaims(claims *Claims, duration int64, subject, id string) (string, *governor.Error) {
+func (t *Tokenizer) GenerateFromClaims(claims *Claims, duration int64, subject, id string) (string, error) {
 	now := time.Now().Unix()
 	claims.IssuedAt = now
 	claims.ExpiresAt = now + duration
 	claims.Subject = subject
 	claims.Id = id
-	token, errjwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
-	if errjwt != nil {
-		return "", governor.NewError(moduleTokenGenerateFromClaims, errjwt.Error(), 0, http.StatusInternalServerError)
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
+	if err != nil {
+		return "", governor.NewError("Failed to generate a jwt from claims", http.StatusInternalServerError, err)
 	}
 	return token, nil
 }
-
-const (
-	moduleTokenValidate = moduleToken + ".validate"
-)
 
 // Validate returns whether a token is valid or not
 func (t *Tokenizer) Validate(tokenString, subject, id string) (bool, *Claims) {
