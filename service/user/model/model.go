@@ -20,7 +20,6 @@ const (
 	uidRandSize = 8
 	passSaltLen = 32
 	passHashLen = 32
-	moduleID    = "usermodel"
 )
 
 const (
@@ -33,22 +32,22 @@ const (
 type (
 	// Repo is a user repository
 	Repo interface {
-		New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, *governor.Error)
+		New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, error)
 		NewEmpty() Model
 		NewEmptyPtr() *Model
-		ValidatePass(password string, m *Model) (bool, *governor.Error)
-		RehashPass(m *Model, password string) *governor.Error
-		GetRoles(m *Model) *governor.Error
-		GetGroup(limit, offset int) ([]Info, *governor.Error)
-		GetBulk(userids []string) ([]Info, *governor.Error)
-		GetByID(userid string) (*Model, *governor.Error)
-		GetByUsername(username string) (*Model, *governor.Error)
-		GetByEmail(email string) (*Model, *governor.Error)
-		Insert(m *Model) *governor.Error
-		UpdateRoles(m *Model, diff map[string]int) *governor.Error
-		Update(m *Model) *governor.Error
-		Delete(m *Model) *governor.Error
-		Setup() *governor.Error
+		ValidatePass(password string, m *Model) (bool, error)
+		RehashPass(m *Model, password string) error
+		GetRoles(m *Model) error
+		GetGroup(limit, offset int) ([]Info, error)
+		GetBulk(userids []string) ([]Info, error)
+		GetByID(userid string) (*Model, error)
+		GetByUsername(username string) (*Model, error)
+		GetByEmail(email string) (*Model, error)
+		Insert(m *Model) error
+		UpdateRoles(m *Model, diff map[string]int) error
+		Update(m *Model) error
+		Delete(m *Model) error
+		Setup() error
 		RoleAddAction() int
 		RoleRemoveAction() int
 	}
@@ -84,7 +83,7 @@ type (
 
 // New creates a new user repository
 func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
-	l.Info("initialized user repo", moduleID, "initialize user repo", 0, nil)
+	l.Info("initialize user repo", nil)
 
 	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.NewScryptDefaultConfig())
 	verifier := hunter2.NewVerifier()
@@ -98,23 +97,18 @@ func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo
 	}
 }
 
-const (
-	moduleIDModNew = moduleID + ".New"
-)
-
 // New creates a new User Model
-func (r *repo) New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, *governor.Error) {
+func (r *repo) New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, error) {
 	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
 	if err != nil {
-		err.AddTrace(moduleIDModNew)
-		return nil, err
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 
 	mHash := ""
 	if h, err := r.hasher.Hash(password); err == nil {
 		mHash = h
 	} else {
-		return nil, governor.NewError(moduleIDModNew, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to hash password", http.StatusInternalServerError, err)
 	}
 
 	return &Model{
@@ -137,94 +131,72 @@ func (r *repo) NewEmptyPtr() *Model {
 	return &Model{}
 }
 
-func ParseB64ID(userid string) (*uid.UID, *governor.Error) {
+func ParseB64ID(userid string) (*uid.UID, error) {
 	return uid.FromBase64(uidTimeSize, 0, uidRandSize, userid)
 }
 
-const (
-	moduleIDHash = moduleID + ".Hash"
-)
-
 // ValidatePass validates the password against a hash
-func (r *repo) ValidatePass(password string, m *Model) (bool, *governor.Error) {
+func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(password, m.PassHash)
 	if err != nil {
-		return false, governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
+		return false, governor.NewError("Failed to verify password", http.StatusInternalServerError, err)
 	}
 	return ok, nil
 }
 
 // RehashPass updates the password with a new hash
-func (r *repo) RehashPass(m *Model, password string) *governor.Error {
+func (r *repo) RehashPass(m *Model, password string) error {
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
-		return governor.NewError(moduleIDHash, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to rehash password", http.StatusInternalServerError, err)
 	}
 	m.PassHash = mHash
 	return nil
 }
 
-const (
-	moduleIDModGetRoles = moduleID + ".GetRoles"
-)
-
 // GetRoles gets the roles of the user for the model
-func (r *repo) GetRoles(m *Model) *governor.Error {
+func (r *repo) GetRoles(m *Model) error {
 	roles, err := r.rolerepo.GetUserRoles(m.Userid, 1024, 0)
 	if err != nil {
-		err.AddTrace(moduleIDModGetRoles)
-		return err
+		return governor.NewError("Failed to get roles of user", http.StatusInternalServerError, err)
 	}
 	m.AuthTags = strings.Join(roles, ",")
 	return nil
 }
 
-const (
-	moduleIDModGetGroup = moduleID + ".GetGroup"
-)
-
 // GetGroup gets information from each user
-func (r *repo) GetGroup(limit, offset int) ([]Info, *governor.Error) {
+func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 	m, err := userModelGetInfoOrdUserid(r.db, true, limit, offset)
 	if err != nil {
-		return nil, governor.NewError(moduleIDModGetGroup, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get user info", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
-
-const (
-	moduleIDModGetBulk = moduleID + ".GetBulk"
-)
 
 // GetBulk gets information from users
-func (r *repo) GetBulk(userids []string) ([]Info, *governor.Error) {
+func (r *repo) GetBulk(userids []string) ([]Info, error) {
 	m, err := userModelGetInfoSetUserid(r.db, userids)
 	if err != nil {
-		return nil, governor.NewError(moduleIDModGetBulk, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get user info of userids", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
 
-const (
-	moduleIDModGet = moduleID + ".Get"
-)
-
-func (r *repo) getApplyRoles(m *Model) (*Model, *governor.Error) {
+func (r *repo) getApplyRoles(m *Model) (*Model, error) {
 	if err := r.GetRoles(m); err != nil {
-		err.AddTrace(moduleIDModGet)
 		return nil, err
 	}
 	return m, nil
 }
 
 // GetByID returns a user model with the given base64 id
-func (r *repo) GetByID(userid string) (*Model, *governor.Error) {
+func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
 	if mUser, code, err := userModelGet(r.db, userid); err != nil {
 		if code == 2 {
-			return nil, governor.NewError(moduleIDModGet, "no user found with that id", 2, http.StatusNotFound)
+			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	} else {
 		m = mUser
 	}
@@ -232,13 +204,13 @@ func (r *repo) GetByID(userid string) (*Model, *governor.Error) {
 }
 
 // GetByUsername returns a user model with the given username
-func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
+func (r *repo) GetByUsername(username string) (*Model, error) {
 	var m *Model
 	if mUser, code, err := userModelGetModelByUsername(r.db, username); err != nil {
 		if code == 2 {
-			return nil, governor.NewError(moduleIDModGet, "no user found with that username", 2, http.StatusNotFound)
+			return nil, governor.NewError("No user found with that username", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get user by username", http.StatusInternalServerError, err)
 	} else {
 		m = mUser
 	}
@@ -246,131 +218,99 @@ func (r *repo) GetByUsername(username string) (*Model, *governor.Error) {
 }
 
 // GetByEmail returns a user model with the given email
-func (r *repo) GetByEmail(email string) (*Model, *governor.Error) {
+func (r *repo) GetByEmail(email string) (*Model, error) {
 	var m *Model
 	if mUser, code, err := userModelGetModelByEmail(r.db, email); err != nil {
 		if code == 2 {
-			return nil, governor.NewError(moduleIDModGet, "no user found with that email", 2, http.StatusNotFound)
+			return nil, governor.NewError("No user found with that email", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError(moduleIDModGet, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to get user by email", http.StatusInternalServerError, err)
 	} else {
 		m = mUser
 	}
 	return r.getApplyRoles(m)
 }
 
-const (
-	moduleIDModInsRoles = moduleID + ".InsertRoles"
-)
-
-func (r *repo) insertRoles(m *Model) *governor.Error {
+func (r *repo) insertRoles(m *Model) error {
 	roles := strings.Split(m.AuthTags, ",")
 	for _, i := range roles {
 		rModel, err := r.rolerepo.New(m.Userid, i)
 		if err != nil {
-			err.AddTrace(moduleIDModInsRoles)
-			return err
+			return governor.NewError("Failed to create user role", http.StatusInternalServerError, err)
 		}
 		if err := r.rolerepo.Insert(rModel); err != nil {
-			err.AddTrace(moduleIDModInsRoles)
-			return err
+			return governor.NewError("Failed to insert user role", http.StatusInternalServerError, err)
 		}
 	}
 	return nil
 }
 
-const (
-	moduleIDModIns = moduleID + ".Insert"
-)
-
 // Insert inserts the model into the db
-func (r *repo) Insert(m *Model) *governor.Error {
+func (r *repo) Insert(m *Model) error {
 	if code, err := userModelInsert(r.db, m); err != nil {
 		if code == 3 {
-			return governor.NewError(moduleIDModIns, err.Error(), 3, http.StatusBadRequest)
+			return governor.NewError("User id must be unique", http.StatusBadRequest, err)
 		}
-		return governor.NewError(moduleIDModIns, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to insert user", http.StatusInternalServerError, err)
 	}
 	if err := r.insertRoles(m); err != nil {
-		err.AddTrace(moduleIDModIns)
 		return err
 	}
 	return nil
 }
 
-const (
-	moduleIDModUpRoles = moduleID + ".UpdateRoles"
-)
-
 // UpdateRoles updates the model's roles into the db
-func (r *repo) UpdateRoles(m *Model, diff map[string]int) *governor.Error {
+func (r *repo) UpdateRoles(m *Model, diff map[string]int) error {
 	for k, v := range diff {
 		if originalRole, err := r.rolerepo.GetByID(m.Userid, k); err == nil {
 			switch v {
 			case roleRemove:
 				if err := r.rolerepo.Delete(originalRole); err != nil {
-					err.AddTrace(moduleIDModUpRoles)
-					return err
+					return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
 				}
 			}
-		} else if err.Code() == 2 {
+		} else if governor.ErrorStatus(err) == http.StatusNotFound {
 			switch v {
 			case roleAdd:
 				if roleM, err := r.rolerepo.New(m.Userid, k); err == nil {
 					if err := r.rolerepo.Insert(roleM); err != nil {
-						err.AddTrace(moduleIDModUpRoles)
-						return err
+						return governor.NewError("Failed to insert role", http.StatusInternalServerError, err)
 					}
 				} else {
-					err.AddTrace(moduleIDModUpRoles)
-					return err
+					return governor.NewError("Failed to create role", http.StatusInternalServerError, err)
 				}
 			}
 		} else {
-			err.AddTrace(moduleIDModUpRoles)
-			return err
+			return governor.NewError("Failed to update role", http.StatusInternalServerError, err)
 		}
 	}
 	return nil
 }
 
-const (
-	moduleIDModUp = moduleID + ".Update"
-)
-
 // Update updates the model in the db
-func (r *repo) Update(m *Model) *governor.Error {
+func (r *repo) Update(m *Model) error {
 	if err := userModelUpdate(r.db, m); err != nil {
-		return governor.NewError(moduleIDModUp, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to update user", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-const (
-	moduleIDModDel = moduleID + ".Delete"
-)
-
 // Delete deletes the model in the db
-func (r *repo) Delete(m *Model) *governor.Error {
+func (r *repo) Delete(m *Model) error {
 	if err := r.rolerepo.DeleteUserRoles(m.Userid); err != nil {
-		err.AddTrace(moduleIDModDel)
-		return err
+		return governor.NewError("Failed to delete user roles", http.StatusInternalServerError, err)
 	}
 
 	if err := userModelDelete(r.db, m); err != nil {
-		return governor.NewError(moduleIDModDel, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to delete user", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-const (
-	moduleIDSetup = moduleID + ".Setup"
-)
-
 // Setup creates a new User table
-func (r *repo) Setup() *governor.Error {
+func (r *repo) Setup() error {
 	if err := userModelSetup(r.db); err != nil {
-		return governor.NewError(moduleIDSetup, err.Error(), 0, http.StatusInternalServerError)
+		return governor.NewError("Failed to setup user model", http.StatusInternalServerError, err)
 	}
 	return nil
 }

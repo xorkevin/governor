@@ -240,6 +240,20 @@ func TestGoverrorUser_As(t *testing.T) {
 	assert.Equal(rootErr, goverr2.err, "error.As should copy err")
 }
 
+func TestErrorStatus(t *testing.T) {
+	assert := assert.New(t)
+
+	rootErr := errors.New("test root err")
+	err := NewError("test message", 123, rootErr)
+	errUser := NewErrorUser("test message user", 234, err)
+	errUser2 := NewErrorUser("test message user", 234, rootErr)
+
+	assert.Equal(123, ErrorStatus(err), "error status should be the goverror status")
+	assert.Equal(123, ErrorStatus(errUser), "error status should be the goverror status if available")
+	assert.Equal(234, ErrorStatus(errUser2), "error status should be the goverrorUser status if no goverror")
+	assert.Equal(0, ErrorStatus(rootErr), "error status should be 0 for non goverror errors")
+}
+
 func TestErrorHandler(t *testing.T) {
 	assert := assert.New(t)
 

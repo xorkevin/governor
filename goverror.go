@@ -153,6 +153,16 @@ func (e *goverrorUser) As(target interface{}) bool {
 	return true
 }
 
+func ErrorStatus(target error) int {
+	if goverr := (&goverror{}); xerrors.As(target, &goverr) {
+		return goverr.status
+	}
+	if goverruser := (&goverrorUser{}); xerrors.As(target, &goverruser) {
+		return goverruser.status
+	}
+	return 0
+}
+
 type (
 	responseError struct {
 		Message string `json:"message"`
