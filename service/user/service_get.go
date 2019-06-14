@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/model"
+	"net/http"
 )
 
 type (
@@ -44,50 +45,60 @@ func getUserFields(m *usermodel.Model) *ResUserGet {
 }
 
 // GetByIDPublic gets and returns the public fields of the user
-func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, *governor.Error) {
+func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 	m, err := u.repo.GetByID(userid)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewError("", 0, err)
+		}
 		return nil, err
 	}
 	return getUserPublicFields(m), nil
 }
 
 // GetByID gets and returns all fields of the user
-func (u *userService) GetByID(userid string) (*ResUserGet, *governor.Error) {
+func (u *userService) GetByID(userid string) (*ResUserGet, error) {
 	m, err := u.repo.GetByID(userid)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewError("", 0, err)
+		}
 		return nil, err
 	}
 	return getUserFields(m), nil
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
-func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, *governor.Error) {
+func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, error) {
 	m, err := u.repo.GetByUsername(username)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewError("", 0, err)
+		}
 		return nil, err
 	}
 	return getUserPublicFields(m), nil
 }
 
 // GetByUsername gets and returns all fields of the user
-func (u *userService) GetByUsername(username string) (*ResUserGet, *governor.Error) {
+func (u *userService) GetByUsername(username string) (*ResUserGet, error) {
 	m, err := u.repo.GetByUsername(username)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewError("", 0, err)
+		}
 		return nil, err
 	}
 	return getUserFields(m), nil
 }
 
 // GetByEmail gets and returns all fields of the user
-func (u *userService) GetByEmail(email string) (*ResUserGet, *governor.Error) {
+func (u *userService) GetByEmail(email string) (*ResUserGet, error) {
 	m, err := u.repo.GetByEmail(email)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewError("", 0, err)
+		}
 		return nil, err
 	}
 	return getUserFields(m), nil
@@ -106,10 +117,9 @@ type (
 )
 
 // GetInfoAll gets and returns info for all users
-func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, *governor.Error) {
+func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, error) {
 	infoSlice, err := u.repo.GetGroup(amount, offset)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return nil, err
 	}
 
@@ -141,10 +151,9 @@ type (
 )
 
 // GetInfoBulkPublic gets and returns public info for users
-func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, *governor.Error) {
+func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, error) {
 	infoSlice, err := u.repo.GetBulk(userids)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return nil, err
 	}
 
@@ -170,10 +179,9 @@ type (
 )
 
 // GetIDsByRole retrieves a list of user ids by role
-func (u *userService) GetIDsByRole(role string, amount int, offset int) (*resUserList, *governor.Error) {
+func (u *userService) GetIDsByRole(role string, amount int, offset int) (*resUserList, error) {
 	userids, err := u.rolerepo.GetByRole(role, amount, offset)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return nil, err
 	}
 	return &resUserList{
