@@ -143,22 +143,22 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 			var img goimg.Image
 			switch mediaType {
 			case MediaTypeJpeg:
-				if i, err := jpeg.Decode(src); err == nil {
-					img = i
-				} else {
+				if i, err := jpeg.Decode(src); err != nil {
 					return governor.NewErrorUser("Invalid JPEG image", http.StatusBadRequest, err)
+				} else {
+					img = i
 				}
 			case MediaTypePng:
-				if i, err := png.Decode(src); err == nil {
-					img = i
-				} else {
+				if i, err := png.Decode(src); err != nil {
 					return governor.NewErrorUser("Invalid PNG image", http.StatusBadRequest, err)
+				} else {
+					img = i
 				}
 			case MediaTypeGif:
-				if i, err := gif.Decode(src); err == nil {
-					img = i
-				} else {
+				if i, err := gif.Decode(src); err != nil {
 					return governor.NewErrorUser("Invalid GIF image", http.StatusBadRequest, err)
+				} else {
+					img = i
 				}
 			}
 

@@ -117,13 +117,13 @@ func (m *goMail) mailWorker() {
 				return
 			}
 			if sender == nil || mailSent >= cap && cap > 0 {
-				if s, err := d.Dial(); err == nil {
-					sender = s
-					mailSent = 0
-				} else {
+				if s, err := d.Dial(); err != nil {
 					m.logger.Error("mail: mailWorker: fail dial smtp server", map[string]string{
 						"err": err.Error(),
 					})
+				} else {
+					sender = s
+					mailSent = 0
 				}
 			}
 			if sender != nil {

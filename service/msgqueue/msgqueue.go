@@ -51,13 +51,11 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	}
 	clientidstr := clientid.Base64()
 
-	var conn stan.Conn
-	if connection, err := stan.Connect(rconf["cluster"], clientidstr, func(options *stan.Options) error {
+	conn, err := stan.Connect(rconf["cluster"], clientidstr, func(options *stan.Options) error {
 		options.NatsURL = "nats://" + rconf["host"] + ":" + rconf["port"]
 		return nil
-	}); err == nil {
-		conn = connection
-	} else {
+	})
+	if err != nil {
 		l.Error("Fail connect nats", map[string]string{
 			"err": err.Error(),
 		})

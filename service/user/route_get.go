@@ -164,22 +164,19 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
 }
 
 func (u *userRouter) getUsersByRole(c echo.Context) error {
-	var amt, ofs int
-	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
-		amt = amount
-	} else {
+	amount, err := strconv.Atoi(c.QueryParam("amount"))
+	if err != nil {
 		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
 	}
-	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
-		ofs = offset
-	} else {
+	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	if err != nil {
 		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
 	ruser := reqGetRoleUserList{
 		Role:   c.Param("role"),
-		Amount: amt,
-		Offset: ofs,
+		Amount: amount,
+		Offset: offset,
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -187,7 +184,6 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 
 	res, err := u.service.GetIDsByRole(ruser.Role, ruser.Amount, ruser.Offset)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	}
 
@@ -199,21 +195,18 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 }
 
 func (u *userRouter) getAllUserInfo(c echo.Context) error {
-	var amt, ofs int
-	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
-		amt = amount
-	} else {
+	amount, err := strconv.Atoi(c.QueryParam("amount"))
+	if err != nil {
 		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
 	}
-	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
-		ofs = offset
-	} else {
+	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	if err != nil {
 		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
 	ruser := reqGetUserEmails{
-		Amount: amt,
-		Offset: ofs,
+		Amount: amount,
+		Offset: offset,
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -221,7 +214,6 @@ func (u *userRouter) getAllUserInfo(c echo.Context) error {
 
 	res, err := u.service.GetInfoAll(ruser.Amount, ruser.Offset)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	}
 

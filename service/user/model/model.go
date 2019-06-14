@@ -104,10 +104,8 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 
-	mHash := ""
-	if h, err := r.hasher.Hash(password); err == nil {
-		mHash = h
-	} else {
+	mHash, err := r.hasher.Hash(password)
+	if err != nil {
 		return nil, governor.NewError("Failed to hash password", http.StatusInternalServerError, err)
 	}
 
@@ -272,12 +270,12 @@ func (r *repo) UpdateRoles(m *Model, diff map[string]int) error {
 		} else if governor.ErrorStatus(err) == http.StatusNotFound {
 			switch v {
 			case roleAdd:
-				if roleM, err := r.rolerepo.New(m.Userid, k); err == nil {
+				if roleM, err := r.rolerepo.New(m.Userid, k); err != nil {
+					return governor.NewError("Failed to create role", http.StatusInternalServerError, err)
+				} else {
 					if err := r.rolerepo.Insert(roleM); err != nil {
 						return governor.NewError("Failed to insert role", http.StatusInternalServerError, err)
 					}
-				} else {
-					return governor.NewError("Failed to create role", http.StatusInternalServerError, err)
 				}
 			}
 		} else {

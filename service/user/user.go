@@ -23,7 +23,7 @@ const (
 type (
 	// User is a user management service
 	User interface {
-		GetByID(userid string) (*ResUserGet, *governor.Error)
+		GetByID(userid string) (*ResUserGet, error)
 	}
 
 	// Service is the public interface for the user service server
@@ -67,8 +67,8 @@ type (
 
 	// Hook is a service that can hook onto the user create and destroy pipelines
 	Hook interface {
-		UserCreateHook(props HookProps) *governor.Error
-		UserDeleteHook(userid string) *governor.Error
+		UserCreateHook(props HookProps) error
+		UserDeleteHook(userid string) error
 	}
 )
 
@@ -88,27 +88,27 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 	refreshTime := time7d
 	confirmTime := time24h
 	passwordResetTime := time24h
-	if duration, err := time.ParseDuration(ca["duration"]); err == nil {
+	if duration, err := time.ParseDuration(ca["duration"]); err != nil {
+		l.Warn(fmt.Sprintf("auth: fail to parse access duration: %s", ca["duration"]), nil)
+	} else {
 		accessTime = duration.Nanoseconds() / b1
-	} else {
-		l.Warn(fmt.Sprintf("auth: failed to parse duration: %s", ca["duration"]), moduleID, "fail parse access duration", 0, nil)
 	}
-	if duration, err := time.ParseDuration(ca["refresh_duration"]); err == nil {
+	if duration, err := time.ParseDuration(ca["refresh_duration"]); err != nil {
+		l.Warn(fmt.Sprintf("auth: fail to parse refresh_duration: %s", ca["refresh_duration"]), nil)
+	} else {
 		refreshTime = duration.Nanoseconds() / b1
-	} else {
-		l.Warn(fmt.Sprintf("auth: failed to parse refresh_duration: %s", ca["refresh_duration"]), moduleID, "fail parse refresh duration", 0, nil)
 	}
-	if duration, err := time.ParseDuration(cu["confirm_duration"]); err == nil {
+	if duration, err := time.ParseDuration(cu["confirm_duration"]); err != nil {
+		l.Warn(fmt.Sprintf("auth: fail to parse confirm_duration: %s", ca["confirm_duration"]), nil)
+	} else {
 		confirmTime = duration.Nanoseconds() / b1
-	} else {
-		l.Warn(fmt.Sprintf("auth: failed to parse confirm_duration: %s", ca["confirm_duration"]), moduleID, "fail parse confirm duration", 0, nil)
 	}
-	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err == nil {
+	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err != nil {
+		l.Warn(fmt.Sprintf("auth: fail to parse password_reset_duration: %s", ca["password_reset_duration"]), nil)
+	} else {
 		passwordResetTime = duration.Nanoseconds() / b1
-	} else {
-		l.Warn(fmt.Sprintf("auth: failed to parse password_reset_duration: %s", ca["password_reset_duration"]), moduleID, "fail parse password reset duration", 0, nil)
 	}
-	l.Info("initialized user service", moduleID, "initialize user service", 0, map[string]string{
+	l.Info("initialize user service", map[string]string{
 		"auth: duration (s)":                strconv.FormatInt(accessTime, 10),
 		"auth: refresh_duration (s)":        strconv.FormatInt(refreshTime, 10),
 		"auth: confirm_duration (s)":        strconv.FormatInt(confirmTime, 10),
@@ -158,40 +158,36 @@ func (u *userService) Mount(conf governor.Config, l governor.Logger, r *echo.Gro
 	if err := ur.mountAuth(conf, r.Group("/auth")); err != nil {
 		return err
 	}
-	l.Info("mounted user service", moduleID, "mount user service", 0, nil)
+	l.Info("mount user service", nil)
 	return nil
 }
 
 // Health is a check for service health
-func (u *userService) Health() *governor.Error {
+func (u *userService) Health() error {
 	return nil
 }
 
 // Setup is run on service setup
-func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	madmin, err := u.repo.New(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname, rank.Admin())
 	if err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
 
 	if err := u.repo.Setup(); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new user table", moduleID, "create user table", 0, nil)
+	l.Info("create user table", nil)
 
 	if err := u.rolerepo.Setup(); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new userrole table", moduleID, "create userrole table", 0, nil)
+	l.Info("create userrole table", nil)
 
 	if err := u.repo.Insert(madmin); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("inserted new admin into users", moduleID, "insert new setup admin", 0, map[string]string{
+	l.Info("insert new setup admin", map[string]string{
 		"username": madmin.Username,
 		"userid":   madmin.Userid,
 	})

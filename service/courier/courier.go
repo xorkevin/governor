@@ -56,10 +56,10 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store 
 	fallbackLink := c["fallback_link"]
 	linkPrefix := c["link_prefix"]
 	cacheTime := min1
-	if duration, err := time.ParseDuration(c["cache_time"]); err == nil {
-		cacheTime = duration.Nanoseconds() / b1
-	} else {
+	if duration, err := time.ParseDuration(c["cache_time"]); err != nil {
 		l.Warn(fmt.Sprintf("courier: fail parse cache duration: %s", c["cache_time"]), nil)
+	} else {
+		cacheTime = duration.Nanoseconds() / b1
 	}
 	if len(fallbackLink) == 0 {
 		l.Warn("courier: fallback_link is not set", nil)

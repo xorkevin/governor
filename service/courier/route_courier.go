@@ -84,27 +84,24 @@ func (cr *courierRouter) getLinkImage(c echo.Context) error {
 }
 
 func (cr *courierRouter) getLinkGroup(c echo.Context) error {
-	var amt, ofs int
-	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
-		amt = amount
-	} else {
+	amount, err := strconv.Atoi(c.QueryParam("amount"))
+	if err != nil {
 		return governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err)
 	}
-	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
-		ofs = offset
-	} else {
+	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	if err != nil {
 		return governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err)
 	}
 
 	rlink := reqLinkGetGroup{
-		Amount: amt,
-		Offset: ofs,
+		Amount: amount,
+		Offset: offset,
 	}
 	if err := rlink.valid(); err != nil {
 		return err
 	}
 
-	res, err := cr.service.GetLinkGroup(amt, ofs, c.QueryParam("creatorid"))
+	res, err := cr.service.GetLinkGroup(amount, offset, c.QueryParam("creatorid"))
 	if err != nil {
 		return err
 	}
