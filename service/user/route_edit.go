@@ -22,7 +22,7 @@ type (
 	}
 )
 
-func (r *reqUserPut) valid() *governor.Error {
+func (r *reqUserPut) valid() error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (r *reqUserPut) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqUserPutRank) valid() *governor.Error {
+func (r *reqUserPutRank) valid() error {
 	if err := validRank(r.Add); err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (u *userRouter) putUser(c echo.Context) error {
 
 	ruser := reqUserPut{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -72,16 +72,13 @@ func (u *userRouter) patchRank(c echo.Context) error {
 
 	ruser := reqUserPutRank{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
 	}
 
-	updaterClaims, ok := c.Get("user").(*token.Claims)
-	if !ok {
-		return governor.NewErrorUser(moduleIDUser, "invalid auth claims", 0, http.StatusUnauthorized)
-	}
+	updaterClaims := c.Get("user").(*token.Claims)
 	updaterRank, _ := rank.FromStringUser(updaterClaims.AuthTags)
 	editAddRank, _ := rank.FromStringUser(ruser.Add)
 	editRemoveRank, _ := rank.FromStringUser(ruser.Remove)

@@ -24,7 +24,7 @@ func (u *userRouter) putEmail(c echo.Context) error {
 
 	ruser := reqUserPutEmail{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -36,7 +36,7 @@ func (u *userRouter) putEmail(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *reqUserPutEmail) valid() *governor.Error {
+func (r *reqUserPutEmail) valid() error {
 	if err := validEmail(r.Email); err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (r *reqUserPutEmail) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqUserPutEmailVerify) valid() *governor.Error {
+func (r *reqUserPutEmailVerify) valid() error {
 	if err := hasToken(r.Key); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (r *reqUserPutEmailVerify) valid() *governor.Error {
 func (u *userRouter) putEmailVerify(c echo.Context) error {
 	ruser := reqUserPutEmailVerify{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -87,7 +87,7 @@ type (
 	}
 )
 
-func (r *reqUserPutPassword) valid(passlen int) *governor.Error {
+func (r *reqUserPutPassword) valid(passlen int) error {
 	if err := validPassword(r.NewPassword, passlen); err != nil {
 		return err
 	}
@@ -97,21 +97,21 @@ func (r *reqUserPutPassword) valid(passlen int) *governor.Error {
 	return nil
 }
 
-func (r *reqForgotPassword) valid() *governor.Error {
+func (r *reqForgotPassword) valid() error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reqForgotPassword) validEmail() *governor.Error {
+func (r *reqForgotPassword) validEmail() error {
 	if err := validEmail(r.Username); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reqForgotPasswordReset) valid(passlen int) *governor.Error {
+func (r *reqForgotPasswordReset) valid(passlen int) error {
 	if err := hasToken(r.Key); err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (u *userRouter) putPassword(c echo.Context) error {
 
 	ruser := reqUserPutPassword{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err
@@ -141,7 +141,7 @@ func (u *userRouter) putPassword(c echo.Context) error {
 func (u *userRouter) forgotPassword(c echo.Context) error {
 	ruser := reqForgotPassword{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	isEmail := false
 	if err := ruser.validEmail(); err == nil {
@@ -159,7 +159,7 @@ func (u *userRouter) forgotPassword(c echo.Context) error {
 func (u *userRouter) forgotPasswordReset(c echo.Context) error {
 	ruser := reqForgotPasswordReset{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err

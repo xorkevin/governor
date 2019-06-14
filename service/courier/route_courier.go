@@ -155,11 +155,8 @@ func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := cr.service.linkImageBucket.Stat(rlink.LinkID + "-qr")
+	objinfo, err := cr.service.StatLinkImage(rlink.LinkID)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return "", governor.NewErrorUser("", 0, err)
-		}
 		return "", err
 	}
 

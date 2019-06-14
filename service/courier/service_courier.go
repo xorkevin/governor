@@ -3,6 +3,7 @@ package courier
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/barcode"
+	"github.com/minio/minio-go"
 	"io"
 	"net/http"
 	"time"
@@ -52,6 +53,17 @@ func (c *courierService) GetLinkFast(linkid string) (string, error) {
 		c.logger.Error("Fail cache linkid url", nil)
 	}
 	return res.URL, nil
+}
+
+func (c *courierService) StatLinkImage(linkid string) (*minio.ObjectInfo, error) {
+	objinfo, err := c.linkImageBucket.Stat(linkid + "-qr")
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("Link qr code image does not exist", http.StatusNotFound, err)
+		}
+		return nil, err
+	}
+	return objinfo, nil
 }
 
 func (c *courierService) GetLinkImage(linkid string) (io.Reader, string, error) {

@@ -37,14 +37,15 @@ type (
 )
 
 // Login authenticates a user and returns auth tokens
-func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent string) (bool, *resUserAuth, *governor.Error) {
+func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent string) (bool, *resUserAuth, error) {
 	m, err := u.repo.GetByID(userid)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return false, nil, governor.NewErrorUser("", 0, err)
+		}
 		return false, nil, err
 	}
 	if ok, err := u.repo.ValidatePass(password, m); err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	} else if !ok {
 		return false, &resUserAuth{
@@ -54,9 +55,8 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 
 	sessionID := ""
 	isMember := false
-	// if claims userid matches model, session_id is provided,
-	// is in list of user sessions, set it as the sessionID
-	// the session can be expired by time
+	// If claims userid matches model, session_id is provided, is in list of user
+	// sessions, set it as the sessionID. The session can be expired by time.
 	if ok, claims := u.tokenizer.GetClaims(sessionToken, sessionSubject); ok {
 		if userid == claims.Userid {
 			if isM, err := u.SessionExists(userid, claims.Id); err == nil && isM {
@@ -70,12 +70,10 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 	if sessionID == "" {
 		// otherwise, create a new sessionID
 		if s, err = session.New(m, ipAddress, userAgent); err != nil {
-			err.AddTrace(moduleIDAuth)
 			return false, nil, err
 		}
 	} else {
 		if s, err = session.FromSessionID(sessionID, userid, ipAddress, userAgent); err != nil {
-			err.AddTrace(moduleIDAuth)
 			return false, nil, err
 		}
 	}
@@ -83,19 +81,16 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 	// generate an access token
 	accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "")
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 	// generate a refresh token with the sessionKey
 	refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, s.SessionID+":"+s.SessionKey)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 	// generate a session token
 	newSessionToken, _, err := u.tokenizer.Generate(m, u.refreshTime, sessionSubject, s.SessionID)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 
@@ -109,8 +104,9 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 			UserAgent: s.UserAgent,
 		}
 		if err := u.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
-			err.AddTrace(moduleIDAuth)
-			return false, nil, err
+			u.logger.Error("fail send new login email", map[string]string{
+				"err": err.Error(),
+			})
 		}
 	}
 
@@ -128,7 +124,7 @@ func (u *userService) Login(userid, password, sessionToken, ipAddress, userAgent
 }
 
 // ExchangeToken validates a refresh token and returns an auth token
-func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (bool, *resUserAuth, *governor.Error) {
+func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (bool, *resUserAuth, error) {
 	sessionID := ""
 	sessionKey := ""
 	userid := ""
@@ -145,7 +141,7 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 	}
 
 	if sessionID == "" {
-		return false, nil, governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+		return false, nil, governor.NewErrorUser("malformed refresh token", http.StatusUnauthorized, nil)
 	}
 
 	// check the refresh token
@@ -159,7 +155,6 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 	// update the user session with a new latest time
 	s, err := session.FromSessionID(sessionID, userid, ipAddress, userAgent)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 	if err := u.UpdateUserSession(s); err != nil {
@@ -169,7 +164,6 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 	// generate a new accessToken from the refreshToken claims
 	accessToken, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 
@@ -181,11 +175,11 @@ func (u *userService) ExchangeToken(refreshToken, ipAddress, userAgent string) (
 }
 
 // RefreshToken invalidates the previous refresh token and creates a new one
-func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *governor.Error) {
+func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, error) {
 	sessionID := ""
 	sessionKey := ""
-	// if session_id is provided, is in cache, and is valid, set it as the sessionID
-	// the session cannot be expired
+	// If session_id is provided, is in cache, and is valid, set it as the
+	// sessionID. The session cannot be expired.
 	if ok, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject); ok {
 		if s := strings.Split(claims.Id, ":"); len(s) == 2 {
 			if key, err := u.GetSessionKey(s[0]); err == nil {
@@ -196,7 +190,7 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 	}
 
 	if sessionID == "" {
-		return false, nil, governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+		return false, nil, governor.NewErrorUser("malformed refresh token", http.StatusUnauthorized, nil)
 	}
 
 	// check the refresh token
@@ -210,22 +204,19 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 	// create a new key for the session
 	key, err := uid.NewU(0, 16)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
-		return false, nil, err
+		return false, nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	sessionKey = key.Base64()
 
 	// generate a new refreshToken from the refreshToken claims
 	newRefreshToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, refreshSubject, sessionID+":"+sessionKey)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 
 	// generate a new sessionToken from the refreshToken claims
 	sessionToken, err := u.tokenizer.GenerateFromClaims(claims, u.refreshTime, sessionSubject, sessionID)
 	if err != nil {
-		err.AddTrace(moduleIDAuth)
 		return false, nil, err
 	}
 
@@ -243,7 +234,7 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, *go
 }
 
 // Logout removes the user session in cache
-func (u *userService) Logout(refreshToken string) (bool, *governor.Error) {
+func (u *userService) Logout(refreshToken string) (bool, error) {
 	sessionID := ""
 	sessionKey := ""
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
@@ -258,7 +249,7 @@ func (u *userService) Logout(refreshToken string) (bool, *governor.Error) {
 	}
 
 	if sessionID == "" {
-		return false, governor.NewErrorUser(moduleIDAuth, "malformed refresh token", 0, http.StatusUnauthorized)
+		return false, governor.NewErrorUser("malformed refresh token", http.StatusUnauthorized, nil)
 	}
 
 	// check the refresh token

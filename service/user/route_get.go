@@ -38,19 +38,19 @@ type (
 	}
 )
 
-func (r *reqUserGetID) valid() *governor.Error {
+func (r *reqUserGetID) valid() error {
 	return hasUserid(r.Userid)
 }
 
-func (r *reqGetUsers) valid() *governor.Error {
+func (r *reqGetUsers) valid() error {
 	return hasUserids(r.Userids)
 }
 
-func (r *reqUserGetUsername) valid() *governor.Error {
+func (r *reqUserGetUsername) valid() error {
 	return hasUsername(r.Username)
 }
 
-func (r *reqGetRoleUserList) valid() *governor.Error {
+func (r *reqGetRoleUserList) valid() error {
 	if err := validRole(r.Role); err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (r *reqGetRoleUserList) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqGetUserEmails) valid() *governor.Error {
+func (r *reqGetUserEmails) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
@@ -168,12 +168,12 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
 		amt = amount
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
 	}
 	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
 		ofs = offset
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
 	ruser := reqGetRoleUserList{
@@ -203,12 +203,12 @@ func (u *userRouter) getAllUserInfo(c echo.Context) error {
 	if amount, err := strconv.Atoi(c.QueryParam("amount")); err == nil {
 		amt = amount
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "amount invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
 	}
 	if offset, err := strconv.Atoi(c.QueryParam("offset")); err == nil {
 		ofs = offset
 	} else {
-		return governor.NewErrorUser(moduleIDReqValid, "offset invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
 	ruser := reqGetUserEmails{

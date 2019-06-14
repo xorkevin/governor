@@ -27,7 +27,7 @@ type (
 	}
 )
 
-func (r *reqUserPost) valid(passlen int) *governor.Error {
+func (r *reqUserPost) valid(passlen int) error {
 	if err := validUsername(r.Username); err != nil {
 		return err
 	}
@@ -46,14 +46,14 @@ func (r *reqUserPost) valid(passlen int) *governor.Error {
 	return nil
 }
 
-func (r *reqUserPostConfirm) valid() *governor.Error {
+func (r *reqUserPostConfirm) valid() error {
 	if err := hasToken(r.Key); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reqUserDelete) valid() *governor.Error {
+func (r *reqUserDelete) valid() error {
 	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (r *reqUserDelete) valid() *governor.Error {
 func (u *userRouter) createUser(c echo.Context) error {
 	ruser := reqUserPost{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(u.service.passwordMinSize); err != nil {
 		return err
@@ -85,7 +85,7 @@ func (u *userRouter) createUser(c echo.Context) error {
 func (u *userRouter) commitUser(c echo.Context) error {
 	ruser := reqUserPostConfirm{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -110,14 +110,14 @@ func (u *userRouter) deleteUser(c echo.Context) error {
 	}
 	ruser := reqUserDelete{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
 	}
 
 	if reqid.Userid != ruser.Userid {
-		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("information does not match", http.StatusBadRequest, nil)
 	}
 
 	if err := u.service.DeleteUser(reqid.Userid, ruser.Username, ruser.Password); err != nil {

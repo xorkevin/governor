@@ -74,7 +74,7 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 
 		rsetup := &ReqSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
-			return NewErrorUser("", http.StatusBadRequest, err)
+			return err
 		}
 		if err := rsetup.valid(); err != nil {
 			return err

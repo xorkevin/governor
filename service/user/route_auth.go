@@ -22,7 +22,7 @@ type (
 	}
 )
 
-func (r *reqUserAuth) valid() *governor.Error {
+func (r *reqUserAuth) valid() error {
 	if err := hasUsername(r.Username); err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func (r *reqUserAuth) valid() *governor.Error {
 	return nil
 }
 
-func (r *reqUserAuth) validEmail() *governor.Error {
+func (r *reqUserAuth) validEmail() error {
 	if err := validEmail(r.Username); err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (r *reqUserAuth) validEmail() *governor.Error {
 	return nil
 }
 
-func (r *reqExchangeToken) valid() *governor.Error {
+func (r *reqExchangeToken) valid() error {
 	if err := hasToken(r.RefreshToken); err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
 func (u *userRouter) loginUser(c echo.Context) error {
 	ruser := reqUserAuth{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	isEmail := false
 	if err := ruser.validEmail(); err == nil {
@@ -240,7 +240,7 @@ func (u *userRouter) exchangeToken(c echo.Context) error {
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -263,7 +263,7 @@ func (u *userRouter) refreshToken(c echo.Context) error {
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
@@ -287,7 +287,7 @@ func (u *userRouter) logoutUser(c echo.Context) error {
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDAuth, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err

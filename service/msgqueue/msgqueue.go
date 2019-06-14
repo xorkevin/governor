@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo"
 	"github.com/nats-io/go-nats-streaming"
 	"net/http"
-	"strings"
 	"sync/atomic"
 )
 
@@ -41,7 +40,7 @@ const (
 	moduleID = "nats"
 )
 
-// New creates a new cache service
+// New creates a new msgqueue service
 func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("nats")
@@ -50,7 +49,7 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	if err != nil {
 		return nil, governor.NewError("Failed to get new uid", http.StatusInternalServerError, err)
 	}
-	clientidstr := strings.TrimRight(clientid.Base64(), "=")
+	clientidstr := clientid.Base64()
 
 	var conn stan.Conn
 	if connection, err := stan.Connect(rconf["cluster"], clientidstr, func(options *stan.Options) error {

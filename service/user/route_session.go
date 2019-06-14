@@ -29,7 +29,7 @@ type (
 	}
 )
 
-func (r *reqUserRmSessions) valid() *governor.Error {
+func (r *reqUserRmSessions) valid() error {
 	if err := hasIDs(r.SessionIDs); err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (u *userRouter) killSessions(c echo.Context) error {
 
 	ruser := reqUserRmSessions{}
 	if err := c.Bind(&ruser); err != nil {
-		return governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	if err := ruser.valid(); err != nil {
 		return err
