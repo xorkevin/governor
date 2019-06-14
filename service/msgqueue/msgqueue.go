@@ -47,7 +47,7 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 
 	clientid, err := uid.NewU(8, 8)
 	if err != nil {
-		return nil, governor.NewError("Failed to get new uid", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	clientidstr := clientid.Base64()
 

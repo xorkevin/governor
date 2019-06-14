@@ -35,45 +35,41 @@ const (
 )
 
 // CreateUser creates a new user and places it into the cache
-func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.Error) {
+func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	m2, err := u.repo.GetByUsername(ruser.Username)
-	if err != nil && err.Code() != 2 {
-		err.AddTrace(moduleIDUser)
+	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
 		return nil, err
 	}
 	if m2 != nil && m2.Username == ruser.Username {
-		return nil, governor.NewErrorUser(moduleIDUser, "username is already taken", 0, http.StatusBadRequest)
+		return nil, governor.NewErrorUser("Username is already taken", http.StatusBadRequest, nil)
 	}
 
 	m2, err = u.repo.GetByEmail(ruser.Email)
-	if err != nil && err.Code() != 2 {
-		err.AddTrace(moduleIDUser)
+	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
 		return nil, err
 	}
 	if m2 != nil && m2.Email == ruser.Email {
-		return nil, governor.NewErrorUser(moduleIDUser, "email is already used by another account", 0, http.StatusBadRequest)
+		return nil, governor.NewErrorUser("Email is already used by another account", http.StatusBadRequest, nil)
 	}
 
 	m, err := u.repo.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName, rank.BaseUser())
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return nil, err
 	}
 
 	b := bytes.Buffer{}
 	if err := gob.NewEncoder(&b).Encode(m); err != nil {
-		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
 	}
 
 	key, err := uid.NewU(0, 16)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
-		return nil, err
+		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	sessionKey := key.Base64()
 
 	if err := u.cache.Cache().Set(cachePrefixNewUser+sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
-		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to store user info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailNewUser{
@@ -82,8 +78,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 		Key:       sessionKey,
 	}
 	if err := u.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
-		err.AddTrace(moduleIDUser)
-		return nil, err
+		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
 
 	return &resUserUpdate{
@@ -93,25 +88,23 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, *governor.E
 }
 
 // CommitUser takes a user from the cache and places it into the db
-func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
+func (u *userService) CommitUser(key string) (*resUserUpdate, error) {
 	gobUser, err := u.cache.Cache().Get(cachePrefixNewUser + key).Result()
 	if err != nil {
-		return nil, governor.NewErrorUser(moduleIDUser, err.Error(), 0, http.StatusBadRequest)
+		return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
 	}
 
 	m := u.repo.NewEmpty()
 	b := bytes.NewBufferString(gobUser)
 	if err := gob.NewDecoder(b).Decode(&m); err != nil {
-		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
+		return nil, governor.NewError("Failed to decode user info", http.StatusInternalServerError, err)
 	}
 
 	if err := u.repo.Insert(&m); err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
 		return nil, err
-	}
-
-	if err := u.cache.Cache().Del(cachePrefixNewUser + key).Err(); err != nil {
-		return nil, governor.NewError(moduleIDUser, err.Error(), 0, http.StatusInternalServerError)
 	}
 
 	hookProps := HookProps{
@@ -124,14 +117,19 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 
 	for _, i := range u.hooks {
 		if err := i.UserCreateHook(hookProps); err != nil {
-			err.AddTrace(moduleIDUser)
-			u.logger.Error(err.Message(), err.Origin(), "userhook create error", err.Code(), map[string]string{
-				"source": err.Source(),
+			u.logger.Error("userhook create error", map[string]string{
+				"err": err.Error(),
 			})
 		}
 	}
 
-	u.logger.Info("user created", moduleIDUser, "create user", 0, map[string]string{
+	if err := u.cache.Cache().Del(cachePrefixNewUser + key).Err(); err != nil {
+		u.logger.Error("Failed to clean up user create cache data", map[string]string{
+			"err": err.Error(),
+		})
+	}
+
+	u.logger.Info("create user", map[string]string{
 		"userid":   m.Userid,
 		"username": m.Username,
 	})
@@ -142,21 +140,22 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, *governor.Error) {
 	}, nil
 }
 
-func (u *userService) DeleteUser(userid string, username string, password string) *governor.Error {
+func (u *userService) DeleteUser(userid string, username string, password string) error {
 	m, err := u.repo.GetByID(userid)
 	if err != nil {
-		err.AddTrace(moduleIDUser)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
 		return err
 	}
 
 	if m.Username != username {
-		return governor.NewErrorUser(moduleIDUser, "information does not match", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Information does not match", http.StatusBadRequest, err)
 	}
 	if ok, err := u.repo.ValidatePass(password, m); err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	} else if !ok {
-		return governor.NewErrorUser(moduleIDUser, "incorrect password", 0, http.StatusForbidden)
+		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
 	if err := u.KillAllSessions(userid); err != nil {
@@ -164,15 +163,14 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	}
 
 	if err := u.repo.Delete(m); err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	}
 
 	for _, i := range u.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
 			err.AddTrace(moduleIDUser)
-			u.logger.Error(err.Message(), err.Origin(), "userhook delete error", err.Code(), map[string]string{
-				"source": err.Source(),
+			u.logger.Error("userhook delete error", map[string]string{
+				"err": err.Error(),
 			})
 		}
 	}
