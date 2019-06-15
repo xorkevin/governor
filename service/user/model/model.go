@@ -9,7 +9,6 @@ import (
 	"github.com/hackform/governor/util/uid"
 	"github.com/hackform/hunter2"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -20,6 +19,7 @@ const (
 	uidRandSize = 8
 	passSaltLen = 32
 	passHashLen = 32
+	roleLimit   = 1024
 )
 
 const (
@@ -63,7 +63,7 @@ type (
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
-		AuthTags     string
+		AuthTags     rank.Rank
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,get"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
@@ -112,7 +112,7 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 	return &Model{
 		Userid:       mUID.Base64(),
 		Username:     username,
-		AuthTags:     ra.Stringify(),
+		AuthTags:     ra,
 		PassHash:     mHash,
 		Email:        email,
 		FirstName:    firstname,
@@ -154,11 +154,11 @@ func (r *repo) RehashPass(m *Model, password string) error {
 
 // GetRoles gets the roles of the user for the model
 func (r *repo) GetRoles(m *Model) error {
-	roles, err := r.rolerepo.GetUserRoles(m.Userid, 1024, 0)
+	roles, err := r.rolerepo.GetUserRoles(m.Userid, roleLimit, 0)
 	if err != nil {
 		return governor.NewError("Failed to get roles of user", http.StatusInternalServerError, err)
 	}
-	m.AuthTags = strings.Join(roles, ",")
+	m.AuthTags = rank.FromSlice(roles)
 	return nil
 }
 
@@ -230,9 +230,8 @@ func (r *repo) GetByEmail(email string) (*Model, error) {
 }
 
 func (r *repo) insertRoles(m *Model) error {
-	roles := strings.Split(m.AuthTags, ",")
-	for _, i := range roles {
-		rModel, err := r.rolerepo.New(m.Userid, i)
+	for k := range m.AuthTags {
+		rModel, err := r.rolerepo.New(m.Userid, k)
 		if err != nil {
 			return governor.NewError("Failed to create user role", http.StatusInternalServerError, err)
 		}

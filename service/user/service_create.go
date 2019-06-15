@@ -152,6 +152,9 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	if m.Username != username {
 		return governor.NewErrorUser("Information does not match", http.StatusBadRequest, err)
 	}
+	if m.AuthTags.Has("admin") {
+		return governor.NewErrorUser("Not allowed to delete admin user", http.StatusForbidden, err)
+	}
 	if ok, err := u.repo.ValidatePass(password, m); err != nil {
 		return err
 	} else if !ok {

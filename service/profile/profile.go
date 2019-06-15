@@ -42,13 +42,13 @@ type (
 func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) (Profile, error) {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
-		err.AddTrace(moduleID)
+		l.Error("fail get profile picture bucket", map[string]string{
+			"err": err.Error(),
+		})
 		return nil, err
 	}
 
-	l.Info("initialized profile service", moduleID, "initialize profile service", 0, map[string]string{
-		"profile: image bucket": imageBucket,
-	})
+	l.Info("initialize profile service", nil)
 
 	return &profileService{
 		repo: repo,
@@ -73,35 +73,31 @@ func (p *profileService) Mount(conf governor.Config, l governor.Logger, r *echo.
 		return err
 	}
 
-	l.Info("mounted profile service", moduleID, "mount profile service", 0, nil)
+	l.Info("mount profile service", nil)
 	return nil
 }
 
 // Health is a check for service health
-func (p *profileService) Health() *governor.Error {
+func (p *profileService) Health() error {
 	return nil
 }
 
 // Setup is run on service setup
-func (p *profileService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) *governor.Error {
+func (p *profileService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
 	if err := p.repo.Setup(); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
-	l.Info("created new profile table", moduleID, "create profile table", 0, nil)
+	l.Info("create profile table", nil)
 	return nil
 }
 
 // UserCreateHook creates a new profile on new user
-func (p *profileService) UserCreateHook(props user.HookProps) *governor.Error {
-	if _, err := p.CreateProfile(props.Userid, "", ""); err != nil {
-		return err
-	}
-
-	return nil
+func (p *profileService) UserCreateHook(props user.HookProps) error {
+	_, err := p.CreateProfile(props.Userid, "", "")
+	return err
 }
 
 // UserDeleteHook deletes the profile on delete user
-func (p *profileService) UserDeleteHook(userid string) *governor.Error {
+func (p *profileService) UserDeleteHook(userid string) error {
 	return p.DeleteProfile(userid)
 }

@@ -54,15 +54,11 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 	}
 
 	diff := make(map[string]int)
-	for k, v := range editAddRank {
-		if v {
-			diff[k] = u.repo.RoleAddAction()
-		}
+	for k := range editAddRank {
+		diff[k] = u.repo.RoleAddAction()
 	}
-	for k, v := range editRemoveRank {
-		if v {
-			diff[k] = u.repo.RoleRemoveAction()
-		}
+	for k := range editRemoveRank {
+		diff[k] = u.repo.RoleRemoveAction()
 	}
 
 	if err := u.KillAllSessions(userid); err != nil {

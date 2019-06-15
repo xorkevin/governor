@@ -22,7 +22,7 @@ func getUserPublicFields(m *usermodel.Model) *ResUserGetPublic {
 	return &ResUserGetPublic{
 		Userid:       m.Userid,
 		Username:     m.Username,
-		AuthTags:     m.AuthTags,
+		AuthTags:     m.AuthTags.Stringify(),
 		FirstName:    m.FirstName,
 		LastName:     m.LastName,
 		CreationTime: m.CreationTime,

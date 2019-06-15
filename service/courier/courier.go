@@ -78,7 +78,7 @@ func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store 
 
 	linkImageBucket, err := store.GetBucketDefLoc(linkImageBucketID)
 	if err != nil {
-		l.Error("fail get image bucket", map[string]string{
+		l.Error("fail get courier link image bucket", map[string]string{
 			"err": err.Error(),
 		})
 		return nil, err

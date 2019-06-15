@@ -4,6 +4,7 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/image"
 	"io"
+	"net/http"
 )
 
 type (
@@ -18,17 +19,16 @@ type (
 	}
 )
 
-func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUpdate, *governor.Error) {
+func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUpdate, error) {
 	m, err := p.repo.New(userid, email, bio)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := p.repo.Insert(m); err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return nil, governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return nil, err
 	}
 
@@ -37,13 +37,12 @@ func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUp
 	}, nil
 }
 
-func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Error {
+func (p *profileService) UpdateProfile(userid, email, bio string) error {
 	m, err := p.repo.GetByID(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return err
 	}
 
@@ -51,59 +50,52 @@ func (p *profileService) UpdateProfile(userid, email, bio string) *governor.Erro
 	m.Bio = bio
 
 	if err := p.repo.Update(m); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) *governor.Error {
+func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) error {
 	m, err := p.repo.GetByID(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return err
 	}
 
 	if err := p.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
-		err.AddTrace(moduleID)
-		return err
+		return governor.NewError("Failed to store profile picture", http.StatusInternalServerError, err)
 	}
 
 	m.Image = thumb64
 	if err := p.repo.Update(m); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) DeleteProfile(userid string) *governor.Error {
+func (p *profileService) DeleteProfile(userid string) error {
 	m, err := p.repo.GetByID(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return err
 	}
 
 	if err := p.repo.Delete(m); err != nil {
-		err.AddTrace(moduleID)
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) GetProfile(userid string) (*resProfileModel, *governor.Error) {
+func (p *profileService) GetProfile(userid string) (*resProfileModel, error) {
 	m, err := p.repo.GetByID(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("", 0, err)
 		}
-		err.AddTrace(moduleID)
 		return nil, err
 	}
 	return &resProfileModel{

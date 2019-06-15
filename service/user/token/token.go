@@ -46,7 +46,7 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id str
 			ExpiresAt: now + duration,
 		},
 		Userid:   u.Userid,
-		AuthTags: u.AuthTags,
+		AuthTags: u.AuthTags.Stringify(),
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS512, claims).SignedString(t.secret)
 	if err != nil {
