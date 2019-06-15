@@ -44,12 +44,10 @@ type (
 		GetByUsername(username string) (*Model, error)
 		GetByEmail(email string) (*Model, error)
 		Insert(m *Model) error
-		UpdateRoles(m *Model, diff map[string]int) error
+		UpdateRoles(m *Model, addRoles, rmRoles []string) error
 		Update(m *Model) error
 		Delete(m *Model) error
 		Setup() error
-		RoleAddAction() int
-		RoleRemoveAction() int
 	}
 
 	repo struct {
@@ -230,14 +228,12 @@ func (r *repo) GetByEmail(email string) (*Model, error) {
 }
 
 func (r *repo) insertRoles(m *Model) error {
+	roles := make([]*rolemodel.Model, 0, len(m.AuthTags))
 	for k := range m.AuthTags {
-		rModel, err := r.rolerepo.New(m.Userid, k)
-		if err != nil {
-			return governor.NewError("Failed to create user role", http.StatusInternalServerError, err)
-		}
-		if err := r.rolerepo.Insert(rModel); err != nil {
-			return governor.NewError("Failed to insert user role", http.StatusInternalServerError, err)
-		}
+		roles = append(roles, r.rolerepo.New(m.Userid, k))
+	}
+	if err := r.rolerepo.InsertBulk(roles); err != nil {
+		return governor.NewError("Failed to insert user roles", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -257,29 +253,16 @@ func (r *repo) Insert(m *Model) error {
 }
 
 // UpdateRoles updates the model's roles into the db
-func (r *repo) UpdateRoles(m *Model, diff map[string]int) error {
-	for k, v := range diff {
-		if originalRole, err := r.rolerepo.GetByID(m.Userid, k); err == nil {
-			switch v {
-			case roleRemove:
-				if err := r.rolerepo.Delete(originalRole); err != nil {
-					return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
-				}
-			}
-		} else if governor.ErrorStatus(err) == http.StatusNotFound {
-			switch v {
-			case roleAdd:
-				if roleM, err := r.rolerepo.New(m.Userid, k); err != nil {
-					return governor.NewError("Failed to create role", http.StatusInternalServerError, err)
-				} else {
-					if err := r.rolerepo.Insert(roleM); err != nil {
-						return governor.NewError("Failed to insert role", http.StatusInternalServerError, err)
-					}
-				}
-			}
-		} else {
-			return governor.NewError("Failed to update role", http.StatusInternalServerError, err)
-		}
+func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
+	rModels := make([]*rolemodel.Model, 0, len(addRoles))
+	for _, i := range addRoles {
+		rModels = append(rModels, r.rolerepo.New(m.Userid, i))
+	}
+	if err := r.rolerepo.InsertBulk(rModels); err != nil {
+		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
+	}
+	if err := r.rolerepo.DeleteBulk(rmRoles); err != nil {
+		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -310,14 +293,4 @@ func (r *repo) Setup() error {
 		return governor.NewError("Failed to setup user model", http.StatusInternalServerError, err)
 	}
 	return nil
-}
-
-// RoleRemoveAction returns the action to add a role
-func (r *repo) RoleAddAction() int {
-	return roleAdd
-}
-
-// RoleRemoveAction returns the action to remove a role
-func (r *repo) RoleRemoveAction() int {
-	return roleRemove
 }

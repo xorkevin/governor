@@ -29,14 +29,19 @@ type (
 	Rank map[string]struct{}
 )
 
-// Stringify transforms the rank into an alphabetically ordered, comma delimited string
-func (r Rank) Stringify() string {
+// ToSlice returns an alphabetically sorted string slice of the rank
+func (r Rank) ToSlice() []string {
 	keys := make([]string, 0, len(r))
 	for k := range r {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	return strings.Join(keys, ",")
+	return keys
+}
+
+// Stringify transforms the rank into an alphabetically ordered, comma delimited string
+func (r Rank) Stringify() string {
+	return strings.Join(r.ToSlice(), ",")
 }
 
 // Has checks if a Rank has a tag

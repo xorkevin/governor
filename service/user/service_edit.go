@@ -53,18 +53,10 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		})
 	}
 
-	diff := make(map[string]int)
-	for k := range editAddRank {
-		diff[k] = u.repo.RoleAddAction()
-	}
-	for k := range editRemoveRank {
-		diff[k] = u.repo.RoleRemoveAction()
-	}
-
 	if err := u.KillAllSessions(userid); err != nil {
 		return err
 	}
-	if err := u.repo.UpdateRoles(m, diff); err != nil {
+	if err := u.repo.UpdateRoles(m, editAddRank.ToSlice(), editRemoveRank.ToSlice()); err != nil {
 		return err
 	}
 	return nil

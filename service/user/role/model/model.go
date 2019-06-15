@@ -5,18 +5,20 @@ import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/db"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 //go:generate forge model -m Model -t userroles -p role -o model_gen.go qUserid qRole
 
 type (
 	Repo interface {
-		New(userid, role string) (*Model, error)
+		New(userid, role string) *Model
 		GetByID(userid, role string) (*Model, error)
 		GetByRole(role string, limit, offset int) ([]string, error)
 		GetUserRoles(userid string, limit, offset int) ([]string, error)
-		Insert(m *Model) error
-		Delete(m *Model) error
+		InsertBulk(m []*Model) error
+		DeleteBulk(roleids []string) error
 		DeleteUserRoles(userid string) error
 		Setup() error
 	}
@@ -49,13 +51,13 @@ func New(conf governor.Config, l governor.Logger, database db.Database) Repo {
 }
 
 // New creates a new User role Model
-func (r *repo) New(userid, role string) (*Model, error) {
+func (r *repo) New(userid, role string) *Model {
 	m := &Model{
 		Userid: userid,
 		Role:   role,
 	}
 	m.ensureRoleid()
-	return m, nil
+	return m
 }
 
 func (m *Model) ensureRoleid() string {
@@ -116,6 +118,26 @@ func (r *repo) Insert(m *Model) error {
 	return nil
 }
 
+// InsertBulk inserts multiple models into the db
+func (r *repo) InsertBulk(m []*Model) error {
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(m))
+	args := make([]interface{}, 0, len(m)*3)
+	for n, i := range m {
+		i.ensureRoleid()
+		a := strconv.Itoa(n*3 + placeholderStart)
+		b := strconv.Itoa(n*3 + 1 + placeholderStart)
+		c := strconv.Itoa(n*3 + 2 + placeholderStart)
+		placeholders = append(placeholders, "($"+a+",$"+b+",$"+c+")")
+		args = append(args, i.roleid, i.Userid, i.Role)
+	}
+
+	stmt := "INSERT INTO " + roleModelTableName + " (roleid, userid, role) VALUES " + strings.Join(placeholders, ",") + " ON CONFLICT DO NOTHING;"
+
+	_, err := r.db.Exec(stmt, args...)
+	return err
+}
+
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
 	m.ensureRoleid()
@@ -123,6 +145,22 @@ func (r *repo) Delete(m *Model) error {
 		return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
 	}
 	return nil
+}
+
+// DeleteBulk deletes multiple models from the db
+func (r *repo) DeleteBulk(m []string) error {
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(m))
+	args := make([]interface{}, 0, len(m))
+	for n, i := range m {
+		placeholders = append(placeholders, "($"+strconv.Itoa(n+placeholderStart)+")")
+		args = append(args, i)
+	}
+
+	stmt := "DELETE FROM " + roleModelTableName + " WHERE roleid IN (VALUES " + strings.Join(placeholders, ",") + ");"
+
+	_, err := r.db.Exec(stmt, args...)
+	return err
 }
 
 const (
