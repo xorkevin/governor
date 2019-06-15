@@ -93,9 +93,6 @@ func (u *userRouter) commitUser(c echo.Context) error {
 
 	res, err := u.service.CommitUser(ruser.Key)
 	if err != nil {
-		if err.Code() == 3 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 	return c.JSON(http.StatusCreated, res)
@@ -121,9 +118,6 @@ func (u *userRouter) deleteUser(c echo.Context) error {
 	}
 
 	if err := u.service.DeleteUser(reqid.Userid, ruser.Username, ruser.Password); err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

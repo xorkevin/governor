@@ -168,7 +168,6 @@ func (u *userService) DeleteUser(userid string, username string, password string
 
 	for _, i := range u.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
-			err.AddTrace(moduleIDUser)
 			u.logger.Error("userhook delete error", map[string]string{
 				"err": err.Error(),
 			})

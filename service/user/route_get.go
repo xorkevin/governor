@@ -83,9 +83,6 @@ func (u *userRouter) getByID(c echo.Context) error {
 
 	res, err := u.service.GetByIDPublic(ruser.Userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 
@@ -97,9 +94,6 @@ func (u *userRouter) getByIDPersonal(c echo.Context) error {
 
 	res, err := u.service.GetByID(userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 
@@ -116,9 +110,6 @@ func (u *userRouter) getByIDPrivate(c echo.Context) error {
 
 	res, err := u.service.GetByID(ruser.Userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 
@@ -135,9 +126,6 @@ func (u *userRouter) getByUsername(c echo.Context) error {
 
 	res, err := u.service.GetByUsernamePublic(ruser.Username)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 
@@ -154,9 +142,6 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
 
 	res, err := u.service.GetByUsername(ruser.Username)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 
@@ -234,7 +219,6 @@ func (u *userRouter) getUserInfoBulkPublic(c echo.Context) error {
 
 	res, err := u.service.GetInfoBulkPublic(strings.Split(ruser.Userids, ","))
 	if err != nil {
-		err.AddTrace(moduleIDUser)
 		return err
 	}
 
@@ -255,9 +239,6 @@ func (u *userRouter) getByUsernameDebug(c echo.Context) error {
 
 	res, err := u.service.GetByUsername(ruser.Username)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
 		return err
 	}
 

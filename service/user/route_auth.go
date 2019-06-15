@@ -195,10 +195,6 @@ func (u *userRouter) loginUser(c echo.Context) error {
 	if isEmail {
 		m, err := u.service.GetByEmail(ruser.Username)
 		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDAuth)
 			return err
 		}
 		userid = m.Userid
@@ -208,10 +204,6 @@ func (u *userRouter) loginUser(c echo.Context) error {
 		}
 		m, err := u.service.GetByUsername(ruser.Username)
 		if err != nil {
-			if err.Code() == 2 {
-				err.SetErrorUser()
-			}
-			err.AddTrace(moduleIDAuth)
 			return err
 		}
 		userid = m.Userid
