@@ -59,9 +59,9 @@ func (c *courierService) StatLinkImage(linkid string) (*minio.ObjectInfo, error)
 	objinfo, err := c.linkImageBucket.Stat(linkid + "-qr")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Link qr code image does not exist", http.StatusNotFound, err)
+			return nil, governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
 		}
-		return nil, err
+		return nil, governor.NewError("Failed to get link qr code image", http.StatusInternalServerError, err)
 	}
 	return objinfo, nil
 }
@@ -70,9 +70,9 @@ func (c *courierService) GetLinkImage(linkid string) (io.Reader, string, error) 
 	qrimage, objinfo, err := c.linkImageBucket.Get(linkid + "-qr")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, "", governor.NewErrorUser("Link qr code image does not exist", http.StatusNotFound, err)
+			return nil, "", governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
 		}
-		return nil, "Failed to get the link qr code image", err
+		return nil, "", governor.NewError("Failed to get link qr code image", http.StatusInternalServerError, err)
 	}
 	return qrimage, objinfo.ContentType, nil
 }

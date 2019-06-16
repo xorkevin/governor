@@ -3,6 +3,7 @@ package profile
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/image"
+	"github.com/minio/minio-go"
 	"io"
 	"net/http"
 )
@@ -103,4 +104,26 @@ func (p *profileService) GetProfile(userid string) (*resProfileModel, error) {
 		Bio:   m.Bio,
 		Image: m.Image,
 	}, nil
+}
+
+func (p *profileService) StatProfileImage(userid string) (*minio.ObjectInfo, error) {
+	objinfo, err := p.obj.Stat(userid + "-profile")
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("Profile image not found", 0, err)
+		}
+		return nil, governor.NewError("Failed to get profile image", http.StatusInternalServerError, err)
+	}
+	return objinfo, nil
+}
+
+func (p *profileService) GetProfileImage(userid string) (io.Reader, string, error) {
+	obj, objinfo, err := p.obj.Get(userid + "-profile")
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, "", governor.NewErrorUser("Profile image not found", 0, err)
+		}
+		return nil, "", governor.NewError("Failed to get profile image", http.StatusInternalServerError, err)
+	}
+	return obj, objinfo.ContentType, nil
 }

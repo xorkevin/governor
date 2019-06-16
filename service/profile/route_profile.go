@@ -21,14 +21,14 @@ type (
 	}
 )
 
-func (r *reqProfileGetID) valid() *governor.Error {
+func (r *reqProfileGetID) valid() error {
 	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *reqProfileModel) valid() *governor.Error {
+func (r *reqProfileModel) valid() error {
 	if err := hasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (r *reqProfileModel) valid() *governor.Error {
 func (p *profileRouter) createProfile(c echo.Context) error {
 	rprofile := reqProfileModel{}
 	if err := c.Bind(&rprofile); err != nil {
-		return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	rprofile.Userid = c.Get("userid").(string)
 	if err := rprofile.valid(); err != nil {
@@ -62,7 +62,7 @@ func (p *profileRouter) createProfile(c echo.Context) error {
 func (p *profileRouter) updateProfile(c echo.Context) error {
 	rprofile := reqProfileModel{}
 	if err := c.Bind(&rprofile); err != nil {
-		return governor.NewErrorUser(moduleID, err.Error(), 0, http.StatusBadRequest)
+		return err
 	}
 	rprofile.Userid = c.Get("userid").(string)
 	if err := rprofile.valid(); err != nil {
@@ -139,18 +139,14 @@ func (p *profileRouter) getProfileImage(c echo.Context) error {
 		return err
 	}
 
-	obj, objinfo, err := p.service.obj.Get(rprofile.Userid + "-profile")
+	image, contentType, err := p.service.GetProfileImage(rprofile.Userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
 		return err
 	}
-	return c.Stream(http.StatusOK, objinfo.ContentType, obj)
+	return c.Stream(http.StatusOK, contentType, image)
 }
 
-func (p *profileRouter) getProfileImageCC(c echo.Context) (string, *governor.Error) {
+func (p *profileRouter) getProfileImageCC(c echo.Context) (string, error) {
 	rprofile := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -158,12 +154,8 @@ func (p *profileRouter) getProfileImageCC(c echo.Context) (string, *governor.Err
 		return "", err
 	}
 
-	objinfo, err := p.service.obj.Stat(rprofile.Userid + "-profile")
+	objinfo, err := p.service.StatProfileImage(rprofile.Userid)
 	if err != nil {
-		if err.Code() == 2 {
-			err.SetErrorUser()
-		}
-		err.AddTrace(moduleID)
 		return "", err
 	}
 

@@ -17,36 +17,29 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func hasUserid(userid string) *governor.Error {
+func hasUserid(userid string) error {
 	if len(userid) < 1 || len(userid) > lengthCap {
-		return governor.NewErrorUser(moduleIDReqValid, "userid must be provided", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
-func validEmail(email string) *governor.Error {
+func validEmail(email string) error {
 	if len(email) == 0 {
 		return nil
 	}
 	if !emailRegex.MatchString(email) || len(email) > lengthCapEmail {
-		return governor.NewErrorUser(moduleIDReqValid, "email is invalid", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
-func validBio(bio string) *governor.Error {
+func validBio(bio string) error {
 	if len(bio) == 0 {
 		return nil
 	}
 	if len(bio) > lengthCapLarge {
-		return governor.NewErrorUser(moduleIDReqValid, "bio exceeds max length", 0, http.StatusBadRequest)
-	}
-	return nil
-}
-
-func validKey(key string) *governor.Error {
-	if len(key) < 1 || len(key) > lengthCapLarge {
-		return governor.NewErrorUser(moduleIDReqValid, "key must be provided", 0, http.StatusBadRequest)
+		return governor.NewErrorUser("Bio exceeds max length", http.StatusBadRequest, nil)
 	}
 	return nil
 }
