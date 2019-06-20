@@ -7,7 +7,6 @@ import (
 	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"net/http"
-	"strings"
 )
 
 type (
@@ -69,7 +68,7 @@ const (
 	month6 = 43200 * 365
 )
 
-func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string) {
+func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -91,12 +90,18 @@ func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refr
 		MaxAge:   month6,
 		HttpOnly: false,
 	})
+	c.SetCookie(&http.Cookie{
+		Name:     "userid",
+		Value:    userid,
+		Path:     "/",
+		MaxAge:   month6,
+		HttpOnly: false,
+	})
 }
 
-func (u *userRouter) setSessionCookie(c echo.Context, conf governor.Config, sessionToken, userid string) {
-	ub64 := strings.TrimRight(userid, "=")
+func (u *userRouter) setSessionCookie(c echo.Context, conf governor.Config, sessionToken string, userid string) {
 	c.SetCookie(&http.Cookie{
-		Name:     "session_token_" + ub64,
+		Name:     "session_token_" + userid,
 		Value:    sessionToken,
 		Path:     conf.BaseURL + "/u/auth/login",
 		MaxAge:   month6,
@@ -127,11 +132,10 @@ func getRefreshCookie(c echo.Context) (string, error) {
 }
 
 func getSessionCookie(c echo.Context, userid string) (string, error) {
-	ub64 := strings.TrimRight(userid, "=")
-	if ub64 == "" {
+	if userid == "" {
 		return "", errors.New("no cookie value")
 	}
-	cookie, err := c.Cookie("session_token_" + ub64)
+	cookie, err := c.Cookie("session_token_" + userid)
 	if err != nil {
 		return "", err
 	}
@@ -169,12 +173,17 @@ func rmRefreshCookie(c echo.Context, conf governor.Config) {
 		MaxAge: -1,
 		Path:   "/",
 	})
+	c.SetCookie(&http.Cookie{
+		Name:   "userid",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   "/",
+	})
 }
 
 func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
-	ub64 := strings.TrimRight(userid, "=")
 	c.SetCookie(&http.Cookie{
-		Name:   "session_token_" + ub64,
+		Name:   "session_token_" + userid,
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   conf.BaseURL + "/u/auth/login",
@@ -221,7 +230,7 @@ func (u *userRouter) loginUser(c echo.Context) error {
 	}
 
 	u.setAccessCookie(c, u.service.config, res.AccessToken)
-	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags)
+	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
 	u.setSessionCookie(c, u.service.config, res.SessionToken, userid)
 
 	return c.JSON(http.StatusOK, res)
@@ -269,7 +278,7 @@ func (u *userRouter) refreshToken(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, res)
 	}
 
-	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags)
+	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
 	u.setSessionCookie(c, u.service.config, res.SessionToken, res.Claims.Userid)
 	return c.JSON(http.StatusOK, res)
 }
