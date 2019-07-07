@@ -254,15 +254,24 @@ func (r *repo) Insert(m *Model) error {
 
 // UpdateRoles updates the model's roles into the db
 func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
-	rModels := make([]*rolemodel.Model, 0, len(addRoles))
+	addModels := make([]*rolemodel.Model, 0, len(addRoles))
 	for _, i := range addRoles {
-		rModels = append(rModels, r.rolerepo.New(m.Userid, i))
+		addModels = append(addModels, r.rolerepo.New(m.Userid, i))
 	}
-	if err := r.rolerepo.InsertBulk(rModels); err != nil {
-		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
+	rmModels := make([]*rolemodel.Model, 0, len(rmRoles))
+	for _, i := range rmRoles {
+		rmModels = append(rmModels, r.rolerepo.New(m.Userid, i))
 	}
-	if err := r.rolerepo.DeleteBulk(rmRoles); err != nil {
-		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
+
+	if len(rmModels) > 0 {
+		if err := r.rolerepo.DeleteBulk(rmModels); err != nil {
+			return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
+		}
+	}
+	if len(addModels) > 0 {
+		if err := r.rolerepo.InsertBulk(addModels); err != nil {
+			return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
+		}
 	}
 	return nil
 }

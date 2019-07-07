@@ -18,7 +18,7 @@ type (
 		GetByRole(role string, limit, offset int) ([]string, error)
 		GetUserRoles(userid string, limit, offset int) ([]string, error)
 		InsertBulk(m []*Model) error
-		DeleteBulk(roleids []string) error
+		DeleteBulk(roleids []*Model) error
 		DeleteUserRoles(userid string) error
 		Setup() error
 	}
@@ -148,13 +148,14 @@ func (r *repo) Delete(m *Model) error {
 }
 
 // DeleteBulk deletes multiple models from the db
-func (r *repo) DeleteBulk(m []string) error {
+func (r *repo) DeleteBulk(m []*Model) error {
 	placeholderStart := 1
 	placeholders := make([]string, 0, len(m))
 	args := make([]interface{}, 0, len(m))
 	for n, i := range m {
 		placeholders = append(placeholders, "($"+strconv.Itoa(n+placeholderStart)+")")
-		args = append(args, i)
+		i.ensureRoleid()
+		args = append(args, i.roleid)
 	}
 
 	stmt := "DELETE FROM " + roleModelTableName + " WHERE roleid IN (VALUES " + strings.Join(placeholders, ",") + ");"

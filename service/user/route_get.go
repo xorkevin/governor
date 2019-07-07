@@ -249,7 +249,7 @@ func (u *userRouter) mountGet(conf governor.Config, r *echo.Group) error {
 	r.GET("/id/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
 	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
 	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
-	r.GET("/name/:username", u.getByUsername, u.service.cc.Control(true, false, min15, nil))
+	r.GET("/name/:username", u.getByUsername)
 	r.GET("/name/:username/private", u.getByUsernamePrivate, gate.Admin(u.service.gate))
 	r.GET("/role/:role", u.getUsersByRole)
 	r.GET("/all", u.getAllUserInfo, gate.Admin(u.service.gate))
