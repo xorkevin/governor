@@ -34,7 +34,7 @@ const (
 	ccNoStore      = "no-store"
 	ccMaxAge       = "max-age"
 	ccEtagH        = "ETag"
-	ccEtagValue    = `"%s"`
+	ccEtagValue    = `W/"%s"`
 	ccIfNoneMatchH = "If-None-Match"
 	moduleID       = "cachecontrol"
 )
