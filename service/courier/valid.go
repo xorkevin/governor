@@ -22,6 +22,9 @@ func validLinkID(linkid string) error {
 	if len(linkid) == 0 {
 		return nil
 	}
+	if len(linkid) < 3 {
+		return governor.NewErrorUser("Link must be longer than 2 characters", http.StatusBadRequest, nil)
+	}
 	if len(linkid) > lengthCapLink {
 		return governor.NewErrorUser("Link must be shorter than 64 characters", http.StatusBadRequest, nil)
 	}
@@ -52,8 +55,8 @@ func hasCreatorID(creatorid string) error {
 }
 
 func hasLinkID(linkid string) error {
-	if len(linkid) < 3 || len(linkid) > lengthCapLink {
-		return governor.NewErrorUser("Link must be longer than 2 chars", http.StatusBadRequest, nil)
+	if len(linkid) == 0 || len(linkid) > lengthCapLink {
+		return governor.NewErrorUser("Link must be provided", http.StatusBadRequest, nil)
 	}
 	return nil
 }
