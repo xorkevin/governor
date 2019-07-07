@@ -6,7 +6,6 @@ import (
 	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 type (
@@ -39,6 +38,10 @@ const (
 	moduleID       = "cachecontrol"
 )
 
+func etagToValue(etag string) string {
+	return fmt.Sprintf(ccEtagValue, etag)
+}
+
 // Control creates a middleware function to cache the response
 func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	if maxage < 0 {
@@ -51,14 +54,14 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 
 			if etagfunc != nil {
 				if tag, err := etagfunc(c); err == nil {
-					etag = tag
+					etag = etagToValue(tag)
 				} else {
 					return err
 				}
 			}
 
 			if val := c.Request().Header.Get(ccIfNoneMatchH); etag != "" && val != "" {
-				if strings.Contains(val, etag) {
+				if val == etag {
 					return c.NoContent(http.StatusNotModified)
 				}
 			}
@@ -77,8 +80,8 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 
 			resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
 
-			if etag != "" {
-				resheader.Set(ccEtagH, fmt.Sprintf(ccEtagValue, etag))
+			if len(etag) > 0 {
+				resheader.Set(ccEtagH, etag)
 			}
 
 			return next(c)
