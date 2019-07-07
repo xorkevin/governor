@@ -179,7 +179,7 @@ func (p *profileRouter) mountProfileRoutes(conf governor.Config, r *echo.Group) 
 	}))
 	r.DELETE("/:id", p.deleteProfile, gate.OwnerOrAdmin(p.service.gate, "id"))
 	r.GET("", p.getOwnProfile, gate.User(p.service.gate))
-	r.GET("/:id", p.getProfile, p.service.cc.Control(true, false, min15, nil))
+	r.GET("/:id", p.getProfile)
 	r.GET("/:id/image", p.getProfileImage, p.service.cc.Control(true, false, min15, p.getProfileImageCC))
 	return nil
 }

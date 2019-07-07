@@ -246,7 +246,7 @@ func (u *userRouter) getByUsernameDebug(c echo.Context) error {
 }
 
 func (u *userRouter) mountGet(conf governor.Config, r *echo.Group) error {
-	r.GET("/id/:id", u.getByID, u.service.cc.Control(true, false, min15, nil))
+	r.GET("/id/:id", u.getByID)
 	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
 	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
 	r.GET("/name/:username", u.getByUsername)
