@@ -40,17 +40,17 @@ func (r *reqUserPutEmail) valid() error {
 	if err := validEmail(r.Email); err != nil {
 		return err
 	}
-	if err := hasPassword(r.Password); err != nil {
+	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (r *reqUserPutEmailVerify) valid() error {
-	if err := hasToken(r.Key); err != nil {
+	if err := validhasToken(r.Key); err != nil {
 		return err
 	}
-	if err := hasPassword(r.Password); err != nil {
+	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
@@ -87,11 +87,11 @@ type (
 	}
 )
 
-func (r *reqUserPutPassword) valid(passlen int) error {
-	if err := validPassword(r.NewPassword, passlen); err != nil {
+func (r *reqUserPutPassword) valid() error {
+	if err := validPassword(r.NewPassword); err != nil {
 		return err
 	}
-	if err := hasPassword(r.OldPassword); err != nil {
+	if err := validhasPassword(r.OldPassword); err != nil {
 		return err
 	}
 	return nil
@@ -112,10 +112,10 @@ func (r *reqForgotPassword) validEmail() error {
 }
 
 func (r *reqForgotPasswordReset) valid(passlen int) error {
-	if err := hasToken(r.Key); err != nil {
+	if err := validhasToken(r.Key); err != nil {
 		return err
 	}
-	if err := validPassword(r.NewPassword, passlen); err != nil {
+	if err := validPassword(r.NewPassword); err != nil {
 		return err
 	}
 	return nil
@@ -128,7 +128,7 @@ func (u *userRouter) putPassword(c echo.Context) error {
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
-	if err := ruser.valid(u.service.passwordMinSize); err != nil {
+	if err := ruser.valid(); err != nil {
 		return err
 	}
 

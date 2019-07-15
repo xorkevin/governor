@@ -11,10 +11,6 @@ import (
 
 //go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetRoleUser reqGetUserBulk reqGetUsers
 
-const (
-	min15 = 900
-)
-
 type (
 	reqUserGetID struct {
 		Userid string `valid:"userid,has" json:"-"`

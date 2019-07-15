@@ -7,71 +7,24 @@ import (
 	"net/http"
 )
 
+//go:generate forge validation -o validation_create_gen.go reqUserPost reqUserPostConfirm reqUserDelete
+
 type (
 	reqUserPost struct {
-		Username  string `json:"username"`
-		Password  string `json:"password"`
-		Email     string `json:"email"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-	}
-
-	reqUserPostConfirm struct {
-		Key string `json:"key"`
-	}
-
-	reqUserDelete struct {
-		Userid   string `json:"userid"`
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username  string `valid:"username" json:"username"`
+		Password  string `valid:"password" json:"password"`
+		Email     string `valid:"email" json:"email"`
+		FirstName string `valid:"firstName" json:"first_name"`
+		LastName  string `valid:"lastName" json:"last_name"`
 	}
 )
-
-func (r *reqUserPost) valid(passlen int) error {
-	if err := validUsername(r.Username); err != nil {
-		return err
-	}
-	if err := validPassword(r.Password, passlen); err != nil {
-		return err
-	}
-	if err := validEmail(r.Email); err != nil {
-		return err
-	}
-	if err := validFirstName(r.FirstName); err != nil {
-		return err
-	}
-	if err := validLastName(r.LastName); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserPostConfirm) valid() error {
-	if err := hasToken(r.Key); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserDelete) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validhasUsername(r.Username); err != nil {
-		return err
-	}
-	if err := hasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (u *userRouter) createUser(c echo.Context) error {
 	ruser := reqUserPost{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
-	if err := ruser.valid(u.service.passwordMinSize); err != nil {
+	if err := ruser.valid(); err != nil {
 		return err
 	}
 
@@ -81,6 +34,12 @@ func (u *userRouter) createUser(c echo.Context) error {
 	}
 	return c.JSON(http.StatusCreated, res)
 }
+
+type (
+	reqUserPostConfirm struct {
+		Key string `valid:"token,has" json:"key"`
+	}
+)
 
 func (u *userRouter) commitUser(c echo.Context) error {
 	ruser := reqUserPostConfirm{}
@@ -97,6 +56,14 @@ func (u *userRouter) commitUser(c echo.Context) error {
 	}
 	return c.JSON(http.StatusCreated, res)
 }
+
+type (
+	reqUserDelete struct {
+		Userid   string `valid:"userid,has" json:"userid"`
+		Username string `valid:"username,has" json:"username"`
+		Password string `valid:"password,has" json:"password"`
+	}
+)
 
 func (u *userRouter) deleteUser(c echo.Context) error {
 	ruser := reqUserDelete{}

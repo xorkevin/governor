@@ -1,7 +1,6 @@
 package user
 
 import (
-	"fmt"
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/util/rank"
 	"net/http"
@@ -88,9 +87,22 @@ func validhasUserids(userids string) error {
 	return nil
 }
 
-func validPassword(password string, size int) error {
-	if len(password) < size || len(password) > lengthCap {
-		return governor.NewErrorUser(fmt.Sprintf("Password must be at least %d chars", size), http.StatusBadRequest, nil)
+func validPassword(password string) error {
+	if len(password) < 10 {
+		return governor.NewErrorUser("Password must be at least 10 chars", http.StatusBadRequest, nil)
+	}
+	if len(password) > lengthCap {
+		return governor.NewErrorUser("Password entropy exceeds that of stored password hash", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasPassword(password string) error {
+	if len(password) == 0 {
+		return governor.NewErrorUser("Password must be provided", http.StatusBadRequest, nil)
+	}
+	if len(password) > lengthCap {
+		return governor.NewErrorUser("Password entropy exceeds that of stored password hash", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -122,26 +134,22 @@ func validLastName(lastname string) error {
 	return nil
 }
 
+func validhasToken(token string) error {
+	if len(token) == 0 {
+		return governor.NewErrorUser("Token must be provided", http.StatusBadRequest, nil)
+	}
+	if len(token) > lengthCapLarge {
+		return governor.NewErrorUser("Token is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validRank(rankString string) error {
 	if len(rankString) > lengthCapLarge {
 		return governor.NewErrorUser("Rank exceeds the max length", http.StatusBadRequest, nil)
 	}
 	if _, err := rank.FromStringUser(rankString); err != nil {
 		return err
-	}
-	return nil
-}
-
-func hasPassword(password string) error {
-	if len(password) < 1 || len(password) > lengthCap {
-		return governor.NewErrorUser("Password must be provided", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func hasToken(token string) error {
-	if len(token) < 1 || len(token) > lengthCapLarge {
-		return governor.NewErrorUser("Token must be provided", http.StatusBadRequest, nil)
 	}
 	return nil
 }

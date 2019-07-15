@@ -25,7 +25,7 @@ func (r *reqUserAuth) valid() error {
 	if err := validhasUsername(r.Username); err != nil {
 		return err
 	}
-	if err := hasPassword(r.Password); err != nil {
+	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
@@ -35,14 +35,14 @@ func (r *reqUserAuth) validEmail() error {
 	if err := validEmail(r.Username); err != nil {
 		return err
 	}
-	if err := hasPassword(r.Password); err != nil {
+	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (r *reqExchangeToken) valid() error {
-	if err := hasToken(r.RefreshToken); err != nil {
+	if err := validhasToken(r.RefreshToken); err != nil {
 		return err
 	}
 	return nil
