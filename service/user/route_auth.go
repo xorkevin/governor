@@ -22,7 +22,7 @@ type (
 )
 
 func (r *reqUserAuth) valid() error {
-	if err := hasUsername(r.Username); err != nil {
+	if err := validhasUsername(r.Username); err != nil {
 		return err
 	}
 	if err := hasPassword(r.Password); err != nil {

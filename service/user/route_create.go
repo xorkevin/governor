@@ -54,10 +54,10 @@ func (r *reqUserPostConfirm) valid() error {
 }
 
 func (r *reqUserDelete) valid() error {
-	if err := hasUserid(r.Userid); err != nil {
+	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := hasUsername(r.Username); err != nil {
+	if err := validhasUsername(r.Username); err != nil {
 		return err
 	}
 	if err := hasPassword(r.Password); err != nil {
@@ -99,12 +99,6 @@ func (u *userRouter) commitUser(c echo.Context) error {
 }
 
 func (u *userRouter) deleteUser(c echo.Context) error {
-	reqid := &reqUserGetID{
-		Userid: c.Param("id"),
-	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
 	ruser := reqUserDelete{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
@@ -113,11 +107,11 @@ func (u *userRouter) deleteUser(c echo.Context) error {
 		return err
 	}
 
-	if reqid.Userid != ruser.Userid {
+	if c.Param("id") != ruser.Userid {
 		return governor.NewErrorUser("information does not match", http.StatusBadRequest, nil)
 	}
 
-	if err := u.service.DeleteUser(reqid.Userid, ruser.Username, ruser.Password); err != nil {
+	if err := u.service.DeleteUser(ruser.Userid, ruser.Username, ruser.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

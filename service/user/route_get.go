@@ -9,27 +9,15 @@ import (
 	"strings"
 )
 
+//go:generate forge validation -o validation_get_gen.go reqUserGetID reqGetUsers reqUserGetUsername reqGetRoleUser
+
 const (
 	min15 = 900
 )
 
 type (
-	reqUserGetID struct {
-		Userid string `json:"-"`
-	}
-
 	reqGetUsers struct {
-		Userids string `json:"-"`
-	}
-
-	reqUserGetUsername struct {
-		Username string `json:"-"`
-	}
-
-	reqGetRoleUserList struct {
-		Role   string
-		Amount int
-		Offset int
+		Userids string `valid:"userids,has" json:"-"`
 	}
 
 	reqGetUserEmails struct {
@@ -37,31 +25,6 @@ type (
 		Offset int
 	}
 )
-
-func (r *reqUserGetID) valid() error {
-	return hasUserid(r.Userid)
-}
-
-func (r *reqGetUsers) valid() error {
-	return hasUserids(r.Userids)
-}
-
-func (r *reqUserGetUsername) valid() error {
-	return hasUsername(r.Username)
-}
-
-func (r *reqGetRoleUserList) valid() error {
-	if err := validRole(r.Role); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (r *reqGetUserEmails) valid() error {
 	if err := validAmount(r.Amount); err != nil {
@@ -72,6 +35,12 @@ func (r *reqGetUserEmails) valid() error {
 	}
 	return nil
 }
+
+type (
+	reqUserGetID struct {
+		Userid string `valid:"userid,has" json:"-"`
+	}
+)
 
 func (u *userRouter) getByID(c echo.Context) error {
 	ruser := reqUserGetID{
@@ -92,7 +61,14 @@ func (u *userRouter) getByID(c echo.Context) error {
 func (u *userRouter) getByIDPersonal(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
-	res, err := u.service.GetByID(userid)
+	ruser := reqUserGetID{
+		Userid: userid,
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	res, err := u.service.GetByID(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -115,6 +91,12 @@ func (u *userRouter) getByIDPrivate(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, res)
 }
+
+type (
+	reqUserGetUsername struct {
+		Username string `valid:"username,has" json:"-"`
+	}
+)
 
 func (u *userRouter) getByUsername(c echo.Context) error {
 	ruser := reqUserGetUsername{
@@ -148,6 +130,14 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+type (
+	reqGetRoleUser struct {
+		Role   string `valid:"role,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
+
 func (u *userRouter) getUsersByRole(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
@@ -158,7 +148,7 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
-	ruser := reqGetRoleUserList{
+	ruser := reqGetRoleUser{
 		Role:   c.Param("role"),
 		Amount: amount,
 		Offset: offset,

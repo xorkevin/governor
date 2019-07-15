@@ -21,12 +21,69 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
+func validhasUserid(userid string) error {
+	if len(userid) == 0 {
+		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
+	}
+	if len(userid) > lengthCap {
+		return governor.NewErrorUser("Userid is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validUsername(username string) error {
-	if len(username) < 3 || len(username) > lengthCap {
+	if len(username) < 3 {
 		return governor.NewErrorUser("Username must be longer than 2 chars", http.StatusBadRequest, nil)
+	}
+	if len(username) > lengthCap {
+		return governor.NewErrorUser("Username is too long", http.StatusBadRequest, nil)
 	}
 	if !userRegex.MatchString(username) {
 		return governor.NewErrorUser("Username contains invalid characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasUsername(username string) error {
+	if len(username) < 1 {
+		return governor.NewErrorUser("Username must be provided", http.StatusBadRequest, nil)
+	}
+	if len(username) > lengthCap {
+		return governor.NewErrorUser("Username is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasRole(role string) error {
+	if len(role) == 0 {
+		return governor.NewErrorUser("Role is invalid", http.StatusBadRequest, nil)
+	}
+	if len(role) > lengthCap {
+		return governor.NewErrorUser("Role is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validAmount(amt int) error {
+	if amt == 0 || amt > amountCap {
+		return governor.NewErrorUser("Amount is invalid", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validOffset(offset int) error {
+	if offset < 0 {
+		return governor.NewErrorUser("Offset is invalid", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasUserids(userids string) error {
+	if len(userids) == 0 {
+		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
+	}
+	if len(userids) > lengthCapLarge {
+		return governor.NewErrorUser("Request too large", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -75,30 +132,6 @@ func validRank(rankString string) error {
 	return nil
 }
 
-func hasUserid(userid string) error {
-	if len(userid) < 1 || len(userid) > lengthCapLarge {
-		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func hasUserids(userids string) error {
-	if len(userids) < 1 || len(userids) > lengthCapLarge {
-		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func hasUsername(username string) error {
-	if len(username) < 1 || len(username) > lengthCap {
-		return governor.NewErrorUser("Username must be provided", http.StatusBadRequest, nil)
-	}
-	if !userRegex.MatchString(username) {
-		return governor.NewErrorUser("Username contains invalid characters", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
 func hasPassword(password string) error {
 	if len(password) < 1 || len(password) > lengthCap {
 		return governor.NewErrorUser("Password must be provided", http.StatusBadRequest, nil)
@@ -116,27 +149,6 @@ func hasToken(token string) error {
 func hasIDs(ids []string) error {
 	if len(ids) < 1 {
 		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func validAmount(amt int) error {
-	if amt < 1 || amt > amountCap {
-		return governor.NewErrorUser("Amount is invalid", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func validOffset(offset int) error {
-	if offset < 0 {
-		return governor.NewErrorUser("Offset is invalid", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func validRole(role string) error {
-	if len(role) < 0 || len(role) > lengthCap {
-		return governor.NewErrorUser("Role is invalid", http.StatusBadRequest, nil)
 	}
 	return nil
 }
