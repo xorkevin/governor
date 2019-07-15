@@ -15,6 +15,12 @@ const (
 	cachePrefixSession     = moduleID + ".session:"
 )
 
+type (
+	resUserGetSessions struct {
+		Sessions []session.Session `json:"active_sessions"`
+	}
+)
+
 // GetSessions retrieves a list of user sessions
 func (u *userService) GetSessions(userid string) (*resUserGetSessions, error) {
 	s := session.Session{

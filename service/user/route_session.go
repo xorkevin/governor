@@ -3,20 +3,20 @@ package user
 import (
 	"github.com/hackform/governor"
 	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/session"
 	"github.com/labstack/echo"
 	"net/http"
 )
 
-type (
-	resUserGetSessions struct {
-		Sessions []session.Session `json:"active_sessions"`
-	}
-)
+//go:generate forge validation -o validation_session_gen.go reqUserRmSessions
 
 func (u *userRouter) getSessions(c echo.Context) error {
-	userid := c.Get("userid").(string)
-	res, err := u.service.GetSessions(userid)
+	ruser := reqUserGetID{
+		Userid: c.Get("userid").(string),
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+	res, err := u.service.GetSessions(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -25,29 +25,23 @@ func (u *userRouter) getSessions(c echo.Context) error {
 
 type (
 	reqUserRmSessions struct {
-		SessionIDs []string `json:"session_ids"`
+		Userid     string   `valid:"userid,has" json:"-"`
+		SessionIDs []string `valid:"sessionIDs,has" json:"session_ids"`
 	}
 )
 
-func (r *reqUserRmSessions) valid() error {
-	if err := hasIDs(r.SessionIDs); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (u *userRouter) killSessions(c echo.Context) error {
-	userid := c.Get("userid").(string)
 
 	ruser := reqUserRmSessions{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
+	ruser.Userid = c.Get("userid").(string)
 	if err := ruser.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.KillSessions(userid, ruser.SessionIDs); err != nil {
+	if err := u.service.KillSessions(ruser.Userid, ruser.SessionIDs); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

@@ -82,7 +82,7 @@ func validhasUserids(userids string) error {
 		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
 	}
 	if len(userids) > lengthCapLarge {
-		return governor.NewErrorUser("Request too large", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -164,9 +164,12 @@ func validhasUsernameOrEmail(useroremail string) (bool, error) {
 	return false, governor.NewErrorUser("Invalid username or email", http.StatusBadRequest, nil)
 }
 
-func hasIDs(ids []string) error {
-	if len(ids) < 1 {
-		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
+func validhasSessionIDs(ids []string) error {
+	if len(ids) == 0 {
+		return governor.NewErrorUser("sessionID must be provided", http.StatusBadRequest, nil)
+	}
+	if len(ids) > lengthCapLarge {
+		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
 	}
 	return nil
 }
