@@ -154,6 +154,16 @@ func validRank(rankString string) error {
 	return nil
 }
 
+func validhasUsernameOrEmail(useroremail string) (bool, error) {
+	if err := validEmail(useroremail); err == nil {
+		return true, nil
+	}
+	if err := validhasUsername(useroremail); err == nil {
+		return false, nil
+	}
+	return false, governor.NewErrorUser("Invalid username or email", http.StatusBadRequest, nil)
+}
+
 func hasIDs(ids []string) error {
 	if len(ids) < 1 {
 		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)

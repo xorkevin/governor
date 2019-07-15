@@ -7,54 +7,38 @@ import (
 	"net/http"
 )
 
+//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPasswordReset
+
 type (
 	reqUserPutEmail struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	reqUserPutEmailVerify struct {
-		Key      string `json:"key"`
-		Password string `json:"password"`
+		Userid   string `valid:"userid,has" json:"-"`
+		Email    string `valid:"email" json:"email"`
+		Password string `valid:"password,has" json:"password"`
 	}
 )
 
 func (u *userRouter) putEmail(c echo.Context) error {
-	userid := c.Get("userid").(string)
-
 	ruser := reqUserPutEmail{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
+	ruser.Userid = c.Get("userid").(string)
 	if err := ruser.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.UpdateEmail(userid, ruser.Email, ruser.Password); err != nil {
+	if err := u.service.UpdateEmail(ruser.Userid, ruser.Email, ruser.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *reqUserPutEmail) valid() error {
-	if err := validEmail(r.Email); err != nil {
-		return err
+type (
+	reqUserPutEmailVerify struct {
+		Key      string `valid:"token,has" json:"key"`
+		Password string `valid:"password,has" json:"password"`
 	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserPutEmailVerify) valid() error {
-	if err := validhasToken(r.Key); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
+)
 
 func (u *userRouter) putEmailVerify(c echo.Context) error {
 	ruser := reqUserPutEmailVerify{}
@@ -73,69 +57,37 @@ func (u *userRouter) putEmailVerify(c echo.Context) error {
 
 type (
 	reqUserPutPassword struct {
-		NewPassword string `json:"new_password"`
-		OldPassword string `json:"old_password"`
-	}
-
-	reqForgotPassword struct {
-		Username string `json:"username"`
-	}
-
-	reqForgotPasswordReset struct {
-		Key         string `json:"key"`
-		NewPassword string `json:"new_password"`
+		Userid      string `valid:"userid,has" json:"-"`
+		NewPassword string `valid:"password" json:"new_password"`
+		OldPassword string `valid:"password,has" json:"old_password"`
 	}
 )
 
-func (r *reqUserPutPassword) valid() error {
-	if err := validPassword(r.NewPassword); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.OldPassword); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqForgotPassword) valid() error {
-	if err := validUsername(r.Username); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqForgotPassword) validEmail() error {
-	if err := validEmail(r.Username); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqForgotPasswordReset) valid(passlen int) error {
-	if err := validhasToken(r.Key); err != nil {
-		return err
-	}
-	if err := validPassword(r.NewPassword); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (u *userRouter) putPassword(c echo.Context) error {
-	userid := c.Get("userid").(string)
 
 	ruser := reqUserPutPassword{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
+	ruser.Userid = c.Get("userid").(string)
 	if err := ruser.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.UpdatePassword(userid, ruser.NewPassword, ruser.OldPassword); err != nil {
+	if err := u.service.UpdatePassword(ruser.Userid, ruser.NewPassword, ruser.OldPassword); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+type (
+	reqForgotPassword struct {
+		Username string `json:"username"`
+	}
+)
+
+func (r *reqForgotPassword) valid() (bool, error) {
+	return validhasUsernameOrEmail(r.Username)
 }
 
 func (u *userRouter) forgotPassword(c echo.Context) error {
@@ -143,10 +95,8 @@ func (u *userRouter) forgotPassword(c echo.Context) error {
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
-	isEmail := false
-	if err := ruser.validEmail(); err == nil {
-		isEmail = true
-	} else if err := ruser.valid(); err != nil {
+	isEmail, err := ruser.valid()
+	if err != nil {
 		return err
 	}
 
@@ -156,12 +106,19 @@ func (u *userRouter) forgotPassword(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+type (
+	reqForgotPasswordReset struct {
+		Key         string `valid:"token,has" json:"key"`
+		NewPassword string `valid:"password" json:"new_password"`
+	}
+)
+
 func (u *userRouter) forgotPasswordReset(c echo.Context) error {
 	ruser := reqForgotPasswordReset{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
-	if err := ruser.valid(u.service.passwordMinSize); err != nil {
+	if err := ruser.valid(); err != nil {
 		return err
 	}
 
