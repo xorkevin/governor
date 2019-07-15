@@ -34,8 +34,18 @@ func validLinkID(linkid string) error {
 	return nil
 }
 
+func validhasLinkID(linkid string) error {
+	if len(linkid) == 0 {
+		return governor.NewErrorUser("Link must be provided", http.StatusBadRequest, nil)
+	}
+	if len(linkid) > lengthCapLink {
+		return governor.NewErrorUser("Link is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validURL(rawurl string) error {
-	if len(rawurl) < 1 {
+	if len(rawurl) == 0 {
 		return governor.NewErrorUser("Url must be provided", http.StatusBadRequest, nil)
 	}
 	if len(rawurl) > lengthCapURL {
@@ -47,29 +57,28 @@ func validURL(rawurl string) error {
 	return nil
 }
 
-func hasCreatorID(creatorid string) error {
-	if len(creatorid) < 1 || len(creatorid) > lengthCap {
+func validhasCreatorID(creatorid string) error {
+	if len(creatorid) == 0 {
 		return governor.NewErrorUser("Creatorid must be provided", http.StatusBadRequest, nil)
 	}
-	return nil
-}
-
-func hasLinkID(linkid string) error {
-	if len(linkid) == 0 || len(linkid) > lengthCapLink {
-		return governor.NewErrorUser("Link must be provided", http.StatusBadRequest, nil)
+	if len(creatorid) > lengthCap {
+		return governor.NewErrorUser("Creatorid is too large", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validAmount(amt int) error {
-	if amt < 1 || amt > amountCap {
+	if amt == 0 {
 		return governor.NewErrorUser("Amount is invalid", http.StatusBadRequest, nil)
+	}
+	if amt > amountCap {
+		return governor.NewErrorUser("Amount is too large", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validOffset(offset int) error {
-	if offset < 0 {
+	if offset == 0 {
 		return governor.NewErrorUser("Offset is invalid", http.StatusBadRequest, nil)
 	}
 	return nil

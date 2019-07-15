@@ -8,49 +8,13 @@ import (
 	"strconv"
 )
 
+//go:generate forge validation -o validation_courier_gen.go reqLinkGet reqLinkGetGroup reqLinkPost
+
 type (
 	reqLinkGet struct {
-		LinkID string `json:"-"`
-	}
-
-	reqLinkGetGroup struct {
-		Amount int `json:"-"`
-		Offset int `json:"-"`
-	}
-
-	reqLinkPost struct {
-		CreatorID string `json:"-"`
-		LinkID    string `json:"linkid"`
-		URL       string `json:"url"`
+		LinkID string `valid:"linkID,has" json:"-"`
 	}
 )
-
-func (r *reqLinkGet) valid() error {
-	return hasLinkID(r.LinkID)
-}
-
-func (r *reqLinkGetGroup) valid() error {
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqLinkPost) valid() error {
-	if err := hasCreatorID(r.CreatorID); err != nil {
-		return err
-	}
-	if err := validLinkID(r.LinkID); err != nil {
-		return err
-	}
-	if err := validURL(r.URL); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (cr *courierRouter) getLink(c echo.Context) error {
 	rlink := reqLinkGet{
@@ -83,6 +47,13 @@ func (cr *courierRouter) getLinkImage(c echo.Context) error {
 	return c.Stream(http.StatusOK, contentType, qrimage)
 }
 
+type (
+	reqLinkGetGroup struct {
+		Amount int `valid:"amount" json:"-"`
+		Offset int `valid:"offset" json:"-"`
+	}
+)
+
 func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
@@ -108,14 +79,20 @@ func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (cr *courierRouter) createLink(c echo.Context) error {
-	userid := c.Get("userid").(string)
+type (
+	reqLinkPost struct {
+		CreatorID string `valid:"creatorID,has" json:"-"`
+		LinkID    string `valid:"linkID" json:"linkid"`
+		URL       string `valid:"URL" json:"url"`
+	}
+)
 
+func (cr *courierRouter) createLink(c echo.Context) error {
 	rlink := reqLinkPost{}
 	if err := c.Bind(&rlink); err != nil {
 		return err
 	}
-	rlink.CreatorID = userid
+	rlink.CreatorID = c.Get("userid").(string)
 	if err := rlink.valid(); err != nil {
 		return err
 	}
