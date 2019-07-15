@@ -138,7 +138,7 @@ func validhasToken(token string) error {
 	if len(token) == 0 {
 		return governor.NewErrorUser("Token must be provided", http.StatusBadRequest, nil)
 	}
-	if len(token) > lengthCapLarge {
+	if len(token) > lengthCap {
 		return governor.NewErrorUser("Token is too long", http.StatusBadRequest, nil)
 	}
 	return nil
@@ -146,7 +146,7 @@ func validhasToken(token string) error {
 
 func validRank(rankString string) error {
 	if len(rankString) > lengthCapLarge {
-		return governor.NewErrorUser("Rank exceeds the max length", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Rank update is too large", http.StatusBadRequest, nil)
 	}
 	if _, err := rank.FromStringUser(rankString); err != nil {
 		return err

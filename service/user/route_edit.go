@@ -9,41 +9,15 @@ import (
 	"net/http"
 )
 
+//go:generate forge validation -o validation_edit_gen.go reqUserPut reqUserPutRank
+
 type (
 	reqUserPut struct {
-		Username  string `json:"username"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-	}
-
-	reqUserPutRank struct {
-		Add    string `json:"add"`
-		Remove string `json:"remove"`
+		Username  string `valid:"username" json:"username"`
+		FirstName string `valid:"firstName" json:"first_name"`
+		LastName  string `valid:"lastName" json:"last_name"`
 	}
 )
-
-func (r *reqUserPut) valid() error {
-	if err := validUsername(r.Username); err != nil {
-		return err
-	}
-	if err := validFirstName(r.FirstName); err != nil {
-		return err
-	}
-	if err := validLastName(r.LastName); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserPutRank) valid() error {
-	if err := validRank(r.Add); err != nil {
-		return err
-	}
-	if err := validRank(r.Remove); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (u *userRouter) putUser(c echo.Context) error {
 	userid := c.Get("userid").(string)
@@ -62,18 +36,20 @@ func (u *userRouter) putUser(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) patchRank(c echo.Context) error {
-	reqid := reqUserGetID{
-		Userid: c.Param("id"),
+type (
+	reqUserPutRank struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Add    string `valid:"rank" json:"add"`
+		Remove string `valid:"rank" json:"remove"`
 	}
-	if err := reqid.valid(); err != nil {
-		return err
-	}
+)
 
+func (u *userRouter) patchRank(c echo.Context) error {
 	ruser := reqUserPutRank{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
+	ruser.Userid = c.Param("id")
 	if err := ruser.valid(); err != nil {
 		return err
 	}
@@ -83,7 +59,7 @@ func (u *userRouter) patchRank(c echo.Context) error {
 	editAddRank, _ := rank.FromStringUser(ruser.Add)
 	editRemoveRank, _ := rank.FromStringUser(ruser.Remove)
 
-	if err := u.service.UpdateRank(reqid.Userid, updaterClaims.Userid, updaterRank, editAddRank, editRemoveRank); err != nil {
+	if err := u.service.UpdateRank(ruser.Userid, updaterClaims.Userid, updaterRank, editAddRank, editRemoveRank); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
