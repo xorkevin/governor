@@ -8,13 +8,6 @@ func (r reqUserGetID) valid() error {
 	return nil
 }
 
-func (r reqGetUsers) valid() error {
-	if err := validhasUserids(r.Userids); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r reqUserGetUsername) valid() error {
 	if err := validhasUsername(r.Username); err != nil {
 		return err
@@ -30,6 +23,23 @@ func (r reqGetRoleUser) valid() error {
 		return err
 	}
 	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetUserBulk) valid() error {
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetUsers) valid() error {
+	if err := validhasUserids(r.Userids); err != nil {
 		return err
 	}
 	return nil

@@ -9,32 +9,11 @@ import (
 	"strings"
 )
 
-//go:generate forge validation -o validation_get_gen.go reqUserGetID reqGetUsers reqUserGetUsername reqGetRoleUser
+//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetRoleUser reqGetUserBulk reqGetUsers
 
 const (
 	min15 = 900
 )
-
-type (
-	reqGetUsers struct {
-		Userids string `valid:"userids,has" json:"-"`
-	}
-
-	reqGetUserEmails struct {
-		Amount int
-		Offset int
-	}
-)
-
-func (r *reqGetUserEmails) valid() error {
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
 
 type (
 	reqUserGetID struct {
@@ -169,6 +148,13 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+type (
+	reqGetUserBulk struct {
+		Amount int `valid:"amount" json:"-"`
+		Offset int `valid:"offset" json:"-"`
+	}
+)
+
 func (u *userRouter) getAllUserInfo(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
@@ -179,7 +165,7 @@ func (u *userRouter) getAllUserInfo(c echo.Context) error {
 		return governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil)
 	}
 
-	ruser := reqGetUserEmails{
+	ruser := reqGetUserBulk{
 		Amount: amount,
 		Offset: offset,
 	}
@@ -198,6 +184,12 @@ func (u *userRouter) getAllUserInfo(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, res)
 }
+
+type (
+	reqGetUsers struct {
+		Userids string `valid:"userids,has" json:"-"`
+	}
+)
 
 func (u *userRouter) getUserInfoBulkPublic(c echo.Context) error {
 	ruser := reqGetUsers{
