@@ -9,44 +9,7 @@ import (
 	"net/http"
 )
 
-type (
-	reqUserAuth struct {
-		Username     string `json:"username"`
-		Password     string `json:"password"`
-		SessionToken string `json:"session_token"`
-	}
-
-	reqExchangeToken struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-)
-
-func (r *reqUserAuth) valid() error {
-	if err := validhasUsername(r.Username); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqUserAuth) validEmail() error {
-	if err := validEmail(r.Username); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqExchangeToken) valid() error {
-	if err := validhasToken(r.RefreshToken); err != nil {
-		return err
-	}
-	return nil
-}
+//go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
 const (
 	authenticationSubject = "authentication"
@@ -190,14 +153,26 @@ func rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
 	})
 }
 
+type (
+	reqUserAuth struct {
+		Username     string `json:"username"`
+		Password     string `valid:"password,has" json:"password"`
+		SessionToken string `valid:"sessionToken,has" json:"session_token"`
+	}
+)
+
+func (r *reqUserAuth) validIsEmail() (bool, error) {
+	return validhasUsernameOrEmail(r.Username)
+}
+
 func (u *userRouter) loginUser(c echo.Context) error {
 	ruser := reqUserAuth{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
 	}
-	isEmail := false
-	if err := ruser.validEmail(); err == nil {
-		isEmail = true
+	isEmail, err := ruser.validIsEmail()
+	if err != nil {
+		return err
 	}
 
 	userid := ""
@@ -208,9 +183,6 @@ func (u *userRouter) loginUser(c echo.Context) error {
 		}
 		userid = m.Userid
 	} else {
-		if err := ruser.valid(); err != nil {
-			return err
-		}
 		m, err := u.service.GetByUsername(ruser.Username)
 		if err != nil {
 			return err
@@ -219,6 +191,10 @@ func (u *userRouter) loginUser(c echo.Context) error {
 	}
 	if t, err := getSessionCookie(c, userid); err == nil {
 		ruser.SessionToken = t
+	}
+
+	if err := ruser.valid(); err != nil {
+		return err
 	}
 
 	ok, res, err := u.service.Login(userid, ruser.Password, ruser.SessionToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
@@ -236,8 +212,14 @@ func (u *userRouter) loginUser(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+type (
+	reqRefreshToken struct {
+		RefreshToken string `valid:"refreshToken,has" json:"refresh_token"`
+	}
+)
+
 func (u *userRouter) exchangeToken(c echo.Context) error {
-	ruser := reqExchangeToken{}
+	ruser := reqRefreshToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
@@ -260,7 +242,7 @@ func (u *userRouter) exchangeToken(c echo.Context) error {
 }
 
 func (u *userRouter) refreshToken(c echo.Context) error {
-	ruser := reqExchangeToken{}
+	ruser := reqRefreshToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
@@ -284,7 +266,7 @@ func (u *userRouter) refreshToken(c echo.Context) error {
 }
 
 func (u *userRouter) logoutUser(c echo.Context) error {
-	ruser := reqExchangeToken{}
+	ruser := reqRefreshToken{}
 	if t, err := getRefreshCookie(c); err == nil {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {

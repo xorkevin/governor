@@ -166,10 +166,27 @@ func validhasUsernameOrEmail(useroremail string) (bool, error) {
 
 func validhasSessionIDs(ids []string) error {
 	if len(ids) == 0 {
-		return governor.NewErrorUser("sessionID must be provided", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("SessionID must be provided", http.StatusBadRequest, nil)
 	}
 	if len(ids) > lengthCapLarge {
 		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasSessionToken(token string) error {
+	if len(token) > lengthCapLarge {
+		return governor.NewErrorUser("Token is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasRefreshToken(token string) error {
+	if len(token) == 0 {
+		return governor.NewErrorUser("Refresh token must be provided", http.StatusBadRequest, nil)
+	}
+	if len(token) > lengthCapLarge {
+		return governor.NewErrorUser("Token is too long", http.StatusBadRequest, nil)
 	}
 	return nil
 }
