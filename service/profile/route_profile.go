@@ -9,37 +9,15 @@ import (
 	"net/http"
 )
 
-type (
-	reqProfileGetID struct {
-		Userid string `json:"userid"`
-	}
+//go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel
 
+type (
 	reqProfileModel struct {
-		Userid string `json:"-"`
-		Email  string `json:"contact_email"`
-		Bio    string `json:"bio"`
+		Userid string `valid:"userid,has" json:"-"`
+		Email  string `valid:"email" json:"contact_email"`
+		Bio    string `valid:"bio" json:"bio"`
 	}
 )
-
-func (r *reqProfileGetID) valid() error {
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *reqProfileModel) valid() error {
-	if err := hasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validEmail(r.Email); err != nil {
-		return err
-	}
-	if err := validBio(r.Email); err != nil {
-		return err
-	}
-	return nil
-}
 
 func (p *profileRouter) createProfile(c echo.Context) error {
 	rprofile := reqProfileModel{}
@@ -76,13 +54,25 @@ func (p *profileRouter) updateProfile(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+type (
+	reqProfileGetID struct {
+		Userid string `valid:"userid,has" json:"userid"`
+	}
+)
+
 func (p *profileRouter) updateImage(c echo.Context) error {
 	img := c.Get("image").(io.Reader)
 	imgSize := c.Get("imagesize").(int64)
 	thumb64 := c.Get("thumbnail").(string)
-	userid := c.Get("userid").(string)
 
-	if err := p.service.UpdateImage(userid, img, imgSize, thumb64); err != nil {
+	ruser := reqProfileGetID{
+		Userid: c.Get("userid").(string),
+	}
+	if err := ruser.valid(); err != nil {
+		return err
+	}
+
+	if err := p.service.UpdateImage(ruser.Userid, img, imgSize, thumb64); err != nil {
 		return err
 	}
 
@@ -105,9 +95,10 @@ func (p *profileRouter) deleteProfile(c echo.Context) error {
 }
 
 func (p *profileRouter) getOwnProfile(c echo.Context) error {
-	userid := c.Get("userid").(string)
-
-	res, err := p.service.GetProfile(userid)
+	ruser := reqProfileGetID{
+		Userid: c.Get("userid").(string),
+	}
+	res, err := p.service.GetProfile(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -171,7 +162,7 @@ func (p *profileRouter) mountProfileRoutes(conf governor.Config, r *echo.Group) 
 		ThumbWidth:     32,
 		ThumbHeight:    32,
 		Quality:        85,
-		ThumbQuality:   85,
+		ThumbQuality:   50,
 		Crop:           true,
 		ContextField:   "image",
 		SizeField:      "imagesize",

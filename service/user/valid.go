@@ -9,9 +9,9 @@ import (
 
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
-	lengthCap        = 128
+	lengthCap        = 127
 	lengthCapEmail   = 255
-	lengthCapLarge   = 4096
+	lengthCapLarge   = 4095
 	amountCap        = 1024
 )
 

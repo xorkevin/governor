@@ -8,7 +8,7 @@ import (
 
 const (
 	moduleIDReqValid = moduleID + ".reqvalid"
-	lengthCap        = 128
+	lengthCap        = 127
 	lengthCapEmail   = 255
 	lengthCapLarge   = 4095
 )
@@ -17,9 +17,12 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func hasUserid(userid string) error {
-	if len(userid) < 1 || len(userid) > lengthCap {
+func validhasUserid(userid string) error {
+	if len(userid) < 1 {
 		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
+	}
+	if len(userid) > lengthCap {
+		return governor.NewErrorUser("Userid is too long", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -35,9 +38,6 @@ func validEmail(email string) error {
 }
 
 func validBio(bio string) error {
-	if len(bio) == 0 {
-		return nil
-	}
 	if len(bio) > lengthCapLarge {
 		return governor.NewErrorUser("Bio exceeds max length", http.StatusBadRequest, nil)
 	}
