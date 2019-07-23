@@ -131,13 +131,13 @@ func (c *courierService) CreateLink(linkid, url, creatorid string) (*resCreateLi
 		}
 		return nil, err
 	}
-	qrimage, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+linkid)
+	qrimage, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+m.LinkID)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate qr code image", http.StatusInternalServerError, err)
 	}
-	if err := c.linkImageBucket.Put(linkid+"-qr", mediaTypePNG, int64(qrimage.Len()), qrimage); err != nil {
+	if err := c.linkImageBucket.Put(m.LinkID+"-qr", mediaTypePNG, int64(qrimage.Len()), qrimage); err != nil {
 		c.logger.Error("fail add link qrcode image to objstore", map[string]string{
-			"linkid": linkid,
+			"linkid": m.LinkID,
 			"err":    err.Error(),
 		})
 		return nil, governor.NewError("Failed to put qr code image in objstore", http.StatusInternalServerError, err)
