@@ -2,11 +2,11 @@ package fileloader
 
 import (
 	"fmt"
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"io"
 	"mime"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 const (

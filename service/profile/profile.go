@@ -1,14 +1,14 @@
 package profile
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/cachecontrol"
-	"github.com/hackform/governor/service/image"
-	"github.com/hackform/governor/service/objstore"
-	"github.com/hackform/governor/service/profile/model"
-	"github.com/hackform/governor/service/user"
-	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cachecontrol"
+	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/user"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 const (

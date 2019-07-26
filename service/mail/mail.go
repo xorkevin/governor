@@ -6,13 +6,13 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	gomail "github.com/go-mail/mail"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/msgqueue"
-	"github.com/hackform/governor/service/template"
 	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/msgqueue"
+	"xorkevin.dev/governor/service/template"
 )
 
 const (

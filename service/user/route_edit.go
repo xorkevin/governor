@@ -1,12 +1,12 @@
 package user
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/token"
-	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/util/rank"
 )
 
 //go:generate forge validation -o validation_edit_gen.go reqUserPut reqUserPutRank

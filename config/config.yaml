@@ -46,7 +46,7 @@ mail:
   host: mail
   port: 1025
   # port: 587
-  from_address: gov@hack.com
+  from_address: gov@xorkevin.com
   from_name: Hackform
   buffer_size: 1024
   worker_size: 2

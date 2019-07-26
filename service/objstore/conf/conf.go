@@ -1,7 +1,7 @@
 package objstoreconf
 
 import (
-	"github.com/hackform/governor"
+	"xorkevin.dev/governor"
 )
 
 // Conf loads in the defaults for the object store

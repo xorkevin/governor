@@ -1,10 +1,10 @@
 package courier
 
 import (
-	"github.com/hackform/governor"
 	"net/http"
 	"net/url"
 	"regexp"
+	"xorkevin.dev/governor"
 )
 
 const (

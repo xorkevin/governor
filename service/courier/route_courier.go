@@ -1,11 +1,11 @@
 package courier
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 //go:generate forge validation -o validation_courier_gen.go reqLinkGet reqLinkGetGroup reqLinkPost

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"golang.org/x/image/draw"
 	goimg "image"
@@ -14,6 +13,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 const (

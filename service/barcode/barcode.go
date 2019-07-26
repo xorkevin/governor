@@ -4,9 +4,9 @@ import (
 	"bytes"
 	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
-	"github.com/hackform/governor"
 	"image/png"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 const (

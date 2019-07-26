@@ -1,10 +1,10 @@
 package user
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/rank"
 	"net/http"
 	"strings"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/rank"
 )
 
 func (u *userService) UpdateUser(userid string, ruser reqUserPut) error {

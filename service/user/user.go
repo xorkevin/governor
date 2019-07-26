@@ -2,18 +2,18 @@ package user
 
 import (
 	"fmt"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/cache"
-	"github.com/hackform/governor/service/cachecontrol"
-	"github.com/hackform/governor/service/mail"
-	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/service/user/role/model"
-	"github.com/hackform/governor/service/user/token"
-	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
 	"strconv"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cache"
+	"xorkevin.dev/governor/service/cachecontrol"
+	"xorkevin.dev/governor/service/mail"
+	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (

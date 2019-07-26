@@ -2,10 +2,10 @@ package cachecontrol
 
 import (
 	"fmt"
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
+	"xorkevin.dev/governor"
 )
 
 type (

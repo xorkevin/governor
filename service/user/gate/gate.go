@@ -2,12 +2,12 @@ package gate
 
 import (
 	"errors"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/token"
-	"github.com/hackform/governor/util/rank"
 	"github.com/labstack/echo"
 	"net/http"
 	"strings"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (

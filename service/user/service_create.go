@@ -3,11 +3,11 @@ package user
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/rank"
-	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/util/uid"
 )
 
 type (

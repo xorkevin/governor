@@ -2,11 +2,11 @@ package user
 
 import (
 	"errors"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/gate"
-	"github.com/hackform/governor/service/user/token"
 	"github.com/labstack/echo"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken

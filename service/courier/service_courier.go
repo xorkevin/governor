@@ -1,12 +1,12 @@
 package courier
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/barcode"
 	"github.com/minio/minio-go"
 	"io"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/barcode"
 )
 
 const (

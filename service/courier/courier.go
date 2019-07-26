@@ -2,16 +2,16 @@ package courier
 
 import (
 	"fmt"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/barcode"
-	"github.com/hackform/governor/service/cache"
-	"github.com/hackform/governor/service/cachecontrol"
-	"github.com/hackform/governor/service/courier/model"
-	"github.com/hackform/governor/service/objstore"
-	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"strconv"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/barcode"
+	"xorkevin.dev/governor/service/cache"
+	"xorkevin.dev/governor/service/cachecontrol"
+	"xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 const (

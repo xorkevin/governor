@@ -2,11 +2,11 @@ package confmodel
 
 import (
 	"database/sql"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/db"
 	"github.com/lib/pq"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 )
 
 //go:generate forge model -m Model -t config -p conf -o model_gen.go

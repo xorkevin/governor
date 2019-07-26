@@ -3,9 +3,9 @@ package websocket
 import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
-	"github.com/hackform/governor"
 	"net/http"
 	"sync"
+	"xorkevin.dev/governor"
 )
 
 type (

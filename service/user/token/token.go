@@ -3,10 +3,10 @@ package token
 import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/model"
 )
 
 type (

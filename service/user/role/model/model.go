@@ -2,11 +2,11 @@ package rolemodel
 
 import (
 	"database/sql"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/db"
 	"net/http"
 	"strconv"
 	"strings"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 )
 
 //go:generate forge model -m Model -t userroles -p role -o model_gen.go qUserid qRole

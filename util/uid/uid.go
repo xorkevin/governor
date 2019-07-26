@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/hackform/governor/util/utime"
+	"xorkevin.dev/governor/util/utime"
 )
 
 type (

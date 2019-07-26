@@ -1,11 +1,11 @@
 package profile
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/image"
 	"github.com/minio/minio-go"
 	"io"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/image"
 )
 
 type (

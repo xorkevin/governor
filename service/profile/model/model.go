@@ -2,9 +2,9 @@ package profilemodel
 
 import (
 	"database/sql"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/db"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 )
 
 //go:generate forge model -m Model -t profiles -p profile -o model_gen.go

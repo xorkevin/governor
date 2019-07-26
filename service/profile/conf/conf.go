@@ -1,7 +1,7 @@
 package profileconf
 
 import (
-	"github.com/hackform/governor"
+	"xorkevin.dev/governor"
 )
 
 // Conf loads in the default

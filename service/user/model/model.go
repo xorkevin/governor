@@ -2,14 +2,14 @@ package usermodel
 
 import (
 	"database/sql"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/db"
-	"github.com/hackform/governor/service/user/role/model"
-	"github.com/hackform/governor/util/rank"
-	"github.com/hackform/governor/util/uid"
-	"github.com/hackform/hunter2"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/util/uid"
+	"xorkevin.dev/hunter2"
 )
 
 //go:generate forge model -m Model -t users -p user -o model_gen.go Model Info

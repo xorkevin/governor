@@ -2,12 +2,12 @@ package msgqueue
 
 import (
 	"fmt"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/uid"
 	"github.com/labstack/echo"
-	"github.com/nats-io/go-nats-streaming"
+	"github.com/nats-io/stan.go"
 	"net/http"
 	"sync/atomic"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/uid"
 )
 
 type (

@@ -1,8 +1,8 @@
 package user
 
 import (
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
+	"xorkevin.dev/governor"
 )
 
 func (u *userRouter) mountRoute(conf governor.Config, r *echo.Group) error {

@@ -3,9 +3,9 @@ package cache
 import (
 	"fmt"
 	"github.com/go-redis/redis"
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 type (

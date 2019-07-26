@@ -1,10 +1,10 @@
 package conf
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/conf/model"
 	"github.com/labstack/echo"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/conf/model"
 )
 
 type (

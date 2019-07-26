@@ -3,10 +3,10 @@ package template
 import (
 	"bytes"
 	"fmt"
-	"github.com/hackform/governor"
 	htmlTemplate "html/template"
 	"net/http"
 	"strings"
+	"xorkevin.dev/governor"
 )
 
 const (

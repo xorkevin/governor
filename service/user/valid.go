@@ -1,10 +1,10 @@
 package user
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/rank"
 	"net/http"
 	"regexp"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (

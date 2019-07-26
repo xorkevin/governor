@@ -3,11 +3,11 @@ package session
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
-	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/util/uid"
 )
 
 const (

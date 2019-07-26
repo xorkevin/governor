@@ -2,12 +2,12 @@ package couriermodel
 
 import (
 	"database/sql"
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/db"
-	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"strings"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/util/uid"
 )
 
 //go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel qLink

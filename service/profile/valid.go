@@ -1,9 +1,9 @@
 package profile
 
 import (
-	"github.com/hackform/governor"
 	"net/http"
 	"regexp"
+	"xorkevin.dev/governor"
 )
 
 const (

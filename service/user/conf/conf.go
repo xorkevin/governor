@@ -1,8 +1,8 @@
 package userconf
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/gate/conf"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate/conf"
 )
 
 // Conf loads in the default

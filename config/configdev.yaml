@@ -12,7 +12,7 @@ allow_origins:
   - http://localhost:3030
   - http://localhost:3031
 route_rewrite:
-  "/link/*": "/api/courier/link/$1"
+  '/link/*': '/api/courier/link/$1'
 postgres:
   user: postgres
   password: admin
@@ -52,7 +52,7 @@ courier:
 mail:
   host: localhost
   port: 1025
-  from_address: gov@hack.com
+  from_address: gov@xorkevin.com
   from_name: Hackform
   insecure: true
   buffer_size: 1024

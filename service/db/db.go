@@ -3,11 +3,11 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"github.com/hackform/governor"
 	"github.com/labstack/echo"
 	_ "github.com/lib/pq" // depends upon postgres
 	"net/http"
 	"strings"
+	"xorkevin.dev/governor"
 )
 
 type (

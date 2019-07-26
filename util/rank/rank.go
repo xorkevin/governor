@@ -1,11 +1,11 @@
 package rank
 
 import (
-	"github.com/hackform/governor"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
+	"xorkevin.dev/governor"
 )
 
 const (

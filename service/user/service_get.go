@@ -1,9 +1,9 @@
 package user
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/user/model"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/model"
 )
 
 type (

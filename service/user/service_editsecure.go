@@ -1,11 +1,11 @@
 package user
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/util/uid"
 	"net/http"
 	"strings"
 	"time"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/uid"
 )
 
 type (

@@ -4,9 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"github.com/hackform/governor"
 	"golang.org/x/crypto/scrypt"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 const (

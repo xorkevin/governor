@@ -1,12 +1,12 @@
 package profile
 
 import (
-	"github.com/hackform/governor"
-	"github.com/hackform/governor/service/image"
-	"github.com/hackform/governor/service/user/gate"
 	"github.com/labstack/echo"
 	"io"
 	"net/http"
+	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 //go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel
