@@ -1,5 +1,8 @@
 # governor
+
 yet another microservice framework
+
+import via `xorkevin.dev/governor`
 
 #### confirm dev setup
 
