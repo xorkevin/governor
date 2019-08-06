@@ -36,10 +36,6 @@ type (
 	}
 )
 
-const (
-	moduleID = "nats"
-)
-
 // New creates a new msgqueue service
 func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	v := c.Conf()
@@ -131,10 +127,6 @@ func (q *msgQueue) Publish(queueid string, msgdata []byte) error {
 	}
 	return nil
 }
-
-const (
-	moduleIDClose = moduleID + ".Close"
-)
 
 // Close closes the client connection
 func (q *msgQueue) Close() error {

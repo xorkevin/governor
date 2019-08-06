@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	moduleID    = "profile"
 	imageBucket = "profile-image"
 	min1        = 60
 	min15       = 900

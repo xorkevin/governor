@@ -35,7 +35,6 @@ const (
 	ccEtagH        = "ETag"
 	ccEtagValue    = `W/"%s"`
 	ccIfNoneMatchH = "If-None-Match"
-	moduleID       = "cachecontrol"
 )
 
 func etagToValue(etag string) string {

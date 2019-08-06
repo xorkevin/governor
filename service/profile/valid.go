@@ -7,10 +7,9 @@ import (
 )
 
 const (
-	moduleIDReqValid = moduleID + ".reqvalid"
-	lengthCap        = 127
-	lengthCapEmail   = 255
-	lengthCapLarge   = 4095
+	lengthCap      = 127
+	lengthCapEmail = 255
+	lengthCapLarge = 4095
 )
 
 var (

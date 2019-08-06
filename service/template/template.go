@@ -9,10 +9,6 @@ import (
 	"xorkevin.dev/governor"
 )
 
-const (
-	moduleID = "template"
-)
-
 type (
 	// Template is a templating service
 	Template interface {
@@ -48,10 +44,6 @@ func New(conf governor.Config, l governor.Logger) (Template, error) {
 		t: t,
 	}, nil
 }
-
-const (
-	moduleIDExecute = moduleID + ".Execute"
-)
 
 // Execute executes a template and returns the templated string
 func (t *templateService) Execute(templateName string, data interface{}) (string, error) {

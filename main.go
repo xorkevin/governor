@@ -35,10 +35,6 @@ type (
 	}
 )
 
-const (
-	moduleIDServer = "govserver"
-)
-
 // New creates a new Server
 func New(config Config, l Logger) (*Server, error) {
 	i := echo.New()

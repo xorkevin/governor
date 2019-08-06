@@ -10,10 +10,6 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-const (
-	moduleID = "session"
-)
-
 type (
 	// Session is a user session
 	Session struct {

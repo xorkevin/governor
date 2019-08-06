@@ -144,11 +144,6 @@ func (u *userService) newRouter() *userRouter {
 	}
 }
 
-const (
-	moduleIDUser = moduleID + ".user"
-	moduleIDAuth = moduleID + ".auth"
-)
-
 // Mount is a collection of routes for accessing and modifying user data
 func (u *userService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
 	ur := u.newRouter()
