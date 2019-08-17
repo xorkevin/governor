@@ -23,6 +23,14 @@ func userModelGet(db *sql.DB, key string) (*Model, int, error) {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
 		return nil, 0, err
 	}
 	return m, 0, nil
@@ -59,6 +67,14 @@ func userModelGetModelByUsername(db *sql.DB, key string) (*Model, int, error) {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
 		return nil, 0, err
 	}
 	return m, 0, nil
@@ -69,6 +85,14 @@ func userModelGetModelByEmail(db *sql.DB, key string) (*Model, int, error) {
 	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE email = $1;", key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
 		}
 		return nil, 0, err
 	}

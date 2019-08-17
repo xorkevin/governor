@@ -2,7 +2,6 @@ package confmodel
 
 import (
 	"database/sql"
-	"github.com/lib/pq"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -56,16 +55,14 @@ func (r *repo) New(orgname string) *Model {
 func (r *repo) Get() (*Model, error) {
 	var m *Model
 	if mConfig, code, err := confModelGet(r.db, configID); err != nil {
-		if code == 2 {
+		switch code {
+		case 2:
 			return nil, governor.NewError("No conf found with that id", http.StatusNotFound, err)
+		case 4:
+			return nil, governor.NewError("No conf found with that id", http.StatusNotFound, err)
+		default:
+			return nil, governor.NewError("Failed to get conf", http.StatusInternalServerError, err)
 		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			// undefined_table error
-			if postgresErr.Code == "42P01" {
-				return nil, governor.NewError("No conf found with that id", http.StatusNotFound, postgresErr)
-			}
-		}
-		return nil, governor.NewError("Failed to get conf", http.StatusInternalServerError, err)
 	} else {
 		m = mConfig
 	}
