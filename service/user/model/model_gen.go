@@ -3,6 +3,7 @@ package usermodel
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/lib/pq"
 	"strconv"
 	"strings"
@@ -38,6 +39,32 @@ func userModelGet(db *sql.DB, key string) (*Model, int, error) {
 
 func userModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO users (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+func userModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+	conflictSQL := ""
+	if allowConflict {
+		conflictSQL = " ON CONFLICT DO NOTHING"
+	}
+	placeholders := make([]string, 0, len(models))
+	args := make([]interface{}, 0, len(models)*7)
+	for c, m := range models {
+		n := c * 7
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
+		args = append(args, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+	}
+	_, err := db.Exec("INSERT INTO users (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

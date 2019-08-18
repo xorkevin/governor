@@ -120,21 +120,10 @@ func (r *repo) Insert(m *Model) error {
 
 // InsertBulk inserts multiple models into the db
 func (r *repo) InsertBulk(m []*Model) error {
-	placeholderStart := 1
-	placeholders := make([]string, 0, len(m))
-	args := make([]interface{}, 0, len(m)*3)
-	for n, i := range m {
+	for _, i := range m {
 		i.ensureRoleid()
-		a := strconv.Itoa(n*3 + placeholderStart)
-		b := strconv.Itoa(n*3 + 1 + placeholderStart)
-		c := strconv.Itoa(n*3 + 2 + placeholderStart)
-		placeholders = append(placeholders, "($"+a+",$"+b+",$"+c+")")
-		args = append(args, i.roleid, i.Userid, i.Role)
 	}
-
-	stmt := "INSERT INTO " + roleModelTableName + " (roleid, userid, role) VALUES " + strings.Join(placeholders, ",") + " ON CONFLICT DO NOTHING;"
-
-	_, err := r.db.Exec(stmt, args...)
+	_, err := roleModelInsertBulk(r.db, m, true)
 	return err
 }
 

@@ -3,7 +3,9 @@ package rolemodel
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/lib/pq"
+	"strings"
 )
 
 const (
@@ -36,6 +38,32 @@ func roleModelGet(db *sql.DB, key string) (*Model, int, error) {
 
 func roleModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO userroles (roleid, userid, role) VALUES ($1, $2, $3);", m.roleid, m.Userid, m.Role)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+	conflictSQL := ""
+	if allowConflict {
+		conflictSQL = " ON CONFLICT DO NOTHING"
+	}
+	placeholders := make([]string, 0, len(models))
+	args := make([]interface{}, 0, len(models)*3)
+	for c, m := range models {
+		n := c * 3
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
+		args = append(args, m.roleid, m.Userid, m.Role)
+	}
+	_, err := db.Exec("INSERT INTO userroles (roleid, userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

@@ -3,7 +3,9 @@ package profilemodel
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/lib/pq"
+	"strings"
 )
 
 const (
@@ -36,6 +38,32 @@ func profileModelGet(db *sql.DB, key string) (*Model, int, error) {
 
 func profileModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO profiles (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", m.Userid, m.Email, m.Bio, m.Image)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+func profileModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+	conflictSQL := ""
+	if allowConflict {
+		conflictSQL = " ON CONFLICT DO NOTHING"
+	}
+	placeholders := make([]string, 0, len(models))
+	args := make([]interface{}, 0, len(models)*4)
+	for c, m := range models {
+		n := c * 4
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
+		args = append(args, m.Userid, m.Email, m.Bio, m.Image)
+	}
+	_, err := db.Exec("INSERT INTO profiles (userid, contact_email, bio, profile_image_url) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
