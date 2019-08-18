@@ -59,13 +59,13 @@ func roleModelDelete(db *sql.DB, m *Model) error {
 	return err
 }
 
-func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qUserid, error) {
+func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, limit, offset int) ([]qUserid, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]qUserid, 0, limit)
-	rows, err := db.Query("SELECT userid FROM userroles WHERE role = $1 ORDER BY userid "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
+	rows, err := db.Query("SELECT userid FROM userroles WHERE role = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, role)
 	if err != nil {
 		return nil, err
 	}
@@ -86,13 +86,13 @@ func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, key string, orderasc bool, l
 	return res, nil
 }
 
-func roleModelGetqRoleEqUseridOrdRole(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qRole, error) {
+func roleModelGetqRoleEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]qRole, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]qRole, 0, limit)
-	rows, err := db.Query("SELECT role FROM userroles WHERE userid = $1 ORDER BY role "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
+	rows, err := db.Query("SELECT role FROM userroles WHERE userid = $3 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}

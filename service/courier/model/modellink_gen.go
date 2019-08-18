@@ -86,13 +86,13 @@ func linkModelGetLinkModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offs
 	return res, nil
 }
 
-func linkModelGetqLinkEqCreatorIDOrdCreationTime(db *sql.DB, key string, orderasc bool, limit, offset int) ([]qLink, error) {
+func linkModelGetqLinkEqCreatorIDOrdCreationTime(db *sql.DB, creatorid string, orderasc bool, limit, offset int) ([]qLink, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]qLink, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $1 ORDER BY creation_time "+order+" LIMIT $2 OFFSET $3;", key, limit, offset)
+	rows, err := db.Query("SELECT linkid, url, creation_time FROM courierlinks WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
