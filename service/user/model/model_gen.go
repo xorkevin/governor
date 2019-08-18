@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/lib/pq"
-	"strconv"
 	"strings"
 )
 
@@ -157,7 +156,7 @@ func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
 	placeholderStart := 1
 	placeholders := make([]string, 0, len(keys))
 	for i := range keys {
-		placeholders = append(placeholders, "($"+strconv.Itoa(i+placeholderStart)+")")
+		placeholders = append(placeholders, fmt.Sprintf("($%d)", i+placeholderStart))
 	}
 
 	args := make([]interface{}, 0, len(keys))
