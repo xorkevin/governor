@@ -155,22 +155,16 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
 	placeholderStart := 1
 	placeholders := make([]string, 0, len(keys))
-	for i := range keys {
-		placeholders = append(placeholders, fmt.Sprintf("($%d)", i+placeholderStart))
-	}
-
 	args := make([]interface{}, 0, len(keys))
-	for _, i := range keys {
+	for n, i := range keys {
+		placeholders = append(placeholders, fmt.Sprintf("($%d)", n+placeholderStart))
 		args = append(args, i)
 	}
-
-	stmt := "SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES " + strings.Join(placeholders, ",") + ");"
-
-	res := make([]Info, 0, len(keys))
-	rows, err := db.Query(stmt, args...)
+	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES "+strings.Join(placeholders, ", ")+");", args...)
 	if err != nil {
 		return nil, err
 	}
+	res := make([]Info, 0, len(keys))
 	defer func() {
 		if err := rows.Close(); err != nil {
 		}

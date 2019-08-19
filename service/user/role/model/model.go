@@ -3,8 +3,6 @@ package rolemodel
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
-	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 )
@@ -29,7 +27,7 @@ type (
 
 	// Model is the db User role model
 	Model struct {
-		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,delgroupeq,userid"`
+		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,delgroupeq,userid;delgroupset"`
 		Userid string `model:"userid,VARCHAR(31) NOT NULL"`
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
@@ -123,8 +121,10 @@ func (r *repo) InsertBulk(m []*Model) error {
 	for _, i := range m {
 		i.ensureRoleid()
 	}
-	_, err := roleModelInsertBulk(r.db, m, true)
-	return err
+	if _, err := roleModelInsertBulk(r.db, m, true); err != nil {
+		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
+	}
+	return nil
 }
 
 // Delete deletes the model in the db
@@ -138,19 +138,15 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteBulk deletes multiple models from the db
 func (r *repo) DeleteBulk(m []*Model) error {
-	placeholderStart := 1
-	placeholders := make([]string, 0, len(m))
-	args := make([]interface{}, 0, len(m))
-	for n, i := range m {
-		placeholders = append(placeholders, "($"+strconv.Itoa(n+placeholderStart)+")")
+	args := make([]string, 0, len(m))
+	for _, i := range m {
 		i.ensureRoleid()
 		args = append(args, i.roleid)
 	}
-
-	stmt := "DELETE FROM " + roleModelTableName + " WHERE roleid IN (VALUES " + strings.Join(placeholders, ",") + ");"
-
-	_, err := r.db.Exec(stmt, args...)
-	return err
+	if err := roleModelDelSetroleid(r.db, args); err != nil {
+		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
+	}
+	return nil
 }
 
 // DeleteUserRoles deletes all the roles of a user

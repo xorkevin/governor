@@ -92,6 +92,18 @@ func roleModelDelEqUserid(db *sql.DB, userid string) error {
 	return err
 }
 
+func roleModelDelSetroleid(db *sql.DB, keys []string) error {
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(keys))
+	args := make([]interface{}, 0, len(keys))
+	for n, i := range keys {
+		placeholders = append(placeholders, fmt.Sprintf("($%d)", n+placeholderStart))
+		args = append(args, i)
+	}
+	_, err := db.Exec("DELETE FROM userroles WHERE roleid IN (VALUES "+strings.Join(placeholders, ", ")+");", args...)
+	return err
+}
+
 func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, limit, offset int) ([]qUserid, error) {
 	order := "DESC"
 	if orderasc {
