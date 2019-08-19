@@ -87,6 +87,11 @@ func roleModelDelete(db *sql.DB, m *Model) error {
 	return err
 }
 
+func roleModelDelEqUserid(db *sql.DB, userid string) error {
+	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1;", userid)
+	return err
+}
+
 func roleModelGetqUseridEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, limit, offset int) ([]qUserid, error) {
 	order := "DESC"
 	if orderasc {

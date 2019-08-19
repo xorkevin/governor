@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-//go:generate forge model -m Model -t userroles -p role -o model_gen.go qUserid qRole
+//go:generate forge model -m Model -t userroles -p role -o model_gen.go Model qUserid qRole
 
 type (
 	Repo interface {
@@ -29,7 +29,7 @@ type (
 
 	// Model is the db User role model
 	Model struct {
-		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY"`
+		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,delgroupeq,userid"`
 		Userid string `model:"userid,VARCHAR(31) NOT NULL"`
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
@@ -153,14 +153,9 @@ func (r *repo) DeleteBulk(m []*Model) error {
 	return err
 }
 
-const (
-	sqlDeleteItem = "DELETE FROM " + roleModelTableName + " WHERE userid=$1;"
-)
-
 // DeleteUserRoles deletes all the roles of a user
 func (r *repo) DeleteUserRoles(userid string) error {
-	_, err := r.db.Exec(sqlDeleteItem, userid)
-	if err != nil {
+	if err := roleModelDelEqUserid(r.db, userid); err != nil {
 		return governor.NewError("Failed to delete roles of userid", http.StatusInternalServerError, err)
 	}
 	return nil
