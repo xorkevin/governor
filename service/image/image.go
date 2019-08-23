@@ -3,17 +3,15 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"github.com/labstack/echo"
 	"golang.org/x/image/draw"
 	goimg "image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
-	"io"
-	"mime"
 	"net/http"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/fileloader"
 )
 
 const (
@@ -35,13 +33,17 @@ const (
 )
 
 type (
-	// Image is a service for managing image uploads
+	// Image is an open image file
 	Image interface {
-		LoadJpeg(formField string, opt Options) echo.MiddlewareFunc
+		Duplicate() Image
+		Resize(width, height int)
+		ResizeFit(width, height int)
+		Crop(bounds goimg.Rectangle)
+		ResizeFill(width, height int)
 	}
 
-	imageService struct {
-		log governor.Logger
+	imageData struct {
+		img goimg.Image
 	}
 
 	// Options represent the image options of the loaded image
@@ -59,18 +61,9 @@ type (
 	}
 )
 
-// New returns a new image service
-func New(conf governor.Config, l governor.Logger) Image {
-	l.Info("initialize image service", nil)
-
-	return &imageService{
-		log: l,
-	}
-}
-
 // LoadJpeg reads an image from a form and places it into context as a jpeg
 // sizeLimit is measured in bytes
-func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareFunc {
+func LoadJpeg(formField string, opt Options) echo.MiddlewareFunc {
 	if formField == "" {
 		panic("formField cannot be an empty string")
 	}
@@ -112,63 +105,18 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			file, err := c.FormFile(formField)
+			img, err := LoadImage(c, formField)
 			if err != nil {
-				return governor.NewErrorUser("Invalid file format", http.StatusBadRequest, err)
+				return err
 			}
-
-			mediaType, _, err := mime.ParseMediaType(file.Header.Get("Content-Type"))
-			if err != nil {
-				return governor.NewErrorUser("File does not have a media type", http.StatusBadRequest, err)
-			}
-			switch mediaType {
-			case MediaTypeJpeg, MediaTypePng, MediaTypeGif:
-			default:
-				return governor.NewErrorUser(fmt.Sprintf("%s is unsupported", mediaType), http.StatusUnsupportedMediaType, nil)
-			}
-
-			src, err := file.Open()
-			if err != nil {
-				return governor.NewErrorUser("Failed to open file", http.StatusInternalServerError, err)
-			}
-			defer func(closer io.Closer) {
-				err := closer.Close()
-				if err != nil {
-					im.log.Error("image: fail close image file", map[string]string{
-						"err": err.Error(),
-					})
-				}
-			}(src)
-
-			var img goimg.Image
-			switch mediaType {
-			case MediaTypeJpeg:
-				if i, err := jpeg.Decode(src); err != nil {
-					return governor.NewErrorUser("Invalid JPEG image", http.StatusBadRequest, err)
-				} else {
-					img = i
-				}
-			case MediaTypePng:
-				if i, err := png.Decode(src); err != nil {
-					return governor.NewErrorUser("Invalid PNG image", http.StatusBadRequest, err)
-				} else {
-					img = i
-				}
-			case MediaTypeGif:
-				if i, err := gif.Decode(src); err != nil {
-					return governor.NewErrorUser("Invalid GIF image", http.StatusBadRequest, err)
-				} else {
-					img = i
-				}
-			}
-
 			if opt.Crop {
-				img = resizeImgCrop(img, opt.Width, opt.Height)
+				img.ResizeFill(opt.Width, opt.Height)
 			} else {
-				img = resizeImg(img, opt.Width, opt.Height)
+				img.ResizeFit(opt.Width, opt.Height)
 			}
 
-			thumb := resizeImg(img, opt.ThumbWidth, opt.ThumbHeight)
+			thumb := img.Duplicate()
+			thumb.ResizeFit(opt.ThumbWidth, opt.ThumbHeight)
 
 			b := &bytes.Buffer{}
 			b2 := &bytes.Buffer{}
@@ -195,6 +143,45 @@ func (im *imageService) LoadJpeg(formField string, opt Options) echo.MiddlewareF
 	}
 }
 
+func LoadImage(c echo.Context, formField string) (Image, error) {
+	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, []string{MediaTypePng, MediaTypeJpeg, MediaTypeGif})
+	if err != nil {
+		return nil, governor.NewErrorUser("Invalid image file", http.StatusBadRequest, err)
+	}
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			//im.log.Error("image: fail close image file", map[string]string{
+			//	"err": err.Error(),
+			//})
+		}
+	}()
+	var img goimg.Image
+	switch mediaType {
+	case MediaTypeJpeg:
+		if i, err := jpeg.Decode(file); err != nil {
+			return nil, governor.NewErrorUser("Invalid JPEG image", http.StatusBadRequest, err)
+		} else {
+			img = i
+		}
+	case MediaTypePng:
+		if i, err := png.Decode(file); err != nil {
+			return nil, governor.NewErrorUser("Invalid PNG image", http.StatusBadRequest, err)
+		} else {
+			img = i
+		}
+	case MediaTypeGif:
+		if i, err := gif.Decode(file); err != nil {
+			return nil, governor.NewErrorUser("Invalid GIF image", http.StatusBadRequest, err)
+		} else {
+			img = i
+		}
+	}
+	return &imageData{
+		img: img,
+	}, nil
+}
+
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -202,62 +189,65 @@ func minInt(a, b int) int {
 	return b
 }
 
-func resizeImg(img goimg.Image, width, height int) goimg.Image {
-	s := img.Bounds().Size()
-	if s.X < width && s.Y < height {
-		return img
+func (i imageData) Duplicate() Image {
+	bounds := i.img.Bounds()
+	target := goimg.NewNRGBA(bounds)
+	draw.Draw(target, target.Bounds(), i.img, bounds.Min, draw.Src)
+	return &imageData{
+		img: target,
 	}
-
-	var targetWidth, targetHeight int
-	targetRatio := float32(width) / float32(height)
-	origRatio := float32(s.X) / float32(s.Y)
-	if origRatio < targetRatio {
-		targetHeight = height
-		targetWidth = minInt(int(float32(targetHeight)*origRatio), width)
-	} else {
-		targetWidth = width
-		targetHeight = minInt(int(float32(targetWidth)/origRatio), height)
-	}
-
-	target := goimg.NewNRGBA(goimg.Rect(0, 0, targetWidth, targetHeight))
-	draw.Draw(target, target.Bounds(), goimg.White, goimg.ZP, draw.Src)
-	draw.ApproxBiLinear.Scale(target, target.Bounds(), img, img.Bounds(), draw.Src, nil)
-
-	return target
 }
 
-func resizeImgCrop(img goimg.Image, width, height int) goimg.Image {
-	s := img.Bounds().Size()
+func (i *imageData) Resize(width, height int) {
+	target := goimg.NewNRGBA(goimg.Rect(0, 0, width, height))
+	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
+	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, i.img.Bounds(), draw.Src, nil)
+	i.img = target
+}
 
-	var targetWidth, targetHeight, imgWidth, imgHeight int
-	targetRatio := float32(width) / float32(height)
-	origRatio := float32(s.X) / float32(s.Y)
+func (i imageData) ResizeFit(width, height int) {
+	s := i.img.Bounds().Size()
+	if s.X < width && s.Y < height {
+		return
+	}
 
+	targetRatio := float64(width) / float64(height)
+	origRatio := float64(s.X) / float64(s.Y)
+	var targetWidth, targetHeight int
+	if origRatio < targetRatio {
+		targetHeight = height
+		targetWidth = minInt(int(float64(targetHeight)*origRatio), width)
+	} else {
+		targetWidth = width
+		targetHeight = minInt(int(float64(targetWidth)/origRatio), height)
+	}
+	i.Resize(targetWidth, targetHeight)
+}
+
+func (i *imageData) Crop(bounds goimg.Rectangle) {
+	size := bounds.Size()
+	target := goimg.NewNRGBA(goimg.Rect(0, 0, size.X, size.Y))
+	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
+	draw.Draw(target, target.Bounds(), i.img, bounds.Min, draw.Src)
+	i.img = target
+}
+
+func (i *imageData) ResizeFill(width, height int) {
+	s := i.img.Bounds().Size()
+	targetRatio := float64(width) / float64(height)
+	origRatio := float64(s.X) / float64(s.Y)
 	var imgBounds goimg.Rectangle
 
 	if origRatio < targetRatio {
-		imgWidth = s.X
-		imgHeight = minInt(int(float32(imgWidth)/targetRatio), s.Y)
+		imgHeight := minInt(int(float64(s.X)/targetRatio), s.Y)
 		k := (s.Y - imgHeight) / 2
-		imgBounds = goimg.Rect(0, k, imgWidth, k+imgHeight)
+		imgBounds = goimg.Rect(0, k, s.X, k+imgHeight)
 	} else {
-		imgHeight = s.Y
-		imgWidth = minInt(int(float32(imgHeight)*targetRatio), s.X)
+		imgWidth := minInt(int(float64(s.Y)*targetRatio), s.X)
 		k := (s.X - imgWidth) / 2
-		imgBounds = goimg.Rect(k, 0, k+imgWidth, imgHeight)
+		imgBounds = goimg.Rect(k, 0, k+imgWidth, s.Y)
 	}
 
-	if s.X > width && s.Y > height {
-		targetWidth = width
-		targetHeight = height
-	} else {
-		targetWidth = imgWidth
-		targetHeight = imgHeight
-	}
-
-	target := goimg.NewNRGBA(goimg.Rect(0, 0, targetWidth, targetHeight))
-	draw.Draw(target, target.Bounds(), goimg.White, goimg.ZP, draw.Src)
-	draw.ApproxBiLinear.Scale(target, target.Bounds(), img, imgBounds, draw.Src, nil)
-
-	return target
+	i.Crop(imgBounds)
+	i.ResizeFit(width, height)
 }

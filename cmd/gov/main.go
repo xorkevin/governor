@@ -119,7 +119,6 @@ func main() {
 	courierService, err := courier.New(config, l, courierModelService, objstoreService, barcodeService, cacheService, gateService, cacheControlService)
 	governor.Must(err)
 
-	fileloader.New(config, l)
 	websocket.New(config, l)
 
 	governor.Must(g.MountRoute("/null/database", dbService))
