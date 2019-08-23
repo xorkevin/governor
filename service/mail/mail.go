@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	gomail "github.com/go-mail/mail"
-	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
 	"time"
@@ -23,7 +22,6 @@ const (
 type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
-		governor.Service
 		Send(to, subjecttpl, bodytpl string, emdata interface{}) error
 	}
 
@@ -210,22 +208,6 @@ func (m *goMail) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) err
 	case <-time.After(30 * time.Second):
 		return governor.NewError("Email service experiencing load", http.StatusInternalServerError, nil)
 	}
-}
-
-// Mount is a place to mount routes to satisfy the Service interface
-func (m *goMail) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mount mail service", nil)
-	return nil
-}
-
-// Health is a health check for the service
-func (m *goMail) Health() error {
-	return nil
-}
-
-// Setup is run on service setup
-func (m *goMail) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	return nil
 }
 
 // Send creates and enqueues a new message to be sent

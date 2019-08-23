@@ -2,7 +2,6 @@ package msgqueue
 
 import (
 	"fmt"
-	"github.com/labstack/echo"
 	"github.com/nats-io/stan.go"
 	"net/http"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
-		governor.Service
 		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
 		Publish(queueid string, msgdata []byte) error
 		Close() error
@@ -65,22 +63,6 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 		logger: l,
 		queue:  conn,
 	}, nil
-}
-
-// Mount is a place to mount routes to satisfy the Service interface
-func (q *msgQueue) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mount msgqueue service", nil)
-	return nil
-}
-
-// Health is a health check for the service
-func (q *msgQueue) Health() error {
-	return nil
-}
-
-// Setup is run on service setup
-func (q *msgQueue) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	return nil
 }
 
 func (s *subscription) subscriber(msg *stan.Msg) {

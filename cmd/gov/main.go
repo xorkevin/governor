@@ -125,8 +125,6 @@ func main() {
 	governor.Must(g.MountRoute("/null/database", dbService))
 	governor.Must(g.MountRoute("/null/cache", cacheService))
 	governor.Must(g.MountRoute("/null/objstore", objstoreService))
-	governor.Must(g.MountRoute("/null/msgqueue", queueService))
-	governor.Must(g.MountRoute("/null/mail", mailService))
 	governor.Must(g.MountRoute("/conf", confService))
 	governor.Must(g.MountRoute("/u", userService))
 	governor.Must(g.MountRoute("/profile", profileService))
