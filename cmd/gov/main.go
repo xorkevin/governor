@@ -29,6 +29,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate/conf"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/websocket"
 )
 
@@ -102,8 +103,9 @@ func main() {
 	confService := conf.New(config, l, confModelService)
 
 	roleModelService := rolemodel.New(config, l, dbService)
+	sessionModelService := sessionmodel.New(config, l, dbService)
 	userModelService := usermodel.New(config, l, dbService, roleModelService)
-	userService := user.New(config, l, userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
+	userService := user.New(config, l, userModelService, roleModelService, sessionModelService, cacheService, mailService, gateService, cacheControlService)
 
 	profileModelService := profilemodel.New(config, l, dbService)
 	profileService, err := profile.New(config, l, profileModelService, objstoreService, gateService, cacheControlService)

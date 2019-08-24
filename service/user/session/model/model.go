@@ -44,6 +44,7 @@ type (
 	}
 )
 
+// New creates a new user session repository
 func New(conf governor.Config, l governor.Logger, database db.Database) Repo {
 	l.Info("initialize user role model", nil)
 	hasher := hunter2.NewBlake2bHasher()

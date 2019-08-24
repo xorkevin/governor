@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -38,6 +39,7 @@ type (
 		logger            governor.Logger
 		repo              usermodel.Repo
 		rolerepo          rolemodel.Repo
+		sessionrepo       sessionmodel.Repo
 		cache             cache.Cache
 		tokenizer         *token.Tokenizer
 		mailer            mail.Mail
@@ -80,7 +82,7 @@ const (
 )
 
 // New creates a new User
-func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
+func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, sessionrepo sessionmodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
@@ -123,6 +125,7 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 		logger:            l,
 		repo:              repo,
 		rolerepo:          rolerepo,
+		sessionrepo:       sessionrepo,
 		cache:             ch,
 		mailer:            m,
 		tokenizer:         token.New(ca["secret"], ca["issuer"]),
