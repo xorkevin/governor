@@ -19,7 +19,12 @@ const (
 type (
 	Repo interface {
 		New(userid string) (*Model, string, error)
-		//Setup() error
+		ValidateKey(key string, m *Model) (bool, error)
+		RehashKey(m *Model) (string, error)
+		Insert(m *Model) error
+		Update(m *Model) error
+		Delete(m *Model) error
+		Setup() error
 	}
 
 	repo struct {
@@ -33,6 +38,9 @@ type (
 		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY"`
 		Userid    string `model:"userid,VARCHAR(31) NOT NULL"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
+		Time      string `model:"time,BIGINT NOT NULL"`
+		IPAddr    string `model:"ipaddr,VARCHAR(63)"`
+		UserAgent string `model:"user_agent,VARCHAR(1023)"`
 	}
 )
 
@@ -69,4 +77,63 @@ func (r *repo) New(userid string) (*Model, string, error) {
 		Userid:    userid,
 		KeyHash:   hash,
 	}, keystr, nil
+}
+
+// ValidateKey validates the key against a hash
+func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
+	ok, err := r.verifier.Verify(key, m.KeyHash)
+	if err != nil {
+		return false, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
+	}
+	return ok, nil
+}
+
+// RehashKey generates a new key and saves its hash
+func (r *repo) RehashKey(m *Model) (string, error) {
+	key, err := uid.New(keySize)
+	if err != nil {
+		return "", governor.NewError("Failed to create new session key", http.StatusInternalServerError, err)
+	}
+	keystr := key.Base64()
+	hash, err := r.hasher.Hash(keystr)
+	if err != nil {
+		return "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
+	}
+	m.KeyHash = hash
+	return keystr, nil
+}
+
+// Insert inserts the model into the db
+func (r *repo) Insert(m *Model) error {
+	if code, err := sessionModelInsert(r.db, m); err != nil {
+		if code == 3 {
+			return governor.NewError("Session id must be unique", http.StatusBadRequest, err)
+		}
+		return governor.NewError("Failed to insert session", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// Update updates the model in the db
+func (r *repo) Update(m *Model) error {
+	if err := sessionModelUpdate(r.db, m); err != nil {
+		return governor.NewError("Failed to update session", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// Delete deletes the model in the db
+func (r *repo) Delete(m *Model) error {
+	if err := sessionModelDelete(r.db, m); err != nil {
+		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// Setup creates a new User session table
+func (r *repo) Setup() error {
+	if err := sessionModelSetup(r.db); err != nil {
+		return governor.NewError("Failed to setup user session model", http.StatusInternalServerError, err)
+	}
+	return nil
 }

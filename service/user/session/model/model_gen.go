@@ -13,13 +13,13 @@ const (
 )
 
 func sessionModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS usersessions (sessionid VARCHAR(31) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS usersessions (sessionid VARCHAR(31) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023));")
 	return err
 }
 
 func sessionModelGet(db *sql.DB, key string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT sessionid, userid, keyhash FROM usersessions WHERE sessionid = $1;", key).Scan(&m.SessionID, &m.Userid, &m.KeyHash); err != nil {
+	if err := db.QueryRow("SELECT sessionid, userid, keyhash, time, ipaddr, user_agent FROM usersessions WHERE sessionid = $1;", key).Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.IPAddr, &m.UserAgent); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -37,7 +37,7 @@ func sessionModelGet(db *sql.DB, key string) (*Model, int, error) {
 }
 
 func sessionModelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash) VALUES ($1, $2, $3);", m.SessionID, m.Userid, m.KeyHash)
+	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6);", m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -57,13 +57,13 @@ func sessionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*3)
+	args := make([]interface{}, 0, len(models)*6)
 	for c, m := range models {
-		n := c * 3
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
-		args = append(args, m.SessionID, m.Userid, m.KeyHash)
+		n := c * 6
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
+		args = append(args, m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent)
 	}
-	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, ipaddr, user_agent) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -78,7 +78,7 @@ func sessionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 }
 
 func sessionModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash) = ($1, $2, $3) WHERE sessionid = $1;", m.SessionID, m.Userid, m.KeyHash)
+	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash, time, ipaddr, user_agent) = ($1, $2, $3, $4, $5, $6) WHERE sessionid = $1;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent)
 	return err
 }
 
