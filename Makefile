@@ -20,6 +20,7 @@ version:
 	@$(GO) version
 	@$(GO) env
 
+TEST_ARGS=
 COVERAGE=cover.out
 COVERAGE_ARGS=-covermode count -coverprofile $(COVERAGE)
 BENCHMARK_ARGS=-benchtime 5s -benchmem
@@ -27,7 +28,7 @@ BENCHMARK_ARGS=-benchtime 5s -benchmem
 .PHONY: test coverage cover bench
 
 test:
-	$(GO) test -v -cover $(COVERAGE_ARGS) ./...
+	$(GO) test $(TEST_ARGS) -cover $(COVERAGE_ARGS) ./...
 
 coverage:
 	$(GO) tool cover -html $(COVERAGE)

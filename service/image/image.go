@@ -138,13 +138,6 @@ func LoadImage(c echo.Context, formField string) (Image, error) {
 	}, nil
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func (i imageData) Duplicate() Image {
 	bounds := i.img.Bounds()
 	target := goimg.NewNRGBA(bounds)
@@ -161,18 +154,20 @@ func (i *imageData) Resize(width, height int) {
 	i.img = target
 }
 
+func dimensionsFit(fromWidth, fromHeight, toWidth, toHeight int) (int, int) {
+	// fromRatio < toRatio
+	if fromWidth*toHeight < toWidth*fromHeight {
+		// height is fit
+		return fromWidth * toHeight / fromHeight, toHeight
+	} else {
+		// width is fit
+		return toWidth, fromHeight * toWidth / fromWidth
+	}
+}
+
 func (i *imageData) ResizeFit(width, height int) {
 	s := i.img.Bounds().Size()
-	targetRatio := float64(width) / float64(height)
-	origRatio := float64(s.X) / float64(s.Y)
-	var targetWidth, targetHeight int
-	if origRatio < targetRatio {
-		targetHeight = height
-		targetWidth = minInt(int(float64(targetHeight)*origRatio), width)
-	} else {
-		targetWidth = width
-		targetHeight = minInt(int(float64(targetWidth)/origRatio), height)
-	}
+	targetWidth, targetHeight := dimensionsFit(s.X, s.Y, width, height)
 	i.Resize(targetWidth, targetHeight)
 }
 
@@ -192,24 +187,31 @@ func (i *imageData) Crop(bounds goimg.Rectangle) {
 	i.img = target
 }
 
+func maxInt(a, b int) int {
+	if a < b {
+		return b
+	}
+	return a
+}
+
+func dimensionsFill(fromWidth, fromHeight, toWidth, toHeight int) (int, int, int, int) {
+	// fromRatio < toRatio
+	if fromWidth*toHeight < toWidth*fromHeight {
+		// width is fit
+		height := fromHeight * toWidth / fromWidth
+		return toWidth, height, 0, maxInt((height-toHeight)/2, 0)
+	} else {
+		// height is fit
+		width := fromWidth * toHeight / fromHeight
+		return width, toHeight, maxInt((width-toWidth)/2, 0), 0
+	}
+}
+
 func (i *imageData) ResizeFill(width, height int) {
 	s := i.img.Bounds().Size()
-	targetRatio := float64(width) / float64(height)
-	origRatio := float64(s.X) / float64(s.Y)
-	var imgBounds goimg.Rectangle
-
-	if origRatio < targetRatio {
-		imgHeight := minInt(int(float64(s.X)/targetRatio), s.Y)
-		k := (s.Y - imgHeight) / 2
-		imgBounds = goimg.Rect(0, k, s.X, k+imgHeight)
-	} else {
-		imgWidth := minInt(int(float64(s.Y)*targetRatio), s.X)
-		k := (s.X - imgWidth) / 2
-		imgBounds = goimg.Rect(k, 0, k+imgWidth, s.Y)
-	}
-
-	i.Crop(imgBounds)
-	i.ResizeFit(width, height)
+	targetWidth, targetHeight, offsetX, offsetY := dimensionsFill(s.X, s.Y, width, height)
+	i.Resize(targetWidth, targetHeight)
+	i.Crop(goimg.Rect(offsetX, offsetY, offsetX+width, offsetY+height))
 }
 
 func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
