@@ -24,12 +24,11 @@ require (
 	github.com/smartystreets/goconvey v0.0.0-20190710185942-9d28bd7c0945 // indirect
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.4.0
-	github.com/stretchr/testify v1.3.0
-	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
+	github.com/stretchr/testify v1.4.0
 	golang.org/x/image v0.0.0-20190703141733-d6a02ce849c9
 	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/ini.v1 v1.44.0 // indirect
 	gopkg.in/mail.v2 v2.3.1 // indirect
-	xorkevin.dev/hunter2 v0.1.0
+	xorkevin.dev/hunter2 v0.1.1
 )
