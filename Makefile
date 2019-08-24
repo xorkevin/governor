@@ -10,15 +10,9 @@ BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 # DOCKER
 IMAGE_NAME=governor
 
-EXT?=0
-
 GO=go
-ifeq ($(EXT),1)
-	GOROOT=$(TOOLCHAIN_GOROOT)
-	GO=$(TOOLCHAIN_GOBIN)
-endif
 
-.PHONY: all version test fmt vet generate prepare
+.PHONY: all version
 
 all: build
 
@@ -28,6 +22,9 @@ version:
 
 COVERAGE=cover.out
 COVERAGE_ARGS=-covermode count -coverprofile $(COVERAGE)
+BENCHMARK_ARGS=-benchtime 5s -benchmem
+
+.PHONY: test coverage cover bench
 
 test:
 	$(GO) test -v -cover $(COVERAGE_ARGS) ./...
@@ -35,10 +32,12 @@ test:
 coverage:
 	$(GO) tool cover -html $(COVERAGE)
 
-BENCHMARK_ARGS=-benchtime 5s -benchmem
+cover: test coverage
 
 bench:
 	$(GO) test -bench . $(BENCHMARK_ARGS)
+
+.PHONY: fmt vet prepare
 
 fmt:
 	$(GO) fmt ./...
@@ -46,19 +45,21 @@ fmt:
 vet:
 	$(GO) vet ./...
 
-generate:
-	$(GO) generate ./...
-
 prepare: fmt vet
 
-.PHONY: gen cleangen dev clean build-bin build
-
 GENSRC=$(shell find . -name '*_gen.go')
+
+.PHONY: generate gen cleangen
+
+generate:
+	$(GO) generate ./...
 
 gen: generate fmt
 
 cleangen:
 	rm $(GENSRC)
+
+.PHONY: dev clean build-bin build
 
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
@@ -115,25 +116,3 @@ launch:
 
 danger-land:
 	docker stack rm $(SERVICE_STACK)
-
-## local go installation
-TOOLCHAIN_DIR=toolchain
-TOOLCHAIN_GO_DIR=$(TOOLCHAIN_DIR)/go
-TOOLCHAIN_TAR=$(TOOLCHAIN_DIR)/go.tar.gz
-TOOLCHAIN_GOROOT=$(TOOLCHAIN_GO_DIR)/go
-TOOLCHAIN_GOBIN=$(TOOLCHAIN_GOROOT)/bin/go
-
-TOOLCHAIN_URL=https://dl.google.com/go/go1.11.linux-amd64.tar.gz
-
-.PHONY: toolchain toolclean
-
-toolchain:
-	mkdir -p $(TOOLCHAIN_DIR)
-	if [ ! -x $(TOOLCHAIN_GO_DIR) ]; then \
-		wget -q --show-progress $(TOOLCHAIN_URL) -O $(TOOLCHAIN_TAR); \
-		mkdir -p $(TOOLCHAIN_GO_DIR); \
-		tar xzf $(TOOLCHAIN_TAR) -C $(TOOLCHAIN_GO_DIR); \
-	fi;
-
-toolclean:
-	rm -rf $(TOOLCHAIN_DIR)
