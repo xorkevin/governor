@@ -5,18 +5,29 @@ import (
 	"testing"
 )
 
-func Test_Uid(t *testing.T) {
+func TestNew(t *testing.T) {
 	assert := assert.New(t)
-	u, err := New(8, 4, 4, nil)
-	assert.NotNil(err, "arg input should be provided")
-	assert.Nil(u, "Uid should not be instantiated")
-	u, err = New(8, 0, 4, nil)
-	assert.Nil(err, "If hashsize is 0, input need not be provided")
-	assert.NotNil(u, "Uid should be instantiated")
-	assert.Equal(u.size, 12, "Uid byte array should only contain time and random")
-	u, err = New(8, 4, 4, []byte{1, 2, 3, 4, 5})
-	assert.Nil(err, "All input is valid")
-	assert.Equal([]byte{2, 3, 4, 5}, u.Hash(), "Only the last bytes of the input are used for the hash byte array")
-	u, err = New(8, 4, 4, []byte{1, 2})
-	assert.Equal([]byte{0, 0, 1, 2}, u.Hash(), "The hash byte array should right align the byte input")
+
+	{
+		u, err := New(8)
+		assert.Nil(err, "New uid should not error")
+		assert.NotNil(u, "Uid should not be nil")
+		assert.Len(u.Bytes(), 8, "Uid should have the correct length")
+	}
+}
+
+func TestUID_FromBase64(t *testing.T) {
+	assert := assert.New(t)
+
+	{
+		u, err := FromBase64("aGVsbG93b3JsZA")
+		assert.Nil(err, "Should not error given a valid base64 encoding")
+		assert.Equal([]byte("helloworld"), u.Bytes(), "UID should have the correct bytes representation")
+		assert.Equal("aGVsbG93b3JsZA", u.Base64(), "UID should have the correct base64 representation")
+	}
+	{
+		u, err := FromBase64("boguscharacters!@#$%")
+		assert.NotNil(err, "Should error on invalid characters")
+		assert.Nil(u, "UID should be nil on error")
+	}
 }

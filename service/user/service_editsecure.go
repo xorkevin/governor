@@ -8,6 +8,11 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
+const (
+	uidEmailSize = 16
+	uidPassSize  = 16
+)
+
 type (
 	emailEmailChange struct {
 		FirstName string
@@ -51,7 +56,7 @@ func (u *userService) UpdateEmail(userid string, newEmail string, password strin
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
-	key, err := uid.NewU(0, 16)
+	key, err := uid.New(uidEmailSize)
 	if err != nil {
 		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
@@ -177,7 +182,7 @@ func (u *userService) UpdatePassword(userid string, newPassword string, oldPassw
 		return err
 	}
 
-	if key, err := uid.NewU(0, 16); err != nil {
+	if key, err := uid.New(uidPassSize); err != nil {
 		u.logger.Error("fail to create new uid", map[string]string{
 			"err": err.Error(),
 		})
@@ -226,7 +231,7 @@ func (u *userService) ForgotPassword(username string, isEmail bool) error {
 		m = mu
 	}
 
-	key, err := uid.NewU(0, 16)
+	key, err := uid.New(uidPassSize)
 	if err != nil {
 		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

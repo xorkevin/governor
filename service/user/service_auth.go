@@ -10,6 +10,10 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
+const (
+	uidSize = 16
+)
+
 type (
 	emailNewLogin struct {
 		FirstName string
@@ -202,7 +206,7 @@ func (u *userService) RefreshToken(refreshToken string) (bool, *resUserAuth, err
 	}
 
 	// create a new key for the session
-	key, err := uid.NewU(0, 16)
+	key, err := uid.New(uidSize)
 	if err != nil {
 		return false, nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

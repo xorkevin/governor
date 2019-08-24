@@ -9,6 +9,10 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
+const (
+	uidSize = 16
+)
+
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
@@ -39,7 +43,7 @@ func New(c governor.Config, l governor.Logger) (Msgqueue, error) {
 	v := c.Conf()
 	rconf := v.GetStringMapString("nats")
 
-	clientid, err := uid.NewU(8, 8)
+	clientid, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

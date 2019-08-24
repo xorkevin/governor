@@ -13,7 +13,7 @@ import (
 //go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel qLink
 
 const (
-	uidRandSize = 8
+	uidSize = 8
 )
 
 type (
@@ -69,7 +69,7 @@ func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, error) {
 
 // NewLinkAuto creates a new courier model with the link id randomly generated
 func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, error) {
-	mUID, err := uid.NewU(0, uidRandSize)
+	mUID, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

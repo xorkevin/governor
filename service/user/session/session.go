@@ -10,6 +10,10 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
+const (
+	uidSize = 16
+)
+
 type (
 	// Session is a user session
 	Session struct {
@@ -27,11 +31,7 @@ type (
 
 // New creates a new session
 func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, error) {
-	userid, err := usermodel.ParseB64ID(m.Userid)
-	if err != nil {
-		return nil, governor.NewError("Failed to parse userid", http.StatusBadRequest, err)
-	}
-	id, err := uid.New(4, 8, 4, userid.Bytes())
+	id, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
@@ -40,7 +40,7 @@ func New(m *usermodel.Model, ipAddress, userAgent string) (*Session, error) {
 
 // FromSessionID creates a new session from an existing sessionID
 func FromSessionID(sessionID, userid, ipAddress, userAgent string) (*Session, error) {
-	key, err := uid.NewU(0, 16)
+	key, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

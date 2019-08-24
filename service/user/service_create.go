@@ -10,6 +10,10 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
+const (
+	uidUserSize = 16
+)
+
 type (
 	emailNewUser struct {
 		FirstName string
@@ -62,7 +66,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
 	}
 
-	key, err := uid.NewU(0, 16)
+	key, err := uid.New(uidUserSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}

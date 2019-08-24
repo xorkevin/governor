@@ -15,8 +15,7 @@ import (
 //go:generate forge model -m Model -t users -p user -o model_gen.go Model Info
 
 const (
-	uidTimeSize = 8
-	uidRandSize = 8
+	uidSize     = 16
 	passSaltLen = 32
 	passHashLen = 32
 	roleLimit   = 1024
@@ -97,7 +96,7 @@ func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo
 
 // New creates a new User Model
 func (r *repo) New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, error) {
-	mUID, err := uid.NewU(uidTimeSize, uidRandSize)
+	mUID, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
@@ -125,10 +124,6 @@ func (r *repo) NewEmpty() Model {
 
 func (r *repo) NewEmptyPtr() *Model {
 	return &Model{}
-}
-
-func ParseB64ID(userid string) (*uid.UID, error) {
-	return uid.FromBase64(uidTimeSize, 0, uidRandSize, userid)
 }
 
 // ValidatePass validates the password against a hash
