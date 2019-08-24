@@ -107,9 +107,6 @@ func LoadImage(c echo.Context, formField string) (Image, error) {
 	defer func() {
 		err := file.Close()
 		if err != nil {
-			//im.log.Error("image: fail close image file", map[string]string{
-			//	"err": err.Error(),
-			//})
 		}
 	}()
 	var img goimg.Image
