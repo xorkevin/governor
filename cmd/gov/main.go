@@ -13,8 +13,6 @@ import (
 	"xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/db/conf"
-	"xorkevin.dev/governor/service/fileloader"
-	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mail/conf"
 	"xorkevin.dev/governor/service/msgqueue"
@@ -98,8 +96,6 @@ func main() {
 
 	gateService := gate.New(config, l)
 
-	imageService := image.New(config, l)
-
 	cacheControlService := cachecontrol.New(config, l)
 
 	confModelService := confmodel.New(config, l, dbService)
@@ -110,7 +106,7 @@ func main() {
 	userService := user.New(config, l, userModelService, roleModelService, cacheService, mailService, gateService, cacheControlService)
 
 	profileModelService := profilemodel.New(config, l, dbService)
-	profileService, err := profile.New(config, l, profileModelService, objstoreService, gateService, imageService, cacheControlService)
+	profileService, err := profile.New(config, l, profileModelService, objstoreService, gateService, cacheControlService)
 	governor.Must(err)
 	userService.RegisterHook(profileService)
 

@@ -4,7 +4,6 @@ import (
 	"github.com/labstack/echo"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
-	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/user"
@@ -28,7 +27,6 @@ type (
 		repo profilemodel.Repo
 		obj  objstore.Bucket
 		gate gate.Gate
-		img  image.Image
 		cc   cachecontrol.CacheControl
 	}
 
@@ -38,7 +36,7 @@ type (
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, img image.Image, cc cachecontrol.CacheControl) (Profile, error) {
+func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, cc cachecontrol.CacheControl) (Profile, error) {
 	b, err := obj.GetBucketDefLoc(imageBucket)
 	if err != nil {
 		l.Error("fail get profile picture bucket", map[string]string{
@@ -53,7 +51,6 @@ func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj ob
 		repo: repo,
 		obj:  b,
 		gate: g,
-		img:  img,
 		cc:   cc,
 	}, nil
 }

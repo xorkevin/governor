@@ -15,21 +15,10 @@ import (
 )
 
 const (
-	// MediaTypeJpeg is the mime type for jpeg images
-	MediaTypeJpeg = "image/jpeg"
-	// MediaTypePng is the mime type for png images
-	MediaTypePng = "image/png"
-	// MediaTypeGif is the mime type for gif images
-	MediaTypeGif = "image/gif"
-
-	dataURIPrefixJpeg = "data:image/jpeg;base64,"
-
-	defaultThumbnailWidth  = 42
+	defaultThumbnailWidth  = 24
 	defaultThumbnailHeight = 24
 	defaultQuality         = 85
-	defaultContextField    = "image"
-	defaultSizeField       = "imagesize"
-	defaultThumbnailField  = "thumbnail"
+	defaultThumbQuality    = 50
 )
 
 type (
@@ -38,8 +27,11 @@ type (
 		Duplicate() Image
 		Resize(width, height int)
 		ResizeFit(width, height int)
+		ResizeLimit(width, height int)
 		Crop(bounds goimg.Rectangle)
 		ResizeFill(width, height int)
+		ToJpeg(quality int) (*bytes.Buffer, error)
+		ToBase64(quality int) (string, error)
 	}
 
 	imageData struct {
@@ -48,100 +40,64 @@ type (
 
 	// Options represent the image options of the loaded image
 	Options struct {
-		Width          int
-		Height         int
-		ThumbWidth     int
-		ThumbHeight    int
-		Quality        int
-		ThumbQuality   int
-		Crop           bool
-		ContextField   string
-		SizeField      string
-		ThumbnailField string
+		Width        int
+		Height       int
+		ThumbWidth   int
+		ThumbHeight  int
+		Quality      int
+		ThumbQuality int
+		Fill         bool
 	}
 )
 
-// LoadJpeg reads an image from a form and places it into context as a jpeg
-// sizeLimit is measured in bytes
-func LoadJpeg(formField string, opt Options) echo.MiddlewareFunc {
-	if formField == "" {
-		panic("formField cannot be an empty string")
-	}
-	if opt.Width < 0 || opt.Height < 0 {
-		panic("width and height must be a positive integer")
-	}
-	if opt.ThumbWidth < 0 || opt.ThumbHeight < 0 {
-		panic("width and height must be a positive integer")
-	}
-	if opt.Width == 0 || opt.Height == 0 {
+// LoadJpeg reads an image from a form and encodes it as a jpeg
+func LoadJpeg(c echo.Context, formField string, opt Options) (*bytes.Buffer, string, error) {
+	if opt.Width < 1 || opt.Height < 1 {
 		opt.Width = defaultThumbnailWidth
 		opt.Height = defaultThumbnailHeight
 	}
-	if opt.ThumbWidth == 0 || opt.ThumbHeight == 0 {
+	if opt.ThumbWidth < 1 || opt.ThumbHeight < 1 {
 		opt.ThumbWidth = defaultThumbnailWidth
 		opt.ThumbHeight = defaultThumbnailHeight
 	}
-	if opt.Quality < 0 || opt.Quality > 100 {
-		panic("quality must be between 1 and 100")
-	}
-	if opt.ThumbQuality < 0 || opt.ThumbQuality > 100 {
-		panic("quality must be between 1 and 100")
-	}
-	if opt.Quality == 0 {
+	if opt.Quality < 1 || opt.Quality > 100 {
 		opt.Quality = defaultQuality
 	}
-	if opt.ThumbQuality == 0 {
-		opt.Quality = defaultQuality
-	}
-	if opt.ContextField == "" {
-		opt.ContextField = defaultContextField
-	}
-	if opt.SizeField == "" {
-		opt.SizeField = defaultSizeField
-	}
-	if opt.ThumbnailField == "" {
-		opt.ThumbnailField = defaultThumbnailField
+	if opt.ThumbQuality < 1 || opt.ThumbQuality > 100 {
+		opt.ThumbQuality = defaultThumbQuality
 	}
 
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			img, err := LoadImage(c, formField)
-			if err != nil {
-				return err
-			}
-			if opt.Crop {
-				img.ResizeFill(opt.Width, opt.Height)
-			} else {
-				img.ResizeFit(opt.Width, opt.Height)
-			}
-
-			thumb := img.Duplicate()
-			thumb.ResizeFit(opt.ThumbWidth, opt.ThumbHeight)
-
-			b := &bytes.Buffer{}
-			b2 := &bytes.Buffer{}
-			j := jpeg.Options{
-				Quality: opt.Quality,
-			}
-			j2 := jpeg.Options{
-				Quality: opt.ThumbQuality,
-			}
-			if err := jpeg.Encode(b, img, &j); err != nil {
-				return governor.NewError("Failed to encode JPEG image", http.StatusInternalServerError, err)
-			}
-			if err := jpeg.Encode(b2, thumb, &j2); err != nil {
-				return governor.NewError("Failed to encode JPEG thumbnail image", http.StatusInternalServerError, err)
-			}
-			b64 := base64.RawStdEncoding.EncodeToString(b2.Bytes())
-
-			c.Set(opt.ContextField, b)
-			c.Set(opt.SizeField, int64(b.Len()))
-			c.Set(opt.ThumbnailField, dataURIPrefixJpeg+b64)
-
-			return next(c)
-		}
+	img, err := LoadImage(c, formField)
+	if err != nil {
+		return nil, "", err
 	}
+	if opt.Fill {
+		img.ResizeFill(opt.Width, opt.Height)
+	} else {
+		img.ResizeLimit(opt.Width, opt.Height)
+	}
+	thumb := img.Duplicate()
+	thumb.ResizeLimit(opt.ThumbWidth, opt.ThumbHeight)
+
+	b, err := img.ToJpeg(opt.Quality)
+	if err != nil {
+		return nil, "", governor.NewError("Failed to encode image as JPEG", http.StatusInternalServerError, err)
+	}
+	b2, err := thumb.ToBase64(opt.ThumbQuality)
+	if err != nil {
+		return nil, "", governor.NewError("Failed to encode thumbnail as JPEG", http.StatusInternalServerError, err)
+	}
+	return b, b2, nil
 }
+
+const (
+	// MediaTypeJpeg is the mime type for jpeg images
+	MediaTypeJpeg = "image/jpeg"
+	// MediaTypePng is the mime type for png images
+	MediaTypePng = "image/png"
+	// MediaTypeGif is the mime type for gif images
+	MediaTypeGif = "image/gif"
+)
 
 func LoadImage(c echo.Context, formField string) (Image, error) {
 	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, []string{MediaTypePng, MediaTypeJpeg, MediaTypeGif})
@@ -205,12 +161,8 @@ func (i *imageData) Resize(width, height int) {
 	i.img = target
 }
 
-func (i imageData) ResizeFit(width, height int) {
+func (i *imageData) ResizeFit(width, height int) {
 	s := i.img.Bounds().Size()
-	if s.X < width && s.Y < height {
-		return
-	}
-
 	targetRatio := float64(width) / float64(height)
 	origRatio := float64(s.X) / float64(s.Y)
 	var targetWidth, targetHeight int
@@ -222,6 +174,14 @@ func (i imageData) ResizeFit(width, height int) {
 		targetHeight = minInt(int(float64(targetWidth)/origRatio), height)
 	}
 	i.Resize(targetWidth, targetHeight)
+}
+
+func (i *imageData) ResizeLimit(width, height int) {
+	s := i.img.Bounds().Size()
+	if s.X < width && s.Y < height {
+		return
+	}
+	i.ResizeFit(width, height)
 }
 
 func (i *imageData) Crop(bounds goimg.Rectangle) {
@@ -250,4 +210,27 @@ func (i *imageData) ResizeFill(width, height int) {
 
 	i.Crop(imgBounds)
 	i.ResizeFit(width, height)
+}
+
+func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
+	b := &bytes.Buffer{}
+	j := jpeg.Options{
+		Quality: quality,
+	}
+	if err := jpeg.Encode(b, i.img, &j); err != nil {
+		return nil, governor.NewError("Failed to encode JPEG image", http.StatusInternalServerError, err)
+	}
+	return b, nil
+}
+
+const (
+	dataURIPrefixJpeg = "data:image/jpeg;base64,"
+)
+
+func (i *imageData) ToBase64(quality int) (string, error) {
+	b, err := i.ToJpeg(quality)
+	if err != nil {
+		return "", err
+	}
+	return dataURIPrefixJpeg + base64.RawStdEncoding.EncodeToString(b.Bytes()), nil
 }

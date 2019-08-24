@@ -2,7 +2,6 @@ package profile
 
 import (
 	"github.com/labstack/echo"
-	"io"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
@@ -61,9 +60,15 @@ type (
 )
 
 func (p *profileRouter) updateImage(c echo.Context) error {
-	img := c.Get("image").(io.Reader)
-	imgSize := c.Get("imagesize").(int64)
-	thumb64 := c.Get("thumbnail").(string)
+	img, thumb64, err := image.LoadJpeg(c, "image", image.Options{
+		Width:  384,
+		Height: 384,
+		Fill:   true,
+	})
+	if err != nil {
+		return err
+	}
+	imgSize := int64(img.Len())
 
 	ruser := reqProfileGetID{
 		Userid: c.Get("userid").(string),
@@ -156,18 +161,7 @@ func (p *profileRouter) getProfileImageCC(c echo.Context) (string, error) {
 func (p *profileRouter) mountProfileRoutes(conf governor.Config, r *echo.Group) error {
 	r.POST("", p.createProfile, gate.User(p.service.gate))
 	r.PUT("", p.updateProfile, gate.User(p.service.gate))
-	r.PUT("/image", p.updateImage, gate.User(p.service.gate), p.service.img.LoadJpeg("image", image.Options{
-		Width:          384,
-		Height:         384,
-		ThumbWidth:     32,
-		ThumbHeight:    32,
-		Quality:        85,
-		ThumbQuality:   50,
-		Crop:           true,
-		ContextField:   "image",
-		SizeField:      "imagesize",
-		ThumbnailField: "thumbnail",
-	}))
+	r.PUT("/image", p.updateImage, gate.User(p.service.gate))
 	r.DELETE("/:id", p.deleteProfile, gate.OwnerOrAdmin(p.service.gate, "id"))
 	r.GET("", p.getOwnProfile, gate.User(p.service.gate))
 	r.GET("/:id", p.getProfile)
