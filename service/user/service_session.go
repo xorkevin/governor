@@ -105,18 +105,6 @@ func (u *userService) KillAllSessions(userid string) error {
 	return u.KillSessions(userid, sessionIDs)
 }
 
-// SessionExists checks if a session of a user exists
-func (u *userService) SessionExists(userid, sessionID string) (bool, error) {
-	s := session.Session{
-		Userid: userid,
-	}
-	ok, err := u.cache.Cache().HExists(cachePrefixUserSession+s.UserKey(), sessionID).Result()
-	if err != nil {
-		return false, governor.NewError("Failed to check if session exists", http.StatusInternalServerError, err)
-	}
-	return ok, nil
-}
-
 // UpdateUserSession updates a user session
 func (u *userService) UpdateUserSession(s *session.Session) error {
 	sessionGob, err := s.ToGob()
@@ -133,19 +121,6 @@ func (u *userService) UpdateUserSession(s *session.Session) error {
 func (u *userService) UpdateSessionKey(sessionID string, sessionKey string, cacheDuration time.Duration) error {
 	if err := u.cache.Cache().Set(cachePrefixSession+sessionID, sessionKey, cacheDuration).Err(); err != nil {
 		return governor.NewError("Failed to update user session", http.StatusInternalServerError, err)
-	}
-	return nil
-}
-
-// AddSession adds a session to the cache
-func (u *userService) AddSession(s *session.Session, cacheDuration time.Duration) error {
-	// add to list of user sessions
-	if err := u.UpdateUserSession(s); err != nil {
-		return err
-	}
-	// set the session id and key into cache
-	if err := u.UpdateSessionKey(s.SessionID, s.SessionKey, cacheDuration); err != nil {
-		return err
 	}
 	return nil
 }

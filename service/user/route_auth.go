@@ -11,12 +11,6 @@ import (
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
-const (
-	authenticationSubject = "authentication"
-	refreshSubject        = "refresh"
-	sessionSubject        = "session"
-)
-
 func (u *userRouter) setAccessCookie(c echo.Context, conf governor.Config, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
@@ -42,21 +36,21 @@ func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refr
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_valid",
 		Value:    "valid",
-		Path:     "/",
+		Path:     "/api/cookie/info",
 		MaxAge:   month6,
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "auth_tags",
 		Value:    authTags,
-		Path:     "/",
+		Path:     "/api/cookie/info",
 		MaxAge:   month6,
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "userid",
 		Value:    userid,
-		Path:     "/",
+		Path:     "/api/cookie/info",
 		MaxAge:   month6,
 		HttpOnly: false,
 	})
@@ -197,17 +191,14 @@ func (u *userRouter) loginUser(c echo.Context) error {
 		return err
 	}
 
-	ok, res, err := u.service.Login(userid, ruser.Password, ruser.SessionToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
+	res, err := u.service.Login(userid, ruser.Password, ruser.SessionToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
 	if err != nil {
 		return err
-	}
-	if !ok {
-		return c.JSON(http.StatusUnauthorized, res)
 	}
 
 	u.setAccessCookie(c, u.service.config, res.AccessToken)
 	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
-	u.setSessionCookie(c, u.service.config, res.SessionToken, userid)
+	u.setSessionCookie(c, u.service.config, res.SessionToken, res.Claims.Userid)
 
 	return c.JSON(http.StatusOK, res)
 }
@@ -229,15 +220,18 @@ func (u *userRouter) exchangeToken(c echo.Context) error {
 		return err
 	}
 
-	ok, res, err := u.service.ExchangeToken(ruser.RefreshToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
+	res, err := u.service.ExchangeToken(ruser.RefreshToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return c.JSON(http.StatusUnauthorized, res)
-	}
 
 	u.setAccessCookie(c, u.service.config, res.AccessToken)
+	if len(res.RefreshToken) > 0 {
+		u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
+	}
+	if len(res.SessionToken) > 0 {
+		u.setSessionCookie(c, u.service.config, res.SessionToken, res.Claims.Userid)
+	}
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -252,14 +246,12 @@ func (u *userRouter) refreshToken(c echo.Context) error {
 		return err
 	}
 
-	ok, res, err := u.service.RefreshToken(ruser.RefreshToken)
+	res, err := u.service.RefreshToken(ruser.RefreshToken, c.RealIP(), c.Request().Header.Get("User-Agent"))
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return c.JSON(http.StatusUnauthorized, res)
-	}
 
+	u.setAccessCookie(c, u.service.config, res.AccessToken)
 	u.setRefreshCookie(c, u.service.config, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
 	u.setSessionCookie(c, u.service.config, res.SessionToken, res.Claims.Userid)
 	return c.JSON(http.StatusOK, res)
@@ -276,14 +268,9 @@ func (u *userRouter) logoutUser(c echo.Context) error {
 		return err
 	}
 
-	ok, err := u.service.Logout(ruser.RefreshToken)
+	err := u.service.Logout(ruser.RefreshToken)
 	if err != nil {
 		return err
-	}
-	if !ok {
-		return c.JSON(http.StatusUnauthorized, resUserAuth{
-			Valid: false,
-		})
 	}
 
 	rmAccessCookie(c, u.service.config)

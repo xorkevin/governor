@@ -180,7 +180,7 @@ func (r *repo) getApplyRoles(m *Model) (*Model, error) {
 	return m, nil
 }
 
-// GetByID returns a user model with the given base64 id
+// GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
 	if mUser, code, err := userModelGet(r.db, userid); err != nil {

@@ -3,6 +3,7 @@ package sessionmodel
 import (
 	"database/sql"
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
@@ -18,9 +19,10 @@ const (
 
 type (
 	Repo interface {
-		New(userid string) (*Model, string, error)
+		New(userid, ipaddr, useragent string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
+		GetByID(sessionid string) (*Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
@@ -38,7 +40,7 @@ type (
 		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY"`
 		Userid    string `model:"userid,VARCHAR(31) NOT NULL"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
-		Time      string `model:"time,BIGINT NOT NULL"`
+		Time      int64  `model:"time,BIGINT NOT NULL"`
 		IPAddr    string `model:"ipaddr,VARCHAR(63)"`
 		UserAgent string `model:"user_agent,VARCHAR(1023)"`
 	}
@@ -59,7 +61,7 @@ func New(conf governor.Config, l governor.Logger, database db.Database) Repo {
 }
 
 // New creates a new User session Model
-func (r *repo) New(userid string) (*Model, string, error) {
+func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 	sid, err := uid.New(uidSize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create new session id", http.StatusInternalServerError, err)
@@ -73,10 +75,14 @@ func (r *repo) New(userid string) (*Model, string, error) {
 	if err != nil {
 		return nil, "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
 	}
+	now := time.Now().Unix()
 	return &Model{
 		SessionID: userid + sid.Base64(),
 		Userid:    userid,
 		KeyHash:   hash,
+		Time:      now,
+		IPAddr:    ipaddr,
+		UserAgent: useragent,
 	}, keystr, nil
 }
 
@@ -100,8 +106,22 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 	if err != nil {
 		return "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
 	}
+	now := time.Now().Unix()
 	m.KeyHash = hash
+	m.Time = now
 	return keystr, nil
+}
+
+// GetByID returns a user session model with the given id
+func (r *repo) GetByID(sessionID string) (*Model, error) {
+	m, code, err := sessionModelGet(r.db, sessionID)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.NewError("No session found with that id", http.StatusNotFound, err)
+		}
+		return nil, governor.NewError("Failed to get session", http.StatusInternalServerError, err)
+	}
+	return m, nil
 }
 
 // Insert inserts the model into the db
