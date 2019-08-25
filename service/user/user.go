@@ -45,6 +45,7 @@ type (
 		mailer            mail.Mail
 		accessTime        int64
 		refreshTime       int64
+		refreshCacheTime  int64
 		confirmTime       int64
 		passwordResetTime int64
 		newLoginEmail     bool
@@ -75,10 +76,10 @@ type (
 )
 
 const (
-	time15m int64 = 900
-	time7d  int64 = 604800
-	time24h int64 = 86400
-	b1            = 1000000000
+	time15m    int64 = 900
+	time24h    int64 = 86400
+	time6month int64 = time24h * 365 / 2
+	b1               = 1000000000
 )
 
 // New creates a new User
@@ -87,7 +88,8 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
 	accessTime := time15m
-	refreshTime := time7d
+	refreshTime := time6month
+	refreshCacheTime := time24h
 	confirmTime := time24h
 	passwordResetTime := time24h
 	if duration, err := time.ParseDuration(ca["duration"]); err != nil {
@@ -99,6 +101,11 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 		l.Warn(fmt.Sprintf("auth: fail to parse refresh_duration: %s", ca["refresh_duration"]), nil)
 	} else {
 		refreshTime = duration.Nanoseconds() / b1
+	}
+	if duration, err := time.ParseDuration(ca["refresh_cache_duration"]); err != nil {
+		l.Warn(fmt.Sprintf("auth: fail to parse refresh_cache_duration: %s", ca["refresh_cache_duration"]), nil)
+	} else {
+		refreshCacheTime = duration.Nanoseconds() / b1
 	}
 	if duration, err := time.ParseDuration(cu["confirm_duration"]); err != nil {
 		l.Warn(fmt.Sprintf("auth: fail to parse confirm_duration: %s", ca["confirm_duration"]), nil)
@@ -113,6 +120,7 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 	l.Info("initialize user service", map[string]string{
 		"auth: duration (s)":                strconv.FormatInt(accessTime, 10),
 		"auth: refresh_duration (s)":        strconv.FormatInt(refreshTime, 10),
+		"auth: refresh_cache_duration (s)":  strconv.FormatInt(refreshCacheTime, 10),
 		"auth: confirm_duration (s)":        strconv.FormatInt(confirmTime, 10),
 		"auth: password_reset_duration (s)": strconv.FormatInt(passwordResetTime, 10),
 		"auth: issuer":                      ca["issuer"],
@@ -131,6 +139,7 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 		tokenizer:         token.New(ca["secret"], ca["issuer"]),
 		accessTime:        accessTime,
 		refreshTime:       refreshTime,
+		refreshCacheTime:  refreshCacheTime,
 		confirmTime:       confirmTime,
 		passwordResetTime: passwordResetTime,
 		newLoginEmail:     c.GetBool("user.new_login_email"),

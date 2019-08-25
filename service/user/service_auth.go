@@ -117,7 +117,7 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 		}
 	}
 
-	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshCacheTime*b1)).Err(); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 	if !sessionExists {
@@ -212,7 +212,7 @@ func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*res
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
 
-	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshTime*b1)).Err(); err != nil {
+	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshCacheTime*b1)).Err(); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 	if err := u.sessionrepo.Update(sm); err != nil {

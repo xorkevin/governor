@@ -16,42 +16,38 @@ func (u *userRouter) setAccessCookie(c echo.Context, conf governor.Config, acces
 		Name:     "access_token",
 		Value:    accessToken,
 		Path:     conf.BaseURL,
-		MaxAge:   int(u.service.accessTime),
+		MaxAge:   int(u.service.accessTime) - 5,
 		HttpOnly: false,
 	})
 }
-
-const (
-	month6 = 43200 * 365
-)
 
 func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refreshToken string, authTags string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     conf.BaseURL + "/u/auth",
-		MaxAge:   month6,
+		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_valid",
 		Value:    "valid",
 		Path:     "/api/cookie/info",
-		MaxAge:   month6,
+		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "auth_tags",
 		Value:    authTags,
 		Path:     "/api/cookie/info",
-		MaxAge:   month6,
+		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "userid",
 		Value:    userid,
 		Path:     "/api/cookie/info",
-		MaxAge:   month6,
+		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 }
@@ -61,7 +57,7 @@ func (u *userRouter) setSessionCookie(c echo.Context, conf governor.Config, sess
 		Name:     "session_token_" + userid,
 		Value:    sessionToken,
 		Path:     conf.BaseURL + "/u/auth/login",
-		MaxAge:   month6,
+		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 }
