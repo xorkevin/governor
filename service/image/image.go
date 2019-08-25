@@ -195,20 +195,22 @@ func dimensionsFill(fromWidth, fromHeight, toWidth, toHeight int) (int, int, int
 	// fromRatio < toRatio
 	if fromWidth*toHeight < toWidth*fromHeight {
 		// width is fit
-		height := fromHeight * toWidth / fromWidth
-		return toWidth, height, 0, maxInt((height-toHeight)/2, 0)
+		height := toHeight * fromWidth / toWidth
+		return fromWidth, height, 0, maxInt((fromHeight-height)/2, 0)
 	} else {
 		// height is fit
-		width := fromWidth * toHeight / fromHeight
-		return width, toHeight, maxInt((width-toWidth)/2, 0), 0
+		width := toWidth * fromHeight / toHeight
+		return width, fromHeight, maxInt((fromWidth-width)/2, 0), 0
 	}
 }
 
 func (i *imageData) ResizeFill(width, height int) {
 	s := i.img.Bounds().Size()
 	targetWidth, targetHeight, offsetX, offsetY := dimensionsFill(s.X, s.Y, width, height)
-	i.Resize(targetWidth, targetHeight)
-	i.Crop(goimg.Rect(offsetX, offsetY, offsetX+width, offsetY+height))
+	target := goimg.NewNRGBA(goimg.Rect(0, 0, width, height))
+	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
+	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, goimg.Rect(offsetX, offsetY, offsetX+targetWidth, offsetY+targetHeight), draw.Src, nil)
+	i.img = target
 }
 
 func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {

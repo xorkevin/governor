@@ -42,30 +42,30 @@ func TestDimensionsFill(t *testing.T) {
 
 	{
 		width, height, offsetX, offsetY := dimensionsFill(9, 16, 3, 4)
-		assert.Equal(3, width)
-		assert.Equal(5, height)
+		assert.Equal(9, width)
+		assert.Equal(12, height)
 		assert.Equal(0, offsetX)
-		assert.Equal(0, offsetY)
+		assert.Equal(2, offsetY)
 	}
 	{
 		width, height, offsetX, offsetY := dimensionsFill(16, 9, 4, 3)
-		assert.Equal(5, width)
-		assert.Equal(3, height)
-		assert.Equal(0, offsetX)
+		assert.Equal(12, width)
+		assert.Equal(9, height)
+		assert.Equal(2, offsetX)
 		assert.Equal(0, offsetY)
 	}
 	{
 		width, height, offsetX, offsetY := dimensionsFill(3, 4, 9, 16)
-		assert.Equal(12, width)
-		assert.Equal(16, height)
-		assert.Equal(1, offsetX)
+		assert.Equal(2, width)
+		assert.Equal(4, height)
+		assert.Equal(0, offsetX)
 		assert.Equal(0, offsetY)
 	}
 	{
 		width, height, offsetX, offsetY := dimensionsFill(4, 3, 16, 9)
-		assert.Equal(16, width)
-		assert.Equal(12, height)
+		assert.Equal(4, width)
+		assert.Equal(2, height)
 		assert.Equal(0, offsetX)
-		assert.Equal(1, offsetY)
+		assert.Equal(0, offsetY)
 	}
 }
