@@ -5,7 +5,7 @@ func (r reqUserRmSessions) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validhasSessionIDs(r.SessionIDs); err != nil {
+	if err := validSessionIDs(r.SessionIDs); err != nil {
 		return err
 	}
 	return nil

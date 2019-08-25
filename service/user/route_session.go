@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/labstack/echo"
 	"net/http"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -16,7 +17,7 @@ func (u *userRouter) getSessions(c echo.Context) error {
 	if err := ruser.valid(); err != nil {
 		return err
 	}
-	res, err := u.service.GetSessions(ruser.Userid)
+	res, err := u.service.GetUserSessions(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -26,12 +27,19 @@ func (u *userRouter) getSessions(c echo.Context) error {
 type (
 	reqUserRmSessions struct {
 		Userid     string   `valid:"userid,has" json:"-"`
-		SessionIDs []string `valid:"sessionIDs,has" json:"session_ids"`
+		SessionIDs []string `valid:"sessionIDs" json:"session_ids"`
 	}
 )
 
-func (u *userRouter) killSessions(c echo.Context) error {
+func (r *reqUserRmSessions) validUserid() error {
+	j := strings.SplitN(r.SessionIDs[0], "|", 2)
+	if r.Userid != j[0] {
+		return governor.NewErrorUser("Invalid session ids", http.StatusForbidden, nil)
+	}
+	return nil
+}
 
+func (u *userRouter) killSessions(c echo.Context) error {
 	ruser := reqUserRmSessions{}
 	if err := c.Bind(&ruser); err != nil {
 		return err
@@ -40,8 +48,11 @@ func (u *userRouter) killSessions(c echo.Context) error {
 	if err := ruser.valid(); err != nil {
 		return err
 	}
+	if err := ruser.validUserid(); err != nil {
+		return err
+	}
 
-	if err := u.service.KillSessions(ruser.Userid, ruser.SessionIDs); err != nil {
+	if err := u.service.KillSessions(ruser.SessionIDs); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

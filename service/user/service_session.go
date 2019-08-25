@@ -1,126 +1,75 @@
 package user
 
 import (
-	"bytes"
-	"encoding/gob"
 	"net/http"
-	"sort"
-	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/session"
-)
-
-const (
-	cachePrefixUserSession = moduleID + ".usersession:"
-	cachePrefixSession     = moduleID + ".session:"
 )
 
 type (
+	resSession struct {
+		SessionID string `json:"session_id"`
+		Userid    string `json:"userid"`
+		Time      int64  `json:"time"`
+		IPAddr    string `json:"ip"`
+		UserAgent string `json:"user_agent"`
+	}
+
 	resUserGetSessions struct {
-		Sessions []session.Session `json:"active_sessions"`
+		Sessions []resSession `json:"active_sessions"`
 	}
 )
 
-// GetSessions retrieves a list of user sessions
-func (u *userService) GetSessions(userid string) (*resUserGetSessions, error) {
-	s := session.Session{
-		Userid: userid,
-	}
-
-	var sarr session.Slice
-	if sgobs, err := u.cache.Cache().HGetAll(cachePrefixUserSession + s.UserKey()).Result(); err != nil {
+func (u *userService) GetUserSessions(userid string) (*resUserGetSessions, error) {
+	m, err := u.sessionrepo.GetUserSessions(userid, 256, 0)
+	if err != nil {
 		return nil, governor.NewError("Failed to get user sessions", http.StatusInternalServerError, err)
-	} else {
-		sarr = make(session.Slice, 0, len(sgobs))
-		for _, v := range sgobs {
-			s := session.Session{}
-			if err = gob.NewDecoder(bytes.NewBufferString(v)).Decode(&s); err != nil {
-				return nil, governor.NewError("Failed to decode user session", http.StatusInternalServerError, err)
-			}
-			sarr = append(sarr, s)
-		}
 	}
-	sort.Sort(sort.Reverse(sarr))
-
+	res := make([]resSession, 0, len(m))
+	for _, i := range m {
+		res = append(res, resSession{
+			SessionID: i.SessionID,
+			Userid:    i.Userid,
+			Time:      i.Time,
+			IPAddr:    i.IPAddr,
+			UserAgent: i.UserAgent,
+		})
+	}
 	return &resUserGetSessions{
-		Sessions: sarr,
+		Sessions: res,
 	}, nil
 }
 
-// GetSessionKey retrieves the key of a session
-func (u *userService) GetSessionKey(sessionID string) (string, error) {
-	key, err := u.cache.Cache().Get(cachePrefixSession + sessionID).Result()
-	if err != nil {
-		return "", governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
-	}
-	return key, nil
-}
-
-// EndSession ends the session of a user
-func (u *userService) EndSession(sessionID string) error {
-	if err := u.cache.Cache().Del(cachePrefixSession + sessionID).Err(); err != nil {
-		return governor.NewError("Failed to kill session", http.StatusInternalServerError, err)
-	}
-	return nil
-}
-
-// KillSessions terminates sessions of a user
-func (u *userService) KillSessions(userid string, sessionIDs []string) error {
-	s := session.Session{
-		Userid: userid,
-	}
-	ids := make([]string, 0, len(sessionIDs))
-	for _, i := range sessionIDs {
+// KillCacheSessions terminates user sessions in cache
+func (u *userService) KillCacheSessions(sessionids []string) error {
+	ids := make([]string, 0, len(sessionids))
+	for _, i := range sessionids {
 		ids = append(ids, cachePrefixSession+i)
 	}
 	if err := u.cache.Cache().Del(ids...).Err(); err != nil {
 		return governor.NewError("Failed to delete session keys", http.StatusInternalServerError, err)
 	}
-	if err := u.cache.Cache().HDel(cachePrefixUserSession+s.UserKey(), sessionIDs...).Err(); err != nil {
-		return governor.NewError("Failed to delete sessions map", http.StatusInternalServerError, err)
+	return nil
+}
+
+// KillSessions terminates user sessions
+func (u *userService) KillSessions(sessionids []string) error {
+	if err := u.KillCacheSessions(sessionids); err != nil {
+		return err
+	}
+	if err := u.sessionrepo.DeleteSessions(sessionids); err != nil {
+		return governor.NewError("Failed to delete session keys", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 // KillAllSessions terminates all sessions of a user
 func (u *userService) KillAllSessions(userid string) error {
-	s := session.Session{
-		Userid: userid,
-	}
-
-	var sessionIDs []string
-	if smap, err := u.cache.Cache().HGetAll(cachePrefixUserSession + s.UserKey()).Result(); err != nil {
-		return governor.NewError("Failed to get sessions map", http.StatusInternalServerError, err)
-	} else {
-		sessionIDs = make([]string, 0, len(smap))
-		for k := range smap {
-			sessionIDs = append(sessionIDs, k)
-		}
-	}
-
-	if len(sessionIDs) == 0 {
-		return nil
-	}
-
-	return u.KillSessions(userid, sessionIDs)
-}
-
-// UpdateUserSession updates a user session
-func (u *userService) UpdateUserSession(s *session.Session) error {
-	sessionGob, err := s.ToGob()
+	sessionids, err := u.sessionrepo.GetUserSessionIDs(userid, 65536, 0)
 	if err != nil {
-		return governor.NewError("Failed to encode user session", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
 	}
-	if err := u.cache.Cache().HSet(cachePrefixUserSession+s.UserKey(), s.SessionID, sessionGob).Err(); err != nil {
-		return governor.NewError("Failed to store user session", http.StatusInternalServerError, err)
-	}
-	return nil
-}
-
-// UpdateSessionKey updates the key of a session
-func (u *userService) UpdateSessionKey(sessionID string, sessionKey string, cacheDuration time.Duration) error {
-	if err := u.cache.Cache().Set(cachePrefixSession+sessionID, sessionKey, cacheDuration).Err(); err != nil {
-		return governor.NewError("Failed to update user session", http.StatusInternalServerError, err)
+	if err := u.KillCacheSessions(sessionids); err != nil {
+		return err
 	}
 	return nil
 }

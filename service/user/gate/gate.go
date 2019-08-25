@@ -75,7 +75,7 @@ func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareF
 				}
 				accessToken = h[1]
 			}
-			validToken, claims := g.tokenizer.Validate(accessToken, subject, "")
+			validToken, claims := g.tokenizer.Validate(accessToken, subject)
 			if !validToken {
 				rmAccessCookie(c, g.baseurl)
 				return governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)

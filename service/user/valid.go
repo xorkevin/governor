@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 	"regexp"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -163,12 +164,22 @@ func validhasUsernameOrEmail(useroremail string) (bool, error) {
 	return false, governor.NewErrorUser("Invalid username or email", http.StatusBadRequest, nil)
 }
 
-func validhasSessionIDs(ids []string) error {
+func validSessionIDs(ids []string) error {
 	if len(ids) == 0 {
 		return governor.NewErrorUser("SessionID must be provided", http.StatusBadRequest, nil)
 	}
 	if len(ids) > lengthCapLarge {
 		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
+	}
+	j := strings.SplitN(ids[0], "|", 2)
+	if len(j) != 2 {
+		return governor.NewErrorUser("Invalid session id", http.StatusBadRequest, nil)
+	}
+	k := j[0]
+	for _, i := range ids {
+		if !strings.HasPrefix(i, k) {
+			return governor.NewErrorUser("Invalid session id", http.StatusBadRequest, nil)
+		}
 	}
 	return nil
 }

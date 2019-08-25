@@ -86,3 +86,69 @@ func sessionModelDelete(db *sql.DB, m *Model) error {
 	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid = $1;", m.SessionID)
 	return err
 }
+
+func sessionModelDelSetSessionID(db *sql.DB, keys []string) error {
+	placeholderStart := 1
+	placeholders := make([]string, 0, len(keys))
+	args := make([]interface{}, 0, len(keys))
+	for n, i := range keys {
+		placeholders = append(placeholders, fmt.Sprintf("($%d)", n+placeholderStart))
+		args = append(args, i)
+	}
+	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid IN (VALUES "+strings.Join(placeholders, ", ")+");", args...)
+	return err
+}
+
+func sessionModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT sessionid, userid, time, ipaddr, user_agent FROM usersessions WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.SessionID, &m.Userid, &m.Time, &m.IPAddr, &m.UserAgent); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func sessionModelGetqIDEqUseridOrdSessionID(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]qID, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]qID, 0, limit)
+	rows, err := db.Query("SELECT sessionid FROM usersessions WHERE userid = $3 ORDER BY sessionid "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := qID{}
+		if err := rows.Scan(&m.SessionID); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}

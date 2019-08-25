@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t usersessions -p session -o model_gen.go
+//go:generate forge model -m Model -t usersessions -p session -o model_gen.go Model qID
 
 const (
 	uidSize = 4
@@ -23,9 +23,12 @@ type (
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
 		GetByID(sessionid string) (*Model, error)
+		GetUserSessions(userid string, limit, offset int) ([]Model, error)
+		GetUserSessionIDs(userid string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
+		DeleteSessions(sessionids []string) error
 		Setup() error
 	}
 
@@ -37,12 +40,16 @@ type (
 
 	// Model is the db User session model
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY"`
-		Userid    string `model:"userid,VARCHAR(31) NOT NULL"`
+		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,delgroupset"`
+		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
-		Time      int64  `model:"time,BIGINT NOT NULL"`
-		IPAddr    string `model:"ipaddr,VARCHAR(63)"`
-		UserAgent string `model:"user_agent,VARCHAR(1023)"`
+		Time      int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
+		IPAddr    string `model:"ipaddr,VARCHAR(63)" query:"ipaddr"`
+		UserAgent string `model:"user_agent,VARCHAR(1023)" query:"user_agent"`
+	}
+
+	qID struct {
+		SessionID string `query:"sessionid,getgroupeq,userid"`
 	}
 )
 
@@ -77,7 +84,7 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 	}
 	now := time.Now().Unix()
 	return &Model{
-		SessionID: userid + sid.Base64(),
+		SessionID: userid + "|" + sid.Base64(),
 		Userid:    userid,
 		KeyHash:   hash,
 		Time:      now,
@@ -124,6 +131,28 @@ func (r *repo) GetByID(sessionID string) (*Model, error) {
 	return m, nil
 }
 
+// GetUserSessions returns all the sessions of a user
+func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error) {
+	m, err := sessionModelGetModelEqUseridOrdTime(r.db, userid, false, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get user sessions", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+// GetUserSessionIDs returns all the session ids of a user
+func (r *repo) GetUserSessionIDs(userid string, limit, offset int) ([]string, error) {
+	m, err := sessionModelGetqIDEqUseridOrdSessionID(r.db, userid, true, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.SessionID)
+	}
+	return res, nil
+}
+
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
 	if code, err := sessionModelInsert(r.db, m); err != nil {
@@ -147,6 +176,14 @@ func (r *repo) Update(m *Model) error {
 func (r *repo) Delete(m *Model) error {
 	if err := sessionModelDelete(r.db, m); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// DeleteSessions deletes the sessions in the set of session ids
+func (r *repo) DeleteSessions(sessionids []string) error {
+	if err := sessionModelDelSetSessionID(r.db, sessionids); err != nil {
+		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}
 	return nil
 }
