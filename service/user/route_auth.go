@@ -32,21 +32,21 @@ func (u *userRouter) setRefreshCookie(c echo.Context, conf governor.Config, refr
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_valid",
 		Value:    "valid",
-		Path:     "/api/cookie/info",
+		Path:     "/",
 		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "auth_tags",
 		Value:    authTags,
-		Path:     "/api/cookie/info",
+		Path:     "/",
 		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "userid",
 		Value:    userid,
-		Path:     "/api/cookie/info",
+		Path:     "/",
 		MaxAge:   int(u.service.refreshTime),
 		HttpOnly: false,
 	})
