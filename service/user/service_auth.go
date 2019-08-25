@@ -91,7 +91,7 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 	}
 
 	// generate an access token
-	accessToken, claims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -135,7 +135,7 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
-		Claims:       claims,
+		Claims:       accessClaims,
 	}, nil
 }
 
@@ -161,7 +161,7 @@ func (u *userService) ExchangeToken(refreshToken, ipaddr, useragent string) (*re
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, newClaims, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
+	accessToken, accessClaims, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -169,7 +169,7 @@ func (u *userService) ExchangeToken(refreshToken, ipaddr, useragent string) (*re
 	return &resUserAuth{
 		Valid:       true,
 		AccessToken: accessToken,
-		Claims:      newClaims,
+		Claims:      accessClaims,
 	}, nil
 }
 
@@ -203,7 +203,7 @@ func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*res
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, newClaims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -224,7 +224,7 @@ func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*res
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
-		Claims:       newClaims,
+		Claims:       accessClaims,
 	}, nil
 }
 
