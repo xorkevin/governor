@@ -191,6 +191,11 @@ func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup gove
 	}
 	l.Info("create userrole table", nil)
 
+	if err := u.sessionrepo.Setup(); err != nil {
+		return err
+	}
+	l.Info("create usersession table", nil)
+
 	if err := u.repo.Insert(madmin); err != nil {
 		return err
 	}
