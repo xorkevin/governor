@@ -76,7 +76,7 @@ type (
 )
 
 const (
-	time15m    int64 = 900
+	time5m     int64 = 300
 	time24h    int64 = 86400
 	time6month int64 = time24h * 365 / 2
 	b1               = 1000000000
@@ -87,7 +87,7 @@ func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo 
 	c := conf.Conf()
 	ca := c.GetStringMapString("userauth")
 	cu := c.GetStringMapString("user")
-	accessTime := time15m
+	accessTime := time5m
 	refreshTime := time6month
 	refreshCacheTime := time24h
 	confirmTime := time24h
