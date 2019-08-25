@@ -53,7 +53,7 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		})
 	}
 
-	if err := u.KillAllSessions(userid); err != nil {
+	if err := u.KillAllCacheSessions(userid); err != nil {
 		return err
 	}
 	if err := u.repo.UpdateRoles(m, editAddRank.ToSlice(), editRemoveRank.ToSlice()); err != nil {

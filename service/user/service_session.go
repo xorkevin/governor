@@ -57,19 +57,30 @@ func (u *userService) KillSessions(sessionids []string) error {
 		return err
 	}
 	if err := u.sessionrepo.DeleteSessions(sessionids); err != nil {
-		return governor.NewError("Failed to delete session keys", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-// KillAllSessions terminates all sessions of a user
-func (u *userService) KillAllSessions(userid string) error {
+// KillAllCacheSessions terminates all sessions of a user in cache
+func (u *userService) KillAllCacheSessions(userid string) error {
 	sessionids, err := u.sessionrepo.GetUserSessionIDs(userid, 65536, 0)
 	if err != nil {
 		return governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
 	}
 	if err := u.KillCacheSessions(sessionids); err != nil {
 		return err
+	}
+	return nil
+}
+
+// KillAllSessions terminates all sessions of a user
+func (u *userService) KillAllSessions(userid string) error {
+	if err := u.KillAllCacheSessions(userid); err != nil {
+		return err
+	}
+	if err := u.sessionrepo.DeleteUserSessions(userid); err != nil {
+		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
 	}
 	return nil
 }

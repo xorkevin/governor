@@ -87,6 +87,11 @@ func sessionModelDelete(db *sql.DB, m *Model) error {
 	return err
 }
 
+func sessionModelDelEqUserid(db *sql.DB, userid string) error {
+	_, err := db.Exec("DELETE FROM usersessions WHERE userid = $1;", userid)
+	return err
+}
+
 func sessionModelDelSetSessionID(db *sql.DB, keys []string) error {
 	placeholderStart := 1
 	placeholders := make([]string, 0, len(keys))
