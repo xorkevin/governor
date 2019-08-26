@@ -50,6 +50,12 @@ type (
 	}
 )
 
+func FromImage(img goimg.Image) Image {
+	return &imageData{
+		img: img,
+	}
+}
+
 // LoadJpeg reads an image from a form and encodes it as a jpeg
 func LoadJpeg(c echo.Context, formField string, opt Options) (*bytes.Buffer, string, error) {
 	if opt.Width < 1 || opt.Height < 1 {
