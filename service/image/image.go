@@ -224,6 +224,41 @@ func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
 	return b, nil
 }
 
+type PngCompressionOpt int
+
+const (
+	PngDefault PngCompressionOpt = 0
+	PngNone    PngCompressionOpt = 1
+	PngFast    PngCompressionOpt = 2
+	PngBest    PngCompressionOpt = 3
+)
+
+func compressionOptTranslate(level PngCompressionOpt) png.CompressionLevel {
+	switch level {
+	case PngDefault:
+		return png.DefaultCompression
+	case PngNone:
+		return png.NoCompression
+	case PngFast:
+		return png.BestSpeed
+	case PngBest:
+		return png.BestCompression
+	default:
+		return png.DefaultCompression
+	}
+}
+
+func (i *imageData) ToPng(level PngCompressionOpt) (*bytes.Buffer, error) {
+	b := &bytes.Buffer{}
+	encoder := png.Encoder{
+		CompressionLevel: compressionOptTranslate(level),
+	}
+	if err := encoder.Encode(b, i.img); err != nil {
+		return nil, governor.NewError("Failed to encode PNG image", http.StatusInternalServerError, err)
+	}
+	return b, nil
+}
+
 const (
 	dataURIPrefixJpeg = "data:image/jpeg;base64,"
 )
