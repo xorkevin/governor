@@ -1,12 +1,16 @@
 package governor
 
 import (
+	"context"
 	"fmt"
 	"github.com/fatih/color"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
+	"time"
 )
 
 type (
@@ -144,20 +148,30 @@ func (s *Server) Init() error {
 
 // Start starts the registered services and the server
 func (s *Server) Start() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.startServices(ctx); err != nil {
+		return err
+	}
 	if s.showBanner {
 		fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), "build version:"+color.GreenString(s.config.VersionHash), "http server on "+color.RedString(":"+s.config.Port))
 	}
-	if err := s.startServices(); err != nil {
-		return err
+	go func() {
+		if err := s.i.Start(":" + s.config.Port); err != nil {
+			s.logger.Info("shutting down server", map[string]string{
+				"error": err.Error(),
+			})
+		}
+	}()
+	sigShutdown := make(chan os.Signal)
+	signal.Notify(sigShutdown, os.Interrupt)
+	<-sigShutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer shutdownCancel()
+	if err := s.i.Shutdown(shutdownCtx); err != nil {
+		s.logger.Error("shutdown server error", map[string]string{
+			"error": err.Error(),
+		})
 	}
-	s.i.Logger.Fatal(s.i.Start(":" + s.config.Port))
 	return nil
-}
-
-// Must ensures that the operation must succeed
-func Must(err error) {
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
 }

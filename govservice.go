@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"context"
 	"fmt"
 	"github.com/labstack/echo"
 	"net/http"
@@ -13,7 +14,7 @@ type (
 		Init(c Config, l Logger, r *echo.Group) error
 		Setup(rsetup ReqSetupPost) error
 		Health() error
-		Start() error
+		Start(ctx context.Context) error
 	}
 
 	serviceDef struct {
@@ -83,10 +84,10 @@ func (s *Server) initServices() error {
 	return nil
 }
 
-func (s *Server) startServices() error {
+func (s *Server) startServices(ctx context.Context) error {
 	s.logger.Info("start all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Start(); err != nil {
+		if err := i.r.Start(ctx); err != nil {
 			s.logger.Error(fmt.Sprintf("start service %s failed", i.name), map[string]string{
 				"start": i.name,
 				"error": err.Error(),
