@@ -26,64 +26,78 @@ type (
 	}
 )
 
-// IsDebug returns if the configuration is in debug mode
-func (c *Config) IsDebug() bool {
-	return c.LogLevel == levelDebug
-}
-
-// Conf returns the config instance
-func (c *Config) Conf() *viper.Viper {
-	return c.config
-}
-
-// Init reads in the config
-func (c *Config) Init() error {
-	if err := c.config.ReadInConfig(); err != nil {
-		return err
-	}
-	c.Appname = c.config.GetString("appname")
-	c.Version = c.config.GetString("version")
-	c.LogLevel = envToLevel(c.config.GetString("mode"))
-	c.LogOutput = envToLogOutput(c.config.GetString("logoutput"))
-	c.Port = c.config.GetString("port")
-	c.BaseURL = c.config.GetString("baseurl")
-	c.PublicDir = c.config.GetString("publicdir")
-	c.TemplateDir = c.config.GetString("templatedir")
-	c.MaxReqSize = c.config.GetString("max_req_size")
-	c.FrontendProxy = c.config.GetStringSlice("frontend_proxy")
-	c.Origins = c.config.GetStringSlice("allow_origins")
-	c.RouteRewrite = c.config.GetStringMapString("route_rewrite")
-	return nil
-}
-
-// NewConfig creates a new server configuration
-func NewConfig(confFilenameDefault string, versionhash string) (Config, error) {
-	configFilename := pflag.String("config", confFilenameDefault, "name of config file in config directory")
+func newConfig(defaultConfFile string, appname, version, versionhash, envPrefix string) Config {
+	configFilename := pflag.String("config", defaultConfFile, "name of config file in config directory")
 	pflag.Parse()
 
 	v := viper.New()
-	v.SetDefault("appname", "governor")
-	v.SetDefault("version", "version")
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")
 	v.SetDefault("templatedir", "templates")
-	v.SetDefault("max_req_size", "2M")
-	v.SetDefault("frontend_proxy", []string{})
-	v.SetDefault("allow_origins", []string{})
+	v.SetDefault("maxreqsize", "2M")
+	v.SetDefault("frontendproxy", []string{})
+	v.SetDefault("alloworigins", []string{})
 
 	v.SetConfigName(*configFilename)
 	v.AddConfigPath("./config")
 	v.AddConfigPath(".")
 	v.SetConfigType("yaml")
 
-	v.SetEnvPrefix("gov")
+	v.SetEnvPrefix(envPrefix)
 	v.AutomaticEnv()
 
 	return Config{
 		config:      v,
+		Appname:     appname,
+		Version:     version,
 		VersionHash: versionhash,
-	}, nil
+	}
+}
+
+func (c *Config) init() error {
+	if err := c.config.ReadInConfig(); err != nil {
+		return err
+	}
+	c.LogLevel = envToLevel(c.config.GetString("mode"))
+	c.LogOutput = envToLogOutput(c.config.GetString("logoutput"))
+	c.Port = c.config.GetString("port")
+	c.BaseURL = c.config.GetString("baseurl")
+	c.PublicDir = c.config.GetString("publicdir")
+	c.TemplateDir = c.config.GetString("templatedir")
+	c.MaxReqSize = c.config.GetString("maxreqsize")
+	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
+	c.Origins = c.config.GetStringSlice("alloworigins")
+	c.RouteRewrite = c.config.GetStringMapString("routerewrite")
+	return nil
+}
+
+// IsDebug returns if the configuration is in debug mode
+func (c *Config) IsDebug() bool {
+	return c.LogLevel == levelDebug
+}
+
+type (
+	// ConfigRegistrar sets default values on the config parser
+	ConfigRegistrar interface {
+		SetDefault(key string, value interface{})
+	}
+
+	configRegistrar struct {
+		prefix string
+		v      *viper.Viper
+	}
+)
+
+func (r *configRegistrar) SetDefault(key string, value interface{}) {
+	r.v.SetDefault(r.prefix+"."+key, value)
+}
+
+func (c *Config) registrar(prefix string) ConfigRegistrar {
+	return &configRegistrar{
+		prefix: prefix,
+		v:      c.config,
+	}
 }

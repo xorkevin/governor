@@ -1,12 +1,10 @@
-appname: governor
-version: v0.1.0
 mode: INFO
 port: 8080
 baseurl: /api
 publicdir: public
 templatedir: templates
-max_req_size: 2M
-allow_origins:
+maxreqsize: 2M
+alloworigins:
   - http://localhost
 postgres:
   user: postgres

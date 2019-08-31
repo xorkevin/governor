@@ -7,19 +7,6 @@ import (
 )
 
 type (
-	setup struct {
-		services []Service
-	}
-)
-
-// New creates a new Setup service
-func newSetup() *setup {
-	return &setup{
-		services: []Service{},
-	}
-}
-
-type (
 	// ReqSetupPost is the http post request for the setup
 	ReqSetupPost struct {
 		Username  string `json:"username"`
@@ -61,17 +48,8 @@ type (
 	}
 )
 
-var (
-	setupRun = false
-)
-
-// Mount is a collection of routes
-func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
+func (s *Server) initSetup(r *echo.Group) {
 	r.POST("", func(c echo.Context) error {
-		if setupRun {
-			return NewErrorUser("Setup already run", http.StatusForbidden, nil)
-		}
-
 		rsetup := &ReqSetupPost{}
 		if err := c.Bind(rsetup); err != nil {
 			return err
@@ -79,33 +57,16 @@ func (s *setup) Mount(conf Config, l Logger, r *echo.Group) error {
 		if err := rsetup.valid(); err != nil {
 			return err
 		}
-
-		for _, service := range s.services {
-			if err := service.Setup(conf, l, *rsetup); err != nil {
-				if ErrorStatus(err) == http.StatusForbidden {
-					setupRun = true
-					l.Warn("govsetup: setup run again", nil)
-					return err
-				}
-				return err
-			}
+		if err := s.setupServices(*rsetup); err != nil {
+			return err
 		}
-
-		l.Info("setup all services", nil)
 
 		return c.JSON(http.StatusCreated, &responseSetupPost{
 			Username:  rsetup.Username,
 			Firstname: rsetup.Firstname,
 			Lastname:  rsetup.Lastname,
-			Version:   conf.Version,
+			Version:   s.config.Version,
 			Orgname:   rsetup.Orgname,
 		})
 	})
-
-	l.Info("mount setup service", nil)
-	return nil
-}
-
-func (s *setup) addService(service Service) {
-	s.services = append(s.services, service)
 }

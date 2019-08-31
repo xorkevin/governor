@@ -1,17 +1,15 @@
-appname: governor
-version: v0.1.0
 mode: DEBUG
 port: 8080
 baseurl: /api
 publicdir: public
 templatedir: templates
-max_req_size: 2M
-allow_origins:
+maxreqsize: 2M
+alloworigins:
   - http://localhost:3000
   - http://localhost:3001
   - http://localhost:3030
   - http://localhost:3031
-route_rewrite:
+routerewrite:
   '/link/*': '/api/courier/link/$1'
 postgres:
   user: postgres
