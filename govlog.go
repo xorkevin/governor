@@ -45,6 +45,8 @@ func envToLogOutput(e string) io.Writer {
 }
 
 type (
+	// Logger is a governor logging interface that may write logs to a
+	// configurable io.Writer
 	Logger interface {
 		Debug(msg string, data map[string]string)
 		Info(msg string, data map[string]string)
@@ -106,26 +108,34 @@ func (l *govlogger) createFields(data map[string]string) logrus.Fields {
 	return fields
 }
 
+// Debug logs a debug level message
+//
+// This message will only be logged when the server configuration is in debug
+// mode.
 func (l *govlogger) Debug(msg string, data map[string]string) {
 	fields := l.createFields(data)
 	l.logger.WithFields(fields).Debug(msg)
 }
 
+// Info logs an info level message
 func (l *govlogger) Info(msg string, data map[string]string) {
 	fields := l.createFields(data)
 	l.logger.WithFields(fields).Info(msg)
 }
 
+// Warn logs a warning level message
 func (l *govlogger) Warn(msg string, data map[string]string) {
 	fields := l.createFields(data)
 	l.logger.WithFields(fields).Warn(msg)
 }
 
+// Error logs a server error level message
 func (l *govlogger) Error(msg string, data map[string]string) {
 	fields := l.createFields(data)
 	l.logger.WithFields(fields).Error(msg)
 }
 
+// Fatal logs a fatal error message then exits
 func (l *govlogger) Fatal(msg string, data map[string]string) {
 	fields := l.createFields(data)
 	l.logger.WithFields(fields).Fatal(msg)

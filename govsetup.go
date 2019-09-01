@@ -7,7 +7,7 @@ import (
 )
 
 type (
-	// ReqSetup is the http post request for the setup
+	// ReqSetup is the option struct that is passed to all services during setup
 	ReqSetup struct {
 		Username  string `json:"username"`
 		Password  string `json:"password"`

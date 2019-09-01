@@ -17,7 +17,8 @@ type (
 		EnvPrefix   string
 	}
 
-	// Config is the server configuration
+	// Config is the complete server configuration including the dynamic
+	// (runtime) options
 	Config struct {
 		config        *viper.Viper
 		Appname       string
@@ -107,6 +108,34 @@ func (r *configRegistrar) SetDefault(key string, value interface{}) {
 
 func (c *Config) registrar(prefix string) ConfigRegistrar {
 	return &configRegistrar{
+		prefix: prefix,
+		v:      c.config,
+	}
+}
+
+type (
+	// ConfigReader gets values from the config parser
+	ConfigReader interface {
+		GetStrMap(key string) map[string]string
+	}
+
+	configReader struct {
+		prefix string
+		v      *viper.Viper
+	}
+)
+
+func (r *configReader) GetStrMap(key string) map[string]string {
+	if key == "" {
+		key = r.prefix
+	} else {
+		key = r.prefix + "." + key
+	}
+	return r.v.GetStringMapString(key)
+}
+
+func (c *Config) reader(prefix string) ConfigReader {
+	return &configReader{
 		prefix: prefix,
 		v:      c.config,
 	}

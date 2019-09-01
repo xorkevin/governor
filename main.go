@@ -15,7 +15,7 @@ import (
 )
 
 type (
-	// Server is an http gateway
+	// Server is a governor server to which services may be registered
 	Server struct {
 		services   []serviceDef
 		config     Config
@@ -40,11 +40,12 @@ func New(conf ConfigOpts, stateService state.State) *Server {
 
 // Init initializes the config, creates a new logger, and initializes the
 // server and its registered services
-func (s *Server) Init() error {
+func (s *Server) Init(ctx context.Context) error {
 	config := s.config
 	if err := config.init(); err != nil {
 		return err
 	}
+	s.config = config
 
 	l := newLogger(s.config)
 	s.logger = l
@@ -145,7 +146,7 @@ func (s *Server) Init() error {
 	s.initHealth(i.Group(config.BaseURL + "/healthz"))
 	l.Info("init health service", nil)
 
-	if err := s.initServices(); err != nil {
+	if err := s.initServices(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -155,6 +156,12 @@ func (s *Server) Init() error {
 func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if err := s.Init(ctx); err != nil {
+		s.logger.Error("init failed", map[string]string{
+			"error": err.Error(),
+		})
+		return err
+	}
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
@@ -171,12 +178,15 @@ func (s *Server) Start() error {
 	sigShutdown := make(chan os.Signal)
 	signal.Notify(sigShutdown, os.Interrupt)
 	<-sigShutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	s.logger.Info("shutdown process begin", nil)
+	cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 16*time.Second)
 	defer shutdownCancel()
 	if err := s.i.Shutdown(shutdownCtx); err != nil {
 		s.logger.Error("shutdown server error", map[string]string{
 			"error": err.Error(),
 		})
 	}
+	s.stopServices(shutdownCtx)
 	return nil
 }

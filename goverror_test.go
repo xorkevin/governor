@@ -262,7 +262,7 @@ func TestErrorHandler(t *testing.T) {
 		LogLevel:  envToLevel("INFO"),
 		LogOutput: &logbuf,
 	}
-	l := NewLogger(config)
+	l := newLogger(config)
 	i := echo.New()
 	handler := errorHandler(i, l)
 

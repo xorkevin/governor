@@ -17,7 +17,7 @@ type (
 	}
 )
 
-// NewError creates a new custom Error
+// NewError creates a new governor Error
 func NewError(message string, status int, err error) error {
 	if err == nil {
 		return &goverror{
@@ -54,6 +54,7 @@ func NewError(message string, status int, err error) error {
 	}
 }
 
+// Error formats the messages of all wrapped errors
 func (e *goverror) Error() string {
 	if e.err == nil {
 		return e.message
@@ -89,7 +90,7 @@ type (
 	}
 )
 
-// NewErrorUser creates a new custom Error
+// NewErrorUser creates a new governor User Error
 func NewErrorUser(message string, status int, err error) error {
 	if err == nil {
 		return &goverrorUser{
@@ -126,6 +127,7 @@ func NewErrorUser(message string, status int, err error) error {
 	}
 }
 
+// Error formats the messages of all wrapped errors
 func (e *goverrorUser) Error() string {
 	if e.err == nil {
 		return e.message
@@ -153,6 +155,7 @@ func (e *goverrorUser) As(target interface{}) bool {
 	return true
 }
 
+// ErrorStatus reports the error status of the top most governor error in the chain
 func ErrorStatus(target error) int {
 	if goverr := (&goverror{}); xerrors.As(target, &goverr) {
 		return goverr.status

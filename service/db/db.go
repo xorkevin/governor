@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/labstack/echo"
@@ -12,67 +13,98 @@ import (
 
 type (
 	// Database is a service wrapper around an sql.DB instance
+	//
+	// DB returns the wrapped sql database instance
 	Database interface {
 		governor.Service
 		DB() *sql.DB
 	}
 
-	postgresDB struct {
-		db *sql.DB
+	service struct {
+		db     *sql.DB
+		logger governor.Logger
+		done   <-chan struct{}
 	}
 )
 
 // New creates a new db service
-func New(c governor.Config, l governor.Logger) (Database, error) {
-	v := c.Conf()
-	pgconf := v.GetStringMapString("postgres")
-	pgarr := make([]string, 0, len(pgconf))
-	for k, v := range pgconf {
+func New() Database {
+	return &service{}
+}
+
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("user", "postgres")
+	r.SetDefault("password", "admin")
+	r.SetDefault("dbname", "governor")
+	r.SetDefault("host", "localhost")
+	r.SetDefault("port", "5432")
+	r.SetDefault("sslmode", "disable")
+}
+
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	conf := r.GetStrMap("")
+	pgarr := make([]string, 0, len(conf))
+	for k, v := range conf {
 		pgarr = append(pgarr, k+"="+v)
 	}
 	postgresURL := strings.Join(pgarr, " ")
 	db, err := sql.Open("postgres", postgresURL)
 	if err != nil {
-		l.Error("db: fail create db", map[string]string{
-			"err": err.Error(),
-		})
-		return nil, err
+		return governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
 	}
+	s.db = db
+
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		if err := s.db.Close(); err != nil {
+			s.logger.Error("db: failed to close db connection", map[string]string{
+				"error": err.Error(),
+			})
+		} else {
+			s.logger.Info("db: closed connection", nil)
+		}
+		done <- struct{}{}
+	}()
+	s.done = done
+
+	s.logger.Info("db: opened database connection", nil)
+
 	if err := db.Ping(); err != nil {
-		l.Error("db: fail ping db", map[string]string{
-			"err": err.Error(),
-		})
-		return nil, err
+		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
+	s.logger.Info("db: ping database success", nil)
 
-	l.Info(fmt.Sprintf("db: establish connection to %s:%s with user %s", pgconf["host"], pgconf["port"], pgconf["user"]), nil)
-	l.Info("initialize database service", nil)
-
-	return &postgresDB{
-		db: db,
-	}, nil
-}
-
-// Mount is a place to mount routes to satisfy the Service interface
-func (db *postgresDB) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mount database service", nil)
+	s.logger.Info(fmt.Sprintf("db: established connection to %s:%s with user %s", conf["host"], conf["port"], conf["user"]), nil)
 	return nil
 }
 
-// Health is a health check for the service
-func (db *postgresDB) Health() error {
-	if _, err := db.db.Exec("SELECT 1;"); err != nil {
-		return governor.NewError("Failed to connect to db", http.StatusServiceUnavailable, err)
+func (s *service) Setup(req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+	select {
+	case <-s.done:
+		return
+	case <-ctx.Done():
+		s.logger.Warn("db: failed to stop", nil)
+	}
+}
+
+func (s *service) Health() error {
+	if _, err := s.db.Exec("SELECT 1;"); err != nil {
+		return governor.NewError("Failed to connect to db", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-// Setup is run on service setup
-func (db *postgresDB) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	return nil
-}
-
-// DB returns the sql database instance
-func (db *postgresDB) DB() *sql.DB {
-	return db.db
+// DB implements Database.DB by returning its wrapped sql.DB
+func (s *service) DB() *sql.DB {
+	return s.db
 }

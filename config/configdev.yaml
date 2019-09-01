@@ -11,7 +11,7 @@ alloworigins:
   - http://localhost:3031
 routerewrite:
   '/link/*': '/api/courier/link/$1'
-postgres:
+database:
   user: postgres
   password: admin
   dbname: governor

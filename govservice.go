@@ -9,13 +9,28 @@ import (
 )
 
 type (
-	// Service is an interface for services
+	// Service is an interface for governor services
+	//
+	// A governor service may be in one of 4 stages in its lifecycle.
+	//
+	// 1. Register: register the service on the config
+	//
+	// 2. Init: initialize any connections necessary for the service to function
+	//
+	// 3. Setup: sets up the service for the first time such as creating database
+	// tables and mounting routes
+	//
+	// 4. Start: start the service
+	//
+	// Register and Init always occur first when a governor application is
+	// launched. Then Setup and Start may occur in either order, or not at all.
 	Service interface {
 		Register(r ConfigRegistrar)
-		Init(c Config, l Logger, r *echo.Group) error
-		Setup(rsetup ReqSetup) error
-		Health() error
+		Init(ctx context.Context, c Config, r ConfigReader, l Logger, g *echo.Group) error
+		Setup(req ReqSetup) error
 		Start(ctx context.Context) error
+		Stop(ctx context.Context)
+		Health() error
 	}
 
 	serviceDef struct {
@@ -86,10 +101,10 @@ func (s *Server) checkHealthServices() []error {
 	return k
 }
 
-func (s *Server) initServices() error {
+func (s *Server) initServices(ctx context.Context) error {
 	s.logger.Info("init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(s.config, s.logger, s.i.Group(s.config.BaseURL+i.url)); err != nil {
+		if err := i.r.Init(ctx, s.config, s.config.reader(i.name), s.logger, s.i.Group(s.config.BaseURL+i.url)); err != nil {
 			s.logger.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
 				"init":  i.name,
 				"error": err.Error(),
@@ -120,4 +135,15 @@ func (s *Server) startServices(ctx context.Context) error {
 	}
 	s.logger.Info("start all services complete", nil)
 	return nil
+}
+
+func (s *Server) stopServices(ctx context.Context) {
+	s.logger.Info("stop all services begin", nil)
+	for _, i := range s.services {
+		i.r.Stop(ctx)
+		s.logger.Info(fmt.Sprintf("stop service %s", i.name), map[string]string{
+			"stop": i.name,
+		})
+	}
+	s.logger.Info("stop all services complete", nil)
 }

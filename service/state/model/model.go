@@ -28,6 +28,7 @@ type (
 	}
 )
 
+// New returns a state service backed by a database
 func New(database db.Database) state.State {
 	return &repo{
 		db: database,
@@ -76,6 +77,7 @@ func (r *repo) Update(m *Model) error {
 	return nil
 }
 
+// Get retrieves the current server state
 func (r *repo) Get() (*state.Model, error) {
 	m, err := r.GetModel()
 	if err != nil {
@@ -93,6 +95,7 @@ func (r *repo) Get() (*state.Model, error) {
 	}, nil
 }
 
+// Set updates the server state entry
 func (r *repo) Set(m *state.Model) error {
 	return r.Update(&Model{
 		config:       configID,
@@ -102,7 +105,8 @@ func (r *repo) Set(m *state.Model) error {
 	})
 }
 
-// Setup creates a new State table
+// Setup creates a new State table if it does not exist and updates the server
+// state entry
 func (r *repo) Setup(req state.ReqSetup) error {
 	m, err := r.GetModel()
 	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {

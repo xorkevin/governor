@@ -6,7 +6,7 @@ templatedir: templates
 maxreqsize: 2M
 alloworigins:
   - http://localhost
-postgres:
+database:
   user: postgres
   password: admin
   dbname: governor

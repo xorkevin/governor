@@ -41,7 +41,7 @@ func TestLogrusLevelToLog(t *testing.T) {
 	assert.Equal(logrus.InfoLevel, logrusLevelToLog(123), "default level should be info")
 }
 
-func TestnewLogger(t *testing.T) {
+func TestNewLogger(t *testing.T) {
 	assert := assert.New(t)
 
 	{
