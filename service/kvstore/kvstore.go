@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	// KVStore is a service wrapper around a redis instance
+	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
 		governor.Service
 		KVStore() *redis.Client

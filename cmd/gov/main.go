@@ -4,6 +4,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/state/model"
 )
 
@@ -25,9 +26,11 @@ func main() {
 	}, stateService)
 
 	kvService := kvstore.New()
+	objstoreService := objstore.New()
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)
+	gov.Register("objstore", "/null", objstoreService)
 
 	gov.Start()
 }

@@ -142,7 +142,9 @@ func (s *Server) startServices(ctx context.Context) error {
 
 func (s *Server) stopServices(ctx context.Context) {
 	s.logger.Info("stop all services begin", nil)
-	for _, i := range s.services {
+	l := len(s.services)
+	for n := range s.services {
+		i := s.services[l-n-1]
 		i.r.Stop(ctx)
 		s.logger.Info(fmt.Sprintf("stop service %s", i.name), map[string]string{
 			"stop": i.name,

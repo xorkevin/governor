@@ -18,9 +18,9 @@ kvstore:
   dbname: 0
   host: redis
   port: 6379
-minio:
-  key_id: admin
-  key_secret: adminsecret
+objstore:
+  keyid: admin
+  keysecret: adminsecret
   host: minio
   port: 9000
   sslmode: false

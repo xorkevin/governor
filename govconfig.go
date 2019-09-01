@@ -117,6 +117,7 @@ type (
 	// ConfigReader gets values from the config parser
 	ConfigReader interface {
 		GetStrMap(key string) map[string]string
+		GetBool(key string) bool
 		GetInt(key string) int
 		GetStr(key string) string
 		GetStrSlice(key string) []string
@@ -135,6 +136,10 @@ func (r *configReader) GetStrMap(key string) map[string]string {
 		key = r.prefix + "." + key
 	}
 	return r.v.GetStringMapString(key)
+}
+
+func (r *configReader) GetBool(key string) bool {
+	return r.v.GetBool(r.prefix + "." + key)
 }
 
 func (r *configReader) GetInt(key string) int {
