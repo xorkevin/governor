@@ -67,6 +67,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		})
 		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
 	}
+	s.store = client
 
 	client.SetAppInfo(c.Appname, c.Version)
 

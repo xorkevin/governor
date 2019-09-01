@@ -24,7 +24,7 @@ objstore:
   host: minio
   port: 9000
   sslmode: false
-nats:
+msgqueue:
   host: messenger
   port: 4222
   cluster: nss

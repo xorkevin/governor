@@ -29,7 +29,7 @@ objstore:
   host: localhost
   port: 9000
   sslmode: false
-nats:
+msgqueue:
   host: localhost
   port: 4222
   cluster: nss
