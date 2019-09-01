@@ -42,7 +42,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	}
 	m, err := s.state.Get()
 	if err != nil {
-		return err
+		return NewError("failed to get state", http.StatusInternalServerError, err)
 	}
 	if m.Setup {
 		s.setupRun = true
@@ -69,7 +69,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		s.logger.Error("setup state service failed", map[string]string{
 			"error": err.Error(),
 		})
-		return err
+		return NewError("failed to set state", http.StatusInternalServerError, err)
 	}
 	s.setupRun = true
 	s.logger.Info("setup all services complete", nil)

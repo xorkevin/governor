@@ -41,7 +41,7 @@ func TestLogrusLevelToLog(t *testing.T) {
 	assert.Equal(logrus.InfoLevel, logrusLevelToLog(123), "default level should be info")
 }
 
-func TestNewLogger(t *testing.T) {
+func TestnewLogger(t *testing.T) {
 	assert := assert.New(t)
 
 	{
@@ -50,7 +50,7 @@ func TestNewLogger(t *testing.T) {
 			LogLevel:  envToLevel("INFO"),
 			LogOutput: &logbuf,
 		}
-		l := NewLogger(config)
+		l := newLogger(config)
 
 		k := l.(*govlogger)
 		assert.Equal(levelInfo, k.level, "log level should be set")
@@ -64,7 +64,7 @@ func TestNewLogger(t *testing.T) {
 			LogLevel:  envToLevel("DEBUG"),
 			LogOutput: &logbuf,
 		}
-		l := NewLogger(config)
+		l := newLogger(config)
 
 		k := l.(*govlogger)
 		assert.Equal(levelDebug, k.level, "log level should be set")
@@ -82,7 +82,7 @@ func TestLogger_Log(t *testing.T) {
 			LogLevel:  envToLevel("INFO"),
 			LogOutput: &logbuf,
 		}
-		l := NewLogger(config)
+		l := newLogger(config)
 
 		l.Debug("test message 1", map[string]string{
 			"test field 1": "test value 1",
@@ -131,7 +131,7 @@ func TestLogger_Log(t *testing.T) {
 			LogLevel:  envToLevel("WARN"),
 			LogOutput: &logbuf,
 		}
-		l := NewLogger(config)
+		l := newLogger(config)
 
 		l.Debug("test message 1", map[string]string{
 			"test field 1": "test value 1",
