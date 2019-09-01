@@ -117,6 +117,9 @@ type (
 	// ConfigReader gets values from the config parser
 	ConfigReader interface {
 		GetStrMap(key string) map[string]string
+		GetInt(key string) int
+		GetStr(key string) string
+		GetStrSlice(key string) []string
 	}
 
 	configReader struct {
@@ -132,6 +135,18 @@ func (r *configReader) GetStrMap(key string) map[string]string {
 		key = r.prefix + "." + key
 	}
 	return r.v.GetStringMapString(key)
+}
+
+func (r *configReader) GetInt(key string) int {
+	return r.v.GetInt(r.prefix + "." + key)
+}
+
+func (r *configReader) GetStr(key string) string {
+	return r.v.GetString(r.prefix + "." + key)
+}
+
+func (r *configReader) GetStrSlice(key string) []string {
+	return r.v.GetStringSlice(r.prefix + "." + key)
 }
 
 func (c *Config) reader(prefix string) ConfigReader {

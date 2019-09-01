@@ -13,7 +13,7 @@ database:
   host: postgres
   port: 5432
   sslmode: disable
-redis:
+kvstore:
   password: admin
   dbname: 0
   host: redis

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/labstack/echo"
@@ -15,57 +16,65 @@ type (
 		Cache() *redis.Client
 	}
 
-	redisCache struct {
-		cache *redis.Client
+	service struct {
+		client *redis.Client
+		logger governor.Logger
 	}
 )
 
 // New creates a new cache service
-func New(c governor.Config, l governor.Logger) (Cache, error) {
-	v := c.Conf()
-	rconf := v.GetStringMapString("redis")
+func New() Cache {
+	return &service{}
+}
 
-	cache := redis.NewClient(&redis.Options{
-		Addr:     rconf["host"] + ":" + rconf["port"],
-		Password: rconf["password"],
-		DB:       v.GetInt("redis.dbname"),
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("password", "admin")
+	r.SetDefault("dbname", 0)
+	r.SetDefault("host", "localhost")
+	r.SetDefault("port", "6379")
+}
+
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	conf := r.GetStrMap("")
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     conf["host"] + ":" + conf["port"],
+		Password: conf["password"],
+		DB:       r.GetInt("dbname"),
 	})
+	s.client = client
 
-	if _, err := cache.Ping().Result(); err != nil {
-		l.Error("cache: fail create cache", map[string]string{
+	if _, err := client.Ping().Result(); err != nil {
+		s.logger.Error("kvstore: failed to ping kvstore", map[string]string{
 			"err": err.Error(),
 		})
-		return nil, err
+		return governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
 	}
 
-	l.Info(fmt.Sprintf("cache: establish connection to %s:%s", rconf["host"], rconf["port"]), nil)
-	l.Info("initialize cache service", nil)
-
-	return &redisCache{
-		cache: cache,
-	}, nil
-}
-
-// Mount is a place to mount routes to satisfy the Service interface
-func (c *redisCache) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	l.Info("mount cache service", nil)
+	s.logger.Info(fmt.Sprintf("kvstore: established connection to %s:%s", conf["host"], conf["port"]), nil)
 	return nil
 }
 
-// Health is a health check for the service
-func (c *redisCache) Health() error {
-	if _, err := c.cache.Ping().Result(); err != nil {
-		return governor.NewError("Failed to connect to cache", http.StatusServiceUnavailable, err)
+func (s *service) Setup(req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
+	if _, err := s.client.Ping().Result(); err != nil {
+		return governor.NewError("Failed to connect to kvstore", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-// Setup is run on service setup
-func (c *redisCache) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	return nil
-}
-
-// Cache returns the cache instance
-func (c *redisCache) Cache() *redis.Client {
-	return c.cache
+// Cache returns the client instance
+func (s *service) Cache() *redis.Client {
+	return s.client
 }
