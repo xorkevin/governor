@@ -11,7 +11,7 @@ import (
 type (
 	// Service is an interface for governor services
 	//
-	// A governor service may be in one of 4 stages in its lifecycle.
+	// A governor service may be in one of 5 stages in its lifecycle.
 	//
 	// 1. Register: register the service on the config
 	//
@@ -22,8 +22,11 @@ type (
 	//
 	// 4. Start: start the service
 	//
+	// 5. Stop: stop the service
+	//
 	// Register and Init always occur first when a governor application is
 	// launched. Then Setup and Start may occur in either order, or not at all.
+	// Stop runs when the server begins the shutdown process
 	Service interface {
 		Register(r ConfigRegistrar)
 		Init(ctx context.Context, c Config, r ConfigReader, l Logger, g *echo.Group) error
