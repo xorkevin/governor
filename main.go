@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"time"
+	"xorkevin.dev/governor/service/state"
 )
 
 type (
@@ -18,6 +19,7 @@ type (
 	Server struct {
 		services   []serviceDef
 		config     Config
+		state      state.State
 		logger     Logger
 		i          *echo.Echo
 		showBanner bool
@@ -26,10 +28,11 @@ type (
 )
 
 // New creates a new Server
-func New(defaultConfFile string, appname, version, versionhash, envPrefix string) *Server {
+func New(conf ConfigOpts, stateService state.State) *Server {
 	return &Server{
 		services:   []serviceDef{},
-		config:     newConfig(defaultConfFile, appname, version, versionhash, envPrefix),
+		config:     newConfig(conf),
+		state:      stateService,
 		showBanner: true,
 		setupRun:   false,
 	}
@@ -39,7 +42,9 @@ func New(defaultConfFile string, appname, version, versionhash, envPrefix string
 // server and its registered services
 func (s *Server) Init() error {
 	config := s.config
-	config.init()
+	if err := config.init(); err != nil {
+		return err
+	}
 
 	l := newLogger(s.config)
 	s.logger = l

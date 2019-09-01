@@ -4,9 +4,19 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"io"
+	"net/http"
 )
 
 type (
+	// ConfigOpts is the server base configuration
+	ConfigOpts struct {
+		DefaultFile string
+		Appname     string
+		Version     string
+		VersionHash string
+		EnvPrefix   string
+	}
+
 	// Config is the server configuration
 	Config struct {
 		config        *viper.Viper
@@ -26,8 +36,8 @@ type (
 	}
 )
 
-func newConfig(defaultConfFile string, appname, version, versionhash, envPrefix string) Config {
-	configFilename := pflag.String("config", defaultConfFile, "name of config file in config directory")
+func newConfig(conf ConfigOpts) Config {
+	configFilename := pflag.String("config", conf.DefaultFile, "name of config file in config directory")
 	pflag.Parse()
 
 	v := viper.New()
@@ -46,20 +56,20 @@ func newConfig(defaultConfFile string, appname, version, versionhash, envPrefix 
 	v.AddConfigPath(".")
 	v.SetConfigType("yaml")
 
-	v.SetEnvPrefix(envPrefix)
+	v.SetEnvPrefix(conf.EnvPrefix)
 	v.AutomaticEnv()
 
 	return Config{
 		config:      v,
-		Appname:     appname,
-		Version:     version,
-		VersionHash: versionhash,
+		Appname:     conf.Appname,
+		Version:     conf.Version,
+		VersionHash: conf.VersionHash,
 	}
 }
 
 func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
-		return err
+		return NewError("Failed to read in config", http.StatusInternalServerError, err)
 	}
 	c.LogLevel = envToLevel(c.config.GetString("mode"))
 	c.LogOutput = envToLogOutput(c.config.GetString("logoutput"))

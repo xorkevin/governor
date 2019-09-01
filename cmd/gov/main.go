@@ -7,8 +7,6 @@ import (
 	"xorkevin.dev/governor/service/cache"
 	"xorkevin.dev/governor/service/cache/conf"
 	"xorkevin.dev/governor/service/cachecontrol"
-	"xorkevin.dev/governor/service/conf"
-	"xorkevin.dev/governor/service/conf/model"
 	"xorkevin.dev/governor/service/courier"
 	"xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"

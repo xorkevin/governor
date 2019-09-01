@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/labstack/echo"
 	"net/http"
+	"xorkevin.dev/governor/service/state"
 )
 
 type (
@@ -12,7 +13,7 @@ type (
 	Service interface {
 		Register(r ConfigRegistrar)
 		Init(c Config, l Logger, r *echo.Group) error
-		Setup(rsetup ReqSetupPost) error
+		Setup(rsetup ReqSetup) error
 		Health() error
 		Start(ctx context.Context) error
 	}
@@ -34,11 +35,21 @@ func (s *Server) Register(name string, url string, r Service) {
 	r.Register(s.config.registrar(name))
 }
 
-func (s *Server) setupServices(rsetup ReqSetupPost) error {
+func (s *Server) setupServices(rsetup ReqSetup) error {
 	if s.setupRun {
 		s.logger.Warn("govsetup: setup already run", nil)
 		return NewErrorUser("setup already run", http.StatusForbidden, nil)
 	}
+	m, err := s.state.Get()
+	if err != nil {
+		return err
+	}
+	if m.Setup {
+		s.setupRun = true
+		s.logger.Warn("govsetup: setup already run", nil)
+		return NewErrorUser("setup already run", http.StatusForbidden, nil)
+	}
+
 	s.logger.Info("setup all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Setup(rsetup); err != nil {
@@ -52,6 +63,15 @@ func (s *Server) setupServices(rsetup ReqSetupPost) error {
 			"setup": i.name,
 		})
 	}
+	if err := s.state.Setup(state.ReqSetup{
+		Orgname: rsetup.Orgname,
+	}); err != nil {
+		s.logger.Error("setup state service failed", map[string]string{
+			"error": err.Error(),
+		})
+		return err
+	}
+	s.setupRun = true
 	s.logger.Info("setup all services complete", nil)
 	return nil
 }

@@ -7,8 +7,8 @@ import (
 )
 
 type (
-	// ReqSetupPost is the http post request for the setup
-	ReqSetupPost struct {
+	// ReqSetup is the http post request for the setup
+	ReqSetup struct {
 		Username  string `json:"username"`
 		Password  string `json:"password"`
 		Email     string `json:"email"`
@@ -22,7 +22,7 @@ var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func (r *ReqSetupPost) valid() error {
+func (r *ReqSetup) valid() error {
 	if len(r.Username) < 3 {
 		return NewErrorUser("Username must be longer than 2 chars", http.StatusBadRequest, nil)
 	}
@@ -39,7 +39,7 @@ func (r *ReqSetupPost) valid() error {
 }
 
 type (
-	responseSetupPost struct {
+	responseSetup struct {
 		Username  string `json:"username"`
 		Firstname string `json:"first_name"`
 		Lastname  string `json:"last_name"`
@@ -50,7 +50,7 @@ type (
 
 func (s *Server) initSetup(r *echo.Group) {
 	r.POST("", func(c echo.Context) error {
-		rsetup := &ReqSetupPost{}
+		rsetup := &ReqSetup{}
 		if err := c.Bind(rsetup); err != nil {
 			return err
 		}
@@ -61,7 +61,7 @@ func (s *Server) initSetup(r *echo.Group) {
 			return err
 		}
 
-		return c.JSON(http.StatusCreated, &responseSetupPost{
+		return c.JSON(http.StatusCreated, &responseSetup{
 			Username:  rsetup.Username,
 			Firstname: rsetup.Firstname,
 			Lastname:  rsetup.Lastname,
