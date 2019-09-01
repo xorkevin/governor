@@ -32,7 +32,7 @@ func (s *Server) initHealth(r *echo.Group) {
 					Message: i.Error(),
 				})
 			}
-			return c.JSON(http.StatusServiceUnavailable, &healthRes{
+			return c.JSON(http.StatusInternalServerError, &healthRes{
 				Time: t,
 				Errs: errReslist,
 			})
