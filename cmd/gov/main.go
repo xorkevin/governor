@@ -2,8 +2,8 @@ package main
 
 import (
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/cache"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/state/model"
 )
 
@@ -24,7 +24,7 @@ func main() {
 		EnvPrefix:   "gov",
 	}, stateService)
 
-	kvService := cache.New()
+	kvService := kvstore.New()
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)

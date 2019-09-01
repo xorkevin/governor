@@ -1,4 +1,4 @@
-package cache
+package kvstore
 
 import (
 	"context"
@@ -10,10 +10,10 @@ import (
 )
 
 type (
-	// Cache is a service wrapper around a redis instance
-	Cache interface {
+	// KVStore is a service wrapper around a redis instance
+	KVStore interface {
 		governor.Service
-		Cache() *redis.Client
+		KVStore() *redis.Client
 	}
 
 	service struct {
@@ -23,7 +23,7 @@ type (
 )
 
 // New creates a new cache service
-func New() Cache {
+func New() KVStore {
 	return &service{}
 }
 
@@ -74,7 +74,7 @@ func (s *service) Health() error {
 	return nil
 }
 
-// Cache returns the client instance
-func (s *service) Cache() *redis.Client {
+// KVStore returns the client instance
+func (s *service) KVStore() *redis.Client {
 	return s.client
 }
