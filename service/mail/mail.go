@@ -109,10 +109,13 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	s.logger.Info("mail: starting mail workers", map[string]string{
+		"count": strconv.Itoa(s.workerSize),
+	})
 	wg := &sync.WaitGroup{}
 	for i := 0; i < s.workerSize; i++ {
 		wg.Add(1)
-		go s.mailWorker(ctx, wg)
+		go s.mailWorker(strconv.Itoa(i), wg)
 	}
 	if _, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber); err != nil {
 		s.logger.Error("mail: failed to subscribe to mail queue", map[string]string{
@@ -123,6 +126,7 @@ func (s *service) Start(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
+		close(s.msgc)
 		wg.Wait()
 		done <- struct{}{}
 	}()
@@ -145,8 +149,16 @@ func (s *service) Health() error {
 	return nil
 }
 
-func (s *service) mailWorker(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
+	defer (func() {
+		wg.Done()
+		s.logger.Info("mail: mail worker stopped", map[string]string{
+			"mailworkerid": id,
+		})
+	})()
+	s.logger.Info("mail: mail worker started", map[string]string{
+		"mailworkerid": id,
+	})
 	d := gomail.NewDialer(s.host, s.port, s.username, s.password)
 	if s.insecure {
 		d.TLSConfig = &tls.Config{
@@ -161,6 +173,16 @@ func (s *service) mailWorker(ctx context.Context, wg *sync.WaitGroup) {
 		select {
 		case msg, ok := <-s.msgc:
 			if !ok {
+				if sender != nil {
+					if err := sender.Close(); err != nil {
+						s.logger.Error("mail: mailWorker: fail close smtp client", map[string]string{
+							"error": err.Error(),
+						})
+					}
+					sender = nil
+					s.logger.Error("mail: mailWorker: close smtp client", nil)
+					return
+				}
 				return
 			}
 			if sender == nil || mailSent >= s.connMsgCap && s.connMsgCap > 0 {
@@ -190,18 +212,6 @@ func (s *service) mailWorker(ctx context.Context, wg *sync.WaitGroup) {
 					})
 				}
 				sender = nil
-			}
-
-		case <-ctx.Done():
-			if sender != nil {
-				if err := sender.Close(); err != nil {
-					s.logger.Error("mail: mailWorker: fail close smtp client", map[string]string{
-						"error": err.Error(),
-					})
-				}
-				sender = nil
-				s.logger.Error("mail: mailWorker: close smtp client", nil)
-				return
 			}
 		}
 	}
