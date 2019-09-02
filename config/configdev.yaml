@@ -34,6 +34,17 @@ msgqueue:
   cluster: nss
 template:
   dir: templates
+mail:
+  host: localhost
+  port: 1025
+  fromaddress: gov@xorkevin.com
+  fromname: Governor
+  insecure: true
+  workersize: 2
+  connmsgcap: 100
+gate:
+  issuer: governor
+  secret: secret
 userauth:
   issuer: governor
   secret: secret
@@ -49,11 +60,3 @@ courier:
   fallback_link: http://localhost:8080
   link_prefix: http://localhost:8080/link
   cache_time: 1m
-mail:
-  host: localhost
-  port: 1025
-  fromaddress: gov@xorkevin.com
-  fromname: Governor
-  insecure: true
-  workersize: 2
-  connmsgcap: 100

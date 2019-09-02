@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"errors"
 	"github.com/labstack/echo"
 	"net/http"
@@ -17,12 +18,14 @@ const (
 type (
 	// Gate creates new middleware to gate routes
 	Gate interface {
+		governor.Service
 		Authenticate(v Validator, subject string) echo.MiddlewareFunc
 	}
 
-	gateService struct {
+	service struct {
 		tokenizer *token.Tokenizer
 		baseurl   string
+		logger    governor.Logger
 	}
 
 	// Validator is a function to check the authorization of a user
@@ -30,15 +33,42 @@ type (
 )
 
 // New returns a new Gate
-func New(conf governor.Config, l governor.Logger) Gate {
-	ca := conf.Conf().GetStringMapString("userauth")
+func New() Gate {
+	return &service{}
+}
 
-	l.Info("initialize gate service", nil)
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("secret", "")
+	r.SetDefault("issuer", "governor")
+}
 
-	return &gateService{
-		tokenizer: token.New(ca["secret"], ca["issuer"]),
-		baseurl:   conf.BaseURL,
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	conf := r.GetStrMap("")
+	if conf["secret"] == "" {
+		s.logger.Warn("gate: token secret is not set", nil)
 	}
+	if conf["issuer"] == "" {
+		s.logger.Warn("gate: token issuer is not set", nil)
+	}
+	s.tokenizer = token.New(conf["secret"], conf["issuer"])
+	s.baseurl = c.BaseURL
+	return nil
+}
+
+func (s *service) Setup(req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
+	return nil
 }
 
 func getAccessCookie(c echo.Context) (string, error) {
@@ -62,7 +92,7 @@ func rmAccessCookie(c echo.Context, baseurl string) {
 }
 
 // Authenticate builds a middleware function to validate tokens and set claims
-func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
+func (s *service) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			var accessToken string
@@ -75,9 +105,9 @@ func (g *gateService) Authenticate(v Validator, subject string) echo.MiddlewareF
 				}
 				accessToken = h[1]
 			}
-			validToken, claims := g.tokenizer.Validate(accessToken, subject)
+			validToken, claims := s.tokenizer.Validate(accessToken, subject)
 			if !validToken {
-				rmAccessCookie(c, g.baseurl)
+				rmAccessCookie(c, s.baseurl)
 				return governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 			}
 			if !v(c, *claims) {

@@ -29,6 +29,17 @@ msgqueue:
   cluster: nss
 template:
   dir: templates
+mail:
+  host: mail
+  port: 1025
+  # port: 587
+  fromaddress: gov@xorkevin.com
+  fromname: Governor
+  workersize: 2
+  connmsgcap: 100
+gate:
+  issuer: governor
+  # secret: secret
 userauth:
   issuer: governor
   secret: secret
@@ -42,11 +53,3 @@ user:
   password_min_size: 8
 courier:
   cache_time: 1m
-mail:
-  host: mail
-  port: 1025
-  # port: 587
-  fromaddress: gov@xorkevin.com
-  fromname: Governor
-  workersize: 2
-  connmsgcap: 100
