@@ -2,7 +2,9 @@ package template
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"github.com/labstack/echo"
 	htmlTemplate "html/template"
 	"net/http"
 	"strings"
@@ -12,49 +14,76 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
+		governor.Service
 		Execute(templateName string, data interface{}) (string, error)
 		ExecuteHTML(filename string, data interface{}) (string, error)
 	}
 
-	templateService struct {
-		t *htmlTemplate.Template
+	service struct {
+		t      *htmlTemplate.Template
+		logger governor.Logger
 	}
 )
 
-// New creates a new Template
-func New(conf governor.Config, l governor.Logger) (Template, error) {
-	t, err := htmlTemplate.ParseGlob(conf.TemplateDir + "/*.html")
+// New creates a new Template service
+func New() Template {
+	return &service{}
+}
+
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("dir", "templates")
+}
+
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	t, err := htmlTemplate.ParseGlob(r.GetStr("dir") + "/*.html")
 	if err != nil {
-		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", conf.TemplateDir+"/*.html") {
-			l.Warn("template: no templates loaded", nil)
+		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
+			s.logger.Warn("template: no templates loaded", nil)
 			t = htmlTemplate.New("default")
 		} else {
-			l.Error(fmt.Sprintf("template: error creating Template: %s", err), nil)
-			return nil, err
+			s.logger.Error("template: failed to load templates", map[string]string{
+				"error": err.Error(),
+			})
+			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
 		}
 	}
 
+	s.t = t
+
 	if k := t.DefinedTemplates(); k != "" {
-		l.Info(fmt.Sprintf("template: load templates: %s", strings.TrimLeft(k, "; ")), nil)
+		l.Info("template: loaded templates", map[string]string{
+			"templates": strings.TrimLeft(k, "; "),
+		})
 	}
+	return nil
+}
 
-	l.Info("initialize template service", nil)
+func (s *service) Setup(req governor.ReqSetup) error {
+	return nil
+}
 
-	return &templateService{
-		t: t,
-	}, nil
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
+	return nil
 }
 
 // Execute executes a template and returns the templated string
-func (t *templateService) Execute(templateName string, data interface{}) (string, error) {
+func (s *service) Execute(templateName string, data interface{}) (string, error) {
 	b := bytes.Buffer{}
-	if err := t.t.ExecuteTemplate(&b, templateName, data); err != nil {
+	if err := s.t.ExecuteTemplate(&b, templateName, data); err != nil {
 		return "", governor.NewError("Failed executing template", http.StatusInternalServerError, err)
 	}
 	return b.String(), nil
 }
 
 // ExecuteHTML executes an html file and returns the templated string
-func (t *templateService) ExecuteHTML(filename string, data interface{}) (string, error) {
-	return t.Execute(filename+".html", data)
+func (s *service) ExecuteHTML(filename string, data interface{}) (string, error) {
+	return s.Execute(filename+".html", data)
 }

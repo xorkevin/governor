@@ -2,7 +2,6 @@ mode: DEBUG
 port: 8080
 baseurl: /api
 publicdir: public
-templatedir: templates
 maxreqsize: 2M
 alloworigins:
   - http://localhost:3000
@@ -33,6 +32,8 @@ msgqueue:
   host: localhost
   port: 4222
   cluster: nss
+template:
+  dir: templates
 userauth:
   issuer: governor
   secret: secret

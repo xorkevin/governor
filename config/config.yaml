@@ -2,7 +2,6 @@ mode: INFO
 port: 8080
 baseurl: /api
 publicdir: public
-templatedir: templates
 maxreqsize: 2M
 alloworigins:
   - http://localhost
@@ -28,6 +27,8 @@ msgqueue:
   host: messenger
   port: 4222
   cluster: nss
+template:
+  dir: templates
 userauth:
   issuer: governor
   secret: secret

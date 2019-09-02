@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/state/model"
+	"xorkevin.dev/governor/service/template"
 )
 
 var (
@@ -34,11 +35,13 @@ func main() {
 		fmt.Printf("Failed to create msgqueue: %s\n", err.Error())
 		return
 	}
+	templateService := template.New()
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)
 	gov.Register("objstore", "/null", objstoreService)
 	gov.Register("msgqueue", "/null", msgqueueService)
+	gov.Register("template", "/null", templateService)
 
 	gov.Start()
 }

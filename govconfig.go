@@ -29,7 +29,6 @@ type (
 		Port          string
 		BaseURL       string
 		PublicDir     string
-		TemplateDir   string
 		MaxReqSize    string
 		FrontendProxy []string
 		Origins       []string
@@ -77,7 +76,6 @@ func (c *Config) init() error {
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	c.PublicDir = c.config.GetString("publicdir")
-	c.TemplateDir = c.config.GetString("templatedir")
 	c.MaxReqSize = c.config.GetString("maxreqsize")
 	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
 	c.Origins = c.config.GetStringSlice("alloworigins")
