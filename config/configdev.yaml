@@ -55,6 +55,5 @@ mail:
   fromaddress: gov@xorkevin.com
   fromname: Governor
   insecure: true
-  buffersize: 1024
   workersize: 2
   connmsgcap: 100

@@ -38,7 +38,6 @@ type (
 		username    string
 		password    string
 		insecure    bool
-		bufferSize  int
 		workerSize  int
 		connMsgCap  int
 		connTimeout int
@@ -70,7 +69,6 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("username", "")
 	r.SetDefault("password", "")
 	r.SetDefault("insecure", false)
-	r.SetDefault("buffersize", 1024)
 	r.SetDefault("workersize", 2)
 	r.SetDefault("connmsgcap", 0)
 	r.SetDefault("conntimeout", 4)
@@ -87,18 +85,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.username = conf["username"]
 	s.password = conf["password"]
 	s.insecure = r.GetBool("insecure")
-	s.bufferSize = r.GetInt("buffersize")
 	s.workerSize = r.GetInt("workersize")
 	s.connMsgCap = r.GetInt("connmsgcap")
 	s.connTimeout = r.GetInt("conntimeout")
 	s.fromAddress = conf["fromaddress"]
 	s.fromName = conf["fromname"]
-	s.msgc = make(chan *gomail.Message, s.bufferSize)
+	s.msgc = make(chan *gomail.Message)
 
 	s.logger.Info("mail: initialize service options", map[string]string{
 		"smtp server host": conf["host"],
 		"smtp server port": conf["port"],
-		"buffer size":      strconv.Itoa(r.GetInt("buffersize")),
 		"worker size":      strconv.Itoa(r.GetInt("workersize")),
 		"conn msg cap":     strconv.Itoa(r.GetInt("connmsgcap")),
 		"conn timeout (s)": strconv.Itoa(r.GetInt("conntimeout")),
@@ -118,8 +114,7 @@ func (s *service) Start(ctx context.Context) error {
 		wg.Add(1)
 		go s.mailWorker(ctx, wg)
 	}
-	sub, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber)
-	if err != nil {
+	if _, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber); err != nil {
 		s.logger.Error("mail: failed to subscribe to mail queue", map[string]string{
 			"error": err.Error(),
 		})
@@ -128,13 +123,6 @@ func (s *service) Start(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
-		if err := sub.Close(); err != nil {
-			s.logger.Error("mail: failed to close mail queue sub", map[string]string{
-				"error": err.Error(),
-			})
-		} else {
-			s.logger.Info("mail: closed mail queue sub", nil)
-		}
 		wg.Wait()
 		done <- struct{}{}
 	}()
@@ -149,7 +137,7 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		s.logger.Warn("mail: failed to close mail queue sub", nil)
+		s.logger.Warn("mail: failed to stop", nil)
 	}
 }
 

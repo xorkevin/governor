@@ -48,6 +48,5 @@ mail:
   # port: 587
   fromaddress: gov@xorkevin.com
   fromname: Governor
-  buffersize: 1024
   workersize: 2
   connmsgcap: 100

@@ -144,10 +144,10 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 			return
 		}
 		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
+			s.worker(msg.Data)
 			if err := msg.Ack(); err != nil {
 				s.logger.Error("msgqueue: subscriber: Fail ack message", nil)
 			}
-			s.worker(msg.Data)
 			return
 		}
 	}
@@ -155,7 +155,7 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	if err := s.sub.Unsubscribe(); err != nil {
+	if err := s.sub.Close(); err != nil {
 		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}
 	return nil
