@@ -155,7 +155,7 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	if err := s.sub.Close(); err != nil {
+	if err := s.sub.Unsubscribe(); err != nil {
 		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}
 	return nil

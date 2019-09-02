@@ -46,10 +46,8 @@ mail:
   host: mail
   port: 1025
   # port: 587
-  from_address: gov@xorkevin.com
-  from_name: Hackform
-  buffer_size: 1024
-  worker_size: 2
-  conn_msg_cap: 100
-post:
-  archive_time: 2688h
+  fromaddress: gov@xorkevin.com
+  fromname: Governor
+  buffersize: 1024
+  workersize: 2
+  connmsgcap: 100
