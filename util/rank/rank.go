@@ -52,19 +52,19 @@ func (r Rank) Has(tag string) bool {
 
 // HasMod checks if a Rank has a moderator tag
 func (r Rank) HasMod(tag string) bool {
-	_, ok := r[TagMod+"_"+tag]
+	_, ok := r[TagModPrefix+"_"+tag]
 	return ok
 }
 
 // HasUser checks if a Rank has a user tag
 func (r Rank) HasUser(tag string) bool {
-	_, ok := r[TagUser+"_"+tag]
+	_, ok := r[TagUserPrefix+"_"+tag]
 	return ok
 }
 
 // HasBan checks if a Rank has a ban tag
 func (r Rank) HasBan(tag string) bool {
-	_, ok := r[TagBan+"_"+tag]
+	_, ok := r[TagBanPrefix+"_"+tag]
 	return ok
 }
 
