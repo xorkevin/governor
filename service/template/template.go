@@ -14,9 +14,13 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
-		governor.Service
 		Execute(templateName string, data interface{}) (string, error)
 		ExecuteHTML(filename string, data interface{}) (string, error)
+	}
+
+	Service interface {
+		governor.Service
+		Template
 	}
 
 	service struct {
@@ -26,7 +30,7 @@ type (
 )
 
 // New creates a new Template service
-func New() Template {
+func New() Service {
 	return &service{}
 }
 

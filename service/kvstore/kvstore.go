@@ -12,8 +12,12 @@ import (
 type (
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
-		governor.Service
 		KVStore() *redis.Client
+	}
+
+	Service interface {
+		governor.Service
+		KVStore
 	}
 
 	service struct {
@@ -23,7 +27,7 @@ type (
 )
 
 // New creates a new cache service
-func New() KVStore {
+func New() Service {
 	return &service{}
 }
 

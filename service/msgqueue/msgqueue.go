@@ -18,9 +18,13 @@ const (
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
-		governor.Service
 		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
 		Publish(queueid string, msgdata []byte) error
+	}
+
+	Service interface {
+		governor.Service
+		Msgqueue
 	}
 
 	service struct {
@@ -43,7 +47,7 @@ type (
 )
 
 // New creates a new msgqueue service
-func New() (Msgqueue, error) {
+func New() (Service, error) {
 	clientid, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)

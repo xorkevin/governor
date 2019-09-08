@@ -18,8 +18,12 @@ const (
 type (
 	// Gate creates new middleware to gate routes
 	Gate interface {
-		governor.Service
 		Authenticate(v Validator, subject string) echo.MiddlewareFunc
+	}
+
+	Service interface {
+		governor.Service
+		Gate
 	}
 
 	service struct {
@@ -33,7 +37,7 @@ type (
 )
 
 // New returns a new Gate
-func New() Gate {
+func New() Service {
 	return &service{}
 }
 

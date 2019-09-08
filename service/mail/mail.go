@@ -25,8 +25,12 @@ const (
 type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
-		governor.Service
 		Send(to, subjecttpl, bodytpl string, emdata interface{}) error
+	}
+
+	Service interface {
+		governor.Service
+		Mail
 	}
 
 	service struct {
@@ -56,7 +60,7 @@ type (
 )
 
 // New creates a new mailer service
-func New(tpl template.Template, queue msgqueue.Msgqueue) Mail {
+func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 	return &service{
 		tpl:   tpl,
 		queue: queue,

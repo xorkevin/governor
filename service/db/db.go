@@ -16,8 +16,12 @@ type (
 	//
 	// DB returns the wrapped sql database instance
 	Database interface {
-		governor.Service
 		DB() *sql.DB
+	}
+
+	Service interface {
+		governor.Service
+		Database
 	}
 
 	service struct {
@@ -28,7 +32,7 @@ type (
 )
 
 // New creates a new db service
-func New() Database {
+func New() Service {
 	return &service{}
 }
 

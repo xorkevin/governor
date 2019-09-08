@@ -18,10 +18,14 @@ const (
 type (
 	// Objstore is a service wrapper around a object storage client
 	Objstore interface {
-		governor.Service
 		GetBucket(name, location string) (Bucket, error)
 		GetBucketDefLoc(name string) (Bucket, error)
 		DestroyBucket(name string) error
+	}
+
+	Service interface {
+		governor.Service
+		Objstore
 	}
 
 	service struct {
@@ -45,7 +49,7 @@ type (
 )
 
 // New creates a new object store service instance
-func New() Objstore {
+func New() Service {
 	return &service{}
 }
 
