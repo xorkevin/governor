@@ -36,19 +36,25 @@ type (
 		Health() error
 	}
 
-	serviceDef struct {
+	serviceOpt struct {
 		name string
 		url  string
-		r    Service
+	}
+
+	serviceDef struct {
+		serviceOpt
+		r Service
 	}
 )
 
 // Register adds the service to the governor Server and runs service.Register
 func (s *Server) Register(name string, url string, r Service) {
 	s.services = append(s.services, serviceDef{
-		name: name,
-		url:  url,
-		r:    r,
+		serviceOpt: serviceOpt{
+			name: name,
+			url:  url,
+		},
+		r: r,
 	})
 	r.Register(s.config.registrar(name))
 }
@@ -107,7 +113,7 @@ func (s *Server) checkHealthServices() []error {
 func (s *Server) initServices(ctx context.Context) error {
 	s.logger.Info("init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(ctx, s.config, s.config.reader(i.name), s.logger, s.i.Group(s.config.BaseURL+i.url)); err != nil {
+		if err := i.r.Init(ctx, s.config, s.config.reader(i.serviceOpt), s.logger, s.i.Group(s.config.BaseURL+i.url)); err != nil {
 			s.logger.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
 				"init":  i.name,
 				"error": err.Error(),

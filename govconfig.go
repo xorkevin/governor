@@ -114,6 +114,8 @@ func (c *Config) registrar(prefix string) ConfigRegistrar {
 type (
 	// ConfigReader gets values from the config parser
 	ConfigReader interface {
+		Name() string
+		URL() string
 		GetStrMap(key string) map[string]string
 		GetBool(key string) bool
 		GetInt(key string) int
@@ -122,39 +124,47 @@ type (
 	}
 
 	configReader struct {
-		prefix string
-		v      *viper.Viper
+		serviceOpt
+		v *viper.Viper
 	}
 )
 
+func (r *configReader) Name() string {
+	return r.name
+}
+
+func (r *configReader) URL() string {
+	return r.url
+}
+
 func (r *configReader) GetStrMap(key string) map[string]string {
 	if key == "" {
-		key = r.prefix
+		key = r.name
 	} else {
-		key = r.prefix + "." + key
+		key = r.name + "." + key
 	}
 	return r.v.GetStringMapString(key)
 }
 
 func (r *configReader) GetBool(key string) bool {
-	return r.v.GetBool(r.prefix + "." + key)
+	return r.v.GetBool(r.name + "." + key)
 }
 
 func (r *configReader) GetInt(key string) int {
-	return r.v.GetInt(r.prefix + "." + key)
+	return r.v.GetInt(r.name + "." + key)
 }
 
 func (r *configReader) GetStr(key string) string {
-	return r.v.GetString(r.prefix + "." + key)
+	return r.v.GetString(r.name + "." + key)
 }
 
 func (r *configReader) GetStrSlice(key string) []string {
-	return r.v.GetStringSlice(r.prefix + "." + key)
+	return r.v.GetStringSlice(r.name + "." + key)
 }
 
-func (c *Config) reader(prefix string) ConfigReader {
+func (c *Config) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
-		prefix: prefix,
-		v:      c.config,
+		serviceOpt: opt,
+		v:          c.config,
 	}
 }
