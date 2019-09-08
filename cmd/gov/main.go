@@ -10,7 +10,11 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
+	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/service/user/session/model"
 )
 
 var (
@@ -40,6 +44,10 @@ func main() {
 	templateService := template.New()
 	mailService := mail.New(templateService, msgqueueService)
 	gateService := gate.New()
+	roleModel := rolemodel.New(dbService)
+	userModel := usermodel.New(dbService, roleModel)
+	sessionModel := sessionmodel.New(dbService)
+	userService := user.New(userModel, roleModel, sessionModel, kvService, mailService, gateService)
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)
@@ -48,6 +56,7 @@ func main() {
 	gov.Register("template", "/null", templateService)
 	gov.Register("mail", "/null", mailService)
 	gov.Register("gate", "/null", gateService)
+	gov.Register("user", "/u", userService)
 
 	gov.Start()
 }

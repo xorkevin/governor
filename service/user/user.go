@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/gate"
@@ -43,7 +42,6 @@ type (
 		kv                kvstore.KVStore
 		mailer            mail.Mail
 		gate              gate.Gate
-		cc                cachecontrol.CacheControl
 		tokenizer         *token.Tokenizer
 		logger            governor.Logger
 		baseURL           string
@@ -86,7 +84,7 @@ const (
 )
 
 // New creates a new User
-func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, mailer mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
+func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, mailer mail.Mail, g gate.Gate) Service {
 	return &service{
 		users:             users,
 		roles:             roles,
@@ -94,7 +92,6 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		kv:                kv,
 		mailer:            mailer,
 		gate:              g,
-		cc:                cc,
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
@@ -163,15 +160,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.tokenizer = token.New(conf["secret"], conf["issuer"])
 
-	l.Info("init user service", map[string]string{
-		"user: accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
-		"user: refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
-		"user: refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
-		"user: confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
-		"user: passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
-		"user: newloginemail":         strconv.FormatBool(s.newLoginEmail),
-		"user: passwordminsize":       strconv.Itoa(s.passwordMinSize),
-		"user: issuer":                conf["issuer"],
+	l.Info("user: loaded config", map[string]string{
+		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
+		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
+		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
+		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
+		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
+		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
+		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
+		"issuer":                conf["issuer"],
 	})
 
 	router := s.router()
@@ -181,7 +178,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err := router.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
 		return err
 	}
-	l.Info("user: mount http routes", nil)
+	l.Info("user: mounted http routes", nil)
 	return nil
 }
 

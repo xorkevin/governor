@@ -5,7 +5,6 @@ import (
 	"github.com/labstack/echo"
 	"net/http"
 	"strconv"
-	"xorkevin.dev/governor"
 )
 
 type (
@@ -20,8 +19,7 @@ type (
 )
 
 // New creates a new cache control service
-func New(config governor.Config, l governor.Logger) CacheControl {
-	l.Info("initialize cache control service", nil)
+func New() CacheControl {
 	return &cacheControl{}
 }
 

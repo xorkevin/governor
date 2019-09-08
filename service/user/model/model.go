@@ -1,7 +1,6 @@
 package usermodel
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -50,7 +49,7 @@ type (
 	}
 
 	repo struct {
-		db       *sql.DB
+		db       db.Database
 		rolerepo rolemodel.Repo
 		hasher   *hunter2.ScryptHasher
 		verifier *hunter2.Verifier
@@ -79,15 +78,13 @@ type (
 )
 
 // New creates a new user repository
-func New(conf governor.Config, l governor.Logger, database db.Database, rolerepo rolemodel.Repo) Repo {
-	l.Info("initialize user repo", nil)
-
+func New(database db.Database, rolerepo rolemodel.Repo) Repo {
 	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.NewScryptDefaultConfig())
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		db:       database.DB(),
+		db:       database,
 		rolerepo: rolerepo,
 		hasher:   hasher,
 		verifier: verifier,
@@ -157,7 +154,7 @@ func (r *repo) GetRoles(m *Model) error {
 
 // GetGroup gets information from each user
 func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
-	m, err := userModelGetInfoOrdUserid(r.db, true, limit, offset)
+	m, err := userModelGetInfoOrdUserid(r.db.DB(), true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user info", http.StatusInternalServerError, err)
 	}
@@ -166,7 +163,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, error) {
-	m, err := userModelGetInfoSetUserid(r.db, userids)
+	m, err := userModelGetInfoSetUserid(r.db.DB(), userids)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user info of userids", http.StatusInternalServerError, err)
 	}
@@ -183,7 +180,7 @@ func (r *repo) getApplyRoles(m *Model) (*Model, error) {
 // GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGet(r.db, userid); err != nil {
+	if mUser, code, err := userModelGet(r.db.DB(), userid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
 		}
@@ -197,7 +194,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGetModelByUsername(r.db, username); err != nil {
+	if mUser, code, err := userModelGetModelByUsername(r.db.DB(), username); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that username", http.StatusNotFound, err)
 		}
@@ -211,7 +208,7 @@ func (r *repo) GetByUsername(username string) (*Model, error) {
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGetModelByEmail(r.db, email); err != nil {
+	if mUser, code, err := userModelGetModelByEmail(r.db.DB(), email); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that email", http.StatusNotFound, err)
 		}
@@ -235,7 +232,7 @@ func (r *repo) insertRoles(m *Model) error {
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	if code, err := userModelInsert(r.db, m); err != nil {
+	if code, err := userModelInsert(r.db.DB(), m); err != nil {
 		if code == 3 {
 			return governor.NewError("User id must be unique", http.StatusBadRequest, err)
 		}
@@ -273,7 +270,7 @@ func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := userModelUpdate(r.db, m); err != nil {
+	if err := userModelUpdate(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to update user", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -285,7 +282,7 @@ func (r *repo) Delete(m *Model) error {
 		return governor.NewError("Failed to delete user roles", http.StatusInternalServerError, err)
 	}
 
-	if err := userModelDelete(r.db, m); err != nil {
+	if err := userModelDelete(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to delete user", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -293,7 +290,7 @@ func (r *repo) Delete(m *Model) error {
 
 // Setup creates a new User table
 func (r *repo) Setup() error {
-	if err := userModelSetup(r.db); err != nil {
+	if err := userModelSetup(r.db.DB()); err != nil {
 		return governor.NewError("Failed to setup user model", http.StatusInternalServerError, err)
 	}
 	return nil

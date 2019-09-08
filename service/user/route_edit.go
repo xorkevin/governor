@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/labstack/echo"
 	"net/http"
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
