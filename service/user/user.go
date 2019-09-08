@@ -1,13 +1,14 @@
 package user
 
 import (
+	"context"
 	"fmt"
 	"github.com/labstack/echo"
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/cache"
 	"xorkevin.dev/governor/service/cachecontrol"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
@@ -25,24 +26,25 @@ type (
 	// User is a user management service
 	User interface {
 		GetByID(userid string) (*ResUserGet, error)
+		RegisterHook(hook Hook)
 	}
 
 	// Service is the public interface for the user service server
 	Service interface {
 		governor.Service
 		User
-		RegisterHook(hook Hook)
 	}
 
-	userService struct {
-		config            governor.Config
-		logger            governor.Logger
-		repo              usermodel.Repo
-		rolerepo          rolemodel.Repo
-		sessionrepo       sessionmodel.Repo
-		cache             cache.Cache
-		tokenizer         *token.Tokenizer
+	service struct {
+		users             usermodel.Repo
+		roles             rolemodel.Repo
+		sessions          sessionmodel.Repo
+		kv                kvstore.KVStore
 		mailer            mail.Mail
+		gate              gate.Gate
+		cc                cachecontrol.CacheControl
+		tokenizer         *token.Tokenizer
+		logger            governor.Logger
 		accessTime        int64
 		refreshTime       int64
 		refreshCacheTime  int64
@@ -50,13 +52,11 @@ type (
 		passwordResetTime int64
 		newLoginEmail     bool
 		passwordMinSize   int
-		gate              gate.Gate
-		cc                cachecontrol.CacheControl
 		hooks             []Hook
 	}
 
-	userRouter struct {
-		service userService
+	router struct {
+		s service
 	}
 
 	// HookProps are properties of the user passed on to each hook
@@ -79,135 +79,150 @@ const (
 	time5m     int64 = 300
 	time24h    int64 = 86400
 	time6month int64 = time24h * 365 / 2
-	b1               = 1000000000
+	b1               = 1_000_000_000
 )
 
 // New creates a new User
-func New(conf governor.Config, l governor.Logger, repo usermodel.Repo, rolerepo rolemodel.Repo, sessionrepo sessionmodel.Repo, ch cache.Cache, m mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
-	c := conf.Conf()
-	ca := c.GetStringMapString("userauth")
-	cu := c.GetStringMapString("user")
-	accessTime := time5m
-	refreshTime := time6month
-	refreshCacheTime := time24h
-	confirmTime := time24h
-	passwordResetTime := time24h
-	if duration, err := time.ParseDuration(ca["duration"]); err != nil {
-		l.Warn(fmt.Sprintf("auth: fail to parse access duration: %s", ca["duration"]), nil)
-	} else {
-		accessTime = duration.Nanoseconds() / b1
-	}
-	if duration, err := time.ParseDuration(ca["refresh_duration"]); err != nil {
-		l.Warn(fmt.Sprintf("auth: fail to parse refresh_duration: %s", ca["refresh_duration"]), nil)
-	} else {
-		refreshTime = duration.Nanoseconds() / b1
-	}
-	if duration, err := time.ParseDuration(ca["refresh_cache_duration"]); err != nil {
-		l.Warn(fmt.Sprintf("auth: fail to parse refresh_cache_duration: %s", ca["refresh_cache_duration"]), nil)
-	} else {
-		refreshCacheTime = duration.Nanoseconds() / b1
-	}
-	if duration, err := time.ParseDuration(cu["confirm_duration"]); err != nil {
-		l.Warn(fmt.Sprintf("auth: fail to parse confirm_duration: %s", ca["confirm_duration"]), nil)
-	} else {
-		confirmTime = duration.Nanoseconds() / b1
-	}
-	if duration, err := time.ParseDuration(cu["password_reset_duration"]); err != nil {
-		l.Warn(fmt.Sprintf("auth: fail to parse password_reset_duration: %s", ca["password_reset_duration"]), nil)
-	} else {
-		passwordResetTime = duration.Nanoseconds() / b1
-	}
-	l.Info("initialize user service", map[string]string{
-		"auth: duration (s)":                strconv.FormatInt(accessTime, 10),
-		"auth: refresh_duration (s)":        strconv.FormatInt(refreshTime, 10),
-		"auth: refresh_cache_duration (s)":  strconv.FormatInt(refreshCacheTime, 10),
-		"auth: confirm_duration (s)":        strconv.FormatInt(confirmTime, 10),
-		"auth: password_reset_duration (s)": strconv.FormatInt(passwordResetTime, 10),
-		"auth: issuer":                      ca["issuer"],
-		"user: new_login_email":             strconv.FormatBool(c.GetBool("user.new_login_email")),
-		"user: password_min_size":           strconv.Itoa(c.GetInt("user.password_min_size")),
-	})
-
-	return &userService{
-		config:            conf,
-		logger:            l,
-		repo:              repo,
-		rolerepo:          rolerepo,
-		sessionrepo:       sessionrepo,
-		cache:             ch,
-		mailer:            m,
-		tokenizer:         token.New(ca["secret"], ca["issuer"]),
-		accessTime:        accessTime,
-		refreshTime:       refreshTime,
-		refreshCacheTime:  refreshCacheTime,
-		confirmTime:       confirmTime,
-		passwordResetTime: passwordResetTime,
-		newLoginEmail:     c.GetBool("user.new_login_email"),
-		passwordMinSize:   c.GetInt("user.password_min_size"),
+func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, mailer mail.Mail, g gate.Gate, cc cachecontrol.CacheControl) Service {
+	return &service{
+		users:             users,
+		roles:             roles,
+		sessions:          sessions,
+		kv:                kv,
+		mailer:            mailer,
 		gate:              g,
 		cc:                cc,
+		accessTime:        time5m,
+		refreshTime:       time6month,
+		refreshCacheTime:  time24h,
+		confirmTime:       time24h,
+		passwordResetTime: time24h,
 		hooks:             []Hook{},
 	}
 }
 
-func (u *userService) newRouter() *userRouter {
-	return &userRouter{
-		service: *u,
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("accesstime", "5m")
+	r.SetDefault("refreshtime", "4380h")
+	r.SetDefault("refreshcache", "24h")
+	r.SetDefault("confirmtime", "24h")
+	r.SetDefault("passwordresettime", "24h")
+	r.SetDefault("newloginemail", true)
+	r.SetDefault("passwordminsize", 8)
+	r.SetDefault("secret", "")
+	r.SetDefault("issuer", "governor")
+}
+
+func (s *service) router() *router {
+	return &router{
+		s: *s,
 	}
 }
 
-// Mount is a collection of routes for accessing and modifying user data
-func (u *userService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	ur := u.newRouter()
-	if err := ur.mountRoute(conf, r.Group("/user")); err != nil {
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	conf := r.GetStrMap("")
+
+	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
+		l.Warn(fmt.Sprintf("user: fail to parse access time: %s", conf["accesstime"]), nil)
+	} else {
+		s.accessTime = t.Nanoseconds() / b1
+	}
+	if t, err := time.ParseDuration(conf["refreshtime"]); err != nil {
+		l.Warn(fmt.Sprintf("user: fail to parse refresh time: %s", conf["refreshtime"]), nil)
+	} else {
+		s.refreshTime = t.Nanoseconds() / b1
+	}
+	if t, err := time.ParseDuration(conf["refreshcache"]); err != nil {
+		l.Warn(fmt.Sprintf("user: fail to parse refresh cache: %s", conf["refreshcache"]), nil)
+	} else {
+		s.refreshCacheTime = t.Nanoseconds() / b1
+	}
+	if t, err := time.ParseDuration(conf["confirmtime"]); err != nil {
+		l.Warn(fmt.Sprintf("user: fail to parse confirm time: %s", conf["confirmtime"]), nil)
+	} else {
+		s.confirmTime = t.Nanoseconds() / b1
+	}
+	if t, err := time.ParseDuration(conf["passwordresettime"]); err != nil {
+		l.Warn(fmt.Sprintf("user: fail to parse password reset time: %s", conf["passwordresettime"]), nil)
+	} else {
+		s.passwordResetTime = t.Nanoseconds() / b1
+	}
+	s.newLoginEmail = r.GetBool("newloginemail")
+	s.passwordMinSize = r.GetInt("passwordminsize")
+	if conf["secret"] == "" {
+		s.logger.Warn("gate: token secret is not set", nil)
+	}
+	if conf["issuer"] == "" {
+		s.logger.Warn("gate: token issuer is not set", nil)
+	}
+	s.tokenizer = token.New(conf["secret"], conf["issuer"])
+
+	l.Info("init user service", map[string]string{
+		"user: accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
+		"user: refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
+		"user: refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
+		"user: confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
+		"user: passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
+		"user: newloginemail":         strconv.FormatBool(s.newLoginEmail),
+		"user: passwordminsize":       strconv.Itoa(s.passwordMinSize),
+		"user: issuer":                conf["issuer"],
+	})
+
+	router := s.router()
+	if err := router.mountRoute(c, g.Group("/user")); err != nil {
 		return err
 	}
-	if err := ur.mountAuth(conf, r.Group("/auth")); err != nil {
+	if err := router.mountAuth(conf, g.Group("/auth")); err != nil {
 		return err
 	}
-	l.Info("mount user service", nil)
+	l.Info("user: mount http routes", nil)
 	return nil
 }
 
-// Health is a check for service health
-func (u *userService) Health() error {
-	return nil
-}
-
-// Setup is run on service setup
-func (u *userService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	madmin, err := u.repo.New(rsetup.Username, rsetup.Password, rsetup.Email, rsetup.Firstname, rsetup.Lastname, rank.Admin())
+func (s *service) Setup(req governor.ReqSetup) error {
+	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname, rank.Admin())
 	if err != nil {
 		return err
 	}
 
-	if err := u.repo.Setup(); err != nil {
+	if err := s.users.Setup(); err != nil {
 		return err
 	}
-	l.Info("create user table", nil)
+	s.logger.Info("create user table", nil)
 
-	if err := u.rolerepo.Setup(); err != nil {
+	if err := s.roles.Setup(); err != nil {
 		return err
 	}
-	l.Info("create userrole table", nil)
+	s.logger.Info("create userrole table", nil)
 
-	if err := u.sessionrepo.Setup(); err != nil {
+	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	l.Info("create usersession table", nil)
+	s.logger.Info("create usersession table", nil)
 
-	if err := u.repo.Insert(madmin); err != nil {
+	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
-	l.Info("insert new setup admin", map[string]string{
+	s.logger.Info("insert new setup admin", map[string]string{
 		"username": madmin.Username,
 		"userid":   madmin.Userid,
 	})
+	return nil
+}
 
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
 	return nil
 }
 
 // RegisterHook adds a hook to the user create and destroy pipelines
-func (u *userService) RegisterHook(hook Hook) {
-	u.hooks = append(u.hooks, hook)
+func (s *service) RegisterHook(hook Hook) {
+	s.hooks = append(s.hooks, hook)
 }

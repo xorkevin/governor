@@ -5,7 +5,7 @@ import (
 	"xorkevin.dev/governor"
 )
 
-func (u *userRouter) mountRoute(conf governor.Config, r *echo.Group) error {
+func (r *router) mountRoute(conf governor.Config, r *echo.Group) error {
 	if err := u.mountGet(conf, r); err != nil {
 		return err
 	}

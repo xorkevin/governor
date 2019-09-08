@@ -45,17 +45,16 @@ mail:
 gate:
   issuer: governor
   secret: secret
-userauth:
+user:
+  accesstime: 5m
+  refreshtime: 4380h
+  refreshcache: 24h
+  confirmtime: 24h
+  passwordresettime: 24h
+  newloginemail: true
+  passwordminsize: 8
   issuer: governor
   secret: secret
-  duration: 15m
-  refresh_duration: 4380h
-  refresh_cache_duration: 24h
-user:
-  confirm_duration: 1h
-  password_reset_duration: 1h
-  new_login_email: true
-  password_min_size: 8
 courier:
   fallback_link: http://localhost:8080
   link_prefix: http://localhost:8080/link
