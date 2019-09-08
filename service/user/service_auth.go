@@ -46,15 +46,15 @@ type (
 )
 
 // Login authenticates a user and returns auth tokens
-func (u *userService) Login(userid, password, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
-	m, err := u.repo.GetByID(userid)
+func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Invalid password", http.StatusUnauthorized, nil)
 		}
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	}
-	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+	if ok, err := s.users.ValidatePass(password, m); err != nil {
 		return nil, governor.NewError("Failed to validate password", http.StatusInternalServerError, err)
 	} else if !ok {
 		return nil, governor.NewErrorUser("Invalid password", http.StatusUnauthorized, nil)
@@ -63,7 +63,7 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 	sessionExists := false
 	var sm *sessionmodel.Model
 	if len(sessionID) > 0 {
-		if m, err := u.sessionrepo.GetByID(sessionID); err != nil {
+		if m, err := s.sessions.GetByID(sessionID); err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
 			} else {
 				return nil, governor.NewError("Failed to get user session", http.StatusInternalServerError, err)
@@ -76,14 +76,14 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 
 	sessionKey := ""
 	if sm == nil {
-		m, key, err := u.sessionrepo.New(userid, ipaddr, useragent)
+		m, key, err := s.sessions.New(userid, ipaddr, useragent)
 		if err != nil {
 			return nil, governor.NewError("Failed to create user session", http.StatusInternalServerError, err)
 		}
 		sm = m
 		sessionKey = key
 	} else {
-		key, err := u.sessionrepo.RehashKey(sm)
+		key, err := s.sessions.RehashKey(sm)
 		if err != nil {
 			return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 		}
@@ -91,17 +91,17 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(m, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
 
-	if u.newLoginEmail && !sessionExists {
+	if s.newLoginEmail && !sessionExists {
 		emdata := emailNewLogin{
 			FirstName: m.FirstName,
 			Username:  m.Username,
@@ -110,22 +110,22 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 			Time:      time.Unix(sm.Time, 0).String(),
 			UserAgent: sm.UserAgent,
 		}
-		if err := u.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
-			u.logger.Error("fail send new login email", map[string]string{
+		if err := s.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
+			s.logger.Error("fail send new login email", map[string]string{
 				"err": err.Error(),
 			})
 		}
 	}
 
-	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshCacheTime*b1)).Err(); err != nil {
+	if err := s.kv.KVStore().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(s.refreshCacheTime)*time.Second).Err(); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 	if !sessionExists {
-		if err := u.sessionrepo.Insert(sm); err != nil {
+		if err := s.sessions.Insert(sm); err != nil {
 			return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 		}
 	} else {
-		if err := u.sessionrepo.Update(sm); err != nil {
+		if err := s.sessions.Update(sm); err != nil {
 			return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 		}
 	}
@@ -140,16 +140,16 @@ func (u *userService) Login(userid, password, sessionID, ipaddr, useragent strin
 }
 
 // ExchangeToken validates a refresh token and returns an auth token
-func (u *userService) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := u.tokenizer.Validate(refreshToken, refreshSubject)
+func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
+	validToken, claims := s.tokenizer.Validate(refreshToken, refreshSubject)
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	keyhash, err := u.cache.Cache().Get(cachePrefixSession + claims.ID).Result()
+	keyhash, err := s.kv.KVStore().Get(cachePrefixSession + claims.ID).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return u.RefreshToken(refreshToken, ipaddr, useragent)
+			return s.RefreshToken(refreshToken, ipaddr, useragent)
 		}
 		return nil, governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
 	}
@@ -157,11 +157,11 @@ func (u *userService) ExchangeToken(refreshToken, ipaddr, useragent string) (*re
 	k := sessionmodel.Model{
 		KeyHash: keyhash,
 	}
-	if ok, err := u.sessionrepo.ValidateKey(claims.Key, &k); err != nil || !ok {
+	if ok, err := s.sessions.ValidateKey(claims.Key, &k); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, accessClaims, err := u.tokenizer.GenerateFromClaims(claims, u.accessTime, authenticationSubject, "")
+	accessToken, accessClaims, err := s.tokenizer.GenerateFromClaims(claims, s.accessTime, authenticationSubject, "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -174,23 +174,23 @@ func (u *userService) ExchangeToken(refreshToken, ipaddr, useragent string) (*re
 }
 
 // RefreshToken invalidates the previous refresh token and creates a new one
-func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := u.tokenizer.Validate(refreshToken, refreshSubject)
+func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
+	validToken, claims := s.tokenizer.Validate(refreshToken, refreshSubject)
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	sm, err := u.sessionrepo.GetByID(claims.ID)
+	sm, err := s.sessions.GetByID(claims.ID)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 		}
 		return nil, governor.NewError("Failed to get session", http.StatusInternalServerError, err)
 	}
-	if ok, err := u.sessionrepo.ValidateKey(claims.Key, sm); err != nil || !ok {
+	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
-	m, err := u.repo.GetByID(claims.Userid)
+	m, err := s.users.GetByID(claims.Userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
@@ -198,24 +198,24 @@ func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*res
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	}
 
-	sessionKey, err := u.sessionrepo.RehashKey(sm)
+	sessionKey, err := s.sessions.RehashKey(sm)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := u.tokenizer.Generate(m, u.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
-	newRefreshToken, _, err := u.tokenizer.Generate(m, u.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(m, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
 
-	if err := u.cache.Cache().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(u.refreshCacheTime*b1)).Err(); err != nil {
+	if err := s.kv.KVStore().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(s.refreshCacheTime)*time.Second).Err(); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
-	if err := u.sessionrepo.Update(sm); err != nil {
+	if err := s.sessions.Update(sm); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 
@@ -229,29 +229,29 @@ func (u *userService) RefreshToken(refreshToken, ipaddr, useragent string) (*res
 }
 
 // Logout removes the user session in cache
-func (u *userService) Logout(refreshToken string) error {
+func (s *service) Logout(refreshToken string) error {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
-	okToken, claims := u.tokenizer.GetClaims(refreshToken, refreshSubject)
+	okToken, claims := s.tokenizer.GetClaims(refreshToken, refreshSubject)
 	if !okToken {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	sm, err := u.sessionrepo.GetByID(claims.ID)
+	sm, err := s.sessions.GetByID(claims.ID)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 		}
 		return governor.NewError("Failed to get session", http.StatusInternalServerError, err)
 	}
-	if ok, err := u.sessionrepo.ValidateKey(claims.Key, sm); err != nil || !ok {
+	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	if err := u.cache.Cache().Del(cachePrefixSession + claims.ID).Err(); err != nil {
+	if err := s.kv.KVStore().Del(cachePrefixSession + claims.ID).Err(); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
-	if err := u.sessionrepo.Delete(sm); err != nil {
+	if err := s.sessions.Delete(sm); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
 

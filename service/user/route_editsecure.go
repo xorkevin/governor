@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/labstack/echo"
 	"net/http"
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -17,17 +16,17 @@ type (
 	}
 )
 
-func (u *userRouter) putEmail(c echo.Context) error {
-	ruser := reqUserPutEmail{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) putEmail(c echo.Context) error {
+	req := reqUserPutEmail{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	ruser.Userid = c.Get("userid").(string)
-	if err := ruser.valid(); err != nil {
+	req.Userid = c.Get("userid").(string)
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.UpdateEmail(ruser.Userid, ruser.Email, ruser.Password); err != nil {
+	if err := r.s.UpdateEmail(req.Userid, req.Email, req.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -40,16 +39,16 @@ type (
 	}
 )
 
-func (u *userRouter) putEmailVerify(c echo.Context) error {
-	ruser := reqUserPutEmailVerify{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) putEmailVerify(c echo.Context) error {
+	req := reqUserPutEmailVerify{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.CommitEmail(ruser.Key, ruser.Password); err != nil {
+	if err := r.s.CommitEmail(req.Key, req.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -63,18 +62,18 @@ type (
 	}
 )
 
-func (u *userRouter) putPassword(c echo.Context) error {
+func (r *router) putPassword(c echo.Context) error {
 
-	ruser := reqUserPutPassword{}
-	if err := c.Bind(&ruser); err != nil {
+	req := reqUserPutPassword{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	ruser.Userid = c.Get("userid").(string)
-	if err := ruser.valid(); err != nil {
+	req.Userid = c.Get("userid").(string)
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.UpdatePassword(ruser.Userid, ruser.NewPassword, ruser.OldPassword); err != nil {
+	if err := r.s.UpdatePassword(req.Userid, req.NewPassword, req.OldPassword); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -90,17 +89,17 @@ func (r *reqForgotPassword) valid() (bool, error) {
 	return validhasUsernameOrEmail(r.Username)
 }
 
-func (u *userRouter) forgotPassword(c echo.Context) error {
-	ruser := reqForgotPassword{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) forgotPassword(c echo.Context) error {
+	req := reqForgotPassword{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	isEmail, err := ruser.valid()
+	isEmail, err := req.valid()
 	if err != nil {
 		return err
 	}
 
-	if err := u.service.ForgotPassword(ruser.Username, isEmail); err != nil {
+	if err := r.s.ForgotPassword(req.Username, isEmail); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -113,26 +112,26 @@ type (
 	}
 )
 
-func (u *userRouter) forgotPasswordReset(c echo.Context) error {
-	ruser := reqForgotPasswordReset{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) forgotPasswordReset(c echo.Context) error {
+	req := reqForgotPasswordReset{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.ResetPassword(ruser.Key, ruser.NewPassword); err != nil {
+	if err := r.s.ResetPassword(req.Key, req.NewPassword); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) mountEditSecure(conf governor.Config, r *echo.Group) error {
-	r.PUT("/email", u.putEmail, gate.User(u.service.gate))
-	r.PUT("/email/verify", u.putEmailVerify)
-	r.PUT("/password", u.putPassword, gate.User(u.service.gate))
-	r.PUT("/password/forgot", u.forgotPassword)
-	r.PUT("/password/forgot/reset", u.forgotPasswordReset)
+func (r *router) mountEditSecure(debugMode bool, g *echo.Group) error {
+	g.PUT("/email", r.putEmail, gate.User(r.s.gate))
+	g.PUT("/email/verify", r.putEmailVerify)
+	g.PUT("/password", r.putPassword, gate.User(r.s.gate))
+	g.PUT("/password/forgot", r.forgotPassword)
+	g.PUT("/password/forgot/reset", r.forgotPasswordReset)
 	return nil
 }

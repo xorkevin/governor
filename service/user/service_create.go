@@ -39,8 +39,8 @@ const (
 )
 
 // CreateUser creates a new user and places it into the cache
-func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
-	m2, err := u.repo.GetByUsername(ruser.Username)
+func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
+	m2, err := s.users.GetByUsername(ruser.Username)
 	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, governor.NewErrorUser("Username is already taken", http.StatusBadRequest, nil)
 	}
 
-	m2, err = u.repo.GetByEmail(ruser.Email)
+	m2, err = s.users.GetByEmail(ruser.Email)
 	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, governor.NewErrorUser("Email is already used by another account", http.StatusBadRequest, nil)
 	}
 
-	m, err := u.repo.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName, rank.BaseUser())
+	m, err := s.users.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName, rank.BaseUser())
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	}
 	sessionKey := key.Base64()
 
-	if err := u.cache.Cache().Set(cachePrefixNewUser+sessionKey, b.String(), time.Duration(u.confirmTime*b1)).Err(); err != nil {
+	if err := s.kv.KVStore().Set(cachePrefixNewUser+sessionKey, b.String(), time.Duration(s.confirmTime)*time.Second).Err(); err != nil {
 		return nil, governor.NewError("Failed to store user info", http.StatusInternalServerError, err)
 	}
 
@@ -81,7 +81,7 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		Username:  m.Username,
 		Key:       sessionKey,
 	}
-	if err := u.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
+	if err := s.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
 		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
 
@@ -92,19 +92,19 @@ func (u *userService) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 }
 
 // CommitUser takes a user from the cache and places it into the db
-func (u *userService) CommitUser(key string) (*resUserUpdate, error) {
-	gobUser, err := u.cache.Cache().Get(cachePrefixNewUser + key).Result()
+func (s *service) CommitUser(key string) (*resUserUpdate, error) {
+	gobUser, err := s.kv.KVStore().Get(cachePrefixNewUser + key).Result()
 	if err != nil {
 		return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
 	}
 
-	m := u.repo.NewEmpty()
+	m := s.users.NewEmpty()
 	b := bytes.NewBufferString(gobUser)
 	if err := gob.NewDecoder(b).Decode(&m); err != nil {
 		return nil, governor.NewError("Failed to decode user info", http.StatusInternalServerError, err)
 	}
 
-	if err := u.repo.Insert(&m); err != nil {
+	if err := s.users.Insert(&m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
@@ -119,21 +119,21 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, error) {
 		LastName:  m.LastName,
 	}
 
-	for _, i := range u.hooks {
+	for _, i := range s.hooks {
 		if err := i.UserCreateHook(hookProps); err != nil {
-			u.logger.Error("userhook create error", map[string]string{
+			s.logger.Error("userhook create error", map[string]string{
 				"err": err.Error(),
 			})
 		}
 	}
 
-	if err := u.cache.Cache().Del(cachePrefixNewUser + key).Err(); err != nil {
-		u.logger.Error("Failed to clean up user create cache data", map[string]string{
+	if err := s.kv.KVStore().Del(cachePrefixNewUser + key).Err(); err != nil {
+		s.logger.Error("Failed to clean up user create cache data", map[string]string{
 			"err": err.Error(),
 		})
 	}
 
-	u.logger.Info("create user", map[string]string{
+	s.logger.Info("create user", map[string]string{
 		"userid":   m.Userid,
 		"username": m.Username,
 	})
@@ -144,8 +144,8 @@ func (u *userService) CommitUser(key string) (*resUserUpdate, error) {
 	}, nil
 }
 
-func (u *userService) DeleteUser(userid string, username string, password string) error {
-	m, err := u.repo.GetByID(userid)
+func (s *service) DeleteUser(userid string, username string, password string) error {
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -159,23 +159,23 @@ func (u *userService) DeleteUser(userid string, username string, password string
 	if m.AuthTags.Has("admin") {
 		return governor.NewErrorUser("Not allowed to delete admin user", http.StatusForbidden, err)
 	}
-	if ok, err := u.repo.ValidatePass(password, m); err != nil {
+	if ok, err := s.users.ValidatePass(password, m); err != nil {
 		return err
 	} else if !ok {
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
-	if err := u.KillAllSessions(userid); err != nil {
+	if err := s.KillAllSessions(userid); err != nil {
 		return err
 	}
 
-	if err := u.repo.Delete(m); err != nil {
+	if err := s.users.Delete(m); err != nil {
 		return err
 	}
 
-	for _, i := range u.hooks {
+	for _, i := range s.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
-			u.logger.Error("userhook delete error", map[string]string{
+			s.logger.Error("userhook delete error", map[string]string{
 				"err": err.Error(),
 			})
 		}

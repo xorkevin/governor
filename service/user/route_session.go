@@ -10,14 +10,14 @@ import (
 
 //go:generate forge validation -o validation_session_gen.go reqUserRmSessions
 
-func (u *userRouter) getSessions(c echo.Context) error {
-	ruser := reqUserGetID{
+func (r *router) getSessions(c echo.Context) error {
+	req := reqUserGetID{
 		Userid: c.Get("userid").(string),
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
-	res, err := u.service.GetUserSessions(ruser.Userid)
+	res, err := r.s.GetUserSessions(req.Userid)
 	if err != nil {
 		return err
 	}
@@ -39,27 +39,27 @@ func (r *reqUserRmSessions) validUserid() error {
 	return nil
 }
 
-func (u *userRouter) killSessions(c echo.Context) error {
-	ruser := reqUserRmSessions{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) killSessions(c echo.Context) error {
+	req := reqUserRmSessions{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	ruser.Userid = c.Get("userid").(string)
-	if err := ruser.valid(); err != nil {
+	req.Userid = c.Get("userid").(string)
+	if err := req.valid(); err != nil {
 		return err
 	}
-	if err := ruser.validUserid(); err != nil {
+	if err := req.validUserid(); err != nil {
 		return err
 	}
 
-	if err := u.service.KillSessions(ruser.SessionIDs); err != nil {
+	if err := r.s.KillSessions(req.SessionIDs); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) mountSession(conf governor.Config, r *echo.Group) error {
-	r.GET("/sessions", u.getSessions, gate.User(u.service.gate))
-	r.DELETE("/sessions", u.killSessions, gate.User(u.service.gate))
+func (r *router) mountSession(debugMode bool, g *echo.Group) error {
+	g.GET("/sessions", r.getSessions, gate.User(r.s.gate))
+	g.DELETE("/sessions", r.killSessions, gate.User(r.s.gate))
 	return nil
 }

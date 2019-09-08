@@ -7,8 +7,8 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-func (u *userService) UpdateUser(userid string, ruser reqUserPut) error {
-	m, err := u.repo.GetByID(userid)
+func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -18,13 +18,13 @@ func (u *userService) UpdateUser(userid string, ruser reqUserPut) error {
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
-	if err = u.repo.Update(m); err != nil {
+	if err = s.users.Update(m); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (u *userService) UpdateRank(userid string, updaterid string, updaterRank rank.Rank, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
+func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.Rank, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
 	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, updaterRank.Has(rank.TagAdmin)); err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 		return err
 	}
 
-	m, err := u.repo.GetByID(userid)
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -41,22 +41,22 @@ func (u *userService) UpdateRank(userid string, updaterid string, updaterRank ra
 	}
 
 	if editAddRank.Has("admin") {
-		u.logger.Info("add admin status", map[string]string{
+		s.logger.Info("add admin status", map[string]string{
 			"userid":   userid,
 			"username": m.Username,
 		})
 	}
 	if editRemoveRank.Has("admin") {
-		u.logger.Info("remove admin status", map[string]string{
+		s.logger.Info("remove admin status", map[string]string{
 			"userid":   userid,
 			"username": m.Username,
 		})
 	}
 
-	if err := u.KillAllCacheSessions(userid); err != nil {
+	if err := s.KillAllCacheSessions(userid); err != nil {
 		return err
 	}
-	if err := u.repo.UpdateRoles(m, editAddRank.ToSlice(), editRemoveRank.ToSlice()); err != nil {
+	if err := s.users.UpdateRoles(m, editAddRank.ToSlice(), editRemoveRank.ToSlice()); err != nil {
 		return err
 	}
 	return nil

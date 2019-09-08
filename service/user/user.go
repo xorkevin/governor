@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	moduleID = "user"
+	moduleID        = "user"
+	authRoutePrefix = "/auth"
 )
 
 type (
@@ -45,6 +46,8 @@ type (
 		cc                cachecontrol.CacheControl
 		tokenizer         *token.Tokenizer
 		logger            governor.Logger
+		baseURL           string
+		authURL           string
 		accessTime        int64
 		refreshTime       int64
 		refreshCacheTime  int64
@@ -123,6 +126,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.logger = l
 	conf := r.GetStrMap("")
 
+	s.baseURL = c.BaseURL
+	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
 		l.Warn(fmt.Sprintf("user: fail to parse access time: %s", conf["accesstime"]), nil)
 	} else {
@@ -170,10 +175,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	router := s.router()
-	if err := router.mountRoute(c, g.Group("/user")); err != nil {
+	if err := router.mountRoute(c.IsDebug(), g.Group("/user")); err != nil {
 		return err
 	}
-	if err := router.mountAuth(conf, g.Group("/auth")); err != nil {
+	if err := router.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
 		return err
 	}
 	l.Info("user: mount http routes", nil)

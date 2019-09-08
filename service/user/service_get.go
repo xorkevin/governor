@@ -45,8 +45,8 @@ func getUserFields(m *usermodel.Model) *ResUserGet {
 }
 
 // GetByIDPublic gets and returns the public fields of the user
-func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
-	m, err := u.repo.GetByID(userid)
+func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewError("", 0, err)
@@ -57,8 +57,8 @@ func (u *userService) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 }
 
 // GetByID gets and returns all fields of the user
-func (u *userService) GetByID(userid string) (*ResUserGet, error) {
-	m, err := u.repo.GetByID(userid)
+func (s *service) GetByID(userid string) (*ResUserGet, error) {
+	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewError("", 0, err)
@@ -69,8 +69,8 @@ func (u *userService) GetByID(userid string) (*ResUserGet, error) {
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
-func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, error) {
-	m, err := u.repo.GetByUsername(username)
+func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error) {
+	m, err := s.users.GetByUsername(username)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewError("", 0, err)
@@ -81,8 +81,8 @@ func (u *userService) GetByUsernamePublic(username string) (*ResUserGetPublic, e
 }
 
 // GetByUsername gets and returns all fields of the user
-func (u *userService) GetByUsername(username string) (*ResUserGet, error) {
-	m, err := u.repo.GetByUsername(username)
+func (s *service) GetByUsername(username string) (*ResUserGet, error) {
+	m, err := s.users.GetByUsername(username)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewError("", 0, err)
@@ -93,8 +93,8 @@ func (u *userService) GetByUsername(username string) (*ResUserGet, error) {
 }
 
 // GetByEmail gets and returns all fields of the user
-func (u *userService) GetByEmail(email string) (*ResUserGet, error) {
-	m, err := u.repo.GetByEmail(email)
+func (s *service) GetByEmail(email string) (*ResUserGet, error) {
+	m, err := s.users.GetByEmail(email)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewError("", 0, err)
@@ -117,8 +117,8 @@ type (
 )
 
 // GetInfoAll gets and returns info for all users
-func (u *userService) GetInfoAll(amount int, offset int) (*resUserInfoList, error) {
-	infoSlice, err := u.repo.GetGroup(amount, offset)
+func (s *service) GetInfoAll(amount int, offset int) (*resUserInfoList, error) {
+	infoSlice, err := s.users.GetGroup(amount, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -151,8 +151,8 @@ type (
 )
 
 // GetInfoBulkPublic gets and returns public info for users
-func (u *userService) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, error) {
-	infoSlice, err := u.repo.GetBulk(userids)
+func (s *service) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, error) {
+	infoSlice, err := s.users.GetBulk(userids)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +179,8 @@ type (
 )
 
 // GetIDsByRole retrieves a list of user ids by role
-func (u *userService) GetIDsByRole(role string, amount int, offset int) (*resUserList, error) {
-	userids, err := u.rolerepo.GetByRole(role, amount, offset)
+func (s *service) GetIDsByRole(role string, amount int, offset int) (*resUserList, error) {
+	userids, err := s.roles.GetByRole(role, amount, offset)
 	if err != nil {
 		return nil, err
 	}

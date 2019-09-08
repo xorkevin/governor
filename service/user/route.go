@@ -2,23 +2,22 @@ package user
 
 import (
 	"github.com/labstack/echo"
-	"xorkevin.dev/governor"
 )
 
-func (r *router) mountRoute(conf governor.Config, r *echo.Group) error {
-	if err := u.mountGet(conf, r); err != nil {
+func (r *router) mountRoute(debugMode bool, g *echo.Group) error {
+	if err := r.mountGet(debugMode, g); err != nil {
 		return err
 	}
-	if err := u.mountSession(conf, r); err != nil {
+	if err := r.mountSession(debugMode, g); err != nil {
 		return err
 	}
-	if err := u.mountCreate(conf, r); err != nil {
+	if err := r.mountCreate(debugMode, g); err != nil {
 		return err
 	}
-	if err := u.mountEdit(conf, r); err != nil {
+	if err := r.mountEdit(debugMode, g); err != nil {
 		return err
 	}
-	if err := u.mountEditSecure(conf, r); err != nil {
+	if err := r.mountEditSecure(debugMode, g); err != nil {
 		return err
 	}
 	return nil

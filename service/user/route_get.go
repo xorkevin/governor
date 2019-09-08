@@ -17,7 +17,7 @@ type (
 	}
 )
 
-func (u *userRouter) getByID(c echo.Context) error {
+func (r *router) getByID(c echo.Context) error {
 	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -25,7 +25,7 @@ func (u *userRouter) getByID(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByIDPublic(ruser.Userid)
+	res, err := r.s.GetByIDPublic(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (u *userRouter) getByID(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByIDPersonal(c echo.Context) error {
+func (r *router) getByIDPersonal(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
 	ruser := reqUserGetID{
@@ -43,7 +43,7 @@ func (u *userRouter) getByIDPersonal(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByID(ruser.Userid)
+	res, err := r.s.GetByID(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (u *userRouter) getByIDPersonal(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByIDPrivate(c echo.Context) error {
+func (r *router) getByIDPrivate(c echo.Context) error {
 	ruser := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -59,7 +59,7 @@ func (u *userRouter) getByIDPrivate(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByID(ruser.Userid)
+	res, err := r.s.GetByID(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ type (
 	}
 )
 
-func (u *userRouter) getByUsername(c echo.Context) error {
+func (r *router) getByUsername(c echo.Context) error {
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -81,7 +81,7 @@ func (u *userRouter) getByUsername(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByUsernamePublic(ruser.Username)
+	res, err := r.s.GetByUsernamePublic(ruser.Username)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (u *userRouter) getByUsername(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
+func (r *router) getByUsernamePrivate(c echo.Context) error {
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -97,7 +97,7 @@ func (u *userRouter) getByUsernamePrivate(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByUsername(ruser.Username)
+	res, err := r.s.GetByUsername(ruser.Username)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ type (
 	}
 )
 
-func (u *userRouter) getUsersByRole(c echo.Context) error {
+func (r *router) getUsersByRole(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
 		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
@@ -132,7 +132,7 @@ func (u *userRouter) getUsersByRole(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetIDsByRole(ruser.Role, ruser.Amount, ruser.Offset)
+	res, err := r.s.GetIDsByRole(ruser.Role, ruser.Amount, ruser.Offset)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ type (
 	}
 )
 
-func (u *userRouter) getAllUserInfo(c echo.Context) error {
+func (r *router) getAllUserInfo(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
 		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
@@ -169,7 +169,7 @@ func (u *userRouter) getAllUserInfo(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetInfoAll(ruser.Amount, ruser.Offset)
+	res, err := r.s.GetInfoAll(ruser.Amount, ruser.Offset)
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ type (
 	}
 )
 
-func (u *userRouter) getUserInfoBulkPublic(c echo.Context) error {
+func (r *router) getUserInfoBulkPublic(c echo.Context) error {
 	ruser := reqGetUsers{
 		Userids: c.QueryParam("ids"),
 	}
@@ -195,7 +195,7 @@ func (u *userRouter) getUserInfoBulkPublic(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetInfoBulkPublic(strings.Split(ruser.Userids, ","))
+	res, err := r.s.GetInfoBulkPublic(strings.Split(ruser.Userids, ","))
 	if err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func (u *userRouter) getUserInfoBulkPublic(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) getByUsernameDebug(c echo.Context) error {
+func (r *router) getByUsernameDebug(c echo.Context) error {
 	ruser := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -215,7 +215,7 @@ func (u *userRouter) getByUsernameDebug(c echo.Context) error {
 		return err
 	}
 
-	res, err := u.service.GetByUsername(ruser.Username)
+	res, err := r.s.GetByUsername(ruser.Username)
 	if err != nil {
 		return err
 	}
@@ -223,17 +223,17 @@ func (u *userRouter) getByUsernameDebug(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (u *userRouter) mountGet(conf governor.Config, r *echo.Group) error {
-	r.GET("/id/:id", u.getByID)
-	r.GET("", u.getByIDPersonal, gate.User(u.service.gate))
-	r.GET("/id/:id/private", u.getByIDPrivate, gate.Admin(u.service.gate))
-	r.GET("/name/:username", u.getByUsername)
-	r.GET("/name/:username/private", u.getByUsernamePrivate, gate.Admin(u.service.gate))
-	r.GET("/role/:role", u.getUsersByRole)
-	r.GET("/all", u.getAllUserInfo, gate.Admin(u.service.gate))
-	r.GET("/ids", u.getUserInfoBulkPublic)
-	if conf.IsDebug() {
-		r.GET("/name/:username/debug", u.getByUsernameDebug)
+func (r *router) mountGet(debugMode bool, g *echo.Group) error {
+	g.GET("/id/:id", r.getByID)
+	g.GET("", r.getByIDPersonal, gate.User(r.s.gate))
+	g.GET("/id/:id/private", r.getByIDPrivate, gate.Admin(r.s.gate))
+	g.GET("/name/:username", r.getByUsername)
+	g.GET("/name/:username/private", r.getByUsernamePrivate, gate.Admin(r.s.gate))
+	g.GET("/role/:role", r.getUsersByRole)
+	g.GET("/all", r.getAllUserInfo, gate.Admin(r.s.gate))
+	g.GET("/ids", r.getUserInfoBulkPublic)
+	if debugMode {
+		g.GET("/name/:username/debug", r.getByUsernameDebug)
 	}
 	return nil
 }

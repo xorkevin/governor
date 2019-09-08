@@ -19,16 +19,16 @@ type (
 	}
 )
 
-func (u *userRouter) createUser(c echo.Context) error {
-	ruser := reqUserPost{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) createUser(c echo.Context) error {
+	req := reqUserPost{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	res, err := u.service.CreateUser(ruser)
+	res, err := r.s.CreateUser(req)
 	if err != nil {
 		return err
 	}
@@ -41,16 +41,16 @@ type (
 	}
 )
 
-func (u *userRouter) commitUser(c echo.Context) error {
-	ruser := reqUserPostConfirm{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) commitUser(c echo.Context) error {
+	req := reqUserPostConfirm{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	res, err := u.service.CommitUser(ruser.Key)
+	res, err := r.s.CommitUser(req.Key)
 	if err != nil {
 		return err
 	}
@@ -65,28 +65,28 @@ type (
 	}
 )
 
-func (u *userRouter) deleteUser(c echo.Context) error {
-	ruser := reqUserDelete{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) deleteUser(c echo.Context) error {
+	req := reqUserDelete{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if c.Param("id") != ruser.Userid {
+	if c.Param("id") != req.Userid {
 		return governor.NewErrorUser("information does not match", http.StatusBadRequest, nil)
 	}
 
-	if err := u.service.DeleteUser(ruser.Userid, ruser.Username, ruser.Password); err != nil {
+	if err := r.s.DeleteUser(req.Userid, req.Username, req.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) mountCreate(conf governor.Config, r *echo.Group) error {
-	r.POST("", u.createUser)
-	r.POST("/confirm", u.commitUser)
-	r.DELETE("/id/:id", u.deleteUser, gate.Owner(u.service.gate, "id"))
+func (r *router) mountCreate(debugMode bool, g *echo.Group) error {
+	g.POST("", r.createUser)
+	g.POST("/confirm", r.commitUser)
+	g.DELETE("/id/:id", r.deleteUser, gate.Owner(r.s.gate, "id"))
 	return nil
 }

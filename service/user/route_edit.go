@@ -19,18 +19,18 @@ type (
 	}
 )
 
-func (u *userRouter) putUser(c echo.Context) error {
+func (r *router) putUser(c echo.Context) error {
 	userid := c.Get("userid").(string)
 
-	ruser := reqUserPut{}
-	if err := c.Bind(&ruser); err != nil {
+	req := reqUserPut{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := u.service.UpdateUser(userid, ruser); err != nil {
+	if err := r.s.UpdateUser(userid, req); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -44,29 +44,29 @@ type (
 	}
 )
 
-func (u *userRouter) patchRank(c echo.Context) error {
-	ruser := reqUserPutRank{}
-	if err := c.Bind(&ruser); err != nil {
+func (r *router) patchRank(c echo.Context) error {
+	req := reqUserPutRank{}
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	ruser.Userid = c.Param("id")
-	if err := ruser.valid(); err != nil {
+	req.Userid = c.Param("id")
+	if err := req.valid(); err != nil {
 		return err
 	}
 
 	updaterClaims := c.Get("user").(*token.Claims)
 	updaterRank, _ := rank.FromStringUser(updaterClaims.AuthTags)
-	editAddRank, _ := rank.FromStringUser(ruser.Add)
-	editRemoveRank, _ := rank.FromStringUser(ruser.Remove)
+	editAddRank, _ := rank.FromStringUser(req.Add)
+	editRemoveRank, _ := rank.FromStringUser(req.Remove)
 
-	if err := u.service.UpdateRank(ruser.Userid, updaterClaims.Userid, updaterRank, editAddRank, editRemoveRank); err != nil {
+	if err := r.s.UpdateRank(req.Userid, updaterClaims.Userid, updaterRank, editAddRank, editRemoveRank); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (u *userRouter) mountEdit(conf governor.Config, r *echo.Group) error {
-	r.PUT("", u.putUser, gate.User(u.service.gate))
-	r.PATCH("/id/:id/rank", u.patchRank, gate.User(u.service.gate))
+func (r *router) mountEdit(debugMode bool, g *echo.Group) error {
+	g.PUT("", r.putUser, gate.User(r.s.gate))
+	g.PATCH("/id/:id/rank", r.patchRank, gate.User(r.s.gate))
 	return nil
 }
