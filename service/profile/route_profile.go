@@ -3,7 +3,7 @@ package profile
 import (
 	"github.com/labstack/echo"
 	"net/http"
-	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -18,7 +18,7 @@ type (
 	}
 )
 
-func (p *profileRouter) createProfile(c echo.Context) error {
+func (r *router) createProfile(c echo.Context) error {
 	rprofile := reqProfileModel{}
 	if err := c.Bind(&rprofile); err != nil {
 		return err
@@ -28,7 +28,7 @@ func (p *profileRouter) createProfile(c echo.Context) error {
 		return err
 	}
 
-	res, err := p.service.CreateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio)
+	res, err := r.s.CreateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func (p *profileRouter) createProfile(c echo.Context) error {
 	return c.JSON(http.StatusCreated, res)
 }
 
-func (p *profileRouter) updateProfile(c echo.Context) error {
+func (r *router) updateProfile(c echo.Context) error {
 	rprofile := reqProfileModel{}
 	if err := c.Bind(&rprofile); err != nil {
 		return err
@@ -46,7 +46,7 @@ func (p *profileRouter) updateProfile(c echo.Context) error {
 		return err
 	}
 
-	if err := p.service.UpdateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio); err != nil {
+	if err := r.s.UpdateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio); err != nil {
 		return err
 	}
 
@@ -59,7 +59,7 @@ type (
 	}
 )
 
-func (p *profileRouter) updateImage(c echo.Context) error {
+func (r *router) updateImage(c echo.Context) error {
 	img, thumb64, err := image.LoadJpeg(c, "image", image.Options{
 		Width:  384,
 		Height: 384,
@@ -77,14 +77,14 @@ func (p *profileRouter) updateImage(c echo.Context) error {
 		return err
 	}
 
-	if err := p.service.UpdateImage(ruser.Userid, img, imgSize, thumb64); err != nil {
+	if err := r.s.UpdateImage(ruser.Userid, img, imgSize, thumb64); err != nil {
 		return err
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (p *profileRouter) deleteProfile(c echo.Context) error {
+func (r *router) deleteProfile(c echo.Context) error {
 	rprofile := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -92,18 +92,18 @@ func (p *profileRouter) deleteProfile(c echo.Context) error {
 		return err
 	}
 
-	if err := p.service.DeleteProfile(rprofile.Userid); err != nil {
+	if err := r.s.DeleteProfile(rprofile.Userid); err != nil {
 		return err
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (p *profileRouter) getOwnProfile(c echo.Context) error {
+func (r *router) getOwnProfile(c echo.Context) error {
 	ruser := reqProfileGetID{
 		Userid: c.Get("userid").(string),
 	}
-	res, err := p.service.GetProfile(ruser.Userid)
+	res, err := r.s.GetProfile(ruser.Userid)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (p *profileRouter) getOwnProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (p *profileRouter) getProfile(c echo.Context) error {
+func (r *router) getProfile(c echo.Context) error {
 	rprofile := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -119,7 +119,7 @@ func (p *profileRouter) getProfile(c echo.Context) error {
 		return err
 	}
 
-	res, err := p.service.GetProfile(rprofile.Userid)
+	res, err := r.s.GetProfile(rprofile.Userid)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (p *profileRouter) getProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (p *profileRouter) getProfileImage(c echo.Context) error {
+func (r *router) getProfileImage(c echo.Context) error {
 	rprofile := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -135,14 +135,14 @@ func (p *profileRouter) getProfileImage(c echo.Context) error {
 		return err
 	}
 
-	image, contentType, err := p.service.GetProfileImage(rprofile.Userid)
+	image, contentType, err := r.s.GetProfileImage(rprofile.Userid)
 	if err != nil {
 		return err
 	}
 	return c.Stream(http.StatusOK, contentType, image)
 }
 
-func (p *profileRouter) getProfileImageCC(c echo.Context) (string, error) {
+func (r *router) getProfileImageCC(c echo.Context) (string, error) {
 	rprofile := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -150,7 +150,7 @@ func (p *profileRouter) getProfileImageCC(c echo.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := p.service.StatProfileImage(rprofile.Userid)
+	objinfo, err := r.s.StatProfileImage(rprofile.Userid)
 	if err != nil {
 		return "", err
 	}
@@ -158,13 +158,13 @@ func (p *profileRouter) getProfileImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (p *profileRouter) mountProfileRoutes(conf governor.Config, r *echo.Group) error {
-	r.POST("", p.createProfile, gate.User(p.service.gate))
-	r.PUT("", p.updateProfile, gate.User(p.service.gate))
-	r.PUT("/image", p.updateImage, gate.User(p.service.gate))
-	r.DELETE("/:id", p.deleteProfile, gate.OwnerOrAdmin(p.service.gate, "id"))
-	r.GET("", p.getOwnProfile, gate.User(p.service.gate))
-	r.GET("/:id", p.getProfile)
-	r.GET("/:id/image", p.getProfileImage, p.service.cc.Control(true, false, min15, p.getProfileImageCC))
+func (r *router) mountProfileRoutes(g *echo.Group) error {
+	g.POST("", r.createProfile, gate.User(r.s.gate))
+	g.PUT("", r.updateProfile, gate.User(r.s.gate))
+	g.PUT("/image", r.updateImage, gate.User(r.s.gate))
+	g.DELETE("/:id", r.deleteProfile, gate.OwnerOrAdmin(r.s.gate, "id"))
+	g.GET("", r.getOwnProfile, gate.User(r.s.gate))
+	g.GET("/:id", r.getProfile)
+	g.GET("/:id/image", r.getProfileImage, cachecontrol.Control(true, false, min15, r.getProfileImageCC))
 	return nil
 }

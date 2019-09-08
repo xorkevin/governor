@@ -29,7 +29,6 @@ type (
 		RegisterHook(hook Hook)
 	}
 
-	// Service is the public interface for the user service server
 	Service interface {
 		governor.Service
 		User
@@ -171,11 +170,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"issuer":                conf["issuer"],
 	})
 
-	router := s.router()
-	if err := router.mountRoute(c.IsDebug(), g.Group("/user")); err != nil {
+	sr := s.router()
+	if err := sr.mountRoute(c.IsDebug(), g.Group("/user")); err != nil {
 		return err
 	}
-	if err := router.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
+	if err := sr.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
 		return err
 	}
 	l.Info("user: mounted http routes", nil)
@@ -191,22 +190,22 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.users.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("create user table", nil)
+	s.logger.Info("created user table", nil)
 
 	if err := s.roles.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("create userrole table", nil)
+	s.logger.Info("created userrole table", nil)
 
 	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("create usersession table", nil)
+	s.logger.Info("created usersession table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
-	s.logger.Info("insert new setup admin", map[string]string{
+	s.logger.Info("inserted new setup admin", map[string]string{
 		"username": madmin.Username,
 		"userid":   madmin.Userid,
 	})

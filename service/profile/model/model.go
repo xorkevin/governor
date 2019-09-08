@@ -1,7 +1,6 @@
 package profilemodel
 
 import (
-	"database/sql"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -20,7 +19,7 @@ type (
 	}
 
 	repo struct {
-		db *sql.DB
+		db db.Database
 	}
 
 	// Model is the db profile model
@@ -33,10 +32,9 @@ type (
 )
 
 // New creates a new profile repo
-func New(conf governor.Config, l governor.Logger, db db.Database) Repo {
-	l.Info("initialize profile repo", nil)
+func New(db db.Database) Repo {
 	return &repo{
-		db: db.DB(),
+		db: db,
 	}
 }
 
@@ -52,7 +50,7 @@ func (r *repo) New(userid, email, bio string) (*Model, error) {
 // GetByID returns a profile model with the given base64 id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
-	if mProfile, code, err := profileModelGet(r.db, userid); err != nil {
+	if mProfile, code, err := profileModelGet(r.db.DB(), userid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No profile found with that id", http.StatusNotFound, err)
 		}
@@ -65,7 +63,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	if code, err := profileModelInsert(r.db, m); err != nil {
+	if code, err := profileModelInsert(r.db.DB(), m); err != nil {
 		if code == 3 {
 			return governor.NewErrorUser("Profile id must be unique", http.StatusBadRequest, err)
 		}
@@ -76,7 +74,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := profileModelUpdate(r.db, m); err != nil {
+	if err := profileModelUpdate(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to update profile", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -84,7 +82,7 @@ func (r *repo) Update(m *Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := profileModelDelete(r.db, m); err != nil {
+	if err := profileModelDelete(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to delete profile", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -92,7 +90,7 @@ func (r *repo) Delete(m *Model) error {
 
 // Setup creates a new Profile table
 func (r *repo) Setup() error {
-	if err := profileModelSetup(r.db); err != nil {
+	if err := profileModelSetup(r.db.DB()); err != nil {
 		return governor.NewError("Failed to setup profile model", http.StatusInternalServerError, err)
 	}
 	return nil

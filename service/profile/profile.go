@@ -1,9 +1,9 @@
 package profile
 
 import (
+	"context"
 	"github.com/labstack/echo"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/user"
@@ -17,83 +17,87 @@ const (
 )
 
 type (
-	// Profile is a service for storing user profile information
-	Profile interface {
+	Service interface {
 		governor.Service
 		user.Hook
 	}
 
-	profileService struct {
-		repo profilemodel.Repo
-		obj  objstore.Bucket
-		gate gate.Gate
-		cc   cachecontrol.CacheControl
+	service struct {
+		profiles profilemodel.Repo
+		objstore objstore.Objstore
+		obj      objstore.Bucket
+		gate     gate.Gate
+		logger   governor.Logger
 	}
 
-	profileRouter struct {
-		service profileService
+	router struct {
+		s service
 	}
 )
 
 // New creates a new Profile service
-func New(conf governor.Config, l governor.Logger, repo profilemodel.Repo, obj objstore.Objstore, g gate.Gate, cc cachecontrol.CacheControl) (Profile, error) {
-	b, err := obj.GetBucketDefLoc(imageBucket)
+func New(profiles profilemodel.Repo, obj objstore.Objstore, g gate.Gate) Service {
+	return &service{
+		profiles: profiles,
+		objstore: obj,
+		gate:     g,
+	}
+}
+
+func (s *service) Register(r governor.ConfigRegistrar) {
+}
+
+func (s *service) router() *router {
+	return &router{
+		s: *s,
+	}
+}
+
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	b, err := s.objstore.GetBucketDefLoc(imageBucket)
 	if err != nil {
-		l.Error("fail get profile picture bucket", map[string]string{
+		l.Error("profile: failed get profile picture bucket", map[string]string{
 			"err": err.Error(),
 		})
-		return nil, err
-	}
-
-	l.Info("initialize profile service", nil)
-
-	return &profileService{
-		repo: repo,
-		obj:  b,
-		gate: g,
-		cc:   cc,
-	}, nil
-}
-
-func (p *profileService) newRouter() *profileRouter {
-	return &profileRouter{
-		service: *p,
-	}
-}
-
-// Mount is a collection of routes for accessing and modifying profile data
-func (p *profileService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	pr := p.newRouter()
-
-	if err := pr.mountProfileRoutes(conf, r); err != nil {
 		return err
 	}
+	s.obj = b
 
-	l.Info("mount profile service", nil)
-	return nil
-}
-
-// Health is a check for service health
-func (p *profileService) Health() error {
-	return nil
-}
-
-// Setup is run on service setup
-func (p *profileService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	if err := p.repo.Setup(); err != nil {
+	sr := s.router()
+	if err := sr.mountProfileRoutes(g); err != nil {
 		return err
 	}
-	l.Info("create profile table", nil)
+	l.Info("profile: mounted http routes", nil)
 	return nil
 }
 
-// UserCreateHook creates a new profile on new user
-func (p *profileService) UserCreateHook(props user.HookProps) error {
-	_, err := p.CreateProfile(props.Userid, "", "")
+func (s *service) Setup(req governor.ReqSetup) error {
+	if err := s.profiles.Setup(); err != nil {
+		return err
+	}
+	s.logger.Info("created profile table", nil)
+	return nil
+}
+
+func (s *service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
+	return nil
+}
+
+// UserCreateHook implements user.Hook by creating a new profile for a new user
+func (s *service) UserCreateHook(props user.HookProps) error {
+	_, err := s.CreateProfile(props.Userid, "", "")
 	return err
 }
 
-// UserDeleteHook deletes the profile on delete user
-func (p *profileService) UserDeleteHook(userid string) error {
-	return p.DeleteProfile(userid)
+// UserDeleteHook implements user.Hook by deleting the profile of a deleted user
+func (s *service) UserDeleteHook(userid string) error {
+	return s.DeleteProfile(userid)
 }

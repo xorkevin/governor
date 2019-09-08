@@ -20,13 +20,13 @@ type (
 	}
 )
 
-func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUpdate, error) {
-	m, err := p.repo.New(userid, email, bio)
+func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, error) {
+	m, err := s.profiles.New(userid, email, bio)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := p.repo.Insert(m); err != nil {
+	if err := s.profiles.Insert(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
@@ -38,8 +38,8 @@ func (p *profileService) CreateProfile(userid, email, bio string) (*resProfileUp
 	}, nil
 }
 
-func (p *profileService) UpdateProfile(userid, email, bio string) error {
-	m, err := p.repo.GetByID(userid)
+func (s *service) UpdateProfile(userid, email, bio string) error {
+	m, err := s.profiles.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -50,14 +50,14 @@ func (p *profileService) UpdateProfile(userid, email, bio string) error {
 	m.Email = email
 	m.Bio = bio
 
-	if err := p.repo.Update(m); err != nil {
+	if err := s.profiles.Update(m); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) error {
-	m, err := p.repo.GetByID(userid)
+func (s *service) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) error {
+	m, err := s.profiles.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -65,19 +65,19 @@ func (p *profileService) UpdateImage(userid string, img io.Reader, imgSize int64
 		return err
 	}
 
-	if err := p.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
+	if err := s.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
 		return governor.NewError("Failed to store profile picture", http.StatusInternalServerError, err)
 	}
 
 	m.Image = thumb64
-	if err := p.repo.Update(m); err != nil {
+	if err := s.profiles.Update(m); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) DeleteProfile(userid string) error {
-	m, err := p.repo.GetByID(userid)
+func (s *service) DeleteProfile(userid string) error {
+	m, err := s.profiles.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
@@ -85,14 +85,14 @@ func (p *profileService) DeleteProfile(userid string) error {
 		return err
 	}
 
-	if err := p.repo.Delete(m); err != nil {
+	if err := s.profiles.Delete(m); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *profileService) GetProfile(userid string) (*resProfileModel, error) {
-	m, err := p.repo.GetByID(userid)
+func (s *service) GetProfile(userid string) (*resProfileModel, error) {
+	m, err := s.profiles.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("", 0, err)
@@ -106,8 +106,8 @@ func (p *profileService) GetProfile(userid string) (*resProfileModel, error) {
 	}, nil
 }
 
-func (p *profileService) StatProfileImage(userid string) (*minio.ObjectInfo, error) {
-	objinfo, err := p.obj.Stat(userid + "-profile")
+func (s *service) StatProfileImage(userid string) (*minio.ObjectInfo, error) {
+	objinfo, err := s.obj.Stat(userid + "-profile")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Profile image not found", 0, err)
@@ -117,8 +117,8 @@ func (p *profileService) StatProfileImage(userid string) (*minio.ObjectInfo, err
 	return objinfo, nil
 }
 
-func (p *profileService) GetProfileImage(userid string) (io.Reader, string, error) {
-	obj, objinfo, err := p.obj.Get(userid + "-profile")
+func (s *service) GetProfileImage(userid string) (io.Reader, string, error) {
+	obj, objinfo, err := s.obj.Get(userid + "-profile")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Profile image not found", 0, err)

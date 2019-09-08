@@ -1,7 +1,6 @@
 package sessionmodel
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -34,7 +33,7 @@ type (
 	}
 
 	repo struct {
-		db       *sql.DB
+		db       db.Database
 		hasher   *hunter2.Blake2bHasher
 		verifier *hunter2.Verifier
 	}
@@ -61,7 +60,7 @@ func New(database db.Database) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		db:       database.DB(),
+		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
 	}
@@ -121,7 +120,7 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 
 // GetByID returns a user session model with the given id
 func (r *repo) GetByID(sessionID string) (*Model, error) {
-	m, code, err := sessionModelGet(r.db, sessionID)
+	m, code, err := sessionModelGet(r.db.DB(), sessionID)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No session found with that id", http.StatusNotFound, err)
@@ -133,7 +132,7 @@ func (r *repo) GetByID(sessionID string) (*Model, error) {
 
 // GetUserSessions returns all the sessions of a user
 func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error) {
-	m, err := sessionModelGetModelEqUseridOrdTime(r.db, userid, false, limit, offset)
+	m, err := sessionModelGetModelEqUseridOrdTime(r.db.DB(), userid, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user sessions", http.StatusInternalServerError, err)
 	}
@@ -142,7 +141,7 @@ func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error
 
 // GetUserSessionIDs returns all the session ids of a user
 func (r *repo) GetUserSessionIDs(userid string, limit, offset int) ([]string, error) {
-	m, err := sessionModelGetqIDEqUseridOrdSessionID(r.db, userid, true, limit, offset)
+	m, err := sessionModelGetqIDEqUseridOrdSessionID(r.db.DB(), userid, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
 	}
@@ -155,7 +154,7 @@ func (r *repo) GetUserSessionIDs(userid string, limit, offset int) ([]string, er
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	if code, err := sessionModelInsert(r.db, m); err != nil {
+	if code, err := sessionModelInsert(r.db.DB(), m); err != nil {
 		if code == 3 {
 			return governor.NewError("Session id must be unique", http.StatusBadRequest, err)
 		}
@@ -166,7 +165,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := sessionModelUpdate(r.db, m); err != nil {
+	if err := sessionModelUpdate(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to update session", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -174,7 +173,7 @@ func (r *repo) Update(m *Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := sessionModelDelete(r.db, m); err != nil {
+	if err := sessionModelDelete(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -182,7 +181,7 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteSessions deletes the sessions in the set of session ids
 func (r *repo) DeleteSessions(sessionids []string) error {
-	if err := sessionModelDelSetSessionID(r.db, sessionids); err != nil {
+	if err := sessionModelDelSetSessionID(r.db.DB(), sessionids); err != nil {
 		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -190,7 +189,7 @@ func (r *repo) DeleteSessions(sessionids []string) error {
 
 // DeleteUserSessions deletes all the sessions of a user
 func (r *repo) DeleteUserSessions(userid string) error {
-	if err := sessionModelDelEqUserid(r.db, userid); err != nil {
+	if err := sessionModelDelEqUserid(r.db.DB(), userid); err != nil {
 		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -198,7 +197,7 @@ func (r *repo) DeleteUserSessions(userid string) error {
 
 // Setup creates a new User session table
 func (r *repo) Setup() error {
-	if err := sessionModelSetup(r.db); err != nil {
+	if err := sessionModelSetup(r.db.DB()); err != nil {
 		return governor.NewError("Failed to setup user session model", http.StatusInternalServerError, err)
 	}
 	return nil
