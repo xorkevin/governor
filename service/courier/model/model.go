@@ -1,7 +1,6 @@
 package couriermodel
 
 import (
-	"database/sql"
 	"net/http"
 	"strings"
 	"time"
@@ -31,7 +30,7 @@ type (
 	}
 
 	repo struct {
-		db *sql.DB
+		db db.Database
 	}
 
 	// LinkModel is the db link model
@@ -50,10 +49,9 @@ type (
 )
 
 // New creates a new courier repo
-func New(config governor.Config, l governor.Logger, d db.Database) Repo {
-	l.Info("initialize courier repo", nil)
+func New(database db.Database) Repo {
 	return &repo{
-		db: d.DB(),
+		db: database,
 	}
 }
 
@@ -90,7 +88,7 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 // GetLinkGroup retrieves a group of links
 func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error) {
 	if len(creatorid) > 0 {
-		m, err := linkModelGetqLinkEqCreatorIDOrdCreationTime(r.db, creatorid, false, limit, offset)
+		m, err := linkModelGetqLinkEqCreatorIDOrdCreationTime(r.db.DB(), creatorid, false, limit, offset)
 		if err != nil {
 			return nil, governor.NewError("Failed to get links of a creator", http.StatusInternalServerError, err)
 		}
@@ -106,7 +104,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 		return links, nil
 	}
 
-	m, err := linkModelGetLinkModelOrdCreationTime(r.db, false, limit, offset)
+	m, err := linkModelGetLinkModelOrdCreationTime(r.db.DB(), false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get links", http.StatusInternalServerError, err)
 	}
@@ -116,7 +114,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 // GetLink returns a link model with the given id
 func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	var m *LinkModel
-	if mLink, code, err := linkModelGet(r.db, linkid); err != nil {
+	if mLink, code, err := linkModelGet(r.db.DB(), linkid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No link found with that id", http.StatusNotFound, err)
 		}
@@ -129,7 +127,7 @@ func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 
 // InsertLink inserts the link model into the db
 func (r *repo) InsertLink(m *LinkModel) error {
-	if code, err := linkModelInsert(r.db, m); err != nil {
+	if code, err := linkModelInsert(r.db.DB(), m); err != nil {
 		if code == 3 {
 			return governor.NewError("Link id must be unique", http.StatusBadRequest, err)
 		}
@@ -140,7 +138,7 @@ func (r *repo) InsertLink(m *LinkModel) error {
 
 // DeleteLink deletes the link model in the db
 func (r *repo) DeleteLink(m *LinkModel) error {
-	if err := linkModelDelete(r.db, m); err != nil {
+	if err := linkModelDelete(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to delete link", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -148,7 +146,7 @@ func (r *repo) DeleteLink(m *LinkModel) error {
 
 // Setup creates new Courier tables
 func (r *repo) Setup() error {
-	if err := linkModelSetup(r.db); err != nil {
+	if err := linkModelSetup(r.db.DB()); err != nil {
 		return governor.NewError("Failed to setup link model", http.StatusInternalServerError, err)
 	}
 	return nil

@@ -7,6 +7,7 @@ import (
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
+	"xorkevin.dev/governor/service/image"
 )
 
 const (
@@ -24,8 +25,8 @@ type (
 )
 
 // GetLink retrieves a link by id
-func (c *courierService) GetLink(linkid string) (*resGetLink, error) {
-	m, err := c.repo.GetLink(linkid)
+func (s *service) GetLink(linkid string) (*resGetLink, error) {
+	m, err := s.repo.GetLink(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("", 0, err)
@@ -40,23 +41,26 @@ func (c *courierService) GetLink(linkid string) (*resGetLink, error) {
 	}, nil
 }
 
-func (c *courierService) GetLinkFast(linkid string) (string, error) {
+func (s *service) GetLinkFast(linkid string) (string, error) {
 	cacheLinkID := cachePrefixCourierLink + linkid
-	if cachedURL, err := c.cache.Cache().Get(cacheLinkID).Result(); err == nil {
+	if cachedURL, err := s.kv.KVStore().Get(cacheLinkID).Result(); err == nil {
 		return cachedURL, nil
 	}
-	res, err := c.GetLink(linkid)
+	res, err := s.GetLink(linkid)
 	if err != nil {
 		return "", err
 	}
-	if err := c.cache.Cache().Set(cacheLinkID, res.URL, time.Duration(c.cacheTime*b1)).Err(); err != nil {
-		c.logger.Error("Fail cache linkid url", nil)
+	if err := s.kv.KVStore().Set(cacheLinkID, res.URL, time.Duration(s.cacheTime)*time.Second).Err(); err != nil {
+		s.logger.Error("courier: failed to cache linkid url", map[string]string{
+			"linkid": linkid,
+			"error":  err.Error(),
+		})
 	}
 	return res.URL, nil
 }
 
-func (c *courierService) StatLinkImage(linkid string) (*minio.ObjectInfo, error) {
-	objinfo, err := c.linkImageBucket.Stat(linkid + "-qr")
+func (s *service) StatLinkImage(linkid string) (*minio.ObjectInfo, error) {
+	objinfo, err := s.linkImageBucket.Stat(linkid + "-qr")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
@@ -66,8 +70,8 @@ func (c *courierService) StatLinkImage(linkid string) (*minio.ObjectInfo, error)
 	return objinfo, nil
 }
 
-func (c *courierService) GetLinkImage(linkid string) (io.Reader, string, error) {
-	qrimage, objinfo, err := c.linkImageBucket.Get(linkid + "-qr")
+func (s *service) GetLinkImage(linkid string) (io.Reader, string, error) {
+	qrimage, objinfo, err := s.linkImageBucket.Get(linkid + "-qr")
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
@@ -84,8 +88,8 @@ type (
 )
 
 // GetLinkGroup retrieves a group of links
-func (c *courierService) GetLinkGroup(limit, offset int, creatorid string) (*resLinkGroup, error) {
-	links, err := c.repo.GetLinkGroup(limit, offset, creatorid)
+func (s *service) GetLinkGroup(limit, offset int, creatorid string) (*resLinkGroup, error) {
+	links, err := s.repo.GetLinkGroup(limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -110,33 +114,37 @@ type (
 )
 
 // CreateLink creates a new link
-func (c *courierService) CreateLink(linkid, url, creatorid string) (*resCreateLink, error) {
-	m := c.repo.NewLinkEmptyPtr()
+func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, error) {
+	m := s.repo.NewLinkEmptyPtr()
 	if len(linkid) == 0 {
-		ml, err := c.repo.NewLinkAuto(url, creatorid)
+		ml, err := s.repo.NewLinkAuto(url, creatorid)
 		if err != nil {
 			return nil, err
 		}
 		m = ml
 	} else {
-		ml, err := c.repo.NewLink(linkid, url, creatorid)
+		ml, err := s.repo.NewLink(linkid, url, creatorid)
 		if err != nil {
 			return nil, err
 		}
 		m = ml
 	}
-	if err := c.repo.InsertLink(m); err != nil {
+	if err := s.repo.InsertLink(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
-	qrimage, err := c.barcode.GenerateBarcode(barcode.TransportQRCode, c.linkPrefix+"/"+m.LinkID)
+	qrimage, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate qr code image", http.StatusInternalServerError, err)
 	}
-	if err := c.linkImageBucket.Put(m.LinkID+"-qr", mediaTypePNG, int64(qrimage.Len()), qrimage); err != nil {
-		c.logger.Error("fail add link qrcode image to objstore", map[string]string{
+	qrpng, err := qrimage.ToPng(image.PngBest)
+	if err != nil {
+		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
+	}
+	if err := s.linkImageBucket.Put(m.LinkID+"-qr", mediaTypePNG, int64(qrpng.Len()), qrpng); err != nil {
+		s.logger.Error("courier: failed to add link qrcode image to objstore", map[string]string{
 			"linkid": m.LinkID,
 			"err":    err.Error(),
 		})
@@ -149,18 +157,18 @@ func (c *courierService) CreateLink(linkid, url, creatorid string) (*resCreateLi
 }
 
 // DeleteLink deletes a link
-func (c *courierService) DeleteLink(linkid string) error {
-	m, err := c.repo.GetLink(linkid)
+func (s *service) DeleteLink(linkid string) error {
+	m, err := s.repo.GetLink(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
 		}
 		return err
 	}
-	if err := c.repo.DeleteLink(m); err != nil {
+	if err := s.repo.DeleteLink(m); err != nil {
 		return err
 	}
-	if err := c.linkImageBucket.Remove(linkid + "-qr"); err != nil {
+	if err := s.linkImageBucket.Remove(linkid + "-qr"); err != nil {
 		return governor.NewError("Failed to remove qr code image from objstore", http.StatusInternalServerError, err)
 	}
 	return nil

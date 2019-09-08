@@ -1,66 +1,53 @@
 package barcode
 
 import (
-	"bytes"
 	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
-	"image/png"
 	"net/http"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/image"
 )
 
 const (
 	barQRSize = 256
 )
 
+type QRECLevel int
+
 const (
-	// TransportQRCode is a type constant for QRCode
-	TransportQRCode = iota
+	QRECDefault  QRECLevel = 0
+	QRECLow      QRECLevel = 1
+	QRECMedium   QRECLevel = 2
+	QRECQuartile QRECLevel = 3
+	QRECHigh     QRECLevel = 4
 )
 
-type (
-	// Generator is a service that encodes data into barcodes
-	Generator interface {
-		GenerateBarcode(transport int, data string) (*bytes.Buffer, error)
-	}
-
-	barcodeService struct {
-		encoder *png.Encoder
-	}
-)
-
-// New returns a new barcode service
-func New(conf governor.Config, l governor.Logger) Generator {
-	l.Info("initialize barcode service", nil)
-
-	return &barcodeService{
-		encoder: &png.Encoder{
-			CompressionLevel: png.BestCompression,
-		},
+func qrecTranslate(level QRECLevel) qr.ErrorCorrectionLevel {
+	switch level {
+	case QRECDefault:
+		return qr.L
+	case QRECLow:
+		return qr.L
+	case QRECMedium:
+		return qr.M
+	case QRECQuartile:
+		return qr.Q
+	case QRECHigh:
+		return qr.H
+	default:
+		return qr.L
 	}
 }
 
-// GenerateBarcode encodes data as a barcode image represented by a bytes Buffer
-func (b *barcodeService) GenerateBarcode(transport int, data string) (*bytes.Buffer, error) {
-	switch transport {
-	case TransportQRCode:
-		qrCode, err := qr.Encode(data, qr.H, qr.Unicode)
-		if err != nil {
-			return nil, governor.NewError("Fail to encode qr data", http.StatusInternalServerError, err)
-		}
-
-		qrCode, err = bar.Scale(qrCode, barQRSize, barQRSize)
-		if err != nil {
-			return nil, governor.NewError("Fail to scale qr code", http.StatusInternalServerError, err)
-		}
-
-		buf := &bytes.Buffer{}
-		if err := b.encoder.Encode(buf, qrCode); err != nil {
-			return nil, governor.NewError("Fail to encode qr code to bytes", http.StatusInternalServerError, err)
-		}
-
-		return buf, nil
+// GenerateQR encodes data as a QR code image
+func GenerateQR(data string, level QRECLevel) (image.Image, error) {
+	qrCode, err := qr.Encode(data, qrecTranslate(level), qr.Unicode)
+	if err != nil {
+		return nil, governor.NewError("Failed to encode qr data", http.StatusInternalServerError, err)
 	}
-
-	return nil, governor.NewError("Invalid transport", http.StatusInternalServerError, nil)
+	qrCode, err = bar.Scale(qrCode, barQRSize, barQRSize)
+	if err != nil {
+		return nil, governor.NewError("Failed to scale qr code", http.StatusInternalServerError, err)
+	}
+	return image.FromImage(qrCode), nil
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -16,31 +17,31 @@ type (
 	}
 )
 
-func (cr *courierRouter) getLink(c echo.Context) error {
+func (r *router) getLink(c echo.Context) error {
 	rlink := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := rlink.valid(); err != nil {
 		return err
 	}
-	url, err := cr.service.GetLinkFast(rlink.LinkID)
+	url, err := r.s.GetLinkFast(rlink.LinkID)
 	if err != nil {
-		if len(cr.service.fallbackLink) > 0 {
-			return c.Redirect(http.StatusMovedPermanently, cr.service.fallbackLink)
+		if len(r.s.fallbackLink) > 0 {
+			return c.Redirect(http.StatusMovedPermanently, r.s.fallbackLink)
 		}
 		return err
 	}
 	return c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (cr *courierRouter) getLinkImage(c echo.Context) error {
+func (r *router) getLinkImage(c echo.Context) error {
 	rlink := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := rlink.valid(); err != nil {
 		return err
 	}
-	qrimage, contentType, err := cr.service.GetLinkImage(rlink.LinkID)
+	qrimage, contentType, err := r.s.GetLinkImage(rlink.LinkID)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ type (
 	}
 )
 
-func (cr *courierRouter) getLinkGroup(c echo.Context) error {
+func (r *router) getLinkGroup(c echo.Context) error {
 	amount, err := strconv.Atoi(c.QueryParam("amount"))
 	if err != nil {
 		return governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err)
@@ -72,7 +73,7 @@ func (cr *courierRouter) getLinkGroup(c echo.Context) error {
 		return err
 	}
 
-	res, err := cr.service.GetLinkGroup(amount, offset, c.QueryParam("creatorid"))
+	res, err := r.s.GetLinkGroup(amount, offset, c.QueryParam("creatorid"))
 	if err != nil {
 		return err
 	}
@@ -87,7 +88,7 @@ type (
 	}
 )
 
-func (cr *courierRouter) createLink(c echo.Context) error {
+func (r *router) createLink(c echo.Context) error {
 	rlink := reqLinkPost{}
 	if err := c.Bind(&rlink); err != nil {
 		return err
@@ -97,31 +98,31 @@ func (cr *courierRouter) createLink(c echo.Context) error {
 		return err
 	}
 
-	res, err := cr.service.CreateLink(rlink.LinkID, rlink.URL, rlink.CreatorID)
+	res, err := r.s.CreateLink(rlink.LinkID, rlink.URL, rlink.CreatorID)
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusCreated, res)
 }
 
-func (cr *courierRouter) deleteLink(c echo.Context) error {
+func (r *router) deleteLink(c echo.Context) error {
 	rlink := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := rlink.valid(); err != nil {
 		return err
 	}
-	if err := cr.service.DeleteLink(rlink.LinkID); err != nil {
+	if err := r.s.DeleteLink(rlink.LinkID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (cr *courierRouter) gateModOrAdmin(c echo.Context) (string, error) {
+func (r *router) gateModOrAdmin(c echo.Context) (string, error) {
 	return "website", nil
 }
 
-func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, error) {
+func (r *router) getLinkImageCC(c echo.Context) (string, error) {
 	rlink := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -129,7 +130,7 @@ func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := cr.service.StatLinkImage(rlink.LinkID)
+	objinfo, err := r.s.StatLinkImage(rlink.LinkID)
 	if err != nil {
 		return "", err
 	}
@@ -137,11 +138,11 @@ func (cr *courierRouter) getLinkImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (cr *courierRouter) mountRoutes(conf governor.Config, r *echo.Group) error {
-	r.GET("/link/:linkid", cr.getLink)
-	r.GET("/link/:linkid/image", cr.getLinkImage, cr.service.cc.Control(true, false, min15, cr.getLinkImageCC))
-	r.GET("/link", cr.getLinkGroup, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
-	r.POST("/link", cr.createLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
-	r.DELETE("/link/:linkid", cr.deleteLink, gate.ModOrAdminF(cr.service.gate, cr.gateModOrAdmin))
+func (r *router) mountRoutes(g *echo.Group) error {
+	g.GET("/link/:linkid", r.getLink)
+	g.GET("/link/:linkid/image", r.getLinkImage, cachecontrol.Control(true, false, min15, r.getLinkImageCC))
+	g.GET("/link", r.getLinkGroup, gate.ModOrAdminF(r.s.gate, r.gateModOrAdmin))
+	g.POST("/link", r.createLink, gate.ModOrAdminF(r.s.gate, r.gateModOrAdmin))
+	g.DELETE("/link/:linkid", r.deleteLink, gate.ModOrAdminF(r.s.gate, r.gateModOrAdmin))
 	return nil
 }

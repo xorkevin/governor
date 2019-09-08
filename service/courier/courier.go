@@ -1,15 +1,14 @@
 package courier
 
 import (
+	"context"
 	"fmt"
 	"github.com/labstack/echo"
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/barcode"
-	"xorkevin.dev/governor/service/cache"
-	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -17,7 +16,7 @@ import (
 const (
 	linkImageBucketID       = "courier-link-image"
 	min1              int64 = 60
-	b1                      = 1000000000
+	b1                      = 1_000_000_000
 	min15                   = 900
 )
 
@@ -32,103 +31,110 @@ type (
 		Courier
 	}
 
-	courierService struct {
-		logger          governor.Logger
+	service struct {
 		repo            couriermodel.Repo
+		objstore        objstore.Objstore
 		linkImageBucket objstore.Bucket
-		barcode         barcode.Generator
-		cache           cache.Cache
+		kv              kvstore.KVStore
 		gate            gate.Gate
-		cc              cachecontrol.CacheControl
+		logger          governor.Logger
 		fallbackLink    string
 		linkPrefix      string
 		cacheTime       int64
 	}
 
-	courierRouter struct {
-		service courierService
+	router struct {
+		s service
 	}
 )
 
 // New creates a new Courier service
-func New(conf governor.Config, l governor.Logger, repo couriermodel.Repo, store objstore.Objstore, code barcode.Generator, ch cache.Cache, g gate.Gate, cc cachecontrol.CacheControl) (Service, error) {
-	c := conf.Conf().GetStringMapString("courier")
-	fallbackLink := c["fallback_link"]
-	linkPrefix := c["link_prefix"]
-	cacheTime := min1
-	if duration, err := time.ParseDuration(c["cache_time"]); err != nil {
-		l.Warn(fmt.Sprintf("courier: fail parse cache duration: %s", c["cache_time"]), nil)
+func New(repo couriermodel.Repo, obj objstore.Objstore, kv kvstore.KVStore, g gate.Gate) Service {
+	return &service{
+		repo:      repo,
+		objstore:  obj,
+		kv:        kv,
+		gate:      g,
+		cacheTime: min1,
+	}
+}
+
+func (s *service) Register(r governor.ConfigRegistrar) {
+	r.SetDefault("fallbacklink", "")
+	r.SetDefault("linkprefix", "")
+	r.SetDefault("cachetime", "1m")
+}
+
+func (s *service) router() *router {
+	return &router{
+		s: *s,
+	}
+}
+
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	conf := r.GetStrMap("")
+	s.fallbackLink = conf["fallbacklink"]
+	s.linkPrefix = conf["linkprefix"]
+	if t, err := time.ParseDuration(conf["cachetime"]); err != nil {
+		s.logger.Warn(fmt.Sprintf("courier: failed to parse cache time: %s", conf["cachetime"]), nil)
 	} else {
-		cacheTime = duration.Nanoseconds() / b1
+		s.cacheTime = t.Nanoseconds() / b1
 	}
-	if len(fallbackLink) == 0 {
-		l.Warn("courier: fallback_link is not set", nil)
-	} else if err := validURL(fallbackLink); err != nil {
-		l.Warn("invalid fallback_link", map[string]string{
-			"err": err.Error(),
+	if len(s.fallbackLink) == 0 {
+		s.logger.Warn("courier: fallbacklink is not set", nil)
+	} else if err := validURL(s.fallbackLink); err != nil {
+		s.logger.Error("invalid fallbacklink", map[string]string{
+			"error": err.Error(),
 		})
+		return err
 	}
-	if len(linkPrefix) == 0 {
-		l.Warn("courier: link_prefix is not set", nil)
-	} else if err := validURL(linkPrefix); err != nil {
-		l.Warn("invalid link_prefix", map[string]string{
-			"err": err.Error(),
+	if len(s.linkPrefix) == 0 {
+		s.logger.Warn("courier: linkprefix is not set", nil)
+	} else if err := validURL(s.linkPrefix); err != nil {
+		s.logger.Error("invalid linkprefix", map[string]string{
+			"error": err.Error(),
 		})
+		return err
 	}
 
-	linkImageBucket, err := store.GetBucketDefLoc(linkImageBucketID)
-	if err != nil {
-		l.Error("fail get courier link image bucket", map[string]string{
-			"err": err.Error(),
-		})
-		return nil, err
-	}
-
-	l.Info("initialize courier service", map[string]string{
-		"fallback_link": fallbackLink,
-		"link_prefix":   linkPrefix,
-		"cache_time":    strconv.FormatInt(cacheTime, 10),
+	l.Info("courier: loaded config", map[string]string{
+		"fallbacklink": s.fallbackLink,
+		"linkprefix":   s.linkPrefix,
+		"cachetime":    strconv.FormatInt(s.cacheTime, 10),
 	})
-	return &courierService{
-		logger:          l,
-		repo:            repo,
-		linkImageBucket: linkImageBucket,
-		barcode:         code,
-		cache:           ch,
-		gate:            g,
-		cc:              cc,
-		fallbackLink:    fallbackLink,
-		linkPrefix:      linkPrefix,
-		cacheTime:       cacheTime,
-	}, nil
-}
 
-func (c *courierService) newRouter() *courierRouter {
-	return &courierRouter{
-		service: *c,
-	}
-}
-
-// Mount is a collection of routes for accessing and modifying courier data
-func (c *courierService) Mount(conf governor.Config, l governor.Logger, r *echo.Group) error {
-	cr := c.newRouter()
-	if err := cr.mountRoutes(conf, r); err != nil {
+	sr := s.router()
+	if err := sr.mountRoutes(g); err != nil {
 		return err
 	}
-	l.Info("mount courier service", nil)
+	l.Info("courier: mounted http routes", nil)
 	return nil
 }
 
-// Health is a check for service health
-func (c *courierService) Health() error {
+func (s *service) Setup(req governor.ReqSetup) error {
+	if err := s.repo.Setup(); err != nil {
+		return err
+	}
+	s.logger.Info("created courierlinks table", nil)
 	return nil
 }
 
-// Setup is run on service setup
-func (c *courierService) Setup(conf governor.Config, l governor.Logger, rsetup governor.ReqSetupPost) error {
-	if err := c.repo.Setup(); err != nil {
+func (s *service) Start(ctx context.Context) error {
+	b, err := s.objstore.GetBucketDefLoc(linkImageBucketID)
+	if err != nil {
+		s.logger.Error("fail get courier link image bucket", map[string]string{
+			"error": err.Error(),
+		})
 		return err
 	}
-	l.Info("create courierlinks table", nil)
+	s.linkImageBucket = b
+	return nil
+}
+
+func (s *service) Stop(ctx context.Context) {
+}
+
+func (s *service) Health() error {
 	return nil
 }

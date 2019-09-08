@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/courier"
+	"xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
@@ -52,6 +54,8 @@ func main() {
 	userService := user.New(userModel, roleModel, sessionModel, kvService, mailService, gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService, gateService)
+	courierModel := couriermodel.New(dbService)
+	courierService := courier.New(courierModel, objstoreService, kvService, gateService)
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)
@@ -62,6 +66,7 @@ func main() {
 	gov.Register("gate", "/null", gateService)
 	gov.Register("user", "/u", userService)
 	gov.Register("profile", "/profile", profileService)
+	gov.Register("courier", "/courier", courierService)
 
 	gov.Start()
 }

@@ -51,7 +51,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	if _, err := client.Ping().Result(); err != nil {
 		s.logger.Error("kvstore: failed to ping kvstore", map[string]string{
-			"err": err.Error(),
+			"error": err.Error(),
 		})
 		return governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
 	}

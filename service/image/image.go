@@ -31,6 +31,7 @@ type (
 		Crop(bounds goimg.Rectangle)
 		ResizeFill(width, height int)
 		ToJpeg(quality int) (*bytes.Buffer, error)
+		ToPng(level PngCompressionOpt) (*bytes.Buffer, error)
 		ToBase64(quality int) (string, error)
 	}
 

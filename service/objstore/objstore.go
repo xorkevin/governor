@@ -77,7 +77,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	if err := initBucket(client, canaryBucket, defaultLocation); err != nil {
 		s.logger.Error("objstore: failed to create canary bucket", map[string]string{
-			"err": err.Error(),
+			"error": err.Error(),
 		})
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}

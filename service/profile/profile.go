@@ -55,20 +55,12 @@ func (s *service) router() *router {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
-	b, err := s.objstore.GetBucketDefLoc(imageBucket)
-	if err != nil {
-		l.Error("profile: failed get profile picture bucket", map[string]string{
-			"err": err.Error(),
-		})
-		return err
-	}
-	s.obj = b
 
 	sr := s.router()
 	if err := sr.mountProfileRoutes(g); err != nil {
 		return err
 	}
-	l.Info("profile: mounted http routes", nil)
+	s.logger.Info("profile: mounted http routes", nil)
 	return nil
 }
 
@@ -76,11 +68,19 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.profiles.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("created profile table", nil)
+	s.logger.Info("profile: created profile table", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
+	b, err := s.objstore.GetBucketDefLoc(imageBucket)
+	if err != nil {
+		s.logger.Error("profile: failed get profile picture bucket", map[string]string{
+			"error": err.Error(),
+		})
+		return err
+	}
+	s.obj = b
 	return nil
 }
 

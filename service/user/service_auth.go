@@ -111,8 +111,8 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 			UserAgent: sm.UserAgent,
 		}
 		if err := s.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
-			s.logger.Error("fail send new login email", map[string]string{
-				"err": err.Error(),
+			s.logger.Error("user: fail send new login email", map[string]string{
+				"error": err.Error(),
 			})
 		}
 	}

@@ -121,19 +121,19 @@ func (s *service) CommitUser(key string) (*resUserUpdate, error) {
 
 	for _, i := range s.hooks {
 		if err := i.UserCreateHook(hookProps); err != nil {
-			s.logger.Error("userhook create error", map[string]string{
-				"err": err.Error(),
+			s.logger.Error("user: userhook_create error", map[string]string{
+				"error": err.Error(),
 			})
 		}
 	}
 
 	if err := s.kv.KVStore().Del(cachePrefixNewUser + key).Err(); err != nil {
-		s.logger.Error("Failed to clean up user create cache data", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to clean up user create cache data", map[string]string{
+			"error": err.Error(),
 		})
 	}
 
-	s.logger.Info("create user", map[string]string{
+	s.logger.Info("user: created user", map[string]string{
 		"userid":   m.Userid,
 		"username": m.Username,
 	})
@@ -175,8 +175,8 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 
 	for _, i := range s.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
-			s.logger.Error("userhook delete error", map[string]string{
-				"err": err.Error(),
+			s.logger.Error("user: userhook_delete error", map[string]string{
+				"error": err.Error(),
 			})
 		}
 	}

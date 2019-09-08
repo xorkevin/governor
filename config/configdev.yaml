@@ -56,6 +56,6 @@ user:
   issuer: governor
   secret: secret
 courier:
-  fallback_link: http://localhost:8080
-  link_prefix: http://localhost:8080/link
-  cache_time: 1m
+  fallbacklink: http://localhost:8080
+  linkprefix: http://localhost:8080/link
+  cachetime: 1m

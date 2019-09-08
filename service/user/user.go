@@ -125,37 +125,37 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: fail to parse access time: %s", conf["accesstime"]), nil)
+		l.Warn(fmt.Sprintf("user: failed to parse access time: %s", conf["accesstime"]), nil)
 	} else {
 		s.accessTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["refreshtime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: fail to parse refresh time: %s", conf["refreshtime"]), nil)
+		l.Warn(fmt.Sprintf("user: failed to parse refresh time: %s", conf["refreshtime"]), nil)
 	} else {
 		s.refreshTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["refreshcache"]); err != nil {
-		l.Warn(fmt.Sprintf("user: fail to parse refresh cache: %s", conf["refreshcache"]), nil)
+		l.Warn(fmt.Sprintf("user: failed to parse refresh cache: %s", conf["refreshcache"]), nil)
 	} else {
 		s.refreshCacheTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["confirmtime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: fail to parse confirm time: %s", conf["confirmtime"]), nil)
+		l.Warn(fmt.Sprintf("user: failed to parse confirm time: %s", conf["confirmtime"]), nil)
 	} else {
 		s.confirmTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["passwordresettime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: fail to parse password reset time: %s", conf["passwordresettime"]), nil)
+		l.Warn(fmt.Sprintf("user: failed to parse password reset time: %s", conf["passwordresettime"]), nil)
 	} else {
 		s.passwordResetTime = t.Nanoseconds() / b1
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	if conf["secret"] == "" {
-		s.logger.Warn("gate: token secret is not set", nil)
+		s.logger.Warn("user: token secret is not set", nil)
 	}
 	if conf["issuer"] == "" {
-		s.logger.Warn("gate: token issuer is not set", nil)
+		s.logger.Warn("user: token issuer is not set", nil)
 	}
 	s.tokenizer = token.New(conf["secret"], conf["issuer"])
 
@@ -190,22 +190,22 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.users.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("created user table", nil)
+	s.logger.Info("user: created user table", nil)
 
 	if err := s.roles.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("created userrole table", nil)
+	s.logger.Info("user: created userrole table", nil)
 
 	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("created usersession table", nil)
+	s.logger.Info("user: created usersession table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
-	s.logger.Info("inserted new setup admin", map[string]string{
+	s.logger.Info("user: inserted new setup admin", map[string]string{
 		"username": madmin.Username,
 		"userid":   madmin.Userid,
 	})

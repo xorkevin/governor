@@ -71,8 +71,8 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
-		s.logger.Error("fail to send old email change notification", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to send old email change notification", map[string]string{
+			"error": err.Error(),
 		})
 	}
 
@@ -121,8 +121,8 @@ func (s *service) CommitEmail(key string, password string) error {
 	}
 
 	if err := s.kv.KVStore().Del(cachePrefixEmailUpdate + key).Err(); err != nil {
-		s.logger.Error("fail to clean up new email cache data", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to clean up new email cache data", map[string]string{
+			"error": err.Error(),
 		})
 	}
 	return nil
@@ -183,14 +183,14 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 	}
 
 	if key, err := uid.New(uidPassSize); err != nil {
-		s.logger.Error("fail to create new uid", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to create new uid", map[string]string{
+			"error": err.Error(),
 		})
 	} else {
 		sessionKey := key.Base64()
 		if err := s.kv.KVStore().Set(cachePrefixPasswordUpdate+sessionKey, userid, time.Duration(s.passwordResetTime)*time.Second).Err(); err != nil {
-			s.logger.Error("fail to cache undo password change key", map[string]string{
-				"err": err.Error(),
+			s.logger.Error("user: failed to cache undo password change key", map[string]string{
+				"error": err.Error(),
 			})
 		} else {
 			emdata := emailPassChange{
@@ -199,8 +199,8 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 				Key:       sessionKey,
 			}
 			if err := s.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
-				s.logger.Error("fail to send password change notification email", map[string]string{
-					"err": err.Error(),
+				s.logger.Error("user: failed to send password change notification email", map[string]string{
+					"error": err.Error(),
 				})
 			}
 		}
@@ -280,14 +280,14 @@ func (s *service) ResetPassword(key string, newPassword string) error {
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send(m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
-		s.logger.Error("fail to send password change notification email", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to send password change notification email", map[string]string{
+			"error": err.Error(),
 		})
 	}
 
 	if err := s.kv.KVStore().Del(cachePrefixPasswordUpdate + key).Err(); err != nil {
-		s.logger.Error("fail to clean up password reset cache data", map[string]string{
-			"err": err.Error(),
+		s.logger.Error("user: failed to clean up password reset cache data", map[string]string{
+			"error": err.Error(),
 		})
 	}
 	return nil

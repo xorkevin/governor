@@ -75,7 +75,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 	if err != nil {
 		l.Error("Failed connect nats", map[string]string{
-			"err": err.Error(),
+			"error": err.Error(),
 		})
 		return err
 	}
