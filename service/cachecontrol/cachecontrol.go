@@ -4,24 +4,7 @@ import (
 	"fmt"
 	"github.com/labstack/echo"
 	"net/http"
-	"strconv"
 )
-
-type (
-	// CacheControl is a service for managing http cache-control headers
-	CacheControl interface {
-		Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc
-		NoStore() echo.MiddlewareFunc
-	}
-
-	cacheControl struct {
-	}
-)
-
-// New creates a new cache control service
-func New() CacheControl {
-	return &cacheControl{}
-}
 
 const (
 	ccHeader       = "Cache-Control"
@@ -40,7 +23,7 @@ func etagToValue(etag string) string {
 }
 
 // Control creates a middleware function to cache the response
-func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	if maxage < 0 {
 		panic("maxage cannot be negative")
 	}
@@ -75,9 +58,9 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 				resheader.Add(ccHeader, ccNoCache)
 			}
 
-			resheader.Add(ccHeader, ccMaxAge+"="+strconv.Itoa(maxage))
+			resheader.Add(ccHeader, fmt.Sprintf("%s=%d", ccMaxAge, maxage))
 
-			if len(etag) > 0 {
+			if etag != "" {
 				resheader.Set(ccEtagH, etag)
 			}
 
@@ -87,7 +70,7 @@ func (cc *cacheControl) Control(public, revalidate bool, maxage int, etagfunc fu
 }
 
 // NoStore creates a middleware function to deny caching responses
-func (cc *cacheControl) NoStore() echo.MiddlewareFunc {
+func NoStore() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if err := next(c); err != nil {
