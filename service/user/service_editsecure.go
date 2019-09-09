@@ -3,7 +3,6 @@ package user
 import (
 	"net/http"
 	"strings"
-	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )
@@ -34,8 +33,7 @@ const (
 )
 
 const (
-	emailChangeEscapeSequence = "%email%"
-	cachePrefixEmailUpdate    = moduleID + ".updateemail:"
+	emailChangeEscapeSequence = "|email|"
 )
 
 // UpdateEmail creates a pending user email update
@@ -60,9 +58,9 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 	if err != nil {
 		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
-	sessionKey := key.Base64()
+	nonce := key.Base64()
 
-	if err := s.kv.KVStore().Set(cachePrefixEmailUpdate+sessionKey, userid+emailChangeEscapeSequence+newEmail, time.Duration(s.passwordResetTime)*time.Second).Err(); err != nil {
+	if err := s.kvemailchange.Set(nonce, userid+emailChangeEscapeSequence+newEmail, s.passwordResetTime); err != nil {
 		return governor.NewError("Failed to store new email info", http.StatusInternalServerError, err)
 	}
 
@@ -79,7 +77,7 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 	emdata := emailEmailChange{
 		FirstName: m.FirstName,
 		Username:  m.Username,
-		Key:       sessionKey,
+		Key:       nonce,
 	}
 	if err := s.mailer.Send(newEmail, emailChangeNotifySubject, emailChangeTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
@@ -89,9 +87,12 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 
 // CommitEmail commits an email update from the cache
 func (s *service) CommitEmail(key string, password string) error {
-	result, err := s.kv.KVStore().Get(cachePrefixEmailUpdate + key).Result()
+	result, err := s.kvemailchange.Get(key)
 	if err != nil {
-		return governor.NewErrorUser("New email verification expired", http.StatusBadRequest, err)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("New email verification expired", http.StatusBadRequest, err)
+		}
+		return governor.NewError("Failed to confirm email", http.StatusInternalServerError, err)
 	}
 
 	k := strings.SplitN(result, emailChangeEscapeSequence, 2)
@@ -120,7 +121,7 @@ func (s *service) CommitEmail(key string, password string) error {
 		return err
 	}
 
-	if err := s.kv.KVStore().Del(cachePrefixEmailUpdate + key).Err(); err != nil {
+	if err := s.kvemailchange.Del(key); err != nil {
 		s.logger.Error("user: failed to clean up new email cache data", map[string]string{
 			"error": err.Error(),
 		})
@@ -156,10 +157,6 @@ const (
 	passResetSubject   = "passreset_subject"
 )
 
-const (
-	cachePrefixPasswordUpdate = moduleID + ".updatepassword:"
-)
-
 // UpdatePassword updates the password
 func (s *service) UpdatePassword(userid string, newPassword string, oldPassword string) error {
 	m, err := s.users.GetByID(userid)
@@ -187,8 +184,8 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 			"error": err.Error(),
 		})
 	} else {
-		sessionKey := key.Base64()
-		if err := s.kv.KVStore().Set(cachePrefixPasswordUpdate+sessionKey, userid, time.Duration(s.passwordResetTime)*time.Second).Err(); err != nil {
+		nonce := key.Base64()
+		if err := s.kvpassreset.Set(nonce, userid, s.passwordResetTime); err != nil {
 			s.logger.Error("user: failed to cache undo password change key", map[string]string{
 				"error": err.Error(),
 			})
@@ -196,7 +193,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 			emdata := emailPassChange{
 				FirstName: m.FirstName,
 				Username:  m.Username,
-				Key:       sessionKey,
+				Key:       nonce,
 			}
 			if err := s.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
 				s.logger.Error("user: failed to send password change notification email", map[string]string{
@@ -235,16 +232,16 @@ func (s *service) ForgotPassword(username string, isEmail bool) error {
 	if err != nil {
 		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
-	sessionKey := key.Base64()
+	nonce := key.Base64()
 
-	if err := s.kv.KVStore().Set(cachePrefixPasswordUpdate+sessionKey, m.Userid, time.Duration(s.passwordResetTime)*time.Second).Err(); err != nil {
+	if err := s.kvpassreset.Set(nonce, m.Userid, s.passwordResetTime); err != nil {
 		return governor.NewError("Failed to store password reset info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailForgotPass{
 		FirstName: m.FirstName,
 		Username:  m.Username,
-		Key:       sessionKey,
+		Key:       nonce,
 	}
 	if err := s.mailer.Send(m.Email, forgotPassSubject, forgotPassTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send password reset email", http.StatusInternalServerError, err)
@@ -254,9 +251,12 @@ func (s *service) ForgotPassword(username string, isEmail bool) error {
 
 // ResetPassword completes the forgot password procedure
 func (s *service) ResetPassword(key string, newPassword string) error {
-	userid, err := s.kv.KVStore().Get(cachePrefixPasswordUpdate + key).Result()
+	userid, err := s.kvpassreset.Get(key)
 	if err != nil {
-		return governor.NewError("Password reset expired", http.StatusBadRequest, err)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("Password reset expired", http.StatusBadRequest, err)
+		}
+		return governor.NewError("Failed to reset password", http.StatusInternalServerError, err)
 	}
 
 	m, err := s.users.GetByID(userid)
@@ -285,7 +285,7 @@ func (s *service) ResetPassword(key string, newPassword string) error {
 		})
 	}
 
-	if err := s.kv.KVStore().Del(cachePrefixPasswordUpdate + key).Err(); err != nil {
+	if err := s.kvpassreset.Del(key); err != nil {
 		s.logger.Error("user: failed to clean up password reset cache data", map[string]string{
 			"error": err.Error(),
 		})

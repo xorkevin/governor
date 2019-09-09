@@ -38,7 +38,10 @@ type (
 		users             usermodel.Repo
 		roles             rolemodel.Repo
 		sessions          sessionmodel.Repo
-		kv                kvstore.KVStore
+		kvnewuser         kvstore.KVStore
+		kvemailchange     kvstore.KVStore
+		kvpassreset       kvstore.KVStore
+		kvsessions        kvstore.KVStore
 		mailer            mail.Mail
 		gate              gate.Gate
 		tokenizer         *token.Tokenizer
@@ -88,7 +91,10 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		users:             users,
 		roles:             roles,
 		sessions:          sessions,
-		kv:                kv,
+		kvnewuser:         kv.Subtree("newuser"),
+		kvemailchange:     kv.Subtree("emailchange"),
+		kvpassreset:       kv.Subtree("passreset"),
+		kvsessions:        kv.Subtree("sessions"),
 		mailer:            mailer,
 		gate:              g,
 		accessTime:        time5m,

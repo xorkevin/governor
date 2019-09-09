@@ -58,4 +58,4 @@ user:
 courier:
   fallbacklink: http://localhost:8080
   linkprefix: http://localhost:8080/link
-  cachetime: 1m
+  cachetime: 24h

@@ -51,4 +51,4 @@ user:
   issuer: governor
   # secret: secret
 courier:
-  cachetime: 1m
+  cachetime: 24h

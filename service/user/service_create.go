@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"net/http"
-	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
@@ -32,10 +31,6 @@ type (
 		Userid   string `json:"userid"`
 		Username string `json:"username"`
 	}
-)
-
-const (
-	cachePrefixNewUser = moduleID + ".newuser:"
 )
 
 // CreateUser creates a new user and places it into the cache
@@ -70,16 +65,16 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
-	sessionKey := key.Base64()
+	nonce := key.Base64()
 
-	if err := s.kv.KVStore().Set(cachePrefixNewUser+sessionKey, b.String(), time.Duration(s.confirmTime)*time.Second).Err(); err != nil {
+	if err := s.kvnewuser.Set(nonce, b.String(), s.confirmTime); err != nil {
 		return nil, governor.NewError("Failed to store user info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailNewUser{
 		FirstName: m.FirstName,
 		Username:  m.Username,
-		Key:       sessionKey,
+		Key:       nonce,
 	}
 	if err := s.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
 		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
@@ -93,9 +88,12 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 
 // CommitUser takes a user from the cache and places it into the db
 func (s *service) CommitUser(key string) (*resUserUpdate, error) {
-	gobUser, err := s.kv.KVStore().Get(cachePrefixNewUser + key).Result()
+	gobUser, err := s.kvnewuser.Get(key)
 	if err != nil {
-		return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
+		}
+		return nil, governor.NewError("Failed to get account", http.StatusInternalServerError, err)
 	}
 
 	m := s.users.NewEmpty()
@@ -127,7 +125,7 @@ func (s *service) CommitUser(key string) (*resUserUpdate, error) {
 		}
 	}
 
-	if err := s.kv.KVStore().Del(cachePrefixNewUser + key).Err(); err != nil {
+	if err := s.kvnewuser.Del(key); err != nil {
 		s.logger.Error("user: failed to clean up user create cache data", map[string]string{
 			"error": err.Error(),
 		})

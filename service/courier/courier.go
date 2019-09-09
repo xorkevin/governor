@@ -15,7 +15,7 @@ import (
 
 const (
 	linkImageBucketID       = "courier-link-image"
-	min1              int64 = 60
+	time24h           int64 = 86400
 	b1                      = 1_000_000_000
 	min15                   = 900
 )
@@ -35,7 +35,7 @@ type (
 		repo            couriermodel.Repo
 		objstore        objstore.Objstore
 		linkImageBucket objstore.Bucket
-		kv              kvstore.KVStore
+		kvlinks         kvstore.KVStore
 		gate            gate.Gate
 		logger          governor.Logger
 		fallbackLink    string
@@ -53,16 +53,16 @@ func New(repo couriermodel.Repo, obj objstore.Objstore, kv kvstore.KVStore, g ga
 	return &service{
 		repo:      repo,
 		objstore:  obj,
-		kv:        kv,
+		kvlinks:   kv.Subtree("links"),
 		gate:      g,
-		cacheTime: min1,
+		cacheTime: time24h,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
-	r.SetDefault("cachetime", "1m")
+	r.SetDefault("cachetime", "24h")
 }
 
 func (s *service) router() *router {

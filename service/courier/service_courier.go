@@ -4,15 +4,13 @@ import (
 	"github.com/minio/minio-go"
 	"io"
 	"net/http"
-	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
 	"xorkevin.dev/governor/service/image"
 )
 
 const (
-	cachePrefixCourierLink = "courier.courierlink:"
-	mediaTypePNG           = "image/png"
+	mediaTypePNG = "image/png"
 )
 
 type (
@@ -42,15 +40,14 @@ func (s *service) GetLink(linkid string) (*resGetLink, error) {
 }
 
 func (s *service) GetLinkFast(linkid string) (string, error) {
-	cacheLinkID := cachePrefixCourierLink + linkid
-	if cachedURL, err := s.kv.KVStore().Get(cacheLinkID).Result(); err == nil {
+	if cachedURL, err := s.kvlinks.Get(linkid); err == nil {
 		return cachedURL, nil
 	}
 	res, err := s.GetLink(linkid)
 	if err != nil {
 		return "", err
 	}
-	if err := s.kv.KVStore().Set(cacheLinkID, res.URL, time.Duration(s.cacheTime)*time.Second).Err(); err != nil {
+	if err := s.kvlinks.Set(linkid, res.URL, s.cacheTime); err != nil {
 		s.logger.Error("courier: failed to cache linkid url", map[string]string{
 			"linkid": linkid,
 			"error":  err.Error(),
@@ -144,10 +141,6 @@ func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, err
 		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
 	}
 	if err := s.linkImageBucket.Put(m.LinkID+"-qr", mediaTypePNG, int64(qrpng.Len()), qrpng); err != nil {
-		s.logger.Error("courier: failed to add link qrcode image to objstore", map[string]string{
-			"linkid": m.LinkID,
-			"err":    err.Error(),
-		})
 		return nil, governor.NewError("Failed to put qr code image in objstore", http.StatusInternalServerError, err)
 	}
 
@@ -170,6 +163,12 @@ func (s *service) DeleteLink(linkid string) error {
 	}
 	if err := s.linkImageBucket.Remove(linkid + "-qr"); err != nil {
 		return governor.NewError("Failed to remove qr code image from objstore", http.StatusInternalServerError, err)
+	}
+	if err := s.kvlinks.Del(linkid); err != nil {
+		s.logger.Error("courier: failed to delete linkid url", map[string]string{
+			"linkid": linkid,
+			"error":  err.Error(),
+		})
 	}
 	return nil
 }

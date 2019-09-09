@@ -51,11 +51,11 @@ func main() {
 	roleModel := rolemodel.New(dbService)
 	userModel := usermodel.New(dbService, roleModel)
 	sessionModel := sessionmodel.New(dbService)
-	userService := user.New(userModel, roleModel, sessionModel, kvService, mailService, gateService)
+	userService := user.New(userModel, roleModel, sessionModel, kvService.Subtree("user"), mailService, gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService, gateService)
 	courierModel := couriermodel.New(dbService)
-	courierService := courier.New(courierModel, objstoreService, kvService, gateService)
+	courierService := courier.New(courierModel, objstoreService, kvService.Subtree("courier"), gateService)
 
 	gov.Register("database", "/null", dbService)
 	gov.Register("kvstore", "/null", kvService)

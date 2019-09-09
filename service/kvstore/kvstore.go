@@ -6,13 +6,17 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/labstack/echo"
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 )
 
 type (
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
-		KVStore() *redis.Client
+		Get(key string) (string, error)
+		Set(key, val string, seconds int64) error
+		Del(key ...string) error
+		Subtree(prefix string) KVStore
 	}
 
 	Service interface {
@@ -78,7 +82,64 @@ func (s *service) Health() error {
 	return nil
 }
 
-// KVStore returns the client instance
-func (s *service) KVStore() *redis.Client {
-	return s.client
+func (s *service) Get(key string) (string, error) {
+	val, err := s.client.Get(key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", governor.NewError("Key not found", http.StatusNotFound, err)
+		}
+		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)
+	}
+	return val, nil
+}
+
+func (s *service) Set(key, val string, seconds int64) error {
+	if err := s.client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
+		return governor.NewError("Failed to set key", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+func (s *service) Del(key ...string) error {
+	if err := s.client.Del(key...).Err(); err != nil {
+		return governor.NewError("Failed to delete key", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+type (
+	tree struct {
+		prefix string
+		base   KVStore
+	}
+)
+
+func (t *tree) Get(key string) (string, error) {
+	return t.base.Get(t.prefix + ":" + key)
+}
+
+func (t *tree) Set(key, val string, seconds int64) error {
+	return t.base.Set(t.prefix+":"+key, val, seconds)
+}
+
+func (t *tree) Del(key ...string) error {
+	args := make([]string, 0, len(key))
+	for _, i := range key {
+		args = append(args, t.prefix+":"+i)
+	}
+	return t.base.Del(args...)
+}
+
+func (t *tree) Subtree(prefix string) KVStore {
+	return &tree{
+		prefix: prefix,
+		base:   t,
+	}
+}
+
+func (s *service) Subtree(prefix string) KVStore {
+	return &tree{
+		prefix: prefix,
+		base:   s,
+	}
 }

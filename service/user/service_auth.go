@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/go-redis/redis"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -16,7 +15,6 @@ const (
 const (
 	authenticationSubject = "authentication"
 	refreshSubject        = "refresh"
-	cachePrefixSession    = moduleID + ".session:"
 )
 
 type (
@@ -117,7 +115,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
-	if err := s.kv.KVStore().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(s.refreshCacheTime)*time.Second).Err(); err != nil {
+	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 	if !sessionExists {
@@ -146,9 +144,9 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	keyhash, err := s.kv.KVStore().Get(cachePrefixSession + claims.ID).Result()
+	keyhash, err := s.kvsessions.Get(claims.ID)
 	if err != nil {
-		if err == redis.Nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return s.RefreshToken(refreshToken, ipaddr, useragent)
 		}
 		return nil, governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
@@ -212,7 +210,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
 
-	if err := s.kv.KVStore().Set(cachePrefixSession+sm.SessionID, sm.KeyHash, time.Duration(s.refreshCacheTime)*time.Second).Err(); err != nil {
+	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 	if err := s.sessions.Update(sm); err != nil {
@@ -248,7 +246,7 @@ func (s *service) Logout(refreshToken string) error {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	if err := s.kv.KVStore().Del(cachePrefixSession + claims.ID).Err(); err != nil {
+	if err := s.kvsessions.Del(claims.ID); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
 	if err := s.sessions.Delete(sm); err != nil {

@@ -41,11 +41,7 @@ func (s *service) GetUserSessions(userid string) (*resUserGetSessions, error) {
 
 // KillCacheSessions terminates user sessions in cache
 func (s *service) KillCacheSessions(sessionids []string) error {
-	ids := make([]string, 0, len(sessionids))
-	for _, i := range sessionids {
-		ids = append(ids, cachePrefixSession+i)
-	}
-	if err := s.kv.KVStore().Del(ids...).Err(); err != nil {
+	if err := s.kvsessions.Del(sessionids...); err != nil {
 		return governor.NewError("Failed to delete session keys", http.StatusInternalServerError, err)
 	}
 	return nil
