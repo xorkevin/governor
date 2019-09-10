@@ -1,12 +1,12 @@
 package courier
 
 import (
-	"github.com/minio/minio-go"
 	"io"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
 	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/objstore"
 )
 
 const (
@@ -56,8 +56,8 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 	return res.URL, nil
 }
 
-func (s *service) StatLinkImage(linkid string) (*minio.ObjectInfo, error) {
-	objinfo, err := s.linkImageBucket.Stat(linkid + "-qr")
+func (s *service) StatLinkImage(linkid string) (*objstore.ObjectInfo, error) {
+	objinfo, err := s.linkImgDir.Stat(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
@@ -67,8 +67,8 @@ func (s *service) StatLinkImage(linkid string) (*minio.ObjectInfo, error) {
 	return objinfo, nil
 }
 
-func (s *service) GetLinkImage(linkid string) (io.Reader, string, error) {
-	qrimage, objinfo, err := s.linkImageBucket.Get(linkid + "-qr")
+func (s *service) GetLinkImage(linkid string) (io.ReadCloser, string, error) {
+	qrimage, objinfo, err := s.linkImgDir.Get(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
@@ -140,8 +140,8 @@ func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, err
 	if err != nil {
 		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
 	}
-	if err := s.linkImageBucket.Put(m.LinkID+"-qr", mediaTypePNG, int64(qrpng.Len()), qrpng); err != nil {
-		return nil, governor.NewError("Failed to put qr code image in objstore", http.StatusInternalServerError, err)
+	if err := s.linkImgDir.Put(m.LinkID, mediaTypePNG, int64(qrpng.Len()), qrpng); err != nil {
+		return nil, governor.NewError("Failed to save qr code image", http.StatusInternalServerError, err)
 	}
 
 	return &resCreateLink{
@@ -161,14 +161,14 @@ func (s *service) DeleteLink(linkid string) error {
 	if err := s.repo.DeleteLink(m); err != nil {
 		return err
 	}
-	if err := s.linkImageBucket.Remove(linkid + "-qr"); err != nil {
-		return governor.NewError("Failed to remove qr code image from objstore", http.StatusInternalServerError, err)
-	}
 	if err := s.kvlinks.Del(linkid); err != nil {
 		s.logger.Error("courier: failed to delete linkid url", map[string]string{
 			"linkid": linkid,
 			"error":  err.Error(),
 		})
+	}
+	if err := s.linkImgDir.Del(linkid); err != nil {
+		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
 	}
 	return nil
 }

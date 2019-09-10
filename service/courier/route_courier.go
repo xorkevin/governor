@@ -45,6 +45,7 @@ func (r *router) getLinkImage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	defer qrimage.Close()
 	return c.Stream(http.StatusOK, contentType, qrimage)
 }
 

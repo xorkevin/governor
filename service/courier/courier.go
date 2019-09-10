@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	linkImageBucketID       = "courier-link-image"
-	time24h           int64 = 86400
-	b1                      = 1_000_000_000
-	min15                   = 900
+	time24h int64 = 86400
+	b1            = 1_000_000_000
+	min15         = 900
 )
 
 type (
@@ -32,15 +31,15 @@ type (
 	}
 
 	service struct {
-		repo            couriermodel.Repo
-		objstore        objstore.Objstore
-		linkImageBucket objstore.Bucket
-		kvlinks         kvstore.KVStore
-		gate            gate.Gate
-		logger          governor.Logger
-		fallbackLink    string
-		linkPrefix      string
-		cacheTime       int64
+		repo          couriermodel.Repo
+		linkImgBucket objstore.Bucket
+		linkImgDir    objstore.Dir
+		kvlinks       kvstore.KVStore
+		gate          gate.Gate
+		logger        governor.Logger
+		fallbackLink  string
+		linkPrefix    string
+		cacheTime     int64
 	}
 
 	router struct {
@@ -49,13 +48,14 @@ type (
 )
 
 // New creates a new Courier service
-func New(repo couriermodel.Repo, obj objstore.Objstore, kv kvstore.KVStore, g gate.Gate) Service {
+func New(repo couriermodel.Repo, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
 	return &service{
-		repo:      repo,
-		objstore:  obj,
-		kvlinks:   kv.Subtree("links"),
-		gate:      g,
-		cacheTime: time24h,
+		repo:          repo,
+		linkImgBucket: obj,
+		linkImgDir:    obj.Subdir("qr"),
+		kvlinks:       kv.Subtree("links"),
+		gate:          g,
+		cacheTime:     time24h,
 	}
 }
 
@@ -116,19 +116,17 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("created courierlinks table", nil)
+	s.logger.Info("courier: created courierlinks table", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	b, err := s.objstore.GetBucketDefLoc(linkImageBucketID)
-	if err != nil {
-		s.logger.Error("fail get courier link image bucket", map[string]string{
+	if err := s.linkImgBucket.Init(); err != nil {
+		s.logger.Error("courier: failed to init courier link image bucket", map[string]string{
 			"error": err.Error(),
 		})
 		return err
 	}
-	s.linkImageBucket = b
 	return nil
 }
 

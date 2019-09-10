@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	imageBucket = "profile-image"
-	min1        = 60
-	min15       = 900
+	min1  = 60
+	min15 = 900
 )
 
 type (
@@ -23,11 +22,12 @@ type (
 	}
 
 	service struct {
-		profiles profilemodel.Repo
-		objstore objstore.Objstore
-		obj      objstore.Bucket
-		gate     gate.Gate
-		logger   governor.Logger
+		profiles      profilemodel.Repo
+		objstore      objstore.Objstore
+		profileBucket objstore.Bucket
+		profileDir    objstore.Dir
+		gate          gate.Gate
+		logger        governor.Logger
 	}
 
 	router struct {
@@ -36,11 +36,12 @@ type (
 )
 
 // New creates a new Profile service
-func New(profiles profilemodel.Repo, obj objstore.Objstore, g gate.Gate) Service {
+func New(profiles profilemodel.Repo, obj objstore.Bucket, g gate.Gate) Service {
 	return &service{
-		profiles: profiles,
-		objstore: obj,
-		gate:     g,
+		profiles:      profiles,
+		profileBucket: obj,
+		profileDir:    obj.Subdir("profileimage"),
+		gate:          g,
 	}
 }
 
@@ -73,14 +74,12 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	b, err := s.objstore.GetBucketDefLoc(imageBucket)
-	if err != nil {
-		s.logger.Error("profile: failed get profile picture bucket", map[string]string{
+	if err := s.profileBucket.Init(); err != nil {
+		s.logger.Error("profile: failed to init profile image bucket", map[string]string{
 			"error": err.Error(),
 		})
 		return err
 	}
-	s.obj = b
 	return nil
 }
 

@@ -139,6 +139,7 @@ func (r *router) getProfileImage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	defer image.Close()
 	return c.Stream(http.StatusOK, contentType, image)
 }
 

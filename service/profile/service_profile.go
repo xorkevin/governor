@@ -1,11 +1,11 @@
 package profile
 
 import (
-	"github.com/minio/minio-go"
 	"io"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/objstore"
 )
 
 type (
@@ -65,8 +65,8 @@ func (s *service) UpdateImage(userid string, img io.Reader, imgSize int64, thumb
 		return err
 	}
 
-	if err := s.obj.Put(userid+"-profile", image.MediaTypeJpeg, imgSize, img); err != nil {
-		return governor.NewError("Failed to store profile picture", http.StatusInternalServerError, err)
+	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, imgSize, img); err != nil {
+		return governor.NewError("Failed to save profile picture", http.StatusInternalServerError, err)
 	}
 
 	m.Image = thumb64
@@ -106,8 +106,8 @@ func (s *service) GetProfile(userid string) (*resProfileModel, error) {
 	}, nil
 }
 
-func (s *service) StatProfileImage(userid string) (*minio.ObjectInfo, error) {
-	objinfo, err := s.obj.Stat(userid + "-profile")
+func (s *service) StatProfileImage(userid string) (*objstore.ObjectInfo, error) {
+	objinfo, err := s.profileDir.Stat(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Profile image not found", 0, err)
@@ -117,8 +117,8 @@ func (s *service) StatProfileImage(userid string) (*minio.ObjectInfo, error) {
 	return objinfo, nil
 }
 
-func (s *service) GetProfileImage(userid string) (io.Reader, string, error) {
-	obj, objinfo, err := s.obj.Get(userid + "-profile")
+func (s *service) GetProfileImage(userid string) (io.ReadCloser, string, error) {
+	obj, objinfo, err := s.profileDir.Get(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Profile image not found", 0, err)

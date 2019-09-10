@@ -10,17 +10,11 @@ import (
 	"xorkevin.dev/governor"
 )
 
-const (
-	canaryBucket    = "bucket-canary"
-	defaultLocation = "us-east-1"
-)
-
 type (
 	// Objstore is a service wrapper around a object storage client
 	Objstore interface {
-		GetBucket(name, location string) (Bucket, error)
-		GetBucketDefLoc(name string) (Bucket, error)
-		DestroyBucket(name string) error
+		GetBucket(name string) Bucket
+		DelBucket(name string) error
 	}
 
 	Service interface {
@@ -29,22 +23,9 @@ type (
 	}
 
 	service struct {
-		store  *minio.Client
-		logger governor.Logger
-	}
-
-	// Bucket is a collection of items of the object store service
-	Bucket interface {
-		Put(name, contentType string, size int64, object io.Reader) error
-		Stat(name string) (*minio.ObjectInfo, error)
-		Get(name string) (*minio.Object, *minio.ObjectInfo, error)
-		Remove(name string) error
-	}
-
-	bucket struct {
-		store    *minio.Client
-		name     string
 		location string
+		store    *minio.Client
+		logger   governor.Logger
 	}
 )
 
@@ -59,6 +40,7 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "9000")
 	r.SetDefault("sslmode", false)
+	r.SetDefault("location", "us-east-1")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
@@ -72,17 +54,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
 	}
 	s.store = client
+	s.location = conf["location"]
 
-	client.SetAppInfo(c.Appname, c.Version)
+	s.store.SetAppInfo(c.Appname, c.Version)
 
-	if err := initBucket(client, canaryBucket, defaultLocation); err != nil {
-		s.logger.Error("objstore: failed to create canary bucket", map[string]string{
+	if _, err := s.store.ListBuckets(); err != nil {
+		s.logger.Error("objstore: failed to ping object store", map[string]string{
 			"error": err.Error(),
 		})
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 
-	s.logger.Info(fmt.Sprintf("objstore: establish objstore connection to %s:%s", conf["host"], conf["port"]), nil)
+	s.logger.Info(fmt.Sprintf("objstore: established objstore connection to %s:%s", conf["host"], conf["port"]), nil)
 	return nil
 }
 
@@ -98,97 +81,160 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	if exists, err := s.store.BucketExists(canaryBucket); err != nil || !exists {
-		return governor.NewError("Failed to find canary bucket", http.StatusServiceUnavailable, err)
+	if _, err := s.store.ListBuckets(); err != nil {
+		s.logger.Error("objstore: failed to ping object store", map[string]string{
+			"error": err.Error(),
+		})
+		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-// GetBucket creates a new bucket if it does not exist in the store and returns the bucket
-func (s *service) GetBucket(name, location string) (Bucket, error) {
-	if err := initBucket(s.store, name, location); err != nil {
-		return nil, err
-	}
+// GetBucket returns the bucket of the given name
+func (s *service) GetBucket(name string) Bucket {
 	return &bucket{
-		store:    s.store,
+		service:  s,
 		name:     name,
-		location: location,
-	}, nil
+		location: s.location,
+	}
 }
 
-// DestroyBucket destroys the bucket if it exists
-func (s *service) DestroyBucket(name string) error {
-	exists, err := s.store.BucketExists(name)
-	if err != nil {
-		return governor.NewError("Failed to find bucket", http.StatusNotFound, err)
-	}
-	if exists {
-		if err := s.store.RemoveBucket(name); err != nil {
-			return governor.NewError("Failed to remove bucket", http.StatusInternalServerError, err)
+// DelBucket deletes the bucket if it exists
+func (s *service) DelBucket(name string) error {
+	if err := s.store.RemoveBucket(name); err != nil {
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return governor.NewError("Failed to get bucket", http.StatusNotFound, err)
 		}
+		return governor.NewError("Failed to remove bucket", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-// GetBucketDefLoc creates a new bucket if it does not exist at the default location in the store and returns the bucket
-func (s *service) GetBucketDefLoc(name string) (Bucket, error) {
-	return s.GetBucket(name, defaultLocation)
-}
+type (
+	ObjectInfo struct {
+		Size         int64
+		ContentType  string
+		ETag         string
+		LastModified int64
+	}
 
-func initBucket(client *minio.Client, name, location string) error {
-	exists, err := client.BucketExists(name)
+	// Dir is a collection of objects in the store at a specified directory
+	Dir interface {
+		Stat(name string) (*ObjectInfo, error)
+		Get(name string) (io.ReadCloser, *ObjectInfo, error)
+		Put(name string, contentType string, size int64, object io.Reader) error
+		Del(name string) error
+		Subdir(name string) Dir
+	}
+
+	// Bucket is a collection of items of the object store service
+	Bucket interface {
+		Dir
+		Init() error
+	}
+
+	bucket struct {
+		service  *service
+		name     string
+		location string
+	}
+
+	dir struct {
+		parent Dir
+		name   string
+	}
+)
+
+// Init creates the bucket if it does not exist
+func (b *bucket) Init() error {
+	exists, err := b.service.store.BucketExists(b.name)
 	if err != nil {
-		return governor.NewError("Failed to query if bucket exists", http.StatusNotFound, err)
+		return governor.NewError("Failed to get bucket", http.StatusInternalServerError, err)
 	}
 	if !exists {
-		if err := client.MakeBucket(name, location); err != nil {
+		if err := b.service.store.MakeBucket(b.name, b.location); err != nil {
 			return governor.NewError("Failed to create bucket", http.StatusInternalServerError, err)
 		}
 	}
 	return nil
 }
 
-func rmBucket(client *minio.Client, name string) error {
-	if err := client.RemoveBucket(name); err != nil {
-		return governor.NewError("Error removing bucket", http.StatusInternalServerError, err)
-	}
-	return nil
-}
-
-// Put puts a new object into the bucket
-func (b *bucket) Put(name, contentType string, size int64, object io.Reader) error {
-	if _, err := b.store.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
-		return governor.NewError("Failed to add object in bucket", http.StatusInternalServerError, err)
-	}
-	return nil
-}
-
 // Stat returns metadata of an object from the bucket
-func (b *bucket) Stat(name string) (*minio.ObjectInfo, error) {
-	objInfo, err := b.store.StatObject(b.name, name, minio.StatObjectOptions{})
+func (b *bucket) Stat(name string) (*ObjectInfo, error) {
+	info, err := b.service.store.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+		}
+		return nil, governor.NewError("Failed to stat object", http.StatusInternalServerError, err)
 	}
-	return &objInfo, nil
+	return &ObjectInfo{
+		Size:         info.Size,
+		ContentType:  info.ContentType,
+		ETag:         info.ETag,
+		LastModified: info.LastModified.Unix(),
+	}, nil
 }
 
 // Get gets an object from the bucket
-func (b *bucket) Get(name string) (*minio.Object, *minio.ObjectInfo, error) {
-	objInfo, err := b.store.StatObject(b.name, name, minio.StatObjectOptions{})
+func (b *bucket) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
+	info, err := b.Stat(name)
 	if err != nil {
-		return nil, nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+		return nil, nil, err
 	}
-	obj, err := b.store.GetObject(b.name, name, minio.GetObjectOptions{})
+
+	obj, err := b.service.store.GetObject(b.name, name, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, nil, governor.NewError("Failed to retrieve object", http.StatusInternalServerError, err)
+		return nil, nil, governor.NewError("Failed to get object", http.StatusInternalServerError, err)
 	}
-	return obj, &objInfo, nil
+	return obj, info, nil
 }
 
-// Remove removes an object from the bucket
-func (b *bucket) Remove(name string) error {
-	if err := b.store.RemoveObject(b.name, name); err != nil {
+// Put puts a new object into the bucket
+func (b *bucket) Put(name string, contentType string, size int64, object io.Reader) error {
+	if _, err := b.service.store.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+		return governor.NewError("Failed to save object to bucket", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// Del removes an object from the bucket
+func (b *bucket) Del(name string) error {
+	if err := b.service.store.RemoveObject(b.name, name); err != nil {
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return governor.NewError("Failed to find object", http.StatusNotFound, err)
+		}
 		return governor.NewError("Failed to remove object", http.StatusInternalServerError, err)
 	}
 	return nil
+}
+
+func (d *dir) Stat(name string) (*ObjectInfo, error) {
+	return d.parent.Stat(d.name + "/" + name)
+}
+
+func (d *dir) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
+	return d.parent.Get(d.name + "/" + name)
+}
+
+func (d *dir) Put(name string, contentType string, size int64, object io.Reader) error {
+	return d.parent.Put(d.name+"/"+name, contentType, size, object)
+}
+
+func (d *dir) Del(name string) error {
+	return d.parent.Del(d.name + "/" + name)
+}
+
+func (d *dir) Subdir(name string) Dir {
+	return &dir{
+		parent: d,
+		name:   name,
+	}
+}
+
+func (b *bucket) Subdir(name string) Dir {
+	return &dir{
+		parent: b,
+		name:   name,
+	}
 }
