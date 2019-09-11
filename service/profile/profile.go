@@ -2,7 +2,7 @@ package profile
 
 import (
 	"context"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"

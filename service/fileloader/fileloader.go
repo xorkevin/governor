@@ -2,7 +2,7 @@ package fileloader
 
 import (
 	"fmt"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"mime"
 	"mime/multipart"
 	"net/http"

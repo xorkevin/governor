@@ -3,7 +3,7 @@ package governor
 import (
 	"bytes"
 	"fmt"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"golang.org/x/xerrors"
 	"net/http"
 	"net/http/httputil"

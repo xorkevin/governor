@@ -3,7 +3,7 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"golang.org/x/image/draw"
 	goimg "image"
 	"image/gif"

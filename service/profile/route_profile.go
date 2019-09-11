@@ -1,7 +1,7 @@
 package profile
 
 import (
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"

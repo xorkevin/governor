@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"

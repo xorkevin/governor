@@ -7,7 +7,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	gomail "github.com/go-mail/mail"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"sync"

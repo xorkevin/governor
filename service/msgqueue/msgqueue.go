@@ -3,7 +3,7 @@ package msgqueue
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"github.com/nats-io/stan.go"
 	"net/http"
 	"sync/atomic"

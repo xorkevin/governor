@@ -3,7 +3,7 @@ package objstore
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 	"github.com/minio/minio-go"
 	"io"
 	"net/http"
