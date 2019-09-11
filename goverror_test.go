@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/xerrors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,7 +96,7 @@ func TestGoverror_Is(t *testing.T) {
 
 	err := NewError("test message", 123, nil)
 	goverr := &goverror{}
-	ok := xerrors.Is(err, goverr)
+	ok := errors.Is(err, goverr)
 	assert.True(ok, "error should be a goverror")
 }
 
@@ -120,7 +119,7 @@ func TestGoverror_As(t *testing.T) {
 	assert.False(ok1, "goverror should not be a goverrorUser by default")
 
 	goverr2 := &goverror{}
-	ok2 := xerrors.As(err, &goverr2)
+	ok2 := errors.As(err, &goverr2)
 	assert.True(ok2, "error should be a goverror")
 	assert.Equal("test message", goverr2.message, "error.As should copy message")
 	assert.Equal(123, goverr2.status, "error.As should copy status")
@@ -210,7 +209,7 @@ func TestGoverrorUser_Is(t *testing.T) {
 
 	err := NewErrorUser("test message", 123, nil)
 	goverruser := &goverrorUser{}
-	ok := xerrors.Is(err, goverruser)
+	ok := errors.Is(err, goverruser)
 	assert.True(ok, "error should be a goverrorUser")
 }
 
@@ -233,7 +232,7 @@ func TestGoverrorUser_As(t *testing.T) {
 	assert.False(ok1, "goverror should not be a goverror by default")
 
 	goverr2 := &goverrorUser{}
-	ok2 := xerrors.As(err, &goverr2)
+	ok2 := errors.As(err, &goverr2)
 	assert.True(ok2, "error should be a goverror")
 	assert.Equal("test message", goverr2.message, "error.As should copy message")
 	assert.Equal(123, goverr2.status, "error.As should copy status")

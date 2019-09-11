@@ -2,9 +2,9 @@ package governor
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/xerrors"
 	"net/http"
 	"net/http/httputil"
 )
@@ -31,10 +31,10 @@ func NewError(message string, status int, err error) error {
 		st := 0
 		goverr := &goverror{}
 		goverruser := &goverrorUser{}
-		if xerrors.As(err, &goverr) {
+		if errors.As(err, &goverr) {
 			m = goverr.message
 			st = goverr.status
-		} else if xerrors.As(err, &goverruser) {
+		} else if errors.As(err, &goverruser) {
 			m = goverruser.message
 			st = goverruser.status
 		} else {
@@ -104,10 +104,10 @@ func NewErrorUser(message string, status int, err error) error {
 		st := 0
 		goverruser := &goverrorUser{}
 		goverr := &goverror{}
-		if xerrors.As(err, &goverruser) {
+		if errors.As(err, &goverruser) {
 			m = goverruser.message
 			st = goverruser.status
-		} else if xerrors.As(err, &goverr) {
+		} else if errors.As(err, &goverr) {
 			m = goverr.message
 			st = goverr.status
 		} else {
@@ -157,10 +157,10 @@ func (e *goverrorUser) As(target interface{}) bool {
 
 // ErrorStatus reports the error status of the top most governor error in the chain
 func ErrorStatus(target error) int {
-	if goverr := (&goverror{}); xerrors.As(target, &goverr) {
+	if goverr := (&goverror{}); errors.As(target, &goverr) {
 		return goverr.status
 	}
-	if goverruser := (&goverrorUser{}); xerrors.As(target, &goverruser) {
+	if goverruser := (&goverrorUser{}); errors.As(target, &goverruser) {
 		return goverruser.status
 	}
 	return 0
@@ -176,7 +176,7 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
 		goverruser := &goverrorUser{}
 		goverr := &goverror{}
-		if xerrors.As(err, &goverruser) {
+		if errors.As(err, &goverruser) {
 			status := http.StatusInternalServerError
 			if goverruser.status != 0 {
 				status = goverruser.status
@@ -189,7 +189,7 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 					"err":      err.Error(),
 				})
 			}
-		} else if xerrors.As(err, &goverr) {
+		} else if errors.As(err, &goverr) {
 			request := ""
 			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
 				request = bytes.NewBuffer(r).String()

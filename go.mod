@@ -16,6 +16,5 @@ require (
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.4.0
 	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a
-	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7
 	xorkevin.dev/hunter2 v0.1.1
 )
