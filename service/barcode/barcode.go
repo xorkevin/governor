@@ -15,11 +15,11 @@ const (
 type QRECLevel int
 
 const (
-	QRECDefault  QRECLevel = 0
-	QRECLow      QRECLevel = 1
-	QRECMedium   QRECLevel = 2
-	QRECQuartile QRECLevel = 3
-	QRECHigh     QRECLevel = 4
+	QRECDefault QRECLevel = iota
+	QRECLow
+	QRECMedium
+	QRECQuartile
+	QRECHigh
 )
 
 func qrecTranslate(level QRECLevel) qr.ErrorCorrectionLevel {

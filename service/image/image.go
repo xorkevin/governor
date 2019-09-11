@@ -234,10 +234,10 @@ func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
 type PngCompressionOpt int
 
 const (
-	PngDefault PngCompressionOpt = 0
-	PngNone    PngCompressionOpt = 1
-	PngFast    PngCompressionOpt = 2
-	PngBest    PngCompressionOpt = 3
+	PngDefault PngCompressionOpt = iota
+	PngNone
+	PngFast
+	PngBest
 )
 
 func compressionOptTranslate(level PngCompressionOpt) png.CompressionLevel {
