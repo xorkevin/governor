@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/labstack/echo/v4"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v6"
 	"io"
 	"net/http"
 	"xorkevin.dev/governor"
