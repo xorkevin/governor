@@ -3,7 +3,7 @@ VERSION=v0.1.0
 
 # CMD
 BIN_DIR=bin
-BIN_NAME=gov
+BIN_NAME=governor
 MAIN_PATH=cmd/gov/main.go
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 

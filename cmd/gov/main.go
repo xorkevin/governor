@@ -33,6 +33,7 @@ func main() {
 	gov := governor.New(governor.ConfigOpts{
 		DefaultFile: "config",
 		Appname:     "governor",
+		Description: "Governor is a web server with user and auth capabilities",
 		Version:     "v0.2.0",
 		VersionHash: GitHash,
 		EnvPrefix:   "gov",
@@ -68,5 +69,5 @@ func main() {
 	gov.Register("profile", "/profile", profileService)
 	gov.Register("courier", "/courier", courierService)
 
-	gov.Start()
+	gov.Execute()
 }

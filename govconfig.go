@@ -12,6 +12,7 @@ type (
 	ConfigOpts struct {
 		DefaultFile string
 		Appname     string
+		Description string
 		Version     string
 		VersionHash string
 		EnvPrefix   string

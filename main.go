@@ -6,6 +6,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ type (
 		state      state.State
 		logger     Logger
 		i          *echo.Echo
+		rootCmd    *cobra.Command
 		showBanner bool
 		setupRun   bool
 	}
@@ -29,18 +31,20 @@ type (
 
 // New creates a new Server
 func New(conf ConfigOpts, stateService state.State) *Server {
-	return &Server{
+	s := &Server{
 		services:   []serviceDef{},
 		config:     newConfig(conf),
 		state:      stateService,
 		showBanner: true,
 		setupRun:   false,
 	}
+	s.initCommand(conf)
+	return s
 }
 
-// Init initializes the config, creates a new logger, and initializes the
+// init initializes the config, creates a new logger, and initializes the
 // server and its registered services
-func (s *Server) Init(ctx context.Context) error {
+func (s *Server) init(ctx context.Context) error {
 	config := s.config
 	if err := config.init(); err != nil {
 		return err
@@ -156,7 +160,7 @@ func (s *Server) Init(ctx context.Context) error {
 func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := s.Init(ctx); err != nil {
+	if err := s.init(ctx); err != nil {
 		s.logger.Error("init failed", map[string]string{
 			"error": err.Error(),
 		})
@@ -188,5 +192,32 @@ func (s *Server) Start() error {
 		})
 	}
 	s.stopServices(shutdownCtx)
+	return nil
+}
+
+// Setup runs the setup procedures for all services
+func (s *Server) Setup() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.init(ctx); err != nil {
+		s.logger.Error("init failed", map[string]string{
+			"error": err.Error(),
+		})
+		return err
+	}
+	r := s.config.reader(serviceOpt{
+		name: "setup",
+	})
+	conf := r.GetStrMap("")
+	if err := s.setupServices(ReqSetup{
+		Username:  conf["username"],
+		Password:  conf["password"],
+		Email:     conf["email"],
+		Firstname: conf["firstname"],
+		Lastname:  conf["lastname"],
+		Orgname:   conf["orgname"],
+	}); err != nil {
+		return err
+	}
 	return nil
 }
