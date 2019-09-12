@@ -1,9 +1,11 @@
 package governor
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/spf13/cobra"
 	"os"
+	"strings"
 )
 
 type (
@@ -43,14 +45,16 @@ The server first runs all init procedures for all services before starting.`,
 The server first runs all init procedures for all services before running
 setup.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := s.Setup(ReqSetup{
-				Username:  "",
-				Password:  "",
-				Email:     "",
-				Firstname: "",
-				Lastname:  "",
-				Orgname:   "",
-			}); err != nil {
+			req, err := getPromptReq()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			if err := req.valid(); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			if err := s.Setup(*req); err != nil {
 				os.Exit(1)
 			}
 		},
@@ -69,4 +73,52 @@ func (s *Server) Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func getPromptReq() (*ReqSetup, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Username: ")
+	username, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("Password: ")
+	password, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("Email: ")
+	email, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("First name: ")
+	firstname, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("Last name: ")
+	lastname, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("Orgname: ")
+	orgname, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	return &ReqSetup{
+		Username:  strings.TrimSpace(username),
+		Password:  strings.TrimSpace(password),
+		Email:     strings.TrimSpace(email),
+		Firstname: strings.TrimSpace(firstname),
+		Lastname:  strings.TrimSpace(lastname),
+		Orgname:   strings.TrimSpace(orgname),
+	}, nil
 }
