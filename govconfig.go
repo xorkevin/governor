@@ -1,10 +1,12 @@
 package governor
 
 import (
-	"github.com/spf13/pflag"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 	"io"
 	"net/http"
+	"os"
+	"path"
 )
 
 type (
@@ -38,9 +40,6 @@ type (
 )
 
 func newConfig(conf ConfigOpts) Config {
-	configFilename := pflag.String("config", conf.DefaultFile, "name of config file in config directory")
-	pflag.Parse()
-
 	v := viper.New()
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
@@ -52,9 +51,12 @@ func newConfig(conf ConfigOpts) Config {
 	v.SetDefault("frontendproxy", []string{})
 	v.SetDefault("alloworigins", []string{})
 
-	v.SetConfigName(*configFilename)
-	v.AddConfigPath("./config")
+	v.SetConfigName(conf.DefaultFile)
 	v.AddConfigPath(".")
+	v.AddConfigPath(path.Join(".", "config"))
+	if home, err := homedir.Dir(); err == nil {
+		v.AddConfigPath(path.Join(getEnvDefault("XDG_CONFIG_HOME", path.Join(home, ".config")), conf.Appname))
+	}
 	v.SetConfigType("yaml")
 
 	v.SetEnvPrefix(conf.EnvPrefix)
@@ -66,6 +68,10 @@ func newConfig(conf ConfigOpts) Config {
 		Version:     conf.Version,
 		VersionHash: conf.VersionHash,
 	}
+}
+
+func (c *Config) setConfigFile(file string) {
+	c.config.SetConfigFile(file)
 }
 
 func (c *Config) init() error {
@@ -168,4 +174,12 @@ func (c *Config) reader(opt serviceOpt) ConfigReader {
 		serviceOpt: opt,
 		v:          c.config,
 	}
+}
+
+func getEnvDefault(key, val string) string {
+	k := os.Getenv(key)
+	if k == "" {
+		return val
+	}
+	return k
 }

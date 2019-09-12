@@ -6,6 +6,12 @@ import (
 	"os"
 )
 
+type (
+	govflags struct {
+		configFile string
+	}
+)
+
 func (s *Server) initCommand(conf ConfigOpts) {
 	rootCmd := &cobra.Command{
 		Use:   conf.Appname,
@@ -37,13 +43,22 @@ The server first runs all init procedures for all services before starting.`,
 The server first runs all init procedures for all services before running
 setup.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := s.Setup(); err != nil {
+			if err := s.Setup(ReqSetup{
+				Username:  "",
+				Password:  "",
+				Email:     "",
+				Firstname: "",
+				Lastname:  "",
+				Orgname:   "",
+			}); err != nil {
 				os.Exit(1)
 			}
 		},
 	}
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
+
+	rootCmd.PersistentFlags().StringVar(&s.flags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", conf.Appname, conf.DefaultFile))
 
 	s.rootCmd = rootCmd
 }

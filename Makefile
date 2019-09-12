@@ -63,7 +63,13 @@ cleangen:
 .PHONY: dev clean build-bin build
 
 dev:
-	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config configdev
+	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml serve
+
+devsetup:
+	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml setup
+
+devversion:
+	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml --version
 
 clean:
 	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi

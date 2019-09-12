@@ -24,6 +24,7 @@ type (
 		logger     Logger
 		i          *echo.Echo
 		rootCmd    *cobra.Command
+		flags      govflags
 		showBanner bool
 		setupRun   bool
 	}
@@ -46,6 +47,10 @@ func New(conf ConfigOpts, stateService state.State) *Server {
 // server and its registered services
 func (s *Server) init(ctx context.Context) error {
 	config := s.config
+	if s.flags.configFile != "" {
+		config.setConfigFile(s.flags.configFile)
+		fmt.Printf("config file set to %s\n", s.flags.configFile)
+	}
 	if err := config.init(); err != nil {
 		return err
 	}
@@ -196,7 +201,7 @@ func (s *Server) Start() error {
 }
 
 // Setup runs the setup procedures for all services
-func (s *Server) Setup() error {
+func (s *Server) Setup(req ReqSetup) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.init(ctx); err != nil {
@@ -205,18 +210,7 @@ func (s *Server) Setup() error {
 		})
 		return err
 	}
-	r := s.config.reader(serviceOpt{
-		name: "setup",
-	})
-	conf := r.GetStrMap("")
-	if err := s.setupServices(ReqSetup{
-		Username:  conf["username"],
-		Password:  conf["password"],
-		Email:     conf["email"],
-		Firstname: conf["firstname"],
-		Lastname:  conf["lastname"],
-		Orgname:   conf["orgname"],
-	}); err != nil {
+	if err := s.setupServices(req); err != nil {
 		return err
 	}
 	return nil

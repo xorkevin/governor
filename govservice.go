@@ -61,7 +61,7 @@ func (s *Server) Register(name string, url string, r Service) {
 
 func (s *Server) setupServices(rsetup ReqSetup) error {
 	if s.setupRun {
-		s.logger.Warn("govsetup: setup already run", nil)
+		s.logger.Warn("setup already run", nil)
 		return NewErrorUser("setup already run", http.StatusForbidden, nil)
 	}
 	m, err := s.state.Get()
@@ -70,8 +70,14 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	}
 	if m.Setup {
 		s.setupRun = true
-		s.logger.Warn("govsetup: setup already run", nil)
+		s.logger.Warn("setup already run", nil)
 		return NewErrorUser("setup already run", http.StatusForbidden, nil)
+	}
+	if err := rsetup.valid(); err != nil {
+		s.logger.Error("setup params not valid", map[string]string{
+			"error": err.Error(),
+		})
+		return err
 	}
 
 	s.logger.Info("setup all services begin", nil)
