@@ -82,6 +82,9 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 
 	s.host = conf["host"]
@@ -96,7 +99,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.fromName = conf["fromname"]
 	s.msgc = make(chan *gomail.Message)
 
-	s.logger.Info("mail: initialize service options", map[string]string{
+	l.Info("initialize service options", map[string]string{
 		"smtp server host": conf["host"],
 		"smtp server port": conf["port"],
 		"worker size":      strconv.Itoa(r.GetInt("workersize")),
@@ -113,7 +116,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	s.logger.Info("mail: starting mail workers", map[string]string{
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+	l.Info("starting mail workers", map[string]string{
 		"count": strconv.Itoa(s.workerSize),
 	})
 	wg := &sync.WaitGroup{}
@@ -122,7 +128,7 @@ func (s *service) Start(ctx context.Context) error {
 		go s.mailWorker(strconv.Itoa(i), wg)
 	}
 	if _, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber); err != nil {
-		s.logger.Error("mail: failed to subscribe to mail queue", map[string]string{
+		l.Error("failed to subscribe to mail queue", map[string]string{
 			"error": err.Error(),
 		})
 		return governor.NewError("Failed to subscribe to queue", http.StatusInternalServerError, err)
@@ -136,16 +142,19 @@ func (s *service) Start(ctx context.Context) error {
 	}()
 	s.done = done
 
-	s.logger.Info("mail: subscribed to mail queue", nil)
+	l.Info("subscribed to mail queue", nil)
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		s.logger.Warn("mail: failed to stop", nil)
+		l.Warn("failed to stop", nil)
 	}
 }
 
@@ -154,15 +163,15 @@ func (s *service) Health() error {
 }
 
 func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
+	l := s.logger.WithData(map[string]string{
+		"mailworkerid": id,
+		"agent":        "worker",
+	})
 	defer (func() {
 		wg.Done()
-		s.logger.Info("mail: mail worker stopped", map[string]string{
-			"mailworkerid": id,
-		})
+		l.Info("mail worker stopped", nil)
 	})()
-	s.logger.Info("mail: mail worker started", map[string]string{
-		"mailworkerid": id,
-	})
+	l.Info("mail worker started", nil)
 	d := gomail.NewDialer(s.host, s.port, s.username, s.password)
 	if s.insecure {
 		d.TLSConfig = &tls.Config{
@@ -179,19 +188,19 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 			if !ok {
 				if sender != nil {
 					if err := sender.Close(); err != nil {
-						s.logger.Error("mail: mailWorker: fail close smtp client", map[string]string{
+						l.Error("fail close smtp client", map[string]string{
 							"error": err.Error(),
 						})
 					}
 					sender = nil
-					s.logger.Error("mail: mailWorker: close smtp client", nil)
+					l.Error("close smtp client", nil)
 					return
 				}
 				return
 			}
 			if sender == nil || mailSent >= s.connMsgCap && s.connMsgCap > 0 {
 				if send, err := d.Dial(); err != nil {
-					s.logger.Error("mail: mailWorker: fail dial smtp server", map[string]string{
+					l.Error("fail dial smtp server", map[string]string{
 						"error": err.Error(),
 					})
 				} else {
@@ -201,7 +210,7 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 			}
 			if sender != nil {
 				if err := gomail.Send(sender, msg); err != nil {
-					s.logger.Error("mail: mailWorker: fail send smtp server", map[string]string{
+					l.Error("fail send smtp server", map[string]string{
 						"error": err.Error(),
 					})
 				}
@@ -211,7 +220,7 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 		case <-time.After(time.Duration(s.connTimeout) * time.Second):
 			if sender != nil {
 				if err := sender.Close(); err != nil {
-					s.logger.Error("mail: mailWorker: fail close smtp client", map[string]string{
+					l.Error("fail close smtp client", map[string]string{
 						"error": err.Error(),
 					})
 				}
@@ -222,10 +231,13 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 }
 
 func (s *service) mailSubscriber(msgdata []byte) {
+	l := s.logger.WithData(map[string]string{
+		"agent": "subscriber",
+	})
 	emmsg := mailmsg{}
 	b := bytes.NewBuffer(msgdata)
 	if err := gob.NewDecoder(b).Decode(&emmsg); err != nil {
-		s.logger.Error("mail: mailSubscriber: fail decode mailmsg", map[string]string{
+		l.Error("fail decode mailmsg", map[string]string{
 			"error": err.Error(),
 		})
 		return
@@ -234,13 +246,13 @@ func (s *service) mailSubscriber(msgdata []byte) {
 	emdata := map[string]string{}
 	b1 := bytes.NewBufferString(emmsg.Emdata)
 	if err := json.NewDecoder(b1).Decode(&emdata); err != nil {
-		s.logger.Error("mail: mailSubscriber: fail decode emdata", map[string]string{
+		l.Error("fail decode emdata", map[string]string{
 			"error": err.Error(),
 		})
 		return
 	}
 	if err := s.enqueue(emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
-		s.logger.Error("mail: mailSubscriber: fail enqueue mail", map[string]string{
+		l.Error("fail enqueue mail", map[string]string{
 			"error": err.Error(),
 		})
 		return

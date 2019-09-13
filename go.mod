@@ -19,5 +19,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
 	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a
+	gopkg.in/mail.v2 v2.3.1 // indirect
 	xorkevin.dev/hunter2 v0.1.1
 )

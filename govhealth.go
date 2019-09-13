@@ -49,7 +49,7 @@ func (s *Server) initHealth(r *echo.Group) {
 		})
 
 		r.GET("/ping", func(c echo.Context) error {
-			s.logger.Debug("govhealth: Ping", map[string]string{
+			s.logger.Debug("Ping", map[string]string{
 				"request":  "ping",
 				"response": "pong",
 			})

@@ -1,12 +1,10 @@
 package governor
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"net/http"
-	"net/http/httputil"
 )
 
 type (
@@ -184,19 +182,14 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 			if reserr := c.JSON(status, &responseError{
 				Message: goverruser.message,
 			}); reserr != nil {
-				l.Warn("goverror: errorHandler: fail to send err message JSON", map[string]string{
+				l.Warn("fail to send err message JSON", map[string]string{
 					"endpoint": c.Path(),
 					"err":      err.Error(),
 				})
 			}
 		} else if errors.As(err, &goverr) {
-			request := ""
-			if r, reqerr := httputil.DumpRequest(c.Request(), true); reqerr == nil {
-				request = bytes.NewBuffer(r).String()
-			}
 			l.Error(goverr.Error(), map[string]string{
 				"endpoint": c.Path(),
-				"request":  request,
 			})
 			status := http.StatusInternalServerError
 			if goverr.status != 0 {
@@ -205,9 +198,8 @@ func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
 			if reserr := c.JSON(status, &responseError{
 				Message: goverr.message,
 			}); reserr != nil {
-				l.Warn("goverror: errorHandler: fail to send err message JSON", map[string]string{
+				l.Warn("fail to send err message JSON", map[string]string{
 					"endpoint": c.Path(),
-					"request":  request,
 					"err":      err.Error(),
 				})
 			}

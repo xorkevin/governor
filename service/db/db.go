@@ -47,6 +47,9 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 	pgarr := make([]string, 0, len(conf))
 	for k, v := range conf {
@@ -62,25 +65,28 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
+		l := s.logger.WithData(map[string]string{
+			"phase": "stop",
+		})
 		if err := s.db.Close(); err != nil {
-			s.logger.Error("db: failed to close db connection", map[string]string{
+			l.Error("failed to close db connection", map[string]string{
 				"error": err.Error(),
 			})
 		} else {
-			s.logger.Info("db: closed connection", nil)
+			l.Info("closed connection", nil)
 		}
 		done <- struct{}{}
 	}()
 	s.done = done
 
-	s.logger.Info("db: opened database connection", nil)
+	l.Info("opened database connection", nil)
 
 	if err := db.Ping(); err != nil {
 		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
-	s.logger.Info("db: ping database success", nil)
+	l.Info("ping database success", nil)
 
-	s.logger.Info(fmt.Sprintf("db: established connection to %s:%s with user %s", conf["host"], conf["port"], conf["user"]), nil)
+	l.Info(fmt.Sprintf("established connection to %s:%s with user %s", conf["host"], conf["port"], conf["user"]), nil)
 	return nil
 }
 
@@ -93,11 +99,14 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		s.logger.Warn("db: failed to stop", nil)
+		l.Warn("failed to stop", nil)
 	}
 }
 

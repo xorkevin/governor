@@ -44,6 +44,9 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 
 	client := redis.NewClient(&redis.Options{
@@ -54,13 +57,13 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.client = client
 
 	if _, err := client.Ping().Result(); err != nil {
-		s.logger.Error("kvstore: failed to ping kvstore", map[string]string{
+		l.Error("failed to ping kvstore", map[string]string{
 			"error": err.Error(),
 		})
 		return governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
 	}
 
-	s.logger.Info(fmt.Sprintf("kvstore: established connection to %s:%s", conf["host"], conf["port"]), nil)
+	l.Info(fmt.Sprintf("established connection to %s:%s", conf["host"], conf["port"]), nil)
 	return nil
 }
 

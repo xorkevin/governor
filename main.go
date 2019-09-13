@@ -67,7 +67,7 @@ func (s *Server) init(ctx context.Context) error {
 	l.Info("init server instance", nil)
 
 	i.HideBanner = true
-	i.HTTPErrorHandler = errorHandler(i, l)
+	i.HTTPErrorHandler = errorHandler(i, s.logger.Subtree("errorhandler"))
 	l.Info("init error handler", nil)
 	i.Binder = requestBinder()
 	l.Info("init request binder", nil)

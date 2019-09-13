@@ -48,9 +48,10 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 		return "", err
 	}
 	if err := s.kvlinks.Set(linkid, res.URL, s.cacheTime); err != nil {
-		s.logger.Error("courier: failed to cache linkid url", map[string]string{
-			"linkid": linkid,
-			"error":  err.Error(),
+		s.logger.Error("failed to cache linkid url", map[string]string{
+			"linkid":     linkid,
+			"error":      err.Error(),
+			"actiontype": "linkcache",
 		})
 	}
 	return res.URL, nil
@@ -162,9 +163,10 @@ func (s *service) DeleteLink(linkid string) error {
 		return err
 	}
 	if err := s.kvlinks.Del(linkid); err != nil {
-		s.logger.Error("courier: failed to delete linkid url", map[string]string{
-			"linkid": linkid,
-			"error":  err.Error(),
+		s.logger.Error("failed to delete linkid url", map[string]string{
+			"linkid":     linkid,
+			"error":      err.Error(),
+			"actiontype": "linkcache",
 		})
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {

@@ -73,32 +73,35 @@ func (s *service) router() *router {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 	s.fallbackLink = conf["fallbacklink"]
 	s.linkPrefix = conf["linkprefix"]
 	if t, err := time.ParseDuration(conf["cachetime"]); err != nil {
-		s.logger.Warn(fmt.Sprintf("courier: failed to parse cache time: %s", conf["cachetime"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse cache time: %s", conf["cachetime"]), nil)
 	} else {
 		s.cacheTime = t.Nanoseconds() / b1
 	}
 	if len(s.fallbackLink) == 0 {
-		s.logger.Warn("courier: fallbacklink is not set", nil)
+		l.Warn("fallbacklink is not set", nil)
 	} else if err := validURL(s.fallbackLink); err != nil {
-		s.logger.Error("invalid fallbacklink", map[string]string{
+		l.Error("invalid fallbacklink", map[string]string{
 			"error": err.Error(),
 		})
 		return err
 	}
 	if len(s.linkPrefix) == 0 {
-		s.logger.Warn("courier: linkprefix is not set", nil)
+		l.Warn("linkprefix is not set", nil)
 	} else if err := validURL(s.linkPrefix); err != nil {
-		s.logger.Error("invalid linkprefix", map[string]string{
+		l.Error("invalid linkprefix", map[string]string{
 			"error": err.Error(),
 		})
 		return err
 	}
 
-	l.Info("courier: loaded config", map[string]string{
+	l.Info("loaded config", map[string]string{
 		"fallbacklink": s.fallbackLink,
 		"linkprefix":   s.linkPrefix,
 		"cachetime":    strconv.FormatInt(s.cacheTime, 10),
@@ -108,21 +111,27 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err := sr.mountRoutes(g); err != nil {
 		return err
 	}
-	l.Info("courier: mounted http routes", nil)
+	l.Info("mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("courier: created courierlinks table", nil)
+	l.Info("created courierlinks table", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
 	if err := s.linkImgBucket.Init(); err != nil {
-		s.logger.Error("courier: failed to init courier link image bucket", map[string]string{
+		l.Error("failed to init courier link image bucket", map[string]string{
 			"error": err.Error(),
 		})
 		return err
