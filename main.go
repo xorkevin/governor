@@ -49,7 +49,6 @@ func (s *Server) init(ctx context.Context) error {
 	config := s.config
 	if s.flags.configFile != "" {
 		config.setConfigFile(s.flags.configFile)
-		fmt.Printf("config file set to %s\n", s.flags.configFile)
 	}
 	if err := config.init(); err != nil {
 		return err

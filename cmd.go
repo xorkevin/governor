@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"strings"
 )
@@ -84,10 +85,11 @@ func getPromptReq() (*ReqSetup, error) {
 	}
 
 	fmt.Print("Password: ")
-	password, err := reader.ReadString('\n')
+	password, err := terminal.ReadPassword(0)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println()
 
 	fmt.Print("Email: ")
 	email, err := reader.ReadString('\n')
@@ -115,7 +117,7 @@ func getPromptReq() (*ReqSetup, error) {
 
 	return &ReqSetup{
 		Username:  strings.TrimSpace(username),
-		Password:  strings.TrimSpace(password),
+		Password:  string(password),
 		Email:     strings.TrimSpace(email),
 		Firstname: strings.TrimSpace(firstname),
 		Lastname:  strings.TrimSpace(lastname),
