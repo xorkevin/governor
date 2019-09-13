@@ -55,11 +55,15 @@ func (s *Server) init(ctx context.Context) error {
 	}
 	s.config = config
 
-	l := newLogger(s.config)
-	s.logger = l
+	s.logger = newLogger(s.config)
 
 	i := echo.New()
 	s.i = i
+
+	l := s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
+
 	l.Info("init server instance", nil)
 
 	i.HideBanner = true
@@ -165,11 +169,19 @@ func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.init(ctx); err != nil {
-		s.logger.Error("init failed", map[string]string{
-			"error": err.Error(),
-		})
+		if s.logger != nil {
+			s.logger.Error("init failed", map[string]string{
+				"error": err.Error(),
+				"phase": "init",
+			})
+		} else {
+			fmt.Println(err)
+		}
 		return err
 	}
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
@@ -178,7 +190,7 @@ func (s *Server) Start() error {
 	}
 	go func() {
 		if err := s.i.Start(":" + s.config.Port); err != nil {
-			s.logger.Info("shutting down server", map[string]string{
+			l.Info("shutting down server", map[string]string{
 				"error": err.Error(),
 			})
 		}
@@ -186,12 +198,12 @@ func (s *Server) Start() error {
 	sigShutdown := make(chan os.Signal)
 	signal.Notify(sigShutdown, os.Interrupt)
 	<-sigShutdown
-	s.logger.Info("shutdown process begin", nil)
+	l.Info("shutdown process begin", nil)
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 16*time.Second)
 	defer shutdownCancel()
 	if err := s.i.Shutdown(shutdownCtx); err != nil {
-		s.logger.Error("shutdown server error", map[string]string{
+		l.Error("shutdown server error", map[string]string{
 			"error": err.Error(),
 		})
 	}
@@ -203,8 +215,11 @@ func (s *Server) Start() error {
 func (s *Server) Setup(req ReqSetup) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
 	if err := s.init(ctx); err != nil {
-		s.logger.Error("init failed", map[string]string{
+		l.Error("init failed", map[string]string{
 			"error": err.Error(),
 		})
 		return err

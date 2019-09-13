@@ -60,8 +60,11 @@ func (s *Server) Register(name string, url string, r Service) {
 }
 
 func (s *Server) setupServices(rsetup ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
 	if s.setupRun {
-		s.logger.Warn("setup already run", nil)
+		l.Warn("setup already run", nil)
 		return NewErrorUser("setup already run", http.StatusForbidden, nil)
 	}
 	m, err := s.state.Get()
@@ -70,39 +73,39 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	}
 	if m.Setup {
 		s.setupRun = true
-		s.logger.Warn("setup already run", nil)
+		l.Warn("setup already run", nil)
 		return NewErrorUser("setup already run", http.StatusForbidden, nil)
 	}
 	if err := rsetup.valid(); err != nil {
-		s.logger.Error("setup params not valid", map[string]string{
+		l.Error("setup params not valid", map[string]string{
 			"error": err.Error(),
 		})
 		return err
 	}
 
-	s.logger.Info("setup all services begin", nil)
+	l.Info("setup all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Setup(rsetup); err != nil {
-			s.logger.Error(fmt.Sprintf("setup service %s failed", i.name), map[string]string{
-				"setup": i.name,
-				"error": err.Error(),
+			l.Error(fmt.Sprintf("setup service %s failed", i.name), map[string]string{
+				"service": i.name,
+				"error":   err.Error(),
 			})
 			return err
 		}
-		s.logger.Info(fmt.Sprintf("setup service %s", i.name), map[string]string{
-			"setup": i.name,
+		l.Info(fmt.Sprintf("setup service %s", i.name), map[string]string{
+			"service": i.name,
 		})
 	}
 	if err := s.state.Setup(state.ReqSetup{
 		Orgname: rsetup.Orgname,
 	}); err != nil {
-		s.logger.Error("setup state service failed", map[string]string{
+		l.Error("setup state service failed", map[string]string{
 			"error": err.Error(),
 		})
 		return NewError("failed to set state", http.StatusInternalServerError, err)
 	}
 	s.setupRun = true
-	s.logger.Info("setup all services complete", nil)
+	l.Info("setup all services complete", nil)
 	return nil
 }
 
@@ -117,50 +120,59 @@ func (s *Server) checkHealthServices() []error {
 }
 
 func (s *Server) initServices(ctx context.Context) error {
-	s.logger.Info("init all services begin", nil)
+	l := s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
+	l.Info("init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(ctx, s.config, s.config.reader(i.serviceOpt), s.logger, s.i.Group(s.config.BaseURL+i.url)); err != nil {
-			s.logger.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
-				"init":  i.name,
-				"error": err.Error(),
+		if err := i.r.Init(ctx, s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.i.Group(s.config.BaseURL+i.url)); err != nil {
+			l.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
+				"service": i.name,
+				"error":   err.Error(),
 			})
 			return err
 		}
-		s.logger.Info(fmt.Sprintf("init service %s", i.name), map[string]string{
-			"init": i.name,
+		l.Info(fmt.Sprintf("init service %s", i.name), map[string]string{
+			"service": i.name,
 		})
 	}
-	s.logger.Info("init all services complete", nil)
+	l.Info("init all services complete", nil)
 	return nil
 }
 
 func (s *Server) startServices(ctx context.Context) error {
-	s.logger.Info("start all services begin", nil)
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+	l.Info("start all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Start(ctx); err != nil {
-			s.logger.Error(fmt.Sprintf("start service %s failed", i.name), map[string]string{
-				"start": i.name,
-				"error": err.Error(),
+			l.Error(fmt.Sprintf("start service %s failed", i.name), map[string]string{
+				"service": i.name,
+				"error":   err.Error(),
 			})
 			return err
 		}
-		s.logger.Info(fmt.Sprintf("start service %s", i.name), map[string]string{
-			"start": i.name,
+		l.Info(fmt.Sprintf("start service %s", i.name), map[string]string{
+			"service": i.name,
 		})
 	}
-	s.logger.Info("start all services complete", nil)
+	l.Info("start all services complete", nil)
 	return nil
 }
 
 func (s *Server) stopServices(ctx context.Context) {
-	s.logger.Info("stop all services begin", nil)
-	l := len(s.services)
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	l.Info("stop all services begin", nil)
+	sl := len(s.services)
 	for n := range s.services {
-		i := s.services[l-n-1]
+		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
-		s.logger.Info(fmt.Sprintf("stop service %s", i.name), map[string]string{
-			"stop": i.name,
+		l.Info(fmt.Sprintf("stop service %s", i.name), map[string]string{
+			"service": i.name,
 		})
 	}
-	s.logger.Info("stop all services complete", nil)
+	l.Info("stop all services complete", nil)
 }

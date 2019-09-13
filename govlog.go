@@ -4,6 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -53,11 +54,15 @@ type (
 		Warn(msg string, data map[string]string)
 		Error(msg string, data map[string]string)
 		Fatal(msg string, data map[string]string)
+		Subtree(module string) Logger
+		WithData(data map[string]string) Logger
 	}
 
 	govlogger struct {
 		level  int
 		logger *logrus.Logger
+		module string
+		data   map[string]string
 	}
 )
 
@@ -92,13 +97,27 @@ func newLogger(c Config) Logger {
 	return &govlogger{
 		level:  c.LogLevel,
 		logger: l,
+		module: "",
+		data:   nil,
 	}
 }
 
 func (l *govlogger) createFields(data map[string]string) logrus.Fields {
-	now, _ := time.Now().MarshalText()
-	fields := logrus.Fields{
-		"logtime": string(now),
+	now := time.Now()
+	nowStr := now.Format(time.RFC3339)
+	nowUnix := strconv.FormatInt(now.Unix(), 10)
+	fields := make(logrus.Fields, len(data)+len(l.data)+3)
+	fields["logtime"] = nowStr
+	fields["logunix"] = nowUnix
+	if l.module != "" {
+		fields["module"] = l.module
+	} else {
+		fields["module"] = "root"
+	}
+	if l.data != nil {
+		for k, v := range l.data {
+			fields[k] = v
+		}
 	}
 	if data != nil {
 		for k, v := range data {
@@ -106,6 +125,39 @@ func (l *govlogger) createFields(data map[string]string) logrus.Fields {
 		}
 	}
 	return fields
+}
+
+func (l *govlogger) Subtree(module string) Logger {
+	m := l.module
+	if m != "" {
+		m += "."
+	}
+	return &govlogger{
+		level:  l.level,
+		logger: l.logger,
+		module: m + module,
+		data:   l.data,
+	}
+}
+
+func (l *govlogger) WithData(data map[string]string) Logger {
+	nextData := make(map[string]string, len(data)+len(l.data))
+	if l.data != nil {
+		for k, v := range l.data {
+			nextData[k] = v
+		}
+	}
+	if data != nil {
+		for k, v := range data {
+			nextData[k] = v
+		}
+	}
+	return &govlogger{
+		level:  l.level,
+		logger: l.logger,
+		module: l.module,
+		data:   nextData,
+	}
 }
 
 // Debug logs a debug level message
