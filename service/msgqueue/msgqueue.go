@@ -18,7 +18,7 @@ const (
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
-		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
+		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte) bool) (Subscription, error)
 		Publish(queueid string, msgdata []byte) error
 	}
 
@@ -42,7 +42,7 @@ type (
 		logger    governor.Logger
 		sub       stan.Subscription
 		lastAcked uint64
-		worker    func(data []byte)
+		worker    func(data []byte) bool
 	}
 )
 
@@ -67,6 +67,9 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 
 	conn, err := stan.Connect(conf["cluster"], s.clientid, func(options *stan.Options) error {
@@ -84,18 +87,21 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
+		l := s.logger.WithData(map[string]string{
+			"phase": "stop",
+		})
 		if err := s.queue.Close(); err != nil {
-			s.logger.Error("msgqueue: failed to close msgqueue connection", map[string]string{
+			l.Error("failed to close msgqueue connection", map[string]string{
 				"error": err.Error(),
 			})
 		} else {
-			s.logger.Info("msgqueue: closed connection", nil)
+			l.Info("closed connection", nil)
 		}
 		done <- struct{}{}
 	}()
 	s.done = done
 
-	l.Info(fmt.Sprintf("msgqueue: establish connection to %s:%s", conf["host"], conf["port"]), nil)
+	l.Info(fmt.Sprintf("establish connection to %s:%s", conf["host"], conf["port"]), nil)
 	return nil
 }
 
@@ -108,11 +114,14 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		s.logger.Warn("msgqueue: failed to stop", nil)
+		l.Warn("failed to stop", nil)
 	}
 }
 
@@ -121,9 +130,12 @@ func (s *service) Health() error {
 }
 
 // SubscribeQueue subscribes to a queue
-func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
+func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte) bool) (Subscription, error) {
+	l := s.logger.WithData(map[string]string{
+		"agent": "subscriber",
+	})
 	msub := &subscription{
-		logger: s.logger,
+		logger: l,
 		worker: worker,
 	}
 	sub, err := s.queue.QueueSubscribe(queueid, queuegroup, msub.subscriber, stan.DurableName(queuegroup+"-durable"), stan.SetManualAckMode())
@@ -148,9 +160,11 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 			return
 		}
 		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
-			s.worker(msg.Data)
+			if !s.worker(msg.Data) {
+				return
+			}
 			if err := msg.Ack(); err != nil {
-				s.logger.Error("msgqueue: subscriber: Fail ack message", nil)
+				s.logger.Error("Failed to ack message", nil)
 			}
 			return
 		}
