@@ -40,7 +40,7 @@ type (
 
 	// Model is the db User session model
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,delgroupeq,userid;delgroupset"`
+		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,get;updeq,sessionid;deleq,sessionid;deleq,userid;delset"`
 		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
 		Time      int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
@@ -120,7 +120,7 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 
 // GetByID returns a user session model with the given id
 func (r *repo) GetByID(sessionID string) (*Model, error) {
-	m, code, err := sessionModelGet(r.db.DB(), sessionID)
+	m, code, err := sessionModelGetModelBySessionID(r.db.DB(), sessionID)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No session found with that id", http.StatusNotFound, err)
@@ -165,7 +165,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := sessionModelUpdate(r.db.DB(), m); err != nil {
+	if err := sessionModelUpdateModelEqSessionID(r.db.DB(), m, m.SessionID); err != nil {
 		return governor.NewError("Failed to update session", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -173,7 +173,7 @@ func (r *repo) Update(m *Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := sessionModelDelete(r.db.DB(), m); err != nil {
+	if err := sessionModelDelEqSessionID(r.db.DB(), m.SessionID); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
 	return nil

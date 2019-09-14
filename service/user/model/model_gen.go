@@ -17,25 +17,6 @@ func userModelSetup(db *sql.DB) error {
 	return err
 }
 
-func userModelGet(db *sql.DB, key string) (*Model, int, error) {
-	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE userid = $1;", key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func userModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO users (userid, username, pass_hash, email, first_name, last_name, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
 	if err != nil {
@@ -77,13 +58,32 @@ func userModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, 
 	return 0, nil
 }
 
-func userModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE users SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $1;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime)
+func userModelGetModelByUserid(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time FROM users WHERE userid = $1;", key).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+func userModelUpdateModelEqUserid(db *sql.DB, m *Model, userid string) error {
+	_, err := db.Exec("UPDATE users SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $8;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, userid)
 	return err
 }
 
-func userModelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec("DELETE FROM users WHERE userid = $1;", m.Userid)
+func userModelDelEqUserid(db *sql.DB, userid string) error {
+	_, err := db.Exec("DELETE FROM users WHERE userid = $1;", userid)
 	return err
 }
 

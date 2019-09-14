@@ -17,25 +17,6 @@ func linkModelSetup(db *sql.DB) error {
 	return err
 }
 
-func linkModelGet(db *sql.DB, key string) (*LinkModel, int, error) {
-	m := &LinkModel{}
-	if err := db.QueryRow("SELECT linkid, url, creatorid, creation_time FROM courierlinks WHERE linkid = $1;", key).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func linkModelInsert(db *sql.DB, m *LinkModel) (int, error) {
 	_, err := db.Exec("INSERT INTO courierlinks (linkid, url, creatorid, creation_time) VALUES ($1, $2, $3, $4);", m.LinkID, m.URL, m.CreatorID, m.CreationTime)
 	if err != nil {
@@ -77,13 +58,27 @@ func linkModelInsertBulk(db *sql.DB, models []*LinkModel, allowConflict bool) (i
 	return 0, nil
 }
 
-func linkModelUpdate(db *sql.DB, m *LinkModel) error {
-	_, err := db.Exec("UPDATE courierlinks SET (linkid, url, creatorid, creation_time) = ($1, $2, $3, $4) WHERE linkid = $1;", m.LinkID, m.URL, m.CreatorID, m.CreationTime)
-	return err
+func linkModelGetLinkModelByLinkID(db *sql.DB, key string) (*LinkModel, int, error) {
+	m := &LinkModel{}
+	if err := db.QueryRow("SELECT linkid, url, creatorid, creation_time FROM courierlinks WHERE linkid = $1;", key).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
 }
 
-func linkModelDelete(db *sql.DB, m *LinkModel) error {
-	_, err := db.Exec("DELETE FROM courierlinks WHERE linkid = $1;", m.LinkID)
+func linkModelDelEqLinkID(db *sql.DB, linkid string) error {
+	_, err := db.Exec("DELETE FROM courierlinks WHERE linkid = $1;", linkid)
 	return err
 }
 

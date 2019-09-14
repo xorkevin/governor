@@ -35,7 +35,7 @@ type (
 
 	// LinkModel is the db link model
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid"`
+		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid,get;deleq,linkid"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup"`
@@ -114,7 +114,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 // GetLink returns a link model with the given id
 func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	var m *LinkModel
-	if mLink, code, err := linkModelGet(r.db.DB(), linkid); err != nil {
+	if mLink, code, err := linkModelGetLinkModelByLinkID(r.db.DB(), linkid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No link found with that id", http.StatusNotFound, err)
 		}
@@ -138,7 +138,7 @@ func (r *repo) InsertLink(m *LinkModel) error {
 
 // DeleteLink deletes the link model in the db
 func (r *repo) DeleteLink(m *LinkModel) error {
-	if err := linkModelDelete(r.db.DB(), m); err != nil {
+	if err := linkModelDelEqLinkID(r.db.DB(), m.LinkID); err != nil {
 		return governor.NewError("Failed to delete link", http.StatusInternalServerError, err)
 	}
 	return nil

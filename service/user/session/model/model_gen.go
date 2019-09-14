@@ -17,25 +17,6 @@ func sessionModelSetup(db *sql.DB) error {
 	return err
 }
 
-func sessionModelGet(db *sql.DB, key string) (*Model, int, error) {
-	m := &Model{}
-	if err := db.QueryRow("SELECT sessionid, userid, keyhash, time, ipaddr, user_agent FROM usersessions WHERE sessionid = $1;", key).Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.IPAddr, &m.UserAgent); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func sessionModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6);", m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent)
 	if err != nil {
@@ -77,13 +58,32 @@ func sessionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 	return 0, nil
 }
 
-func sessionModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash, time, ipaddr, user_agent) = ($1, $2, $3, $4, $5, $6) WHERE sessionid = $1;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent)
+func sessionModelGetModelBySessionID(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT sessionid, userid, time, ipaddr, user_agent FROM usersessions WHERE sessionid = $1;", key).Scan(&m.SessionID, &m.Userid, &m.Time, &m.IPAddr, &m.UserAgent); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+func sessionModelUpdateModelEqSessionID(db *sql.DB, m *Model, sessionid string) error {
+	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, time, ipaddr, user_agent) = ($1, $2, $3, $4, $5) WHERE sessionid = $6;", m.SessionID, m.Userid, m.Time, m.IPAddr, m.UserAgent, sessionid)
 	return err
 }
 
-func sessionModelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid = $1;", m.SessionID)
+func sessionModelDelEqSessionID(db *sql.DB, sessionid string) error {
+	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid = $1;", sessionid)
 	return err
 }
 

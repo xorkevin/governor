@@ -17,25 +17,6 @@ func stateModelSetup(db *sql.DB) error {
 	return err
 }
 
-func stateModelGet(db *sql.DB, key int) (*Model, int, error) {
-	m := &Model{}
-	if err := db.QueryRow("SELECT config, orgname, setup, creation_time FROM govstate WHERE config = $1;", key).Scan(&m.config, &m.Orgname, &m.Setup, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func stateModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO govstate (config, orgname, setup, creation_time) VALUES ($1, $2, $3, $4);", m.config, m.Orgname, m.Setup, m.CreationTime)
 	if err != nil {
@@ -77,12 +58,26 @@ func stateModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int,
 	return 0, nil
 }
 
-func stateModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE govstate SET (config, orgname, setup, creation_time) = ($1, $2, $3, $4) WHERE config = $1;", m.config, m.Orgname, m.Setup, m.CreationTime)
-	return err
+func stateModelGetModelByconfig(db *sql.DB, key int) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT config, orgname, setup, creation_time FROM govstate WHERE config = $1;", key).Scan(&m.config, &m.Orgname, &m.Setup, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
 }
 
-func stateModelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec("DELETE FROM govstate WHERE config = $1;", m.config)
+func stateModelUpdateModelEqconfig(db *sql.DB, m *Model, config int) error {
+	_, err := db.Exec("UPDATE govstate SET (config, orgname, setup, creation_time) = ($1, $2, $3, $4) WHERE config = $5;", m.config, m.Orgname, m.Setup, m.CreationTime, config)
 	return err
 }

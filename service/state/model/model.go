@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/state"
 )
 
-//go:generate forge model -m Model -t govstate -p state -o model_gen.go
+//go:generate forge model -m Model -t govstate -p state -o model_gen.go Model
 
 const (
 	configID = 0
@@ -21,10 +21,10 @@ type (
 
 	// Model is the db State model
 	Model struct {
-		config       int    `model:"config,INT PRIMARY KEY"`
-		Orgname      string `model:"orgname,VARCHAR(255) NOT NULL"`
-		Setup        bool   `model:"setup,BOOLEAN NOT NULL"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
+		config       int    `model:"config,INT PRIMARY KEY" query:"config,get;updeq,config"`
+		Orgname      string `model:"orgname,VARCHAR(255) NOT NULL" query:"orgname"`
+		Setup        bool   `model:"setup,BOOLEAN NOT NULL" query:"setup"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 )
 
@@ -47,7 +47,7 @@ func (r *repo) New(orgname string) *Model {
 
 // GetModel returns the state model
 func (r *repo) GetModel() (*Model, error) {
-	m, code, err := stateModelGet(r.db.DB(), configID)
+	m, code, err := stateModelGetModelByconfig(r.db.DB(), configID)
 	if err != nil {
 		switch code {
 		case 2:
@@ -63,6 +63,7 @@ func (r *repo) GetModel() (*Model, error) {
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
+	m.config = configID
 	if _, err := stateModelInsert(r.db.DB(), m); err != nil {
 		return governor.NewError("Failed to insert state", http.StatusInternalServerError, err)
 	}
@@ -71,7 +72,8 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := stateModelUpdate(r.db.DB(), m); err != nil {
+	m.config = configID
+	if err := stateModelUpdateModelEqconfig(r.db.DB(), m, configID); err != nil {
 		return governor.NewError("Failed to update state", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -98,7 +100,6 @@ func (r *repo) Get() (*state.Model, error) {
 // Set updates the server state entry
 func (r *repo) Set(m *state.Model) error {
 	return r.Update(&Model{
-		config:       configID,
 		Orgname:      m.Orgname,
 		Setup:        m.Setup,
 		CreationTime: m.CreationTime,

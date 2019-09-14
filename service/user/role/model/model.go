@@ -26,7 +26,7 @@ type (
 
 	// Model is the db User role model
 	Model struct {
-		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,delgroupeq,userid;delgroupset"`
+		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,get;deleq,userid;delset"`
 		Userid string `model:"userid,VARCHAR(31) NOT NULL"`
 		Role   string `model:"role,VARCHAR(255) NOT NULL"`
 	}
@@ -48,24 +48,23 @@ func New(database db.Database) Repo {
 
 // New creates a new User role Model
 func (r *repo) New(userid, role string) *Model {
-	m := &Model{
+	return &Model{
 		Userid: userid,
 		Role:   role,
 	}
-	m.ensureRoleid()
-	return m
 }
 
-func (m *Model) ensureRoleid() string {
-	r := m.Userid + "|" + m.Role
-	m.roleid = r
-	return r
+func calcRoleid(userid, role string) string {
+	return userid + "|" + role
+}
+func (m *Model) ensureRoleid() {
+	m.roleid = calcRoleid(m.Userid, m.Role)
 }
 
 // GetByID returns a user role model with the given id
 func (r *repo) GetByID(userid, role string) (*Model, error) {
 	var m *Model
-	if mRole, code, err := roleModelGet(r.db.DB(), (&Model{Userid: userid, Role: role}).ensureRoleid()); err != nil {
+	if mRole, code, err := roleModelGetModelByroleid(r.db.DB(), calcRoleid(userid, role)); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("Role not found for user", http.StatusNotFound, err)
 		}
@@ -128,7 +127,7 @@ func (r *repo) InsertBulk(m []*Model) error {
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
 	m.ensureRoleid()
-	if err := roleModelDelete(r.db.DB(), m); err != nil {
+	if err := roleModelDelEqUserid(r.db.DB(), m.roleid); err != nil {
 		return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
 	}
 	return nil

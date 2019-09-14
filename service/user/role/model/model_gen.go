@@ -17,25 +17,6 @@ func roleModelSetup(db *sql.DB) error {
 	return err
 }
 
-func roleModelGet(db *sql.DB, key string) (*Model, int, error) {
-	m := &Model{}
-	if err := db.QueryRow("SELECT roleid, userid, role FROM userroles WHERE roleid = $1;", key).Scan(&m.roleid, &m.Userid, &m.Role); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func roleModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO userroles (roleid, userid, role) VALUES ($1, $2, $3);", m.roleid, m.Userid, m.Role)
 	if err != nil {
@@ -77,14 +58,23 @@ func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, 
 	return 0, nil
 }
 
-func roleModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE userroles SET (roleid, userid, role) = ($1, $2, $3) WHERE roleid = $1;", m.roleid, m.Userid, m.Role)
-	return err
-}
-
-func roleModelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec("DELETE FROM userroles WHERE roleid = $1;", m.roleid)
-	return err
+func roleModelGetModelByroleid(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT roleid FROM userroles WHERE roleid = $1;", key).Scan(&m.roleid); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
 }
 
 func roleModelDelEqUserid(db *sql.DB, userid string) error {

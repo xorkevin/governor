@@ -17,25 +17,6 @@ func profileModelSetup(db *sql.DB) error {
 	return err
 }
 
-func profileModelGet(db *sql.DB, key string) (*Model, int, error) {
-	m := &Model{}
-	if err := db.QueryRow("SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid = $1;", key).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
-	}
-	return m, 0, nil
-}
-
 func profileModelInsert(db *sql.DB, m *Model) (int, error) {
 	_, err := db.Exec("INSERT INTO profiles (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", m.Userid, m.Email, m.Bio, m.Image)
 	if err != nil {
@@ -77,12 +58,31 @@ func profileModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 	return 0, nil
 }
 
-func profileModelUpdate(db *sql.DB, m *Model) error {
-	_, err := db.Exec("UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $1;", m.Userid, m.Email, m.Bio, m.Image)
+func profileModelGetModelByUserid(db *sql.DB, key string) (*Model, int, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid = $1;", key).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
+func profileModelUpdateModelEqUserid(db *sql.DB, m *Model, userid string) error {
+	_, err := db.Exec("UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $5;", m.Userid, m.Email, m.Bio, m.Image, userid)
 	return err
 }
 
-func profileModelDelete(db *sql.DB, m *Model) error {
-	_, err := db.Exec("DELETE FROM profiles WHERE userid = $1;", m.Userid)
+func profileModelDelEqUserid(db *sql.DB, userid string) error {
+	_, err := db.Exec("DELETE FROM profiles WHERE userid = $1;", userid)
 	return err
 }
