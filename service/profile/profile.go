@@ -56,26 +56,35 @@ func (s *service) router() *router {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 
 	sr := s.router()
 	if err := sr.mountProfileRoutes(g); err != nil {
 		return err
 	}
-	s.logger.Info("profile: mounted http routes", nil)
+	l.Info("mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
 	if err := s.profiles.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("profile: created profile table", nil)
+	l.Info("created profile table", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
 	if err := s.profileBucket.Init(); err != nil {
-		s.logger.Error("profile: failed to init profile image bucket", map[string]string{
+		l.Error("failed to init profile image bucket", map[string]string{
 			"error": err.Error(),
 		})
 		return err

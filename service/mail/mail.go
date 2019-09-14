@@ -230,7 +230,7 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 	}
 }
 
-func (s *service) mailSubscriber(msgdata []byte) bool {
+func (s *service) mailSubscriber(msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent": "subscriber",
 	})
@@ -240,7 +240,7 @@ func (s *service) mailSubscriber(msgdata []byte) bool {
 		l.Error("fail decode mailmsg", map[string]string{
 			"error": err.Error(),
 		})
-		return true
+		return
 	}
 
 	emdata := map[string]string{}
@@ -249,15 +249,14 @@ func (s *service) mailSubscriber(msgdata []byte) bool {
 		l.Error("fail decode emdata", map[string]string{
 			"error": err.Error(),
 		})
-		return true
+		return
 	}
 	if err := s.enqueue(emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
 		l.Error("fail enqueue mail", map[string]string{
 			"error": err.Error(),
 		})
-		return true
+		return
 	}
-	return true
 }
 
 func (s *service) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) error {

@@ -64,16 +64,6 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		return governor.NewError("Failed to store new email info", http.StatusInternalServerError, err)
 	}
 
-	emdatanotify := emailEmailChangeNotify{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-	}
-	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
-		s.logger.Error("user: failed to send old email change notification", map[string]string{
-			"error": err.Error(),
-		})
-	}
-
 	emdata := emailEmailChange{
 		FirstName: m.FirstName,
 		Username:  m.Username,
@@ -81,6 +71,17 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 	}
 	if err := s.mailer.Send(newEmail, emailChangeNotifySubject, emailChangeTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
+	}
+
+	emdatanotify := emailEmailChangeNotify{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+	}
+	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
+		s.logger.Error("failed to send old email change notification", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "updateemail",
+		})
 	}
 	return nil
 }
@@ -122,8 +123,9 @@ func (s *service) CommitEmail(key string, password string) error {
 	}
 
 	if err := s.kvemailchange.Del(key); err != nil {
-		s.logger.Error("user: failed to clean up new email cache data", map[string]string{
-			"error": err.Error(),
+		s.logger.Error("failed to clean up new email cache data", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "commitemail",
 		})
 	}
 	return nil
@@ -133,7 +135,6 @@ type (
 	emailPassChange struct {
 		FirstName string
 		Username  string
-		Key       string
 	}
 
 	emailForgotPass struct {
@@ -179,28 +180,15 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		return err
 	}
 
-	if key, err := uid.New(uidPassSize); err != nil {
-		s.logger.Error("user: failed to create new uid", map[string]string{
-			"error": err.Error(),
+	emdata := emailPassChange{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+	}
+	if err := s.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
+		s.logger.Error("failed to send password change notification email", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "updatepasswordmail",
 		})
-	} else {
-		nonce := key.Base64()
-		if err := s.kvpassreset.Set(nonce, userid, s.passwordResetTime); err != nil {
-			s.logger.Error("user: failed to cache undo password change key", map[string]string{
-				"error": err.Error(),
-			})
-		} else {
-			emdata := emailPassChange{
-				FirstName: m.FirstName,
-				Username:  m.Username,
-				Key:       nonce,
-			}
-			if err := s.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
-				s.logger.Error("user: failed to send password change notification email", map[string]string{
-					"error": err.Error(),
-				})
-			}
-		}
 	}
 	return nil
 }
@@ -280,14 +268,16 @@ func (s *service) ResetPassword(key string, newPassword string) error {
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send(m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
-		s.logger.Error("user: failed to send password change notification email", map[string]string{
-			"error": err.Error(),
+		s.logger.Error("failed to send password change notification email", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "resetpasswordmail",
 		})
 	}
 
 	if err := s.kvpassreset.Del(key); err != nil {
-		s.logger.Error("user: failed to clean up password reset cache data", map[string]string{
-			"error": err.Error(),
+		s.logger.Error("failed to clean up password reset cache data", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "resetpassword",
 		})
 	}
 	return nil

@@ -48,12 +48,15 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 	if conf["secret"] == "" {
-		s.logger.Warn("gate: token secret is not set", nil)
+		l.Warn("token secret is not set", nil)
 	}
 	if conf["issuer"] == "" {
-		s.logger.Warn("gate: token issuer is not set", nil)
+		l.Warn("token issuer is not set", nil)
 	}
 	s.tokenizer = token.New(conf["secret"], conf["issuer"])
 	s.baseurl = c.BaseURL

@@ -6,7 +6,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nats-io/stan.go"
 	"net/http"
-	"sync/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )
@@ -18,7 +17,7 @@ const (
 type (
 	// Msgqueue is a service wrapper around a nats streaming queue client instance
 	Msgqueue interface {
-		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte) bool) (Subscription, error)
+		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
 		Publish(queueid string, msgdata []byte) error
 	}
 
@@ -39,10 +38,9 @@ type (
 	}
 
 	subscription struct {
-		logger    governor.Logger
-		sub       stan.Subscription
-		lastAcked uint64
-		worker    func(data []byte) bool
+		logger governor.Logger
+		sub    stan.Subscription
+		worker func(data []byte)
 	}
 )
 
@@ -130,7 +128,7 @@ func (s *service) Health() error {
 }
 
 // SubscribeQueue subscribes to a queue
-func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte) bool) (Subscription, error) {
+func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
 		"agent": "subscriber",
 	})
@@ -154,20 +152,9 @@ func (s *service) Publish(queueid string, msgdata []byte) error {
 }
 
 func (s *subscription) subscriber(msg *stan.Msg) {
-	for {
-		local := s.lastAcked
-		if msg.Sequence <= local {
-			return
-		}
-		if atomic.CompareAndSwapUint64(&s.lastAcked, local, msg.Sequence) {
-			if !s.worker(msg.Data) {
-				return
-			}
-			if err := msg.Ack(); err != nil {
-				s.logger.Error("Failed to ack message", nil)
-			}
-			return
-		}
+	s.worker(msg.Data)
+	if err := msg.Ack(); err != nil {
+		s.logger.Error("Failed to ack message", nil)
 	}
 }
 

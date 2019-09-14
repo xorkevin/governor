@@ -40,13 +40,16 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	t, err := htmlTemplate.ParseGlob(r.GetStr("dir") + "/*.html")
 	if err != nil {
 		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
-			s.logger.Warn("template: no templates loaded", nil)
+			l.Warn("no templates loaded", nil)
 			t = htmlTemplate.New("default")
 		} else {
-			s.logger.Error("template: failed to load templates", map[string]string{
+			l.Error("failed to load templates", map[string]string{
 				"error": err.Error(),
 			})
 			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
@@ -56,7 +59,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.t = t
 
 	if k := t.DefinedTemplates(); k != "" {
-		l.Info("template: loaded templates", map[string]string{
+		l.Info("loaded templates", map[string]string{
 			"templates": strings.TrimLeft(k, "; "),
 		})
 	}

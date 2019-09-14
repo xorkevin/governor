@@ -45,10 +45,13 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 	client, err := minio.New(conf["host"]+":"+conf["port"], conf["keyid"], conf["keysecret"], r.GetBool("sslmode"))
 	if err != nil {
-		s.logger.Error("objstore: failed to create objstore", map[string]string{
+		l.Error("failed to create objstore", map[string]string{
 			"error": err.Error(),
 		})
 		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
@@ -59,13 +62,13 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.store.SetAppInfo(c.Appname, c.Version)
 
 	if _, err := s.store.ListBuckets(); err != nil {
-		s.logger.Error("objstore: failed to ping object store", map[string]string{
+		l.Error("failed to ping object store", map[string]string{
 			"error": err.Error(),
 		})
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 
-	s.logger.Info(fmt.Sprintf("objstore: established objstore connection to %s:%s", conf["host"], conf["port"]), nil)
+	l.Info(fmt.Sprintf("established objstore connection to %s:%s", conf["host"], conf["port"]), nil)
 	return nil
 }
 
@@ -82,9 +85,6 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if _, err := s.store.ListBuckets(); err != nil {
-		s.logger.Error("objstore: failed to ping object store", map[string]string{
-			"error": err.Error(),
-		})
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 	return nil

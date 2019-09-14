@@ -119,21 +119,24 @@ func (s *service) CommitUser(key string) (*resUserUpdate, error) {
 
 	for _, i := range s.hooks {
 		if err := i.UserCreateHook(hookProps); err != nil {
-			s.logger.Error("user: userhook_create error", map[string]string{
-				"error": err.Error(),
+			s.logger.Error("userhook create error", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "createuserhook",
 			})
 		}
 	}
 
 	if err := s.kvnewuser.Del(key); err != nil {
-		s.logger.Error("user: failed to clean up user create cache data", map[string]string{
-			"error": err.Error(),
+		s.logger.Error("failed to clean up user create cache data", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "commituserdelcache",
 		})
 	}
 
-	s.logger.Info("user: created user", map[string]string{
-		"userid":   m.Userid,
-		"username": m.Username,
+	s.logger.Info("created user", map[string]string{
+		"userid":     m.Userid,
+		"username":   m.Username,
+		"actiontype": "commituser",
 	})
 
 	return &resUserUpdate{
@@ -173,8 +176,9 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 
 	for _, i := range s.hooks {
 		if err := i.UserDeleteHook(userid); err != nil {
-			s.logger.Error("user: userhook_delete error", map[string]string{
-				"error": err.Error(),
+			s.logger.Error("userhook_delete error", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "deleteuserhook",
 			})
 		}
 	}

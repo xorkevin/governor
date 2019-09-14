@@ -126,46 +126,49 @@ func (s *service) router() *router {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
 	conf := r.GetStrMap("")
 
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: failed to parse access time: %s", conf["accesstime"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse access time: %s", conf["accesstime"]), nil)
 	} else {
 		s.accessTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["refreshtime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: failed to parse refresh time: %s", conf["refreshtime"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse refresh time: %s", conf["refreshtime"]), nil)
 	} else {
 		s.refreshTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["refreshcache"]); err != nil {
-		l.Warn(fmt.Sprintf("user: failed to parse refresh cache: %s", conf["refreshcache"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse refresh cache: %s", conf["refreshcache"]), nil)
 	} else {
 		s.refreshCacheTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["confirmtime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: failed to parse confirm time: %s", conf["confirmtime"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse confirm time: %s", conf["confirmtime"]), nil)
 	} else {
 		s.confirmTime = t.Nanoseconds() / b1
 	}
 	if t, err := time.ParseDuration(conf["passwordresettime"]); err != nil {
-		l.Warn(fmt.Sprintf("user: failed to parse password reset time: %s", conf["passwordresettime"]), nil)
+		l.Warn(fmt.Sprintf("failed to parse password reset time: %s", conf["passwordresettime"]), nil)
 	} else {
 		s.passwordResetTime = t.Nanoseconds() / b1
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	if conf["secret"] == "" {
-		s.logger.Warn("user: token secret is not set", nil)
+		l.Warn("token secret is not set", nil)
 	}
 	if conf["issuer"] == "" {
-		s.logger.Warn("user: token issuer is not set", nil)
+		l.Warn("token issuer is not set", nil)
 	}
 	s.tokenizer = token.New(conf["secret"], conf["issuer"])
 
-	l.Info("user: loaded config", map[string]string{
+	l.Info("loaded config", map[string]string{
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
 		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
@@ -183,11 +186,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err := sr.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
 		return err
 	}
-	l.Info("user: mounted http routes", nil)
+	l.Info("mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
+
 	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname, rank.Admin())
 	if err != nil {
 		return err
@@ -196,22 +203,22 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.users.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("user: created user table", nil)
+	l.Info("created user table", nil)
 
 	if err := s.roles.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("user: created userrole table", nil)
+	l.Info("created userrole table", nil)
 
 	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	s.logger.Info("user: created usersession table", nil)
+	l.Info("created usersession table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
-	s.logger.Info("user: inserted new setup admin", map[string]string{
+	l.Info("inserted new setup admin", map[string]string{
 		"username": madmin.Username,
 		"userid":   madmin.Userid,
 	})
