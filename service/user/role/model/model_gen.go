@@ -60,7 +60,7 @@ func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, 
 
 func roleModelGetModelByroleid(db *sql.DB, key string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT roleid FROM userroles WHERE roleid = $1;", key).Scan(&m.roleid); err != nil {
+	if err := db.QueryRow("SELECT roleid, userid, role FROM userroles WHERE roleid = $1;", key).Scan(&m.roleid, &m.Userid, &m.Role); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}

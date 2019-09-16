@@ -27,8 +27,8 @@ type (
 	// Model is the db User role model
 	Model struct {
 		roleid string `model:"roleid,VARCHAR(511) PRIMARY KEY" query:"roleid,get;deleq,userid;delset"`
-		Userid string `model:"userid,VARCHAR(31) NOT NULL"`
-		Role   string `model:"role,VARCHAR(255) NOT NULL"`
+		Userid string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
+		Role   string `model:"role,VARCHAR(255) NOT NULL" query:"role"`
 	}
 
 	qUserid struct {
