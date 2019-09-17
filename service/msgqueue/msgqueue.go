@@ -68,10 +68,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
 
-	conn, err := stan.Connect(conf["cluster"], s.clientid, func(options *stan.Options) error {
-		options.NatsURL = "nats://" + conf["host"] + ":" + conf["port"]
+	conn, err := stan.Connect(r.GetStr("cluster"), s.clientid, func(options *stan.Options) error {
+		options.NatsURL = "nats://" + r.GetStr("host") + ":" + r.GetStr("port")
 		return nil
 	})
 	if err != nil {
@@ -99,7 +98,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}()
 	s.done = done
 
-	l.Info(fmt.Sprintf("establish connection to %s:%s", conf["host"], conf["port"]), nil)
+	l.Info(fmt.Sprintf("establish connection to %s:%s", r.GetStr("host"), r.GetStr("port")), nil)
 	return nil
 }
 

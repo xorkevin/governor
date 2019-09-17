@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	gomail "github.com/go-mail/mail"
 	"github.com/labstack/echo/v4"
 	"net/http"
@@ -44,7 +45,7 @@ type (
 		insecure    bool
 		workerSize  int
 		connMsgCap  int
-		connTimeout int
+		connTimeout int64
 		fromAddress string
 		fromName    string
 		msgc        chan *gomail.Message
@@ -75,38 +76,47 @@ func (s *service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("insecure", false)
 	r.SetDefault("workersize", 2)
 	r.SetDefault("connmsgcap", 0)
-	r.SetDefault("conntimeout", 4)
+	r.SetDefault("conntimeout", "4s")
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
 }
+
+const (
+	time4s int64 = 4
+	b1           = 1_000_000_000
+)
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
 
-	s.host = conf["host"]
+	s.host = r.GetStr("host")
 	s.port = r.GetInt("port")
-	s.username = conf["username"]
-	s.password = conf["password"]
+	s.username = r.GetStr("username")
+	s.password = r.GetStr("password")
 	s.insecure = r.GetBool("insecure")
 	s.workerSize = r.GetInt("workersize")
 	s.connMsgCap = r.GetInt("connmsgcap")
-	s.connTimeout = r.GetInt("conntimeout")
-	s.fromAddress = conf["fromaddress"]
-	s.fromName = conf["fromname"]
+	s.connTimeout = time4s
+	if t, err := time.ParseDuration(r.GetStr("conntimeout")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse conn timeout: %s", r.GetStr("conntimeout")), nil)
+	} else {
+		s.connTimeout = t.Nanoseconds() / b1
+	}
+	s.fromAddress = r.GetStr("fromaddress")
+	s.fromName = r.GetStr("fromname")
 	s.msgc = make(chan *gomail.Message)
 
 	l.Info("initialize service options", map[string]string{
-		"smtp server host": conf["host"],
-		"smtp server port": conf["port"],
-		"worker size":      strconv.Itoa(r.GetInt("workersize")),
-		"conn msg cap":     strconv.Itoa(r.GetInt("connmsgcap")),
-		"conn timeout (s)": strconv.Itoa(r.GetInt("conntimeout")),
-		"sender address":   conf["fromaddress"],
-		"sender name":      conf["fromname"],
+		"smtp server host": s.host,
+		"smtp server port": strconv.Itoa(s.port),
+		"worker size":      strconv.Itoa(s.workerSize),
+		"conn msg cap":     strconv.Itoa(s.connMsgCap),
+		"conn timeout (s)": strconv.FormatInt(s.connTimeout, 10),
+		"sender address":   s.fromAddress,
+		"sender name":      s.fromName,
 	})
 	return nil
 }

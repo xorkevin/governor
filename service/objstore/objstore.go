@@ -48,8 +48,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
-	client, err := minio.New(conf["host"]+":"+conf["port"], conf["keyid"], conf["keysecret"], r.GetBool("sslmode"))
+
+	client, err := minio.New(r.GetStr("host")+":"+r.GetStr("port"), r.GetStr("keyid"), r.GetStr("keysecret"), r.GetBool("sslmode"))
 	if err != nil {
 		l.Error("failed to create objstore", map[string]string{
 			"error": err.Error(),
@@ -57,7 +57,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
 	}
 	s.store = client
-	s.location = conf["location"]
+	s.location = r.GetStr("location")
 
 	s.store.SetAppInfo(c.Appname, c.Version)
 
@@ -68,7 +68,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 
-	l.Info(fmt.Sprintf("established objstore connection to %s:%s", conf["host"], conf["port"]), nil)
+	l.Info(fmt.Sprintf("established objstore connection to %s:%s", r.GetStr("host"), r.GetStr("port")), nil)
 	return nil
 }
 

@@ -129,44 +129,43 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
 
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
-	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse access time: %s", conf["accesstime"]), nil)
+	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse access time: %s", r.GetStr("accesstime")), nil)
 	} else {
 		s.accessTime = t.Nanoseconds() / b1
 	}
-	if t, err := time.ParseDuration(conf["refreshtime"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse refresh time: %s", conf["refreshtime"]), nil)
+	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse refresh time: %s", r.GetStr("refreshtime")), nil)
 	} else {
 		s.refreshTime = t.Nanoseconds() / b1
 	}
-	if t, err := time.ParseDuration(conf["refreshcache"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse refresh cache: %s", conf["refreshcache"]), nil)
+	if t, err := time.ParseDuration(r.GetStr("refreshcache")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse refresh cache: %s", r.GetStr("refreshcache")), nil)
 	} else {
 		s.refreshCacheTime = t.Nanoseconds() / b1
 	}
-	if t, err := time.ParseDuration(conf["confirmtime"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse confirm time: %s", conf["confirmtime"]), nil)
+	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse confirm time: %s", r.GetStr("confirmtime")), nil)
 	} else {
 		s.confirmTime = t.Nanoseconds() / b1
 	}
-	if t, err := time.ParseDuration(conf["passwordresettime"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse password reset time: %s", conf["passwordresettime"]), nil)
+	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse password reset time: %s", r.GetStr("passwordresettime")), nil)
 	} else {
 		s.passwordResetTime = t.Nanoseconds() / b1
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
-	if conf["secret"] == "" {
+	if r.GetStr("secret") == "" {
 		l.Warn("token secret is not set", nil)
 	}
-	if conf["issuer"] == "" {
+	if r.GetStr("issuer") == "" {
 		l.Warn("token issuer is not set", nil)
 	}
-	s.tokenizer = token.New(conf["secret"], conf["issuer"])
+	s.tokenizer = token.New(r.GetStr("secret"), r.GetStr("issuer"))
 
 	l.Info("loaded config", map[string]string{
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
@@ -176,7 +175,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
-		"issuer":                conf["issuer"],
+		"issuer":                r.GetStr("issuer"),
 	})
 
 	sr := s.router()

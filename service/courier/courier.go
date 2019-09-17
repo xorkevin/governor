@@ -76,11 +76,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
-	s.fallbackLink = conf["fallbacklink"]
-	s.linkPrefix = conf["linkprefix"]
-	if t, err := time.ParseDuration(conf["cachetime"]); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse cache time: %s", conf["cachetime"]), nil)
+
+	s.fallbackLink = r.GetStr("fallbacklink")
+	s.linkPrefix = r.GetStr("linkprefix")
+	if t, err := time.ParseDuration(r.GetStr("cachetime")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse cache time: %s", r.GetStr("cachetime")), nil)
 	} else {
 		s.cacheTime = t.Nanoseconds() / b1
 	}

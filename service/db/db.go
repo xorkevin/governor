@@ -50,6 +50,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
+
 	conf := r.GetStrMap("")
 	pgarr := make([]string, 0, len(conf))
 	for k, v := range conf {

@@ -51,14 +51,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	conf := r.GetStrMap("")
-	if conf["secret"] == "" {
+
+	if r.GetStr("secret") == "" {
 		l.Warn("token secret is not set", nil)
 	}
-	if conf["issuer"] == "" {
+	if r.GetStr("issuer") == "" {
 		l.Warn("token issuer is not set", nil)
 	}
-	s.tokenizer = token.New(conf["secret"], conf["issuer"])
+	s.tokenizer = token.New(r.GetStr("secret"), r.GetStr("issuer"))
 	s.baseurl = c.BaseURL
 	return nil
 }
