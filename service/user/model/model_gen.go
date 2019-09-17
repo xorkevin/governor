@@ -155,6 +155,7 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 func userModelGetInfoEqHasUseridOrdUserid(db *sql.DB, userid []string, orderasc bool, limit, offset int) ([]Info, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(userid))
+	args = append(args, limit, offset)
 	var placeholdersuserid string
 	{
 		placeholders := make([]string, 0, len(userid))
@@ -170,7 +171,7 @@ func userModelGetInfoEqHasUseridOrdUserid(db *sql.DB, userid []string, orderasc 
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, args)
+	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}

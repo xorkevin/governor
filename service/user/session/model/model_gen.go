@@ -100,7 +100,7 @@ func sessionModelDelEqHasSessionID(db *sql.DB, sessionid []string) error {
 		}
 		placeholderssessionid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid IN (VALUES "+placeholderssessionid+");", args)
+	_, err := db.Exec("DELETE FROM usersessions WHERE sessionid IN (VALUES "+placeholderssessionid+");", args...)
 	return err
 }
 

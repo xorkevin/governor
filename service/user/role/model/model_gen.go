@@ -155,6 +155,6 @@ func roleModelDelEqUseridHasRole(db *sql.DB, userid string, role []string) error
 		}
 		placeholdersrole = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args)
+	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
 	return err
 }
