@@ -26,8 +26,8 @@ type (
 
 	// Model is the db User role model
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31)" query:"userid,getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role,getoneeq,userid,role;getgroupeq,userid;deleq,userid,role;deleq,userid,role|arr"`
+		Userid string `model:"userid,VARCHAR(31);index" query:"userid,getgroupeq,role;deleq,userid"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;deleq,userid,role;deleq,userid,role|arr"`
 	}
 )
 

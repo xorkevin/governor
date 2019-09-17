@@ -215,12 +215,10 @@ func (s *Server) Start() error {
 func (s *Server) Setup(req ReqSetup) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
 	if err := s.init(ctx); err != nil {
-		l.Error("init failed", map[string]string{
+		s.logger.Error("init failed", map[string]string{
 			"error": err.Error(),
+			"phase": "setup",
 		})
 		return err
 	}

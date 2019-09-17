@@ -41,7 +41,7 @@ type (
 	// Model is the db User session model
 	Model struct {
 		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,getoneeq,sessionid;updeq,sessionid;deleq,sessionid;deleq,sessionid|arr"`
-		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid,deleq,userid"`
+		Userid    string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid,deleq,userid"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Time      int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
 		IPAddr    string `model:"ipaddr,VARCHAR(63)" query:"ipaddr"`

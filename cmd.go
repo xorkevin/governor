@@ -2,6 +2,7 @@ package governor
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
@@ -85,11 +86,23 @@ func getPromptReq() (*ReqSetup, error) {
 	}
 
 	fmt.Print("Password: ")
-	password, err := terminal.ReadPassword(0)
+	passwordBytes, err := terminal.ReadPassword(0)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Println()
+	password := string(passwordBytes)
+
+	fmt.Print("Verify password: ")
+	passwordVerifyBytes, err := terminal.ReadPassword(0)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println()
+	passwordVerify := string(passwordVerifyBytes)
+	if password != passwordVerify {
+		return nil, errors.New("Passwords do not match")
+	}
 
 	fmt.Print("Email: ")
 	email, err := reader.ReadString('\n')
@@ -117,7 +130,7 @@ func getPromptReq() (*ReqSetup, error) {
 
 	return &ReqSetup{
 		Username:  strings.TrimSpace(username),
-		Password:  string(password),
+		Password:  password,
 		Email:     strings.TrimSpace(email),
 		Firstname: strings.TrimSpace(firstname),
 		Lastname:  strings.TrimSpace(lastname),

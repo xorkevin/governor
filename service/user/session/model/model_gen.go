@@ -17,6 +17,10 @@ func sessionModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_userid_index ON usersessions (userid);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

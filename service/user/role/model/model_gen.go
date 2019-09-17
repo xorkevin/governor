@@ -17,6 +17,14 @@ func roleModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_userid_index ON userroles (userid);")
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_role_index ON userroles (role);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

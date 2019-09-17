@@ -17,6 +17,10 @@ func linkModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creatorid_index ON courierlinks (creatorid);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
