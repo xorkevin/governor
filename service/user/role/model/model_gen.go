@@ -14,7 +14,10 @@ const (
 
 func roleModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userroles (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func roleModelInsert(db *sql.DB, m *Model) (int, error) {

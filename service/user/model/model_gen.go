@@ -14,7 +14,10 @@ const (
 
 func userModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS users (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func userModelInsert(db *sql.DB, m *Model) (int, error) {

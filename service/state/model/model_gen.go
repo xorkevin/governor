@@ -14,7 +14,10 @@ const (
 
 func stateModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS govstate (config INT PRIMARY KEY, orgname VARCHAR(255) NOT NULL, setup BOOLEAN NOT NULL, creation_time BIGINT NOT NULL);")
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func stateModelInsert(db *sql.DB, m *Model) (int, error) {
