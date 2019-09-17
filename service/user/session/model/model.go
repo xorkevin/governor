@@ -40,9 +40,9 @@ type (
 
 	// Model is the db User session model
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,get;updeq,sessionid;deleq,sessionid;deleq,userid;delset"`
-		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
-		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
+		SessionID string `model:"sessionid,VARCHAR(31) PRIMARY KEY" query:"sessionid,getoneeq,sessionid;updeq,sessionid;deleq,sessionid;deleq,sessionid|arr"`
+		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid,deleq,userid"`
+		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Time      int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
 		IPAddr    string `model:"ipaddr,VARCHAR(63)" query:"ipaddr"`
 		UserAgent string `model:"user_agent,VARCHAR(1023)" query:"user_agent"`
@@ -120,7 +120,7 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 
 // GetByID returns a user session model with the given id
 func (r *repo) GetByID(sessionID string) (*Model, error) {
-	m, code, err := sessionModelGetModelBySessionID(r.db.DB(), sessionID)
+	m, code, err := sessionModelGetModelEqSessionID(r.db.DB(), sessionID)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No session found with that id", http.StatusNotFound, err)
@@ -181,7 +181,7 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteSessions deletes the sessions in the set of session ids
 func (r *repo) DeleteSessions(sessionids []string) error {
-	if err := sessionModelDelSetSessionID(r.db.DB(), sessionids); err != nil {
+	if err := sessionModelDelEqHasSessionID(r.db.DB(), sessionids); err != nil {
 		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}
 	return nil

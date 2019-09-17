@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-//go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel qLink
+//go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel
 
 const (
 	uidSize = 8
@@ -35,16 +35,10 @@ type (
 
 	// LinkModel is the db link model
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid,get;deleq,linkid"`
+		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid,getoneeq,linkid;deleq,linkid"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup"`
-	}
-
-	qLink struct {
-		LinkID       string `query:"linkid"`
-		URL          string `query:"url"`
-		CreationTime int64  `query:"creation_time,getgroupeq,creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup;getgroupeq,creatorid"`
 	}
 )
 
@@ -88,7 +82,7 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 // GetLinkGroup retrieves a group of links
 func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error) {
 	if len(creatorid) > 0 {
-		m, err := linkModelGetqLinkEqCreatorIDOrdCreationTime(r.db.DB(), creatorid, false, limit, offset)
+		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(r.db.DB(), creatorid, false, limit, offset)
 		if err != nil {
 			return nil, governor.NewError("Failed to get links of a creator", http.StatusInternalServerError, err)
 		}
@@ -114,7 +108,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 // GetLink returns a link model with the given id
 func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	var m *LinkModel
-	if mLink, code, err := linkModelGetLinkModelByLinkID(r.db.DB(), linkid); err != nil {
+	if mLink, code, err := linkModelGetLinkModelEqLinkID(r.db.DB(), linkid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No link found with that id", http.StatusNotFound, err)
 		}

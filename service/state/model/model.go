@@ -21,7 +21,7 @@ type (
 
 	// Model is the db State model
 	Model struct {
-		config       int    `model:"config,INT PRIMARY KEY" query:"config,get;updeq,config"`
+		config       int    `model:"config,INT PRIMARY KEY" query:"config,getoneeq,config;updeq,config"`
 		Orgname      string `model:"orgname,VARCHAR(255) NOT NULL" query:"orgname"`
 		Setup        bool   `model:"setup,BOOLEAN NOT NULL" query:"setup"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
@@ -47,7 +47,7 @@ func (r *repo) New(orgname string) *Model {
 
 // GetModel returns the state model
 func (r *repo) GetModel() (*Model, error) {
-	m, code, err := stateModelGetModelByconfig(r.db.DB(), configID)
+	m, code, err := stateModelGetModelEqconfig(r.db.DB(), configID)
 	if err != nil {
 		switch code {
 		case 2:

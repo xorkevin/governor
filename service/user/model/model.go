@@ -57,11 +57,11 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,get;updeq,userid;deleq,userid"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,get"`
+		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
 		AuthTags     rank.Rank
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
-		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,get"`
+		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
@@ -180,7 +180,7 @@ func (r *repo) getApplyRoles(m *Model) (*Model, error) {
 // GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGetModelByUserid(r.db.DB(), userid); err != nil {
+	if mUser, code, err := userModelGetModelEqUserid(r.db.DB(), userid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
 		}
@@ -194,7 +194,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGetModelByUsername(r.db.DB(), username); err != nil {
+	if mUser, code, err := userModelGetModelEqUsername(r.db.DB(), username); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that username", http.StatusNotFound, err)
 		}
@@ -208,7 +208,7 @@ func (r *repo) GetByUsername(username string) (*Model, error) {
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, error) {
 	var m *Model
-	if mUser, code, err := userModelGetModelByEmail(r.db.DB(), email); err != nil {
+	if mUser, code, err := userModelGetModelEqEmail(r.db.DB(), email); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that email", http.StatusNotFound, err)
 		}
@@ -250,13 +250,9 @@ func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
 	for _, i := range addRoles {
 		addModels = append(addModels, r.rolerepo.New(m.Userid, i))
 	}
-	rmModels := make([]*rolemodel.Model, 0, len(rmRoles))
-	for _, i := range rmRoles {
-		rmModels = append(rmModels, r.rolerepo.New(m.Userid, i))
-	}
 
-	if len(rmModels) > 0 {
-		if err := r.rolerepo.DeleteBulk(rmModels); err != nil {
+	if len(rmRoles) > 0 {
+		if err := r.rolerepo.DeleteRoles(m.Userid, rmRoles); err != nil {
 			return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 		}
 	}

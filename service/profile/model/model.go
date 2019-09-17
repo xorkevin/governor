@@ -24,7 +24,7 @@ type (
 
 	// Model is the db profile model
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,get;updeq,userid;deleq,userid"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
@@ -50,7 +50,7 @@ func (r *repo) New(userid, email, bio string) (*Model, error) {
 // GetByID returns a profile model with the given base64 id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	var m *Model
-	if mProfile, code, err := profileModelGetModelByUserid(r.db.DB(), userid); err != nil {
+	if mProfile, code, err := profileModelGetModelEqUserid(r.db.DB(), userid); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No profile found with that id", http.StatusNotFound, err)
 		}
