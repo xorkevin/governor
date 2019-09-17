@@ -152,19 +152,28 @@ func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]
 	return res, nil
 }
 
-func userModelGetInfoSetUserid(db *sql.DB, keys []string) ([]Info, error) {
-	placeholderStart := 1
-	placeholders := make([]string, 0, len(keys))
-	args := make([]interface{}, 0, len(keys))
-	for n, i := range keys {
-		placeholders = append(placeholders, fmt.Sprintf("($%d)", n+placeholderStart))
-		args = append(args, i)
+func userModelGetInfoEqHasUseridOrdUserid(db *sql.DB, userid []string, orderasc bool, limit, offset int) ([]Info, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(userid))
+	var placeholdersuserid string
+	{
+		placeholders := make([]string, 0, len(userid))
+		for _, i := range userid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid = strings.Join(placeholders, ", ")
 	}
-	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES "+strings.Join(placeholders, ", ")+");", args...)
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Info, 0, limit)
+	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, args)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]Info, 0, len(keys))
 	defer func() {
 		if err := rows.Close(); err != nil {
 		}

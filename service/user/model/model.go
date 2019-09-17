@@ -69,7 +69,7 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid    string `query:"userid,getgroup;getgroupset"`
+		Userid    string `query:"userid,getgroup;getgroupeq,userid|arr"`
 		Username  string `query:"username"`
 		Email     string `query:"email"`
 		FirstName string `query:"first_name"`
@@ -163,7 +163,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, error) {
-	m, err := userModelGetInfoSetUserid(r.db.DB(), userids)
+	m, err := userModelGetInfoEqHasUseridOrdUserid(r.db.DB(), userids, true, len(userids), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user info of userids", http.StatusInternalServerError, err)
 	}
