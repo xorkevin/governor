@@ -103,7 +103,7 @@ func newLogger(c Config) Logger {
 }
 
 func (l *govlogger) createFields(data map[string]string) logrus.Fields {
-	now := time.Now()
+	now := time.Now().Round(0)
 	nowStr := now.Format(time.RFC3339)
 	nowUnix := strconv.FormatInt(now.Unix(), 10)
 	fields := make(logrus.Fields, len(data)+len(l.data)+3)

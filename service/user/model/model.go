@@ -111,7 +111,7 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 		Email:        email,
 		FirstName:    firstname,
 		LastName:     lastname,
-		CreationTime: time.Now().Unix(),
+		CreationTime: time.Now().Round(0).Unix(),
 	}, nil
 }
 

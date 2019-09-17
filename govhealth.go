@@ -20,11 +20,11 @@ type (
 
 func (s *Server) initHealth(r *echo.Group) {
 	r.GET("/check", func(c echo.Context) error {
-		return c.String(http.StatusOK, strconv.FormatInt(time.Now().Unix(), 10))
+		return c.String(http.StatusOK, strconv.FormatInt(time.Now().Round(0).Unix(), 10))
 	})
 
 	r.GET("/report", func(c echo.Context) error {
-		t := time.Now().Unix()
+		t := time.Now().Round(0).Unix()
 		if errs := s.checkHealthServices(); len(errs) > 0 {
 			errReslist := []errRes{}
 			for _, i := range errs {

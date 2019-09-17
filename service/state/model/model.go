@@ -41,7 +41,7 @@ func (r *repo) New(orgname string) *Model {
 		config:       configID,
 		Orgname:      orgname,
 		Setup:        false,
-		CreationTime: time.Now().Unix(),
+		CreationTime: time.Now().Round(0).Unix(),
 	}
 }
 

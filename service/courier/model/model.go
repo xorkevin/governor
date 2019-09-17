@@ -55,7 +55,7 @@ func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, error) {
 		LinkID:       linkid,
 		URL:          url,
 		CreatorID:    creatorid,
-		CreationTime: time.Now().Unix(),
+		CreationTime: time.Now().Round(0).Unix(),
 	}, nil
 }
 

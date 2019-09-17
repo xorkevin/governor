@@ -38,7 +38,7 @@ func New(secret, issuer string) *Tokenizer {
 
 // Generate returns a new jwt token from a user model
 func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id, key string) (string, *Claims, error) {
-	now := time.Now().Unix()
+	now := time.Now().Round(0).Unix()
 	claims := &Claims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   subject,
@@ -60,7 +60,7 @@ func (t *Tokenizer) Generate(u *usermodel.Model, duration int64, subject, id, ke
 
 // GenerateFromClaims creates a new jwt from a set of claims
 func (t *Tokenizer) GenerateFromClaims(claims *Claims, duration int64, subject, key string) (string, *Claims, error) {
-	now := time.Now().Unix()
+	now := time.Now().Round(0).Unix()
 	claims.Subject = subject
 	claims.IssuedAt = now
 	claims.ExpiresAt = now + duration

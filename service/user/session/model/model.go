@@ -81,7 +81,7 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 	if err != nil {
 		return nil, "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
 	}
-	now := time.Now().Unix()
+	now := time.Now().Round(0).Unix()
 	return &Model{
 		SessionID: userid + "|" + sid.Base64(),
 		Userid:    userid,
@@ -112,7 +112,7 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 	if err != nil {
 		return "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
 	}
-	now := time.Now().Unix()
+	now := time.Now().Round(0).Unix()
 	m.KeyHash = hash
 	m.Time = now
 	return keystr, nil

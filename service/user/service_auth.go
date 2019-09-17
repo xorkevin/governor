@@ -105,7 +105,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 			Username:  m.Username,
 			SessionID: sm.SessionID,
 			IP:        sm.IPAddr,
-			Time:      time.Unix(sm.Time, 0).String(),
+			Time:      time.Unix(sm.Time, 0).Format(time.RFC3339),
 			UserAgent: sm.UserAgent,
 		}
 		if err := s.mailer.Send(m.Email, newLoginSubject, newLoginTemplate, emdata); err != nil {
