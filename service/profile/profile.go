@@ -45,7 +45,7 @@ func New(profiles profilemodel.Repo, obj objstore.Bucket, g gate.Gate) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 }
 
 func (s *service) router() *router {

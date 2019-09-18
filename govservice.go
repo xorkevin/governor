@@ -28,7 +28,7 @@ type (
 	// launched. Then Setup and Start may occur in either order, or not at all.
 	// Stop runs when the server begins the shutdown process
 	Service interface {
-		Register(r ConfigRegistrar)
+		Register(r ConfigRegistrar, jr JobRegistrar)
 		Init(ctx context.Context, c Config, r ConfigReader, l Logger, g *echo.Group) error
 		Setup(req ReqSetup) error
 		Start(ctx context.Context) error
@@ -56,7 +56,7 @@ func (s *Server) Register(name string, url string, r Service) {
 		},
 		r: r,
 	})
-	r.Register(s.config.registrar(name))
+	r.Register(s.config.registrar(name), nil)
 }
 
 func (s *Server) setupServices(rsetup ReqSetup) error {

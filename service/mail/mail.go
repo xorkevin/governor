@@ -68,7 +68,7 @@ func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "587")
 	r.SetDefault("username", "")

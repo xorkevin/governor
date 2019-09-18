@@ -36,7 +36,7 @@ func New() Service {
 	return &service{}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("user", "postgres")
 	r.SetDefault("password", "admin")
 	r.SetDefault("dbname", "governor")

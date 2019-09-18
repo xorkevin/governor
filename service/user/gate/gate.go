@@ -41,7 +41,7 @@ func New() Service {
 	return &service{}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("secret", "")
 	r.SetDefault("issuer", "governor")
 }

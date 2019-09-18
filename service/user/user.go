@@ -106,7 +106,7 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")

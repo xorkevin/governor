@@ -59,7 +59,7 @@ func New(repo couriermodel.Repo, obj objstore.Bucket, kv kvstore.KVStore, g gate
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
 	r.SetDefault("cachetime", "24h")

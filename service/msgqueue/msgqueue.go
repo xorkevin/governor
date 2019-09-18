@@ -57,7 +57,7 @@ func New() (Service, error) {
 	}, nil
 }
 
-func (s *service) Register(r governor.ConfigRegistrar) {
+func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")
 	r.SetDefault("cluster", "nss")
