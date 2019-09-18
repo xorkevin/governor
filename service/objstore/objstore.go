@@ -51,9 +51,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	client, err := minio.New(r.GetStr("host")+":"+r.GetStr("port"), r.GetStr("keyid"), r.GetStr("keysecret"), r.GetBool("sslmode"))
 	if err != nil {
-		l.Error("failed to create objstore", map[string]string{
-			"error": err.Error(),
-		})
 		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
 	}
 	s.store = client
@@ -62,9 +59,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.store.SetAppInfo(c.Appname, c.Version)
 
 	if _, err := s.store.ListBuckets(); err != nil {
-		l.Error("failed to ping object store", map[string]string{
-			"error": err.Error(),
-		})
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
 

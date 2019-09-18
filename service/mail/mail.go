@@ -138,10 +138,7 @@ func (s *service) Start(ctx context.Context) error {
 		go s.mailWorker(strconv.Itoa(i), wg)
 	}
 	if _, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber); err != nil {
-		l.Error("failed to subscribe to mail queue", map[string]string{
-			"error": err.Error(),
-		})
-		return governor.NewError("Failed to subscribe to queue", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to subscribe to mail queue", http.StatusInternalServerError, err)
 	}
 	done := make(chan struct{})
 	go func() {

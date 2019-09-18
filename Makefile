@@ -1,11 +1,17 @@
 # METADATA
 VERSION=v0.1.0
 
-# CMD
 BIN_DIR=bin
+
+# CMD
 BIN_NAME=governor
 MAIN_PATH=cmd/gov/main.go
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
+
+# SETUP CMD
+SETUP_BIN_NAME=govsetup
+SETUP_MAIN_PATH=cmd/setup/main.go
+SETUP_BIN_PATH=$(BIN_DIR)/$(SETUP_BIN_NAME)
 
 # DOCKER
 IMAGE_NAME=governor
@@ -68,6 +74,9 @@ dev:
 devsetup:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml setup
 
+devsetup-setup:
+	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(SETUP_MAIN_PATH) --config config/configdev.yaml setup
+
 devversion:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml --version
 
@@ -79,7 +88,12 @@ build-bin:
 	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH); fi
 	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -extldflags '-static' -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
-build: clean build-bin
+build-setup:
+	mkdir -p $(BIN_DIR)
+	if [ -f $(SETUP_BIN_PATH) ]; then rm $(SETUP_BIN_PATH); fi
+	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -extldflags '-static' -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(SETUP_BIN_PATH) $(SETUP_MAIN_PATH)
+
+build: clean build-bin build-setup
 
 ## service def
 .PHONY: service

@@ -32,6 +32,13 @@ msgqueue:
   host: localhost
   port: 4222
   cluster: nss
+msgstoredb:
+  user: nss
+  password: admin
+  dbname: nss_db
+  host: localhost
+  port: 5433
+  sslmode: disable
 template:
   dir: templates
 mail:

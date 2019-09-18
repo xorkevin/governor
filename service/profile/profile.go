@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"github.com/labstack/echo/v4"
+	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"
@@ -80,14 +81,8 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
 	if err := s.profileBucket.Init(); err != nil {
-		l.Error("failed to init profile image bucket", map[string]string{
-			"error": err.Error(),
-		})
-		return err
+		return governor.NewError("Failed to init profile image bucket", http.StatusInternalServerError, err)
 	}
 	return nil
 }

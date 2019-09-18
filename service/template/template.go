@@ -49,9 +49,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 			l.Warn("no templates loaded", nil)
 			t = htmlTemplate.New("default")
 		} else {
-			l.Error("failed to load templates", map[string]string{
-				"error": err.Error(),
-			})
 			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
 		}
 	}

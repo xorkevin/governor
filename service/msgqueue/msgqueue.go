@@ -74,10 +74,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return nil
 	})
 	if err != nil {
-		l.Error("Failed connect nats", map[string]string{
-			"error": err.Error(),
-		})
-		return err
+		return governor.NewError("Failed to connect to nats", http.StatusInternalServerError, err)
 	}
 	s.queue = conn
 

@@ -27,6 +27,13 @@ msgqueue:
   host: messenger
   port: 4222
   cluster: nss
+msgstoredb:
+  user: nss
+  password: admin
+  dbname: nss_db
+  host: messagestore
+  port: 5432
+  sslmode: disable
 template:
   dir: templates
 mail:

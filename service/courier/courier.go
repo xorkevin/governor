@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/labstack/echo/v4"
+	"net/http"
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
@@ -87,18 +88,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if len(s.fallbackLink) == 0 {
 		l.Warn("fallbacklink is not set", nil)
 	} else if err := validURL(s.fallbackLink); err != nil {
-		l.Error("invalid fallbacklink", map[string]string{
-			"error": err.Error(),
-		})
-		return err
+		return governor.NewError("Invalid fallbacklink", http.StatusBadRequest, err)
 	}
 	if len(s.linkPrefix) == 0 {
 		l.Warn("linkprefix is not set", nil)
 	} else if err := validURL(s.linkPrefix); err != nil {
-		l.Error("invalid linkprefix", map[string]string{
-			"error": err.Error(),
-		})
-		return err
+		return governor.NewError("Invalid linkprefix", http.StatusBadRequest, err)
 	}
 
 	l.Info("loaded config", map[string]string{
@@ -127,14 +122,8 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
 	if err := s.linkImgBucket.Init(); err != nil {
-		l.Error("failed to init courier link image bucket", map[string]string{
-			"error": err.Error(),
-		})
-		return err
+		return governor.NewError("Failed to init courier link image bucket", http.StatusInternalServerError, err)
 	}
 	return nil
 }
