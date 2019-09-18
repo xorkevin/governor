@@ -60,15 +60,10 @@ type (
 )
 
 func (r *router) updateImage(c echo.Context) error {
-	img, thumb64, err := image.LoadJpeg(c, "image", image.Options{
-		Width:  384,
-		Height: 384,
-		Fill:   true,
-	})
+	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		return err
 	}
-	imgSize := int64(img.Len())
 
 	ruser := reqProfileGetID{
 		Userid: c.Get("userid").(string),
@@ -77,7 +72,7 @@ func (r *router) updateImage(c echo.Context) error {
 		return err
 	}
 
-	if err := r.s.UpdateImage(ruser.Userid, img, imgSize, thumb64); err != nil {
+	if err := r.s.UpdateImage(ruser.Userid, img); err != nil {
 		return err
 	}
 

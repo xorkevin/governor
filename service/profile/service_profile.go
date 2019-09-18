@@ -56,7 +56,12 @@ func (s *service) UpdateProfile(userid, email, bio string) error {
 	return nil
 }
 
-func (s *service) UpdateImage(userid string, img io.Reader, imgSize int64, thumb64 string) error {
+const (
+	imgQuality   = 85
+	thumbQuality = 50
+)
+
+func (s *service) UpdateImage(userid string, img image.Image) error {
 	m, err := s.profiles.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
@@ -65,7 +70,19 @@ func (s *service) UpdateImage(userid string, img io.Reader, imgSize int64, thumb
 		return err
 	}
 
-	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, imgSize, img); err != nil {
+	img.ResizeFill(384, 384)
+	thumb := img.Duplicate()
+	thumb.ResizeLimit(24, 24)
+	thumb64, err := thumb.ToBase64(thumbQuality)
+	if err != nil {
+		return governor.NewError("Failed to encode thumbnail to base64", http.StatusInternalServerError, err)
+	}
+	imgJpeg, err := img.ToJpeg(imgQuality)
+	if err != nil {
+		return governor.NewError("Failed to encode image to jpeg", http.StatusInternalServerError, err)
+	}
+
+	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), imgJpeg); err != nil {
 		return governor.NewError("Failed to save profile picture", http.StatusInternalServerError, err)
 	}
 

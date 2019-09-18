@@ -93,46 +93,6 @@ func FromGif(file io.Reader) (Image, error) {
 	return FromImage(i), nil
 }
 
-// LoadJpeg reads an image from a form and encodes it as a jpeg
-func LoadJpeg(c echo.Context, formField string, opt Options) (*bytes.Buffer, string, error) {
-	if opt.Width < 1 || opt.Height < 1 {
-		opt.Width = defaultThumbnailWidth
-		opt.Height = defaultThumbnailHeight
-	}
-	if opt.ThumbWidth < 1 || opt.ThumbHeight < 1 {
-		opt.ThumbWidth = defaultThumbnailWidth
-		opt.ThumbHeight = defaultThumbnailHeight
-	}
-	if opt.Quality < 1 || opt.Quality > 100 {
-		opt.Quality = defaultQuality
-	}
-	if opt.ThumbQuality < 1 || opt.ThumbQuality > 100 {
-		opt.ThumbQuality = defaultThumbQuality
-	}
-
-	img, err := LoadImage(c, formField)
-	if err != nil {
-		return nil, "", err
-	}
-	if opt.Fill {
-		img.ResizeFill(opt.Width, opt.Height)
-	} else {
-		img.ResizeLimit(opt.Width, opt.Height)
-	}
-	thumb := img.Duplicate()
-	thumb.ResizeLimit(opt.ThumbWidth, opt.ThumbHeight)
-
-	b, err := img.ToJpeg(opt.Quality)
-	if err != nil {
-		return nil, "", governor.NewError("Failed to encode image as JPEG", http.StatusInternalServerError, err)
-	}
-	b2, err := thumb.ToBase64(opt.ThumbQuality)
-	if err != nil {
-		return nil, "", governor.NewError("Failed to encode thumbnail as JPEG", http.StatusInternalServerError, err)
-	}
-	return b, b2, nil
-}
-
 const (
 	// MediaTypeJpeg is the mime type for jpeg images
 	MediaTypeJpeg = "image/jpeg"
@@ -152,28 +112,16 @@ func LoadImage(c echo.Context, formField string) (Image, error) {
 		if err != nil {
 		}
 	}()
-	var img goimg.Image
 	switch mediaType {
 	case MediaTypeJpeg:
-		if i, err := jpeg.Decode(file); err != nil {
-			return nil, governor.NewErrorUser("Invalid JPEG image", http.StatusBadRequest, err)
-		} else {
-			img = i
-		}
+		return FromJpeg(file)
 	case MediaTypePng:
-		if i, err := png.Decode(file); err != nil {
-			return nil, governor.NewErrorUser("Invalid PNG image", http.StatusBadRequest, err)
-		} else {
-			img = i
-		}
+		return FromPng(file)
 	case MediaTypeGif:
-		if i, err := gif.Decode(file); err != nil {
-			return nil, governor.NewErrorUser("Invalid GIF image", http.StatusBadRequest, err)
-		} else {
-			img = i
-		}
+		return FromGif(file)
+	default:
+		return nil, governor.NewErrorUser("Invalid file type", http.StatusBadRequest, err)
 	}
-	return FromImage(img), nil
 }
 
 func (i imageData) ColorModel() color.Model {
