@@ -16,13 +16,6 @@ import (
 	"xorkevin.dev/governor/service/fileloader"
 )
 
-const (
-	defaultThumbnailWidth  = 24
-	defaultThumbnailHeight = 24
-	defaultQuality         = 85
-	defaultThumbQuality    = 50
-)
-
 type (
 	Size struct {
 		W, H int
