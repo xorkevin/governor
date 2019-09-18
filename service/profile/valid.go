@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	lengthCap      = 127
+	lengthCap      = 31
 	lengthCapEmail = 255
 	lengthCapLarge = 4095
 )
@@ -21,7 +21,7 @@ func validhasUserid(userid string) error {
 		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
 	}
 	if len(userid) > lengthCap {
-		return governor.NewErrorUser("Userid is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Userid must be shorter than 32 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -30,15 +30,18 @@ func validEmail(email string) error {
 	if len(email) == 0 {
 		return nil
 	}
-	if !emailRegex.MatchString(email) || len(email) > lengthCapEmail {
+	if !emailRegex.MatchString(email) {
 		return governor.NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
+	}
+	if len(email) > lengthCapEmail {
+		return governor.NewErrorUser("Email must be shorter than 256 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validBio(bio string) error {
 	if len(bio) > lengthCapLarge {
-		return governor.NewErrorUser("Bio exceeds max length", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Bio must be shorter than 4096 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }

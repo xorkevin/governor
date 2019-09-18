@@ -35,6 +35,9 @@ func (r *ReqSetup) valid() error {
 	if len(r.Orgname) == 0 {
 		return NewErrorUser("organization name must be provided", http.StatusBadRequest, nil)
 	}
+	if len(r.Orgname) > 255 {
+		return NewErrorUser("organization name must be shorter than 256 characters", http.StatusBadRequest, nil)
+	}
 	return nil
 }
 

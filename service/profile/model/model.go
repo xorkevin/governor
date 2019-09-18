@@ -27,7 +27,7 @@ type (
 		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
-		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
+		Image  string `model:"profile_image_url,TEXT" query:"profile_image_url"`
 	}
 )
 

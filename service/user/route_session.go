@@ -32,9 +32,11 @@ type (
 )
 
 func (r *reqUserRmSessions) validUserid() error {
-	j := strings.SplitN(r.SessionIDs[0], "|", 2)
-	if r.Userid != j[0] {
-		return governor.NewErrorUser("Invalid session ids", http.StatusForbidden, nil)
+	for _, i := range r.SessionIDs {
+		j := strings.SplitN(i, "|", 2)
+		if r.Userid != j[0] {
+			return governor.NewErrorUser("Invalid session ids", http.StatusForbidden, nil)
+		}
 	}
 	return nil
 }

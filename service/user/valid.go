@@ -3,16 +3,16 @@ package user
 import (
 	"net/http"
 	"regexp"
-	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )
 
 const (
-	lengthCap      = 127
-	lengthCapEmail = 255
-	lengthCapLarge = 4095
-	amountCap      = 1024
+	lengthCapUserid = 31
+	lengthCap       = 127
+	lengthCapEmail  = 255
+	lengthCapLarge  = 4095
+	amountCap       = 1024
 )
 
 var (
@@ -24,18 +24,18 @@ func validhasUserid(userid string) error {
 	if len(userid) == 0 {
 		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
 	}
-	if len(userid) > lengthCap {
-		return governor.NewErrorUser("Userid is too long", http.StatusBadRequest, nil)
+	if len(userid) > lengthCapUserid {
+		return governor.NewErrorUser("Userid must be shorter than 32 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validUsername(username string) error {
 	if len(username) < 3 {
-		return governor.NewErrorUser("Username must be longer than 2 chars", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Username must be longer than 2 characters", http.StatusBadRequest, nil)
 	}
 	if len(username) > lengthCap {
-		return governor.NewErrorUser("Username is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Username must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	if !userRegex.MatchString(username) {
 		return governor.NewErrorUser("Username contains invalid characters", http.StatusBadRequest, nil)
@@ -48,7 +48,7 @@ func validhasUsername(username string) error {
 		return governor.NewErrorUser("Username must be provided", http.StatusBadRequest, nil)
 	}
 	if len(username) > lengthCap {
-		return governor.NewErrorUser("Username is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Username must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -58,21 +58,24 @@ func validhasRole(role string) error {
 		return governor.NewErrorUser("Role is invalid", http.StatusBadRequest, nil)
 	}
 	if len(role) > lengthCap {
-		return governor.NewErrorUser("Role is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Role must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validAmount(amt int) error {
-	if amt == 0 || amt > amountCap {
-		return governor.NewErrorUser("Amount is invalid", http.StatusBadRequest, nil)
+	if amt == 0 {
+		return governor.NewErrorUser("Amount must be positive", http.StatusBadRequest, nil)
+	}
+	if amt > amountCap {
+		return governor.NewErrorUser("Amount must be less than 1024", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validOffset(offset int) error {
 	if offset < 0 {
-		return governor.NewErrorUser("Offset is invalid", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Offset must not be negative", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -108,8 +111,11 @@ func validhasPassword(password string) error {
 }
 
 func validEmail(email string) error {
-	if !emailRegex.MatchString(email) || len(email) > lengthCapEmail {
+	if !emailRegex.MatchString(email) {
 		return governor.NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
+	}
+	if len(email) > lengthCapEmail {
+		return governor.NewErrorUser("Email must be shorter than 256 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -119,7 +125,7 @@ func validFirstName(firstname string) error {
 		return governor.NewErrorUser("First name must be provided", http.StatusBadRequest, nil)
 	}
 	if len(firstname) > lengthCap {
-		return governor.NewErrorUser("First name is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("First name must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -129,7 +135,7 @@ func validLastName(lastname string) error {
 		return governor.NewErrorUser("Last name must be provided", http.StatusBadRequest, nil)
 	}
 	if len(lastname) > lengthCap {
-		return governor.NewErrorUser("Last name is too long", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Last name must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -168,17 +174,12 @@ func validSessionIDs(ids []string) error {
 	if len(ids) == 0 {
 		return governor.NewErrorUser("SessionID must be provided", http.StatusBadRequest, nil)
 	}
-	if len(ids) > lengthCapLarge {
+	if len(ids) > lengthCap {
 		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
 	}
-	j := strings.SplitN(ids[0], "|", 2)
-	if len(j) != 2 {
-		return governor.NewErrorUser("Invalid session id", http.StatusBadRequest, nil)
-	}
-	k := j[0]
 	for _, i := range ids {
-		if !strings.HasPrefix(i, k) {
-			return governor.NewErrorUser("Invalid session id", http.StatusBadRequest, nil)
+		if len(i) > lengthCap {
+			return governor.NewErrorUser("SessionID is too large", http.StatusBadRequest, nil)
 		}
 	}
 	return nil
