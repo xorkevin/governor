@@ -6,9 +6,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"golang.org/x/image/draw"
 	goimg "image"
+	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/fileloader"
@@ -22,9 +24,16 @@ const (
 )
 
 type (
+	Size struct {
+		W, H int
+	}
+
 	// Image is an open image file
 	Image interface {
+		goimg.Image
 		Duplicate() Image
+		Size() Size
+		Draw(img Image, x, y int)
 		Resize(width, height int)
 		ResizeFit(width, height int)
 		ResizeLimit(width, height int)
@@ -36,7 +45,7 @@ type (
 	}
 
 	imageData struct {
-		img goimg.Image
+		img draw.Image
 	}
 
 	// Options represent the image options of the loaded image
@@ -52,9 +61,36 @@ type (
 )
 
 func FromImage(img goimg.Image) Image {
+	bounds := img.Bounds()
+	target := goimg.NewNRGBA64(bounds)
+	draw.Draw(target, target.Bounds(), img, bounds.Min, draw.Src)
 	return &imageData{
-		img: img,
+		img: target,
 	}
+}
+
+func FromJpeg(file io.Reader) (Image, error) {
+	i, err := jpeg.Decode(file)
+	if err != nil {
+		return nil, governor.NewError("Invalid JPEG image", http.StatusBadRequest, err)
+	}
+	return FromImage(i), nil
+}
+
+func FromPng(file io.Reader) (Image, error) {
+	i, err := png.Decode(file)
+	if err != nil {
+		return nil, governor.NewError("Invalid PNG image", http.StatusBadRequest, err)
+	}
+	return FromImage(i), nil
+}
+
+func FromGif(file io.Reader) (Image, error) {
+	i, err := gif.Decode(file)
+	if err != nil {
+		return nil, governor.NewError("Invalid GIF image", http.StatusBadRequest, err)
+	}
+	return FromImage(i), nil
 }
 
 // LoadJpeg reads an image from a form and encodes it as a jpeg
@@ -137,22 +173,40 @@ func LoadImage(c echo.Context, formField string) (Image, error) {
 			img = i
 		}
 	}
-	return &imageData{
-		img: img,
-	}, nil
+	return FromImage(img), nil
+}
+
+func (i imageData) ColorModel() color.Model {
+	return i.img.ColorModel()
+}
+
+func (i imageData) Bounds() goimg.Rectangle {
+	return i.img.Bounds()
+}
+
+func (i imageData) At(x, y int) color.Color {
+	return i.img.At(x, y)
 }
 
 func (i imageData) Duplicate() Image {
-	bounds := i.img.Bounds()
-	target := goimg.NewNRGBA(bounds)
-	draw.Draw(target, target.Bounds(), i.img, bounds.Min, draw.Src)
-	return &imageData{
-		img: target,
+	return FromImage(i.img)
+}
+
+func (i imageData) Size() Size {
+	k := i.img.Bounds().Size()
+	return Size{
+		W: k.X,
+		H: k.Y,
 	}
 }
 
+func (i *imageData) Draw(img Image, x, y int) {
+	source := img.Bounds()
+	draw.Draw(i.img, source.Sub(source.Min).Add(i.img.Bounds().Min).Add(goimg.Pt(x, y)), img, source.Min, draw.Src)
+}
+
 func (i *imageData) Resize(width, height int) {
-	target := goimg.NewNRGBA(goimg.Rect(0, 0, width, height))
+	target := goimg.NewNRGBA64(goimg.Rect(0, 0, width, height))
 	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
 	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, i.img.Bounds(), draw.Src, nil)
 	i.img = target
@@ -185,7 +239,7 @@ func (i *imageData) ResizeLimit(width, height int) {
 
 func (i *imageData) Crop(bounds goimg.Rectangle) {
 	size := bounds.Size()
-	target := goimg.NewNRGBA(goimg.Rect(0, 0, size.X, size.Y))
+	target := goimg.NewNRGBA64(goimg.Rect(0, 0, size.X, size.Y))
 	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
 	draw.Draw(target, target.Bounds(), i.img, bounds.Min, draw.Src)
 	i.img = target
@@ -214,7 +268,7 @@ func dimensionsFill(fromWidth, fromHeight, toWidth, toHeight int) (int, int, int
 func (i *imageData) ResizeFill(width, height int) {
 	s := i.img.Bounds().Size()
 	targetWidth, targetHeight, offsetX, offsetY := dimensionsFill(s.X, s.Y, width, height)
-	target := goimg.NewNRGBA(goimg.Rect(0, 0, width, height))
+	target := goimg.NewNRGBA64(goimg.Rect(0, 0, width, height))
 	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
 	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, goimg.Rect(offsetX, offsetY, offsetX+targetWidth, offsetY+targetHeight), draw.Src, nil)
 	i.img = target
