@@ -26,11 +26,11 @@ type (
 		goimg.Image
 		Duplicate() Image
 		Size() Size
-		Draw(img Image, x, y int)
+		Draw(img Image, x, y int, over bool)
 		Resize(width, height int)
 		ResizeFit(width, height int)
 		ResizeLimit(width, height int)
-		Crop(bounds goimg.Rectangle)
+		Crop(x, y, w, h int)
 		ResizeFill(width, height int)
 		ToJpeg(quality int) (*bytes.Buffer, error)
 		ToPng(level PngCompressionOpt) (*bytes.Buffer, error)
@@ -141,9 +141,13 @@ func (i imageData) Size() Size {
 	}
 }
 
-func (i *imageData) Draw(img Image, x, y int) {
+func (i *imageData) Draw(img Image, x, y int, over bool) {
 	source := img.Bounds()
-	draw.Draw(i.img, source.Sub(source.Min).Add(i.img.Bounds().Min).Add(goimg.Pt(x, y)), img, source.Min, draw.Src)
+	op := draw.Src
+	if over {
+		op = draw.Over
+	}
+	draw.Draw(i.img, source.Sub(source.Min).Add(i.img.Bounds().Min).Add(goimg.Pt(x, y)), img, source.Min, op)
 }
 
 func (i *imageData) Resize(width, height int) {
@@ -178,11 +182,9 @@ func (i *imageData) ResizeLimit(width, height int) {
 	i.ResizeFit(width, height)
 }
 
-func (i *imageData) Crop(bounds goimg.Rectangle) {
-	size := bounds.Size()
-	target := goimg.NewNRGBA64(goimg.Rect(0, 0, size.X, size.Y))
-	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
-	draw.Draw(target, target.Bounds(), i.img, bounds.Min, draw.Src)
+func (i *imageData) Crop(x, y, w, h int) {
+	target := goimg.NewNRGBA64(goimg.Rect(0, 0, w, h))
+	draw.Draw(target, target.Bounds(), i.img, goimg.Pt(x, y), draw.Src)
 	i.img = target
 }
 
