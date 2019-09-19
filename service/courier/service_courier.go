@@ -235,6 +235,7 @@ func (s *service) CreateBrand(brandid string, img image.Image, creatorid string)
 		}
 		return nil, err
 	}
+	img.ResizeFill(256, 256)
 	imgpng, err := img.ToPng(image.PngBest)
 	if err != nil {
 		return nil, governor.NewError("Failed to encode png image", http.StatusInternalServerError, err)
