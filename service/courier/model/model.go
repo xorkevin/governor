@@ -10,6 +10,7 @@ import (
 )
 
 //go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel
+//go:generate forge model -m BrandModel -t courierbrands -p brand -o modelbrand_gen.go BrandModel
 
 const (
 	uidSize = 8
@@ -18,7 +19,7 @@ const (
 type (
 	// Repo is a courier repository
 	Repo interface {
-		NewLink(linkid, url, creatorid string) (*LinkModel, error)
+		NewLink(linkid, url, creatorid string) *LinkModel
 		NewLinkAuto(url, creatorid string) (*LinkModel, error)
 		NewLinkEmpty() LinkModel
 		NewLinkEmptyPtr() *LinkModel
@@ -26,6 +27,11 @@ type (
 		GetLink(linkid string) (*LinkModel, error)
 		InsertLink(m *LinkModel) error
 		DeleteLink(m *LinkModel) error
+		NewBrand(brandid, creatorid string) *BrandModel
+		GetBrandGroup(limit, offset int) ([]BrandModel, error)
+		GetBrand(brandid string) (*BrandModel, error)
+		InsertBrand(m *BrandModel) error
+		DeleteBrand(m *BrandModel) error
 		Setup() error
 	}
 
@@ -40,6 +46,13 @@ type (
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL;index" query:"creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup;getgroupeq,creatorid"`
 	}
+
+	// BrandModel is the db brand model
+	BrandModel struct {
+		BrandID      string `model:"brandid,VARCHAR(63) PRIMARY KEY" query:"brandid,getoneeq,brandid;deleq,brandid"`
+		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL;index" query:"creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time,getgroup;getgroupeq,creatorid"`
+	}
 )
 
 // New creates a new courier repo
@@ -50,13 +63,13 @@ func New(database db.Database) Repo {
 }
 
 // NewLink creates a new link model
-func (r *repo) NewLink(linkid, url, creatorid string) (*LinkModel, error) {
+func (r *repo) NewLink(linkid, url, creatorid string) *LinkModel {
 	return &LinkModel{
 		LinkID:       linkid,
 		URL:          url,
 		CreatorID:    creatorid,
 		CreationTime: time.Now().Round(0).Unix(),
-	}, nil
+	}
 }
 
 // NewLinkAuto creates a new courier model with the link id randomly generated
@@ -66,7 +79,7 @@ func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, error) {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	rawb64 := strings.TrimRight(mUID.Base64(), "=")
-	return r.NewLink(rawb64, url, creatorid)
+	return r.NewLink(rawb64, url, creatorid), nil
 }
 
 // NewLinkEmpty creates an empty link model
@@ -79,7 +92,7 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 	return &LinkModel{}
 }
 
-// GetLinkGroup retrieves a group of links
+// GetLinkGroup gets a list of links ordered by creation time
 func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error) {
 	if len(creatorid) > 0 {
 		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(r.db.DB(), creatorid, false, limit, offset)
@@ -138,10 +151,62 @@ func (r *repo) DeleteLink(m *LinkModel) error {
 	return nil
 }
 
+// NewBrand creates a new brand model
+func (r *repo) NewBrand(brandid, creatorid string) *BrandModel {
+	return &BrandModel{
+		BrandID:      brandid,
+		CreatorID:    creatorid,
+		CreationTime: time.Now().Round(0).Unix(),
+	}
+}
+
+// GetBrandGroup gets a list of brands ordered by creation time
+func (r *repo) GetBrandGroup(limit, offset int) ([]BrandModel, error) {
+	m, err := brandModelGetBrandModelOrdCreationTime(r.db.DB(), false, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get brands", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+// GetBrand returns a brand model with the given id
+func (r *repo) GetBrand(brandid string) (*BrandModel, error) {
+	m, code, err := brandModelGetBrandModelEqBrandID(r.db.DB(), brandid)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.NewError("No brand found with that id", http.StatusNotFound, err)
+		}
+		return nil, governor.NewError("Failed to get brand", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+// InsertBrand adds a brand to the db
+func (r *repo) InsertBrand(m *BrandModel) error {
+	if code, err := brandModelInsert(r.db.DB(), m); err != nil {
+		if code == 3 {
+			return governor.NewError("Brand id must be unique", http.StatusBadRequest, err)
+		}
+		return governor.NewError("Failed to insert brand", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// DeleteBrand removes a brand from the db
+func (r *repo) DeleteBrand(m *BrandModel) error {
+	if err := brandModelDelEqBrandID(r.db.DB(), m.BrandID); err != nil {
+		return governor.NewError("Failed to delete brand", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
 // Setup creates new Courier tables
 func (r *repo) Setup() error {
 	if err := linkModelSetup(r.db.DB()); err != nil {
 		return governor.NewError("Failed to setup link model", http.StatusInternalServerError, err)
+	}
+	if err := brandModelSetup(r.db.DB()); err != nil {
+		return governor.NewError("Failed to setup brand model", http.StatusInternalServerError, err)
 	}
 	return nil
 }

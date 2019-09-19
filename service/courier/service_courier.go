@@ -9,10 +9,6 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 )
 
-const (
-	mediaTypePNG = "image/png"
-)
-
 type (
 	resGetLink struct {
 		LinkID       string `json:"linkid"`
@@ -69,14 +65,14 @@ func (s *service) StatLinkImage(linkid string) (*objstore.ObjectInfo, error) {
 }
 
 func (s *service) GetLinkImage(linkid string) (io.ReadCloser, string, error) {
-	qrimage, objinfo, err := s.linkImgDir.Get(linkid)
+	qrimg, objinfo, err := s.linkImgDir.Get(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
 		}
 		return nil, "", governor.NewError("Failed to get link qr code image", http.StatusInternalServerError, err)
 	}
-	return qrimage, objinfo.ContentType, nil
+	return qrimg, objinfo.ContentType, nil
 }
 
 type (
@@ -121,11 +117,7 @@ func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, err
 		}
 		m = ml
 	} else {
-		ml, err := s.repo.NewLink(linkid, url, creatorid)
-		if err != nil {
-			return nil, err
-		}
-		m = ml
+		m = s.repo.NewLink(linkid, url, creatorid)
 	}
 	if err := s.repo.InsertLink(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
@@ -133,15 +125,15 @@ func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, err
 		}
 		return nil, err
 	}
-	qrimage, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh)
+	qrimg, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate qr code image", http.StatusInternalServerError, err)
 	}
-	qrpng, err := qrimage.ToPng(image.PngBest)
+	qrpng, err := qrimg.ToPng(image.PngBest)
 	if err != nil {
 		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
 	}
-	if err := s.linkImgDir.Put(m.LinkID, mediaTypePNG, int64(qrpng.Len()), qrpng); err != nil {
+	if err := s.linkImgDir.Put(m.LinkID, image.MediaTypePng, int64(qrpng.Len()), qrpng); err != nil {
 		return nil, governor.NewError("Failed to save qr code image", http.StatusInternalServerError, err)
 	}
 
@@ -171,6 +163,104 @@ func (s *service) DeleteLink(linkid string) error {
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {
 		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+type (
+	resGetBrand struct {
+		BrandID      string `json:"brandid"`
+		CreatorID    string `json:"creatorid"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	resBrandGroup struct {
+		Brands []resGetBrand `json:"brands"`
+	}
+)
+
+// GetBrandGroup gets a list of brand images
+func (s *service) GetBrandGroup(limit, offset int) (*resBrandGroup, error) {
+	brands, err := s.repo.GetBrandGroup(limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]resGetBrand, 0, len(brands))
+	for _, i := range brands {
+		res = append(res, resGetBrand{
+			BrandID:      i.BrandID,
+			CreatorID:    i.CreatorID,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resBrandGroup{
+		Brands: res,
+	}, nil
+}
+
+func (s *service) StatBrandImage(brandid string) (*objstore.ObjectInfo, error) {
+	objinfo, err := s.brandImgDir.Stat(brandid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+		}
+		return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+	}
+	return objinfo, nil
+}
+
+func (s *service) GetBrandImage(brandid string) (io.ReadCloser, string, error) {
+	brandimg, objinfo, err := s.brandImgDir.Get(brandid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, "", governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+		}
+		return nil, "", governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+	}
+	return brandimg, objinfo.ContentType, nil
+}
+
+type (
+	resCreateBrand struct {
+		BrandID string `json:"brandid"`
+	}
+)
+
+// CreateBrand adds a brand image
+func (s *service) CreateBrand(brandid string, img image.Image, creatorid string) (*resCreateBrand, error) {
+	m := s.repo.NewBrand(brandid, creatorid)
+	if err := s.repo.InsertBrand(m); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		return nil, err
+	}
+	imgpng, err := img.ToPng(image.PngBest)
+	if err != nil {
+		return nil, governor.NewError("Failed to encode png image", http.StatusInternalServerError, err)
+	}
+	if err := s.brandImgDir.Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
+		return nil, governor.NewError("Failed to save image", http.StatusInternalServerError, err)
+	}
+	return &resCreateBrand{
+		BrandID: brandid,
+	}, nil
+}
+
+// DeleteBrand removes a brand image
+func (s *service) DeleteBrand(brandid string) error {
+	m, err := s.repo.GetBrand(brandid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if err := s.repo.DeleteBrand(m); err != nil {
+		return err
+	}
+	if err := s.brandImgDir.Del(brandid); err != nil {
+		return governor.NewError("Failed to delete brand image", http.StatusInternalServerError, err)
 	}
 	return nil
 }

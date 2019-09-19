@@ -1,15 +1,10 @@
 package barcode
 
 import (
-	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
-)
-
-const (
-	barQRSize = 256
 )
 
 type QRECLevel int
@@ -44,10 +39,6 @@ func GenerateQR(data string, level QRECLevel) (image.Image, error) {
 	qrCode, err := qr.Encode(data, qrecTranslate(level), qr.Unicode)
 	if err != nil {
 		return nil, governor.NewError("Failed to encode qr data", http.StatusInternalServerError, err)
-	}
-	qrCode, err = bar.Scale(qrCode, barQRSize, barQRSize)
-	if err != nil {
-		return nil, governor.NewError("Failed to scale qr code", http.StatusInternalServerError, err)
 	}
 	return image.FromImage(qrCode), nil
 }

@@ -35,6 +35,7 @@ type (
 		repo          couriermodel.Repo
 		linkImgBucket objstore.Bucket
 		linkImgDir    objstore.Dir
+		brandImgDir   objstore.Dir
 		kvlinks       kvstore.KVStore
 		gate          gate.Gate
 		logger        governor.Logger
@@ -54,6 +55,7 @@ func New(repo couriermodel.Repo, obj objstore.Bucket, kv kvstore.KVStore, g gate
 		repo:          repo,
 		linkImgBucket: obj,
 		linkImgDir:    obj.Subdir("qr"),
+		brandImgDir:   obj.Subdir("brand"),
 		kvlinks:       kv.Subtree("links"),
 		gate:          g,
 		cacheTime:     time24h,

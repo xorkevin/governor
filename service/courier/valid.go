@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	lengthCap     = 31
-	lengthCapLink = 63
-	lengthCapURL  = 2047
-	amountCap     = 1024
+	lengthCapUserid = 31
+	lengthCap       = 63
+	lengthCapURL    = 2047
+	amountCap       = 1024
 )
 
 var (
@@ -25,7 +25,7 @@ func validLinkID(linkid string) error {
 	if len(linkid) < 3 {
 		return governor.NewErrorUser("Link id must be longer than 2 characters", http.StatusBadRequest, nil)
 	}
-	if len(linkid) > lengthCapLink {
+	if len(linkid) > lengthCap {
 		return governor.NewErrorUser("Link id must be shorter than 64 characters", http.StatusBadRequest, nil)
 	}
 	if !linkRegex.MatchString(linkid) {
@@ -38,8 +38,34 @@ func validhasLinkID(linkid string) error {
 	if len(linkid) == 0 {
 		return governor.NewErrorUser("Link id must be provided", http.StatusBadRequest, nil)
 	}
-	if len(linkid) > lengthCapLink {
+	if len(linkid) > lengthCap {
 		return governor.NewErrorUser("Link id must be shorter than 64 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validBrandID(brandid string) error {
+	if len(brandid) == 0 {
+		return nil
+	}
+	if len(brandid) < 3 {
+		return governor.NewErrorUser("Brand id must be longer than 2 characters", http.StatusBadRequest, nil)
+	}
+	if len(brandid) > lengthCap {
+		return governor.NewErrorUser("Brand id must be shorter than 64 characters", http.StatusBadRequest, nil)
+	}
+	if !linkRegex.MatchString(brandid) {
+		return governor.NewErrorUser("Brand id can only contain a-z,0-9,_,-", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasBrandID(brandid string) error {
+	if len(brandid) == 0 {
+		return nil
+	}
+	if len(brandid) > lengthCap {
+		return governor.NewErrorUser("Brand id must be shorter than 64 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -61,7 +87,7 @@ func validhasCreatorID(creatorid string) error {
 	if len(creatorid) == 0 {
 		return governor.NewErrorUser("Creatorid must be provided", http.StatusBadRequest, nil)
 	}
-	if len(creatorid) > lengthCap {
+	if len(creatorid) > lengthCapUserid {
 		return governor.NewErrorUser("Creatorid must be shorter than 32 characters", http.StatusBadRequest, nil)
 	}
 	return nil
