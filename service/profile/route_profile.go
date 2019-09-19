@@ -134,7 +134,14 @@ func (r *router) getProfileImage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	defer image.Close()
+	defer func() {
+		if err := image.Close(); err != nil {
+			r.s.logger.Error("Failed to close profile image", map[string]string{
+				"actiontype": "getprofileimage",
+				"error":      err.Error(),
+			})
+		}
+	}()
 	return c.Stream(http.StatusOK, contentType, image)
 }
 

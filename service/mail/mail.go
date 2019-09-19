@@ -174,10 +174,10 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 		"mailworkerid": id,
 		"agent":        "worker",
 	})
-	defer (func() {
+	defer func() {
 		wg.Done()
 		l.Info("mail worker stopped", nil)
-	})()
+	}()
 	l.Info("mail worker started", nil)
 	d := gomail.NewDialer(s.host, s.port, s.username, s.password)
 	if s.insecure {

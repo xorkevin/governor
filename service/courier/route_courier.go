@@ -46,7 +46,14 @@ func (r *router) getLinkImage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	defer img.Close()
+	defer func() {
+		if err := img.Close(); err != nil {
+			r.s.logger.Error("Failed to close link image", map[string]string{
+				"actiontype": "getlinkimage",
+				"error":      err.Error(),
+			})
+		}
+	}()
 	return c.Stream(http.StatusOK, contentType, img)
 }
 
@@ -84,9 +91,10 @@ func (r *router) getLinkGroup(c echo.Context) error {
 
 type (
 	reqLinkPost struct {
-		CreatorID string `valid:"creatorID,has" json:"-"`
 		LinkID    string `valid:"linkID" json:"linkid"`
 		URL       string `valid:"URL" json:"url"`
+		BrandID   string `valid:"brandID,has" json:"brandid"`
+		CreatorID string `valid:"creatorID,has" json:"-"`
 	}
 )
 
@@ -100,7 +108,7 @@ func (r *router) createLink(c echo.Context) error {
 		return err
 	}
 
-	res, err := r.s.CreateLink(req.LinkID, req.URL, req.CreatorID)
+	res, err := r.s.CreateLink(req.LinkID, req.URL, req.BrandID, req.CreatorID)
 	if err != nil {
 		return err
 	}
@@ -137,7 +145,14 @@ func (r *router) getBrandImage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	defer img.Close()
+	defer func() {
+		if err := img.Close(); err != nil {
+			r.s.logger.Error("Failed to close brand image", map[string]string{
+				"actiontype": "getbrandimage",
+				"error":      err.Error(),
+			})
+		}
+	}()
 	return c.Stream(http.StatusOK, contentType, img)
 }
 

@@ -19,13 +19,16 @@ func (r reqGetGroup) valid() error {
 }
 
 func (r reqLinkPost) valid() error {
-	if err := validhasCreatorID(r.CreatorID); err != nil {
-		return err
-	}
 	if err := validLinkID(r.LinkID); err != nil {
 		return err
 	}
 	if err := validURL(r.URL); err != nil {
+		return err
+	}
+	if err := validhasBrandID(r.BrandID); err != nil {
+		return err
+	}
+	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err
 	}
 	return nil

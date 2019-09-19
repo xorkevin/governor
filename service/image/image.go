@@ -101,8 +101,7 @@ func LoadImage(c echo.Context, formField string) (Image, error) {
 		return nil, governor.NewErrorUser("Invalid image file", http.StatusBadRequest, err)
 	}
 	defer func() {
-		err := file.Close()
-		if err != nil {
+		if err := file.Close(); err != nil {
 		}
 	}()
 	switch mediaType {

@@ -101,6 +101,10 @@ func (s *service) GetLinkGroup(limit, offset int, creatorid string) (*resLinkGro
 	}, nil
 }
 
+const (
+	qrScale = 12
+)
+
 type (
 	resCreateLink struct {
 		LinkID string `json:"linkid"`
@@ -108,7 +112,7 @@ type (
 )
 
 // CreateLink creates a new link
-func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, error) {
+func (s *service) CreateLink(linkid, url, brandid, creatorid string) (*resCreateLink, error) {
 	m := s.repo.NewLinkEmptyPtr()
 	if len(linkid) == 0 {
 		ml, err := s.repo.NewLinkAuto(url, creatorid)
@@ -119,16 +123,55 @@ func (s *service) CreateLink(linkid, url, creatorid string) (*resCreateLink, err
 	} else {
 		m = s.repo.NewLink(linkid, url, creatorid)
 	}
+
+	if brandid != "" {
+		objinfo, err := s.brandImgDir.Stat(brandid)
+		if err != nil {
+			if governor.ErrorStatus(err) == http.StatusNotFound {
+				return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+			}
+			return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+		}
+		if objinfo.ContentType != image.MediaTypePng {
+			return nil, governor.NewErrorUser("Invalid brand image media type", http.StatusBadRequest, err)
+		}
+	}
+
 	if err := s.repo.InsertLink(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
-	qrimg, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh)
+	qrimg, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh, qrScale)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate qr code image", http.StatusInternalServerError, err)
 	}
+
+	if brandid != "" {
+		brandimg, _, err := s.brandImgDir.Get(brandid)
+		if err != nil {
+			return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+		}
+		defer func() {
+			if err := brandimg.Close(); err != nil {
+				s.logger.Error("Failed to close brand image", map[string]string{
+					"actiontype": "getlinkbrandimage",
+					"error":      err.Error(),
+				})
+			}
+		}()
+		brand, err := image.FromPng(brandimg)
+		if err != nil {
+			return nil, governor.NewError("Failed to parse brand image", http.StatusInternalServerError, err)
+		}
+		size := qrimg.Size()
+		w := size.W / 3
+		h := size.H / 3
+		brand.ResizeFit(w, h)
+		qrimg.Draw(brand, w, h, true)
+	}
+
 	qrpng, err := qrimg.ToPng(image.PngBest)
 	if err != nil {
 		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
