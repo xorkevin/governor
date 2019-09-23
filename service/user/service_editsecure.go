@@ -244,6 +244,22 @@ func (s *service) ForgotPassword(username string, isEmail bool) error {
 	}
 	nonce := key.Base64()
 
+	if orignonce, err := s.kvpassresetuser.Get(m.Userid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return governor.NewError("Failed to get user password reset info", http.StatusInternalServerError, err)
+		}
+	} else {
+		if err := s.kvpassreset.Del(orignonce); err != nil {
+			s.logger.Error("failed to clean up old password reset attempt data", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "forgotpass",
+			})
+		}
+	}
+
+	if err := s.kvpassresetuser.Set(m.Userid, nonce, s.passwordResetTime); err != nil {
+		return governor.NewError("Failed to store user password reset info", http.StatusInternalServerError, err)
+	}
 	if err := s.kvpassreset.Set(nonce, m.Userid, s.passwordResetTime); err != nil {
 		return governor.NewError("Failed to store password reset info", http.StatusInternalServerError, err)
 	}
@@ -297,7 +313,13 @@ func (s *service) ResetPassword(key string, newPassword string) error {
 	}
 
 	if err := s.kvpassreset.Del(key); err != nil {
-		s.logger.Error("failed to clean up password reset cache data", map[string]string{
+		s.logger.Error("failed to clean up password reset info", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "resetpassword",
+		})
+	}
+	if err := s.kvpassresetuser.Del(userid); err != nil {
+		s.logger.Error("failed to clean up user password reset info", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpassword",
 		})
