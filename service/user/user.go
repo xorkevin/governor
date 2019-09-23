@@ -40,7 +40,9 @@ type (
 		sessions          sessionmodel.Repo
 		kvnewuser         kvstore.KVStore
 		kvemailchange     kvstore.KVStore
+		kvemailchangeuser kvstore.KVStore
 		kvpassreset       kvstore.KVStore
+		kvpassresetuser   kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		mailer            mail.Mail
 		gate              gate.Gate
@@ -93,7 +95,9 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		sessions:          sessions,
 		kvnewuser:         kv.Subtree("newuser"),
 		kvemailchange:     kv.Subtree("emailchange"),
+		kvemailchangeuser: kv.Subtree("emailchangeuser"),
 		kvpassreset:       kv.Subtree("passreset"),
+		kvpassresetuser:   kv.Subtree("passresetuser"),
 		kvsessions:        kv.Subtree("sessions"),
 		mailer:            mailer,
 		gate:              g,

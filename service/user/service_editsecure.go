@@ -60,6 +60,22 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 	}
 	nonce := key.Base64()
 
+	if orignonce, err := s.kvemailchangeuser.Get(userid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return governor.NewError("Failed to get user email reset info", http.StatusInternalServerError, err)
+		}
+	} else {
+		if err := s.kvemailchange.Del(orignonce); err != nil {
+			s.logger.Error("failed to clean up old email reset attempt data", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "updateemail",
+			})
+		}
+	}
+
+	if err := s.kvemailchangeuser.Set(userid, nonce, s.passwordResetTime); err != nil {
+		return governor.NewError("Failed to store user email reset info", http.StatusInternalServerError, err)
+	}
 	if err := s.kvemailchange.Set(nonce, userid+emailChangeEscapeSequence+newEmail, s.passwordResetTime); err != nil {
 		return governor.NewError("Failed to store new email info", http.StatusInternalServerError, err)
 	}
@@ -69,19 +85,8 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		Username:  m.Username,
 		Key:       nonce,
 	}
-	if err := s.mailer.Send(newEmail, emailChangeNotifySubject, emailChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send(newEmail, emailChangeSubject, emailChangeTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
-	}
-
-	emdatanotify := emailEmailChangeNotify{
-		FirstName: m.FirstName,
-		Username:  m.Username,
-	}
-	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
-		s.logger.Error("failed to send old email change notification", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "updateemail",
-		})
 	}
 	return nil
 }
@@ -117,13 +122,30 @@ func (s *service) CommitEmail(key string, password string) error {
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
+	emdatanotify := emailEmailChangeNotify{
+		FirstName: m.FirstName,
+		Username:  m.Username,
+	}
+	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
+		s.logger.Error("failed to send old email change notification", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "commitemail",
+		})
+	}
+
 	m.Email = email
 	if err = s.users.Update(m); err != nil {
 		return err
 	}
 
 	if err := s.kvemailchange.Del(key); err != nil {
-		s.logger.Error("failed to clean up new email cache data", map[string]string{
+		s.logger.Error("failed to clean up new email info", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "commitemail",
+		})
+	}
+	if err := s.kvemailchangeuser.Del(userid); err != nil {
+		s.logger.Error("failed to clean up user email reset info", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemail",
 		})
