@@ -66,9 +66,9 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		}
 	} else {
 		if err := s.kvemailchange.Del(orignonce); err != nil {
-			s.logger.Error("failed to clean up old email reset attempt data", map[string]string{
+			s.logger.Error("failed to clean up old email reset info", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "updateemail",
+				"actiontype": "updateemailcleanup",
 			})
 		}
 	}
@@ -129,7 +129,7 @@ func (s *service) CommitEmail(key string, password string) error {
 	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
 		s.logger.Error("failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "commitemail",
+			"actiontype": "commitemailoldmail",
 		})
 	}
 
@@ -141,13 +141,13 @@ func (s *service) CommitEmail(key string, password string) error {
 	if err := s.kvemailchange.Del(key); err != nil {
 		s.logger.Error("failed to clean up new email info", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "commitemail",
+			"actiontype": "commitemailcleanup",
 		})
 	}
 	if err := s.kvemailchangeuser.Del(userid); err != nil {
 		s.logger.Error("failed to clean up user email reset info", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "commitemail",
+			"actiontype": "commitemailcleanup",
 		})
 	}
 	return nil
@@ -250,9 +250,9 @@ func (s *service) ForgotPassword(username string, isEmail bool) error {
 		}
 	} else {
 		if err := s.kvpassreset.Del(orignonce); err != nil {
-			s.logger.Error("failed to clean up old password reset attempt data", map[string]string{
+			s.logger.Error("failed to clean up old password reset info", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "forgotpass",
+				"actiontype": "forgotpasscleanup",
 			})
 		}
 	}
@@ -315,13 +315,13 @@ func (s *service) ResetPassword(key string, newPassword string) error {
 	if err := s.kvpassreset.Del(key); err != nil {
 		s.logger.Error("failed to clean up password reset info", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "resetpassword",
+			"actiontype": "resetpasswordcleanup",
 		})
 	}
 	if err := s.kvpassresetuser.Del(userid); err != nil {
 		s.logger.Error("failed to clean up user password reset info", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "resetpassword",
+			"actiontype": "resetpasswordcleanup",
 		})
 	}
 	return nil

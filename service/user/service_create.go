@@ -67,8 +67,24 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	}
 	nonce := key.Base64()
 
-	if err := s.kvnewuser.Set(nonce, b.String(), s.confirmTime); err != nil {
+	if orignonce, err := s.kvnewuseremail.Get(ruser.Email); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return nil, governor.NewError("Failed to get new user info", http.StatusInternalServerError, err)
+		}
+	} else {
+		if err := s.kvnewuser.Del(orignonce); err != nil {
+			s.logger.Error("failed to clean up previous create new user info", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "createusercleanup",
+			})
+		}
+	}
+
+	if err := s.kvnewuseremail.Set(m.Email, nonce, s.confirmTime); err != nil {
 		return nil, governor.NewError("Failed to store user info", http.StatusInternalServerError, err)
+	}
+	if err := s.kvnewuser.Set(nonce, b.String(), s.confirmTime); err != nil {
+		return nil, governor.NewError("Failed to store new user info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailNewUser{
@@ -127,9 +143,15 @@ func (s *service) CommitUser(key string) (*resUserUpdate, error) {
 	}
 
 	if err := s.kvnewuser.Del(key); err != nil {
-		s.logger.Error("failed to clean up user create cache data", map[string]string{
+		s.logger.Error("failed to clean up new user info", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "commituserdelcache",
+			"actiontype": "commitusercleanup",
+		})
+	}
+	if err := s.kvnewuseremail.Del(m.Email); err != nil {
+		s.logger.Error("failed to clean up user info", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "commitusercleanup",
 		})
 	}
 
