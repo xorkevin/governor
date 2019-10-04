@@ -1,5 +1,5 @@
 # METADATA
-VERSION=v0.1.0
+VERSION=v0.2.1
 
 BIN_DIR=bin
 

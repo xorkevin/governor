@@ -1,4 +1,4 @@
-version: "3.7"
+version: '3.7'
 
 services:
   governor:
@@ -9,9 +9,15 @@ services:
       mode: replicated
       replicas: 1
       labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=launch-net"
-        - "traefik.port=8080"
+        - 'traefik.enable=true'
+        - 'traefik.docker.network=launch-net'
+        - 'traefik.http.services.governor.loadbalancer.server.port=8080'
+        - 'traefik.http.routers.governor.entrypoints=web'
+        - 'traefik.http.routers.governor.rule=Host(`localhost`)'
+        #- 'traefik.http.routers.governor.entrypoints=websecure'
+        #- 'traefik.http.routers.governor.tls.certresolver=httpchallengeresolver'
+        #- "traefik.http.routers.governor.middlewares=httpsredirectscheme@docker"
+        #- 'traefik.http.middlewares.httpsredirectscheme.redirectscheme.scheme=https'
 
 networks:
   launch-net:
