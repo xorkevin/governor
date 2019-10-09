@@ -100,6 +100,10 @@ func (s *service) Set(key, val string, seconds int64) error {
 }
 
 func (s *service) Del(key ...string) error {
+	if len(key) == 0 {
+		return nil
+	}
+
 	if err := s.client.Del(key...).Err(); err != nil {
 		return governor.NewError("Failed to delete key", http.StatusInternalServerError, err)
 	}
