@@ -66,7 +66,7 @@ gen: generate fmt
 cleangen:
 	rm $(GENSRC)
 
-.PHONY: dev clean build-bin build
+.PHONY: dev devsetup devsetup-setup devversion clean build-bin build-setup build
 
 dev:
 	$(GO) run -ldflags "-X main.GitHash=$$(git rev-parse --verify HEAD)" $(MAIN_PATH) --config config/configdev.yaml serve
@@ -94,12 +94,6 @@ build-setup:
 	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -extldflags '-static' -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(SETUP_BIN_PATH) $(SETUP_MAIN_PATH)
 
 build: clean build-bin build-setup
-
-## service def
-.PHONY: service
-
-service:
-	./servicedef-gen.sh
 
 ## docker
 .PHONY: build-docker produp proddown devup devdown docker-clean
@@ -131,9 +125,14 @@ docker-clean:
 
 ## service
 SERVICE_STACK=governor
-.PHONY: launch danger-land
+SERVICE_DEF_DIR=defs
+SERVICE_DEF_NAME=$(SERVICE_DEF_DIR)/dc.$(SERVICE_STACK).yaml
+.PHONY: service launch danger-land
+service:
+	./servicedef-gen.sh $(SERVICE_DEF_DIR) $(SERVICE_DEF_NAME)
+
 launch:
-	docker stack deploy -c defs/dc.gov.yaml $(SERVICE_STACK)
+	docker stack deploy -c $(SERVICE_DEF_NAME) $(SERVICE_STACK)
 
 danger-land:
 	docker stack rm $(SERVICE_STACK)

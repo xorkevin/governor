@@ -10,14 +10,15 @@ services:
       replicas: 1
       labels:
         - 'traefik.enable=true'
-        - 'traefik.docker.network=launch-net'
-        - 'traefik.http.services.governor.loadbalancer.server.port=8080'
-        - 'traefik.http.routers.governor.entrypoints=web'
-        - 'traefik.http.routers.governor.rule=Host(`localhost`)'
-        #- 'traefik.http.routers.governor.entrypoints=websecure'
-        #- 'traefik.http.routers.governor.tls.certresolver=httpchallengeresolver'
-        #- "traefik.http.routers.governor.middlewares=httpsredirectscheme@docker"
-        #- 'traefik.http.middlewares.httpsredirectscheme.redirectscheme.scheme=https'
+        - 'traefik.http.services.${SERVICE_NAME}-service.loadbalancer.server.port=80'
+        - 'traefik.http.routers.${SERVICE_NAME}.entrypoints=web'
+        - 'traefik.http.routers.${SERVICE_NAME}.rule=Host(`localhost`)'
+        #- 'traefik.http.middlewares.${SERVICE_NAME}-redirect.redirectscheme.scheme=https'
+        #- 'traefik.http.middlewares.${SERVICE_NAME}-redirect.redirectscheme.permanent=true'
+        #- 'traefik.http.routers.${SERVICE_NAME}.middlewares=${SERVICE_NAME}-redirect@docker'
+        #- 'traefik.http.routers.${SERVICE_NAME}-secure.entrypoints=websecure'
+        #- 'traefik.http.routers.${SERVICE_NAME}-secure.tls.certresolver=httpchallengeresolver'
+        #- 'traefik.http.routers.${SERVICE_NAME}-secure.rule=Host(`localhost`)'
 
 networks:
   launch-net:

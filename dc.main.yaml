@@ -1,4 +1,4 @@
-version: "3.7"
+version: '3.7'
 
 services:
   postgres:
@@ -32,7 +32,7 @@ services:
     volumes:
       - ./config:/config
     depends_on:
-      - "messagestore"
+      - 'messagestore'
 
   messagestore:
     image: postgres:11-alpine
@@ -44,8 +44,8 @@ services:
       POSTGRES_DB: ${MSG_STORE_DB}
 
 volumes:
-  pgdata:
-  redisdata:
-  miniodata:
-  minioconfig:
-  messagestoredata:
+  pgdata: {}
+  redisdata: {}
+  miniodata: {}
+  minioconfig: {}
+  messagestoredata: {}

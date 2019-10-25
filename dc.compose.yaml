@@ -1,4 +1,4 @@
-version: "3.7"
+version: '3.7'
 
 services:
   governor:
@@ -19,4 +19,7 @@ services:
     restart: unless-stopped
 
   messagestore:
+    restart: unless-stopped
+
+  mail:
     restart: unless-stopped
