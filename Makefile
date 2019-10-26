@@ -1,20 +1,13 @@
-# METADATA
-VERSION=v0.2.1
-
+# CMD
 BIN_DIR=bin
 
-# CMD
 BIN_NAME=governor
 MAIN_PATH=cmd/gov/main.go
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
-# SETUP CMD
 SETUP_BIN_NAME=govsetup
 SETUP_MAIN_PATH=cmd/setup/main.go
 SETUP_BIN_PATH=$(BIN_DIR)/$(SETUP_BIN_NAME)
-
-# DOCKER
-IMAGE_NAME=governor
 
 GO=go
 
@@ -96,10 +89,13 @@ build-setup:
 build: clean build-bin build-setup
 
 ## docker
+DOCKER_IMAGE_NAME=governor
+DOCKER_VERSION=v0.2.2
+DOCKER_FILE=./cmd/gov/Dockerfile
 .PHONY: build-docker produp proddown devup devdown docker-clean
 
 build-docker:
-	docker build -f ./cmd/gov/Dockerfile -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest .
+	docker build -f $(DOCKER_FILE) -t $(DOCKER_IMAGE_NAME):$(DOCKER_VERSION) -t $(DOCKER_IMAGE_NAME):latest .
 
 produp:
 	docker-compose -f dc.main.yaml -f dc.prod.yaml -f dc.compose.yaml up -d
