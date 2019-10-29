@@ -10,15 +10,15 @@ services:
       replicas: 1
       labels:
         - 'traefik.enable=true'
-        - 'traefik.http.services.${SERVICE_NAME}-service.loadbalancer.server.port=80'
+        - 'traefik.http.services.${SERVICE_NAME}-service.loadbalancer.server.port=${SERVICE_PORT}'
         - 'traefik.http.routers.${SERVICE_NAME}.entrypoints=web'
-        - 'traefik.http.routers.${SERVICE_NAME}.rule=Host(`localhost`)'
+        - 'traefik.http.routers.${SERVICE_NAME}.rule=Host(`${SERVICE_HOST}`)'
         #- 'traefik.http.middlewares.${SERVICE_NAME}-redirect.redirectscheme.scheme=https'
         #- 'traefik.http.middlewares.${SERVICE_NAME}-redirect.redirectscheme.permanent=true'
         #- 'traefik.http.routers.${SERVICE_NAME}.middlewares=${SERVICE_NAME}-redirect@docker'
         #- 'traefik.http.routers.${SERVICE_NAME}-secure.entrypoints=websecure'
         #- 'traefik.http.routers.${SERVICE_NAME}-secure.tls.certresolver=httpchallengeresolver'
-        #- 'traefik.http.routers.${SERVICE_NAME}-secure.rule=Host(`localhost`)'
+        #- 'traefik.http.routers.${SERVICE_NAME}-secure.rule=Host(`${SERVICE_HOST}`)'
 
 networks:
   launch-net:

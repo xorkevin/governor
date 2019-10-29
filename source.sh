@@ -1,4 +1,6 @@
 export SERVICE_NAME=governor
+export SERVICE_PORT=8080
+export SERVICE_HOST=localhost
 
 export POSTGRES_USER=postgres
 export POSTGRES_PASS=admin

@@ -1,4 +1,4 @@
-source ./source.sh
+. ./source.sh
 rm -rf $1
 mkdir -p $1
 
