@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	moduleID        = "user"
 	authRoutePrefix = "/auth"
 )
 
