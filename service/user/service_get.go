@@ -49,7 +49,7 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("", 0, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("", 0, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 	m, err := s.users.GetByUsername(username)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("", 0, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 	m, err := s.users.GetByUsername(username)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("", 0, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 	m, err := s.users.GetByEmail(email)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("", 0, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
 		return nil, err
 	}
