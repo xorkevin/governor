@@ -34,6 +34,10 @@ type (
 
 	// Validator is a function to check the authorization of a user
 	Validator func(c echo.Context, claims token.Claims) bool
+
+	Claims struct {
+		token.Claims
+	}
 )
 
 // New returns a new Gate
@@ -147,7 +151,7 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 // resource
 //
 // idfunc should return the userid
-func OwnerF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func OwnerF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -156,7 +160,7 @@ func OwnerF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFu
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c)
+		s, err := idfunc(c, Claims{claims})
 		if err != nil {
 			return false
 		}
@@ -206,7 +210,7 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 // by the owner or a moderator
 //
 // idfunc should return the userid and the group_tag
-func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, error)) echo.MiddlewareFunc {
+func OwnerModOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -218,7 +222,7 @@ func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, error))
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		userid, group, err := idfunc(c)
+		userid, group, err := idfunc(c, Claims{claims})
 		if err != nil {
 			return false
 		}
@@ -230,7 +234,7 @@ func OwnerModOrAdminF(g Gate, idfunc func(echo.Context) (string, string, error))
 // the moderator of a group or an admin
 //
 // idfunc should return the group_tag
-func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func ModOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -242,7 +246,7 @@ func ModOrAdminF(g Gate, idfunc func(echo.Context) (string, error)) echo.Middlew
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c)
+		s, err := idfunc(c, Claims{claims})
 		if err != nil {
 			return false
 		}
@@ -270,7 +274,7 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 // user and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func UserOrBanF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func UserOrBanF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -279,7 +283,7 @@ func UserOrBanF(g Gate, idfunc func(echo.Context) (string, error)) echo.Middlewa
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c)
+		s, err := idfunc(c, Claims{claims})
 		if err != nil {
 			return false
 		}
@@ -309,7 +313,7 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 // member of a group and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func MemberF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -318,7 +322,7 @@ func MemberF(g Gate, idfunc func(echo.Context) (string, error)) echo.MiddlewareF
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c)
+		s, err := idfunc(c, Claims{claims})
 		if err != nil {
 			return false
 		}
