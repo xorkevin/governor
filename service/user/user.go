@@ -15,6 +15,7 @@ import (
 	"xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/hunter2"
 )
 
 const (
@@ -40,12 +41,13 @@ type (
 		kvnewuser         kvstore.KVStore
 		kvnewuseremail    kvstore.KVStore
 		kvemailchange     kvstore.KVStore
-		kvemailchangeuser kvstore.KVStore
 		kvpassreset       kvstore.KVStore
 		kvpassresetuser   kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		mailer            mail.Mail
 		gate              gate.Gate
+		hasher            *hunter2.Blake2bHasher
+		verifier          *hunter2.Verifier
 		tokenizer         *token.Tokenizer
 		logger            governor.Logger
 		baseURL           string
@@ -89,6 +91,10 @@ const (
 
 // New creates a new User
 func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, mailer mail.Mail, g gate.Gate) Service {
+	hasher := hunter2.NewBlake2bHasher()
+	verifier := hunter2.NewVerifier()
+	verifier.RegisterHash(hasher)
+
 	return &service{
 		users:             users,
 		roles:             roles,
@@ -96,12 +102,13 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		kvnewuser:         kv.Subtree("newuser"),
 		kvnewuseremail:    kv.Subtree("newuseremail"),
 		kvemailchange:     kv.Subtree("emailchange"),
-		kvemailchangeuser: kv.Subtree("emailchangeuser"),
 		kvpassreset:       kv.Subtree("passreset"),
 		kvpassresetuser:   kv.Subtree("passresetuser"),
 		kvsessions:        kv.Subtree("sessions"),
 		mailer:            mailer,
 		gate:              g,
+		hasher:            hasher,
+		verifier:          verifier,
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,

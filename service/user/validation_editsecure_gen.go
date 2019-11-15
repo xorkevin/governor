@@ -16,6 +16,9 @@ func (r reqUserPutEmail) valid() error {
 }
 
 func (r reqUserPutEmailVerify) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
 	if err := validhasToken(r.Key); err != nil {
 		return err
 	}
@@ -39,6 +42,9 @@ func (r reqUserPutPassword) valid() error {
 }
 
 func (r reqForgotPasswordReset) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
 	if err := validhasToken(r.Key); err != nil {
 		return err
 	}

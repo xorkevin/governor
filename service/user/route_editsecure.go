@@ -34,6 +34,7 @@ func (r *router) putEmail(c echo.Context) error {
 
 type (
 	reqUserPutEmailVerify struct {
+		Userid   string `valid:"userid,has" json:"userid"`
 		Key      string `valid:"token,has" json:"key"`
 		Password string `valid:"password,has" json:"password"`
 	}
@@ -48,7 +49,7 @@ func (r *router) putEmailVerify(c echo.Context) error {
 		return err
 	}
 
-	if err := r.s.CommitEmail(req.Key, req.Password); err != nil {
+	if err := r.s.CommitEmail(req.Userid, req.Key, req.Password); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -107,6 +108,7 @@ func (r *router) forgotPassword(c echo.Context) error {
 
 type (
 	reqForgotPasswordReset struct {
+		Userid      string `valid:"userid,has" json:"userid"`
 		Key         string `valid:"token,has" json:"key"`
 		NewPassword string `valid:"password" json:"new_password"`
 	}
@@ -121,7 +123,7 @@ func (r *router) forgotPasswordReset(c echo.Context) error {
 		return err
 	}
 
-	if err := r.s.ResetPassword(req.Key, req.NewPassword); err != nil {
+	if err := r.s.ResetPassword(req.Userid, req.Key, req.NewPassword); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
