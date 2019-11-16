@@ -22,6 +22,11 @@ services:
     ports:
       - 5433:5432
 
+  pubsub:
+    ports:
+      - 4224:4222
+      - 8224:8222
+
   mail:
     image: mailhog/mailhog
     ports:

@@ -61,6 +61,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")
 	r.SetDefault("cluster", "nss")
+	r.SetDefault("token", "admin")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
@@ -69,10 +70,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	conn, err := stan.Connect(r.GetStr("cluster"), s.clientid, func(options *stan.Options) error {
-		options.NatsURL = "nats://" + r.GetStr("host") + ":" + r.GetStr("port")
-		return nil
-	})
+	conn, err := stan.Connect(r.GetStr("cluster"), s.clientid, stan.NatsURL(fmt.Sprintf("nats://%s@%s:%s", r.GetStr("token"), r.GetStr("host"), r.GetStr("port"))))
 	if err != nil {
 		return governor.NewError("Failed to connect to nats", http.StatusInternalServerError, err)
 	}

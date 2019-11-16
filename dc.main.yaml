@@ -28,7 +28,7 @@ services:
 
   messenger:
     image: nats-streaming:linux
-    command: -cid nss --store sql --sql_driver postgres --sql_source "user=${MSG_STORE_USER} password=${MSG_STORE_PASS} dbname=${MSG_STORE_DB} host=messagestore port=5432 sslmode=disable"
+    command: -cid nss --auth ${MSG_TOKEN} --store sql --sql_driver postgres --sql_source "user=${MSG_STORE_USER} password=${MSG_STORE_PASS} dbname=${MSG_STORE_DB} host=messagestore port=5432 sslmode=disable"
     volumes:
       - ./config:/config
     depends_on:
@@ -42,6 +42,10 @@ services:
       POSTGRES_USER: ${MSG_STORE_USER}
       POSTGRES_PASSWORD: ${MSG_STORE_PASS}
       POSTGRES_DB: ${MSG_STORE_DB}
+
+  pubsub:
+    image: nats:linux
+    command: --auth ${PUBSUB_TOKEN}
 
 volumes:
   pgdata: {}

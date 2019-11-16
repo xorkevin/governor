@@ -21,5 +21,8 @@ services:
   messagestore:
     restart: unless-stopped
 
+  pubsub:
+    restart: unless-stopped
+
   mail:
     restart: unless-stopped
