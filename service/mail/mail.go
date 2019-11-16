@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	govmailqueueid     = "gov-mail"
-	govmailqueueworker = "gov-mail-worker"
+	govmailqueueid     = "gov.mail"
+	govmailqueueworker = "gov.mail.worker"
 )
 
 type (

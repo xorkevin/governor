@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
 	"xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
@@ -46,6 +47,7 @@ func main() {
 		fmt.Printf("Failed to create msgqueue: %s\n", err.Error())
 		return
 	}
+	pubsubService := pubsub.New()
 	templateService := template.New()
 	mailService := mail.New(templateService, msgqueueService)
 	gateService := gate.New()
@@ -62,6 +64,7 @@ func main() {
 	gov.Register("kvstore", "/null", kvService)
 	gov.Register("objstore", "/null", objstoreService)
 	gov.Register("msgqueue", "/null", msgqueueService)
+	gov.Register("pubsub", "/null", pubsubService)
 	gov.Register("template", "/null", templateService)
 	gov.Register("mail", "/null", mailService)
 	gov.Register("gate", "/null", gateService)

@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	profilequeueworkercreate = "profile-worker-create"
-	profilequeueworkerdelete = "profile-worker-delete"
+	profilequeueworkercreate = "gov.profile.worker.create"
+	profilequeueworkerdelete = "gov.profile.worker.delete"
 )
 
 const (

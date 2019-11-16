@@ -81,8 +81,8 @@ type (
 )
 
 const (
-	NewUserQueueID    = "gov-user-new"
-	DeleteUserQueueID = "gov-user-delete"
+	NewUserQueueID    = "gov.user.new"
+	DeleteUserQueueID = "gov.user.delete"
 )
 
 const (

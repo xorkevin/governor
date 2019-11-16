@@ -1,36 +1,31 @@
-package msgqueue
+package pubsub
 
 import (
 	"context"
 	"fmt"
 	"github.com/labstack/echo/v4"
-	"github.com/nats-io/stan.go"
+	"github.com/nats-io/nats.go"
 	"net/http"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/util/uid"
-)
-
-const (
-	uidSize = 16
 )
 
 type (
-	// Msgqueue is a service wrapper around a nats streaming queue client instance
-	Msgqueue interface {
-		SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
+	// Pubsub is a service wrapper around a nats pub sub client
+	Pubsub interface {
+		Subscribe(queueid string, worker func(msgdata []byte)) (Subscription, error)
+		SubscribeGroup(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
 		Publish(queueid string, msgdata []byte) error
 	}
 
 	Service interface {
 		governor.Service
-		Msgqueue
+		Pubsub
 	}
 
 	service struct {
-		clientid string
-		queue    stan.Conn
-		logger   governor.Logger
-		done     <-chan struct{}
+		queue  *nats.Conn
+		logger governor.Logger
+		done   <-chan struct{}
 	}
 
 	Subscription interface {
@@ -39,28 +34,19 @@ type (
 
 	subscription struct {
 		logger governor.Logger
-		sub    stan.Subscription
+		sub    *nats.Subscription
 		worker func(data []byte)
 	}
 )
 
-// New creates a new msgqueue service
-func New() (Service, error) {
-	clientid, err := uid.New(uidSize)
-	if err != nil {
-		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
-	}
-	clientidstr := clientid.Base64()
-
-	return &service{
-		clientid: clientidstr,
-	}, nil
+// New creates a new pubsub service
+func New() Service {
+	return &service{}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")
-	r.SetDefault("cluster", "nss")
 	r.SetDefault("token", "admin")
 }
 
@@ -70,7 +56,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	conn, err := stan.Connect(r.GetStr("cluster"), s.clientid, stan.NatsURL(fmt.Sprintf("nats://%s@%s:%s", r.GetStr("token"), r.GetStr("host"), r.GetStr("port"))))
+	conn, err := nats.Connect(fmt.Sprintf("nats://%s@%s:%s", r.GetStr("token"), r.GetStr("host"), r.GetStr("port")))
 	if err != nil {
 		return governor.NewError("Failed to connect to nats", http.StatusInternalServerError, err)
 	}
@@ -82,13 +68,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		l := s.logger.WithData(map[string]string{
 			"phase": "stop",
 		})
-		if err := s.queue.Close(); err != nil {
-			l.Error("failed to close msgqueue connection", map[string]string{
-				"error": err.Error(),
-			})
-		} else {
-			l.Info("closed connection", nil)
-		}
+		s.queue.Close()
+		l.Info("closed connection", nil)
 		close(done)
 	}()
 	s.done = done
@@ -121,8 +102,8 @@ func (s *service) Health() error {
 	return nil
 }
 
-// SubscribeQueue subscribes to a queue
-func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
+// Subscribe subscribes to a channel
+func (s *service) Subscribe(queueid string, worker func(msgdata []byte)) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
 		"agent": "subscriber",
 	})
@@ -130,9 +111,26 @@ func (s *service) SubscribeQueue(queueid, queuegroup string, worker func(msgdata
 		logger: l,
 		worker: worker,
 	}
-	sub, err := s.queue.QueueSubscribe(queueid, queuegroup, msub.subscriber, stan.DurableName(queuegroup+"-durable"), stan.SetManualAckMode())
+	sub, err := s.queue.Subscribe(queueid, msub.subscriber)
 	if err != nil {
-		return nil, governor.NewError("Failed to create subscription to queue", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
+	}
+	msub.sub = sub
+	return msub, nil
+}
+
+// SubscribeGroup subscribes to a queue group
+func (s *service) SubscribeGroup(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
+	l := s.logger.WithData(map[string]string{
+		"agent": "subscriber",
+	})
+	msub := &subscription{
+		logger: l,
+		worker: worker,
+	}
+	sub, err := s.queue.QueueSubscribe(queueid, queuegroup, msub.subscriber)
+	if err != nil {
+		return nil, governor.NewError("Failed to create subscription to queue group", http.StatusInternalServerError, err)
 	}
 	msub.sub = sub
 	return msub, nil
@@ -145,16 +143,13 @@ func (s *service) Publish(queueid string, msgdata []byte) error {
 	return nil
 }
 
-func (s *subscription) subscriber(msg *stan.Msg) {
+func (s *subscription) subscriber(msg *nats.Msg) {
 	s.worker(msg.Data)
-	if err := msg.Ack(); err != nil {
-		s.logger.Error("Failed to ack message", nil)
-	}
 }
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	if err := s.sub.Close(); err != nil {
+	if err := s.sub.Unsubscribe(); err != nil {
 		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}
 	return nil

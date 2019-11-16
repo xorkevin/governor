@@ -13,6 +13,7 @@ require (
 	github.com/minio/minio-go/v6 v6.0.35
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/nats-io/nats-streaming-server v0.16.2 // indirect
+	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.5.0
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
