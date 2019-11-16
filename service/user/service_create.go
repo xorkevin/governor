@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"net/http"
-	"net/url"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
@@ -34,10 +33,6 @@ type (
 		Username string `json:"username"`
 	}
 )
-
-func escapeEmail(email string) string {
-	return url.QueryEscape(email)
-}
 
 func prefixEmailKey(email string) string {
 	return "nonce:" + email
@@ -89,7 +84,7 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	}
 
 	emdata := emailNewUser{
-		Email:     escapeEmail(m.Email),
+		Email:     m.Email,
 		Key:       nonce,
 		FirstName: m.FirstName,
 		Username:  m.Username,
