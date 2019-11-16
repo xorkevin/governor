@@ -40,7 +40,7 @@ mail:
   host: mail
   port: 1025
   # port: 587
-  fromaddress: gov@xorkevin.com
+  fromaddress: no-reply@xorkevin.com
   fromname: Governor
   workersize: 2
   connmsgcap: 100

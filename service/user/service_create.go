@@ -3,6 +3,7 @@ package user
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
@@ -89,7 +90,7 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
 		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
 
@@ -123,9 +124,22 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 	}
 
 	m := s.users.NewEmpty()
-	b := bytes.NewBufferString(gobUser)
-	if err := gob.NewDecoder(b).Decode(&m); err != nil {
+	if err := gob.NewDecoder(bytes.NewBufferString(gobUser)).Decode(&m); err != nil {
 		return nil, governor.NewError("Failed to decode user info", http.StatusInternalServerError, err)
+	}
+
+	userProps := NewUserProps{
+		Userid:       m.Userid,
+		Username:     m.Username,
+		Email:        m.Email,
+		FirstName:    m.FirstName,
+		LastName:     m.LastName,
+		CreationTime: m.CreationTime,
+	}
+
+	b := bytes.Buffer{}
+	if err := json.NewEncoder(&b).Encode(userProps); err != nil {
+		return nil, governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
 	}
 
 	if err := s.users.Insert(&m); err != nil {
@@ -135,21 +149,11 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 		return nil, err
 	}
 
-	hookProps := HookProps{
-		Userid:    m.Userid,
-		Username:  m.Username,
-		Email:     m.Email,
-		FirstName: m.FirstName,
-		LastName:  m.LastName,
-	}
-
-	for _, i := range s.hooks {
-		if err := i.UserCreateHook(hookProps); err != nil {
-			s.logger.Error("userhook create error", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "createuserhook",
-			})
-		}
+	if err := s.queue.Publish(NewUserQueueID, b.Bytes()); err != nil {
+		s.logger.Error("failed to publish new user", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishnewuser",
+		})
 	}
 
 	if err := s.kvnewuser.Del(prefixEmailKey(email), email); err != nil {
@@ -192,6 +196,14 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
+	userProps := DeleteUserProps{
+		Userid: m.Userid,
+	}
+	b := bytes.Buffer{}
+	if err := json.NewEncoder(&b).Encode(userProps); err != nil {
+		return governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
+	}
+
 	if err := s.KillAllSessions(userid); err != nil {
 		return err
 	}
@@ -200,13 +212,29 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return err
 	}
 
-	for _, i := range s.hooks {
-		if err := i.UserDeleteHook(userid); err != nil {
-			s.logger.Error("userhook_delete error", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "deleteuserhook",
-			})
-		}
+	if err := s.queue.Publish(DeleteUserQueueID, b.Bytes()); err != nil {
+		s.logger.Error("failed to publish delete user", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishdeleteuser",
+		})
 	}
 	return nil
+}
+
+// DecodeNewUserProps marshals json encoded new user props into a struct
+func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
+	m := &NewUserProps{}
+	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(m); err != nil {
+		return nil, governor.NewError("Failed to decode new user props", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+// DecodeDeleteUserProps marshals json encoded delete user props into a struct
+func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
+	m := &DeleteUserProps{}
+	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(m); err != nil {
+		return nil, governor.NewError("Failed to decode delete user props", http.StatusInternalServerError, err)
+	}
+	return m, nil
 }

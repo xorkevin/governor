@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
+	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/role/model"
@@ -26,7 +27,6 @@ type (
 	// User is a user management service
 	User interface {
 		GetByID(userid string) (*ResUserGet, error)
-		RegisterHook(hook Hook)
 	}
 
 	Service interface {
@@ -42,6 +42,7 @@ type (
 		kvemailchange     kvstore.KVStore
 		kvpassreset       kvstore.KVStore
 		kvsessions        kvstore.KVStore
+		queue             msgqueue.Msgqueue
 		mailer            mail.Mail
 		gate              gate.Gate
 		hasher            *hunter2.Blake2bHasher
@@ -57,27 +58,31 @@ type (
 		passwordResetTime int64
 		newLoginEmail     bool
 		passwordMinSize   int
-		hooks             []Hook
 	}
 
 	router struct {
 		s service
 	}
 
-	// HookProps are properties of the user passed on to each hook
-	HookProps struct {
-		Userid    string
-		Username  string
-		Email     string
-		FirstName string
-		LastName  string
+	// NewUserProps are properties of a newly created user
+	NewUserProps struct {
+		Userid       string `json:"userid"`
+		Username     string `json:"username"`
+		Email        string `json:"email"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		CreationTime int64  `json:"creation_time"`
 	}
 
-	// Hook is a service that can hook onto the user create and destroy pipelines
-	Hook interface {
-		UserCreateHook(props HookProps) error
-		UserDeleteHook(userid string) error
+	// DeleteUserProps are properties of a deleted user
+	DeleteUserProps struct {
+		Userid string `json:"userid"`
 	}
+)
+
+const (
+	NewUserQueueID    = "gov-user-new"
+	DeleteUserQueueID = "gov-user-delete"
 )
 
 const (
@@ -88,7 +93,7 @@ const (
 )
 
 // New creates a new User
-func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, mailer mail.Mail, g gate.Gate) Service {
+func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, g gate.Gate) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
@@ -101,6 +106,7 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		kvemailchange:     kv.Subtree("emailchange"),
 		kvpassreset:       kv.Subtree("passreset"),
 		kvsessions:        kv.Subtree("sessions"),
+		queue:             queue,
 		mailer:            mailer,
 		gate:              g,
 		hasher:            hasher,
@@ -110,7 +116,6 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		refreshCacheTime:  time24h,
 		confirmTime:       time24h,
 		passwordResetTime: time24h,
-		hooks:             []Hook{},
 	}
 }
 
@@ -241,9 +246,4 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	return nil
-}
-
-// RegisterHook adds a hook to the user create and destroy pipelines
-func (s *service) RegisterHook(hook Hook) {
-	s.hooks = append(s.hooks, hook)
 }

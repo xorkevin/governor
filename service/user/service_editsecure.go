@@ -75,7 +75,7 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(newEmail, emailChangeSubject, emailChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", newEmail, emailChangeSubject, emailChangeTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -134,7 +134,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
+	if err := s.mailer.Send("", "", m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
 		s.logger.Error("failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailoldmail",
@@ -197,7 +197,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
 		s.logger.Error("failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "updatepasswordmail",
@@ -249,7 +249,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(m.Email, forgotPassSubject, forgotPassTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", m.Email, forgotPassSubject, forgotPassTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send password reset email", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -298,7 +298,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
 		s.logger.Error("failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpasswordmail",

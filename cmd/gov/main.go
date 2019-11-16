@@ -52,9 +52,9 @@ func main() {
 	roleModel := rolemodel.New(dbService)
 	userModel := usermodel.New(dbService, roleModel)
 	sessionModel := sessionmodel.New(dbService)
-	userService := user.New(userModel, roleModel, sessionModel, kvService.Subtree("user"), mailService, gateService)
+	userService := user.New(userModel, roleModel, sessionModel, kvService.Subtree("user"), msgqueueService, mailService, gateService)
 	profileModel := profilemodel.New(dbService)
-	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), gateService)
+	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), msgqueueService, gateService)
 	courierModel := couriermodel.New(dbService)
 	courierService := courier.New(courierModel, objstoreService.GetBucket("link-qr-image"), kvService.Subtree("courier"), gateService)
 

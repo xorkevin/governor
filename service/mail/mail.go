@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	gomail "github.com/go-mail/mail"
@@ -26,7 +25,7 @@ const (
 type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
-		Send(to, subjecttpl, bodytpl string, emdata interface{}) error
+		Send(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error
 	}
 
 	Service interface {
@@ -53,10 +52,12 @@ type (
 	}
 
 	mailmsg struct {
-		To         string
-		Subjecttpl string
-		Bodytpl    string
-		Emdata     string
+		From       string `json:"from"`
+		Name       string `json:"name"`
+		To         string `json:"to"`
+		Subjecttpl string `json:"subjecttpl"`
+		Bodytpl    string `json:"bodytpl"`
+		Emdata     string `json:"emdata"`
 	}
 )
 
@@ -243,7 +244,7 @@ func (s *service) mailSubscriber(msgdata []byte) {
 	})
 	emmsg := mailmsg{}
 	b := bytes.NewBuffer(msgdata)
-	if err := gob.NewDecoder(b).Decode(&emmsg); err != nil {
+	if err := json.NewDecoder(b).Decode(&emmsg); err != nil {
 		l.Error("fail decode mailmsg", map[string]string{
 			"error": err.Error(),
 		})
@@ -258,7 +259,7 @@ func (s *service) mailSubscriber(msgdata []byte) {
 		})
 		return
 	}
-	if err := s.enqueue(emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
+	if err := s.enqueue(emmsg.From, emmsg.Name, emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
 		l.Error("fail enqueue mail", map[string]string{
 			"error": err.Error(),
 		})
@@ -266,7 +267,7 @@ func (s *service) mailSubscriber(msgdata []byte) {
 	}
 }
 
-func (s *service) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) error {
+func (s *service) enqueue(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error {
 	body, err := s.tpl.ExecuteHTML(bodytpl, emdata)
 	if err != nil {
 		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
@@ -277,10 +278,10 @@ func (s *service) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) er
 	}
 
 	msg := gomail.NewMessage()
-	if len(s.fromName) > 0 {
-		msg.SetAddressHeader("From", s.fromAddress, s.fromName)
+	if len(name) > 0 {
+		msg.SetAddressHeader("From", from, name)
 	} else {
-		msg.SetHeader("From", s.fromAddress)
+		msg.SetHeader("From", from)
 	}
 	msg.SetHeader("To", to)
 	msg.SetHeader("Subject", subject)
@@ -294,23 +295,33 @@ func (s *service) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) er
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(to, subjecttpl, bodytpl string, emdata interface{}) error {
+func (s *service) Send(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error {
 	datastring := bytes.Buffer{}
 	if err := json.NewEncoder(&datastring).Encode(emdata); err != nil {
 		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
 	}
 
-	b := bytes.Buffer{}
-	if err := gob.NewEncoder(&b).Encode(mailmsg{
+	msg := mailmsg{
+		From:       from,
+		Name:       name,
 		To:         to,
 		Subjecttpl: subjecttpl,
 		Bodytpl:    bodytpl,
 		Emdata:     datastring.String(),
-	}); err != nil {
-		return governor.NewError("Failed to encode email to gob", http.StatusInternalServerError, err)
+	}
+	if msg.From == "" {
+		msg.From = s.fromAddress
+	}
+	if msg.Name == "" {
+		msg.Name = s.fromName
+	}
+
+	b := bytes.Buffer{}
+	if err := json.NewEncoder(&b).Encode(msg); err != nil {
+		return governor.NewError("Failed to encode email to json", http.StatusInternalServerError, err)
 	}
 	if err := s.queue.Publish(govmailqueueid, b.Bytes()); err != nil {
-		return governor.NewError("Failed to push gob to message queue", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to publish new email to message queue", http.StatusInternalServerError, err)
 	}
 	return nil
 }

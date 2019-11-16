@@ -44,7 +44,7 @@ template:
 mail:
   host: localhost
   port: 1025
-  fromaddress: gov@xorkevin.com
+  fromaddress: no-reply@xorkevin.com
   fromname: Governor
   insecure: true
   workersize: 2
