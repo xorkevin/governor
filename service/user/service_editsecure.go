@@ -207,10 +207,10 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 }
 
 // ForgotPassword invokes the forgot password reset procedure
-func (s *service) ForgotPassword(username string, isEmail bool) error {
+func (s *service) ForgotPassword(useroremail string) error {
 	m := s.users.NewEmptyPtr()
-	if isEmail {
-		mu, err := s.users.GetByEmail(username)
+	if isEmail(useroremail) {
+		mu, err := s.users.GetByEmail(useroremail)
 		if err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
 				return governor.NewErrorUser("", 0, err)
@@ -219,7 +219,7 @@ func (s *service) ForgotPassword(username string, isEmail bool) error {
 		}
 		m = mu
 	} else {
-		mu, err := s.users.GetByUsername(username)
+		mu, err := s.users.GetByUsername(useroremail)
 		if err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
 				return governor.NewErrorUser("", 0, err)

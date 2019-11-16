@@ -41,6 +41,13 @@ func (r reqUserPutPassword) valid() error {
 	return nil
 }
 
+func (r reqForgotPassword) valid() error {
+	if err := validhasUsernameOrEmail(r.Username); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqForgotPasswordReset) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err

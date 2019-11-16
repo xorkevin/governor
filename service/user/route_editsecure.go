@@ -6,7 +6,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPasswordReset
+//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPassword reqForgotPasswordReset
 
 type (
 	reqUserPutEmail struct {
@@ -82,25 +82,20 @@ func (r *router) putPassword(c echo.Context) error {
 
 type (
 	reqForgotPassword struct {
-		Username string `json:"username"`
+		Username string `valid:"usernameOrEmail,has" json:"username"`
 	}
 )
-
-func (r *reqForgotPassword) valid() (bool, error) {
-	return validhasUsernameOrEmail(r.Username)
-}
 
 func (r *router) forgotPassword(c echo.Context) error {
 	req := reqForgotPassword{}
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	isEmail, err := req.valid()
-	if err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
-	if err := r.s.ForgotPassword(req.Username, isEmail); err != nil {
+	if err := r.s.ForgotPassword(req.Username); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

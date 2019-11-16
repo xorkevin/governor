@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 	"regexp"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -160,14 +161,15 @@ func validRank(rankString string) error {
 	return nil
 }
 
-func validhasUsernameOrEmail(useroremail string) (bool, error) {
-	if err := validEmail(useroremail); err == nil {
-		return true, nil
+func isEmail(useroremail string) bool {
+	return strings.ContainsRune(useroremail, '@')
+}
+
+func validhasUsernameOrEmail(useroremail string) error {
+	if isEmail(useroremail) {
+		return validEmail(useroremail)
 	}
-	if err := validhasUsername(useroremail); err == nil {
-		return false, nil
-	}
-	return false, governor.NewErrorUser("Invalid username or email", http.StatusBadRequest, nil)
+	return validhasUsername(useroremail)
 }
 
 func validSessionIDs(ids []string) error {

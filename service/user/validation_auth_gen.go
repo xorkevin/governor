@@ -3,6 +3,9 @@
 package user
 
 func (r reqUserAuth) valid() error {
+	if err := validhasUsernameOrEmail(r.Username); err != nil {
+		return err
+	}
 	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}

@@ -145,28 +145,23 @@ func (r *router) rmSessionCookie(c echo.Context, conf governor.Config, userid st
 
 type (
 	reqUserAuth struct {
-		Username     string `json:"username"`
+		Username     string `valid:"usernameOrEmail,has" json:"username"`
 		Password     string `valid:"password,has" json:"password"`
 		SessionToken string `valid:"sessionToken,has" json:"session_token"`
 	}
 )
-
-func (r *reqUserAuth) validIsEmail() (bool, error) {
-	return validhasUsernameOrEmail(r.Username)
-}
 
 func (r *router) loginUser(c echo.Context) error {
 	req := reqUserAuth{}
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	isEmail, err := req.validIsEmail()
-	if err != nil {
+	if err := req.valid(); err != nil {
 		return err
 	}
 
 	userid := ""
-	if isEmail {
+	if isEmail(req.Username) {
 		m, err := r.s.GetByEmail(req.Username)
 		if err != nil {
 			return err
