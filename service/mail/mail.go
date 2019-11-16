@@ -145,7 +145,7 @@ func (s *service) Start(ctx context.Context) error {
 		<-ctx.Done()
 		close(s.msgc)
 		wg.Wait()
-		done <- struct{}{}
+		close(done)
 	}()
 	s.done = done
 
@@ -287,11 +287,10 @@ func (s *service) enqueue(to, subjecttpl, bodytpl string, emdata interface{}) er
 	msg.SetBody("text/html", body)
 
 	select {
+	case <-s.done:
 	case s.msgc <- msg:
-		return nil
-	case <-time.After(time.Duration(s.connTimeout) * time.Second):
-		return governor.NewError("Email service experiencing load", http.StatusInternalServerError, nil)
 	}
+	return nil
 }
 
 // Send creates and enqueues a new message to be sent

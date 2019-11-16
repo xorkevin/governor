@@ -91,7 +91,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		} else {
 			l.Info("closed connection", nil)
 		}
-		done <- struct{}{}
+		close(done)
 	}()
 	s.done = done
 
