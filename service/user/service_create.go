@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"net/http"
+	"net/url"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
@@ -15,9 +16,10 @@ const (
 
 type (
 	emailNewUser struct {
+		Email     string
+		Key       string
 		FirstName string
 		Username  string
-		Key       string
 	}
 )
 
@@ -32,6 +34,14 @@ type (
 		Username string `json:"username"`
 	}
 )
+
+func escapeEmail(email string) string {
+	return url.QueryEscape(email)
+}
+
+func prefixEmailKey(email string) string {
+	return "nonce:" + email
+}
 
 // CreateUser creates a new user and places it into the cache
 func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
@@ -66,31 +76,23 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	nonce := key.Base64()
-
-	if orignonce, err := s.kvnewuseremail.Get(ruser.Email); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return nil, governor.NewError("Failed to get new user info", http.StatusInternalServerError, err)
-		}
-	} else {
-		if err := s.kvnewuser.Del(orignonce); err != nil {
-			s.logger.Error("failed to clean up previous create new user info", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "createusercleanup",
-			})
-		}
+	noncehash, err := s.hasher.Hash(nonce)
+	if err != nil {
+		return nil, governor.NewError("Failed to hash email validation key", http.StatusInternalServerError, err)
 	}
 
-	if err := s.kvnewuseremail.Set(m.Email, nonce, s.confirmTime); err != nil {
-		return nil, governor.NewError("Failed to store user info", http.StatusInternalServerError, err)
+	if err := s.kvnewuser.Set(prefixEmailKey(m.Email), noncehash, s.confirmTime); err != nil {
+		return nil, governor.NewError("Failed to store email validation key", http.StatusInternalServerError, err)
 	}
-	if err := s.kvnewuser.Set(nonce, b.String(), s.confirmTime); err != nil {
+	if err := s.kvnewuser.Set(m.Email, b.String(), s.confirmTime); err != nil {
 		return nil, governor.NewError("Failed to store new user info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailNewUser{
+		Email:     escapeEmail(m.Email),
+		Key:       nonce,
 		FirstName: m.FirstName,
 		Username:  m.Username,
-		Key:       nonce,
 	}
 	if err := s.mailer.Send(m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
 		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
@@ -103,13 +105,26 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 }
 
 // CommitUser takes a user from the cache and places it into the db
-func (s *service) CommitUser(key string) (*resUserUpdate, error) {
-	gobUser, err := s.kvnewuser.Get(key)
+func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
+	noncehash, err := s.kvnewuser.Get(prefixEmailKey(email))
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
 		}
 		return nil, governor.NewError("Failed to get account", http.StatusInternalServerError, err)
+	}
+	if ok, err := s.verifier.Verify(key, noncehash); err != nil {
+		return nil, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
+	} else if !ok {
+		return nil, governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
+	}
+
+	gobUser, err := s.kvnewuser.Get(email)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
+		}
+		return nil, governor.NewError("Failed to get user info", http.StatusInternalServerError, err)
 	}
 
 	m := s.users.NewEmpty()
@@ -142,14 +157,8 @@ func (s *service) CommitUser(key string) (*resUserUpdate, error) {
 		}
 	}
 
-	if err := s.kvnewuser.Del(key); err != nil {
+	if err := s.kvnewuser.Del(prefixEmailKey(email), email); err != nil {
 		s.logger.Error("failed to clean up new user info", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "commitusercleanup",
-		})
-	}
-	if err := s.kvnewuseremail.Del(m.Email); err != nil {
-		s.logger.Error("failed to clean up user info", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitusercleanup",
 		})

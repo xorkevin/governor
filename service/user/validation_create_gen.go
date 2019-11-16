@@ -22,6 +22,9 @@ func (r reqUserPost) valid() error {
 }
 
 func (r reqUserPostConfirm) valid() error {
+	if err := validEmail(r.Email); err != nil {
+		return err
+	}
 	if err := validhasToken(r.Key); err != nil {
 		return err
 	}

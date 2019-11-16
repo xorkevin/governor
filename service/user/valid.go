@@ -17,7 +17,7 @@ const (
 
 var (
 	userRegex  = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
-	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
+	emailRegex = regexp.MustCompile(`^[a-z0-9_-][a-z0-9_+-]*(\.[a-z0-9_+-]+)*@[a-z0-9]+(-+[a-z0-9]+)*(\.[a-z0-9]+(-+[a-z0-9]+)*)*$`)
 )
 
 func validhasUserid(userid string) error {

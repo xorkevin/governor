@@ -37,7 +37,8 @@ func (r *router) createUser(c echo.Context) error {
 
 type (
 	reqUserPostConfirm struct {
-		Key string `valid:"token,has" json:"key"`
+		Email string `valid:"email" json:"email"`
+		Key   string `valid:"token,has" json:"key"`
 	}
 )
 
@@ -50,7 +51,7 @@ func (r *router) commitUser(c echo.Context) error {
 		return err
 	}
 
-	res, err := r.s.CommitUser(req.Key)
+	res, err := r.s.CommitUser(req.Email, req.Key)
 	if err != nil {
 		return err
 	}
