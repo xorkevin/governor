@@ -1,6 +1,5 @@
 A password reset has been triggered for your account {{ .Username }}.
 
-Userid: {{ .Userid }}
-Key: {{ .Key }}
+Key: {{ .Userid }}.{{ .Key }}
 
-<a href="http://localhost:3000/x/resetpass?userid={{ .Userid }}&key={{ .Key }}">http://localhost:3000/x/resetpass?userid={{ .Userid }}&key={{ .Key }}</a>
+<a href="http://localhost:3000/x/resetpass?key={{ .Userid }}.{{ .Key }}">http://localhost:3000/x/resetpass?key={{ .Userid }}.{{ .Key }}</a>

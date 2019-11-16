@@ -1,6 +1,5 @@
 Please verify this new email for your account {{ .Username }}.
 
-Userid: {{ .Userid }}
-Key: {{ .Key }}
+Key: {{ .Userid }}.{{ .Key }}
 
-<a href="http://localhost:3000/a/account/email/confirm?userid={{ .Userid }}&key={{ .Key }}">http://localhost:3000/a/account/email/confirm?userid={{ .Userid }}&key={{ .Key }}</a>
+<a href="http://localhost:3000/a/account/email/confirm?key={{ .Userid }}.{{ .Key }}">http://localhost:3000/a/account/email/confirm?key={{ .Userid }}.{{ .Key }}</a>
