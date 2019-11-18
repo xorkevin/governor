@@ -165,7 +165,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := sessionModelUpdateModelEqSessionID(r.db.DB(), m, m.SessionID); err != nil {
+	if err := sessionModelUpdModelEqSessionID(r.db.DB(), m, m.SessionID); err != nil {
 		return governor.NewError("Failed to update session", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -181,7 +181,7 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteSessions deletes the sessions in the set of session ids
 func (r *repo) DeleteSessions(sessionids []string) error {
-	if err := sessionModelDelEqHasSessionID(r.db.DB(), sessionids); err != nil {
+	if err := sessionModelDelHasSessionID(r.db.DB(), sessionids); err != nil {
 		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}
 	return nil

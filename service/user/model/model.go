@@ -163,7 +163,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, error) {
-	m, err := userModelGetInfoEqHasUseridOrdUserid(r.db.DB(), userids, true, len(userids), 0)
+	m, err := userModelGetInfoHasUseridOrdUserid(r.db.DB(), userids, true, len(userids), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user info of userids", http.StatusInternalServerError, err)
 	}
@@ -266,7 +266,7 @@ func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := userModelUpdateModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
+	if err := userModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
 		return governor.NewError("Failed to update user", http.StatusInternalServerError, err)
 	}
 	return nil

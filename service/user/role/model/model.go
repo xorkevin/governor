@@ -48,7 +48,7 @@ func (r *repo) New(userid, role string) *Model {
 // GetByID returns a user role model with the given id
 func (r *repo) GetByID(userid, role string) (*Model, error) {
 	var m *Model
-	if mRole, code, err := roleModelGetModelEqUseridRole(r.db.DB(), userid, role); err != nil {
+	if mRole, code, err := roleModelGetModelEqUseridEqRole(r.db.DB(), userid, role); err != nil {
 		if code == 2 {
 			return nil, governor.NewError("Role not found for user", http.StatusNotFound, err)
 		}
@@ -106,7 +106,7 @@ func (r *repo) InsertBulk(m []*Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := roleModelDelEqUseridRole(r.db.DB(), m.Userid, m.Role); err != nil {
+	if err := roleModelDelEqUseridEqRole(r.db.DB(), m.Userid, m.Role); err != nil {
 		return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
 	}
 	return nil
