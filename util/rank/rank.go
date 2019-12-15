@@ -16,9 +16,7 @@ const (
 const (
 	TagUser       = "user"
 	TagUserPrefix = "usr"
-	TagBan        = "ban"
 	TagBanPrefix  = "ban"
-	TagMod        = "mod"
 	TagModPrefix  = "mod"
 	TagAdmin      = "admin"
 	TagSystem     = "system"

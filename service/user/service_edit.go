@@ -25,10 +25,10 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 }
 
 func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.Rank, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
-	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, updaterRank.Has(rank.TagAdmin)); err != nil {
+	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, true); err != nil {
 		return err
 	}
-	if err := canUpdateRank(editRemoveRank, updaterRank, userid, updaterid, updaterRank.Has(rank.TagAdmin)); err != nil {
+	if err := canUpdateRank(editRemoveRank, updaterRank, userid, updaterid, false); err != nil {
 		return err
 	}
 
@@ -62,7 +62,8 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 	return nil
 }
 
-func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bool) error {
+func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) error {
+	updaterIsAdmin := updater.Has(rank.TagAdmin)
 	for key := range edit {
 		k := strings.SplitN(key, "_", 2)
 		if len(k) == 1 {
@@ -72,7 +73,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 				if editid == updaterid {
 					return governor.NewErrorUser("Cannot modify own admin status", http.StatusForbidden, nil)
 				}
-				if !isAdmin {
+				if !updaterIsAdmin {
 					return governor.NewErrorUser("Must be admin to modify admin status", http.StatusForbidden, nil)
 				}
 			case rank.TagSystem:
@@ -80,7 +81,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 				return governor.NewErrorUser("Forbidden rank edit", http.StatusForbidden, nil)
 			case rank.TagUser:
 				// only admins can change the user status
-				if !isAdmin {
+				if !updaterIsAdmin {
 					return governor.NewErrorUser("Must be admin to modify user status", http.StatusForbidden, nil)
 				}
 			default:
@@ -91,18 +92,25 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, isAdmin bo
 			switch k[0] {
 			case rank.TagModPrefix:
 				// cannot edit mod group rank if not an admin and not a moderator of that group
-				if !isAdmin && !updater.HasMod(k[1]) {
+				if !updaterIsAdmin && !updater.HasMod(k[1]) {
 					return governor.NewErrorUser("Must be moderator of the group to modify mod status", http.StatusForbidden, nil)
 				}
 			case rank.TagBanPrefix:
 				// cannot edit ban group rank if not an admin and not a moderator of that group
-				if !isAdmin && !updater.HasMod(k[1]) {
+				if !updaterIsAdmin && !updater.HasMod(k[1]) {
 					return governor.NewErrorUser("Must be moderator of the group to modify ban status", http.StatusForbidden, nil)
 				}
 			case rank.TagUserPrefix:
-				// can only edit own id
-				if !isAdmin && editid != updaterid {
-					return governor.NewErrorUser("Cannot update other user status", http.StatusForbidden, nil)
+				if add {
+					// cannot add user if not admin and not a moderator of that group
+					if !updaterIsAdmin && !updater.HasMod(k[1]) {
+						return governor.NewErrorUser("Must be a moderator of the group to add user status", http.StatusForbidden, nil)
+					}
+				} else {
+					// cannot remove user if not admin and not a moderator of that group and not self
+					if !updaterIsAdmin && !updater.HasMod(k[1]) && editid != updaterid {
+						return governor.NewErrorUser("Cannot update other user status", http.StatusForbidden, nil)
+					}
 				}
 			default:
 				// other tags cannot be edited
