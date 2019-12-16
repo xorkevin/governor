@@ -20,13 +20,6 @@ const (
 	roleLimit   = 1024
 )
 
-const (
-	// roleAdd indicates adding a role in diff
-	roleAdd = iota
-	// roleRemove indicates removing a role in diff
-	roleRemove
-)
-
 type (
 	// Repo is a user repository
 	Repo interface {
