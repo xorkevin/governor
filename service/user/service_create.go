@@ -2,10 +2,10 @@ package user
 
 import (
 	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"net/http"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
 )
@@ -62,26 +62,52 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, err
 	}
 
+	if s.userApproval {
+		if err := s.CreateUserEnqueue(m); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.CreateUserVerify(m); err != nil {
+			return nil, err
+		}
+	}
+
+	return &resUserUpdate{
+		Userid:   m.Userid,
+		Username: m.Username,
+	}, nil
+}
+
+func (s *service) CreateUserEnqueue(m *usermodel.Model) error {
 	b := bytes.Buffer{}
-	if err := gob.NewEncoder(&b).Encode(m); err != nil {
-		return nil, governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
+	if err := json.NewEncoder(&b).Encode(m); err != nil {
+		return governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
+	}
+
+	return nil
+}
+
+func (s *service) CreateUserVerify(m *usermodel.Model) error {
+	b := bytes.Buffer{}
+	if err := json.NewEncoder(&b).Encode(m); err != nil {
+		return governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
 	}
 
 	key, err := uid.New(uidUserSize)
 	if err != nil {
-		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
 	nonce := key.Base64()
 	noncehash, err := s.hasher.Hash(nonce)
 	if err != nil {
-		return nil, governor.NewError("Failed to hash email validation key", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to hash email validation key", http.StatusInternalServerError, err)
 	}
 
 	if err := s.kvnewuser.Set(prefixEmailKey(m.Email), noncehash, s.confirmTime); err != nil {
-		return nil, governor.NewError("Failed to store email validation key", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to store email validation key", http.StatusInternalServerError, err)
 	}
 	if err := s.kvnewuser.Set(m.Email, b.String(), s.confirmTime); err != nil {
-		return nil, governor.NewError("Failed to store new user info", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to store new user info", http.StatusInternalServerError, err)
 	}
 
 	emdata := emailNewUser{
@@ -91,13 +117,10 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
-		return nil, governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
 
-	return &resUserUpdate{
-		Userid:   m.Userid,
-		Username: m.Username,
-	}, nil
+	return nil
 }
 
 // CommitUser takes a user from the cache and places it into the db
@@ -115,7 +138,7 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 		return nil, governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
 	}
 
-	gobUser, err := s.kvnewuser.Get(email)
+	jsonUser, err := s.kvnewuser.Get(email)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
@@ -124,7 +147,7 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 	}
 
 	m := s.users.NewEmpty()
-	if err := gob.NewDecoder(bytes.NewBufferString(gobUser)).Decode(&m); err != nil {
+	if err := json.NewDecoder(bytes.NewBufferString(jsonUser)).Decode(&m); err != nil {
 		return nil, governor.NewError("Failed to decode user info", http.StatusInternalServerError, err)
 	}
 

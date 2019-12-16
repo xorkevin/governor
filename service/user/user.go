@@ -58,6 +58,7 @@ type (
 		passwordResetTime int64
 		newLoginEmail     bool
 		passwordMinSize   int
+		userApproval      bool
 	}
 
 	router struct {
@@ -127,6 +128,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("passwordresettime", "24h")
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
+	r.SetDefault("userapproval", false)
 	r.SetDefault("secret", "")
 	r.SetDefault("issuer", "governor")
 }
@@ -179,6 +181,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		l.Warn("token issuer is not set", nil)
 	}
 	s.tokenizer = token.New(r.GetStr("secret"), r.GetStr("issuer"))
+	s.userApproval = r.GetBool("userapproval")
 
 	l.Info("loaded config", map[string]string{
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
@@ -189,6 +192,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"issuer":                r.GetStr("issuer"),
+		"userapproval":          strconv.FormatBool(s.userApproval),
 	})
 
 	sr := s.router()
