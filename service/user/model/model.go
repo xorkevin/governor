@@ -172,14 +172,12 @@ func (r *repo) getApplyRoles(m *Model) (*Model, error) {
 
 // GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
-	var m *Model
-	if mUser, code, err := userModelGetModelEqUserid(r.db.DB(), userid); err != nil {
+	m, code, err := userModelGetModelEqUserid(r.db.DB(), userid)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
-	} else {
-		m = mUser
 	}
 	return r.getApplyRoles(m)
 }
