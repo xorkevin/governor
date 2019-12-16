@@ -79,11 +79,64 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 }
 
 func (s *service) CreateUserEnqueue(m *usermodel.Model) error {
-	b := bytes.Buffer{}
-	if err := json.NewEncoder(&b).Encode(m); err != nil {
-		return governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
+	if err := s.approvals.Insert(s.approvals.New(m)); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
 	}
 
+	return nil
+}
+
+type (
+	resApproval struct {
+		Userid       string `json:"userid"`
+		Username     string `json:"username"`
+		AuthTags     string `json:"authtags"`
+		Email        string `json:"email"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	resApprovals struct {
+		Approvals []resApproval `json:"approvals"`
+	}
+)
+
+func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
+	return nil, nil
+}
+
+func (s *service) ApproveUser(userid string) error {
+	m, err := s.approvals.GetByID(userid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if err := s.approvals.Delete(m); err != nil {
+		return err
+	}
+	if err := s.CreateUserVerify(s.approvals.ToUserModel(m)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) DeleteUserApproval(userid string) error {
+	m, err := s.approvals.GetByID(userid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if err := s.approvals.Delete(m); err != nil {
+		return err
+	}
 	return nil
 }
 
