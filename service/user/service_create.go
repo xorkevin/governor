@@ -106,7 +106,25 @@ type (
 )
 
 func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
-	return nil, nil
+	m, err := s.approvals.GetGroup(limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	approvals := make([]resApproval, 0, len(m))
+	for _, i := range m {
+		approvals = append(approvals, resApproval{
+			Userid:       i.Userid,
+			Username:     i.Username,
+			AuthTags:     i.AuthTags,
+			Email:        i.Email,
+			FirstName:    i.FirstName,
+			LastName:     i.LastName,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resApprovals{
+		Approvals: approvals,
+	}, nil
 }
 
 func (s *service) ApproveUser(userid string) error {

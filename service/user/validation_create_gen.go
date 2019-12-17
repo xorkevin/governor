@@ -43,3 +43,13 @@ func (r reqUserDelete) valid() error {
 	}
 	return nil
 }
+
+func (r reqGetUserApprovals) valid() error {
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
