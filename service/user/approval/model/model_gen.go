@@ -64,7 +64,7 @@ func approvalModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (i
 
 func approvalModelGetModelEqUserid(db *sql.DB, userid string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, authtags, email, first_name, last_name, creation_time FROM userapprovals WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.AuthTags, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT userid, username, authtags, pass_hash, email, first_name, last_name, creation_time FROM userapprovals WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.AuthTags, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -92,7 +92,7 @@ func approvalModelGetModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offs
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, username, authtags, email, first_name, last_name, creation_time FROM userapprovals ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT userid, username, authtags, pass_hash, email, first_name, last_name, creation_time FROM userapprovals ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func approvalModelGetModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offs
 	}()
 	for rows.Next() {
 		m := Model{}
-		if err := rows.Scan(&m.Userid, &m.Username, &m.AuthTags, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.Userid, &m.Username, &m.AuthTags, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
