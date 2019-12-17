@@ -148,12 +148,16 @@ func (r *router) deleteUserApproval(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+func (r *router) gateManager(c echo.Context, claims gate.Claims) (string, error) {
+	return "manager", nil
+}
+
 func (r *router) mountCreate(debugMode bool, g *echo.Group) error {
 	g.POST("", r.createUser)
 	g.POST("/confirm", r.commitUser)
-	g.GET("/approvals", r.getUserApprovals)
-	g.POST("/approvals/id/:id", r.approveUser)
-	g.DELETE("/approvals/id/:id", r.deleteUserApproval)
+	g.GET("/approvals", r.getUserApprovals, gate.ModOrAdminF(r.s.gate, r.gateManager))
+	g.POST("/approvals/id/:id", r.approveUser, gate.ModOrAdminF(r.s.gate, r.gateManager))
+	g.DELETE("/approvals/id/:id", r.deleteUserApproval, gate.ModOrAdminF(r.s.gate, r.gateManager))
 	g.DELETE("/id/:id", r.deleteUser, gate.Owner(r.s.gate, "id"))
 	return nil
 }
