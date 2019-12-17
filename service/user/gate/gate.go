@@ -186,6 +186,9 @@ func User(g Gate) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
 		return r.Has(rank.TagUser)
 	}, authenticationSubject)
 }
@@ -202,31 +205,10 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
-		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid || r.Has(rank.TagAdmin)
-	}, authenticationSubject)
-}
-
-// OwnerModOrAdminF is a middleware function to validate if the request is made
-// by the owner or a moderator
-//
-// idfunc should return the userid and the group_tag
-func OwnerModOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, string, error)) echo.MiddlewareFunc {
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
-			return false
-		}
 		if r.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
-			return false
-		}
-		userid, group, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return userid == claims.Userid || r.HasMod(group)
+		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid
 	}, authenticationSubject)
 }
 
@@ -266,6 +248,9 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
 		return r.Has(rank.TagUser) && !r.HasBan(c.Param(idparam))
 	}, authenticationSubject)
 }
@@ -279,6 +264,9 @@ func UserOrBanF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
+		}
+		if r.Has(rank.TagAdmin) {
+			return true
 		}
 		if !r.Has(rank.TagUser) {
 			return false
@@ -302,6 +290,9 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
 		if !r.Has(rank.TagUser) {
 			return false
 		}
@@ -319,6 +310,9 @@ func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.Mid
 		if err != nil {
 			return false
 		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
 		if !r.Has(rank.TagUser) {
 			return false
 		}
@@ -327,6 +321,30 @@ func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.Mid
 			return false
 		}
 		return r.HasUser(s) && !r.HasBan(s)
+	}, authenticationSubject)
+}
+
+// OwnerOrMemberF is a middleware function to validate if the request is made
+// by the owner or a moderator
+//
+// idfunc should return the userid and the group_tag
+func OwnerOrMemberF(g Gate, idfunc func(echo.Context, Claims) (string, string, error)) echo.MiddlewareFunc {
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		userid, group, err := idfunc(c, Claims{claims})
+		if err != nil {
+			return false
+		}
+		return userid == claims.Userid || r.HasUser(group)
 	}, authenticationSubject)
 }
 
