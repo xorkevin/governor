@@ -234,6 +234,11 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("created usersession table", nil)
 
+	if err := s.approvals.Setup(); err != nil {
+		return err
+	}
+	l.Info("created userapprovals table", nil)
+
 	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
