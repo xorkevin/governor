@@ -153,7 +153,7 @@ func (r *router) mountCreate(debugMode bool, g *echo.Group) error {
 	g.POST("/confirm", r.commitUser)
 	g.GET("/approvals", r.getUserApprovals)
 	g.POST("/approvals/id/:id", r.approveUser)
-	g.DELETE("/approvals/id/:id", r.approveUser)
+	g.DELETE("/approvals/id/:id", r.deleteUserApproval)
 	g.DELETE("/id/:id", r.deleteUser, gate.Owner(r.s.gate, "id"))
 	return nil
 }
