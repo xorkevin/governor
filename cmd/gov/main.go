@@ -36,7 +36,7 @@ func main() {
 		DefaultFile: "config",
 		Appname:     "governor",
 		Description: "Governor is a web server with user and auth capabilities",
-		Version:     "v0.2.0",
+		Version:     "v0.2",
 		VersionHash: GitHash,
 		EnvPrefix:   "gov",
 	}, stateService)

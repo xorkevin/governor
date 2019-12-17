@@ -20,7 +20,7 @@ func main() {
 		DefaultFile: "config",
 		Appname:     "govsetup",
 		Description: "govsetup initializes preliminary resources for governor dependencies",
-		Version:     "v0.2.0",
+		Version:     "v0.2",
 		VersionHash: GitHash,
 		EnvPrefix:   "govsetup",
 	}, stateService)

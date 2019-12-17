@@ -93,7 +93,7 @@ type (
 	resApproval struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
-		AuthTags     string `json:"authtags"`
+		AuthTags     string `json:"auth_tags"`
 		Email        string `json:"email"`
 		FirstName    string `json:"first_name"`
 		LastName     string `json:"last_name"`
