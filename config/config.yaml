@@ -60,6 +60,7 @@ user:
   passwordresettime: 24h
   newloginemail: true
   passwordminsize: 8
+  userapproval: false
   issuer: governor
   # secret: secret
 courier:
