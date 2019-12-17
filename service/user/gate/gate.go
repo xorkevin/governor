@@ -143,7 +143,10 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 		if err != nil {
 			return false
 		}
-		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		return c.Param(idparam) == claims.Userid
 	}, authenticationSubject)
 }
 
@@ -152,6 +155,10 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 //
 // idfunc should return the userid
 func OwnerF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -208,15 +215,72 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 		if r.Has(rank.TagAdmin) {
 			return true
 		}
-		return r.Has(rank.TagUser) && c.Param(idparam) == claims.Userid
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		return c.Param(idparam) == claims.Userid
 	}, authenticationSubject)
 }
 
-// ModOrAdminF is a middleware function to validate if the request is made by
-// the moderator of a group or an admin
+// OwnerOrAdminF is a middleware function to validate if the request is made by
+// the owner or an admin
+//
+// idfunc should return the userid
+func OwnerOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		s, err := idfunc(c, Claims{claims})
+		if err != nil {
+			return false
+		}
+		return s == claims.Userid
+	}, authenticationSubject)
+}
+
+// Mod is a middleware function to validate if the request is made by the
+// moderator of a group or an admin
+func Mod(g Gate, idparam string) echo.MiddlewareFunc {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+
+	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+		r, err := rank.FromStringUser(claims.AuthTags)
+		if err != nil {
+			return false
+		}
+		if r.Has(rank.TagAdmin) {
+			return true
+		}
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		return r.HasMod(c.Param(idparam))
+	}, authenticationSubject)
+}
+
+// ModF is a middleware function to validate if the request is made by the
+// moderator of a group or an admin
 //
 // idfunc should return the group_tag
-func ModOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func ModF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -251,7 +315,10 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 		if r.Has(rank.TagAdmin) {
 			return true
 		}
-		return r.Has(rank.TagUser) && !r.HasBan(c.Param(idparam))
+		if !r.Has(rank.TagUser) {
+			return false
+		}
+		return !r.HasBan(c.Param(idparam))
 	}, authenticationSubject)
 }
 
@@ -260,6 +327,10 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 //
 // idfunc should return the group_tag
 func UserOrBanF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -285,6 +356,7 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -305,6 +377,10 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 //
 // idfunc should return the group_tag
 func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
@@ -325,10 +401,14 @@ func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.Mid
 }
 
 // OwnerOrMemberF is a middleware function to validate if the request is made
-// by the owner or a moderator
+// by the owner or a group member
 //
 // idfunc should return the userid and the group_tag
 func OwnerOrMemberF(g Gate, idfunc func(echo.Context, Claims) (string, string, error)) echo.MiddlewareFunc {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+
 	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
