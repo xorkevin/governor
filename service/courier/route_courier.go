@@ -223,8 +223,8 @@ func (r *router) deleteBrand(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) gateWebsite(c echo.Context, claims gate.Claims) (string, error) {
-	return "website", nil
+func (r *router) gateCourier(c echo.Context, claims gate.Claims) (string, error) {
+	return "courier", nil
 }
 
 func (r *router) getLinkImageCC(c echo.Context) (string, error) {
@@ -262,12 +262,12 @@ func (r *router) getBrandImageCC(c echo.Context) (string, error) {
 func (r *router) mountRoutes(g *echo.Group) error {
 	g.GET("/link/:linkid", r.getLink)
 	g.GET("/link/:linkid/image", r.getLinkImage, cachecontrol.Control(true, false, min15, r.getLinkImageCC))
-	g.GET("/link", r.getLinkGroup, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
-	g.POST("/link", r.createLink, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
-	g.DELETE("/link/:linkid", r.deleteLink, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
-	g.GET("/brand/:brandid/image", r.getBrandImage, gate.ModOrAdminF(r.s.gate, r.gateWebsite), cachecontrol.Control(true, false, min15, r.getBrandImageCC))
-	g.GET("/brand", r.getBrandGroup, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
-	g.POST("/brand", r.createBrand, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
-	g.DELETE("/brand/:brandid", r.deleteBrand, gate.ModOrAdminF(r.s.gate, r.gateWebsite))
+	g.GET("/link", r.getLinkGroup, gate.MemberF(r.s.gate, r.gateCourier))
+	g.POST("/link", r.createLink, gate.MemberF(r.s.gate, r.gateCourier))
+	g.DELETE("/link/:linkid", r.deleteLink, gate.MemberF(r.s.gate, r.gateCourier))
+	g.GET("/brand/:brandid/image", r.getBrandImage, gate.MemberF(r.s.gate, r.gateCourier), cachecontrol.Control(true, false, min15, r.getBrandImageCC))
+	g.GET("/brand", r.getBrandGroup, gate.MemberF(r.s.gate, r.gateCourier))
+	g.POST("/brand", r.createBrand, gate.MemberF(r.s.gate, r.gateCourier))
+	g.DELETE("/brand/:brandid", r.deleteBrand, gate.MemberF(r.s.gate, r.gateCourier))
 	return nil
 }
