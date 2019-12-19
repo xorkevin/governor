@@ -10,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/msgqueue"
+	"xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
@@ -40,6 +41,7 @@ type (
 		roles             rolemodel.Repo
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
+		apikeys           apikeymodel.Repo
 		kvnewuser         kvstore.KVStore
 		kvemailchange     kvstore.KVStore
 		kvpassreset       kvstore.KVStore
@@ -96,7 +98,7 @@ const (
 )
 
 // New creates a new User
-func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, g gate.Gate) Service {
+func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, apikeys apikeymodel.Repo, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, g gate.Gate) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
@@ -106,6 +108,7 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		roles:             roles,
 		sessions:          sessions,
 		approvals:         approvals,
+		apikeys:           apikeys,
 		kvnewuser:         kv.Subtree("newuser"),
 		kvemailchange:     kv.Subtree("emailchange"),
 		kvpassreset:       kv.Subtree("passreset"),
