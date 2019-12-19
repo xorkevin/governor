@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t userapikeys -p apikey -o model_gen.go Model
+//go:generate forge model -m Model -t userapikeys -p apikey -o model_gen.go Model qID
 
 const (
 	uidSize = 8
@@ -24,6 +24,7 @@ type (
 		RehashKey(m *Model) (string, error)
 		GetByID(keyid string) (*Model, error)
 		GetUserKeys(userid string, limit, offset int) ([]Model, error)
+		GetUserKeyIDs(userid string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
@@ -40,9 +41,14 @@ type (
 	Model struct {
 		Keyid    string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid,getoneeq,keyid;updeq,keyid;deleq,keyid"`
 		Userid   string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid,deleq,userid"`
-		AuthTags string `model:"authtags,VARCHAR(4095) NOT NULL" query:"authtags"`
+		AuthTags rank.Rank
+		authtags string `model:"authtags,VARCHAR(4095) NOT NULL" query:"authtags"`
 		KeyHash  string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Time     int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
+	}
+
+	qID struct {
+		Keyid string `query:"keyid,getgroupeq,userid"`
 	}
 )
 
@@ -73,13 +79,28 @@ func (r *repo) New(userid string, authtags rank.Rank) (*Model, string, error) {
 		return nil, "", governor.NewError("Failed to hash session key", http.StatusInternalServerError, err)
 	}
 	now := time.Now().Round(0).Unix()
-	return &Model{
+	m := &Model{
 		Keyid:    userid + "|" + aid.Base64(),
 		Userid:   userid,
-		AuthTags: authtags.Stringify(),
+		AuthTags: authtags,
 		KeyHash:  hash,
 		Time:     now,
-	}, keystr, nil
+	}
+	m.computeAuthTags()
+	return m, keystr, nil
+}
+
+func (m *Model) computeAuthTags() {
+	m.authtags = m.AuthTags.Stringify()
+}
+
+func (m *Model) loadAuthTags() error {
+	authTags, err := rank.FromStringUser(m.authtags)
+	if err != nil {
+		return governor.NewError("Invalid auth tags format", http.StatusInternalServerError, err)
+	}
+	m.AuthTags = authTags
+	return nil
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
@@ -114,6 +135,9 @@ func (r *repo) GetByID(keyid string) (*Model, error) {
 		}
 		return nil, governor.NewError("Failed to get apikey", http.StatusInternalServerError, err)
 	}
+	if err := m.loadAuthTags(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
@@ -122,10 +146,28 @@ func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
 	if err != nil {
 		return nil, governor.NewError("Failed to get user apikeys", http.StatusInternalServerError, err)
 	}
+	for n := range m {
+		if err := m[n].loadAuthTags(); err != nil {
+			return nil, err
+		}
+	}
 	return m, nil
 }
 
+func (r *repo) GetUserKeyIDs(userid string, limit, offset int) ([]string, error) {
+	m, err := apikeyModelGetqIDEqUseridOrdKeyid(r.db.DB(), userid, true, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get user apikeys", http.StatusInternalServerError, err)
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.Keyid)
+	}
+	return res, nil
+}
+
 func (r *repo) Insert(m *Model) error {
+	m.computeAuthTags()
 	if code, err := apikeyModelInsert(r.db.DB(), m); err != nil {
 		if code == 3 {
 			return governor.NewError("Keyid must be unique", http.StatusBadRequest, err)
@@ -136,6 +178,7 @@ func (r *repo) Insert(m *Model) error {
 }
 
 func (r *repo) Update(m *Model) error {
+	m.computeAuthTags()
 	if err := apikeyModelUpdModelEqKeyid(r.db.DB(), m, m.Keyid); err != nil {
 		return governor.NewError("Failed to update apikey", http.StatusInternalServerError, err)
 	}
@@ -143,6 +186,7 @@ func (r *repo) Update(m *Model) error {
 }
 
 func (r *repo) Delete(m *Model) error {
+	m.computeAuthTags()
 	if err := apikeyModelDelEqKeyid(r.db.DB(), m.Keyid); err != nil {
 		return governor.NewError("Failed to delete apikey", http.StatusInternalServerError, err)
 	}
