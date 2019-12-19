@@ -112,6 +112,9 @@ func (r *repo) Insert(m *Model) error {
 
 // InsertBulk inserts multiple models into the db
 func (r *repo) InsertBulk(m []*Model) error {
+	if len(m) == 0 {
+		return nil
+	}
 	if _, err := roleModelInsertBulk(r.db.DB(), m, true); err != nil {
 		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
 	}
@@ -128,6 +131,9 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteRoles deletes multiple roles from the db of a userid
 func (r *repo) DeleteRoles(userid string, roles []string) error {
+	if len(roles) == 0 {
+		return nil
+	}
 	if err := roleModelDelEqUseridHasRole(r.db.DB(), userid, roles); err != nil {
 		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}

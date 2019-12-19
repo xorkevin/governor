@@ -181,6 +181,9 @@ func (r *repo) Delete(m *Model) error {
 
 // DeleteSessions deletes the sessions in the set of session ids
 func (r *repo) DeleteSessions(sessionids []string) error {
+	if len(sessionids) == 0 {
+		return nil
+	}
 	if err := sessionModelDelHasSessionID(r.db.DB(), sessionids); err != nil {
 		return governor.NewError("Failed to delete sessions", http.StatusInternalServerError, err)
 	}

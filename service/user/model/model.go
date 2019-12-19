@@ -254,15 +254,11 @@ func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
 		addModels = append(addModels, r.rolerepo.New(m.Userid, i))
 	}
 
-	if len(rmRoles) > 0 {
-		if err := r.rolerepo.DeleteRoles(m.Userid, rmRoles); err != nil {
-			return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
-		}
+	if err := r.rolerepo.DeleteRoles(m.Userid, rmRoles); err != nil {
+		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}
-	if len(addModels) > 0 {
-		if err := r.rolerepo.InsertBulk(addModels); err != nil {
-			return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
-		}
+	if err := r.rolerepo.InsertBulk(addModels); err != nil {
+		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
 	}
 	return nil
 }
