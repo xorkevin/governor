@@ -14,7 +14,7 @@ const (
 )
 
 func approvalModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapprovals (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL, authtags VARCHAR(4096) NOT NULL, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapprovals (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL, authtags VARCHAR(4095) NOT NULL, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}

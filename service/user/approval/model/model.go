@@ -28,7 +28,7 @@ type (
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
-		AuthTags     string `model:"authtags,VARCHAR(4096) NOT NULL" query:"authtags"`
+		AuthTags     string `model:"authtags,VARCHAR(4095) NOT NULL" query:"authtags"`
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL" query:"email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
