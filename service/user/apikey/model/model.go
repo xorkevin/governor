@@ -19,7 +19,7 @@ const (
 
 type (
 	Repo interface {
-		New(userid string, authtags rank.Rank) (*Model, string, error)
+		New(userid string, authtags rank.Rank, name, desc string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
 		GetByID(keyid string) (*Model, error)
@@ -44,6 +44,8 @@ type (
 		AuthTags rank.Rank
 		authtags string `model:"authtags,VARCHAR(4095) NOT NULL" query:"authtags"`
 		KeyHash  string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
+		Name     string `model:"name,VARCHAR(255)" query:"name"`
+		Desc     string `model:"desc,VARCHAR(255)" query:"desc"`
 		Time     int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
 	}
 
@@ -64,7 +66,7 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(userid string, authtags rank.Rank) (*Model, string, error) {
+func (r *repo) New(userid string, authtags rank.Rank, name, desc string) (*Model, string, error) {
 	aid, err := uid.New(uidSize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create new api key id", http.StatusInternalServerError, err)
@@ -84,6 +86,8 @@ func (r *repo) New(userid string, authtags rank.Rank) (*Model, string, error) {
 		Userid:   userid,
 		AuthTags: authtags,
 		KeyHash:  hash,
+		Name:     name,
+		Desc:     desc,
 		Time:     now,
 	}
 	m.computeAuthTags()

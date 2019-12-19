@@ -9,6 +9,8 @@ type (
 	resApikey struct {
 		Keyid    string `json:"keyid"`
 		AuthTags string `json:"authtags"`
+		Name     string `json:"name"`
+		Desc     string `json:"desc"`
 		Time     int64  `json:"time"`
 	}
 
@@ -27,6 +29,8 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 		res = append(res, resApikey{
 			Keyid:    i.Keyid,
 			AuthTags: i.AuthTags.Stringify(),
+			Name:     i.Name,
+			Desc:     i.Desc,
 			Time:     i.Time,
 		})
 	}

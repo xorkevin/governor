@@ -14,7 +14,7 @@ const (
 )
 
 func apikeyModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapikeys (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, authtags VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapikeys (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, authtags VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255), desc VARCHAR(255), time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func apikeyModelSetup(db *sql.DB) error {
 }
 
 func apikeyModelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, authtags, keyhash, time) VALUES ($1, $2, $3, $4, $5);", m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Time)
+	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, authtags, keyhash, name, desc, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Name, m.Desc, m.Time)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -46,13 +46,13 @@ func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*5)
+	args := make([]interface{}, 0, len(models)*7)
 	for c, m := range models {
-		n := c * 5
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
-		args = append(args, m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Time)
+		n := c * 7
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
+		args = append(args, m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Name, m.Desc, m.Time)
 	}
-	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, authtags, keyhash, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, authtags, keyhash, name, desc, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -68,7 +68,7 @@ func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int
 
 func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT keyid, userid, authtags, keyhash, time FROM userapikeys WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.authtags, &m.KeyHash, &m.Time); err != nil {
+	if err := db.QueryRow("SELECT keyid, userid, authtags, keyhash, name, desc, time FROM userapikeys WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.authtags, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -86,7 +86,7 @@ func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, int, error) {
 }
 
 func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) error {
-	_, err := db.Exec("UPDATE userapikeys SET (keyid, userid, authtags, keyhash, time) = ($1, $2, $3, $4, $5) WHERE keyid = $6;", m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Time, keyid)
+	_, err := db.Exec("UPDATE userapikeys SET (keyid, userid, authtags, keyhash, name, desc, time) = ($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
 	return err
 }
 
@@ -106,7 +106,7 @@ func apikeyModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc bool
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT keyid, userid, authtags, keyhash, time FROM userapikeys WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT keyid, userid, authtags, keyhash, name, desc, time FROM userapikeys WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func apikeyModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc bool
 	}()
 	for rows.Next() {
 		m := Model{}
-		if err := rows.Scan(&m.Keyid, &m.Userid, &m.authtags, &m.KeyHash, &m.Time); err != nil {
+		if err := rows.Scan(&m.Keyid, &m.Userid, &m.authtags, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
