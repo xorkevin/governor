@@ -148,6 +148,46 @@ func roleModelGetModelEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, 
 	return res, nil
 }
 
+func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
+	paramCount := 3
+	args := make([]interface{}, 0, paramCount+len(role))
+	args = append(args, limit, offsetuserid)
+	var placeholdersrole string
+	{
+		placeholders := make([]string, 0, len(role))
+		for _, i := range role {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersrole = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT userid, role FROM userroles WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func roleModelDelEqUseridEqRole(db *sql.DB, userid string, role string) error {
 	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role = $2;", userid, role)
 	return err

@@ -12,6 +12,7 @@ type (
 	Repo interface {
 		New(userid, role string) *Model
 		GetByID(userid, role string) (*Model, error)
+		IntersectRoles(userid string, roles []string) ([]string, error)
 		GetByRole(role string, limit, offset int) ([]string, error)
 		GetUserRoles(userid string, limit, offset int) ([]string, error)
 		InsertBulk(m []*Model) error
@@ -27,7 +28,7 @@ type (
 	// Model is the db User role model
 	Model struct {
 		Userid string `model:"userid,VARCHAR(31);index" query:"userid,getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;deleq,userid,role;deleq,userid,role|arr"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;deleq,userid,role;deleq,userid,role|arr"`
 	}
 )
 
@@ -57,6 +58,19 @@ func (r *repo) GetByID(userid, role string) (*Model, error) {
 		m = mRole
 	}
 	return m, nil
+}
+
+// IntersectRoles gets the intersection of user roles and the input roles
+func (r *repo) IntersectRoles(userid string, roles []string) ([]string, error) {
+	m, err := roleModelGetModelEqUseridHasRoleOrdRole(r.db.DB(), userid, roles, true, len(roles), 0)
+	if err != nil {
+		return nil, governor.NewError("Failed to get user roles", http.StatusInternalServerError, err)
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.Role)
+	}
+	return res, nil
 }
 
 // GetByRole returns a list of userids with the given role

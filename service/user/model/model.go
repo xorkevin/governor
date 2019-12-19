@@ -28,7 +28,7 @@ type (
 		NewEmptyPtr() *Model
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
-		GetRoles(m *Model) error
+		IntersectRoles(userid string, ra rank.Rank) (rank.Rank, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
 		GetByID(userid string) (*Model, error)
@@ -135,8 +135,20 @@ func (r *repo) RehashPass(m *Model, password string) error {
 	return nil
 }
 
-// GetRoles gets the roles of the user for the model
-func (r *repo) GetRoles(m *Model) error {
+// IntersectRoles gets the intersection of user roles and the input roles
+func (r *repo) IntersectRoles(userid string, ra rank.Rank) (rank.Rank, error) {
+	m, err := r.rolerepo.IntersectRoles(userid, ra.ToSlice())
+	if err != nil {
+		return nil, err
+	}
+	res := rank.Rank{}
+	for _, i := range m {
+		res[i] = struct{}{}
+	}
+	return res, nil
+}
+
+func (r *repo) getRoles(m *Model) error {
 	roles, err := r.rolerepo.GetUserRoles(m.Userid, roleLimit, 0)
 	if err != nil {
 		return governor.NewError("Failed to get roles of user", http.StatusInternalServerError, err)
@@ -164,7 +176,7 @@ func (r *repo) GetBulk(userids []string) ([]Info, error) {
 }
 
 func (r *repo) getApplyRoles(m *Model) (*Model, error) {
-	if err := r.GetRoles(m); err != nil {
+	if err := r.getRoles(m); err != nil {
 		return nil, err
 	}
 	return m, nil
