@@ -47,7 +47,7 @@ func (r *router) getUserApikeys(c echo.Context) error {
 type (
 	reqApikeyPost struct {
 		Userid   string `valid:"userid,has" json:"-"`
-		AuthTags string `valid:"rank" json:"authtags"`
+		AuthTags string `valid:"rank" json:"auth_tags"`
 		Name     string `valid:"apikeyName" json:"name"`
 		Desc     string `valid:"apikeyDesc" json:"desc"`
 	}
@@ -106,7 +106,7 @@ type (
 	reqApikeyUpdate struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Keyid    string `valid:"apikeyid,has" json:"-"`
-		AuthTags string `valid:"rank" json:"authtags"`
+		AuthTags string `valid:"rank" json:"auth_tags"`
 		Name     string `valid:"apikeyName" json:"name"`
 		Desc     string `valid:"apikeyDesc" json:"desc"`
 	}
