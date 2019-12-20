@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/rank"
 )
 
 type (
@@ -37,4 +38,67 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 	return &resApikeys{
 		Apikeys: res,
 	}, nil
+}
+
+type (
+	resApikeyModel struct {
+		Keyid string `json:"keyid"`
+		Key   string `json:"key"`
+	}
+)
+
+func (s *service) CreateApikey(userid string, authtags rank.Rank, name, desc string) (*resApikeyModel, error) {
+	intersect, err := s.users.IntersectRoles(userid, authtags)
+	if err != nil {
+		return nil, err
+	}
+	m, key, err := s.apikeys.New(userid, intersect, name, desc)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.apikeys.Insert(m); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		return nil, err
+	}
+	return &resApikeyModel{
+		Keyid: m.Keyid,
+		Key:   key,
+	}, nil
+}
+
+func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, desc string) error {
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	intersect, err := s.users.IntersectRoles(userid, authtags)
+	if err != nil {
+		return err
+	}
+	m.AuthTags = intersect
+	m.Name = name
+	m.Desc = desc
+	if err := s.apikeys.Update(m); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) DeleteApikey(keyid string) error {
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if err := s.apikeys.Delete(m); err != nil {
+		return err
+	}
+	return nil
 }
