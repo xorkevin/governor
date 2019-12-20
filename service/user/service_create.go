@@ -298,6 +298,10 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
 	}
 
+	if err := s.DeleteUserApikeys(userid); err != nil {
+		return err
+	}
+
 	if err := s.KillAllSessions(userid); err != nil {
 		return err
 	}

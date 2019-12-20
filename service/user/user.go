@@ -208,6 +208,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err := sr.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
 		return err
 	}
+	sr.mountApikey(g.Group("/apikey"))
 	l.Info("mounted http routes", nil)
 	return nil
 }
@@ -241,6 +242,11 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("created userapprovals table", nil)
+
+	if err := s.apikeys.Setup(); err != nil {
+		return err
+	}
+	l.Info("created userapikeys table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err

@@ -151,7 +151,7 @@ func roleModelGetModelEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, 
 func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(role))
-	args = append(args, limit, offsetuserid)
+	args = append(args, limit, offset, userid)
 	var placeholdersrole string
 	{
 		placeholders := make([]string, 0, len(role))

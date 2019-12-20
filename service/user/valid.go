@@ -9,11 +9,12 @@ import (
 )
 
 const (
-	lengthCapUserid = 31
-	lengthCap       = 127
-	lengthCapEmail  = 255
-	lengthCapLarge  = 4095
-	amountCap       = 1024
+	lengthCapUserid   = 31
+	lengthCapApikeyid = 63
+	lengthCap         = 127
+	lengthCapEmail    = 255
+	lengthCapLarge    = 4095
+	amountCap         = 1024
 )
 
 var (
@@ -200,6 +201,33 @@ func validhasRefreshToken(token string) error {
 	}
 	if len(token) > lengthCapLarge {
 		return governor.NewErrorUser("Token is too long", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validhasApikeyid(keyid string) error {
+	if len(keyid) == 0 {
+		return governor.NewErrorUser("Apikey id must be provided", http.StatusBadRequest, nil)
+	}
+	if len(keyid) > lengthCapApikeyid {
+		return governor.NewErrorUser("Apikey id must be shorter than 64 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validApikeyName(name string) error {
+	if len(name) == 0 {
+		return governor.NewErrorUser("Name must be provided", http.StatusBadRequest, nil)
+	}
+	if len(name) > lengthCap {
+		return governor.NewErrorUser("Name must be shorter than 128 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validApikeyDesc(desc string) error {
+	if len(desc) > lengthCap {
+		return governor.NewErrorUser("Description must be shorter than 128 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
