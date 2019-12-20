@@ -3,21 +3,40 @@ package user
 import (
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"strconv"
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_session_gen.go reqUserRmSessions
+//go:generate forge validation -o validation_session_gen.go reqGetUserSessions reqUserRmSessions
+
+type (
+	reqGetUserSessions struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
 
 func (r *router) getSessions(c echo.Context) error {
-	req := reqUserGetID{
+	amount, err := strconv.Atoi(c.QueryParam("amount"))
+	if err != nil {
+		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+	}
+	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	if err != nil {
+		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+	}
+	req := reqGetUserSessions{
 		Userid: c.Get("userid").(string),
+		Amount: amount,
+		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
 		return err
 	}
-	res, err := r.s.GetUserSessions(req.Userid)
+	res, err := r.s.GetUserSessions(req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		return err
 	}

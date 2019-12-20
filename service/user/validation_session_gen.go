@@ -2,6 +2,19 @@
 
 package user
 
+func (r reqGetUserSessions) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqUserRmSessions) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err

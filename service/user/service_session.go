@@ -19,8 +19,8 @@ type (
 	}
 )
 
-func (s *service) GetUserSessions(userid string) (*resUserGetSessions, error) {
-	m, err := s.sessions.GetUserSessions(userid, 256, 0)
+func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGetSessions, error) {
+	m, err := s.sessions.GetUserSessions(userid, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user sessions", http.StatusInternalServerError, err)
 	}
