@@ -218,7 +218,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname, rank.Admin())
+	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
 	if err != nil {
 		return err
 	}
@@ -249,6 +249,9 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l.Info("created userapikeys table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
+		return err
+	}
+	if err := s.roles.InsertBulk(madmin.Userid, rank.Admin()); err != nil {
 		return err
 	}
 	l.Info("inserted new setup admin", map[string]string{

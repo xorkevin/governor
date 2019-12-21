@@ -57,7 +57,7 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, governor.NewErrorUser("Email is already used by another account", http.StatusBadRequest, nil)
 	}
 
-	m, err := s.users.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName, rank.BaseUser())
+	m, err := s.users.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,6 @@ type (
 	resApproval struct {
 		Userid       string `json:"userid"`
 		Username     string `json:"username"`
-		AuthTags     string `json:"auth_tags"`
 		Email        string `json:"email"`
 		FirstName    string `json:"first_name"`
 		LastName     string `json:"last_name"`
@@ -115,7 +114,6 @@ func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
 		approvals = append(approvals, resApproval{
 			Userid:       i.Userid,
 			Username:     i.Username,
-			AuthTags:     i.AuthTags,
 			Email:        i.Email,
 			FirstName:    i.FirstName,
 			LastName:     i.LastName,
@@ -242,6 +240,9 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 		}
 		return nil, err
 	}
+	if err := s.roles.InsertBulk(m.Userid, rank.BaseUser()); err != nil {
+		return nil, err
+	}
 
 	if err := s.queue.Publish(NewUserQueueID, b.Bytes()); err != nil {
 		s.logger.Error("failed to publish new user", map[string]string{
@@ -281,7 +282,9 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 	if m.Username != username {
 		return governor.NewErrorUser("Information does not match", http.StatusBadRequest, err)
 	}
-	if m.AuthTags.Has("admin") {
+	if roles, err := s.roles.IntersectRoles("userid", rank.Rank{"admin": struct{}{}}); err != nil {
+		return err
+	} else if roles.Has("admin") {
 		return governor.NewErrorUser("Not allowed to delete admin user", http.StatusForbidden, err)
 	}
 	if ok, err := s.users.ValidatePass(password, m); err != nil {
@@ -303,6 +306,10 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 	}
 
 	if err := s.KillAllSessions(userid); err != nil {
+		return err
+	}
+
+	if err := s.roles.DeleteUserRoles(userid); err != nil {
 		return err
 	}
 

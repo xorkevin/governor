@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/util/rank"
 )
 
 //go:generate forge model -m Model -t userroles -p role -o model_gen.go Model
@@ -12,10 +13,10 @@ type (
 	Repo interface {
 		New(userid, role string) *Model
 		GetByID(userid, role string) (*Model, error)
-		IntersectRoles(userid string, roles []string) ([]string, error)
+		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 		GetByRole(role string, limit, offset int) ([]string, error)
 		GetUserRoles(userid string, limit, offset int) ([]string, error)
-		InsertBulk(m []*Model) error
+		InsertBulk(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles []string) error
 		DeleteUserRoles(userid string) error
 		Setup() error
@@ -61,14 +62,14 @@ func (r *repo) GetByID(userid, role string) (*Model, error) {
 }
 
 // IntersectRoles gets the intersection of user roles and the input roles
-func (r *repo) IntersectRoles(userid string, roles []string) ([]string, error) {
-	m, err := roleModelGetModelEqUseridHasRoleOrdRole(r.db.DB(), userid, roles, true, len(roles), 0)
+func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+	m, err := roleModelGetModelEqUseridHasRoleOrdRole(r.db.DB(), userid, roles.ToSlice(), true, len(roles), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user roles", http.StatusInternalServerError, err)
 	}
-	res := make([]string, 0, len(m))
+	res := make(rank.Rank, len(m))
 	for _, i := range m {
-		res = append(res, i.Role)
+		res[i.Role] = struct{}{}
 	}
 	return res, nil
 }
@@ -110,10 +111,17 @@ func (r *repo) Insert(m *Model) error {
 	return nil
 }
 
-// InsertBulk inserts multiple models into the db
-func (r *repo) InsertBulk(m []*Model) error {
-	if len(m) == 0 {
+// InsertBulk inserts roles for a user into the db
+func (r *repo) InsertBulk(userid string, roles rank.Rank) error {
+	if len(roles) == 0 {
 		return nil
+	}
+	m := make([]*Model, 0, len(roles))
+	for _, i := range roles.ToSlice() {
+		m = append(m, &Model{
+			Userid: userid,
+			Role:   i,
+		})
 	}
 	if _, err := roleModelInsertBulk(r.db.DB(), m, true); err != nil {
 		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
@@ -143,7 +151,7 @@ func (r *repo) DeleteRoles(userid string, roles []string) error {
 // DeleteUserRoles deletes all the roles of a user
 func (r *repo) DeleteUserRoles(userid string) error {
 	if err := roleModelDelEqUserid(r.db.DB(), userid); err != nil {
-		return governor.NewError("Failed to delete roles of userid", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to delete user roles", http.StatusInternalServerError, err)
 	}
 	return nil
 }

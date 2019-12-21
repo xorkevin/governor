@@ -5,7 +5,6 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/model"
-	"xorkevin.dev/governor/util/rank"
 )
 
 //go:generate forge model -m Model -t userapprovals -p approval -o model_gen.go Model
@@ -28,7 +27,6 @@ type (
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
-		AuthTags     string `model:"authtags,VARCHAR(4095) NOT NULL" query:"authtags"`
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL" query:"email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
@@ -47,7 +45,6 @@ func (r *repo) New(m *usermodel.Model) *Model {
 	return &Model{
 		Userid:       m.Userid,
 		Username:     m.Username,
-		AuthTags:     m.AuthTags.Stringify(),
 		PassHash:     m.PassHash,
 		Email:        m.Email,
 		FirstName:    m.FirstName,
@@ -57,11 +54,9 @@ func (r *repo) New(m *usermodel.Model) *Model {
 }
 
 func (r *repo) ToUserModel(m *Model) *usermodel.Model {
-	authTags, _ := rank.FromStringUser(m.AuthTags)
 	return &usermodel.Model{
 		Userid:       m.Userid,
 		Username:     m.Username,
-		AuthTags:     authTags,
 		PassHash:     m.PassHash,
 		Email:        m.Email,
 		FirstName:    m.FirstName,

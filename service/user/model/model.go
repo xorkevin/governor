@@ -5,8 +5,6 @@ import (
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/user/role/model"
-	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 )
@@ -23,19 +21,17 @@ const (
 type (
 	// Repo is a user repository
 	Repo interface {
-		New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, error)
+		New(username, password, email, firstname, lastname string) (*Model, error)
 		NewEmpty() Model
 		NewEmptyPtr() *Model
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
-		IntersectRoles(userid string, ra rank.Rank) (rank.Rank, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
 		GetByID(userid string) (*Model, error)
 		GetByUsername(username string) (*Model, error)
 		GetByEmail(email string) (*Model, error)
 		Insert(m *Model) error
-		UpdateRoles(m *Model, addRoles, rmRoles []string) error
 		Update(m *Model) error
 		Delete(m *Model) error
 		Setup() error
@@ -43,7 +39,6 @@ type (
 
 	repo struct {
 		db       db.Database
-		rolerepo rolemodel.Repo
 		hasher   *hunter2.ScryptHasher
 		verifier *hunter2.Verifier
 	}
@@ -52,7 +47,6 @@ type (
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
-		AuthTags     rank.Rank
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
@@ -71,21 +65,20 @@ type (
 )
 
 // New creates a new user repository
-func New(database db.Database, rolerepo rolemodel.Repo) Repo {
+func New(database db.Database) Repo {
 	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.NewScryptDefaultConfig())
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
 		db:       database,
-		rolerepo: rolerepo,
 		hasher:   hasher,
 		verifier: verifier,
 	}
 }
 
 // New creates a new User Model
-func (r *repo) New(username, password, email, firstname, lastname string, ra rank.Rank) (*Model, error) {
+func (r *repo) New(username, password, email, firstname, lastname string) (*Model, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
@@ -99,7 +92,6 @@ func (r *repo) New(username, password, email, firstname, lastname string, ra ran
 	return &Model{
 		Userid:       mUID.Base64(),
 		Username:     username,
-		AuthTags:     ra,
 		PassHash:     mHash,
 		Email:        email,
 		FirstName:    firstname,
@@ -135,28 +127,6 @@ func (r *repo) RehashPass(m *Model, password string) error {
 	return nil
 }
 
-// IntersectRoles gets the intersection of user roles and the input roles
-func (r *repo) IntersectRoles(userid string, ra rank.Rank) (rank.Rank, error) {
-	m, err := r.rolerepo.IntersectRoles(userid, ra.ToSlice())
-	if err != nil {
-		return nil, err
-	}
-	res := rank.Rank{}
-	for _, i := range m {
-		res[i] = struct{}{}
-	}
-	return res, nil
-}
-
-func (r *repo) getRoles(m *Model) error {
-	roles, err := r.rolerepo.GetUserRoles(m.Userid, roleLimit, 0)
-	if err != nil {
-		return governor.NewError("Failed to get roles of user", http.StatusInternalServerError, err)
-	}
-	m.AuthTags = rank.FromSlice(roles)
-	return nil
-}
-
 // GetGroup gets information from each user
 func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 	m, err := userModelGetInfoOrdUserid(r.db.DB(), true, limit, offset)
@@ -175,13 +145,6 @@ func (r *repo) GetBulk(userids []string) ([]Info, error) {
 	return m, nil
 }
 
-func (r *repo) getApplyRoles(m *Model) (*Model, error) {
-	if err := r.getRoles(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
 	m, code, err := userModelGetModelEqUserid(r.db.DB(), userid)
@@ -191,46 +154,31 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 		}
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	}
-	return r.getApplyRoles(m)
+	return m, nil
 }
 
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, error) {
-	var m *Model
-	if mUser, code, err := userModelGetModelEqUsername(r.db.DB(), username); err != nil {
+	m, code, err := userModelGetModelEqUsername(r.db.DB(), username)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that username", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get user by username", http.StatusInternalServerError, err)
-	} else {
-		m = mUser
 	}
-	return r.getApplyRoles(m)
+	return m, nil
 }
 
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, error) {
-	var m *Model
-	if mUser, code, err := userModelGetModelEqEmail(r.db.DB(), email); err != nil {
+	m, code, err := userModelGetModelEqEmail(r.db.DB(), email)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that email", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get user by email", http.StatusInternalServerError, err)
-	} else {
-		m = mUser
 	}
-	return r.getApplyRoles(m)
-}
-
-func (r *repo) insertRoles(m *Model) error {
-	roles := make([]*rolemodel.Model, 0, len(m.AuthTags))
-	for k := range m.AuthTags {
-		roles = append(roles, r.rolerepo.New(m.Userid, k))
-	}
-	if err := r.rolerepo.InsertBulk(roles); err != nil {
-		return governor.NewError("Failed to insert user roles", http.StatusInternalServerError, err)
-	}
-	return nil
+	return m, nil
 }
 
 // Insert inserts the model into the db
@@ -240,25 +188,6 @@ func (r *repo) Insert(m *Model) error {
 			return governor.NewError("User id must be unique", http.StatusBadRequest, err)
 		}
 		return governor.NewError("Failed to insert user", http.StatusInternalServerError, err)
-	}
-	if err := r.insertRoles(m); err != nil {
-		return err
-	}
-	return nil
-}
-
-// UpdateRoles updates the model's roles into the db
-func (r *repo) UpdateRoles(m *Model, addRoles, rmRoles []string) error {
-	addModels := make([]*rolemodel.Model, 0, len(addRoles))
-	for _, i := range addRoles {
-		addModels = append(addModels, r.rolerepo.New(m.Userid, i))
-	}
-
-	if err := r.rolerepo.DeleteRoles(m.Userid, rmRoles); err != nil {
-		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
-	}
-	if err := r.rolerepo.InsertBulk(addModels); err != nil {
-		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -273,10 +202,6 @@ func (r *repo) Update(m *Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := r.rolerepo.DeleteUserRoles(m.Userid); err != nil {
-		return governor.NewError("Failed to delete user roles", http.StatusInternalServerError, err)
-	}
-
 	if err := userModelDelEqUserid(r.db.DB(), m.Userid); err != nil {
 		return governor.NewError("Failed to delete user", http.StatusInternalServerError, err)
 	}
