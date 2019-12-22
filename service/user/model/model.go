@@ -15,7 +15,6 @@ const (
 	uidSize     = 16
 	passSaltLen = 32
 	passHashLen = 32
-	roleLimit   = 1024
 )
 
 type (

@@ -240,7 +240,7 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 		}
 		return nil, err
 	}
-	if err := s.roles.InsertBulk(m.Userid, rank.BaseUser()); err != nil {
+	if err := s.roles.InsertRoles(m.Userid, rank.BaseUser()); err != nil {
 		return nil, err
 	}
 

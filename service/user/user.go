@@ -251,7 +251,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.users.Insert(madmin); err != nil {
 		return err
 	}
-	if err := s.roles.InsertBulk(madmin.Userid, rank.Admin()); err != nil {
+	if err := s.roles.InsertRoles(madmin.Userid, rank.Admin()); err != nil {
 		return err
 	}
 	l.Info("inserted new setup admin", map[string]string{

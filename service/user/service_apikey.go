@@ -48,7 +48,7 @@ type (
 )
 
 func (s *service) CreateApikey(userid string, authtags rank.Rank, name, desc string) (*resApikeyModel, error) {
-	intersect, err := s.users.IntersectRoles(userid, authtags)
+	intersect, err := s.roles.IntersectRoles(userid, authtags)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, d
 		}
 		return err
 	}
-	intersect, err := s.users.IntersectRoles(userid, authtags)
+	intersect, err := s.roles.IntersectRoles(userid, authtags)
 	if err != nil {
 		return err
 	}
