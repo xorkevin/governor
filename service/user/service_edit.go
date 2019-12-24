@@ -40,6 +40,12 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 		return err
 	}
 
+	for k := range editRemoveRank {
+		if _, ok := editAddRank[k]; ok {
+			delete(editAddRank, k)
+		}
+	}
+
 	if editAddRank.Has("admin") {
 		s.logger.Info("add admin status", map[string]string{
 			"userid":   userid,
@@ -53,9 +59,6 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 		})
 	}
 
-	if err := s.KillAllCacheSessions(userid); err != nil {
-		return err
-	}
 	if err := s.roles.InsertRoles(m.Userid, editAddRank); err != nil {
 		return err
 	}

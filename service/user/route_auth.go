@@ -188,7 +188,7 @@ func (r *router) loginUser(c echo.Context) error {
 	}
 
 	r.setAccessCookie(c, res.AccessToken)
-	r.setRefreshCookie(c, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
+	r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
 	r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
 
 	return c.JSON(http.StatusOK, res)
@@ -218,7 +218,7 @@ func (r *router) exchangeToken(c echo.Context) error {
 
 	r.setAccessCookie(c, res.AccessToken)
 	if len(res.RefreshToken) > 0 {
-		r.setRefreshCookie(c, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
+		r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
 	}
 	if len(res.SessionToken) > 0 {
 		r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
@@ -243,7 +243,7 @@ func (r *router) refreshToken(c echo.Context) error {
 	}
 
 	r.setAccessCookie(c, res.AccessToken)
-	r.setRefreshCookie(c, res.RefreshToken, res.Claims.AuthTags, res.Claims.Userid)
+	r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
 	r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
 	return c.JSON(http.StatusOK, res)
 }

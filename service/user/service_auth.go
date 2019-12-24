@@ -40,6 +40,7 @@ type (
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		SessionToken string        `json:"session_token,omitempty"`
 		Claims       *token.Claims `json:"claims,omitempty"`
+		AuthTags     string        `json:"auth_tags,omitempty"`
 	}
 )
 
@@ -135,6 +136,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
+		AuthTags:     "",
 	}, nil
 }
 
@@ -224,6 +226,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
+		AuthTags:     "",
 	}, nil
 }
 
