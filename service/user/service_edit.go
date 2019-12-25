@@ -24,7 +24,12 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 	return nil
 }
 
-func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.Rank, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
+func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
+	updaterRank, err := s.roles.IntersectRoles(updaterid, combineModRoles(editAddRank, editRemoveRank))
+	if err != nil {
+		return err
+	}
+
 	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, true); err != nil {
 		return err
 	}
@@ -40,11 +45,7 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 		return err
 	}
 
-	for k := range editRemoveRank {
-		if _, ok := editAddRank[k]; ok {
-			delete(editAddRank, k)
-		}
-	}
+	editAddRank.Remove(editRemoveRank)
 
 	if editAddRank.Has("admin") {
 		s.logger.Info("add admin status", map[string]string{
@@ -71,6 +72,27 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 	}
 
 	return nil
+}
+
+func combineModRoles(r1, r2 rank.Rank) rank.Rank {
+	roles := rank.Rank{
+		rank.TagAdmin: struct{}{},
+	}
+	for key := range r1 {
+		k := strings.SplitN(key, "_", 2)
+		if len(k) == 1 {
+			continue
+		}
+		roles[rank.TagModPrefix+"_"+k[1]] = struct{}{}
+	}
+	for key := range r2 {
+		k := strings.SplitN(key, "_", 2)
+		if len(k) == 1 {
+			continue
+		}
+		roles[rank.TagModPrefix+"_"+k[1]] = struct{}{}
+	}
+	return roles
 }
 
 func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) error {

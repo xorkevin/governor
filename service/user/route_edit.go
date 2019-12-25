@@ -53,12 +53,11 @@ func (r *router) patchRank(c echo.Context) error {
 		return err
 	}
 
-	updaterClaims := c.Get("user").(*token.Claims)
-	updaterRank, _ := rank.FromStringUser(updaterClaims.AuthTags)
+	updaterUserid := c.Get("userid").(string)
 	editAddRank, _ := rank.FromStringUser(req.Add)
 	editRemoveRank, _ := rank.FromStringUser(req.Remove)
 
-	if err := r.s.UpdateRank(req.Userid, updaterClaims.Userid, updaterRank, editAddRank, editRemoveRank); err != nil {
+	if err := r.s.UpdateRank(req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
