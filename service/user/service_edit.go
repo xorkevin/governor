@@ -65,6 +65,11 @@ func (s *service) UpdateRank(userid string, updaterid string, updaterRank rank.R
 	if err := s.roles.DeleteRoles(m.Userid, editRemoveRank); err != nil {
 		return err
 	}
+
+	if err := s.DeleteCachedUserRoles(m.Userid); err != nil {
+		return err
+	}
+
 	return nil
 }
 

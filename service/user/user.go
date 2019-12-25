@@ -45,6 +45,8 @@ type (
 		kvnewuser         kvstore.KVStore
 		kvemailchange     kvstore.KVStore
 		kvpassreset       kvstore.KVStore
+		kvroles           kvstore.KVStore
+		kvroleset         kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		queue             msgqueue.Msgqueue
 		mailer            mail.Mail
@@ -58,6 +60,7 @@ type (
 		accessTime        int64
 		refreshTime       int64
 		refreshCacheTime  int64
+		roleCacheTime     int64
 		confirmTime       int64
 		passwordResetTime int64
 		newLoginEmail     bool
@@ -112,6 +115,8 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		kvnewuser:         kv.Subtree("newuser"),
 		kvemailchange:     kv.Subtree("emailchange"),
 		kvpassreset:       kv.Subtree("passreset"),
+		kvroles:           kv.Subtree("roles"),
+		kvroleset:         kv.Subtree("roleset"),
 		kvsessions:        kv.Subtree("sessions"),
 		queue:             queue,
 		mailer:            mailer,
@@ -121,6 +126,7 @@ func New(users usermodel.Repo, roles rolemodel.Repo, sessions sessionmodel.Repo,
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
+		roleCacheTime:     time24h,
 		confirmTime:       time24h,
 		passwordResetTime: time24h,
 	}
@@ -130,6 +136,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")
+	r.SetDefault("rolecache", "24h")
 	r.SetDefault("confirmtime", "24h")
 	r.SetDefault("passwordresettime", "24h")
 	r.SetDefault("newloginemail", true)
@@ -168,6 +175,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	} else {
 		s.refreshCacheTime = t.Nanoseconds() / b1
 	}
+	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse role cache: %s", r.GetStr("rolecache")), nil)
+	} else {
+		s.roleCacheTime = t.Nanoseconds() / b1
+	}
 	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
 		l.Warn(fmt.Sprintf("failed to parse confirm time: %s", r.GetStr("confirmtime")), nil)
 	} else {
@@ -193,6 +205,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
 		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
+		"rolecache (s)":         strconv.FormatInt(s.roleCacheTime, 10),
 		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
 		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),

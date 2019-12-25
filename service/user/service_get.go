@@ -4,11 +4,6 @@ import (
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/model"
-	"xorkevin.dev/governor/util/rank"
-)
-
-const (
-	roleLimit = 256
 )
 
 type (
@@ -23,11 +18,11 @@ type (
 	}
 )
 
-func getUserPublicFields(m *usermodel.Model, roles rank.Rank) *ResUserGetPublic {
+func getUserPublicFields(m *usermodel.Model, roles string) *ResUserGetPublic {
 	return &ResUserGetPublic{
 		Userid:       m.Userid,
 		Username:     m.Username,
-		AuthTags:     roles.Stringify(),
+		AuthTags:     roles,
 		FirstName:    m.FirstName,
 		LastName:     m.LastName,
 		CreationTime: m.CreationTime,
@@ -42,7 +37,7 @@ type (
 	}
 )
 
-func getUserFields(m *usermodel.Model, roles rank.Rank) *ResUserGet {
+func getUserFields(m *usermodel.Model, roles string) *ResUserGet {
 	return &ResUserGet{
 		ResUserGetPublic: *getUserPublicFields(m, roles),
 		Email:            m.Email,
@@ -58,7 +53,7 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoles(userid, roleLimit, 0)
+	roles, err := s.GetUserRoles(userid)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +69,7 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoles(userid, roleLimit, 0)
+	roles, err := s.GetUserRoles(userid)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +85,7 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoles(m.Userid, roleLimit, 0)
+	roles, err := s.GetUserRoles(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +101,7 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoles(m.Userid, roleLimit, 0)
+	roles, err := s.GetUserRoles(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +117,7 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoles(m.Userid, roleLimit, 0)
+	roles, err := s.GetUserRoles(m.Userid)
 	if err != nil {
 		return nil, err
 	}

@@ -309,7 +309,7 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return err
 	}
 
-	if err := s.roles.DeleteUserRoles(userid); err != nil {
+	if err := s.DeleteUserRoles(userid); err != nil {
 		return err
 	}
 

@@ -130,13 +130,18 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
+	roles, err := s.GetUserRoles(m.Userid)
+	if err != nil {
+		return nil, err
+	}
+
 	return &resUserAuth{
 		Valid:        true,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     "",
+		AuthTags:     roles,
 	}, nil
 }
 
@@ -167,10 +172,16 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 
+	roles, err := s.GetUserRoles(accessClaims.Userid)
+	if err != nil {
+		return nil, err
+	}
+
 	return &resUserAuth{
 		Valid:       true,
 		AccessToken: accessToken,
 		Claims:      accessClaims,
+		AuthTags:    roles,
 	}, nil
 }
 
@@ -220,13 +231,18 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 
+	roles, err := s.GetUserRoles(m.Userid)
+	if err != nil {
+		return nil, err
+	}
+
 	return &resUserAuth{
 		Valid:        true,
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     "",
+		AuthTags:     roles,
 	}, nil
 }
 
