@@ -53,11 +53,11 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.GetUserRoles(userid)
+	roles, err := s.roles.GetRoleSummary(userid)
 	if err != nil {
 		return nil, err
 	}
-	return getUserPublicFields(m, roles), nil
+	return getUserPublicFields(m, roles.Stringify()), nil
 }
 
 // GetByID gets and returns all fields of the user
@@ -69,11 +69,11 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.GetUserRoles(userid)
+	roles, err := s.roles.GetRoleSummary(userid)
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles), nil
+	return getUserFields(m, roles.Stringify()), nil
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
@@ -85,11 +85,11 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 		}
 		return nil, err
 	}
-	roles, err := s.GetUserRoles(m.Userid)
+	roles, err := s.roles.GetRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
-	return getUserPublicFields(m, roles), nil
+	return getUserPublicFields(m, roles.Stringify()), nil
 }
 
 // GetByUsername gets and returns all fields of the user
@@ -101,11 +101,11 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.GetUserRoles(m.Userid)
+	roles, err := s.roles.GetRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles), nil
+	return getUserFields(m, roles.Stringify()), nil
 }
 
 // GetByEmail gets and returns all fields of the user
@@ -117,11 +117,11 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.GetUserRoles(m.Userid)
+	roles, err := s.roles.GetRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles), nil
+	return getUserFields(m, roles.Stringify()), nil
 }
 
 type (

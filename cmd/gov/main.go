@@ -20,6 +20,7 @@ import (
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/role/model"
 	"xorkevin.dev/governor/service/user/session/model"
 )
@@ -52,13 +53,14 @@ func main() {
 	pubsubService := pubsub.New()
 	templateService := template.New()
 	mailService := mail.New(templateService, msgqueueService)
-	gateService := gate.New()
-	userModel := usermodel.New(dbService)
 	roleModel := rolemodel.New(dbService)
+	roleService := role.New(roleModel)
+	gateService := gate.New(roleService)
+	userModel := usermodel.New(dbService)
 	sessionModel := sessionmodel.New(dbService)
 	approvalModel := approvalmodel.New(dbService)
 	apikeyModel := apikeymodel.New(dbService)
-	userService := user.New(userModel, roleModel, sessionModel, approvalModel, apikeyModel, kvService.Subtree("user"), msgqueueService, mailService, gateService)
+	userService := user.New(userModel, sessionModel, approvalModel, apikeyModel, roleService, kvService.Subtree("user"), msgqueueService, mailService, gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), msgqueueService, gateService)
 	courierModel := couriermodel.New(dbService)

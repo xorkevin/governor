@@ -130,7 +130,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
-	roles, err := s.GetUserRoles(m.Userid)
+	roles, err := s.roles.GetRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     roles,
+		AuthTags:     roles.Stringify(),
 	}, nil
 }
 
@@ -172,7 +172,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 
-	roles, err := s.GetUserRoles(accessClaims.Userid)
+	roles, err := s.roles.GetRoleSummary(accessClaims.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		Valid:       true,
 		AccessToken: accessToken,
 		Claims:      accessClaims,
-		AuthTags:    roles,
+		AuthTags:    roles.Stringify(),
 	}, nil
 }
 
@@ -231,7 +231,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 
-	roles, err := s.GetUserRoles(m.Userid)
+	roles, err := s.roles.GetRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     roles,
+		AuthTags:     roles.Stringify(),
 	}, nil
 }
 

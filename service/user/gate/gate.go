@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -27,6 +28,7 @@ type (
 	}
 
 	service struct {
+		roles     role.Role
 		tokenizer *token.Tokenizer
 		baseurl   string
 		logger    governor.Logger
@@ -41,8 +43,10 @@ type (
 )
 
 // New returns a new Gate
-func New() Service {
-	return &service{}
+func New(roles role.Role) Service {
+	return &service{
+		roles: roles,
+	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
