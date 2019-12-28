@@ -34,8 +34,11 @@ type (
 		logger    governor.Logger
 	}
 
+	// Intersector is a function that returns roles needed to validate a user
+	Intersector func(roles rank.Rank) (rank.Rank, bool)
+
 	// Validator is a function to check the authorization of a user
-	Validator func(c echo.Context, claims token.Claims) bool
+	Validator func(userid string, r Intersector, c echo.Context) bool
 
 	Claims struct {
 		token.Claims
@@ -106,6 +109,24 @@ func rmAccessCookie(c echo.Context, baseurl string) {
 	})
 }
 
+func (s *service) intersector(userid string) (Intersector, bool) {
+	if len(userid) == 0 {
+		return nil, false
+	}
+
+	return func(roles rank.Rank) (rank.Rank, bool) {
+		k, err := s.roles.IntersectRoles(userid, roles)
+		if err != nil {
+			s.logger.Error("Failed to get user roles", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "authgetroles",
+			})
+			return nil, false
+		}
+		return k, true
+	}, true
+}
+
 // Authenticate builds a middleware function to validate tokens and set claims
 func (s *service) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -125,10 +146,13 @@ func (s *service) Authenticate(v Validator, subject string) echo.MiddlewareFunc 
 				rmAccessCookie(c, s.baseurl)
 				return governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 			}
-			if !v(c, *claims) {
+			r, ok := s.intersector(claims.Userid)
+			if !ok {
 				return governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
 			}
-			c.Set("user", claims)
+			if !v(claims.Userid, r, c) {
+				return governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
+			}
 			c.Set("userid", claims.Userid)
 			return next(c)
 		}
@@ -142,7 +166,7 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+	return g.Authenticate(func(c echo.Context, userid string) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false
@@ -150,7 +174,7 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 		if !r.Has(rank.TagUser) {
 			return false
 		}
-		return c.Param(idparam) == claims.Userid
+		return c.Param(idparam) == userid
 	}, authenticationSubject)
 }
 
@@ -163,7 +187,7 @@ func OwnerF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.Midd
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
+	return g.Authenticate(func(c echo.Context, userid string) bool {
 		r, err := rank.FromStringUser(claims.AuthTags)
 		if err != nil {
 			return false

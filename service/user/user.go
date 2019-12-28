@@ -121,7 +121,6 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
-		roleCacheTime:     time24h,
 		confirmTime:       time24h,
 		passwordResetTime: time24h,
 	}
@@ -206,9 +205,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err := sr.mountRoute(c.IsDebug(), g.Group("/user")); err != nil {
 		return err
 	}
-	if err := sr.mountAuth(c.IsDebug(), g.Group(authRoutePrefix)); err != nil {
-		return err
-	}
+	sr.mountAuth(g.Group(authRoutePrefix))
 	sr.mountApikey(g.Group("/apikey"))
 	l.Info("mounted http routes", nil)
 	return nil

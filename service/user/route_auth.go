@@ -269,20 +269,9 @@ func (r *router) logoutUser(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) decodeToken(c echo.Context) error {
-	return c.JSON(http.StatusOK, resUserAuth{
-		Valid:  true,
-		Claims: c.Get("user").(*token.Claims),
-	})
-}
-
-func (r *router) mountAuth(debugMode bool, g *echo.Group) error {
+func (r *router) mountAuth(g *echo.Group) {
 	g.POST("/login", r.loginUser)
 	g.POST("/exchange", r.exchangeToken)
 	g.POST("/refresh", r.refreshToken)
 	g.POST("/logout", r.logoutUser)
-	if debugMode {
-		g.GET("/decode", r.decodeToken, gate.User(r.s.gate))
-	}
-	return nil
 }
