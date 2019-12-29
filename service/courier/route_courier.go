@@ -223,7 +223,7 @@ func (r *router) deleteBrand(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) gateCourier(c echo.Context, claims gate.Claims) (string, error) {
+func (r *router) gateCourier(c echo.Context, userid string) (string, error) {
 	return "courier", nil
 }
 

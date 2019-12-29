@@ -5,8 +5,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken

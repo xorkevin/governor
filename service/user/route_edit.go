@@ -4,7 +4,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 

@@ -148,7 +148,7 @@ func (r *router) deleteUserApproval(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) gateUser(c echo.Context, claims gate.Claims) (string, error) {
+func (r *router) gateUser(c echo.Context, userid string) (string, error) {
 	return "user", nil
 }
 
