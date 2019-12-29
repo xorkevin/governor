@@ -66,6 +66,24 @@ func (r Rank) HasBan(tag string) bool {
 	return ok
 }
 
+// AddMod adds a mod tag
+func (r Rank) AddMod(tag string) Rank {
+	r[TagModPrefix+"_"+tag] = struct{}{}
+	return r
+}
+
+// AddUser adds a user tag
+func (r Rank) AddUser(tag string) Rank {
+	r[TagUserPrefix+"_"+tag] = struct{}{}
+	return r
+}
+
+// AddBan adds a ban tag
+func (r Rank) AddBan(tag string) Rank {
+	r[TagBanPrefix+"_"+tag] = struct{}{}
+	return r
+}
+
 // Add adds a rank
 func (r Rank) Add(other Rank) {
 	for k := range other {

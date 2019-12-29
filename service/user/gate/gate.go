@@ -182,15 +182,15 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, userid string) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagUser}))
+		if !ok {
 			return false
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return c.Param(idparam) == userid
+		return r.Context().Param(idparam) == r.Userid()
 	}, authenticationSubject)
 }
 
@@ -198,49 +198,50 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 // resource
 //
 // idfunc should return the userid
-func OwnerF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func OwnerF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, userid string) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagUser}))
+		if !ok {
+			return false
+		}
+		if !roles.Has(rank.TagUser) {
+			return false
+		}
+		userid := r.Userid()
+		s, err := idfunc(r.Context(), userid)
 		if err != nil {
 			return false
 		}
-		if !r.Has(rank.TagUser) {
-			return false
-		}
-		s, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return s == claims.Userid
+		return s == userid
 	}, authenticationSubject)
 }
 
 // Admin is a middleware function to validate if a user is an admin
 func Admin(g Gate) echo.MiddlewareFunc {
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin}))
+		if !ok {
 			return false
 		}
-		return r.Has(rank.TagAdmin)
+		return roles.Has(rank.TagAdmin)
 	}, authenticationSubject)
 }
 
 // User is a middleware function to validate if the request is made by a user
 func User(g Gate) echo.MiddlewareFunc {
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		return r.Has(rank.TagUser)
+		return roles.Has(rank.TagUser)
 	}, authenticationSubject)
 }
 
@@ -251,18 +252,18 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return c.Param(idparam) == claims.Userid
+		return r.Context().Param(idparam) == r.Userid()
 	}, authenticationSubject)
 }
 
@@ -270,27 +271,28 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 // the owner or an admin
 //
 // idfunc should return the userid
-func OwnerOrAdminF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func OwnerOrAdminF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c, Claims{claims})
+		userid := r.Userid()
+		s, err := idfunc(r.Context(), userid)
 		if err != nil {
 			return false
 		}
-		return s == claims.Userid
+		return s == userid
 	}, authenticationSubject)
 }
 
@@ -301,18 +303,19 @@ func Mod(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		modtag := r.Context().Param(idparam)
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddMod(modtag))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return r.HasMod(c.Param(idparam))
+		return roles.HasMod(modtag)
 	}, authenticationSubject)
 }
 
@@ -320,27 +323,27 @@ func Mod(g Gate, idparam string) echo.MiddlewareFunc {
 // moderator of a group or an admin
 //
 // idfunc should return the group_tag
-func ModF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func ModF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
+	return g.Authenticate(func(r Intersector) bool {
+		modtag, err := idfunc(r.Context(), r.Userid())
 		if err != nil {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddMod(modtag))
+		if !ok {
+			return false
+		}
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return r.HasMod(s)
+		return roles.HasMod(modtag)
 	}, authenticationSubject)
 }
 
@@ -351,18 +354,19 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		bantag := r.Context().Param(idparam)
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddBan(bantag))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return !r.HasBan(c.Param(idparam))
+		return !roles.HasBan(bantag)
 	}, authenticationSubject)
 }
 
@@ -370,27 +374,27 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 // user and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func UserOrBanF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func UserOrBanF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
+	return g.Authenticate(func(r Intersector) bool {
+		bantag, err := idfunc(r.Context(), r.Userid())
 		if err != nil {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddBan(bantag))
+		if !ok {
+			return false
+		}
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return !r.HasBan(s)
+		return !roles.HasBan(bantag)
 	}, authenticationSubject)
 }
 
@@ -401,18 +405,19 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 		panic("idparam cannot be empty")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		tag := r.Context().Param(idparam)
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddUser(tag).AddBan(tag))
+		if !ok {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return r.HasUser(c.Param(idparam)) && !r.HasBan(c.Param(idparam))
+		return roles.HasUser(tag) && !roles.HasBan(tag)
 	}, authenticationSubject)
 }
 
@@ -420,27 +425,27 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 // member of a group and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.MiddlewareFunc {
+func MemberF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
+	return g.Authenticate(func(r Intersector) bool {
+		tag, err := idfunc(r.Context(), r.Userid())
 		if err != nil {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddUser(tag).AddBan(tag))
+		if !ok {
+			return false
+		}
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		s, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return r.HasUser(s) && !r.HasBan(s)
+		return roles.HasUser(tag) && !roles.HasBan(tag)
 	}, authenticationSubject)
 }
 
@@ -448,37 +453,38 @@ func MemberF(g Gate, idfunc func(echo.Context, Claims) (string, error)) echo.Mid
 // by the owner or a group member
 //
 // idfunc should return the userid and the group_tag
-func OwnerOrMemberF(g Gate, idfunc func(echo.Context, Claims) (string, string, error)) echo.MiddlewareFunc {
+func OwnerOrMemberF(g Gate, idfunc func(echo.Context, string) (string, string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
+	return g.Authenticate(func(r Intersector) bool {
+		userid := r.Userid()
+		s, tag, err := idfunc(r.Context(), userid)
 		if err != nil {
 			return false
 		}
-		if r.Has(rank.TagAdmin) {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddUser(tag).AddBan(tag))
+		if !ok {
+			return false
+		}
+		if roles.Has(rank.TagAdmin) {
 			return true
 		}
-		if !r.Has(rank.TagUser) {
+		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		userid, group, err := idfunc(c, Claims{claims})
-		if err != nil {
-			return false
-		}
-		return userid == claims.Userid || r.HasUser(group)
+		return s == userid || (roles.HasUser(tag) && !roles.HasBan(tag))
 	}, authenticationSubject)
 }
 
 // System is a middleware function to validate if the request is made by a system
 func System(g Gate) echo.MiddlewareFunc {
-	return g.Authenticate(func(c echo.Context, claims token.Claims) bool {
-		r, err := rank.FromStringUser(claims.AuthTags)
-		if err != nil {
+	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.System())
+		if !ok {
 			return false
 		}
-		return r.Has(rank.TagSystem)
+		return roles.Has(rank.TagSystem)
 	}, authenticationSubject)
 }
