@@ -79,14 +79,14 @@ func combineModRoles(r1, r2 rank.Rank) rank.Rank {
 		if len(k) == 1 {
 			continue
 		}
-		roles[rank.TagModPrefix+"_"+k[1]] = struct{}{}
+		roles.AddMod(k[1])
 	}
 	for key := range r2 {
 		k := strings.SplitN(key, "_", 2)
 		if len(k) == 1 {
 			continue
 		}
-		roles[rank.TagModPrefix+"_"+k[1]] = struct{}{}
+		roles.AddMod(k[1])
 	}
 	return roles
 }
