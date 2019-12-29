@@ -49,6 +49,8 @@ mail:
   fromname: Governor
   workersize: 2
   connmsgcap: 100
+role:
+  rolecache: 24h
 gate:
   issuer: governor
   # secret: secret
@@ -56,7 +58,6 @@ user:
   accesstime: 5m
   refreshtime: 4380h
   refreshcache: 24h
-  rolecache: 24h
   confirmtime: 24h
   passwordresettime: 24h
   newloginemail: true
