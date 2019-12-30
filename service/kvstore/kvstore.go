@@ -11,11 +11,23 @@ import (
 )
 
 type (
+	Resulter interface {
+		Result() (string, error)
+	}
+
+	Tx interface {
+		Get(key string) Resulter
+		Set(key, val string, seconds int64)
+		Del(key ...string)
+		Subtree(prefix string) Tx
+	}
+
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
 		Get(key string) (string, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
+		Tx(func(tx Tx) error) error
 		Subtree(prefix string) KVStore
 	}
 
@@ -110,10 +122,85 @@ func (s *service) Del(key ...string) error {
 	return nil
 }
 
+func (s *service) Tx(fn func(tx Tx) error) error {
+	_, err := s.client.TxPipelined(func(pipe redis.Pipeliner) error {
+		tx := &baseTransaction{
+			base: pipe,
+		}
+		return fn(tx)
+	})
+	if err != nil {
+		return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+func (s *service) Subtree(prefix string) KVStore {
+	return &tree{
+		prefix: prefix,
+		base:   s,
+	}
+}
+
+type (
+	baseTransaction struct {
+		base redis.Pipeliner
+	}
+
+	transaction struct {
+		prefix string
+		base   *baseTransaction
+	}
+)
+
+func (t *baseTransaction) Get(key string) Resulter {
+	return &resulter{
+		res: t.base.Get(key),
+	}
+}
+
+func (t *baseTransaction) Set(key, val string, seconds int64) {
+	t.base.Set(key, val, time.Duration(seconds)*time.Second)
+}
+
+func (t *baseTransaction) Del(key ...string) {
+	t.base.Del(key...)
+}
+
+func (t *baseTransaction) Subtree(prefix string) Tx {
+	return &transaction{
+		prefix: prefix,
+		base:   t,
+	}
+}
+
+func (t *transaction) Get(key string) Resulter {
+	return t.base.Get(t.prefix + ":" + key)
+}
+
+func (t *transaction) Set(key, val string, seconds int64) {
+	t.base.Set(t.prefix+":"+key, val, seconds)
+}
+
+func (t *transaction) Del(key ...string) {
+	args := make([]string, 0, len(key))
+	for _, i := range key {
+		args = append(args, t.prefix+":"+i)
+	}
+	t.base.Del(args...)
+}
+
+func (t *transaction) Subtree(prefix string) Tx {
+	return &transaction{
+		prefix: t.prefix + ":" + prefix,
+		base:   t.base,
+	}
+}
+
 type (
 	tree struct {
 		prefix string
-		base   KVStore
+		base   *service
 	}
 )
 
@@ -133,16 +220,32 @@ func (t *tree) Del(key ...string) error {
 	return t.base.Del(args...)
 }
 
+func (t *tree) Tx(fn func(tx Tx) error) error {
+	return t.base.Tx(func(tx Tx) error {
+		return fn(tx.Subtree(t.prefix))
+	})
+}
+
 func (t *tree) Subtree(prefix string) KVStore {
 	return &tree{
-		prefix: prefix,
-		base:   t,
+		prefix: t.prefix + ":" + prefix,
+		base:   t.base,
 	}
 }
 
-func (s *service) Subtree(prefix string) KVStore {
-	return &tree{
-		prefix: prefix,
-		base:   s,
+type (
+	resulter struct {
+		res *redis.StringCmd
 	}
+)
+
+func (r *resulter) Result() (string, error) {
+	val, err := r.res.Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", governor.NewError("Key not found", http.StatusNotFound, err)
+		}
+		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)
+	}
+	return val, nil
 }
