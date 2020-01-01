@@ -20,6 +20,7 @@ type (
 		Set(key, val string, seconds int64)
 		Del(key ...string)
 		Subtree(prefix string) Tx
+		Exec() error
 	}
 
 	// KVStore is a service wrapper around a kv store client
@@ -27,7 +28,7 @@ type (
 		Get(key string) (string, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
-		Tx(func(tx Tx) error) error
+		Tx() Tx
 		Subtree(prefix string) KVStore
 	}
 
@@ -122,17 +123,10 @@ func (s *service) Del(key ...string) error {
 	return nil
 }
 
-func (s *service) Tx(fn func(tx Tx) error) error {
-	_, err := s.client.TxPipelined(func(pipe redis.Pipeliner) error {
-		tx := &baseTransaction{
-			base: pipe,
-		}
-		return fn(tx)
-	})
-	if err != nil {
-		return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+func (s *service) Tx() Tx {
+	return &baseTransaction{
+		base: s.client.TxPipeline(),
 	}
-	return nil
 }
 
 func (s *service) Subtree(prefix string) KVStore {
@@ -174,6 +168,13 @@ func (t *baseTransaction) Subtree(prefix string) Tx {
 	}
 }
 
+func (t *baseTransaction) Exec() error {
+	if _, err := t.base.Exec(); err != nil {
+		return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
 func (t *transaction) Get(key string) Resulter {
 	return t.base.Get(t.prefix + ":" + key)
 }
@@ -188,6 +189,10 @@ func (t *transaction) Del(key ...string) {
 		args = append(args, t.prefix+":"+i)
 	}
 	t.base.Del(args...)
+}
+
+func (t *transaction) Exec() error {
+	return t.base.Exec()
 }
 
 func (t *transaction) Subtree(prefix string) Tx {
@@ -220,10 +225,8 @@ func (t *tree) Del(key ...string) error {
 	return t.base.Del(args...)
 }
 
-func (t *tree) Tx(fn func(tx Tx) error) error {
-	return t.base.Tx(func(tx Tx) error {
-		return fn(tx.Subtree(t.prefix))
-	})
+func (t *tree) Tx() Tx {
+	return t.base.Tx().Subtree(t.prefix)
 }
 
 func (t *tree) Subtree(prefix string) KVStore {
