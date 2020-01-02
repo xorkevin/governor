@@ -27,6 +27,11 @@ type (
 	Rank map[string]struct{}
 )
 
+// Len returns the size of the rank
+func (r Rank) Len() int {
+	return len(r)
+}
+
 // ToSlice returns an alphabetically sorted string slice of the rank
 func (r Rank) ToSlice() []string {
 	keys := make([]string, 0, len(r))
@@ -81,6 +86,12 @@ func (r Rank) AddUser(tag string) Rank {
 // AddBan adds a ban tag
 func (r Rank) AddBan(tag string) Rank {
 	r[TagBanPrefix+"_"+tag] = struct{}{}
+	return r
+}
+
+// AddOne adds a tag
+func (r Rank) AddOne(tag string) Rank {
+	r[tag] = struct{}{}
 	return r
 }
 

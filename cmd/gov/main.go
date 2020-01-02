@@ -54,7 +54,7 @@ func main() {
 	templateService := template.New()
 	mailService := mail.New(templateService, msgqueueService)
 	roleModel := rolemodel.New(dbService)
-	roleService := role.New(roleModel, kvService)
+	roleService := role.New(roleModel, kvService.Subtree("roles"))
 	gateService := gate.New(roleService)
 	userModel := usermodel.New(dbService)
 	sessionModel := sessionmodel.New(dbService)

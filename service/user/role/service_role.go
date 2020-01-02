@@ -3,11 +3,80 @@ package role
 import (
 	"net/http"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/util/rank"
 )
 
-func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+const (
+	cacheValY = "y"
+	cacheValN = "n"
+)
+
+func (s *service) intersectRolesRepo(userid string, roles rank.Rank) (rank.Rank, error) {
 	return s.roles.IntersectRoles(userid, roles)
+}
+
+func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+	userkv := s.kvroleset.Subtree(userid)
+
+	txget := userkv.Tx()
+	resget := make(map[string]kvstore.Resulter, roles.Len())
+	for _, i := range roles.ToSlice() {
+		resget[i] = txget.Get(i)
+	}
+	if err := txget.Exec(); err != nil {
+		s.logger.Error("Failed to get user roles from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "getroleset",
+		})
+		return s.intersectRolesRepo(userid, roles)
+	}
+
+	uncachedRoles := rank.Rank{}
+	res := rank.Rank{}
+	for k, v := range resget {
+		r, err := v.Result()
+		if err != nil {
+			if governor.ErrorStatus(err) != http.StatusNotFound {
+				s.logger.Error("Failed to get user role result from cache", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "getroleresult",
+				})
+			}
+			uncachedRoles.AddOne(k)
+		} else {
+			if r == cacheValY {
+				res.AddOne(k)
+			}
+		}
+	}
+
+	if len(uncachedRoles) == 0 {
+		return res, nil
+	}
+
+	m, err := s.intersectRolesRepo(userid, uncachedRoles)
+	if err != nil {
+		return nil, err
+	}
+
+	txset := userkv.Tx()
+	for _, i := range uncachedRoles.ToSlice() {
+		if m.Has(i) {
+			res.AddOne(i)
+			txset.Set(i, cacheValY, s.roleCacheTime)
+		} else {
+			txset.Set(i, cacheValN, s.roleCacheTime)
+		}
+	}
+	if err := txset.Exec(); err != nil {
+		s.logger.Error("Failed to set user roles in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setroleset",
+		})
+	}
+
+	return res, nil
 }
 
 func (s *service) InsertRoles(userid string, roles rank.Rank) error {

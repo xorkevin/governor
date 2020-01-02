@@ -63,6 +63,10 @@ func (r *repo) GetByID(userid, role string) (*Model, error) {
 
 // IntersectRoles gets the intersection of user roles and the input roles
 func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+	if len(roles) == 0 {
+		return rank.Rank{}, nil
+	}
+
 	m, err := roleModelGetModelEqUseridHasRoleOrdRole(r.db.DB(), userid, roles.ToSlice(), true, len(roles), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user roles", http.StatusInternalServerError, err)
@@ -116,6 +120,7 @@ func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
 	if len(roles) == 0 {
 		return nil
 	}
+
 	m := make([]*Model, 0, len(roles))
 	for _, i := range roles.ToSlice() {
 		m = append(m, &Model{
@@ -142,6 +147,7 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 	if len(roles) == 0 {
 		return nil
 	}
+
 	if err := roleModelDelEqUseridHasRole(r.db.DB(), userid, roles.ToSlice()); err != nil {
 		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}

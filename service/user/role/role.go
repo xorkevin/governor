@@ -31,6 +31,7 @@ type (
 
 	service struct {
 		roles         rolemodel.Repo
+		kvroleset     kvstore.KVStore
 		kvsummary     kvstore.KVStore
 		logger        governor.Logger
 		roleCacheTime int64
@@ -46,6 +47,7 @@ const (
 func New(roles rolemodel.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		roles:         roles,
+		kvroleset:     kv.Subtree("roleset"),
 		kvsummary:     kv.Subtree("summary"),
 		roleCacheTime: time24h,
 	}
