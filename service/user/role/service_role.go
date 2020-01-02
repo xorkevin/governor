@@ -83,7 +83,7 @@ func (s *service) InsertRoles(userid string, roles rank.Rank) error {
 	if err := s.roles.InsertRoles(userid, roles); err != nil {
 		return err
 	}
-	s.clearCache(userid)
+	s.clearCache(userid, roles)
 	return nil
 }
 
@@ -91,15 +91,19 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 	if err := s.roles.DeleteRoles(userid, roles); err != nil {
 		return err
 	}
-	s.clearCache(userid)
+	s.clearCache(userid, roles)
 	return nil
 }
 
 func (s *service) DeleteAllRoles(userid string) error {
+	roles, err := s.GetRoles(userid, 65536, 0)
+	if err != nil {
+		return err
+	}
 	if err := s.roles.DeleteUserRoles(userid); err != nil {
 		return err
 	}
-	s.clearCache(userid)
+	s.clearCache(userid, roles)
 	return nil
 }
 
@@ -151,11 +155,26 @@ func (s *service) GetRoleSummary(userid string) (rank.Rank, error) {
 	return roles, nil
 }
 
-func (s *service) clearCache(userid string) {
+func (s *service) clearCache(userid string, roles rank.Rank) {
 	if err := s.kvsummary.Del(userid); err != nil {
 		s.logger.Error("Failed to clear role summary from cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "clearcachesummary",
+		})
+	}
+
+	if len(roles) == 0 {
+		return
+	}
+
+	tx := s.kvroleset.Subtree(userid).Tx()
+	for _, i := range roles.ToSlice() {
+		tx.Del(i)
+	}
+	if err := tx.Exec(); err != nil {
+		s.logger.Error("Failed to clear role set from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearroleset",
 		})
 	}
 }
