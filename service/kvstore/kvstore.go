@@ -170,7 +170,9 @@ func (t *baseTransaction) Subtree(prefix string) Tx {
 
 func (t *baseTransaction) Exec() error {
 	if _, err := t.base.Exec(); err != nil {
-		return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+		if err != redis.Nil {
+			return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+		}
 	}
 	return nil
 }
