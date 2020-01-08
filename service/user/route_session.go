@@ -79,8 +79,7 @@ func (r *router) killSessions(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) mountSession(debugMode bool, g *echo.Group) error {
+func (r *router) mountSession(g *echo.Group) {
 	g.GET("/sessions", r.getSessions, gate.User(r.s.gate))
 	g.DELETE("/sessions", r.killSessions, gate.User(r.s.gate))
-	return nil
 }

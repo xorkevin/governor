@@ -207,23 +207,7 @@ func (r *router) getUserInfoBulkPublic(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (r *router) getByUsernameDebug(c echo.Context) error {
-	ruser := reqUserGetUsername{
-		Username: c.Param("username"),
-	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
-
-	res, err := r.s.GetByUsername(ruser.Username)
-	if err != nil {
-		return err
-	}
-
-	return c.JSON(http.StatusOK, res)
-}
-
-func (r *router) mountGet(debugMode bool, g *echo.Group) error {
+func (r *router) mountGet(g *echo.Group) {
 	g.GET("/id/:id", r.getByID)
 	g.GET("", r.getByIDPersonal, gate.User(r.s.gate))
 	g.GET("/id/:id/private", r.getByIDPrivate, gate.Admin(r.s.gate))
@@ -232,8 +216,4 @@ func (r *router) mountGet(debugMode bool, g *echo.Group) error {
 	g.GET("/role/:role", r.getUsersByRole)
 	g.GET("/all", r.getAllUserInfo, gate.Admin(r.s.gate))
 	g.GET("/ids", r.getUserInfoBulkPublic)
-	if debugMode {
-		g.GET("/name/:username/debug", r.getByUsernameDebug)
-	}
-	return nil
 }

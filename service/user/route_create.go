@@ -152,12 +152,11 @@ func (r *router) gateUser(c echo.Context, userid string) (string, error) {
 	return "user", nil
 }
 
-func (r *router) mountCreate(debugMode bool, g *echo.Group) error {
+func (r *router) mountCreate(g *echo.Group) {
 	g.POST("", r.createUser)
 	g.POST("/confirm", r.commitUser)
 	g.GET("/approvals", r.getUserApprovals, gate.MemberF(r.s.gate, r.gateUser))
 	g.POST("/approvals/id/:id", r.approveUser, gate.MemberF(r.s.gate, r.gateUser))
 	g.DELETE("/approvals/id/:id", r.deleteUserApproval, gate.MemberF(r.s.gate, r.gateUser))
 	g.DELETE("/id/:id", r.deleteUser, gate.Owner(r.s.gate, "id"))
-	return nil
 }

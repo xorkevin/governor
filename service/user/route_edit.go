@@ -62,8 +62,7 @@ func (r *router) patchRank(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) mountEdit(debugMode bool, g *echo.Group) error {
+func (r *router) mountEdit(g *echo.Group) {
 	g.PUT("", r.putUser, gate.User(r.s.gate))
 	g.PATCH("/id/:id/rank", r.patchRank, gate.User(r.s.gate))
-	return nil
 }

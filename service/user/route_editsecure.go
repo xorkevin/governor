@@ -124,11 +124,10 @@ func (r *router) forgotPasswordReset(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) mountEditSecure(debugMode bool, g *echo.Group) error {
+func (r *router) mountEditSecure(g *echo.Group) {
 	g.PUT("/email", r.putEmail, gate.User(r.s.gate))
 	g.PUT("/email/verify", r.putEmailVerify)
 	g.PUT("/password", r.putPassword, gate.User(r.s.gate))
 	g.PUT("/password/forgot", r.forgotPassword)
 	g.PUT("/password/forgot/reset", r.forgotPasswordReset)
-	return nil
 }

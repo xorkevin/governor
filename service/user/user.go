@@ -202,9 +202,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	if err := sr.mountRoute(c.IsDebug(), g.Group("/user")); err != nil {
-		return err
-	}
+	sr.mountRoute(g.Group("/user"))
 	sr.mountAuth(g.Group(authRoutePrefix))
 	sr.mountApikey(g.Group("/apikey"))
 	l.Info("mounted http routes", nil)

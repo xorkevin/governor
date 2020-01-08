@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/labstack/echo/v4"
 	"net/http"
-	"xorkevin.dev/governor"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
@@ -132,7 +131,7 @@ func (r *router) rmRefreshCookie(c echo.Context) {
 	})
 }
 
-func (r *router) rmSessionCookie(c echo.Context, conf governor.Config, userid string) {
+func (r *router) rmSessionCookie(c echo.Context, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:   "session_token_" + userid,
 		Value:  "invalid",
@@ -257,8 +256,7 @@ func (r *router) logoutUser(c echo.Context) error {
 		return err
 	}
 
-	err := r.s.Logout(ruser.RefreshToken)
-	if err != nil {
+	if err := r.s.Logout(ruser.RefreshToken); err != nil {
 		return err
 	}
 
