@@ -51,7 +51,7 @@ type (
 		gate              gate.Gate
 		hasher            *hunter2.Blake2bHasher
 		verifier          *hunter2.Verifier
-		tokenizer         *token.Tokenizer
+		tokenizer         token.Tokenizer
 		logger            governor.Logger
 		baseURL           string
 		authURL           string
@@ -98,7 +98,7 @@ const (
 )
 
 // New creates a new User
-func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, apikeys apikeymodel.Repo, roles role.Role, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, g gate.Gate) Service {
+func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, apikeys apikeymodel.Repo, roles role.Role, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, tokenizer token.Tokenizer, g gate.Gate) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
@@ -118,6 +118,7 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 		gate:              g,
 		hasher:            hasher,
 		verifier:          verifier,
+		tokenizer:         tokenizer,
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
@@ -135,8 +136,6 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
-	r.SetDefault("secret", "")
-	r.SetDefault("issuer", "governor")
 }
 
 func (s *service) router() *router {
@@ -180,13 +179,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
-	if r.GetStr("secret") == "" {
-		l.Warn("token secret is not set", nil)
-	}
-	if r.GetStr("issuer") == "" {
-		l.Warn("token issuer is not set", nil)
-	}
-	s.tokenizer = token.New(r.GetStr("secret"), r.GetStr("issuer"))
 	s.userApproval = r.GetBool("userapproval")
 
 	l.Info("loaded config", map[string]string{

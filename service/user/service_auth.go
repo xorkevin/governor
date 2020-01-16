@@ -90,12 +90,12 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(m, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(m, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -215,11 +215,11 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(m, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(m, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}

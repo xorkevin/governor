@@ -56,7 +56,7 @@ mail:
   connmsgcap: 100
 role:
   rolecache: 24h
-gate:
+token:
   issuer: governor
   secret: secret
 user:
@@ -68,8 +68,6 @@ user:
   newloginemail: true
   passwordminsize: 8
   userapproval: false
-  issuer: governor
-  secret: secret
 courier:
   fallbacklink: http://localhost:8080
   linkprefix: http://localhost:8080/link

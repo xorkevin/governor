@@ -51,7 +51,7 @@ mail:
   connmsgcap: 100
 role:
   rolecache: 24h
-gate:
+token:
   issuer: governor
   # secret: secret
 user:
@@ -63,7 +63,5 @@ user:
   newloginemail: true
   passwordminsize: 8
   userapproval: false
-  issuer: governor
-  # secret: secret
 courier:
   cachetime: 24h

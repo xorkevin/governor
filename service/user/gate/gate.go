@@ -29,7 +29,7 @@ type (
 
 	service struct {
 		roles     role.Role
-		tokenizer *token.Tokenizer
+		tokenizer token.Tokenizer
 		baseurl   string
 		logger    governor.Logger
 	}
@@ -56,15 +56,14 @@ type (
 )
 
 // New returns a new Gate
-func New(roles role.Role) Service {
+func New(roles role.Role, tokenizer token.Tokenizer) Service {
 	return &service{
-		roles: roles,
+		roles:     roles,
+		tokenizer: tokenizer,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("secret", "")
-	r.SetDefault("issuer", "governor")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
@@ -72,14 +71,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-
-	if r.GetStr("secret") == "" {
-		l.Warn("token secret is not set", nil)
-	}
-	if r.GetStr("issuer") == "" {
-		l.Warn("token issuer is not set", nil)
-	}
-	s.tokenizer = token.New(r.GetStr("secret"), r.GetStr("issuer"))
 	s.baseurl = c.BaseURL
 	return nil
 }
