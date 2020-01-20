@@ -148,7 +148,10 @@ func (s *service) Publish(queueid string, msgdata []byte) error {
 func (s *subscription) subscriber(msg *stan.Msg) {
 	s.worker(msg.Data)
 	if err := msg.Ack(); err != nil {
-		s.logger.Error("Failed to ack message", nil)
+		s.logger.Error("Failed to ack message", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "ackmessage",
+		})
 	}
 }
 
