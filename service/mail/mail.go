@@ -201,7 +201,7 @@ func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
 						})
 					}
 					sender = nil
-					l.Error("close smtp client", nil)
+					l.Info("close smtp client", nil)
 					return
 				}
 				return
