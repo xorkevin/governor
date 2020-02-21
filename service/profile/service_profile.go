@@ -57,8 +57,10 @@ func (s *service) UpdateProfile(userid, email, bio string) error {
 }
 
 const (
+	imgSize      = 384
 	imgQuality   = 85
-	thumbQuality = 50
+	thumbSize    = 8
+	thumbQuality = 0
 )
 
 func (s *service) UpdateImage(userid string, img image.Image) error {
@@ -70,9 +72,9 @@ func (s *service) UpdateImage(userid string, img image.Image) error {
 		return err
 	}
 
-	img.ResizeFill(384, 384)
+	img.ResizeFill(imgSize, imgSize)
 	thumb := img.Duplicate()
-	thumb.ResizeLimit(24, 24)
+	thumb.ResizeLimit(thumbSize, thumbSize)
 	thumb64, err := thumb.ToBase64(thumbQuality)
 	if err != nil {
 		return governor.NewError("Failed to encode thumbnail to base64", http.StatusInternalServerError, err)
