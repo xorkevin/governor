@@ -53,9 +53,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	}
-	if ok, err := s.users.ValidatePass(password, m); err != nil {
-		return nil, governor.NewError("Failed to validate password", http.StatusInternalServerError, err)
-	} else if !ok {
+	if ok, err := s.users.ValidatePass(password, m); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid password", http.StatusUnauthorized, nil)
 	}
 

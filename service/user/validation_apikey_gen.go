@@ -59,3 +59,10 @@ func (r reqApikeyUpdate) valid() error {
 	}
 	return nil
 }
+
+func (r reqApikeyCheck) valid() error {
+	if err := validRank(r.AuthTags); err != nil {
+		return err
+	}
+	return nil
+}

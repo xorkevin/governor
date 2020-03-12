@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_apikey_gen.go reqGetUserApikeys reqApikeyPost reqApikeyID reqApikeyUpdate
+//go:generate forge validation -o validation_apikey_gen.go reqGetUserApikeys reqApikeyPost reqApikeyID reqApikeyUpdate reqApikeyCheck
 
 type (
 	reqGetUserApikeys struct {
@@ -79,7 +80,7 @@ type (
 
 func (r *reqApikeyID) validUserid() error {
 	k := strings.SplitN(r.Keyid, "|", 2)
-	if r.Userid != k[0] {
+	if len(k) != 2 || r.Userid != k[0] {
 		return governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
 	}
 	return nil
@@ -114,7 +115,7 @@ type (
 
 func (r *reqApikeyUpdate) validUserid() error {
 	k := strings.SplitN(r.Keyid, "|", 2)
-	if r.Userid != k[0] {
+	if len(k) != 2 || r.Userid != k[0] {
 		return governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
 	}
 	return nil
@@ -158,10 +159,44 @@ func (r *router) rotateApikey(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+type (
+	reqApikeyCheck struct {
+		AuthTags string `valid:"rank"`
+	}
+)
+
+const (
+	basicAuthRealm = "governor"
+)
+
+func (r *router) checkApikeyValidator(username, password string, c echo.Context) (bool, error) {
+	k := strings.SplitN(username, "|", 2)
+	if len(k) != 2 {
+		return false, governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+	}
+	req := reqApikeyCheck{
+		AuthTags: c.QueryParam("authtags"),
+	}
+	if err := req.valid(); err != nil {
+		return false, err
+	}
+	authTags, _ := rank.FromStringUser(req.AuthTags)
+	return r.s.CheckApikey(k[0], username, password, authTags)
+}
+
+func (r *router) checkApikey(c echo.Context) error {
+	return c.String(http.StatusOK, "OK\n")
+}
+
 func (r *router) mountApikey(g *echo.Group) {
 	g.GET("", r.getUserApikeys, gate.User(r.s.gate))
 	g.POST("", r.createApikey, gate.User(r.s.gate))
 	g.PUT("/id/:id", r.updateApikey, gate.User(r.s.gate))
 	g.PUT("/id/:id/rotate", r.updateApikey, gate.User(r.s.gate))
 	g.DELETE("/id/:id", r.deleteApikey, gate.User(r.s.gate))
+	g.POST("/check", r.checkApikey, middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
+		Skipper:   middleware.DefaultSkipper,
+		Validator: r.checkApikeyValidator,
+		Realm:     basicAuthRealm,
+	}))
 }
