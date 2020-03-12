@@ -140,9 +140,28 @@ func (r *router) updateApikey(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+func (r *router) rotateApikey(c echo.Context) error {
+	req := reqApikeyID{
+		Userid: c.Get("userid").(string),
+		Keyid:  c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		return err
+	}
+	if err := req.validUserid(); err != nil {
+		return err
+	}
+	res, err := r.s.RotateApikey(req.Keyid)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
+}
+
 func (r *router) mountApikey(g *echo.Group) {
 	g.GET("", r.getUserApikeys, gate.User(r.s.gate))
 	g.POST("", r.createApikey, gate.User(r.s.gate))
 	g.PUT("/id/:id", r.updateApikey, gate.User(r.s.gate))
+	g.PUT("/id/:id/rotate", r.updateApikey, gate.User(r.s.gate))
 	g.DELETE("/id/:id", r.deleteApikey, gate.User(r.s.gate))
 }

@@ -68,6 +68,27 @@ func (s *service) CreateApikey(userid string, authtags rank.Rank, name, desc str
 	}, nil
 }
 
+func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		return nil, err
+	}
+	key, err := s.apikeys.RehashKey(m)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.apikeys.Update(m); err != nil {
+		return nil, err
+	}
+	return &resApikeyModel{
+		Keyid: m.Keyid,
+		Key:   key,
+	}, nil
+}
+
 func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, desc string) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
