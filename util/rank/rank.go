@@ -109,6 +109,17 @@ func (r Rank) Remove(other Rank) {
 	}
 }
 
+// Intersect returns the intersection between Ranks
+func (r Rank) Intersect(other Rank) Rank {
+	intersect := Rank{}
+	for k := range other {
+		if _, ok := r[k]; ok {
+			intersect[k] = struct{}{}
+		}
+	}
+	return intersect
+}
+
 var (
 	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
 	rankRegexUser  = regexp.MustCompile(`^usr_[a-z][a-z0-9.-_]+$`)

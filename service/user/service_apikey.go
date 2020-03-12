@@ -51,9 +51,12 @@ func (s *service) CheckApikey(userid, keyid, key string, authtags rank.Rank) (bo
 	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
 		return false, governor.NewErrorUser("Invalid key", http.StatusUnauthorized, nil)
 	}
-	if intersect, err := s.roles.IntersectRoles(userid, authtags); err != nil {
+	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
+		return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
+	}
+	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
 		return false, err
-	} else if intersect.Len() != authtags.Len() {
+	} else if inter.Len() != authtags.Len() {
 		return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
 	}
 	return true, nil
