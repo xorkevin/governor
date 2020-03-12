@@ -192,7 +192,7 @@ func (r *router) mountApikey(g *echo.Group) {
 	g.GET("", r.getUserApikeys, gate.User(r.s.gate))
 	g.POST("", r.createApikey, gate.User(r.s.gate))
 	g.PUT("/id/:id", r.updateApikey, gate.User(r.s.gate))
-	g.PUT("/id/:id/rotate", r.updateApikey, gate.User(r.s.gate))
+	g.PUT("/id/:id/rotate", r.rotateApikey, gate.User(r.s.gate))
 	g.DELETE("/id/:id", r.deleteApikey, gate.User(r.s.gate))
 	g.POST("/check", r.checkApikey, middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
 		Skipper:   middleware.DefaultSkipper,
