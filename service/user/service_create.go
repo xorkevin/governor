@@ -282,7 +282,7 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 	if m.Username != username {
 		return governor.NewErrorUser("Information does not match", http.StatusBadRequest, err)
 	}
-	if roles, err := s.roles.IntersectRoles("userid", rank.Rank{"admin": struct{}{}}); err != nil {
+	if roles, err := s.roles.IntersectRoles(userid, rank.Rank{"admin": struct{}{}}); err != nil {
 		return err
 	} else if roles.Has("admin") {
 		return governor.NewErrorUser("Not allowed to delete admin user", http.StatusForbidden, err)
