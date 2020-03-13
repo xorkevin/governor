@@ -184,8 +184,16 @@ func (r *router) checkApikeyValidator(username, password string, c echo.Context)
 	return r.s.CheckApikey(k[0], username, password, authTags)
 }
 
+type (
+	resApikeyOK struct {
+		Message string `json:"message"`
+	}
+)
+
 func (r *router) checkApikey(c echo.Context) error {
-	return c.String(http.StatusOK, "OK\n")
+	return c.JSON(http.StatusOK, resApikeyOK{
+		Message: "OK",
+	})
 }
 
 func (r *router) mountApikey(g *echo.Group) {
