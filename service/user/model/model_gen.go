@@ -82,7 +82,7 @@ func userModelGetModelEqUserid(db *sql.DB, userid string) (*Model, int, error) {
 }
 
 func userModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) (int, error) {
-	_, err := db.Exec("UPDATE users SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $8;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, userid)
+	_, err := db.Exec("UPDATE users SET (userid, username, pass_hash, email, first_name, last_name, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE userid = $8;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, userid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
