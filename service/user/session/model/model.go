@@ -165,7 +165,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := sessionModelUpdModelEqSessionID(r.db.DB(), m, m.SessionID); err != nil {
+	if _, err := sessionModelUpdModelEqSessionID(r.db.DB(), m, m.SessionID); err != nil {
 		return governor.NewError("Failed to update session", http.StatusInternalServerError, err)
 	}
 	return nil

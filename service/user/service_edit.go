@@ -19,6 +19,9 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
 	if err = s.users.Update(m); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return governor.NewErrorUser("Username must be unique", 0, err)
+		}
 		return err
 	}
 	return nil

@@ -81,9 +81,19 @@ func profileModelGetModelEqUserid(db *sql.DB, userid string) (*Model, int, error
 	return m, 0, nil
 }
 
-func profileModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) error {
+func profileModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) (int, error) {
 	_, err := db.Exec("UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ($1, $2, $3, $4) WHERE userid = $5;", m.Userid, m.Email, m.Bio, m.Image, userid)
-	return err
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }
 
 func profileModelDelEqUserid(db *sql.DB, userid string) error {

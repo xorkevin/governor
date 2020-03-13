@@ -75,7 +75,7 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := profileModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
+	if _, err := profileModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
 		return governor.NewError("Failed to update profile", http.StatusInternalServerError, err)
 	}
 	return nil

@@ -193,7 +193,10 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if err := userModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
+	if code, err := userModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
+		if code == 3 {
+			return governor.NewError("Username and email must be unique", http.StatusBadRequest, err)
+		}
 		return governor.NewError("Failed to update user", http.StatusInternalServerError, err)
 	}
 	return nil

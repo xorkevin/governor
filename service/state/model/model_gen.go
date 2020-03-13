@@ -81,7 +81,17 @@ func stateModelGetModelEqconfig(db *sql.DB, config int) (*Model, int, error) {
 	return m, 0, nil
 }
 
-func stateModelUpdModelEqconfig(db *sql.DB, m *Model, config int) error {
+func stateModelUpdModelEqconfig(db *sql.DB, m *Model, config int) (int, error) {
 	_, err := db.Exec("UPDATE govstate SET (config, orgname, setup, creation_time) = ($1, $2, $3, $4) WHERE config = $5;", m.config, m.Orgname, m.Setup, m.CreationTime, config)
-	return err
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }

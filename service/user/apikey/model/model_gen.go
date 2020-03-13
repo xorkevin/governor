@@ -85,9 +85,19 @@ func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, int, error) {
 	return m, 0, nil
 }
 
-func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) error {
+func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) (int, error) {
 	_, err := db.Exec("UPDATE userapikeys SET (keyid, userid, authtags, keyhash, name, description, time) = ($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.authtags, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
-	return err
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }
 
 func apikeyModelDelEqKeyid(db *sql.DB, keyid string) error {

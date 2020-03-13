@@ -73,7 +73,7 @@ func (r *repo) Insert(m *Model) error {
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
 	m.config = configID
-	if err := stateModelUpdModelEqconfig(r.db.DB(), m, configID); err != nil {
+	if _, err := stateModelUpdModelEqconfig(r.db.DB(), m, configID); err != nil {
 		return governor.NewError("Failed to update state", http.StatusInternalServerError, err)
 	}
 	return nil

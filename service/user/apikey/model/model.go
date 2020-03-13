@@ -183,7 +183,7 @@ func (r *repo) Insert(m *Model) error {
 
 func (r *repo) Update(m *Model) error {
 	m.computeAuthTags()
-	if err := apikeyModelUpdModelEqKeyid(r.db.DB(), m, m.Keyid); err != nil {
+	if _, err := apikeyModelUpdModelEqKeyid(r.db.DB(), m, m.Keyid); err != nil {
 		return governor.NewError("Failed to update apikey", http.StatusInternalServerError, err)
 	}
 	return nil

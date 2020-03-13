@@ -120,6 +120,9 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 
 	m.Email = newEmail
 	if err = s.users.Update(m); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return governor.NewErrorUser("Email is already in use by another account", 0, err)
+		}
 		return err
 	}
 

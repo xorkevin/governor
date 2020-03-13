@@ -85,9 +85,19 @@ func sessionModelGetModelEqSessionID(db *sql.DB, sessionid string) (*Model, int,
 	return m, 0, nil
 }
 
-func sessionModelUpdModelEqSessionID(db *sql.DB, m *Model, sessionid string) error {
+func sessionModelUpdModelEqSessionID(db *sql.DB, m *Model, sessionid string) (int, error) {
 	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash, time, ipaddr, user_agent) = ($1, $2, $3, $4, $5, $6) WHERE sessionid = $7;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.IPAddr, m.UserAgent, sessionid)
-	return err
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }
 
 func sessionModelDelEqSessionID(db *sql.DB, sessionid string) error {
