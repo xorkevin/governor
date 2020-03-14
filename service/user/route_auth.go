@@ -15,30 +15,18 @@ func (r *router) setAccessCookie(c echo.Context, accessToken string) {
 		Path:     r.s.baseURL,
 		MaxAge:   int(r.s.accessTime) - 5,
 		HttpOnly: false,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
-func (r *router) setRefreshCookie(c echo.Context, refreshToken string, authTags string, userid string) {
+func (r *router) setRefreshCookie(c echo.Context, refreshToken string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     r.s.authURL,
 		MaxAge:   int(r.s.refreshTime),
 		HttpOnly: false,
-	})
-	c.SetCookie(&http.Cookie{
-		Name:     "refresh_valid",
-		Value:    "valid",
-		Path:     "/",
-		MaxAge:   int(r.s.refreshTime),
-		HttpOnly: false,
-	})
-	c.SetCookie(&http.Cookie{
-		Name:     "auth_tags",
-		Value:    authTags,
-		Path:     "/",
-		MaxAge:   int(r.s.refreshTime),
-		HttpOnly: false,
+		SameSite: http.SameSiteStrictMode,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "userid",
@@ -46,6 +34,7 @@ func (r *router) setRefreshCookie(c echo.Context, refreshToken string, authTags 
 		Path:     "/",
 		MaxAge:   int(r.s.refreshTime),
 		HttpOnly: false,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
@@ -56,6 +45,7 @@ func (r *router) setSessionCookie(c echo.Context, sessionToken string, userid st
 		Path:     r.s.authURL,
 		MaxAge:   int(r.s.refreshTime),
 		HttpOnly: false,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
@@ -110,18 +100,6 @@ func (r *router) rmRefreshCookie(c echo.Context) {
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   r.s.authURL,
-	})
-	c.SetCookie(&http.Cookie{
-		Name:   "refresh_valid",
-		Value:  "invalid",
-		MaxAge: -1,
-		Path:   "/",
-	})
-	c.SetCookie(&http.Cookie{
-		Name:   "auth_tags",
-		Value:  "invalid",
-		MaxAge: -1,
-		Path:   "/",
 	})
 	c.SetCookie(&http.Cookie{
 		Name:   "userid",
@@ -185,7 +163,7 @@ func (r *router) loginUser(c echo.Context) error {
 	}
 
 	r.setAccessCookie(c, res.AccessToken)
-	r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
+	r.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
 	r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
 
 	return c.JSON(http.StatusOK, res)
@@ -215,7 +193,7 @@ func (r *router) exchangeToken(c echo.Context) error {
 
 	r.setAccessCookie(c, res.AccessToken)
 	if len(res.RefreshToken) > 0 {
-		r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
+		r.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
 	}
 	if len(res.SessionToken) > 0 {
 		r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
@@ -240,7 +218,7 @@ func (r *router) refreshToken(c echo.Context) error {
 	}
 
 	r.setAccessCookie(c, res.AccessToken)
-	r.setRefreshCookie(c, res.RefreshToken, res.AuthTags, res.Claims.Userid)
+	r.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
 	r.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
 	return c.JSON(http.StatusOK, res)
 }

@@ -142,7 +142,7 @@ func (s *service) Validate(tokenString, subject string) (bool, *Claims) {
 	return false, nil
 }
 
-// GetClaims returns the tokens claims without validation
+// GetClaims returns the tokens claims without validating time
 func (s *service) GetClaims(tokenString, subject string) (bool, *Claims) {
 	if token, err := s.parser.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
