@@ -79,12 +79,12 @@ clean:
 build-bin:
 	mkdir -p $(BIN_DIR)
 	if [ -f $(BIN_PATH) ]; then rm $(BIN_PATH); fi
-	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -extldflags '-static' -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
 build-setup:
 	mkdir -p $(BIN_DIR)
 	if [ -f $(SETUP_BIN_PATH) ]; then rm $(SETUP_BIN_PATH); fi
-	CGO_ENABLED=0 $(GO) build -a -tags netgo -ldflags "-w -s -extldflags '-static' -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(SETUP_BIN_PATH) $(SETUP_MAIN_PATH)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(SETUP_BIN_PATH) $(SETUP_MAIN_PATH)
 
 build: clean build-bin build-setup
 
