@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/apikey"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
@@ -35,15 +36,17 @@ type (
 
 	service struct {
 		roles     role.Role
+		apikeys   apikey.Apikey
 		tokenizer token.Tokenizer
 		baseurl   string
 		logger    governor.Logger
 	}
 
 	apikeyAuth struct {
-		base   Authenticator
-		roles  role.Role
-		logger governor.Logger
+		base    Authenticator
+		roles   role.Role
+		apikeys apikey.Apikey
+		logger  governor.Logger
 	}
 
 	// Intersector is a function that returns roles needed to validate a user
@@ -71,9 +74,10 @@ type (
 )
 
 // New returns a new Gate
-func New(roles role.Role, tokenizer token.Tokenizer) Service {
+func New(roles role.Role, apikeys apikey.Apikey, tokenizer token.Tokenizer) Service {
 	return &service{
 		roles:     roles,
+		apikeys:   apikeys,
 		tokenizer: tokenizer,
 	}
 }

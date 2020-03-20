@@ -20,7 +20,7 @@ func (s *service) useridFromKeyid(keyid string) (string, error) {
 	return k[0], nil
 }
 
-func (s *service) CheckKey(keyid, key string) (string, error) {
+func (s *service) CheckKey(keyid, key string, authtags rank.Rank) (string, error) {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, err)
@@ -37,36 +37,41 @@ func (s *service) CheckKey(keyid, key string) (string, error) {
 	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 	}
+
+	if authtags == nil || authtags.Len() == 0 {
+		return userid, nil
+	}
+
+	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
+		return "", governor.NewError("User is forbidden", http.StatusForbidden, nil)
+	}
+	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
+		return "", governor.NewError("Unable to get user roles", http.StatusInternalServerError, err)
+	} else if inter.Len() != authtags.Len() {
+		return "", governor.NewError("User is forbidden", http.StatusForbidden, nil)
+	}
 	return userid, nil
 }
 
-func (s *service) CheckRoles(keyid string, authtags rank.Rank) error {
+func (s *service) IntersectRoles(keyid string, authtags rank.Rank) (rank.Rank, error) {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
-		return governor.NewError("Invalid key", http.StatusUnauthorized, err)
+		return nil, governor.NewError("Invalid key", http.StatusBadRequest, err)
 	}
 
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+			return nil, governor.NewError("Apikey not found", http.StatusNotFound, nil)
 		}
-		return err
+		return nil, err
 	}
 
-	if authtags == nil || authtags.Len() == 0 {
-		return nil
+	inter, err := s.roles.IntersectRoles(userid, m.AuthTags.Intersect(authtags))
+	if err != nil {
+		return nil, governor.NewError("Unable to get user roles", http.StatusInternalServerError, err)
 	}
-
-	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
-		return governor.NewError("User is forbidden", http.StatusForbidden, nil)
-	}
-	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
-		return err
-	} else if inter.Len() != authtags.Len() {
-		return governor.NewError("User is forbidden", http.StatusForbidden, nil)
-	}
-	return nil
+	return inter, nil
 }
 
 type (

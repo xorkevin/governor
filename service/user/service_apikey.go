@@ -41,11 +41,8 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 }
 
 func (s *service) CheckApikey(keyid, key string, authtags rank.Rank) error {
-	if _, err := s.apikeys.CheckKey(keyid, key); err != nil {
-		return governor.NewErrorUser("Apikey invalid", http.StatusUnauthorized, err)
-	}
-	if err := s.apikeys.CheckRoles(keyid, authtags); err != nil {
-		return governor.NewErrorUser("Invalid permissions", http.StatusForbidden, err)
+	if _, err := s.apikeys.CheckKey(keyid, key, authtags); err != nil {
+		return err
 	}
 	return nil
 }

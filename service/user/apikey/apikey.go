@@ -13,8 +13,8 @@ type (
 	// Apikey manages apikeys
 	Apikey interface {
 		GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error)
-		CheckKey(keyid, key string) (string, error)
-		CheckRoles(keyid string, authtags rank.Rank) error
+		CheckKey(keyid, key string, authtags rank.Rank) (string, error)
+		IntersectRoles(keyid string, authtags rank.Rank) (rank.Rank, error)
 		Insert(userid string, authtags rank.Rank, name, desc string) (*ResApikeyModel, error)
 		RotateKey(keyid string) (*ResApikeyModel, error)
 		UpdateKey(keyid string, authtags rank.Rank, name, desc string) error

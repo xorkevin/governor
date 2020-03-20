@@ -60,7 +60,7 @@ func main() {
 	apikeyModel := apikeymodel.New(dbService)
 	apikeyService := apikey.New(apikeyModel, roleService)
 	tokenService := token.New()
-	gateService := gate.New(roleService, tokenService)
+	gateService := gate.New(roleService, apikeyService, tokenService)
 	userModel := usermodel.New(dbService)
 	sessionModel := sessionmodel.New(dbService)
 	approvalModel := approvalmodel.New(dbService)
