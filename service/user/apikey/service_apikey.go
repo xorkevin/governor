@@ -2,6 +2,7 @@ package apikey
 
 import (
 	"net/http"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/util/rank"
@@ -11,7 +12,40 @@ func (s *service) GetUserKeys(userid string, limit, offset int) ([]apikeymodel.M
 	return s.apikeys.GetUserKeys(userid, limit, offset)
 }
 
-func (s *service) CheckKey(userid, keyid, key string, authtags rank.Rank) error {
+func (s *service) useridFromKeyid(keyid string) (string, error) {
+	k := strings.SplitN(keyid, "|", 2)
+	if len(k) != 2 {
+		return "", governor.NewError("Invalid apikey", http.StatusBadRequest, nil)
+	}
+	return k[0], nil
+}
+
+func (s *service) CheckKey(keyid, key string) (string, error) {
+	userid, err := s.useridFromKeyid(keyid)
+	if err != nil {
+		return "", governor.NewError("Invalid key", http.StatusUnauthorized, err)
+	}
+
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+		}
+		return "", err
+	}
+
+	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
+		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+	}
+	return userid, nil
+}
+
+func (s *service) CheckRoles(keyid string, authtags rank.Rank) error {
+	userid, err := s.useridFromKeyid(keyid)
+	if err != nil {
+		return governor.NewError("Invalid key", http.StatusUnauthorized, err)
+	}
+
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
@@ -19,9 +53,7 @@ func (s *service) CheckKey(userid, keyid, key string, authtags rank.Rank) error 
 		}
 		return err
 	}
-	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
-		return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
-	}
+
 	if authtags == nil || authtags.Len() == 0 {
 		return nil
 	}
@@ -80,7 +112,12 @@ func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 	}, nil
 }
 
-func (s *service) UpdateKey(userid, keyid string, authtags rank.Rank, name, desc string) error {
+func (s *service) UpdateKey(keyid string, authtags rank.Rank, name, desc string) error {
+	userid, err := s.useridFromKeyid(keyid)
+	if err != nil {
+		return governor.NewError("Invalid apikey", http.StatusBadRequest, err)
+	}
+
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
 		return err

@@ -40,9 +40,12 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 	}, nil
 }
 
-func (s *service) CheckApikey(userid, keyid, key string, authtags rank.Rank) error {
-	if err := s.apikeys.CheckKey(userid, keyid, key, authtags); err != nil {
-		return governor.NewErrorUser("", 0, err)
+func (s *service) CheckApikey(keyid, key string, authtags rank.Rank) error {
+	if _, err := s.apikeys.CheckKey(keyid, key); err != nil {
+		return governor.NewErrorUser("Apikey invalid", http.StatusUnauthorized, err)
+	}
+	if err := s.apikeys.CheckRoles(keyid, authtags); err != nil {
+		return governor.NewErrorUser("Invalid permissions", http.StatusForbidden, err)
 	}
 	return nil
 }
@@ -69,7 +72,7 @@ func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
 	m, err := s.apikeys.RotateKey(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Apikey not found", 0, err)
+			return nil, governor.NewErrorUser("Apikey not found", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to rotate apikey", http.StatusInternalServerError, err)
 	}
@@ -79,10 +82,13 @@ func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
 	}, nil
 }
 
-func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, desc string) error {
-	if err := s.apikeys.UpdateKey(userid, keyid, authtags, name, desc); err != nil {
+func (s *service) UpdateApikey(keyid string, authtags rank.Rank, name, desc string) error {
+	if err := s.apikeys.UpdateKey(keyid, authtags, name, desc); err != nil {
+		if governor.ErrorStatus(err) == http.StatusBadRequest {
+			return governor.NewErrorUser("Invalid apikey", http.StatusBadRequest, err)
+		}
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("Apikey not found", 0, err)
+			return governor.NewErrorUser("Apikey not found", http.StatusNotFound, err)
 		}
 		return governor.NewError("Failed to update apikey", http.StatusInternalServerError, err)
 	}
@@ -92,7 +98,7 @@ func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, d
 func (s *service) DeleteApikey(keyid string) error {
 	if err := s.apikeys.DeleteKey(keyid); err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("Apikey not found", 0, err)
+			return governor.NewErrorUser("Apikey not found", http.StatusNotFound, err)
 		}
 		return governor.NewError("Failed to delete apikey", http.StatusInternalServerError, err)
 	}

@@ -135,7 +135,7 @@ func (r *router) updateApikey(c echo.Context) error {
 		return err
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	if err := r.s.UpdateApikey(req.Userid, req.Keyid, authTags, req.Name, req.Desc); err != nil {
+	if err := r.s.UpdateApikey(req.Keyid, authTags, req.Name, req.Desc); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -170,11 +170,6 @@ const (
 )
 
 func (r *router) checkApikeyValidator(keyid, password string, c echo.Context) (bool, error) {
-	k := strings.SplitN(keyid, "|", 2)
-	if len(k) != 2 {
-		return false, governor.NewErrorUser("Invalid apikey id", http.StatusUnauthorized, nil)
-	}
-	userid := k[0]
 	req := reqApikeyCheck{
 		AuthTags: c.QueryParam("authtags"),
 	}
@@ -182,7 +177,7 @@ func (r *router) checkApikeyValidator(keyid, password string, c echo.Context) (b
 		return false, err
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	if err := r.s.CheckApikey(userid, keyid, password, authTags); err != nil {
+	if err := r.s.CheckApikey(keyid, password, authTags); err != nil {
 		return false, err
 	}
 	return true, nil
