@@ -194,12 +194,11 @@ func (r *apikeyIntersector) Context() echo.Context {
 }
 
 func (r *apikeyIntersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
-	// TODO: intersect apikey roles as well
-	k, err := r.s.roles.IntersectRoles(r.userid, roles)
+	k, err := r.s.apikeys.IntersectRoles(r.apikeyid, roles)
 	if err != nil {
-		r.s.logger.Error("Failed to get user roles", map[string]string{
+		r.s.logger.Error("Failed to get apikey roles", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "authgetroles",
+			"actiontype": "authgetapikeyroles",
 		})
 		return nil, false
 	}
@@ -225,12 +224,10 @@ func (s *apikeyAuth) Authenticate(v Validator, subject string) echo.MiddlewareFu
 	basicAuth := middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
 		Skipper: middleware.DefaultSkipper,
 		Validator: func(keyid, password string, c echo.Context) (bool, error) {
-			k := strings.SplitN(keyid, "|", 2)
-			if len(k) != 2 {
-				return false, governor.NewErrorUser("Invalid apikey id", http.StatusUnauthorized, nil)
+			userid, err := s.apikeys.CheckKey(keyid, password, nil)
+			if err != nil {
+				return false, governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 			}
-			userid := k[0]
-			// TODO: validate apikey password
 			if !v(s.intersector(keyid, userid, c)) {
 				return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
 			}
