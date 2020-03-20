@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/msgqueue"
-	"xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/governor/service/user/apikey"
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
@@ -40,8 +40,8 @@ type (
 		users             usermodel.Repo
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
-		apikeys           apikeymodel.Repo
 		roles             role.Role
+		apikeys           apikey.Apikey
 		kvnewuser         kvstore.KVStore
 		kvemailchange     kvstore.KVStore
 		kvpassreset       kvstore.KVStore
@@ -98,7 +98,7 @@ const (
 )
 
 // New creates a new User
-func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, apikeys apikeymodel.Repo, roles role.Role, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, tokenizer token.Tokenizer, g gate.Gate) Service {
+func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, roles role.Role, apikeys apikey.Apikey, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, tokenizer token.Tokenizer, g gate.Gate) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
@@ -107,8 +107,8 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 		users:             users,
 		sessions:          sessions,
 		approvals:         approvals,
-		apikeys:           apikeys,
 		roles:             roles,
+		apikeys:           apikeys,
 		kvnewuser:         kv.Subtree("newuser"),
 		kvemailchange:     kv.Subtree("emailchange"),
 		kvpassreset:       kv.Subtree("passreset"),
@@ -225,11 +225,6 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("created userapprovals table", nil)
-
-	if err := s.apikeys.Setup(); err != nil {
-		return err
-	}
-	l.Info("created userapikeys table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err

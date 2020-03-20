@@ -16,6 +16,7 @@ import (
 	"xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
+	"xorkevin.dev/governor/service/user/apikey"
 	"xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
@@ -56,13 +57,14 @@ func main() {
 	mailService := mail.New(templateService, msgqueueService)
 	roleModel := rolemodel.New(dbService)
 	roleService := role.New(roleModel, kvService.Subtree("roles"))
+	apikeyModel := apikeymodel.New(dbService)
+	apikeyService := apikey.New(apikeyModel, roleService)
 	tokenService := token.New()
 	gateService := gate.New(roleService, tokenService)
 	userModel := usermodel.New(dbService)
 	sessionModel := sessionmodel.New(dbService)
 	approvalModel := approvalmodel.New(dbService)
-	apikeyModel := apikeymodel.New(dbService)
-	userService := user.New(userModel, sessionModel, approvalModel, apikeyModel, roleService, kvService.Subtree("user"), msgqueueService, mailService, tokenService, gateService)
+	userService := user.New(userModel, sessionModel, approvalModel, roleService, apikeyService, kvService.Subtree("user"), msgqueueService, mailService, tokenService, gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), msgqueueService, gateService)
 	courierModel := couriermodel.New(dbService)
@@ -76,6 +78,7 @@ func main() {
 	gov.Register("template", "/null", templateService)
 	gov.Register("mail", "/null", mailService)
 	gov.Register("role", "/null", roleService)
+	gov.Register("apikey", "/null", apikeyService)
 	gov.Register("token", "/null", tokenService)
 	gov.Register("gate", "/null", gateService)
 	gov.Register("user", "/u", userService)

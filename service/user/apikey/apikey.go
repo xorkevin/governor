@@ -13,7 +13,7 @@ type (
 	// Apikey manages apikeys
 	Apikey interface {
 		GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error)
-		CheckKey(userid, keyid, key string, authtags rank.Rank) (bool, error)
+		CheckKey(userid, keyid, key string, authtags rank.Rank) error
 		Insert(userid string, authtags rank.Rank, name, desc string) (*ResApikeyModel, error)
 		RotateKey(keyid string) (*ResApikeyModel, error)
 		UpdateKey(userid, keyid string, authtags rank.Rank, name, desc string) error
@@ -61,7 +61,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.apikeys.Setup(); err != nil {
 		return err
 	}
-	l.Info("created user apikey table", nil)
+	l.Info("created userapikeys table", nil)
 
 	return nil
 }

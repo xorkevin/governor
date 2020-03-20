@@ -11,30 +11,30 @@ func (s *service) GetUserKeys(userid string, limit, offset int) ([]apikeymodel.M
 	return s.apikeys.GetUserKeys(userid, limit, offset)
 }
 
-func (s *service) CheckKey(userid, keyid, key string, authtags rank.Rank) (bool, error) {
+func (s *service) CheckKey(userid, keyid, key string, authtags rank.Rank) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return false, governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+			return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 		}
-		return false, err
+		return err
 	}
 	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
-		return false, governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+		return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 	}
 	if authtags == nil || authtags.Len() == 0 {
-		return true, nil
+		return nil
 	}
 
 	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
-		return false, governor.NewError("User is forbidden", http.StatusForbidden, nil)
+		return governor.NewError("User is forbidden", http.StatusForbidden, nil)
 	}
 	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
-		return false, err
+		return err
 	} else if inter.Len() != authtags.Len() {
-		return false, governor.NewError("User is forbidden", http.StatusForbidden, nil)
+		return governor.NewError("User is forbidden", http.StatusForbidden, nil)
 	}
-	return true, nil
+	return nil
 }
 
 type (
@@ -54,9 +54,6 @@ func (s *service) Insert(userid string, authtags rank.Rank, name, desc string) (
 		return nil, err
 	}
 	if err := s.apikeys.Insert(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
-		}
 		return nil, err
 	}
 	return &ResApikeyModel{
@@ -68,9 +65,6 @@ func (s *service) Insert(userid string, authtags rank.Rank, name, desc string) (
 func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
-		}
 		return nil, err
 	}
 	key, err := s.apikeys.RehashKey(m)
@@ -89,9 +83,6 @@ func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 func (s *service) UpdateKey(userid, keyid string, authtags rank.Rank, name, desc string) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
-		}
 		return err
 	}
 	intersect, err := s.roles.IntersectRoles(userid, authtags)
@@ -110,9 +101,6 @@ func (s *service) UpdateKey(userid, keyid string, authtags rank.Rank, name, desc
 func (s *service) DeleteKey(keyid string) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
-		}
 		return err
 	}
 	if err := s.apikeys.Delete(m); err != nil {

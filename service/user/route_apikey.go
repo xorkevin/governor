@@ -169,11 +169,12 @@ const (
 	basicAuthRealm = "governor"
 )
 
-func (r *router) checkApikeyValidator(username, password string, c echo.Context) (bool, error) {
-	k := strings.SplitN(username, "|", 2)
+func (r *router) checkApikeyValidator(keyid, password string, c echo.Context) (bool, error) {
+	k := strings.SplitN(keyid, "|", 2)
 	if len(k) != 2 {
 		return false, governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
 	}
+	userid := k[0]
 	req := reqApikeyCheck{
 		AuthTags: c.QueryParam("authtags"),
 	}
@@ -181,7 +182,10 @@ func (r *router) checkApikeyValidator(username, password string, c echo.Context)
 		return false, err
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	return r.s.CheckApikey(k[0], username, password, authTags)
+	if err := r.s.CheckApikey(userid, keyid, password, authTags); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type (

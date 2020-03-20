@@ -23,7 +23,7 @@ type (
 func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys, error) {
 	m, err := s.apikeys.GetUserKeys(userid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.NewError("Failed to get apikeys", http.StatusInternalServerError, err)
 	}
 	res := make([]resApikey, 0, len(m))
 	for _, i := range m {
@@ -40,26 +40,11 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 	}, nil
 }
 
-func (s *service) CheckApikey(userid, keyid, key string, authtags rank.Rank) (bool, error) {
-	m, err := s.apikeys.GetByID(keyid)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return false, governor.NewErrorUser("Invalid key", http.StatusUnauthorized, nil)
-		}
-		return false, err
+func (s *service) CheckApikey(userid, keyid, key string, authtags rank.Rank) error {
+	if err := s.apikeys.CheckKey(userid, keyid, key, authtags); err != nil {
+		return governor.NewErrorUser("", 0, err)
 	}
-	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
-		return false, governor.NewErrorUser("Invalid key", http.StatusUnauthorized, nil)
-	}
-	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
-		return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
-	}
-	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
-		return false, err
-	} else if inter.Len() != authtags.Len() {
-		return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
-	}
-	return true, nil
+	return nil
 }
 
 type (
@@ -70,85 +55,53 @@ type (
 )
 
 func (s *service) CreateApikey(userid string, authtags rank.Rank, name, desc string) (*resApikeyModel, error) {
-	intersect, err := s.roles.IntersectRoles(userid, authtags)
+	m, err := s.apikeys.Insert(userid, authtags, name, desc)
 	if err != nil {
-		return nil, err
-	}
-	m, key, err := s.apikeys.New(userid, intersect, name, desc)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.apikeys.Insert(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
-		}
-		return nil, err
+		return nil, governor.NewError("Failed to create apikey", http.StatusInternalServerError, err)
 	}
 	return &resApikeyModel{
 		Keyid: m.Keyid,
-		Key:   key,
+		Key:   m.Key,
 	}, nil
 }
 
 func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
-	m, err := s.apikeys.GetByID(keyid)
+	m, err := s.apikeys.RotateKey(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+			return nil, governor.NewErrorUser("Apikey not found", 0, err)
 		}
-		return nil, err
-	}
-	key, err := s.apikeys.RehashKey(m)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.apikeys.Update(m); err != nil {
-		return nil, err
+		return nil, governor.NewError("Failed to rotate apikey", http.StatusInternalServerError, err)
 	}
 	return &resApikeyModel{
 		Keyid: m.Keyid,
-		Key:   key,
+		Key:   m.Key,
 	}, nil
 }
 
 func (s *service) UpdateApikey(userid, keyid string, authtags rank.Rank, name, desc string) error {
-	m, err := s.apikeys.GetByID(keyid)
-	if err != nil {
+	if err := s.apikeys.UpdateKey(userid, keyid, authtags, name, desc); err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+			return governor.NewErrorUser("Apikey not found", 0, err)
 		}
-		return err
-	}
-	intersect, err := s.roles.IntersectRoles(userid, authtags)
-	if err != nil {
-		return err
-	}
-	m.AuthTags = intersect
-	m.Name = name
-	m.Desc = desc
-	if err := s.apikeys.Update(m); err != nil {
-		return err
+		return governor.NewError("Failed to update apikey", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (s *service) DeleteApikey(keyid string) error {
-	m, err := s.apikeys.GetByID(keyid)
-	if err != nil {
+	if err := s.apikeys.DeleteKey(keyid); err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+			return governor.NewErrorUser("Apikey not found", 0, err)
 		}
-		return err
-	}
-	if err := s.apikeys.Delete(m); err != nil {
-		return err
+		return governor.NewError("Failed to delete apikey", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (s *service) DeleteUserApikeys(userid string) error {
 	if err := s.apikeys.DeleteUserKeys(userid); err != nil {
-		return err
+		return governor.NewError("Failed to delete user apikeys", http.StatusInternalServerError, err)
 	}
 	return nil
 }
