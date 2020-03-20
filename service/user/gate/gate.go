@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
@@ -17,9 +18,14 @@ const (
 )
 
 type (
+	// Authenticator creates new authenticating middleware
+	Authenticator interface {
+		Authenticate(v Validator, subject string) echo.MiddlewareFunc
+	}
+
 	// Gate creates new middleware to gate routes
 	Gate interface {
-		Authenticate(v Validator, subject string) echo.MiddlewareFunc
+		Authenticator
 	}
 
 	Service interface {
@@ -32,6 +38,12 @@ type (
 		tokenizer token.Tokenizer
 		baseurl   string
 		logger    governor.Logger
+	}
+
+	apikeyAuth struct {
+		base   Authenticator
+		roles  role.Role
+		logger governor.Logger
 	}
 
 	// Intersector is a function that returns roles needed to validate a user
@@ -47,12 +59,15 @@ type (
 		ctx    echo.Context
 	}
 
+	apikeyIntersector struct {
+		s        *apikeyAuth
+		apikeyid string
+		userid   string
+		ctx      echo.Context
+	}
+
 	// Validator is a function to check the authorization of a user
 	Validator func(r Intersector) bool
-
-	Claims struct {
-		token.Claims
-	}
 )
 
 // New returns a new Gate
@@ -166,9 +181,76 @@ func (s *service) Authenticate(v Validator, subject string) echo.MiddlewareFunc 
 	}
 }
 
+func (r *apikeyIntersector) Userid() string {
+	return r.userid
+}
+
+func (r *apikeyIntersector) Context() echo.Context {
+	return r.ctx
+}
+
+func (r *apikeyIntersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
+	// TODO: intersect apikey roles as well
+	k, err := r.s.roles.IntersectRoles(r.userid, roles)
+	if err != nil {
+		r.s.logger.Error("Failed to get user roles", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "authgetroles",
+		})
+		return nil, false
+	}
+	return k, true
+}
+
+func (s *apikeyAuth) intersector(apikeyid, userid string, c echo.Context) Intersector {
+	return &apikeyIntersector{
+		s:        s,
+		apikeyid: apikeyid,
+		userid:   userid,
+		ctx:      c,
+	}
+}
+
+const (
+	basicAuthRealm  = "governor"
+	basicAuthHeader = "Authorization"
+	basicAuthType   = "basic"
+)
+
+func (s *apikeyAuth) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
+	basicAuth := middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
+		Skipper: middleware.DefaultSkipper,
+		Validator: func(username, password string, c echo.Context) (bool, error) {
+			k := strings.SplitN(username, "|", 2)
+			if len(k) != 2 {
+				return false, governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+			}
+			userid := k[0]
+			// TODO: validate apikey password
+			if !v(s.intersector(username, userid, c)) {
+				return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
+			}
+			c.Set("userid", userid)
+			return true, nil
+		},
+		Realm: basicAuthRealm,
+	})
+	middle := s.base.Authenticate(v, subject)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		basicAuthHandle := basicAuth(next)
+		handleBase := middle(next)
+		return func(c echo.Context) error {
+			if l, header := len(basicAuthType), c.Request().Header.Get(basicAuthHeader); len(header) > l+1 && strings.ToLower(header[:l]) == basicAuthType {
+				return basicAuthHandle(c)
+			}
+			return handleBase(c)
+		}
+	}
+}
+
 // Owner is a middleware function to validate if a user owns the accessed
 // resource
-func Owner(g Gate, idparam string) echo.MiddlewareFunc {
+func Owner(g Authenticator, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -189,7 +271,7 @@ func Owner(g Gate, idparam string) echo.MiddlewareFunc {
 // resource
 //
 // idfunc should return the userid
-func OwnerF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
+func OwnerF(g Authenticator, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -212,7 +294,7 @@ func OwnerF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.Midd
 }
 
 // Admin is a middleware function to validate if a user is an admin
-func Admin(g Gate) echo.MiddlewareFunc {
+func Admin(g Authenticator) echo.MiddlewareFunc {
 	return g.Authenticate(func(r Intersector) bool {
 		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin}))
 		if !ok {
@@ -223,7 +305,7 @@ func Admin(g Gate) echo.MiddlewareFunc {
 }
 
 // User is a middleware function to validate if the request is made by a user
-func User(g Gate) echo.MiddlewareFunc {
+func User(g Authenticator) echo.MiddlewareFunc {
 	return g.Authenticate(func(r Intersector) bool {
 		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
 		if !ok {
@@ -238,7 +320,7 @@ func User(g Gate) echo.MiddlewareFunc {
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by
 // the owner or an admin
-func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
+func OwnerOrAdmin(g Authenticator, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -262,7 +344,7 @@ func OwnerOrAdmin(g Gate, idparam string) echo.MiddlewareFunc {
 // the owner or an admin
 //
 // idfunc should return the userid
-func OwnerOrAdminF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
+func OwnerOrAdminF(g Authenticator, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -289,7 +371,7 @@ func OwnerOrAdminF(g Gate, idfunc func(echo.Context, string) (string, error)) ec
 
 // Mod is a middleware function to validate if the request is made by the
 // moderator of a group or an admin
-func Mod(g Gate, idparam string) echo.MiddlewareFunc {
+func Mod(g Authenticator, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -314,7 +396,7 @@ func Mod(g Gate, idparam string) echo.MiddlewareFunc {
 // moderator of a group or an admin
 //
 // idfunc should return the group_tag
-func ModF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
+func ModF(g Authenticator, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -340,7 +422,7 @@ func ModF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.Middle
 
 // UserOrBan is a middleware function to validate if the request is made by a
 // user and check if the user is banned from the group
-func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
+func UserOrBan(g Authenticator, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -365,7 +447,7 @@ func UserOrBan(g Gate, idparam string) echo.MiddlewareFunc {
 // user and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func UserOrBanF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
+func UserOrBanF(g Authenticator, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -391,7 +473,7 @@ func UserOrBanF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.
 
 // Member is a middleware function to validate if the request is made by a
 // member of a group and check if the user is banned from the group
-func Member(g Gate, idparam string) echo.MiddlewareFunc {
+func Member(g Authenticator, idparam string) echo.MiddlewareFunc {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -416,7 +498,7 @@ func Member(g Gate, idparam string) echo.MiddlewareFunc {
 // member of a group and check if the user is banned from the group
 //
 // idfunc should return the group_tag
-func MemberF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
+func MemberF(g Authenticator, idfunc func(echo.Context, string) (string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -444,7 +526,7 @@ func MemberF(g Gate, idfunc func(echo.Context, string) (string, error)) echo.Mid
 // by the owner or a group member
 //
 // idfunc should return the userid and the group_tag
-func OwnerOrMemberF(g Gate, idfunc func(echo.Context, string) (string, string, error)) echo.MiddlewareFunc {
+func OwnerOrMemberF(g Authenticator, idfunc func(echo.Context, string) (string, string, error)) echo.MiddlewareFunc {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -470,7 +552,7 @@ func OwnerOrMemberF(g Gate, idfunc func(echo.Context, string) (string, string, e
 }
 
 // System is a middleware function to validate if the request is made by a system
-func System(g Gate) echo.MiddlewareFunc {
+func System(g Authenticator) echo.MiddlewareFunc {
 	return g.Authenticate(func(r Intersector) bool {
 		roles, ok := r.Intersect(rank.System())
 		if !ok {
