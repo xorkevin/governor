@@ -23,7 +23,7 @@ func (s *service) useridFromKeyid(keyid string) (string, error) {
 func (s *service) CheckKey(keyid, key string, authtags rank.Rank) (string, error) {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
-		return "", governor.NewError("Invalid key", http.StatusUnauthorized, err)
+		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 	}
 
 	m, err := s.apikeys.GetByID(keyid)
@@ -61,9 +61,6 @@ func (s *service) IntersectRoles(keyid string, authtags rank.Rank) (rank.Rank, e
 
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewError("Apikey not found", http.StatusNotFound, nil)
-		}
 		return nil, err
 	}
 
@@ -120,7 +117,7 @@ func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 func (s *service) UpdateKey(keyid string, authtags rank.Rank, name, desc string) error {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
-		return governor.NewError("Invalid apikey", http.StatusBadRequest, err)
+		return err
 	}
 
 	m, err := s.apikeys.GetByID(keyid)
@@ -129,7 +126,7 @@ func (s *service) UpdateKey(keyid string, authtags rank.Rank, name, desc string)
 	}
 	intersect, err := s.roles.IntersectRoles(userid, authtags)
 	if err != nil {
-		return err
+		return governor.NewError("Unable to get user roles", http.StatusInternalServerError, err)
 	}
 	m.AuthTags = intersect
 	m.Name = name

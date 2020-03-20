@@ -42,7 +42,13 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 
 func (s *service) CheckApikey(keyid, key string, authtags rank.Rank) error {
 	if _, err := s.apikeys.CheckKey(keyid, key, authtags); err != nil {
-		return err
+		if governor.ErrorStatus(err) == http.StatusUnauthorized {
+			return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+		}
+		if governor.ErrorStatus(err) == http.StatusForbidden {
+			return governor.NewError("User is forbidden", http.StatusForbidden, nil)
+		}
+		return governor.NewError("Failed to check apikey", http.StatusInternalServerError, err)
 	}
 	return nil
 }
