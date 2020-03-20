@@ -172,7 +172,7 @@ const (
 func (r *router) checkApikeyValidator(keyid, password string, c echo.Context) (bool, error) {
 	k := strings.SplitN(keyid, "|", 2)
 	if len(k) != 2 {
-		return false, governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+		return false, governor.NewErrorUser("Invalid apikey id", http.StatusUnauthorized, nil)
 	}
 	userid := k[0]
 	req := reqApikeyCheck{

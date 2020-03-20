@@ -220,14 +220,14 @@ const (
 func (s *apikeyAuth) Authenticate(v Validator, subject string) echo.MiddlewareFunc {
 	basicAuth := middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
 		Skipper: middleware.DefaultSkipper,
-		Validator: func(username, password string, c echo.Context) (bool, error) {
-			k := strings.SplitN(username, "|", 2)
+		Validator: func(keyid, password string, c echo.Context) (bool, error) {
+			k := strings.SplitN(keyid, "|", 2)
 			if len(k) != 2 {
-				return false, governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+				return false, governor.NewErrorUser("Invalid apikey id", http.StatusUnauthorized, nil)
 			}
 			userid := k[0]
 			// TODO: validate apikey password
-			if !v(s.intersector(username, userid, c)) {
+			if !v(s.intersector(keyid, userid, c)) {
 				return false, governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil)
 			}
 			c.Set("userid", userid)
