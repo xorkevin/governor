@@ -27,6 +27,7 @@ type (
 	// Gate creates new middleware to gate routes
 	Gate interface {
 		Authenticator
+		WithApikey() Authenticator
 	}
 
 	Service interface {
@@ -185,6 +186,15 @@ func (s *service) Authenticate(v Validator, subject string) echo.MiddlewareFunc 
 	}
 }
 
+func (s *service) WithApikey() Authenticator {
+	return &apikeyAuth{
+		base:    s,
+		roles:   s.roles,
+		apikeys: s.apikeys,
+		logger:  s.logger,
+	}
+}
+
 func (r *apikeyIntersector) Userid() string {
 	return r.userid
 }
@@ -224,7 +234,7 @@ func (s *apikeyAuth) Authenticate(v Validator, subject string) echo.MiddlewareFu
 	basicAuth := middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
 		Skipper: middleware.DefaultSkipper,
 		Validator: func(keyid, password string, c echo.Context) (bool, error) {
-			userid, err := s.apikeys.CheckKey(keyid, password, nil)
+			userid, err := s.apikeys.CheckKey(keyid, password)
 			if err != nil {
 				return false, governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil)
 			}

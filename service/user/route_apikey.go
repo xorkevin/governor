@@ -2,7 +2,6 @@ package user
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"net/http"
 	"strconv"
 	"strings"
@@ -169,18 +168,24 @@ const (
 	basicAuthRealm = "governor"
 )
 
-func (r *router) checkApikeyValidator(keyid, password string, c echo.Context) (bool, error) {
+func (r *router) checkApikeyValidator(t gate.Intersector) bool {
+	c := t.Context()
 	req := reqApikeyCheck{
 		AuthTags: c.QueryParam("authtags"),
 	}
 	if err := req.valid(); err != nil {
-		return false, err
+		return false
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	if err := r.s.CheckApikey(keyid, password, authTags); err != nil {
-		return false, err
+
+	roles, ok := t.Intersect(authTags)
+	if !ok {
+		return false
 	}
-	return true, nil
+	if roles.Len() != authTags.Len() {
+		return false
+	}
+	return true
 }
 
 type (
@@ -201,9 +206,5 @@ func (r *router) mountApikey(g *echo.Group) {
 	g.PUT("/id/:id", r.updateApikey, gate.User(r.s.gate))
 	g.PUT("/id/:id/rotate", r.rotateApikey, gate.User(r.s.gate))
 	g.DELETE("/id/:id", r.deleteApikey, gate.User(r.s.gate))
-	g.Any("/check", r.checkApikey, middleware.BasicAuthWithConfig(middleware.BasicAuthConfig{
-		Skipper:   middleware.DefaultSkipper,
-		Validator: r.checkApikeyValidator,
-		Realm:     basicAuthRealm,
-	}))
+	g.Any("/check", r.checkApikey, r.s.gate.WithApikey().Authenticate(r.checkApikeyValidator, "authentication"))
 }

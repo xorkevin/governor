@@ -20,7 +20,7 @@ func (s *service) useridFromKeyid(keyid string) (string, error) {
 	return k[0], nil
 }
 
-func (s *service) CheckKey(keyid, key string, authtags rank.Rank) (string, error) {
+func (s *service) CheckKey(keyid, key string) (string, error) {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
@@ -36,19 +36,6 @@ func (s *service) CheckKey(keyid, key string, authtags rank.Rank) (string, error
 
 	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
-	}
-
-	if authtags == nil || authtags.Len() == 0 {
-		return userid, nil
-	}
-
-	if inter := m.AuthTags.Intersect(authtags); inter.Len() != authtags.Len() {
-		return "", governor.NewError("User is forbidden", http.StatusForbidden, nil)
-	}
-	if inter, err := s.roles.IntersectRoles(userid, authtags); err != nil {
-		return "", governor.NewError("Unable to get user roles", http.StatusInternalServerError, err)
-	} else if inter.Len() != authtags.Len() {
-		return "", governor.NewError("User is forbidden", http.StatusForbidden, nil)
 	}
 	return userid, nil
 }
