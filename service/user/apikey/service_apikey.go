@@ -8,6 +8,10 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
+const (
+	cacheValDNE = "-"
+)
+
 func (s *service) GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error) {
 	return s.apikeys.GetUserKeys(userid, limit, offset)
 }
@@ -20,13 +24,88 @@ func (s *service) useridFromKeyid(keyid string) (string, error) {
 	return k[0], nil
 }
 
+func (s *service) getKeyHash(keyid string) (string, error) {
+	if keyhash, err := s.kvkey.Get(keyid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			s.logger.Error("Failed to get apikey key from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcacheapikey",
+			})
+		}
+	} else if keyhash == cacheValDNE {
+		return "", governor.NewError("Apikey not found", http.StatusNotFound, nil)
+	} else {
+		return keyhash, nil
+	}
+
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			if err := s.kvkey.Set(keyid, cacheValDNE, s.roleCacheTime); err != nil {
+				s.logger.Error("Failed to set apikey key in cache", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "setcacheapikey",
+				})
+			}
+		}
+		return "", err
+	}
+
+	if err := s.kvkey.Set(keyid, m.KeyHash, s.roleCacheTime); err != nil {
+		s.logger.Error("Failed to set apikey key in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setcacheapikey",
+		})
+	}
+
+	return m.KeyHash, nil
+}
+
+func (s *service) getRoleset(keyid string) (rank.Rank, error) {
+	if rolestring, err := s.kvroleset.Get(keyid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			s.logger.Error("Failed to get apikey roleset from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcacheroleset",
+			})
+		}
+	} else if rolestring == cacheValDNE {
+		return nil, governor.NewError("Apikey not found", http.StatusNotFound, nil)
+	} else {
+		k, _ := rank.FromStringUser(rolestring)
+		return k, nil
+	}
+
+	m, err := s.apikeys.GetByID(keyid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			if err := s.kvroleset.Set(keyid, cacheValDNE, s.roleCacheTime); err != nil {
+				s.logger.Error("Failed to set apikey roleset in cache", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "setcacheroleset",
+				})
+			}
+		}
+		return nil, err
+	}
+
+	if err := s.kvroleset.Set(keyid, m.AuthTags.Stringify(), s.roleCacheTime); err != nil {
+		s.logger.Error("Failed to set apikey roleset in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setcacheroleset",
+		})
+	}
+
+	return m.AuthTags, nil
+}
+
 func (s *service) CheckKey(keyid, key string) (string, error) {
 	userid, err := s.useridFromKeyid(keyid)
 	if err != nil {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 	}
 
-	m, err := s.apikeys.GetByID(keyid)
+	keyhash, err := s.getKeyHash(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
@@ -34,7 +113,10 @@ func (s *service) CheckKey(keyid, key string) (string, error) {
 		return "", err
 	}
 
-	if ok, err := s.apikeys.ValidateKey(key, m); err != nil || !ok {
+	m := apikeymodel.Model{
+		KeyHash: keyhash,
+	}
+	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil || !ok {
 		return "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
 	}
 	return userid, nil
@@ -46,12 +128,12 @@ func (s *service) IntersectRoles(keyid string, authtags rank.Rank) (rank.Rank, e
 		return nil, governor.NewError("Invalid key", http.StatusBadRequest, err)
 	}
 
-	m, err := s.apikeys.GetByID(keyid)
+	m, err := s.getRoleset(keyid)
 	if err != nil {
 		return nil, err
 	}
 
-	inter, err := s.roles.IntersectRoles(userid, m.AuthTags.Intersect(authtags))
+	inter, err := s.roles.IntersectRoles(userid, m.Intersect(authtags))
 	if err != nil {
 		return nil, governor.NewError("Unable to get user roles", http.StatusInternalServerError, err)
 	}
