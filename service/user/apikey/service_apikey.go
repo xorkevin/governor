@@ -77,6 +77,7 @@ func (s *service) Insert(userid string, authtags rank.Rank, name, desc string) (
 	if err := s.apikeys.Insert(m); err != nil {
 		return nil, err
 	}
+	s.clearCache(m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
 		Key:   key,
@@ -95,6 +96,7 @@ func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 	if err := s.apikeys.Update(m); err != nil {
 		return nil, err
 	}
+	s.clearCache(m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
 		Key:   key,
@@ -121,6 +123,7 @@ func (s *service) UpdateKey(keyid string, authtags rank.Rank, name, desc string)
 	if err := s.apikeys.Update(m); err != nil {
 		return err
 	}
+	s.clearCache(m.Keyid)
 	return nil
 }
 
@@ -132,12 +135,42 @@ func (s *service) DeleteKey(keyid string) error {
 	if err := s.apikeys.Delete(m); err != nil {
 		return err
 	}
+	s.clearCache(m.Keyid)
 	return nil
 }
 
 func (s *service) DeleteUserKeys(userid string) error {
+	keys, err := s.GetUserKeys(userid, 65536, 0)
+	if err != nil {
+		return err
+	}
 	if err := s.apikeys.DeleteUserKeys(userid); err != nil {
 		return err
 	}
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	keyids := make([]string, 0, len(keys))
+	for _, i := range keys {
+		keyids = append(keyids, i.Keyid)
+	}
+	s.clearCache(keyids...)
 	return nil
+}
+
+func (s *service) clearCache(keyids ...string) {
+	if err := s.kvkey.Del(keyids...); err != nil {
+		s.logger.Error("Failed to clear keys from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearcacheapikey",
+		})
+	}
+	if err := s.kvroleset.Del(keyids...); err != nil {
+		s.logger.Error("Failed to clear rolesets from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearcacheroleset",
+		})
+	}
 }

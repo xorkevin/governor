@@ -2,8 +2,12 @@ package apikey
 
 import (
 	"context"
+	"fmt"
 	"github.com/labstack/echo/v4"
+	"strconv"
+	"time"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/util/rank"
@@ -28,9 +32,12 @@ type (
 	}
 
 	service struct {
-		apikeys apikeymodel.Repo
-		roles   role.Role
-		logger  governor.Logger
+		apikeys       apikeymodel.Repo
+		roles         role.Role
+		kvkey         kvstore.KVStore
+		kvroleset     kvstore.KVStore
+		logger        governor.Logger
+		roleCacheTime int64
 	}
 )
 
@@ -40,17 +47,36 @@ const (
 )
 
 // New returns a new Apikey
-func New(apikeys apikeymodel.Repo, roles role.Role) Service {
+func New(apikeys apikeymodel.Repo, roles role.Role, kv kvstore.KVStore) Service {
 	return &service{
-		apikeys: apikeys,
-		roles:   roles,
+		apikeys:       apikeys,
+		roles:         roles,
+		kvkey:         kv.Subtree("key"),
+		kvroleset:     kv.Subtree("roleset"),
+		roleCacheTime: time24h,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	r.SetDefault("rolecache", "24h")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
+
+	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
+		l.Warn(fmt.Sprintf("failed to parse role cache time: %s", r.GetStr("rolecache")), nil)
+	} else {
+		s.roleCacheTime = t.Nanoseconds() / b1
+	}
+
+	l.Info("loaded config", map[string]string{
+		"rolecache (s)": strconv.FormatInt(s.roleCacheTime, 10),
+	})
+
 	return nil
 }
 
