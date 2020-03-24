@@ -12,7 +12,4 @@
 *.out
 
 vendor/
-vendor.orig/
 bin/
-toolchain/
-defs/

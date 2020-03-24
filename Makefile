@@ -90,45 +90,21 @@ build: clean build-bin build-setup
 
 ## docker
 DOCKER_IMAGE_NAME=governor
-DOCKER_VERSION=v0.2.2
+DOCKER_VERSION=v0.2.7
 DOCKER_FILE=./cmd/gov/Dockerfile
-.PHONY: build-docker produp proddown devup devdown docker-clean
+.PHONY: build-docker produp proddown devup devdown
 
 build-docker:
 	docker build -f $(DOCKER_FILE) -t $(DOCKER_IMAGE_NAME):$(DOCKER_VERSION) -t $(DOCKER_IMAGE_NAME):latest .
 
 produp:
-	docker-compose -f dc.main.yaml -f dc.prod.yaml -f dc.compose.yaml up -d
+	docker-compose -f dc/main.yaml -f dc.prod.yaml up -d
 
 proddown:
-	docker-compose -f dc.main.yaml -f dc.prod.yaml -f dc.compose.yaml down
+	docker-compose -f dc/main.yaml -f dc.prod.yaml down
 
 devup:
-	docker-compose -f dc.main.yaml -f dc.dev.yaml up -d
+	docker-compose -f dc/main.yaml -f dc/dev.yaml up -d
 
 devdown:
-	docker-compose -f dc.main.yaml -f dc.dev.yaml down
-
-docker-clean:
-	if [ "$$(docker ps -q -f status=running)" ]; \
-		then docker stop $$(docker ps -q -f status=running); fi
-	if [ "$$(docker ps -q -f status=restarting)" ]; \
-		then docker stop $$(docker ps -q -f status=restarting); fi
-	if [ "$$(docker ps -q -f status=exited)" ]; \
-		then docker rm $$(docker ps -q -f status=exited); fi
-	if [ "$$(docker ps -q -f status=created)" ]; \
-		then docker rm $$(docker ps -q -f status=created); fi
-
-## service
-SERVICE_STACK=governor
-SERVICE_DEF_DIR=defs
-SERVICE_DEF_NAME=$(SERVICE_DEF_DIR)/dc.$(SERVICE_STACK).yaml
-.PHONY: service launch danger-land
-service:
-	./servicedef-gen.sh $(SERVICE_DEF_DIR) $(SERVICE_DEF_NAME)
-
-launch:
-	docker stack deploy -c $(SERVICE_DEF_NAME) $(SERVICE_STACK)
-
-danger-land:
-	docker stack rm $(SERVICE_STACK)
+	docker-compose -f dc/main.yaml -f dc/dev.yaml down

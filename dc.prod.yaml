@@ -1,9 +1,0 @@
-version: '3.7'
-
-services:
-  governor:
-    image: governor:latest
-    volumes:
-      - ./config:/config
-      - ./public:/public
-      - ./templates:/templates
