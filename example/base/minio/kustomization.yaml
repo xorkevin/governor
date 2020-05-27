@@ -1,0 +1,20 @@
+apiVersion: 'kustomize.config.k8s.io/v1beta1'
+kind: 'Kustomization'
+namespace: 'governor'
+namePrefix: 'minio-'
+commonLabels:
+  app.kubernetes.io/name: 'minio'
+  app.kubernetes.io/instance: 'minio-minio'
+  app.kubernetes.io/part-of: 'minio-minio'
+  app.kubernetes.io/managed-by: 'launchcpx'
+bases:
+  - 'github.com/xorkevin/launchcpx//base/minio'
+configMapGenerator:
+  - name: 'minio-opts'
+    literals:
+      - 'vaultaddr=http://vault.vault.svc.cluster.local:8200'
+      - 'vaultrole=governor-minio-role'
+      - 'kvpath=kv/data/infra/governor/minio'
+      - 'passlen=64'
+      - 'curlbackoff=5'
+      - 'curlreauth=12'

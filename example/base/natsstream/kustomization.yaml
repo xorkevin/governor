@@ -1,0 +1,20 @@
+apiVersion: 'kustomize.config.k8s.io/v1beta1'
+kind: 'Kustomization'
+namespace: 'governor'
+namePrefix: 'natsstream-'
+commonLabels:
+  app.kubernetes.io/name: 'nats-streaming'
+  app.kubernetes.io/instance: 'nats-streaming-natsstream'
+  app.kubernetes.io/part-of: 'nats-streaming-natsstream'
+  app.kubernetes.io/managed-by: 'launchcpx'
+bases:
+  - 'github.com/xorkevin/launchcpx//base/nats-streaming'
+configMapGenerator:
+  - name: 'nats-streaming-opts'
+    literals:
+      - 'vaultaddr=http://vault.vault.svc.cluster.local:8200'
+      - 'vaultrole=governor-natsstream-role'
+      - 'kvpath=kv/data/infra/governor/natsstream'
+      - 'passlen=64'
+      - 'curlbackoff=5'
+      - 'curlreauth=12'
