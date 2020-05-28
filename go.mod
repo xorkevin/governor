@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/boombuler/barcode v1.0.0
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fatih/color v1.7.0
 	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/go-redis/redis v6.15.5+incompatible
@@ -25,5 +24,6 @@ require (
 	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mail.v2 v2.3.1 // indirect
+	gopkg.in/square/go-jose.v2 v2.5.1
 	xorkevin.dev/hunter2 v0.1.1
 )

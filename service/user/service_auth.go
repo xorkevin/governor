@@ -165,7 +165,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.GenerateFromClaims(claims, s.accessTime, authenticationSubject, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
