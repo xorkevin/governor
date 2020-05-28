@@ -23,3 +23,9 @@
 ```
 kubectl apply -k base
 ```
+
+### Register vault db engine
+
+```
+./register2.sh
+```

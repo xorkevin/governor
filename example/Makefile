@@ -1,4 +1,4 @@
-.PHONY: devinit devup
+.PHONY: devinit devinit2 devup
 
 devinit:
 	./plan.sh
@@ -7,3 +7,6 @@ devinit:
 
 devup:
 	kubectl apply -k base
+
+devinit2:
+	./register2.sh
