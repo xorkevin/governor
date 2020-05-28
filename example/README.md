@@ -17,3 +17,9 @@
 ```
 ./connect.sh
 ```
+
+### Create development deployment
+
+```
+kubectl apply -k base
+```

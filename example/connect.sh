@@ -1,7 +1,7 @@
 #!/bin/sh
 
 namespace=governor
-dir=app
+dir=base/app
 
 flightctl connect postgres -n $namespace -o $dir $namespace postgres
 flightctl connect redis -n $namespace -o $dir $namespace redis
