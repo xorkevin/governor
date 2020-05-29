@@ -1,7 +1,8 @@
 package governor
 
 import (
-	"github.com/mitchellh/go-homedir"
+	"fmt"
+	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/spf13/viper"
 	"io"
 	"net/http"
@@ -24,6 +25,7 @@ type (
 	// (runtime) options
 	Config struct {
 		config        *viper.Viper
+		vault         *vaultapi.Client
 		Appname       string
 		Version       string
 		VersionHash   string
@@ -50,12 +52,13 @@ func newConfig(conf ConfigOpts) Config {
 	v.SetDefault("maxreqsize", "2M")
 	v.SetDefault("frontendproxy", []string{})
 	v.SetDefault("alloworigins", []string{})
+	v.SetDefault("vault.addr", "")
 
 	v.SetConfigName(conf.DefaultFile)
 	v.AddConfigPath(".")
 	v.AddConfigPath(path.Join(".", "config"))
-	if home, err := homedir.Dir(); err == nil {
-		v.AddConfigPath(path.Join(getEnvDefault("XDG_CONFIG_HOME", path.Join(home, ".config")), conf.Appname))
+	if cfgdir, err := os.UserConfigDir(); err == nil {
+		v.AddConfigPath(path.Join(cfgdir, conf.Appname))
 	}
 	v.SetConfigType("yaml")
 
@@ -87,6 +90,19 @@ func (c *Config) init() error {
 	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
 	c.Origins = c.config.GetStringSlice("alloworigins")
 	c.RouteRewrite = c.config.GetStringMapString("routerewrite")
+	vconfig := c.config.GetStringMapString("vault")
+	vaultconfig := vaultapi.DefaultConfig()
+	if err := vaultconfig.Error; err != nil {
+		fmt.Printf("Error creating vault config: %v\n", err)
+	}
+	if vaddr := vconfig["addr"]; len(vaddr) != 0 {
+		vaultconfig.Address = vaddr
+	}
+	vault, err := vaultapi.NewClient(vaultconfig)
+	if err != nil {
+		return NewError("Failed to create vault client", http.StatusInternalServerError, err)
+	}
+	c.vault = vault
 	return nil
 }
 
@@ -169,17 +185,29 @@ func (r *configReader) GetStrSlice(key string) []string {
 	return r.v.GetStringSlice(r.name + "." + key)
 }
 
-func (c *Config) reader(opt serviceOpt) ConfigReader {
-	return &configReader{
+type (
+	SecretReader interface {
+		GetSecret(key string) string
+	}
+
+	secretReader struct {
+		r     *configReader
+		vault *vaultapi.Client
+	}
+)
+
+func (r *secretReader) GetSecret(key string) string {
+	return ""
+}
+
+func (c *Config) reader(opt serviceOpt) (ConfigReader, SecretReader) {
+	r := &configReader{
 		serviceOpt: opt,
 		v:          c.config,
 	}
-}
-
-func getEnvDefault(key, val string) string {
-	k := os.Getenv(key)
-	if k == "" {
-		return val
+	s := &secretReader{
+		r:     r,
+		vault: c.vault,
 	}
-	return k
+	return r, s
 }

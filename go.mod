@@ -7,10 +7,10 @@ require (
 	github.com/fatih/color v1.7.0
 	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/go-redis/redis v6.15.5+incompatible
+	github.com/hashicorp/vault/api v1.0.4
 	github.com/labstack/echo/v4 v4.1.10
 	github.com/lib/pq v1.2.0
 	github.com/minio/minio-go/v6 v6.0.35
-	github.com/mitchellh/go-homedir v1.1.0
 	github.com/nats-io/nats-streaming-server v0.16.2 // indirect
 	github.com/nats-io/nats.go v1.9.1
 	github.com/nats-io/stan.go v0.5.0
