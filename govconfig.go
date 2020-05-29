@@ -228,6 +228,7 @@ type (
 		GetStr(key string) string
 		GetStrSlice(key string) []string
 		GetSecret(key string) (vaultSecretVal, error)
+		InvalidateSecret(key string)
 	}
 
 	vaultSecretVal map[string]interface{}
@@ -317,6 +318,12 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 	r.setCacheSecretLocked(key, s.Data, expire)
 
 	return s.Data, nil
+}
+
+func (r *configReader) InvalidateSecret(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cache, key)
 }
 
 func (r *configReader) getCacheSecretLocked(key string) (vaultSecretVal, bool) {
