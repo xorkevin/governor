@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sync"
 	"time"
 )
 
@@ -30,6 +31,7 @@ type (
 		vault         *vaultapi.Client
 		vaultK8sAuth  bool
 		vaultExpire   int64
+		mu            sync.RWMutex
 		Appname       string
 		Version       string
 		VersionHash   string
@@ -128,7 +130,34 @@ func (c *Config) initvault(ctx context.Context, l Logger) error {
 	return nil
 }
 
+func (c *Config) ensureValidAuth() error {
+	if !c.vaultK8sAuth {
+		return nil
+	}
+	if c.authk8sValid() {
+		return nil
+	}
+	return c.authk8s()
+}
+
+func (c *Config) authk8sValidLocked() bool {
+	return c.vaultExpire-time.Now().Round(0).Unix() > 5
+}
+
+func (c *Config) authk8sValid() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.authk8sValidLocked()
+}
+
 func (c *Config) authk8s() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.authk8sValidLocked() {
+		return nil
+	}
+
 	vault := c.vault.Logical()
 	kconfig := c.config.GetStringMapString("vault.k8s")
 	role := kconfig["role"]
