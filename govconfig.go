@@ -227,6 +227,11 @@ type (
 		GetInt(key string) int
 		GetStr(key string) string
 		GetStrSlice(key string) []string
+		SecretReader
+	}
+
+	// SecretReader gets values from a secret engine
+	SecretReader interface {
 		GetSecret(key string) (vaultSecretVal, error)
 		InvalidateSecret(key string)
 	}
