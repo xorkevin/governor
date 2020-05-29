@@ -1,13 +1,15 @@
 package governor
 
 import (
-	"fmt"
+	"context"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/spf13/viper"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
+	"time"
 )
 
 type (
@@ -26,6 +28,8 @@ type (
 	Config struct {
 		config        *viper.Viper
 		vault         *vaultapi.Client
+		vaultK8sAuth  bool
+		vaultExpire   int64
 		Appname       string
 		Version       string
 		VersionHash   string
@@ -41,7 +45,7 @@ type (
 	}
 )
 
-func newConfig(conf ConfigOpts) Config {
+func newConfig(conf ConfigOpts) *Config {
 	v := viper.New()
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
@@ -53,6 +57,10 @@ func newConfig(conf ConfigOpts) Config {
 	v.SetDefault("frontendproxy", []string{})
 	v.SetDefault("alloworigins", []string{})
 	v.SetDefault("vault.addr", "")
+	v.SetDefault("vault.k8s.auth", false)
+	v.SetDefault("vault.k8s.role", "")
+	v.SetDefault("vault.k8s.loginpath", "/auth/kubernetes/login")
+	v.SetDefault("vault.k8s.jwtpath", "/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 	v.SetConfigName(conf.DefaultFile)
 	v.AddConfigPath(".")
@@ -65,7 +73,7 @@ func newConfig(conf ConfigOpts) Config {
 	v.SetEnvPrefix(conf.EnvPrefix)
 	v.AutomaticEnv()
 
-	return Config{
+	return &Config{
 		config:      v,
 		Appname:     conf.Appname,
 		Version:     conf.Version,
@@ -90,12 +98,20 @@ func (c *Config) init() error {
 	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
 	c.Origins = c.config.GetStringSlice("alloworigins")
 	c.RouteRewrite = c.config.GetStringMapString("routerewrite")
+	return nil
+}
+
+func (c *Config) initvault(ctx context.Context, l Logger) error {
 	vconfig := c.config.GetStringMapString("vault")
 	vaultconfig := vaultapi.DefaultConfig()
 	if err := vaultconfig.Error; err != nil {
-		fmt.Printf("Error creating vault config: %v\n", err)
+		l.Warn("error creating vault config", map[string]string{
+			"phase":      "init",
+			"error":      err.Error(),
+			"actiontype": "vaultdefaultconfig",
+		})
 	}
-	if vaddr := vconfig["addr"]; len(vaddr) != 0 {
+	if vaddr := vconfig["addr"]; vaddr != "" {
 		vaultconfig.Address = vaddr
 	}
 	vault, err := vaultapi.NewClient(vaultconfig)
@@ -103,6 +119,44 @@ func (c *Config) init() error {
 		return NewError("Failed to create vault client", http.StatusInternalServerError, err)
 	}
 	c.vault = vault
+	if c.config.GetBool("vault.k8s.auth") {
+		c.vaultK8sAuth = true
+		if err := c.authk8s(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Config) authk8s() error {
+	vault := c.vault.Logical()
+	kconfig := c.config.GetStringMapString("vault.k8s")
+	role := kconfig["role"]
+	loginpath := kconfig["loginpath"]
+	jwtpath := kconfig["jwtpath"]
+	if role == "" {
+		return NewError("No vault role set", http.StatusBadRequest, nil)
+	}
+	if loginpath == "" {
+		return NewError("No vault k8s login path set", http.StatusBadRequest, nil)
+	}
+	if jwtpath == "" {
+		return NewError("No path for vault k8s service account jwt auth", http.StatusBadRequest, nil)
+	}
+	jwtbytes, err := ioutil.ReadFile(jwtpath)
+	if err != nil {
+		return NewError("Failed to read vault k8s service account jwt", http.StatusInternalServerError, err)
+	}
+	jwt := string(jwtbytes)
+	authsecret, err := vault.Write(loginpath, map[string]interface{}{
+		"jwt":  jwt,
+		"role": role,
+	})
+	if err != nil {
+		return NewError("Failed to auth with vault k8s", http.StatusInternalServerError, err)
+	}
+	c.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
+	c.vault.SetToken(authsecret.Auth.ClientToken)
 	return nil
 }
 
@@ -144,11 +198,13 @@ type (
 		GetInt(key string) int
 		GetStr(key string) string
 		GetStrSlice(key string) []string
+		GetSecret(key string) (string, error)
 	}
 
 	configReader struct {
 		serviceOpt
-		v *viper.Viper
+		v     *viper.Viper
+		vault *vaultapi.Client
 	}
 )
 
@@ -185,29 +241,18 @@ func (r *configReader) GetStrSlice(key string) []string {
 	return r.v.GetStringSlice(r.name + "." + key)
 }
 
-type (
-	SecretReader interface {
-		GetSecret(key string) string
+func (r *configReader) GetSecret(key string) (string, error) {
+	kvpath := r.GetStr(key)
+	if kvpath == "" {
+		return "", NewError("Invalid secret key", http.StatusInternalServerError, nil)
 	}
-
-	secretReader struct {
-		r     *configReader
-		vault *vaultapi.Client
-	}
-)
-
-func (r *secretReader) GetSecret(key string) string {
-	return ""
+	return "", nil
 }
 
-func (c *Config) reader(opt serviceOpt) (ConfigReader, SecretReader) {
-	r := &configReader{
+func (c *Config) reader(opt serviceOpt) ConfigReader {
+	return &configReader{
 		serviceOpt: opt,
 		v:          c.config,
+		vault:      c.vault,
 	}
-	s := &secretReader{
-		r:     r,
-		vault: c.vault,
-	}
-	return r, s
 }

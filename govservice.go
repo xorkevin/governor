@@ -125,8 +125,7 @@ func (s *Server) initServices(ctx context.Context) error {
 	})
 	l.Info("init all services begin", nil)
 	for _, i := range s.services {
-		configReader, _ := s.config.reader(i.serviceOpt)
-		if err := i.r.Init(ctx, s.config, configReader, s.logger.Subtree(i.name), s.i.Group(s.config.BaseURL+i.url)); err != nil {
+		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.i.Group(s.config.BaseURL+i.url)); err != nil {
 			l.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
 				"service": i.name,
 				"error":   err.Error(),

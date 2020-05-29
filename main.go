@@ -19,7 +19,7 @@ type (
 	// Server is a governor server to which services may be registered
 	Server struct {
 		services   []serviceDef
-		config     Config
+		config     *Config
 		state      state.State
 		logger     Logger
 		i          *echo.Echo
@@ -46,23 +46,23 @@ func New(conf ConfigOpts, stateService state.State) *Server {
 // init initializes the config, creates a new logger, and initializes the
 // server and its registered services
 func (s *Server) init(ctx context.Context) error {
-	config := s.config
 	if s.flags.configFile != "" {
-		config.setConfigFile(s.flags.configFile)
+		s.config.setConfigFile(s.flags.configFile)
 	}
-	if err := config.init(); err != nil {
+	if err := s.config.init(); err != nil {
 		return err
 	}
-	s.config = config
-
-	s.logger = newLogger(s.config)
-
-	i := echo.New()
-	s.i = i
+	s.logger = newLogger(*s.config)
+	if err := s.config.initvault(ctx, s.logger); err != nil {
+		return err
+	}
 
 	l := s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
+
+	i := echo.New()
+	s.i = i
 
 	l.Info("init server instance", nil)
 
@@ -73,16 +73,16 @@ func (s *Server) init(ctx context.Context) error {
 	l.Info("init request binder", nil)
 	i.Pre(middleware.RemoveTrailingSlash())
 	l.Info("init middleware RemoveTrailingSlash", nil)
-	if len(config.RouteRewrite) > 0 {
-		rewriteRules := make(map[string]string, len(config.RouteRewrite))
-		for k, v := range config.RouteRewrite {
+	if len(s.config.RouteRewrite) > 0 {
+		rewriteRules := make(map[string]string, len(s.config.RouteRewrite))
+		for k, v := range s.config.RouteRewrite {
 			rewriteRules["^"+k] = v
 		}
 		i.Pre(middleware.Rewrite(rewriteRules))
-		l.Info("init route rewrite rules", config.RouteRewrite)
+		l.Info("init route rewrite rules", s.config.RouteRewrite)
 	}
 
-	if config.IsDebug() {
+	if s.config.IsDebug() {
 		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 			Format: "time=${time_rfc3339}, method=${method}, uri=${uri}, status=${status}, latency=${latency_human}\n",
 		}))
@@ -92,30 +92,30 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(middleware.Gzip())
 	l.Info("init middleware gzip", nil)
 
-	if len(config.Origins) > 0 {
+	if len(s.config.Origins) > 0 {
 		i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins:     config.Origins,
+			AllowOrigins:     s.config.Origins,
 			AllowCredentials: true,
 		}))
 		l.Info("init middleware CORS", map[string]string{
-			"origins": strings.Join(config.Origins, ", "),
+			"origins": strings.Join(s.config.Origins, ", "),
 		})
 	}
 
-	i.Use(middleware.BodyLimit(config.MaxReqSize))
+	i.Use(middleware.BodyLimit(s.config.MaxReqSize))
 	l.Info("init middleware body limit", map[string]string{
-		"maxreqsize": config.MaxReqSize,
+		"maxreqsize": s.config.MaxReqSize,
 	})
 	i.Use(middleware.Recover())
 	l.Info("init middleware recover", nil)
 
 	apiMiddlewareSkipper := func(c echo.Context) bool {
 		path := c.Request().URL.EscapedPath()
-		return strings.HasPrefix(path, config.BaseURL+"/") || config.BaseURL == path
+		return strings.HasPrefix(path, s.config.BaseURL+"/") || s.config.BaseURL == path
 	}
-	if len(config.FrontendProxy) > 0 {
-		targets := make([]*middleware.ProxyTarget, 0, len(config.FrontendProxy))
-		for _, i := range config.FrontendProxy {
+	if len(s.config.FrontendProxy) > 0 {
+		targets := make([]*middleware.ProxyTarget, 0, len(s.config.FrontendProxy))
+		for _, i := range s.config.FrontendProxy {
 			if u, err := url.Parse(i); err == nil {
 				targets = append(targets, &middleware.ProxyTarget{
 					URL: u,
@@ -133,19 +133,19 @@ func (s *Server) init(ctx context.Context) error {
 				Skipper:  apiMiddlewareSkipper,
 			}))
 			l.Info("init middleware frontend proxy", map[string]string{
-				"proxies": strings.Join(config.FrontendProxy, ", "),
+				"proxies": strings.Join(s.config.FrontendProxy, ", "),
 			})
 		}
 	} else {
 		i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-			Root:    config.PublicDir,
+			Root:    s.config.PublicDir,
 			Index:   "index.html",
 			Browse:  false,
 			HTML5:   true,
 			Skipper: apiMiddlewareSkipper,
 		}))
 		l.Info("init middleware static dir", map[string]string{
-			"root":  config.PublicDir,
+			"root":  s.config.PublicDir,
 			"index": "index.html",
 		})
 	}
@@ -153,9 +153,9 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(middleware.RequestID())
 	l.Info("init middleware request id", nil)
 
-	s.initSetup(i.Group(config.BaseURL + "/setupz"))
+	s.initSetup(i.Group(s.config.BaseURL + "/setupz"))
 	l.Info("init setup service", nil)
-	s.initHealth(i.Group(config.BaseURL + "/healthz"))
+	s.initHealth(i.Group(s.config.BaseURL + "/healthz"))
 	l.Info("init health service", nil)
 
 	if err := s.initServices(ctx); err != nil {
