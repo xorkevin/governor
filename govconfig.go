@@ -227,13 +227,22 @@ type (
 		GetInt(key string) int
 		GetStr(key string) string
 		GetStrSlice(key string) []string
-		GetSecret(key string) (string, error)
+		GetSecret(key string) (vaultSecretVal, error)
+	}
+
+	vaultSecretVal map[string]interface{}
+
+	vaultSecret struct {
+		key    string
+		value  vaultSecretVal
+		expire int64
 	}
 
 	configReader struct {
 		serviceOpt
-		v     *viper.Viper
-		vault *vaultapi.Client
+		c     *Config
+		cache map[string]vaultSecret
+		mu    sync.RWMutex
 	}
 )
 
@@ -251,37 +260,94 @@ func (r *configReader) GetStrMap(key string) map[string]string {
 	} else {
 		key = r.name + "." + key
 	}
-	return r.v.GetStringMapString(key)
+	return r.c.config.GetStringMapString(key)
 }
 
 func (r *configReader) GetBool(key string) bool {
-	return r.v.GetBool(r.name + "." + key)
+	return r.c.config.GetBool(r.name + "." + key)
 }
 
 func (r *configReader) GetInt(key string) int {
-	return r.v.GetInt(r.name + "." + key)
+	return r.c.config.GetInt(r.name + "." + key)
 }
 
 func (r *configReader) GetStr(key string) string {
-	return r.v.GetString(r.name + "." + key)
+	return r.c.config.GetString(r.name + "." + key)
 }
 
 func (r *configReader) GetStrSlice(key string) []string {
-	return r.v.GetStringSlice(r.name + "." + key)
+	return r.c.config.GetStringSlice(r.name + "." + key)
 }
 
-func (r *configReader) GetSecret(key string) (string, error) {
+func (s *vaultSecret) isValid() bool {
+	return s.expire == 0 || s.expire-time.Now().Round(0).Unix() > 5
+}
+
+func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 	kvpath := r.GetStr(key)
 	if kvpath == "" {
-		return "", NewError("Invalid secret key", http.StatusInternalServerError, nil)
+		return nil, NewError("Invalid secret key", http.StatusInternalServerError, nil)
 	}
-	return "", nil
+
+	if v, ok := r.getCacheSecret(key); ok {
+		return v, nil
+	}
+
+	if err := r.c.ensureValidAuth(); err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if v, ok := r.getCacheSecretLocked(key); ok {
+		return v, nil
+	}
+
+	vault := r.c.vault.Logical()
+	s, err := vault.Read(kvpath)
+	if err != nil {
+		return nil, NewError("Failed to read vault secret", http.StatusInternalServerError, err)
+	}
+
+	var expire int64
+	if s.LeaseDuration > 0 {
+		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
+	}
+	r.setCacheSecretLocked(key, s.Data, expire)
+
+	return s.Data, nil
+}
+
+func (r *configReader) getCacheSecretLocked(key string) (vaultSecretVal, bool) {
+	s, ok := r.cache[key]
+	if !ok {
+		return nil, false
+	}
+	if !s.isValid() {
+		return nil, false
+	}
+	return s.value, true
+}
+
+func (r *configReader) getCacheSecret(key string) (map[string]interface{}, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.getCacheSecretLocked(key)
+}
+
+func (r *configReader) setCacheSecretLocked(key string, value vaultSecretVal, expire int64) {
+	r.cache[key] = vaultSecret{
+		key:    key,
+		value:  value,
+		expire: expire,
+	}
 }
 
 func (c *Config) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
 		serviceOpt: opt,
-		v:          c.config,
-		vault:      c.vault,
+		c:          c,
+		cache:      map[string]vaultSecret{},
 	}
 }
