@@ -1,0 +1,36 @@
+apiVersion: 'apps/v1'
+kind: 'Deployment'
+metadata:
+  name: 'governor'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: 'governor-server'
+      version: 'v1'
+  template:
+    metadata:
+      labels:
+        component: 'governor-server'
+        version: 'v1'
+      annotations:
+        sidecar.istio.io/inject: 'true'
+    spec:
+      containers:
+        - name: 'governor'
+          image: 'registry.pkg.dev.home:8080/governor'
+          ports:
+            - name: 'http'
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: '/healthz/ready'
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: '/healthz/live'
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15

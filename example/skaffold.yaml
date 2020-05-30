@@ -1,0 +1,26 @@
+apiVersion: 'skaffold/v2beta4'
+kind: 'Config'
+metadata:
+  name: 'governor'
+build:
+  artifacts:
+    - image: 'registry.pkg.dev.home:8080/governor'
+      context: '.'
+      sync:
+        manual: []
+      custom:
+        buildCommand: './skaffoldbuild.sh'
+        dependencies:
+          dockerfile:
+            path: 'cmd/Dockerfile'
+  local:
+    push: true
+    useDockerCLI: false
+    useBuildkit: true
+    concurrency: 1
+  insecureRegistries:
+    - 'registry.pkg.dev.home:8080'
+deploy:
+  kustomize:
+    paths:
+      - 'base/app'
