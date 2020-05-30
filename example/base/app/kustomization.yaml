@@ -1,6 +1,29 @@
 apiVersion: 'kustomize.config.k8s.io/v1beta1'
 kind: 'Kustomization'
 namespace: 'governor'
+configMapGenerator:
+  - name: 'config'
+    files:
+      - 'config/config.yaml'
+  - name: 'templates'
+    files:
+      - 'templates/emailchange.html'
+      - 'templates/emailchangenotify.html'
+      - 'templates/emailchangenotify_subject.html'
+      - 'templates/emailchange_subject.html'
+      - 'templates/forgotpass.html'
+      - 'templates/forgotpass_subject.html'
+      - 'templates/newlogin.html'
+      - 'templates/newlogin_subject.html'
+      - 'templates/newuser.html'
+      - 'templates/newuser_subject.html'
+      - 'templates/passchange.html'
+      - 'templates/passchange_subject.html'
+      - 'templates/passreset.html'
+      - 'templates/passreset_subject.html'
+  - name: 'public'
+    files:
+      - 'public/index.html'
 resources:
   - 'deployment.yaml'
   - 'service.yaml'

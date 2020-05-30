@@ -6,9 +6,6 @@ build:
   artifacts:
     - image: 'registry.pkg.dev.home:8080/governor'
       context: '.'
-      sync:
-        manual: []
-        infer: null
       custom:
         buildCommand: './skaffoldbuild.sh'
         dependencies:
@@ -24,4 +21,4 @@ build:
 deploy:
   kustomize:
     paths:
-      - 'base/app'
+      - 'skaffolddev'

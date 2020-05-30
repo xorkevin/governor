@@ -16,6 +16,7 @@ spec:
       annotations:
         sidecar.istio.io/inject: 'true'
     spec:
+      serviceAccountName: 'governor'
       containers:
         - name: 'governor'
           image: 'registry.pkg.dev.home:8080/governor'

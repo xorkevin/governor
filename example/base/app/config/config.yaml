@@ -1,10 +1,12 @@
-mode: INFO
-port: 8080
-baseurl: /api
-publicdir: public
-maxreqsize: 2M
-alloworigins:
-  - http://localhost
+mode: 'INFO'
+port: '8080'
+baseurl: '/api'
+maxreqsize: '2M'
+vault:
+  addr: 'vault.vault.svc.cluster.local'
+  k8s:
+    auth: true
+    role: 'governor-role'
 database:
   user: postgres
   password: admin
