@@ -8,6 +8,7 @@ build:
       context: '.'
       sync:
         manual: []
+        infer: null
       custom:
         buildCommand: './skaffoldbuild.sh'
         dependencies:
