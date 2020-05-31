@@ -167,6 +167,7 @@ func (s *service) authPostgres() (*sql.DB, error) {
 	}
 
 	if err := db.Ping(); err != nil {
+		s.config.InvalidateSecret("auth")
 		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
 
