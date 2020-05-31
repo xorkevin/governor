@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"context"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/spf13/viper"
 	"io"
@@ -104,18 +103,17 @@ func (c *Config) init() error {
 	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
 	c.Origins = c.config.GetStringSlice("alloworigins")
 	c.RouteRewrite = c.config.GetStringMapString("routerewrite")
+	if err := c.initvault(); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (c *Config) initvault(ctx context.Context, l Logger) error {
+func (c *Config) initvault() error {
 	vconfig := c.config.GetStringMapString("vault")
 	vaultconfig := vaultapi.DefaultConfig()
 	if err := vaultconfig.Error; err != nil {
-		l.Warn("error creating vault config", map[string]string{
-			"phase":      "init",
-			"error":      err.Error(),
-			"actiontype": "vaultdefaultconfig",
-		})
+		return err
 	}
 	if vaddr := vconfig["addr"]; vaddr != "" {
 		vaultconfig.Address = vaddr
@@ -257,7 +255,6 @@ type (
 		serviceOpt
 		c     *Config
 		cache map[string]vaultSecret
-		mu    sync.RWMutex
 	}
 )
 
@@ -299,24 +296,17 @@ func (s *vaultSecret) isValid() bool {
 }
 
 func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
+	if s, ok := r.cache[key]; ok && s.isValid() {
+		return s.value, nil
+	}
+
 	kvpath := r.GetStr(key)
 	if kvpath == "" {
 		return nil, NewError("Invalid secret key", http.StatusInternalServerError, nil)
 	}
 
-	if v, ok := r.getCacheSecret(key); ok {
-		return v, nil
-	}
-
 	if err := r.c.ensureValidAuth(); err != nil {
 		return nil, err
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if v, ok := r.getCacheSecretLocked(key); ok {
-		return v, nil
 	}
 
 	vault := r.c.vault.Logical()
@@ -329,40 +319,17 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 	if s.LeaseDuration > 0 {
 		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
 	}
-	r.setCacheSecretLocked(key, s.Data, expire)
+	r.cache[key] = vaultSecret{
+		key:    key,
+		value:  s.Data,
+		expire: expire,
+	}
 
 	return s.Data, nil
 }
 
 func (r *configReader) InvalidateSecret(key string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	delete(r.cache, key)
-}
-
-func (r *configReader) getCacheSecretLocked(key string) (vaultSecretVal, bool) {
-	s, ok := r.cache[key]
-	if !ok {
-		return nil, false
-	}
-	if !s.isValid() {
-		return nil, false
-	}
-	return s.value, true
-}
-
-func (r *configReader) getCacheSecret(key string) (vaultSecretVal, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getCacheSecretLocked(key)
-}
-
-func (r *configReader) setCacheSecretLocked(key string, value vaultSecretVal, expire int64) {
-	r.cache[key] = vaultSecret{
-		key:    key,
-		value:  value,
-		expire: expire,
-	}
 }
 
 func (c *Config) reader(opt serviceOpt) ConfigReader {

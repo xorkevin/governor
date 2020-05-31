@@ -53,9 +53,6 @@ func (s *Server) init(ctx context.Context) error {
 		return err
 	}
 	s.logger = newLogger(*s.config)
-	if err := s.config.initvault(ctx, s.logger); err != nil {
-		return err
-	}
 
 	l := s.logger.WithData(map[string]string{
 		"phase": "init",
