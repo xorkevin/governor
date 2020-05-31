@@ -16,7 +16,7 @@ type (
 	//
 	// DB returns the wrapped sql database instance
 	Database interface {
-		DB() *sql.DB
+		DB() (*sql.DB, error)
 	}
 
 	Service interface {
@@ -73,7 +73,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.port = conf["port"]
 	s.sslmode = conf["sslmode"]
 
-	if err := s.authPostgres(); err != nil {
+	if _, err := s.authPostgres(); err != nil {
 		return err
 	}
 
@@ -107,15 +107,7 @@ func (s *service) closeDBLocked() {
 		})
 	}
 	s.db = nil
-}
-
-func (s *service) ensureValidAuth() error {
-	if ok, err := s.authPostgresValid(); err != nil {
-		return err
-	} else if ok {
-		return nil
-	}
-	return s.authPostgres()
+	s.auth = pgauth{}
 }
 
 func (s *service) getPostgresAuth() (pgauth, error) {
@@ -129,43 +121,53 @@ func (s *service) getPostgresAuth() (pgauth, error) {
 	}, nil
 }
 
-func (s *service) authPostgresValidLocked() (bool, error) {
+func (s *service) authPostgresValidLocked() (*sql.DB, bool, error) {
+	if s.db == nil {
+		return nil, false, nil
+	}
+
 	auth, err := s.getPostgresAuth()
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
-	return auth == s.auth, nil
+	return s.db, auth == s.auth, nil
 }
 
-func (s *service) authPostgresValid() (bool, error) {
+func (s *service) authPostgresValid() (*sql.DB, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.authPostgresValidLocked()
 }
 
-func (s *service) authPostgres() error {
+func (s *service) authPostgres() (*sql.DB, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if ok, err := s.authPostgresValidLocked(); err != nil {
-		return err
+	select {
+	case <-s.done:
+		return nil, governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
+	default:
+	}
+
+	if db, ok, err := s.authPostgresValidLocked(); err != nil {
+		return nil, err
 	} else if ok {
-		return nil
+		return db, nil
 	}
 
 	auth, err := s.getPostgresAuth()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	connection := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=%s sslmode=%s", auth.username, auth.password, s.dbname, s.host, s.port, s.sslmode)
 	db, err := sql.Open("postgres", connection)
 	if err != nil {
-		return governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
 
 	s.closeDBLocked()
@@ -174,7 +176,7 @@ func (s *service) authPostgres() error {
 	s.auth = auth
 
 	s.logger.Info(fmt.Sprintf("established connection to %s:%s with user %s", s.host, s.port, s.auth.username), nil)
-	return nil
+	return s.db, nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -198,6 +200,12 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return governor.NewError("No db connection", http.StatusInternalServerError, nil)
+	}
 	if _, err := s.db.Exec("SELECT 1;"); err != nil {
 		return governor.NewError("Failed to connect to db", http.StatusInternalServerError, err)
 	}
@@ -205,6 +213,11 @@ func (s *service) Health() error {
 }
 
 // DB implements Database.DB by returning its wrapped sql.DB
-func (s *service) DB() *sql.DB {
-	return s.db
+func (s *service) DB() (*sql.DB, error) {
+	if db, ok, err := s.authPostgresValid(); err != nil {
+		return nil, err
+	} else if ok {
+		return db, nil
+	}
+	return s.authPostgres()
 }
