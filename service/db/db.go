@@ -7,7 +7,6 @@ import (
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq" // depends upon postgres
 	"net/http"
-	"sync"
 	"xorkevin.dev/governor"
 )
 
@@ -29,24 +28,35 @@ type (
 		password string
 	}
 
+	getDBRes struct {
+		db  *sql.DB
+		err error
+	}
+
+	dbOp struct {
+		res chan<- getDBRes
+	}
+
+	pingOp struct {
+		res chan<- error
+	}
+
 	service struct {
-		db      *sql.DB
-		auth    pgauth
-		dbname  string
-		host    string
-		port    string
-		sslmode string
-		mu      *sync.RWMutex
-		config  governor.SecretReader
-		logger  governor.Logger
-		done    <-chan struct{}
+		db       *sql.DB
+		auth     pgauth
+		connopts string
+		config   governor.SecretReader
+		logger   governor.Logger
+		ops      chan dbOp
+		pings    chan pingOp
+		done     <-chan struct{}
 	}
 )
 
 // New creates a new db service
 func New() Service {
 	return &service{
-		mu: &sync.RWMutex{},
+		ops: make(chan dbOp),
 	}
 }
 
@@ -68,29 +78,82 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.config = r
 
 	conf := r.GetStrMap("")
-	s.dbname = conf["dbname"]
-	s.host = conf["host"]
-	s.port = conf["port"]
-	s.sslmode = conf["sslmode"]
-
-	if _, err := s.authPostgres(); err != nil {
-		return err
-	}
+	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", conf["dbname"], conf["host"], conf["port"], conf["sslmode"])
 
 	done := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		s.closeDBLocked()
-		close(done)
-	}()
+	go s.execute(ctx, done)
 	s.done = done
+
+	if _, err := s.DB(); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (s *service) closeDBLocked() {
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	for {
+		select {
+		case <-ctx.Done():
+			s.closeDB()
+			return
+		case op := <-s.pings:
+			op.res <- s.handlePing()
+			close(op.res)
+		case op := <-s.ops:
+			db, err := s.handleGetDB()
+			op.res <- getDBRes{
+				db:  db,
+				err: err,
+			}
+			close(op.res)
+		}
+	}
+}
+
+func (s *service) handlePing() error {
+	if s.db == nil {
+		return governor.NewError("No db connection", http.StatusInternalServerError, nil)
+	}
+	if err := s.db.Ping(); err != nil {
+		s.config.InvalidateSecret("auth")
+		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+func (s *service) handleGetDB() (*sql.DB, error) {
+	authsecret, err := s.config.GetSecret("auth")
+	if err != nil {
+		return nil, err
+	}
+	auth := pgauth{
+		username: authsecret["username"].(string),
+		password: authsecret["password"].(string),
+	}
+	if auth == s.auth {
+		return s.db, nil
+	}
+
+	s.closeDB()
+
+	connection := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
+	db, err := sql.Open("postgres", connection)
+	if err != nil {
+		return nil, governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
+	}
+	if err := db.Ping(); err != nil {
+		s.config.InvalidateSecret("auth")
+		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
+	}
+
+	s.db = db
+	s.auth = auth
+	s.logger.Info(fmt.Sprintf("established connection to %s with user %s", s.connopts, s.auth.username), nil)
+	return s.db, nil
+}
+
+func (s *service) closeDB() {
 	if s.db == nil {
 		return
 	}
@@ -108,76 +171,6 @@ func (s *service) closeDBLocked() {
 	}
 	s.db = nil
 	s.auth = pgauth{}
-}
-
-func (s *service) getPostgresAuth() (pgauth, error) {
-	secret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return pgauth{}, err
-	}
-	return pgauth{
-		username: secret["username"].(string),
-		password: secret["password"].(string),
-	}, nil
-}
-
-func (s *service) authPostgresValidLocked() (*sql.DB, bool, error) {
-	if s.db == nil {
-		return nil, false, nil
-	}
-
-	auth, err := s.getPostgresAuth()
-	if err != nil {
-		return nil, false, err
-	}
-	return s.db, auth == s.auth, nil
-}
-
-func (s *service) authPostgresValid() (*sql.DB, bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.authPostgresValidLocked()
-}
-
-func (s *service) authPostgres() (*sql.DB, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	select {
-	case <-s.done:
-		return nil, governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
-	default:
-	}
-
-	if db, ok, err := s.authPostgresValidLocked(); err != nil {
-		return nil, err
-	} else if ok {
-		return db, nil
-	}
-
-	auth, err := s.getPostgresAuth()
-	if err != nil {
-		return nil, err
-	}
-
-	connection := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=%s sslmode=%s", auth.username, auth.password, s.dbname, s.host, s.port, s.sslmode)
-	db, err := sql.Open("postgres", connection)
-	if err != nil {
-		return nil, governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
-	}
-
-	if err := db.Ping(); err != nil {
-		s.config.InvalidateSecret("auth")
-		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
-	}
-
-	s.closeDBLocked()
-
-	s.db = db
-	s.auth = auth
-
-	s.logger.Info(fmt.Sprintf("established connection to %s:%s with user %s", s.host, s.port, s.auth.username), nil)
-	return s.db, nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -201,25 +194,29 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.db == nil {
-		return governor.NewError("No db connection", http.StatusInternalServerError, nil)
+	res := make(chan error)
+	op := pingOp{
+		res: res,
 	}
-	if err := s.db.Ping(); err != nil {
-		s.config.InvalidateSecret("auth")
-		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
+	select {
+	case <-s.done:
+		return governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
+	case s.pings <- op:
+		return <-res
 	}
-	return nil
 }
 
 // DB implements Database.DB by returning its wrapped sql.DB
 func (s *service) DB() (*sql.DB, error) {
-	if db, ok, err := s.authPostgresValid(); err != nil {
-		return nil, err
-	} else if ok {
-		return db, nil
+	res := make(chan getDBRes)
+	op := dbOp{
+		res: res,
 	}
-	return s.authPostgres()
+	select {
+	case <-s.done:
+		return nil, governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
+	case s.ops <- op:
+		v := <-res
+		return v.db, v.err
+	}
 }
