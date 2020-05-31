@@ -33,7 +33,7 @@ type (
 		err error
 	}
 
-	dbOp struct {
+	getOp struct {
 		res chan<- getDBRes
 	}
 
@@ -47,7 +47,7 @@ type (
 		connopts string
 		config   governor.SecretReader
 		logger   governor.Logger
-		ops      chan dbOp
+		ops      chan getOp
 		pings    chan pingOp
 		done     <-chan struct{}
 	}
@@ -56,13 +56,13 @@ type (
 // New creates a new db service
 func New() Service {
 	return &service{
-		ops: make(chan dbOp),
+		ops:   make(chan getOp),
+		pings: make(chan pingOp),
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("user", "postgres")
-	r.SetDefault("password", "admin")
+	r.SetDefault("auth", "")
 	r.SetDefault("dbname", "postgres")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "5432")
@@ -160,12 +160,14 @@ func (s *service) closeDB() {
 	if err := s.db.Close(); err != nil {
 		s.logger.Error("failed to close db connection", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "closedb",
+			"actiontype": "closedberr",
+			"connection": s.connopts,
 			"username":   s.auth.username,
 		})
 	} else {
-		s.logger.Info("closed connection", map[string]string{
-			"actiontype": "closedb",
+		s.logger.Info("closed db connection", map[string]string{
+			"actiontype": "closedbok",
+			"connection": s.connopts,
 			"username":   s.auth.username,
 		})
 	}
@@ -209,7 +211,7 @@ func (s *service) Health() error {
 // DB implements Database.DB by returning its wrapped sql.DB
 func (s *service) DB() (*sql.DB, error) {
 	res := make(chan getDBRes)
-	op := dbOp{
+	op := getOp{
 		res: res,
 	}
 	select {

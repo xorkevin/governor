@@ -3,7 +3,7 @@ package kvstore
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v7"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"time"
@@ -28,7 +28,7 @@ type (
 		Get(key string) (string, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
-		Tx() Tx
+		Tx() (Tx, error)
 		Subtree(prefix string) KVStore
 	}
 
@@ -37,19 +37,42 @@ type (
 		KVStore
 	}
 
+	getKVRes struct {
+		kv  *redis.Client
+		err error
+	}
+
+	getOp struct {
+		res chan<- getKVRes
+	}
+
+	pingOp struct {
+		res chan<- error
+	}
+
 	service struct {
 		client *redis.Client
+		auth   string
+		addr   string
+		dbname int
+		config governor.SecretReader
 		logger governor.Logger
+		ops    chan getOp
+		pings  chan pingOp
+		done   <-chan struct{}
 	}
 )
 
 // New creates a new cache service
 func New() Service {
-	return &service{}
+	return &service{
+		ops:   make(chan getOp),
+		pings: make(chan pingOp),
+	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("password", "admin")
+	r.SetDefault("auth", "")
 	r.SetDefault("dbname", 0)
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "6379")
@@ -61,19 +84,102 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     r.GetStr("host") + ":" + r.GetStr("port"),
-		Password: r.GetStr("password"),
-		DB:       r.GetInt("dbname"),
-	})
-	s.client = client
+	s.config = r
 
-	if _, err := client.Ping().Result(); err != nil {
+	conf := r.GetStrMap("")
+	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
+	s.dbname = r.GetInt("dbname")
+
+	done := make(chan struct{})
+	go s.execute(ctx, done)
+	s.done = done
+
+	if _, err := s.getClient(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	for {
+		select {
+		case <-ctx.Done():
+			s.closeKV()
+			return
+		case op := <-s.pings:
+			op.res <- s.handlePing()
+			close(op.res)
+		case op := <-s.ops:
+			kv, err := s.handleGetKV()
+			op.res <- getKVRes{
+				kv:  kv,
+				err: err,
+			}
+			close(op.res)
+		}
+	}
+}
+
+func (s *service) handlePing() error {
+	if s.client == nil {
+		return governor.NewError("No kvstore connection", http.StatusInternalServerError, nil)
+	}
+	if _, err := s.client.Ping().Result(); err != nil {
+		s.config.InvalidateSecret("auth")
 		return governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
 	}
-
-	l.Info(fmt.Sprintf("established connection to %s:%s", r.GetStr("host"), r.GetStr("port")), nil)
 	return nil
+}
+
+func (s *service) handleGetKV() (*redis.Client, error) {
+	authsecret, err := s.config.GetSecret("auth")
+	if err != nil {
+		return nil, err
+	}
+	auth := authsecret["password"].(string)
+	if auth == s.auth {
+		return s.client, nil
+	}
+
+	s.closeKV()
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     s.addr,
+		Password: auth,
+		DB:       s.dbname,
+	})
+	if _, err := client.Ping().Result(); err != nil {
+		s.config.InvalidateSecret("auth")
+		return nil, governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
+	}
+
+	s.client = client
+	s.auth = auth
+	s.logger.Info(fmt.Sprintf("established connection to %s", s.addr), nil)
+	return s.client, nil
+}
+
+func (s *service) closeKV() {
+	if s.client == nil {
+		return
+	}
+	if err := s.client.Close(); err != nil {
+		s.logger.Error("failed to close kvstore connection", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "closekverr",
+			"address":    s.addr,
+			"dbname":     fmt.Sprintf("%d", s.dbname),
+		})
+	} else {
+		s.logger.Info("closed kvstore connection", map[string]string{
+			"actiontype": "closekvok",
+			"address":    s.addr,
+			"dbname":     fmt.Sprintf("%d", s.dbname),
+		})
+	}
+	s.client = nil
+	s.auth = ""
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -85,17 +191,50 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	select {
+	case <-s.done:
+		return
+	case <-ctx.Done():
+		l.Warn("failed to stop", nil)
+	}
 }
 
 func (s *service) Health() error {
-	if _, err := s.client.Ping().Result(); err != nil {
-		return governor.NewError("Failed to connect to kvstore", http.StatusInternalServerError, err)
+	res := make(chan error)
+	op := pingOp{
+		res: res,
 	}
-	return nil
+	select {
+	case <-s.done:
+		return governor.NewError("KVStore service shutdown", http.StatusInternalServerError, nil)
+	case s.pings <- op:
+		return <-res
+	}
+}
+
+func (s *service) getClient() (*redis.Client, error) {
+	res := make(chan getKVRes)
+	op := getOp{
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return nil, governor.NewError("KVStore service shutdown", http.StatusInternalServerError, nil)
+	case s.ops <- op:
+		v := <-res
+		return v.kv, v.err
+	}
 }
 
 func (s *service) Get(key string) (string, error) {
-	val, err := s.client.Get(key).Result()
+	client, err := s.getClient()
+	if err != nil {
+		return "", err
+	}
+	val, err := client.Get(key).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return "", governor.NewError("Key not found", http.StatusNotFound, err)
@@ -106,7 +245,11 @@ func (s *service) Get(key string) (string, error) {
 }
 
 func (s *service) Set(key, val string, seconds int64) error {
-	if err := s.client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
+	client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
 		return governor.NewError("Failed to set key", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -117,16 +260,25 @@ func (s *service) Del(key ...string) error {
 		return nil
 	}
 
-	if err := s.client.Del(key...).Err(); err != nil {
+	client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+
+	if err := client.Del(key...).Err(); err != nil {
 		return governor.NewError("Failed to delete key", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
-func (s *service) Tx() Tx {
-	return &baseTransaction{
-		base: s.client.TxPipeline(),
+func (s *service) Tx() (Tx, error) {
+	client, err := s.getClient()
+	if err != nil {
+		return nil, err
 	}
+	return &baseTransaction{
+		base: client.TxPipeline(),
+	}, nil
 }
 
 func (s *service) Subtree(prefix string) KVStore {
@@ -227,8 +379,12 @@ func (t *tree) Del(key ...string) error {
 	return t.base.Del(args...)
 }
 
-func (t *tree) Tx() Tx {
-	return t.base.Tx().Subtree(t.prefix)
+func (t *tree) Tx() (Tx, error) {
+	tx, err := t.base.Tx()
+	if err != nil {
+		return nil, err
+	}
+	return tx.Subtree(t.prefix), nil
 }
 
 func (t *tree) Subtree(prefix string) KVStore {

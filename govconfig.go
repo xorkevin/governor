@@ -302,7 +302,7 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 
 	kvpath := r.GetStr(key)
 	if kvpath == "" {
-		return nil, NewError("Invalid secret key", http.StatusInternalServerError, nil)
+		return nil, NewError("Invalid secret key "+key, http.StatusInternalServerError, nil)
 	}
 
 	if err := r.c.ensureValidAuth(); err != nil {
