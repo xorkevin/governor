@@ -207,8 +207,9 @@ func (s *service) Health() error {
 	if s.db == nil {
 		return governor.NewError("No db connection", http.StatusInternalServerError, nil)
 	}
-	if _, err := s.db.Exec("SELECT 1;"); err != nil {
-		return governor.NewError("Failed to connect to db", http.StatusInternalServerError, err)
+	if err := s.db.Ping(); err != nil {
+		s.config.InvalidateSecret("auth")
+		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
 	return nil
 }
