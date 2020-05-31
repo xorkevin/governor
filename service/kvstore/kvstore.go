@@ -37,13 +37,13 @@ type (
 		KVStore
 	}
 
-	getKVRes struct {
-		kv  *redis.Client
-		err error
+	getClientRes struct {
+		client *redis.Client
+		err    error
 	}
 
 	getOp struct {
-		res chan<- getKVRes
+		res chan<- getClientRes
 	}
 
 	pingOp struct {
@@ -105,16 +105,16 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeKV()
+			s.closeClient()
 			return
 		case op := <-s.pings:
 			op.res <- s.handlePing()
 			close(op.res)
 		case op := <-s.ops:
-			kv, err := s.handleGetKV()
-			op.res <- getKVRes{
-				kv:  kv,
-				err: err,
+			client, err := s.handleGetClient()
+			op.res <- getClientRes{
+				client: client,
+				err:    err,
 			}
 			close(op.res)
 		}
@@ -132,7 +132,7 @@ func (s *service) handlePing() error {
 	return nil
 }
 
-func (s *service) handleGetKV() (*redis.Client, error) {
+func (s *service) handleGetClient() (*redis.Client, error) {
 	authsecret, err := s.config.GetSecret("auth")
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (s *service) handleGetKV() (*redis.Client, error) {
 		return s.client, nil
 	}
 
-	s.closeKV()
+	s.closeClient()
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     s.addr,
@@ -160,7 +160,7 @@ func (s *service) handleGetKV() (*redis.Client, error) {
 	return s.client, nil
 }
 
-func (s *service) closeKV() {
+func (s *service) closeClient() {
 	if s.client == nil {
 		return
 	}
@@ -216,7 +216,7 @@ func (s *service) Health() error {
 }
 
 func (s *service) getClient() (*redis.Client, error) {
-	res := make(chan getKVRes)
+	res := make(chan getClientRes)
 	op := getOp{
 		res: res,
 	}
@@ -225,7 +225,7 @@ func (s *service) getClient() (*redis.Client, error) {
 		return nil, governor.NewError("KVStore service shutdown", http.StatusInternalServerError, nil)
 	case s.ops <- op:
 		v := <-res
-		return v.kv, v.err
+		return v.client, v.err
 	}
 }
 

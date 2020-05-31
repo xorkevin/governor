@@ -22,21 +22,48 @@ type (
 		Objstore
 	}
 
+	minioauth struct {
+		username string
+		password string
+	}
+
+	getClientRes struct {
+		client *minio.Client
+		err    error
+	}
+
+	getOp struct {
+		res chan<- getClientRes
+	}
+
+	pingOp struct {
+		res chan<- error
+	}
+
 	service struct {
+		client   *minio.Client
+		auth     minioauth
+		addr     string
+		sslmode  bool
 		location string
-		store    *minio.Client
+		config   governor.SecretReader
 		logger   governor.Logger
+		ops      chan getOp
+		pings    chan pingOp
+		done     <-chan struct{}
 	}
 )
 
 // New creates a new object store service instance
 func New() Service {
-	return &service{}
+	return &service{
+		ops:   make(chan getOp),
+		pings: make(chan pingOp),
+	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("keyid", "admin")
-	r.SetDefault("keysecret", "adminsecret")
+	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "9000")
 	r.SetDefault("sslmode", false)
@@ -49,21 +76,88 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	client, err := minio.New(r.GetStr("host")+":"+r.GetStr("port"), r.GetStr("keyid"), r.GetStr("keysecret"), r.GetBool("sslmode"))
-	if err != nil {
-		return governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
+	s.config = r
+
+	conf := r.GetStrMap("")
+	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
+	s.sslmode = r.GetBool("sslmode")
+	s.location = conf["location"]
+
+	done := make(chan struct{})
+	go s.execute(ctx, done)
+	s.done = done
+
+	if _, err := s.getClient(); err != nil {
+		return err
 	}
-	s.store = client
-	s.location = r.GetStr("location")
+	return nil
+}
 
-	s.store.SetAppInfo(c.Appname, c.Version)
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	for {
+		select {
+		case <-ctx.Done():
+			s.closeClient()
+			return
+		case op := <-s.pings:
+			op.res <- s.handlePing()
+			close(op.res)
+		case op := <-s.ops:
+			client, err := s.handleGetClient()
+			op.res <- getClientRes{
+				client: client,
+				err:    err,
+			}
+			close(op.res)
+		}
+	}
+}
 
-	if _, err := s.store.ListBuckets(); err != nil {
+func (s *service) handlePing() error {
+	if s.client == nil {
+		return governor.NewError("No objstore connection", http.StatusInternalServerError, nil)
+	}
+	if _, err := s.client.ListBuckets(); err != nil {
+		s.config.InvalidateSecret("auth")
 		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
-
-	l.Info(fmt.Sprintf("established objstore connection to %s:%s", r.GetStr("host"), r.GetStr("port")), nil)
 	return nil
+}
+
+func (s *service) handleGetClient() (*minio.Client, error) {
+	authsecret, err := s.config.GetSecret("auth")
+	if err != nil {
+		return nil, err
+	}
+	auth := minioauth{
+		username: authsecret["username"].(string),
+		password: authsecret["password"].(string),
+	}
+	if auth == s.auth {
+		return s.client, nil
+	}
+
+	s.closeClient()
+
+	client, err := minio.New(s.addr, auth.username, auth.password, s.sslmode)
+	if err != nil {
+		return nil, governor.NewError("Failed to create minio client", http.StatusInternalServerError, err)
+	}
+	if _, err := client.ListBuckets(); err != nil {
+		s.config.InvalidateSecret("auth")
+		return nil, governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
+	}
+
+	s.client = client
+	s.auth = auth
+	s.logger.Info(fmt.Sprintf("established connection to %s with key %s", s.addr, s.auth.username), nil)
+	return s.client, nil
+}
+
+func (s *service) closeClient() {
+	s.client = nil
+	s.auth = minioauth{}
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -75,19 +169,48 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	select {
+	case <-s.done:
+		return
+	case <-ctx.Done():
+		l.Warn("failed to stop", nil)
+	}
 }
 
 func (s *service) Health() error {
-	if _, err := s.store.ListBuckets(); err != nil {
-		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
+	res := make(chan error)
+	op := pingOp{
+		res: res,
 	}
-	return nil
+	select {
+	case <-s.done:
+		return governor.NewError("Objstore service shutdown", http.StatusInternalServerError, nil)
+	case s.pings <- op:
+		return <-res
+	}
+}
+
+func (s *service) getClient() (*minio.Client, error) {
+	res := make(chan getClientRes)
+	op := getOp{
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return nil, governor.NewError("Objstore service shutdown", http.StatusInternalServerError, nil)
+	case s.ops <- op:
+		v := <-res
+		return v.client, v.err
+	}
 }
 
 // GetBucket returns the bucket of the given name
 func (s *service) GetBucket(name string) Bucket {
 	return &bucket{
-		service:  s,
+		s:        s,
 		name:     name,
 		location: s.location,
 	}
@@ -95,7 +218,11 @@ func (s *service) GetBucket(name string) Bucket {
 
 // DelBucket deletes the bucket if it exists
 func (s *service) DelBucket(name string) error {
-	if err := s.store.RemoveBucket(name); err != nil {
+	client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.RemoveBucket(name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return governor.NewError("Failed to get bucket", http.StatusNotFound, err)
 		}
@@ -128,7 +255,7 @@ type (
 	}
 
 	bucket struct {
-		service  *service
+		s        *service
 		name     string
 		location string
 	}
@@ -141,12 +268,16 @@ type (
 
 // Init creates the bucket if it does not exist
 func (b *bucket) Init() error {
-	exists, err := b.service.store.BucketExists(b.name)
+	client, err := b.s.getClient()
+	if err != nil {
+		return err
+	}
+	exists, err := client.BucketExists(b.name)
 	if err != nil {
 		return governor.NewError("Failed to get bucket", http.StatusInternalServerError, err)
 	}
 	if !exists {
-		if err := b.service.store.MakeBucket(b.name, b.location); err != nil {
+		if err := client.MakeBucket(b.name, b.location); err != nil {
 			return governor.NewError("Failed to create bucket", http.StatusInternalServerError, err)
 		}
 	}
@@ -155,7 +286,11 @@ func (b *bucket) Init() error {
 
 // Stat returns metadata of an object from the bucket
 func (b *bucket) Stat(name string) (*ObjectInfo, error) {
-	info, err := b.service.store.StatObject(b.name, name, minio.StatObjectOptions{})
+	client, err := b.s.getClient()
+	if err != nil {
+		return nil, err
+	}
+	info, err := client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
@@ -172,21 +307,36 @@ func (b *bucket) Stat(name string) (*ObjectInfo, error) {
 
 // Get gets an object from the bucket
 func (b *bucket) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
-	info, err := b.Stat(name)
+	client, err := b.s.getClient()
 	if err != nil {
 		return nil, nil, err
 	}
-
-	obj, err := b.service.store.GetObject(b.name, name, minio.GetObjectOptions{})
+	obj, err := client.GetObject(b.name, name, minio.GetObjectOptions{})
 	if err != nil {
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return nil, nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+		}
 		return nil, nil, governor.NewError("Failed to get object", http.StatusInternalServerError, err)
 	}
-	return obj, info, nil
+	info, err := obj.Stat()
+	if err != nil {
+		return nil, nil, governor.NewError("Failed to stat object", http.StatusInternalServerError, err)
+	}
+	return obj, &ObjectInfo{
+		Size:         info.Size,
+		ContentType:  info.ContentType,
+		ETag:         info.ETag,
+		LastModified: info.LastModified.Unix(),
+	}, nil
 }
 
 // Put puts a new object into the bucket
 func (b *bucket) Put(name string, contentType string, size int64, object io.Reader) error {
-	if _, err := b.service.store.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+	client, err := b.s.getClient()
+	if err != nil {
+		return err
+	}
+	if _, err := client.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
 		return governor.NewError("Failed to save object to bucket", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -194,7 +344,11 @@ func (b *bucket) Put(name string, contentType string, size int64, object io.Read
 
 // Del removes an object from the bucket
 func (b *bucket) Del(name string) error {
-	if err := b.service.store.RemoveObject(b.name, name); err != nil {
+	client, err := b.s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.RemoveObject(b.name, name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return governor.NewError("Failed to find object", http.StatusNotFound, err)
 		}

@@ -28,13 +28,13 @@ type (
 		password string
 	}
 
-	getDBRes struct {
-		db  *sql.DB
-		err error
+	getClientRes struct {
+		client *sql.DB
+		err    error
 	}
 
 	getOp struct {
-		res chan<- getDBRes
+		res chan<- getClientRes
 	}
 
 	pingOp struct {
@@ -95,16 +95,16 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeDB()
+			s.closeClient()
 			return
 		case op := <-s.pings:
 			op.res <- s.handlePing()
 			close(op.res)
 		case op := <-s.ops:
-			db, err := s.handleGetDB()
-			op.res <- getDBRes{
-				db:  db,
-				err: err,
+			client, err := s.handleGetClient()
+			op.res <- getClientRes{
+				client: client,
+				err:    err,
 			}
 			close(op.res)
 		}
@@ -122,7 +122,7 @@ func (s *service) handlePing() error {
 	return nil
 }
 
-func (s *service) handleGetDB() (*sql.DB, error) {
+func (s *service) handleGetClient() (*sql.DB, error) {
 	authsecret, err := s.config.GetSecret("auth")
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (s *service) handleGetDB() (*sql.DB, error) {
 		return s.db, nil
 	}
 
-	s.closeDB()
+	s.closeClient()
 
 	connection := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
 	db, err := sql.Open("postgres", connection)
@@ -153,7 +153,7 @@ func (s *service) handleGetDB() (*sql.DB, error) {
 	return s.db, nil
 }
 
-func (s *service) closeDB() {
+func (s *service) closeClient() {
 	if s.db == nil {
 		return
 	}
@@ -210,7 +210,7 @@ func (s *service) Health() error {
 
 // DB implements Database.DB by returning its wrapped sql.DB
 func (s *service) DB() (*sql.DB, error) {
-	res := make(chan getDBRes)
+	res := make(chan getClientRes)
 	op := getOp{
 		res: res,
 	}
@@ -219,6 +219,6 @@ func (s *service) DB() (*sql.DB, error) {
 		return nil, governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
 	case s.ops <- op:
 		v := <-res
-		return v.db, v.err
+		return v.client, v.err
 	}
 }

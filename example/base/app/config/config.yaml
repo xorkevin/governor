@@ -19,10 +19,9 @@ kvstore:
   host: 'redis-redis.governor.svc.cluster.local'
   port: '6379'
 objstore:
-  keyid: admin
-  keysecret: adminsecret
-  host: minio
-  port: 9000
+  auth: 'kv/data/infra/governor/minio'
+  host: 'minio'
+  port: '9000'
   sslmode: false
 msgqueue:
   host: messenger
