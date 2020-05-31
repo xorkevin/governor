@@ -27,23 +27,26 @@ type (
 	// Config is the complete server configuration including the dynamic
 	// (runtime) options
 	Config struct {
-		config        *viper.Viper
-		vault         *vaultapi.Client
-		vaultK8sAuth  bool
-		vaultExpire   int64
-		mu            *sync.RWMutex
-		Appname       string
-		Version       string
-		VersionHash   string
-		LogLevel      int
-		LogOutput     io.Writer
-		Port          string
-		BaseURL       string
-		PublicDir     string
-		MaxReqSize    string
-		FrontendProxy []string
-		Origins       []string
-		RouteRewrite  map[string]string
+		config         *viper.Viper
+		vault          *vaultapi.Client
+		vaultK8sAuth   bool
+		vaultRole      string
+		vaultJWT       string
+		vaultLoginPath string
+		vaultExpire    int64
+		mu             *sync.RWMutex
+		Appname        string
+		Version        string
+		VersionHash    string
+		LogLevel       int
+		LogOutput      io.Writer
+		Port           string
+		BaseURL        string
+		PublicDir      string
+		MaxReqSize     string
+		FrontendProxy  []string
+		Origins        []string
+		RouteRewrite   map[string]string
 	}
 )
 
@@ -124,6 +127,29 @@ func (c *Config) initvault(ctx context.Context, l Logger) error {
 	c.vault = vault
 	if c.config.GetBool("vault.k8s.auth") {
 		c.vaultK8sAuth = true
+
+		kconfig := c.config.GetStringMapString("vault.k8s")
+		role := kconfig["role"]
+		loginpath := kconfig["loginpath"]
+		jwtpath := kconfig["jwtpath"]
+		if role == "" {
+			return NewError("No vault role set", http.StatusBadRequest, nil)
+		}
+		if loginpath == "" {
+			return NewError("No vault k8s login path set", http.StatusBadRequest, nil)
+		}
+		if jwtpath == "" {
+			return NewError("No path for vault k8s service account jwt auth", http.StatusBadRequest, nil)
+		}
+		jwtbytes, err := ioutil.ReadFile(jwtpath)
+		if err != nil {
+			return NewError("Failed to read vault k8s service account jwt", http.StatusInternalServerError, err)
+		}
+		jwt := string(jwtbytes)
+		c.vaultRole = role
+		c.vaultLoginPath = loginpath
+		c.vaultJWT = jwt
+
 		if err := c.authVault(); err != nil {
 			return err
 		}
@@ -160,27 +186,9 @@ func (c *Config) authVault() error {
 	}
 
 	vault := c.vault.Logical()
-	kconfig := c.config.GetStringMapString("vault.k8s")
-	role := kconfig["role"]
-	loginpath := kconfig["loginpath"]
-	jwtpath := kconfig["jwtpath"]
-	if role == "" {
-		return NewError("No vault role set", http.StatusBadRequest, nil)
-	}
-	if loginpath == "" {
-		return NewError("No vault k8s login path set", http.StatusBadRequest, nil)
-	}
-	if jwtpath == "" {
-		return NewError("No path for vault k8s service account jwt auth", http.StatusBadRequest, nil)
-	}
-	jwtbytes, err := ioutil.ReadFile(jwtpath)
-	if err != nil {
-		return NewError("Failed to read vault k8s service account jwt", http.StatusInternalServerError, err)
-	}
-	jwt := string(jwtbytes)
-	authsecret, err := vault.Write(loginpath, map[string]interface{}{
-		"jwt":  jwt,
-		"role": role,
+	authsecret, err := vault.Write(c.vaultLoginPath, map[string]interface{}{
+		"jwt":  c.vaultJWT,
+		"role": c.vaultRole,
 	})
 	if err != nil {
 		return NewError("Failed to auth with vault k8s", http.StatusInternalServerError, err)
