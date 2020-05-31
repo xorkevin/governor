@@ -8,12 +8,11 @@ vault:
     auth: true
     role: 'governor-role'
 database:
-  user: postgres
-  password: admin
-  dbname: governor
-  host: postgres
-  port: 5432
-  sslmode: disable
+  auth: 'kv/data/infra/governor/postgres'
+  dbname: 'postgres'
+  host: 'postgres-postgres.governor.svc.cluster.local'
+  port: '5432'
+  sslmode: 'disable'
 kvstore:
   password: admin
   dbname: 0

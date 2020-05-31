@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	_ "github.com/lib/pq" // depends upon postgres
 	"net/http"
-	"strings"
+	"sync"
 	"xorkevin.dev/governor"
 )
 
@@ -24,22 +24,36 @@ type (
 		Database
 	}
 
+	pgauth struct {
+		username string
+		password string
+	}
+
 	service struct {
-		db     *sql.DB
-		logger governor.Logger
-		done   <-chan struct{}
+		db      *sql.DB
+		auth    pgauth
+		dbname  string
+		host    string
+		port    string
+		sslmode string
+		mu      *sync.RWMutex
+		config  governor.SecretReader
+		logger  governor.Logger
+		done    <-chan struct{}
 	}
 )
 
 // New creates a new db service
 func New() Service {
-	return &service{}
+	return &service{
+		mu: &sync.RWMutex{},
+	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("user", "postgres")
 	r.SetDefault("password", "admin")
-	r.SetDefault("dbname", "governor")
+	r.SetDefault("dbname", "postgres")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "5432")
 	r.SetDefault("sslmode", "disable")
@@ -51,43 +65,115 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	s.config = r
+
 	conf := r.GetStrMap("")
-	pgarr := make([]string, 0, len(conf))
-	for k, v := range conf {
-		pgarr = append(pgarr, k+"="+v)
+	s.dbname = conf["dbname"]
+	s.host = conf["host"]
+	s.port = conf["port"]
+	s.sslmode = conf["sslmode"]
+
+	if err := s.authPostgres(); err != nil {
+		return err
 	}
-	postgresURL := strings.Join(pgarr, " ")
-	db, err := sql.Open("postgres", postgresURL)
-	if err != nil {
-		return governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
-	}
-	s.db = db
 
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
-		l := s.logger.WithData(map[string]string{
-			"phase": "stop",
-		})
-		if err := s.db.Close(); err != nil {
-			l.Error("failed to close db connection", map[string]string{
-				"error": err.Error(),
-			})
-		} else {
-			l.Info("closed connection", nil)
-		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		s.closeDBLocked()
 		close(done)
 	}()
 	s.done = done
+	return nil
+}
 
-	l.Info("opened database connection", nil)
+func (s *service) closeDBLocked() {
+	if s.db == nil {
+		return
+	}
+	if err := s.db.Close(); err != nil {
+		s.logger.Error("failed to close db connection", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "closedb",
+			"username":   s.auth.username,
+		})
+	} else {
+		s.logger.Info("closed connection", map[string]string{
+			"actiontype": "closedb",
+			"username":   s.auth.username,
+		})
+	}
+	s.db = nil
+}
+
+func (s *service) ensureValidAuth() error {
+	if ok, err := s.authPostgresValid(); err != nil {
+		return err
+	} else if ok {
+		return nil
+	}
+	return s.authPostgres()
+}
+
+func (s *service) getPostgresAuth() (pgauth, error) {
+	secret, err := s.config.GetSecret("auth")
+	if err != nil {
+		return pgauth{}, err
+	}
+	return pgauth{
+		username: secret["username"].(string),
+		password: secret["password"].(string),
+	}, nil
+}
+
+func (s *service) authPostgresValidLocked() (bool, error) {
+	auth, err := s.getPostgresAuth()
+	if err != nil {
+		return false, err
+	}
+	return auth == s.auth, nil
+}
+
+func (s *service) authPostgresValid() (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.authPostgresValidLocked()
+}
+
+func (s *service) authPostgres() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if ok, err := s.authPostgresValidLocked(); err != nil {
+		return err
+	} else if ok {
+		return nil
+	}
+
+	auth, err := s.getPostgresAuth()
+	if err != nil {
+		return err
+	}
+
+	connection := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=%s sslmode=%s", auth.username, auth.password, s.dbname, s.host, s.port, s.sslmode)
+	db, err := sql.Open("postgres", connection)
+	if err != nil {
+		return governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
+	}
 
 	if err := db.Ping(); err != nil {
 		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
-	l.Info("ping database success", nil)
 
-	l.Info(fmt.Sprintf("established connection to %s:%s with user %s", conf["host"], conf["port"], conf["user"]), nil)
+	s.closeDBLocked()
+
+	s.db = db
+	s.auth = auth
+
+	s.logger.Info(fmt.Sprintf("established connection to %s:%s with user %s", s.host, s.port, s.auth.username), nil)
 	return nil
 }
 

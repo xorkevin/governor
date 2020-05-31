@@ -31,7 +31,7 @@ type (
 		vault         *vaultapi.Client
 		vaultK8sAuth  bool
 		vaultExpire   int64
-		mu            sync.RWMutex
+		mu            *sync.RWMutex
 		Appname       string
 		Version       string
 		VersionHash   string
@@ -77,6 +77,7 @@ func newConfig(conf ConfigOpts) *Config {
 
 	return &Config{
 		config:      v,
+		mu:          &sync.RWMutex{},
 		Appname:     conf.Appname,
 		Version:     conf.Version,
 		VersionHash: conf.VersionHash,
@@ -123,7 +124,7 @@ func (c *Config) initvault(ctx context.Context, l Logger) error {
 	c.vault = vault
 	if c.config.GetBool("vault.k8s.auth") {
 		c.vaultK8sAuth = true
-		if err := c.authk8s(); err != nil {
+		if err := c.authVault(); err != nil {
 			return err
 		}
 	}
@@ -134,27 +135,27 @@ func (c *Config) ensureValidAuth() error {
 	if !c.vaultK8sAuth {
 		return nil
 	}
-	if c.authk8sValid() {
+	if c.authVaultValid() {
 		return nil
 	}
-	return c.authk8s()
+	return c.authVault()
 }
 
-func (c *Config) authk8sValidLocked() bool {
+func (c *Config) authVaultValidLocked() bool {
 	return c.vaultExpire-time.Now().Round(0).Unix() > 5
 }
 
-func (c *Config) authk8sValid() bool {
+func (c *Config) authVaultValid() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.authk8sValidLocked()
+	return c.authVaultValidLocked()
 }
 
-func (c *Config) authk8s() error {
+func (c *Config) authVault() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.authk8sValidLocked() {
+	if c.authVaultValidLocked() {
 		return nil
 	}
 
@@ -342,7 +343,7 @@ func (r *configReader) getCacheSecretLocked(key string) (vaultSecretVal, bool) {
 	return s.value, true
 }
 
-func (r *configReader) getCacheSecret(key string) (map[string]interface{}, bool) {
+func (r *configReader) getCacheSecret(key string) (vaultSecretVal, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getCacheSecretLocked(key)
