@@ -8,7 +8,7 @@ vault:
     auth: true
     role: 'governor-role'
 database:
-  auth: 'kv/data/infra/governor/postgres'
+  auth: 'database/creds/governor-role'
   dbname: 'postgres'
   host: 'postgres-postgres.governor.svc.cluster.local'
   port: '5432'
