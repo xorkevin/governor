@@ -116,7 +116,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 
 func (s *service) handlePing() error {
 	if s.client == nil {
-		return governor.NewError("No objstore connection", http.StatusInternalServerError, nil)
+		return governor.NewError("No object store connection", http.StatusInternalServerError, nil)
 	}
 	if _, err := s.client.ListBuckets(); err != nil {
 		s.config.InvalidateSecret("auth")
@@ -142,7 +142,7 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 
 	client, err := minio.New(s.addr, auth.username, auth.password, s.sslmode)
 	if err != nil {
-		return nil, governor.NewError("Failed to create minio client", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to create object store client", http.StatusInternalServerError, err)
 	}
 	if _, err := client.ListBuckets(); err != nil {
 		s.config.InvalidateSecret("auth")

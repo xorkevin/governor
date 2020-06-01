@@ -140,7 +140,7 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 	connection := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
 	db, err := sql.Open("postgres", connection)
 	if err != nil {
-		return nil, governor.NewError("Failed to init postgres conn", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to init db conn", http.StatusInternalServerError, err)
 	}
 	if err := db.Ping(); err != nil {
 		s.config.InvalidateSecret("auth")
