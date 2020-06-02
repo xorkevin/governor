@@ -46,28 +46,28 @@ type (
 		res chan<- getClientRes
 	}
 
-	pingOp struct {
-		res chan<- error
-	}
-
 	service struct {
-		client *redis.Client
-		auth   string
-		addr   string
-		dbname int
-		config governor.SecretReader
-		logger governor.Logger
-		ops    chan getOp
-		pings  chan pingOp
-		done   <-chan struct{}
+		client     *redis.Client
+		auth       string
+		addr       string
+		dbname     int
+		config     governor.SecretReader
+		logger     governor.Logger
+		ops        chan getOp
+		ready      bool
+		hbfailed   int
+		hbinterval int
+		hbmaxfail  int
+		done       <-chan struct{}
 	}
 )
 
 // New creates a new cache service
 func New() Service {
 	return &service{
-		ops:   make(chan getOp),
-		pings: make(chan pingOp),
+		ops:      make(chan getOp),
+		ready:    false,
+		hbfailed: 0,
 	}
 }
 
@@ -76,6 +76,8 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("dbname", 0)
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "6379")
+	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbmaxfail", 5)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
@@ -89,6 +91,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	conf := r.GetStrMap("")
 	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
 	s.dbname = r.GetInt("dbname")
+	s.hbinterval = r.GetInt("hbinterval")
+	s.hbmaxfail = r.GetInt("hbmaxfail")
 
 	done := make(chan struct{})
 	go s.execute(ctx, done)
@@ -102,14 +106,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
+	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			s.closeClient()
 			return
-		case op := <-s.pings:
-			op.res <- s.handlePing()
-			close(op.res)
+		case <-ticker.C:
+			s.handlePing()
 		case op := <-s.ops:
 			client, err := s.handleGetClient()
 			op.res <- getClientRes{
@@ -121,15 +126,40 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing() error {
-	if s.client == nil {
-		return governor.NewError("No kvstore connection", http.StatusInternalServerError, nil)
-	}
-	if _, err := s.client.Ping().Result(); err != nil {
+func (s *service) handlePing() {
+	if s.client != nil {
+		_, err := s.client.Ping().Result()
+		if err == nil {
+			s.ready = true
+			s.hbfailed = 0
+			return
+		}
+		s.hbfailed++
+		if s.hbfailed < s.hbmaxfail {
+			s.logger.Warn("failed to ping kvstore", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "pingkv",
+				"address":    s.addr,
+				"dbname":     fmt.Sprintf("%d", s.dbname),
+			})
+			return
+		}
+		s.logger.Error("failed max pings to kvstore", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "pingkvmax",
+			"address":    s.addr,
+			"dbname":     fmt.Sprintf("%d", s.dbname),
+		})
+		s.ready = false
+		s.hbfailed = 0
 		s.config.InvalidateSecret("auth")
-		return governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
 	}
-	return nil
+	if _, err := s.handleGetClient(); err != nil {
+		s.logger.Error("failed to create kvstore client", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "createkvclient",
+		})
+	}
 }
 
 func (s *service) handleGetClient() (*redis.Client, error) {
@@ -156,7 +186,9 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 
 	s.client = client
 	s.auth = auth
-	s.logger.Info(fmt.Sprintf("established connection to %s", s.addr), nil)
+	s.ready = true
+	s.hbfailed = 0
+	s.logger.Info(fmt.Sprintf("established connection to %s dbname %d", s.addr, s.dbname), nil)
 	return s.client, nil
 }
 
@@ -203,16 +235,10 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	res := make(chan error)
-	op := pingOp{
-		res: res,
+	if !s.ready {
+		return governor.NewError("KVStore service not ready", http.StatusInternalServerError, nil)
 	}
-	select {
-	case <-s.done:
-		return governor.NewError("KVStore service shutdown", http.StatusInternalServerError, nil)
-	case s.pings <- op:
-		return <-res
-	}
+	return nil
 }
 
 func (s *service) getClient() (*redis.Client, error) {

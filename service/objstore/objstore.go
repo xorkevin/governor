@@ -7,6 +7,7 @@ import (
 	"github.com/minio/minio-go/v6"
 	"io"
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 )
 
@@ -36,29 +37,29 @@ type (
 		res chan<- getClientRes
 	}
 
-	pingOp struct {
-		res chan<- error
-	}
-
 	service struct {
-		client   *minio.Client
-		auth     minioauth
-		addr     string
-		sslmode  bool
-		location string
-		config   governor.SecretReader
-		logger   governor.Logger
-		ops      chan getOp
-		pings    chan pingOp
-		done     <-chan struct{}
+		client     *minio.Client
+		auth       minioauth
+		addr       string
+		sslmode    bool
+		location   string
+		config     governor.SecretReader
+		logger     governor.Logger
+		ops        chan getOp
+		ready      bool
+		hbfailed   int
+		hbinterval int
+		hbmaxfail  int
+		done       <-chan struct{}
 	}
 )
 
 // New creates a new object store service instance
 func New() Service {
 	return &service{
-		ops:   make(chan getOp),
-		pings: make(chan pingOp),
+		ops:      make(chan getOp),
+		ready:    false,
+		hbfailed: 0,
 	}
 }
 
@@ -68,6 +69,8 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("port", "9000")
 	r.SetDefault("sslmode", false)
 	r.SetDefault("location", "us-east-1")
+	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbmaxfail", 5)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
@@ -82,6 +85,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
 	s.sslmode = r.GetBool("sslmode")
 	s.location = conf["location"]
+	s.hbinterval = r.GetInt("hbinterval")
+	s.hbmaxfail = r.GetInt("hbmaxfail")
 
 	done := make(chan struct{})
 	go s.execute(ctx, done)
@@ -95,14 +100,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
+	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			s.closeClient()
 			return
-		case op := <-s.pings:
-			op.res <- s.handlePing()
-			close(op.res)
+		case <-ticker.C:
+			s.handlePing()
 		case op := <-s.ops:
 			client, err := s.handleGetClient()
 			op.res <- getClientRes{
@@ -114,15 +120,34 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing() error {
-	if s.client == nil {
-		return governor.NewError("No object store connection", http.StatusInternalServerError, nil)
-	}
-	if _, err := s.client.ListBuckets(); err != nil {
+func (s *service) handlePing() {
+	if s.client != nil {
+		_, err := s.client.ListBuckets()
+		if err == nil {
+			s.ready = true
+			s.hbfailed = 0
+			return
+		}
+		s.hbfailed++
+		if s.hbfailed < s.hbmaxfail {
+			s.logger.Warn("failed to ping objstore", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "pingobj",
+				"address":    s.addr,
+				"username":   s.auth.username,
+			})
+			return
+		}
+		s.ready = false
+		s.hbfailed = 0
 		s.config.InvalidateSecret("auth")
-		return governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
 	}
-	return nil
+	if _, err := s.handleGetClient(); err != nil {
+		s.logger.Error("failed to create objstore client", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "createobjclient",
+		})
+	}
 }
 
 func (s *service) handleGetClient() (*minio.Client, error) {
@@ -142,15 +167,17 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 
 	client, err := minio.New(s.addr, auth.username, auth.password, s.sslmode)
 	if err != nil {
-		return nil, governor.NewError("Failed to create object store client", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
 	}
 	if _, err := client.ListBuckets(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.NewError("Failed to ping object store", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to ping objstore", http.StatusInternalServerError, err)
 	}
 
 	s.client = client
 	s.auth = auth
+	s.ready = false
+	s.hbfailed = 0
 	s.logger.Info(fmt.Sprintf("established connection to %s with key %s", s.addr, s.auth.username), nil)
 	return s.client, nil
 }
@@ -181,16 +208,10 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	res := make(chan error)
-	op := pingOp{
-		res: res,
+	if !s.ready {
+		return governor.NewError("Objstore service not ready", http.StatusInternalServerError, nil)
 	}
-	select {
-	case <-s.done:
-		return governor.NewError("Objstore service shutdown", http.StatusInternalServerError, nil)
-	case s.pings <- op:
-		return <-res
-	}
+	return nil
 }
 
 func (s *service) getClient() (*minio.Client, error) {
