@@ -38,21 +38,27 @@ type (
 		res chan<- getClientRes
 	}
 
+	subOp struct {
+		rm  bool
+		sub *subscription
+	}
+
 	service struct {
 		client     stan.Conn
 		auth       string
 		clientid   string
 		clusterid  string
 		addr       string
+		config     governor.SecretReader
+		logger     governor.Logger
+		ops        chan getOp
+		subops     chan subOp
+		subs       map[*subscription]struct{}
 		ready      bool
 		canary     <-chan struct{}
 		hbinterval int
 		hbmaxfail  int
-		config     governor.SecretReader
-		logger     governor.Logger
-		ops        chan getOp
 		done       <-chan struct{}
-		subs       map[*subscription]bool
 	}
 
 	Subscription interface {
@@ -75,8 +81,10 @@ type (
 // New creates a new msgqueue service
 func New() Service {
 	return &service{
-		ready: false,
-		subs:  map[*subscription]bool{},
+		ops:    make(chan getOp),
+		subops: make(chan subOp),
+		subs:   map[*subscription]struct{}{},
+		ready:  false,
 	}
 }
 
@@ -130,6 +138,12 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			return
 		case <-ticker.C:
 			s.handlePing()
+		case op := <-s.subops:
+			if op.rm {
+				delete(s.subs, op.sub)
+			} else {
+				s.subs[op.sub] = struct{}{}
+			}
 		case op := <-s.ops:
 			client, err := s.handleGetClient()
 			op.res <- getClientRes{
@@ -147,16 +161,62 @@ func (s *service) handlePing() {
 		case <-s.canary:
 		default:
 			s.ready = true
+			s.updateSubs()
 			return
 		}
 		s.ready = false
 		s.config.InvalidateSecret("auth")
+		s.deinitSubs()
 	}
 	if _, err := s.handleGetClient(); err != nil {
 		s.logger.Error("failed to create msgqueue client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createmsgqueueclient",
 		})
+	}
+}
+
+func (s *service) updateSubs() {
+	for k := range s.subs {
+		if k.ok() {
+			continue
+		}
+		if err := k.init(s.client); err != nil {
+			s.logger.Error("failed to subscribe to channel", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "createmsgqueuesuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("subscribed to channel", map[string]string{
+				"actiontype": "createmsgqueuesubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
+	}
+}
+
+func (s *service) deinitSubs() {
+	for k := range s.subs {
+		if !k.ok() {
+			continue
+		}
+		if err := k.deinit(); err != nil {
+			s.logger.Error("failed to close subscription", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "closemsgqueuesuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("closed subscription", map[string]string{
+				"actiontype": "closemsgqueuesubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
 	}
 }
 
@@ -258,6 +318,28 @@ func (s *service) Health() error {
 	return nil
 }
 
+func (s *service) addSub(sub *subscription) {
+	op := subOp{
+		rm:  false,
+		sub: sub,
+	}
+	select {
+	case <-s.done:
+	case s.subops <- op:
+	}
+}
+
+func (s *service) rmSub(sub *subscription) {
+	op := subOp{
+		rm:  true,
+		sub: sub,
+	}
+	select {
+	case <-s.done:
+	case s.subops <- op:
+	}
+}
+
 // Subscribe subscribes to a channel
 func (s *service) Subscribe(channel, group string, ackwait time.Duration, inflight int, worker WorkerFunc) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
@@ -265,7 +347,7 @@ func (s *service) Subscribe(channel, group string, ackwait time.Duration, inflig
 		"channel": channel,
 		"group":   group,
 	})
-	msub := &subscription{
+	sub := &subscription{
 		s:        s,
 		channel:  channel,
 		group:    group,
@@ -274,11 +356,8 @@ func (s *service) Subscribe(channel, group string, ackwait time.Duration, inflig
 		worker:   worker,
 		logger:   l,
 	}
-	if err := msub.init(); err != nil {
-		return nil, err
-	}
-	s.subs[msub] = true
-	return msub, nil
+	s.addSub(sub)
+	return sub, nil
 }
 
 // Publish publishes to a channel
@@ -293,11 +372,7 @@ func (s *service) Publish(channel string, msgdata []byte) error {
 	return nil
 }
 
-func (s *subscription) init() error {
-	client, err := s.s.getClient()
-	if err != nil {
-		return err
-	}
+func (s *subscription) init(client stan.Conn) error {
 	sub, err := client.QueueSubscribe(s.channel, s.group,
 		s.subscriber,
 		stan.DurableName(s.group+"-durable"),
@@ -305,10 +380,23 @@ func (s *subscription) init() error {
 		stan.AckWait(s.ackwait),
 		stan.MaxInflight(s.inflight))
 	if err != nil {
-		return governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
+		return err
 	}
 	s.sub = sub
 	return nil
+}
+
+func (s *subscription) deinit() error {
+	k := s.sub
+	s.sub = nil
+	if err := k.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *subscription) ok() bool {
+	return s.sub != nil
 }
 
 func (s *subscription) subscriber(msg *stan.Msg) {
@@ -329,7 +417,10 @@ func (s *subscription) subscriber(msg *stan.Msg) {
 
 // Unsubscribe removes the subscription
 func (s *subscription) Unsubscribe() error {
-	delete(s.s.subs, s)
+	s.s.rmSub(s)
+	if s.sub == nil {
+		return nil
+	}
 	if err := s.sub.Unsubscribe(); err != nil {
 		return governor.NewError("Failed to unsubscribe", http.StatusInternalServerError, err)
 	}
@@ -338,7 +429,10 @@ func (s *subscription) Unsubscribe() error {
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	delete(s.s.subs, s)
+	s.s.rmSub(s)
+	if s.sub == nil {
+		return nil
+	}
 	if err := s.sub.Close(); err != nil {
 		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}
