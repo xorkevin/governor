@@ -24,17 +24,12 @@ objstore:
   port: '9000'
   sslmode: false
 msgqueue:
-  host: messenger
-  port: 4222
-  cluster: nss
-  token: admin
-msgstoredb:
-  user: nss
-  password: admin
-  dbname: nss_db
-  host: messagestore
-  port: 5432
-  sslmode: disable
+  auth: 'kv/data/infra/governor/natsstream'
+  host: 'natsstream-nats-streaming'
+  port: '4222'
+  cluster: 'nss'
+  hbinterval: 5
+  hbmaxfail: 5
 pubsub:
   host: pubsub
   port: 4222

@@ -42,7 +42,7 @@ type (
 	}
 
 	service struct {
-		db       *sql.DB
+		client   *sql.DB
 		auth     pgauth
 		connopts string
 		config   governor.SecretReader
@@ -112,10 +112,10 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing() error {
-	if s.db == nil {
+	if s.client == nil {
 		return governor.NewError("No db connection", http.StatusInternalServerError, nil)
 	}
-	if err := s.db.Ping(); err != nil {
+	if err := s.client.Ping(); err != nil {
 		s.config.InvalidateSecret("auth")
 		return governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
@@ -132,7 +132,7 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 		password: authsecret["password"].(string),
 	}
 	if auth == s.auth {
-		return s.db, nil
+		return s.client, nil
 	}
 
 	s.closeClient()
@@ -147,17 +147,17 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
 	}
 
-	s.db = db
+	s.client = db
 	s.auth = auth
 	s.logger.Info(fmt.Sprintf("established connection to %s with user %s", s.connopts, s.auth.username), nil)
-	return s.db, nil
+	return s.client, nil
 }
 
 func (s *service) closeClient() {
-	if s.db == nil {
+	if s.client == nil {
 		return
 	}
-	if err := s.db.Close(); err != nil {
+	if err := s.client.Close(); err != nil {
 		s.logger.Error("failed to close db connection", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "closedberr",
@@ -171,7 +171,7 @@ func (s *service) closeClient() {
 			"username":   s.auth.username,
 		})
 	}
-	s.db = nil
+	s.client = nil
 	s.auth = pgauth{}
 }
 
