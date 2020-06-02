@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nats-io/stan.go"
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )
@@ -15,10 +16,12 @@ const (
 )
 
 type (
-	// Msgqueue is a service wrapper around a nats streaming queue client instance
+	WorkerFunc func(msgdata []byte) error
+
+	// Msgqueue is a service wrapper around a nats streaming client instance
 	Msgqueue interface {
-		Subscribe(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error)
-		Publish(queueid string, msgdata []byte) error
+		Subscribe(channel, group string, ackwait time.Duration, inflight int, worker WorkerFunc) (Subscription, error)
+		Publish(channel string, msgdata []byte) error
 	}
 
 	Service interface {
@@ -50,6 +53,7 @@ type (
 	}
 
 	Subscription interface {
+		Unsubscribe() error
 		Close() error
 	}
 
@@ -57,7 +61,7 @@ type (
 		s      *service
 		logger governor.Logger
 		sub    stan.Subscription
-		worker func(data []byte)
+		worker WorkerFunc
 	}
 )
 
@@ -214,12 +218,12 @@ func (s *service) Health() error {
 	return nil
 }
 
-// SubscribeQueue subscribes to a queue
-func (s *service) Subscribe(queueid, queuegroup string, worker func(msgdata []byte)) (Subscription, error) {
+// Subscribe subscribes to a channel
+func (s *service) Subscribe(channel, group string, ackwait time.Duration, inflight int, worker WorkerFunc) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
-		"agent":      "subscriber",
-		"queueid":    queueid,
-		"queuegroup": queuegroup,
+		"agent":   "subscriber",
+		"channel": channel,
+		"group":   group,
 	})
 	msub := &subscription{
 		s:      s,
@@ -230,33 +234,53 @@ func (s *service) Subscribe(queueid, queuegroup string, worker func(msgdata []by
 	if err != nil {
 		return nil, err
 	}
-	sub, err := client.QueueSubscribe(queueid, queuegroup, msub.subscriber, stan.DurableName(queuegroup+"-durable"), stan.SetManualAckMode())
+	sub, err := client.QueueSubscribe(channel, group,
+		msub.subscriber,
+		stan.DurableName(group+"-durable"),
+		stan.SetManualAckMode(),
+		stan.AckWait(ackwait),
+		stan.MaxInflight(inflight))
 	if err != nil {
-		return nil, governor.NewError("Failed to create subscription to queue", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
 	}
 	msub.sub = sub
 	return msub, nil
 }
 
-func (s *service) Publish(queueid string, msgdata []byte) error {
+// Publish publishes to a channel
+func (s *service) Publish(channel string, msgdata []byte) error {
 	client, err := s.getClient()
 	if err != nil {
 		return err
 	}
-	if err := client.Publish(queueid, msgdata); err != nil {
+	if err := client.Publish(channel, msgdata); err != nil {
 		return governor.NewError("Failed to publish message: ", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (s *subscription) subscriber(msg *stan.Msg) {
-	s.worker(msg.Data)
+	if err := s.worker(msg.Data); err != nil {
+		s.logger.Error("Failed to execute message handler", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "execworker",
+		})
+		return
+	}
 	if err := msg.Ack(); err != nil {
 		s.logger.Error("Failed to ack message", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "ackmessage",
 		})
 	}
+}
+
+// Unsubscribe removes the subscription
+func (s *subscription) Unsubscribe() error {
+	if err := s.sub.Unsubscribe(); err != nil {
+		return governor.NewError("Failed to unsubscribe", http.StatusInternalServerError, err)
+	}
+	return nil
 }
 
 // Close closes the subscription
