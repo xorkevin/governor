@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"io"
+	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/http"
@@ -270,7 +271,11 @@ func (b *msgbuilder) writePart(w io.Writer, data []byte) error {
 func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 	defer w.Close()
 	if len(b.body) != 0 {
-		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=\"UTF-8\""}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		header := textproto.MIMEHeader{
+			"Content-Type":              {mime.FormatMediaType("text/plain", map[string]string{"charset": "UTF-8"})},
+			"Content-Transfer-Encoding": {"quoted-printable"},
+		}
+		w, err := w.CreatePart(header)
 		if err != nil {
 			return err
 		}
@@ -279,7 +284,11 @@ func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 		}
 	}
 	if len(b.htmlbody) != 0 {
-		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/html; charset=\"UTF-8\""}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		header := textproto.MIMEHeader{
+			"Content-Type":              {mime.FormatMediaType("text/html", map[string]string{"charset": "UTF-8"})},
+			"Content-Transfer-Encoding": {"quoted-printable"},
+		}
+		w, err := w.CreatePart(header)
 		if err != nil {
 			return err
 		}
@@ -296,7 +305,11 @@ func genBoundary() string {
 
 func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, error) {
 	boundary := genBoundary()
-	part, err := m.CreatePart(textproto.MIMEHeader{"Content-Type": {fmt.Sprintf("%s;\r\n\tboundary=\"%s\"", contenttype, boundary)}})
+
+	header := textproto.MIMEHeader{
+		"Content-Type": {mime.FormatMediaType(contenttype, map[string]string{"boundary": boundary})},
+	}
+	part, err := m.CreatePart(header)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +328,7 @@ func (b *msgbuilder) build() (*bytes.Buffer, error) {
 
 	m := multipart.NewWriter(buf)
 	defer m.Close()
-	fmt.Fprintf(buf, "Content-Type: multipart/mixed;\r\n\tboundary=\"%s\";\r\n\tcharset=\"UTF-8\"\r\n\r\n", m.Boundary())
+	fmt.Fprintf(buf, "Content-Type: %s\r\n\r\n", mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": m.Boundary(), "charset": "UTF-8"}))
 
 	part, err := createPart(m, "multipart/alternative")
 	if err != nil {

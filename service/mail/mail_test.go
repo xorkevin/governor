@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"io"
+	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/mail"
@@ -49,11 +51,40 @@ func TestBuildMail(t *testing.T) {
 			assert.Equal(ti.to[n], i.Address)
 		}
 		assert.Equal(m.Header.Get("Mime-Version"), "1.0")
-		mediatype, params, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
+		mixedcontenttype, mixedparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 		assert.NoError(err)
-		assert.Equal("multipart/mixed", mediatype)
-		assert.Equal("UTF-8", params["charset"])
-		assert.NotEqual("", params["boundary"])
-		multipart.NewReader(m.Body, params["boundary"])
+		assert.Equal("multipart/mixed", mixedcontenttype)
+		assert.Equal("UTF-8", mixedparams["charset"])
+		assert.NotEqual("", mixedparams["boundary"])
+		r := multipart.NewReader(m.Body, mixedparams["boundary"])
+		body, err := r.NextPart()
+		assert.NoError(err)
+		altcontenttype, altparams, err := mime.ParseMediaType(body.Header.Get("Content-Type"))
+		assert.NoError(err)
+		assert.Equal("multipart/alternative", altcontenttype)
+		assert.NotEqual("", altparams["boundary"])
+		b := multipart.NewReader(body, altparams["boundary"])
+		plain, err := b.NextPart()
+		assert.NoError(err)
+		plaincontenttype, plainparams, err := mime.ParseMediaType(plain.Header.Get("Content-Type"))
+		assert.NoError(err)
+		assert.Equal("text/plain", plaincontenttype)
+		assert.Equal("UTF-8", plainparams["charset"])
+		plainbytes, err := ioutil.ReadAll(plain)
+		assert.NoError(err)
+		assert.Equal(ti.body, string(plainbytes))
+		htmlpart, err := b.NextPart()
+		assert.NoError(err)
+		htmlcontenttype, htmlparams, err := mime.ParseMediaType(htmlpart.Header.Get("Content-Type"))
+		assert.NoError(err)
+		assert.Equal("text/html", htmlcontenttype)
+		assert.Equal("UTF-8", htmlparams["charset"])
+		htmlbytes, err := ioutil.ReadAll(htmlpart)
+		assert.NoError(err)
+		assert.Equal(ti.htmlbody, string(htmlbytes))
+		_, err = b.NextPart()
+		assert.Equal(io.EOF, err)
+		_, err = r.NextPart()
+		assert.Equal(io.EOF, err)
 	}
 }
