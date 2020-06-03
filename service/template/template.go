@@ -14,8 +14,8 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
-		Execute(templateName string, data interface{}) (string, error)
-		ExecuteHTML(filename string, data interface{}) (string, error)
+		Execute(templateName string, data interface{}) ([]byte, error)
+		ExecuteHTML(filename string, data interface{}) ([]byte, error)
 	}
 
 	Service interface {
@@ -79,15 +79,15 @@ func (s *service) Health() error {
 }
 
 // Execute executes a template and returns the templated string
-func (s *service) Execute(templateName string, data interface{}) (string, error) {
+func (s *service) Execute(templateName string, data interface{}) ([]byte, error) {
 	b := bytes.Buffer{}
 	if err := s.t.ExecuteTemplate(&b, templateName, data); err != nil {
-		return "", governor.NewError("Failed executing template", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed executing template", http.StatusInternalServerError, err)
 	}
-	return b.String(), nil
+	return b.Bytes(), nil
 }
 
 // ExecuteHTML executes an html file and returns the templated string
-func (s *service) ExecuteHTML(filename string, data interface{}) (string, error) {
+func (s *service) ExecuteHTML(filename string, data interface{}) ([]byte, error) {
 	return s.Execute(filename+".html", data)
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"strconv"
 	"time"
 	"xorkevin.dev/governor"
 )
@@ -140,7 +141,7 @@ func (s *service) handlePing() {
 				"error":      err.Error(),
 				"actiontype": "pingkv",
 				"address":    s.addr,
-				"dbname":     fmt.Sprintf("%d", s.dbname),
+				"dbname":     strconv.Itoa(s.dbname),
 			})
 			return
 		}
@@ -148,7 +149,7 @@ func (s *service) handlePing() {
 			"error":      err.Error(),
 			"actiontype": "pingkvmax",
 			"address":    s.addr,
-			"dbname":     fmt.Sprintf("%d", s.dbname),
+			"dbname":     strconv.Itoa(s.dbname),
 		})
 		s.ready = false
 		s.hbfailed = 0
@@ -201,13 +202,13 @@ func (s *service) closeClient() {
 			"error":      err.Error(),
 			"actiontype": "closekverr",
 			"address":    s.addr,
-			"dbname":     fmt.Sprintf("%d", s.dbname),
+			"dbname":     strconv.Itoa(s.dbname),
 		})
 	} else {
 		s.logger.Info("closed kvstore connection", map[string]string{
 			"actiontype": "closekvok",
 			"address":    s.addr,
-			"dbname":     fmt.Sprintf("%d", s.dbname),
+			"dbname":     strconv.Itoa(s.dbname),
 		})
 	}
 	s.client = nil

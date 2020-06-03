@@ -44,15 +44,13 @@ pubsub:
   hbinterval: 5
   hbmaxfail: 5
 template:
-  dir: templates
+  dir: 'templates'
 mail:
-  host: mail
-  port: 1025
-  # port: 587
-  fromaddress: no-reply@xorkevin.com
-  fromname: Governor
-  workersize: 2
-  connmsgcap: 100
+  auth: 'kv/data/external/smtp'
+  host: 'localhost'
+  port: 587
+  fromaddress: 'no-reply@xorkevin.com'
+  fromname: 'Governor'
 role:
   rolecache: 24h
 token:

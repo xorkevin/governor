@@ -5,7 +5,6 @@ go 1.14
 require (
 	github.com/boombuler/barcode v1.0.0
 	github.com/fatih/color v1.9.0
-	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/go-redis/redis/v7 v7.3.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/labstack/echo/v4 v4.1.16
@@ -22,8 +21,6 @@ require (
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
 	golang.org/x/image v0.0.0-20200430140353-33d19683fad8
 	google.golang.org/protobuf v1.24.0 // indirect
-	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
-	gopkg.in/mail.v2 v2.3.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
 	xorkevin.dev/hunter2 v0.1.1
 )

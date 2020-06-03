@@ -1,25 +1,22 @@
 package mail
 
 import (
+	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	gomail "github.com/go-mail/mail"
 	"github.com/labstack/echo/v4"
 	"net/http"
-	"strconv"
-	"sync"
-	"time"
+	"net/smtp"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/template"
 )
 
 const (
-	govmailqueueid     = "gov.mail"
-	govmailqueueworker = "gov.mail.worker"
+	govmailchannelid = "gov.mail"
+	govmailworker    = "gov.mail.worker"
 )
 
 type (
@@ -33,59 +30,58 @@ type (
 		Mail
 	}
 
-	service struct {
-		tpl         template.Template
-		queue       msgqueue.Msgqueue
-		logger      governor.Logger
-		host        string
-		port        int
-		username    string
-		password    string
-		insecure    bool
-		workerSize  int
-		connMsgCap  int
-		connTimeout int64
-		fromAddress string
-		fromName    string
-		msgc        chan *gomail.Message
-		done        <-chan struct{}
+	mailOp struct {
+		from string
+		to   []string
+		msg  []byte
+		res  chan<- error
 	}
 
 	mailmsg struct {
 		From       string `json:"from"`
-		Name       string `json:"name"`
+		FromName   string `json:"fromname"`
 		To         string `json:"to"`
 		Subjecttpl string `json:"subjecttpl"`
 		Bodytpl    string `json:"bodytpl"`
 		Emdata     string `json:"emdata"`
+	}
+
+	msgbuilder struct {
+		buf *bytes.Buffer
+	}
+
+	service struct {
+		tpl         template.Template
+		queue       msgqueue.Msgqueue
+		config      governor.SecretReader
+		logger      governor.Logger
+		host        string
+		addr        string
+		fromAddress string
+		fromName    string
+		insecure    bool
+		outbox      chan mailOp
+		done        <-chan struct{}
 	}
 )
 
 // New creates a new mailer service
 func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 	return &service{
-		tpl:   tpl,
-		queue: queue,
+		tpl:    tpl,
+		queue:  queue,
+		outbox: make(chan mailOp),
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "587")
-	r.SetDefault("username", "")
-	r.SetDefault("password", "")
-	r.SetDefault("insecure", false)
-	r.SetDefault("workersize", 2)
-	r.SetDefault("connmsgcap", 0)
-	r.SetDefault("conntimeout", "4s")
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
+	r.SetDefault("insecure", false)
 }
-
-const (
-	time4s int64 = 4
-	b1           = 1_000_000_000
-)
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
 	s.logger = l
@@ -93,29 +89,21 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	s.host = r.GetStr("host")
-	s.port = r.GetInt("port")
-	s.username = r.GetStr("username")
-	s.password = r.GetStr("password")
-	s.insecure = r.GetBool("insecure")
-	s.workerSize = r.GetInt("workersize")
-	s.connMsgCap = r.GetInt("connmsgcap")
-	s.connTimeout = time4s
-	if t, err := time.ParseDuration(r.GetStr("conntimeout")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse conn timeout: %s", r.GetStr("conntimeout")), nil)
-	} else {
-		s.connTimeout = t.Nanoseconds() / b1
-	}
-	s.fromAddress = r.GetStr("fromaddress")
-	s.fromName = r.GetStr("fromname")
-	s.msgc = make(chan *gomail.Message)
+	s.config = r
 
-	l.Info("initialize service options", map[string]string{
-		"smtp server host": s.host,
-		"smtp server port": strconv.Itoa(s.port),
-		"worker size":      strconv.Itoa(s.workerSize),
-		"conn msg cap":     strconv.Itoa(s.connMsgCap),
-		"conn timeout (s)": strconv.FormatInt(s.connTimeout, 10),
+	conf := r.GetStrMap("")
+	s.host = conf["host"]
+	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
+	s.fromAddress = conf["fromaddress"]
+	s.fromName = conf["fromname"]
+	s.insecure = r.GetBool("insecure")
+
+	done := make(chan struct{})
+	go s.execute(ctx, done)
+	s.done = done
+
+	l.Info("initialize mail options", map[string]string{
+		"smtp server addr": s.addr,
 		"sender address":   s.fromAddress,
 		"sender name":      s.fromName,
 	})
@@ -127,30 +115,6 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-	l.Info("starting mail workers", map[string]string{
-		"count": strconv.Itoa(s.workerSize),
-	})
-	wg := &sync.WaitGroup{}
-	for i := 0; i < s.workerSize; i++ {
-		wg.Add(1)
-		go s.mailWorker(strconv.Itoa(i), wg)
-	}
-	if _, err := s.queue.SubscribeQueue(govmailqueueid, govmailqueueworker, s.mailSubscriber); err != nil {
-		return governor.NewError("Failed to subscribe to mail queue", http.StatusInternalServerError, err)
-	}
-	done := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		close(s.msgc)
-		wg.Wait()
-		close(done)
-	}()
-	s.done = done
-
-	l.Info("subscribed to mail queue", nil)
 	return nil
 }
 
@@ -170,140 +134,114 @@ func (s *service) Health() error {
 	return nil
 }
 
-func (s *service) mailWorker(id string, wg *sync.WaitGroup) {
-	l := s.logger.WithData(map[string]string{
-		"mailworkerid": id,
-		"agent":        "worker",
-	})
-	defer func() {
-		wg.Done()
-		l.Info("mail worker stopped", nil)
-	}()
-	l.Info("mail worker started", nil)
-	d := gomail.NewDialer(s.host, s.port, s.username, s.password)
-	if s.insecure {
-		d.TLSConfig = &tls.Config{
-			ServerName:         s.host,
-			InsecureSkipVerify: true,
-		}
-	}
-	var sender gomail.SendCloser
-	mailSent := 0
-
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
 	for {
 		select {
-		case msg, ok := <-s.msgc:
-			if !ok {
-				if sender != nil {
-					if err := sender.Close(); err != nil {
-						l.Error("fail close smtp client", map[string]string{
-							"error": err.Error(),
-						})
-					}
-					sender = nil
-					l.Info("close smtp client", nil)
-					return
-				}
-				return
-			}
-			if sender == nil || mailSent >= s.connMsgCap && s.connMsgCap > 0 {
-				if send, err := d.Dial(); err != nil {
-					l.Error("fail dial smtp server", map[string]string{
-						"error": err.Error(),
-					})
-				} else {
-					sender = send
-					mailSent = 0
-				}
-			}
-			if sender != nil {
-				if err := gomail.Send(sender, msg); err != nil {
-					l.Error("fail send smtp server", map[string]string{
-						"error": err.Error(),
-					})
-				}
-				mailSent++
-			}
-
-		case <-time.After(time.Duration(s.connTimeout) * time.Second):
-			if sender != nil {
-				if err := sender.Close(); err != nil {
-					l.Error("fail close smtp client", map[string]string{
-						"error": err.Error(),
-					})
-				}
-				sender = nil
-			}
+		case <-ctx.Done():
+			return
+		case op := <-s.outbox:
+			op.res <- s.handleSendMail(op.from, op.to, op.msg)
+			close(op.res)
 		}
 	}
 }
 
-func (s *service) mailSubscriber(msgdata []byte) {
-	l := s.logger.WithData(map[string]string{
-		"agent": "subscriber",
-	})
-	emmsg := mailmsg{}
-	b := bytes.NewBuffer(msgdata)
-	if err := json.NewDecoder(b).Decode(&emmsg); err != nil {
-		l.Error("fail decode mailmsg", map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	emdata := map[string]string{}
-	b1 := bytes.NewBufferString(emmsg.Emdata)
-	if err := json.NewDecoder(b1).Decode(&emdata); err != nil {
-		l.Error("fail decode emdata", map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-	if err := s.enqueue(emmsg.From, emmsg.Name, emmsg.To, emmsg.Subjecttpl, emmsg.Bodytpl, emdata); err != nil {
-		l.Error("fail enqueue mail", map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-}
-
-func (s *service) enqueue(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error {
-	body, err := s.tpl.ExecuteHTML(bodytpl, emdata)
+func (s *service) handleSendMail(from string, to []string, msg []byte) error {
+	authsecret, err := s.config.GetSecret("auth")
 	if err != nil {
-		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
-	}
-	subject, err := s.tpl.ExecuteHTML(subjecttpl, emdata)
-	if err != nil {
-		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
+		return err
 	}
 
-	msg := gomail.NewMessage()
-	if len(name) > 0 {
-		msg.SetAddressHeader("From", from, name)
-	} else {
-		msg.SetHeader("From", from)
-	}
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", subject)
-	msg.SetBody("text/html", body)
-
-	select {
-	case <-s.done:
-	case s.msgc <- msg:
+	smtpauth := smtp.PlainAuth("", authsecret["username"].(string), authsecret["password"].(string), s.host)
+	if err := smtp.SendMail(s.addr, smtpauth, from, to, msg); err != nil {
+		return err
 	}
 	return nil
 }
 
+func (s *service) mailSubscriber(msgdata []byte) error {
+	emmsg := mailmsg{}
+	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(&emmsg); err != nil {
+		return governor.NewError("Failed to decode mail message", http.StatusInternalServerError, err)
+	}
+	emdata := map[string]string{}
+	if err := json.NewDecoder(bytes.NewBufferString(emmsg.Emdata)).Decode(&emdata); err != nil {
+		return governor.NewError("Failed to decode mail data", http.StatusInternalServerError, err)
+	}
+
+	body, err := s.tpl.ExecuteHTML(emmsg.Bodytpl, emdata)
+	if err != nil {
+		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
+	}
+	subject, err := s.tpl.ExecuteHTML(emmsg.Subjecttpl, emdata)
+	if err != nil {
+		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
+	}
+
+	msg := newMsgBuilder()
+	if emmsg.FromName == "" {
+		msg.setHeader("From", emmsg.From)
+	} else {
+		msg.setAddrHeader("From", emmsg.FromName, emmsg.From)
+	}
+	msg.setHeader("To", emmsg.To)
+	msg.setHeader("Subject", string(subject))
+	msg.setHeader("MIME-version", "1.0")
+	msg.setHeader("Content-Type", "text/html; charset=\"UTF-8\"")
+	msg.setBody(body)
+
+	res := make(chan error)
+	op := mailOp{
+		from: emmsg.From,
+		to:   []string{emmsg.To},
+		msg:  msg.bytes(),
+		res:  res,
+	}
+	select {
+	case <-s.done:
+		return governor.NewError("Mail service shutdown", http.StatusInternalServerError, err)
+	case s.outbox <- op:
+		return <-res
+	}
+}
+
+func newMsgBuilder() *msgbuilder {
+	return &msgbuilder{
+		buf: &bytes.Buffer{},
+	}
+}
+
+func (b *msgbuilder) setHeader(key, val string) {
+	fmt.Fprintf(b.buf, "%s: %s\r\n", key, val)
+}
+
+func (b *msgbuilder) setAddrHeader(key, name, addr string) {
+	fmt.Fprintf(b.buf, "%s: %s <%s>\r\n", key, name, addr)
+}
+
+func (b *msgbuilder) setBody(body []byte) {
+	fmt.Fprint(b.buf, "\r\n")
+	scanner := bufio.NewScanner(bytes.NewBuffer(body))
+	for scanner.Scan() {
+		fmt.Fprintf(b.buf, "%s\r\n", scanner.Text())
+	}
+}
+
+func (b *msgbuilder) bytes() []byte {
+	return b.buf.Bytes()
+}
+
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error {
-	datastring := bytes.Buffer{}
-	if err := json.NewEncoder(&datastring).Encode(emdata); err != nil {
+func (s *service) Send(from, fromname, to, subjecttpl, bodytpl string, emdata interface{}) error {
+	datastring := &bytes.Buffer{}
+	if err := json.NewEncoder(datastring).Encode(emdata); err != nil {
 		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
 	}
 
 	msg := mailmsg{
 		From:       from,
-		Name:       name,
+		FromName:   fromname,
 		To:         to,
 		Subjecttpl: subjecttpl,
 		Bodytpl:    bodytpl,
@@ -312,15 +250,15 @@ func (s *service) Send(from, name, to, subjecttpl, bodytpl string, emdata interf
 	if msg.From == "" {
 		msg.From = s.fromAddress
 	}
-	if msg.Name == "" {
-		msg.Name = s.fromName
+	if msg.FromName == "" {
+		msg.FromName = s.fromName
 	}
 
-	b := bytes.Buffer{}
-	if err := json.NewEncoder(&b).Encode(msg); err != nil {
+	b := &bytes.Buffer{}
+	if err := json.NewEncoder(b).Encode(msg); err != nil {
 		return governor.NewError("Failed to encode email to json", http.StatusInternalServerError, err)
 	}
-	if err := s.queue.Publish(govmailqueueid, b.Bytes()); err != nil {
+	if err := s.queue.Publish(govmailchannelid, b.Bytes()); err != nil {
 		return governor.NewError("Failed to publish new email to message queue", http.StatusInternalServerError, err)
 	}
 	return nil
