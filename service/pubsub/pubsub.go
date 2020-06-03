@@ -11,7 +11,7 @@ import (
 )
 
 type (
-	WorkerFunc func(msgdata []byte) error
+	WorkerFunc func(msgdata []byte)
 
 	// Pubsub is a service wrapper around a nats pub sub client
 	Pubsub interface {
@@ -60,9 +60,12 @@ type (
 	}
 
 	subscription struct {
-		logger governor.Logger
-		sub    *nats.Subscription
-		worker WorkerFunc
+		s       *service
+		channel string
+		group   string
+		worker  WorkerFunc
+		logger  governor.Logger
+		sub     *nats.Subscription
 	}
 )
 
@@ -141,16 +144,62 @@ func (s *service) handlePing() {
 		case <-s.canary:
 		default:
 			s.ready = true
+			s.updateSubs()
 			return
 		}
 		s.ready = false
 		s.config.InvalidateSecret("auth")
+		s.deinitSubs()
 	}
 	if _, err := s.handleGetClient(); err != nil {
 		s.logger.Error("failed to create pubsub client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createpubsubclient",
 		})
+	}
+}
+
+func (s *service) updateSubs() {
+	for k := range s.subs {
+		if k.ok() {
+			continue
+		}
+		if err := k.init(s.client); err != nil {
+			s.logger.Error("failed to subscribe to channel", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "createpubsubsuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("subscribed to channel", map[string]string{
+				"actiontype": "createpubsubsubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
+	}
+}
+
+func (s *service) deinitSubs() {
+	for k := range s.subs {
+		if !k.ok() {
+			continue
+		}
+		if err := k.deinit(); err != nil {
+			s.logger.Error("failed to close subscription", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "closepubsubsuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("closed subscription", map[string]string{
+				"actiontype": "closepubsubsubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
 	}
 }
 
@@ -242,45 +291,101 @@ func (s *service) Health() error {
 	return nil
 }
 
+func (s *service) addSub(sub *subscription) {
+	op := subOp{
+		rm:  false,
+		sub: sub,
+	}
+	select {
+	case <-s.done:
+	case s.subops <- op:
+	}
+}
+
+func (s *service) rmSub(sub *subscription) {
+	op := subOp{
+		rm:  true,
+		sub: sub,
+	}
+	select {
+	case <-s.done:
+	case s.subops <- op:
+	}
+}
+
 // Subscribe subscribes to a channel
 func (s *service) Subscribe(channel string, worker WorkerFunc) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
-		"agent": "subscriber",
+		"agent":   "subscriber",
+		"channel": channel,
 	})
-	msub := &subscription{
-		logger: l,
-		worker: worker,
+	sub := &subscription{
+		s:       s,
+		channel: channel,
+		worker:  worker,
+		logger:  l,
 	}
-	sub, err := s.client.Subscribe(channel, msub.subscriber)
-	if err != nil {
-		return nil, governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
-	}
-	msub.sub = sub
-	return msub, nil
+	s.addSub(sub)
+	return sub, nil
 }
 
 // SubscribeGroup subscribes to a queue group
 func (s *service) SubscribeGroup(channel, group string, worker WorkerFunc) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
-		"agent": "subscriber",
+		"agent":   "subscriber",
+		"channel": channel,
+		"group":   group,
 	})
-	msub := &subscription{
-		logger: l,
-		worker: worker,
+	sub := &subscription{
+		s:       s,
+		channel: channel,
+		group:   group,
+		worker:  worker,
+		logger:  l,
 	}
-	sub, err := s.client.QueueSubscribe(channel, group, msub.subscriber)
-	if err != nil {
-		return nil, governor.NewError("Failed to create subscription to queue group", http.StatusInternalServerError, err)
-	}
-	msub.sub = sub
-	return msub, nil
+	s.addSub(sub)
+	return sub, nil
 }
 
 func (s *service) Publish(channel string, msgdata []byte) error {
-	if err := s.client.Publish(channel, msgdata); err != nil {
-		return governor.NewError("Failed to publish message: ", http.StatusInternalServerError, err)
+	client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Publish(channel, msgdata); err != nil {
+		return governor.NewError("Failed to publish message", http.StatusInternalServerError, err)
 	}
 	return nil
+}
+
+func (s *subscription) init(client *nats.Conn) error {
+	if s.group == "" {
+		sub, err := client.Subscribe(s.channel, s.subscriber)
+		if err != nil {
+			return governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
+		}
+		s.sub = sub
+	} else {
+		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
+		if err != nil {
+			return governor.NewError("Failed to create subscription to channel as queue group", http.StatusInternalServerError, err)
+		}
+		s.sub = sub
+	}
+	return nil
+}
+
+func (s *subscription) deinit() error {
+	k := s.sub
+	s.sub = nil
+	if err := k.Unsubscribe(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *subscription) ok() bool {
+	return s.sub != nil
 }
 
 func (s *subscription) subscriber(msg *nats.Msg) {
@@ -289,6 +394,10 @@ func (s *subscription) subscriber(msg *nats.Msg) {
 
 // Close closes the subscription
 func (s *subscription) Close() error {
+	s.s.rmSub(s)
+	if s.sub == nil {
+		return nil
+	}
 	if err := s.sub.Unsubscribe(); err != nil {
 		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
 	}

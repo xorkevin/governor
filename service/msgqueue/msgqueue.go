@@ -367,7 +367,7 @@ func (s *service) Publish(channel string, msgdata []byte) error {
 		return err
 	}
 	if err := client.Publish(channel, msgdata); err != nil {
-		return governor.NewError("Failed to publish message: ", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to publish message", http.StatusInternalServerError, err)
 	}
 	return nil
 }
