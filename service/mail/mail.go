@@ -1,14 +1,17 @@
 package mail
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/labstack/echo/v4"
+	"io"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net/http"
 	"net/smtp"
+	"net/textproto"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/template"
@@ -47,7 +50,9 @@ type (
 	}
 
 	msgbuilder struct {
-		buf *bytes.Buffer
+		headers  []string
+		body     []byte
+		htmlbody []byte
 	}
 
 	service struct {
@@ -181,21 +186,23 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 
 	msg := newMsgBuilder()
 	if emmsg.FromName == "" {
-		msg.setHeader("From", emmsg.From)
+		msg.addHeader("From", emmsg.From)
 	} else {
-		msg.setAddrHeader("From", emmsg.FromName, emmsg.From)
+		msg.addAddrHeader("From", emmsg.FromName, emmsg.From)
 	}
-	msg.setHeader("To", emmsg.To)
-	msg.setHeader("Subject", string(subject))
-	msg.setHeader("MIME-version", "1.0")
-	msg.setHeader("Content-Type", "text/html; charset=\"UTF-8\"")
-	msg.setBody(body)
+	msg.addHeader("To", emmsg.To)
+	msg.addHeader("Subject", string(subject))
+	msg.addHtmlBody(body)
+	buf, err := msg.build()
+	if err != nil {
+		return governor.NewError("Failed to write mail", http.StatusInternalServerError, err)
+	}
 
 	res := make(chan error)
 	op := mailOp{
 		from: emmsg.From,
 		to:   []string{emmsg.To},
-		msg:  msg.bytes(),
+		msg:  buf.Bytes(),
 		res:  res,
 	}
 	select {
@@ -208,28 +215,101 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 
 func newMsgBuilder() *msgbuilder {
 	return &msgbuilder{
-		buf: &bytes.Buffer{},
+		headers: []string{},
+		body:    nil,
 	}
 }
 
-func (b *msgbuilder) setHeader(key, val string) {
-	fmt.Fprintf(b.buf, "%s: %s\r\n", key, val)
+func (b *msgbuilder) addHeader(key, val string) {
+	b.headers = append(b.headers, fmt.Sprintf("%s: %s", key, val))
 }
 
-func (b *msgbuilder) setAddrHeader(key, name, addr string) {
-	fmt.Fprintf(b.buf, "%s: %s <%s>\r\n", key, name, addr)
+func (b *msgbuilder) addAddrHeader(key, name, addr string) {
+	b.headers = append(b.headers, fmt.Sprintf("%s: %s <%s>", key, name, addr))
 }
 
-func (b *msgbuilder) setBody(body []byte) {
-	fmt.Fprint(b.buf, "\r\n")
-	scanner := bufio.NewScanner(bytes.NewBuffer(body))
-	for scanner.Scan() {
-		fmt.Fprintf(b.buf, "%s\r\n", scanner.Text())
+func (b *msgbuilder) addBody(body []byte) {
+	b.body = body
+}
+
+func (b *msgbuilder) addHtmlBody(body []byte) {
+	b.htmlbody = body
+}
+
+func (b *msgbuilder) writeHeaders(buf *bytes.Buffer) {
+	for _, h := range b.headers {
+		buf.WriteString(h)
+		buf.WriteString("\r\n")
 	}
 }
 
-func (b *msgbuilder) bytes() []byte {
-	return b.buf.Bytes()
+func (b *msgbuilder) writePart(w io.Writer, data []byte) error {
+	qw := quotedprintable.NewWriter(w)
+	defer qw.Close()
+	if _, err := qw.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *msgbuilder) writeBody(w *multipart.Writer) error {
+	defer w.Close()
+	if len(b.body) != 0 {
+		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=UTF-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		if err != nil {
+			return err
+		}
+		if err := b.writePart(w, b.body); err != nil {
+			return err
+		}
+	}
+	if len(b.htmlbody) != 0 {
+		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/html; charset=UTF-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		if err != nil {
+			return err
+		}
+		if err := b.writePart(w, b.htmlbody); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func genBoundary() string {
+	return multipart.NewWriter(&bytes.Buffer{}).Boundary()
+}
+
+func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, error) {
+	boundary := genBoundary()
+	part, err := m.CreatePart(textproto.MIMEHeader{"Content-Type": {fmt.Sprintf("%s; boundary=\"%s\"", contenttype, boundary)}})
+	if err != nil {
+		return nil, err
+	}
+	w := multipart.NewWriter(part)
+	if err := w.SetBoundary(boundary); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+func (b *msgbuilder) build() (*bytes.Buffer, error) {
+	buf := &bytes.Buffer{}
+	b.writeHeaders(buf)
+
+	buf.WriteString("Mime-Version: 1.0\r\n")
+	m := multipart.NewWriter(buf)
+	defer m.Close()
+	fmt.Fprintf(buf, "Content-Type: multipart/mixed; boundary=\"%s\"; charset=UTF-8\r\n\r\n", m.Boundary())
+
+	part, err := createPart(m, "multipart/alternative")
+	if err != nil {
+		return nil, err
+	}
+	if err := b.writeBody(part); err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // Send creates and enqueues a new message to be sent
