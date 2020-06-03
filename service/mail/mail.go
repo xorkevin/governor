@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/smtp"
 	"net/textproto"
+	"strings"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/template"
@@ -25,7 +27,7 @@ const (
 type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
-		Send(from, name, to, subjecttpl, bodytpl string, emdata interface{}) error
+		Send(from, fromname string, to []string, subjecttpl, bodytpl string, emdata interface{}) error
 	}
 
 	Service interface {
@@ -41,12 +43,12 @@ type (
 	}
 
 	mailmsg struct {
-		From       string `json:"from"`
-		FromName   string `json:"fromname"`
-		To         string `json:"to"`
-		Subjecttpl string `json:"subjecttpl"`
-		Bodytpl    string `json:"bodytpl"`
-		Emdata     string `json:"emdata"`
+		From       string   `json:"from"`
+		FromName   string   `json:"fromname"`
+		To         []string `json:"to"`
+		Subjecttpl string   `json:"subjecttpl"`
+		Bodytpl    string   `json:"bodytpl"`
+		Emdata     string   `json:"emdata"`
 	}
 
 	msgbuilder struct {
@@ -184,25 +186,16 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
 	}
 
-	msg := newMsgBuilder()
-	if emmsg.FromName == "" {
-		msg.addHeader("From", emmsg.From)
-	} else {
-		msg.addAddrHeader("From", emmsg.FromName, emmsg.From)
-	}
-	msg.addHeader("To", emmsg.To)
-	msg.addHeader("Subject", string(subject))
-	msg.addHtmlBody(body)
-	buf, err := msg.build()
+	msg, err := msgToBytes(string(subject), emmsg.From, emmsg.FromName, emmsg.To, nil, body)
 	if err != nil {
-		return governor.NewError("Failed to write mail", http.StatusInternalServerError, err)
+		return err
 	}
 
 	res := make(chan error)
 	op := mailOp{
 		from: emmsg.From,
-		to:   []string{emmsg.To},
-		msg:  buf.Bytes(),
+		to:   emmsg.To,
+		msg:  msg,
 		res:  res,
 	}
 	select {
@@ -211,6 +204,28 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 	case s.outbox <- op:
 		return <-res
 	}
+}
+
+func msgToBytes(subject string, from, fromname string, to []string, body []byte, htmlbody []byte) ([]byte, error) {
+	msg := newMsgBuilder()
+	msg.addHeader("Subject", subject)
+	if fromname == "" {
+		msg.addHeader("From", from)
+	} else {
+		msg.addAddrHeader("From", fromname, from)
+	}
+	msg.addHeader("To", strings.Join(to, ",\r\n\t"))
+	if body != nil {
+		msg.addBody(body)
+	}
+	if htmlbody != nil {
+		msg.addHtmlBody(htmlbody)
+	}
+	buf, err := msg.build()
+	if err != nil {
+		return nil, governor.NewError("Failed to write mail", http.StatusInternalServerError, err)
+	}
+	return buf.Bytes(), nil
 }
 
 func newMsgBuilder() *msgbuilder {
@@ -255,7 +270,7 @@ func (b *msgbuilder) writePart(w io.Writer, data []byte) error {
 func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 	defer w.Close()
 	if len(b.body) != 0 {
-		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=UTF-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=\"UTF-8\""}, "Content-Transfer-Encoding": {"quoted-printable"}})
 		if err != nil {
 			return err
 		}
@@ -264,7 +279,7 @@ func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 		}
 	}
 	if len(b.htmlbody) != 0 {
-		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/html; charset=UTF-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
+		w, err := w.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/html; charset=\"UTF-8\""}, "Content-Transfer-Encoding": {"quoted-printable"}})
 		if err != nil {
 			return err
 		}
@@ -281,7 +296,7 @@ func genBoundary() string {
 
 func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, error) {
 	boundary := genBoundary()
-	part, err := m.CreatePart(textproto.MIMEHeader{"Content-Type": {fmt.Sprintf("%s; boundary=\"%s\"", contenttype, boundary)}})
+	part, err := m.CreatePart(textproto.MIMEHeader{"Content-Type": {fmt.Sprintf("%s;\r\n\tboundary=\"%s\"", contenttype, boundary)}})
 	if err != nil {
 		return nil, err
 	}
@@ -294,12 +309,13 @@ func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, err
 
 func (b *msgbuilder) build() (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
+	buf.WriteString("Mime-Version: 1.0\r\n")
+	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Round(0).Format(time.RFC1123Z)))
 	b.writeHeaders(buf)
 
-	buf.WriteString("Mime-Version: 1.0\r\n")
 	m := multipart.NewWriter(buf)
 	defer m.Close()
-	fmt.Fprintf(buf, "Content-Type: multipart/mixed; boundary=\"%s\"; charset=UTF-8\r\n\r\n", m.Boundary())
+	fmt.Fprintf(buf, "Content-Type: multipart/mixed;\r\n\tboundary=\"%s\";\r\n\tcharset=\"UTF-8\"\r\n\r\n", m.Boundary())
 
 	part, err := createPart(m, "multipart/alternative")
 	if err != nil {
@@ -313,7 +329,10 @@ func (b *msgbuilder) build() (*bytes.Buffer, error) {
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from, fromname, to, subjecttpl, bodytpl string, emdata interface{}) error {
+func (s *service) Send(from, fromname string, to []string, subjecttpl, bodytpl string, emdata interface{}) error {
+	if len(to) == 0 {
+		return governor.NewError("Email must have at least one recipient", http.StatusBadRequest, nil)
+	}
 	datastring := &bytes.Buffer{}
 	if err := json.NewEncoder(datastring).Encode(emdata); err != nil {
 		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
