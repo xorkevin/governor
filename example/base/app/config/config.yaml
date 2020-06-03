@@ -32,15 +32,17 @@ objstore:
   hbmaxfail: 5
 msgqueue:
   auth: 'kv/data/infra/governor/natsstream'
-  host: 'natsstream-nats-streaming'
+  host: 'natsstream-nats-streaming.svc.cluster.local'
   port: '4222'
   cluster: 'nss'
   hbinterval: 5
   hbmaxfail: 5
 pubsub:
-  host: pubsub
-  port: 4222
-  token: admin
+  auth: 'kv/data/infra/governor/nats'
+  host: 'nats-nats.svc.cluster.local'
+  port: '4222'
+  hbinterval: 5
+  hbmaxfail: 5
 template:
   dir: templates
 mail:
