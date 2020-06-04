@@ -1,6 +1,11 @@
+FROM alpine:3 as builder
+RUN apk add --no-cache ca-certificates tzdata
+
 FROM scratch
 MAINTAINER xorkevin <kevin@xorkevin.com>
 WORKDIR /home/governor
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY bin/governor .
 VOLUME /home/governor/config
 VOLUME /home/governor/public

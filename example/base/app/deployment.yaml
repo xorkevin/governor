@@ -61,7 +61,7 @@ spec:
               mountPath: '/home/governor'
       containers:
         - name: 'governor'
-          image: 'registry.pkg.dev.home:8080/governor'
+          image: 'docker.pkg.dev.home:8080/governor'
           ports:
             - name: 'http'
               containerPort: 8080

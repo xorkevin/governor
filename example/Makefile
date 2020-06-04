@@ -37,15 +37,21 @@ build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
 # Docker
-DOCKER_NAME=governor
-DOCKER_VERSION=0.2.7
+DOCKER_NAME=docker.pkg.dev.home:8080/governor
+
+DOCKER_MAJOR_VERSION=0.2
+DOCKER_VERSION=0.2.7-0
+
+DOCKER_LATEST_IMAGE=$(DOCKER_NAME):latest
+DOCKER_MAJOR_IMAGE=$(DOCKER_NAME):$(DOCKER_MAJOR_VERSION)
 DOCKER_IMAGE?=$(DOCKER_NAME):$(DOCKER_VERSION)
+
 DOCKER_FILE=cmd/Dockerfile
 
 .PHONY: build-docker publish-docker docker
 
 build-docker:
-	docker build -f $(DOCKER_FILE) -t $(DOCKER_IMAGE) -t $(DOCKER_NAME):latest .
+	docker build -f $(DOCKER_FILE) -t $(DOCKER_IMAGE) -t $(DOCKER_MAJOR_IMAGE) -t $(DOCKER_LATEST_IMAGE) .
 
 publish-docker:
 	docker push $(DOCKER_IMAGE)

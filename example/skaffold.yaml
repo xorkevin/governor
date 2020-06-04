@@ -4,7 +4,7 @@ metadata:
   name: 'governor'
 build:
   artifacts:
-    - image: 'registry.pkg.dev.home:8080/governor'
+    - image: 'docker.pkg.dev.home:8080/governor'
       context: '.'
       custom:
         buildCommand: './skaffoldbuild.sh'
@@ -17,7 +17,7 @@ build:
     useBuildkit: true
     concurrency: 1
   insecureRegistries:
-    - 'registry.pkg.dev.home:8080'
+    - 'docker.pkg.dev.home:8080'
 deploy:
   kustomize:
     paths:
