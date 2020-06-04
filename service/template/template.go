@@ -97,8 +97,8 @@ func (s *service) Health() error {
 
 // Execute executes a template and returns the templated string
 func (s *service) Execute(templateName string, data interface{}) ([]byte, error) {
-	b := bytes.Buffer{}
-	if err := s.tt.ExecuteTemplate(&b, templateName, data); err != nil {
+	b := &bytes.Buffer{}
+	if err := s.tt.ExecuteTemplate(b, templateName, data); err != nil {
 		return nil, governor.NewError("Failed executing text template", http.StatusInternalServerError, err)
 	}
 	return b.Bytes(), nil
@@ -106,8 +106,8 @@ func (s *service) Execute(templateName string, data interface{}) ([]byte, error)
 
 // ExecuteHTML executes an html template and returns the templated string
 func (s *service) ExecuteHTML(templateName string, data interface{}) ([]byte, error) {
-	b := bytes.Buffer{}
-	if err := s.ht.ExecuteTemplate(&b, templateName, data); err != nil {
+	b := &bytes.Buffer{}
+	if err := s.ht.ExecuteTemplate(b, templateName, data); err != nil {
 		return nil, governor.NewError("Failed executing html template", http.StatusInternalServerError, err)
 	}
 	return b.Bytes(), nil

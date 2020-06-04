@@ -3,6 +3,7 @@ package user
 import (
 	"bytes"
 	"encoding/json"
+	htmlTemplate "html/template"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/model"
@@ -18,6 +19,7 @@ type (
 	emailNewUser struct {
 		Email     string
 		Key       string
+		URL       string
 		FirstName string
 		Username  string
 	}
@@ -25,8 +27,16 @@ type (
 
 const (
 	newUserTemplate = "newuser"
-	newUserSubject  = "newuser_subject"
 )
+
+func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
+	b := &bytes.Buffer{}
+	if err := tpl.Execute(b, *e); err != nil {
+		return governor.NewError("Failed executing new user url template", http.StatusInternalServerError, err)
+	}
+	e.URL = base + b.String()
+	return nil
+}
 
 type (
 	resUserUpdate struct {
@@ -185,7 +195,10 @@ func (s *service) CreateUserVerify(m *usermodel.Model) error {
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", m.Email, newUserSubject, newUserTemplate, emdata); err != nil {
+	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
+		return err
+	}
+	if err := s.mailer.Send("", "", []string{m.Email}, newUserTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
 

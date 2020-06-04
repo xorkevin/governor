@@ -28,7 +28,7 @@ const (
 type (
 	// Mail is a service wrapper around a mailer instance
 	Mail interface {
-		Send(from, fromname string, to []string, subjecttpl, bodytpl string, emdata interface{}) error
+		Send(from, fromname string, to []string, tpl string, emdata interface{}) error
 	}
 
 	Service interface {
@@ -352,7 +352,7 @@ func (b *msgbuilder) build() (*bytes.Buffer, error) {
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from, fromname string, to []string, subjecttpl, bodytpl string, emdata interface{}) error {
+func (s *service) Send(from, fromname string, to []string, tpl string, emdata interface{}) error {
 	if len(to) == 0 {
 		return governor.NewError("Email must have at least one recipient", http.StatusBadRequest, nil)
 	}
@@ -365,9 +365,9 @@ func (s *service) Send(from, fromname string, to []string, subjecttpl, bodytpl s
 		From:        from,
 		FromName:    fromname,
 		To:          to,
-		Subjecttpl:  subjecttpl + ".txt",
-		Bodytpl:     bodytpl + ".txt",
-		HtmlBodytpl: bodytpl + ".html",
+		Subjecttpl:  tpl + "_subject.txt",
+		Bodytpl:     tpl + ".txt",
+		HtmlBodytpl: tpl + ".html",
 		Emdata:      datastring.String(),
 	}
 	if msg.From == "" {

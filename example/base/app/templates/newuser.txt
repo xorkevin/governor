@@ -4,5 +4,3 @@ Finish creating your account
 
 Email: {{ .Email }}
 Key: {{ .Key }}
-
-<a href="{{ .URL }}">{{ .URL }}</a>

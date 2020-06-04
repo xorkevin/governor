@@ -57,13 +57,16 @@ token:
   issuer: governor
   # secret: secret
 user:
-  accesstime: 5m
-  refreshtime: 4380h
-  refreshcache: 24h
-  confirmtime: 24h
-  passwordresettime: 24h
+  accesstime: '5m'
+  refreshtime: '4380h'
+  refreshcache: '24h'
+  confirmtime: '24h'
+  passwordresettime: '24h'
   newloginemail: true
   passwordminsize: 8
   userapproval: false
+  email:
+    url:
+      base: 'http://localhost:8080'
 courier:
   cachetime: 24h

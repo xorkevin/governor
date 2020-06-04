@@ -1,6 +1,8 @@
 package user
 
 import (
+	"bytes"
+	htmlTemplate "html/template"
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
@@ -16,6 +18,7 @@ type (
 	emailEmailChange struct {
 		Userid    string
 		Key       string
+		URL       string
 		FirstName string
 		Username  string
 	}
@@ -28,14 +31,21 @@ type (
 
 const (
 	emailChangeTemplate       = "emailchange"
-	emailChangeSubject        = "emailchange_subject"
 	emailChangeNotifyTemplate = "emailchangenotify"
-	emailChangeNotifySubject  = "emailchangenotify_subject"
 )
 
 const (
 	emailChangeSeparator = "|email|"
 )
+
+func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) error {
+	b := &bytes.Buffer{}
+	if err := tpl.Execute(b, *e); err != nil {
+		return governor.NewError("Failed executing email change url template", http.StatusInternalServerError, err)
+	}
+	e.URL = base + b.String()
+	return nil
+}
 
 // UpdateEmail creates a pending user email update
 func (s *service) UpdateEmail(userid string, newEmail string, password string) error {
@@ -75,7 +85,10 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", newEmail, emailChangeSubject, emailChangeTemplate, emdata); err != nil {
+	if err := emdata.computeURL(s.emailurlbase, s.tplemailchange); err != nil {
+		return err
+	}
+	if err := s.mailer.Send("", "", []string{newEmail}, emailChangeTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -137,7 +150,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", m.Email, emailChangeNotifySubject, emailChangeNotifyTemplate, emdatanotify); err != nil {
+	if err := s.mailer.Send("", "", []string{m.Email}, emailChangeNotifyTemplate, emdatanotify); err != nil {
 		s.logger.Error("failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailoldmail",
@@ -155,6 +168,7 @@ type (
 	emailForgotPass struct {
 		Userid    string
 		Key       string
+		URL       string
 		FirstName string
 		Username  string
 	}
@@ -165,13 +179,19 @@ type (
 	}
 )
 
+func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) error {
+	b := &bytes.Buffer{}
+	if err := tpl.Execute(b, *e); err != nil {
+		return governor.NewError("Failed executing forgot pass url template", http.StatusInternalServerError, err)
+	}
+	e.URL = base + b.String()
+	return nil
+}
+
 const (
 	passChangeTemplate = "passchange"
-	passChangeSubject  = "passchange_subject"
 	forgotPassTemplate = "forgotpass"
-	forgotPassSubject  = "forgotpass_subject"
 	passResetTemplate  = "passreset"
-	passResetSubject   = "passreset_subject"
 )
 
 // UpdatePassword updates the password
@@ -200,7 +220,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", m.Email, passChangeSubject, passChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", []string{m.Email}, passChangeTemplate, emdata); err != nil {
 		s.logger.Error("failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "updatepasswordmail",
@@ -252,7 +272,10 @@ func (s *service) ForgotPassword(useroremail string) error {
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", m.Email, forgotPassSubject, forgotPassTemplate, emdata); err != nil {
+	if err := emdata.computeURL(s.emailurlbase, s.tplforgotpass); err != nil {
+		return err
+	}
+	if err := s.mailer.Send("", "", []string{m.Email}, forgotPassTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send password reset email", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -301,7 +324,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		FirstName: m.FirstName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", m.Email, passResetSubject, passResetTemplate, emdata); err != nil {
+	if err := s.mailer.Send("", "", []string{m.Email}, passResetTemplate, emdata); err != nil {
 		s.logger.Error("failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpasswordmail",

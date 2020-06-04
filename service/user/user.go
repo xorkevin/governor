@@ -2,8 +2,9 @@ package user
 
 import (
 	"context"
-	"fmt"
 	"github.com/labstack/echo/v4"
+	htmlTemplate "html/template"
+	"net/http"
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
@@ -63,6 +64,10 @@ type (
 		newLoginEmail     bool
 		passwordMinSize   int
 		userApproval      bool
+		emailurlbase      string
+		tplemailchange    *htmlTemplate.Template
+		tplforgotpass     *htmlTemplate.Template
+		tplnewuser        *htmlTemplate.Template
 	}
 
 	router struct {
@@ -91,10 +96,9 @@ const (
 )
 
 const (
-	time5m     int64 = 300
-	time24h    int64 = 86400
+	time5m     int64 = int64(5 * time.Minute / time.Second)
+	time24h    int64 = int64(24 * time.Hour / time.Second)
 	time6month int64 = time24h * 365 / 2
-	b1               = 1_000_000_000
 )
 
 // New creates a new User
@@ -136,6 +140,10 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
+	r.SetDefault("email.url.base", "http://localhost:8080")
+	r.SetDefault("email.url.emailchange", "/a/account/email/confirm?key={{.Userid}}.{{.Key}}")
+	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{ .Userid }}.{{ .Key }}")
+	r.SetDefault("email.url.newuser", "/x/confirm?email={{ .Email }}&key={{ .Key }}")
 }
 
 func (s *service) router() *router {
@@ -152,34 +160,53 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
-	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse access time: %s", r.GetStr("accesstime")), nil)
+	conf := r.GetStrMap("")
+	if t, err := time.ParseDuration(conf["accesstime"]); err != nil {
+		return governor.NewError("Failed to parse access time", http.StatusInternalServerError, err)
 	} else {
-		s.accessTime = t.Nanoseconds() / b1
+		s.accessTime = int64(t / time.Second)
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse refresh time: %s", r.GetStr("refreshtime")), nil)
+	if t, err := time.ParseDuration(conf["refreshtime"]); err != nil {
+		return governor.NewError("Failed to parse refresh time", http.StatusInternalServerError, err)
 	} else {
-		s.refreshTime = t.Nanoseconds() / b1
+		s.refreshTime = int64(t / time.Second)
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshcache")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse refresh cache: %s", r.GetStr("refreshcache")), nil)
+	if t, err := time.ParseDuration(conf["refreshcache"]); err != nil {
+		return governor.NewError("Failed to parse refresh cache", http.StatusInternalServerError, err)
 	} else {
-		s.refreshCacheTime = t.Nanoseconds() / b1
+		s.refreshCacheTime = int64(t / time.Second)
 	}
-	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse confirm time: %s", r.GetStr("confirmtime")), nil)
+	if t, err := time.ParseDuration(conf["confirmtime"]); err != nil {
+		return governor.NewError("Failed to parse confirm time", http.StatusInternalServerError, err)
 	} else {
-		s.confirmTime = t.Nanoseconds() / b1
+		s.confirmTime = int64(t / time.Second)
 	}
-	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse password reset time: %s", r.GetStr("passwordresettime")), nil)
+	if t, err := time.ParseDuration(conf["passwordresettime"]); err != nil {
+		return governor.NewError("Failed to parse password reset time", http.StatusInternalServerError, err)
 	} else {
-		s.passwordResetTime = t.Nanoseconds() / b1
+		s.passwordResetTime = int64(t / time.Second)
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
+
+	emailconf := r.GetStrMap("email.url")
+	s.emailurlbase = emailconf["base"]
+	if t, err := htmlTemplate.New("email.url.emailchange").Parse(emailconf["emailchange"]); err != nil {
+		return governor.NewError("Failed to parse email change url template", http.StatusInternalServerError, err)
+	} else {
+		s.tplemailchange = t
+	}
+	if t, err := htmlTemplate.New("email.url.forgotpass").Parse(emailconf["forgotpass"]); err != nil {
+		return governor.NewError("Failed to parse forgot pass url template", http.StatusInternalServerError, err)
+	} else {
+		s.tplforgotpass = t
+	}
+	if t, err := htmlTemplate.New("email.url.newuser").Parse(emailconf["newuser"]); err != nil {
+		return governor.NewError("Failed to parse new user url template", http.StatusInternalServerError, err)
+	} else {
+		s.tplnewuser = t
+	}
 
 	l.Info("loaded config", map[string]string{
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
@@ -191,6 +218,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"issuer":                r.GetStr("issuer"),
 		"userapproval":          strconv.FormatBool(s.userApproval),
+		"tplemailchange":        emailconf["emailchange"],
+		"tplforgotpass":         emailconf["forgotpass"],
+		"tplnewuser":            emailconf["newuser"],
 	})
 
 	sr := s.router()
