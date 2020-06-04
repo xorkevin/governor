@@ -2,7 +2,7 @@
 
 all: build
 
-.PHONY: devinit devinit2 devup devdown
+.PHONY: devinit devinit2 devconfig devup devdown
 
 devinit:
 	./plan.sh
@@ -17,6 +17,9 @@ devdown:
 
 devinit2:
 	./register2.sh
+
+devconfig:
+	./setsmtpauth.sh
 
 # CMD
 BIN_NAME=governor

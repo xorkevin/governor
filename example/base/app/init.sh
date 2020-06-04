@@ -6,7 +6,7 @@ export ROOT_DIR=${0%/*}
 
 . "${ROOT_DIR}/_init_lib.sh"
 
-log2 'begin gentoken'
+log2 'begin gentokensecret'
 
 secret=
 

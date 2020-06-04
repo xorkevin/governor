@@ -18,7 +18,7 @@ spec:
     spec:
       serviceAccountName: 'governor'
       initContainers:
-        - name: 'genpass'
+        - name: 'gentokensecret'
           image: 'xorkevin/alpine-utils:3'
           command: ['sh']
           args: ['/home/governor/init.sh']
