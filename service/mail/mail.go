@@ -44,12 +44,13 @@ type (
 	}
 
 	mailmsg struct {
-		From       string   `json:"from"`
-		FromName   string   `json:"fromname"`
-		To         []string `json:"to"`
-		Subjecttpl string   `json:"subjecttpl"`
-		Bodytpl    string   `json:"bodytpl"`
-		Emdata     string   `json:"emdata"`
+		From        string   `json:"from"`
+		FromName    string   `json:"fromname"`
+		To          []string `json:"to"`
+		Subjecttpl  string   `json:"subjecttpl"`
+		Bodytpl     string   `json:"bodytpl"`
+		HtmlBodytpl string   `json:"htmlbodytpl"`
+		Emdata      string   `json:"emdata"`
 	}
 
 	msgbuilder struct {
@@ -178,16 +179,25 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 		return governor.NewError("Failed to decode mail data", http.StatusInternalServerError, err)
 	}
 
-	body, err := s.tpl.ExecuteHTML(emmsg.Bodytpl, emdata)
-	if err != nil {
-		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
-	}
-	subject, err := s.tpl.ExecuteHTML(emmsg.Subjecttpl, emdata)
+	subject, err := s.tpl.Execute(emmsg.Subjecttpl, emdata)
 	if err != nil {
 		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
 	}
+	body, err := s.tpl.Execute(emmsg.Bodytpl, emdata)
+	if err != nil {
+		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
+	}
+	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HtmlBodytpl, emdata)
+	if err != nil {
+		s.logger.Error("failed to execute mail html body template", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "executehtmlbody",
+			"bodytpl":    emmsg.HtmlBodytpl,
+		})
+		htmlbody = nil
+	}
 
-	msg, err := msgToBytes(string(subject), emmsg.From, emmsg.FromName, emmsg.To, nil, body)
+	msg, err := msgToBytes(string(subject), emmsg.From, emmsg.FromName, emmsg.To, body, htmlbody)
 	if err != nil {
 		return err
 	}
@@ -352,12 +362,13 @@ func (s *service) Send(from, fromname string, to []string, subjecttpl, bodytpl s
 	}
 
 	msg := mailmsg{
-		From:       from,
-		FromName:   fromname,
-		To:         to,
-		Subjecttpl: subjecttpl,
-		Bodytpl:    bodytpl,
-		Emdata:     datastring.String(),
+		From:        from,
+		FromName:    fromname,
+		To:          to,
+		Subjecttpl:  subjecttpl + ".txt",
+		Bodytpl:     bodytpl + ".txt",
+		HtmlBodytpl: bodytpl + ".html",
+		Emdata:      datastring.String(),
 	}
 	if msg.From == "" {
 		msg.From = s.fromAddress

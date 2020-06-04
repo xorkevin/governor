@@ -8,6 +8,7 @@ import (
 	htmlTemplate "html/template"
 	"net/http"
 	"strings"
+	textTemplate "text/template"
 	"xorkevin.dev/governor"
 )
 
@@ -24,7 +25,8 @@ type (
 	}
 
 	service struct {
-		t      *htmlTemplate.Template
+		tt     *textTemplate.Template
+		ht     *htmlTemplate.Template
 		logger governor.Logger
 	}
 )
@@ -43,20 +45,35 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	t, err := htmlTemplate.ParseGlob(r.GetStr("dir") + "/*.html")
+	templateDir := r.GetStr("dir")
+	tt, err := textTemplate.ParseGlob(templateDir + "/*.txt")
 	if err != nil {
-		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
+		if err.Error() == fmt.Sprintf("text/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
 			l.Warn("no templates loaded", nil)
-			t = htmlTemplate.New("default")
+			tt = textTemplate.New("default")
 		} else {
 			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
 		}
 	}
+	s.tt = tt
+	ht, err := htmlTemplate.ParseGlob(templateDir + "/*.html")
+	if err != nil {
+		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
+			l.Warn("no templates loaded", nil)
+			ht = htmlTemplate.New("default")
+		} else {
+			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
+		}
+	}
+	s.ht = ht
 
-	s.t = t
-
-	if k := t.DefinedTemplates(); k != "" {
-		l.Info("loaded templates", map[string]string{
+	if k := tt.DefinedTemplates(); k != "" {
+		l.Info("loaded text templates", map[string]string{
+			"templates": strings.TrimLeft(k, "; "),
+		})
+	}
+	if k := ht.DefinedTemplates(); k != "" {
+		l.Info("loaded html templates", map[string]string{
 			"templates": strings.TrimLeft(k, "; "),
 		})
 	}
@@ -81,13 +98,17 @@ func (s *service) Health() error {
 // Execute executes a template and returns the templated string
 func (s *service) Execute(templateName string, data interface{}) ([]byte, error) {
 	b := bytes.Buffer{}
-	if err := s.t.ExecuteTemplate(&b, templateName, data); err != nil {
-		return nil, governor.NewError("Failed executing template", http.StatusInternalServerError, err)
+	if err := s.tt.ExecuteTemplate(&b, templateName, data); err != nil {
+		return nil, governor.NewError("Failed executing text template", http.StatusInternalServerError, err)
 	}
 	return b.Bytes(), nil
 }
 
-// ExecuteHTML executes an html file and returns the templated string
-func (s *service) ExecuteHTML(filename string, data interface{}) ([]byte, error) {
-	return s.Execute(filename+".html", data)
+// ExecuteHTML executes an html template and returns the templated string
+func (s *service) ExecuteHTML(templateName string, data interface{}) ([]byte, error) {
+	b := bytes.Buffer{}
+	if err := s.ht.ExecuteTemplate(&b, templateName, data); err != nil {
+		return nil, governor.NewError("Failed executing html template", http.StatusInternalServerError, err)
+	}
+	return b.Bytes(), nil
 }
