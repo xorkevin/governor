@@ -50,21 +50,27 @@ func (r *repo) New(userid, email, bio string) (*Model, error) {
 
 // GetByID returns a profile model with the given base64 id
 func (r *repo) GetByID(userid string) (*Model, error) {
-	var m *Model
-	if mProfile, code, err := profileModelGetModelEqUserid(r.db.DB(), userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := profileModelGetModelEqUserid(db, userid)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No profile found with that id", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get profile", http.StatusInternalServerError, err)
-	} else {
-		m = mProfile
 	}
 	return m, nil
 }
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	if code, err := profileModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := profileModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewErrorUser("Profile id must be unique", http.StatusBadRequest, err)
 		}
@@ -75,7 +81,11 @@ func (r *repo) Insert(m *Model) error {
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	if _, err := profileModelUpdModelEqUserid(r.db.DB(), m, m.Userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := profileModelUpdModelEqUserid(db, m, m.Userid); err != nil {
 		return governor.NewError("Failed to update profile", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -83,7 +93,11 @@ func (r *repo) Update(m *Model) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := profileModelDelEqUserid(r.db.DB(), m.Userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := profileModelDelEqUserid(db, m.Userid); err != nil {
 		return governor.NewError("Failed to delete profile", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -91,7 +105,11 @@ func (r *repo) Delete(m *Model) error {
 
 // Setup creates a new Profile table
 func (r *repo) Setup() error {
-	if err := profileModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := profileModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup profile model", http.StatusInternalServerError, err)
 	}
 	return nil

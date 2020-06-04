@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/courier"
 	"xorkevin.dev/governor/service/courier/model"
@@ -47,11 +46,7 @@ func main() {
 
 	kvService := kvstore.New()
 	objstoreService := objstore.New()
-	msgqueueService, err := msgqueue.New()
-	if err != nil {
-		fmt.Printf("Failed to create msgqueue: %s\n", err.Error())
-		return
-	}
+	msgqueueService := msgqueue.New()
 	pubsubService := pubsub.New()
 	templateService := template.New()
 	mailService := mail.New(templateService, msgqueueService)

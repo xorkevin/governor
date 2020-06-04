@@ -66,7 +66,11 @@ func (r *repo) ToUserModel(m *Model) *usermodel.Model {
 }
 
 func (r *repo) GetByID(userid string) (*Model, error) {
-	m, code, err := approvalModelGetModelEqUserid(r.db.DB(), userid)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := approvalModelGetModelEqUserid(db, userid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
@@ -77,7 +81,11 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 }
 
 func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
-	m, err := approvalModelGetModelOrdCreationTime(r.db.DB(), true, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := approvalModelGetModelOrdCreationTime(db, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user approvals", http.StatusInternalServerError, err)
 	}
@@ -85,7 +93,11 @@ func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
 }
 
 func (r *repo) Insert(m *Model) error {
-	if code, err := approvalModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := approvalModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewError("User id must be unique", http.StatusBadRequest, err)
 		}
@@ -95,14 +107,22 @@ func (r *repo) Insert(m *Model) error {
 }
 
 func (r *repo) Delete(m *Model) error {
-	if err := approvalModelDelEqUserid(r.db.DB(), m.Userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := approvalModelDelEqUserid(db, m.Userid); err != nil {
 		return governor.NewError("Failed to delete user approval", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
-	if err := approvalModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := approvalModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup user approval model", http.StatusInternalServerError, err)
 	}
 	return nil

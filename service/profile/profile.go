@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/objstore"
@@ -96,10 +97,10 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.NewError("Failed to init profile image bucket", http.StatusInternalServerError, err)
 	}
 
-	if _, err := s.queue.SubscribeQueue(user.NewUserQueueID, profilequeueworkercreate, s.UserCreateHook); err != nil {
+	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, time.Second, 2, s.UserCreateHook); err != nil {
 		return governor.NewError("Failed to subscribe to user create queue", http.StatusInternalServerError, err)
 	}
-	if _, err := s.queue.SubscribeQueue(user.DeleteUserQueueID, profilequeueworkerdelete, s.UserDeleteHook); err != nil {
+	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, time.Second, 1, s.UserDeleteHook); err != nil {
 		return governor.NewError("Failed to subscribe to user delete queue", http.StatusInternalServerError, err)
 	}
 	l.Info("subscribed to user create/delete queue", nil)
@@ -114,37 +115,25 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(msgdata []byte) {
+func (s *service) UserCreateHook(msgdata []byte) error {
 	props, err := user.DecodeNewUserProps(msgdata)
 	if err != nil {
-		s.logger.Error("failed to decode new user props", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "profiledecodenewuserprops",
-		})
-		return
+		return err
 	}
 	if _, err := s.CreateProfile(props.Userid, "", ""); err != nil {
-		s.logger.Error("failed to create new user from props", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "profilecreateuserfromprops",
-		})
+		return err
 	}
+	return nil
 }
 
 // UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(msgdata []byte) {
+func (s *service) UserDeleteHook(msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
-		s.logger.Error("failed to decode delete user props", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "profiledecodedeleteuserprops",
-		})
-		return
+		return err
 	}
 	if err := s.DeleteProfile(props.Userid); err != nil {
-		s.logger.Error("failed to delete user from props", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "profiledeleteuserfromprops",
-		})
+		return err
 	}
+	return nil
 }

@@ -19,7 +19,10 @@ func (s *service) intersectRolesRepo(userid string, roles rank.Rank) (rank.Rank,
 func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
 	userkv := s.kvroleset.Subtree(userid)
 
-	txget := userkv.Tx()
+	txget, err := userkv.Tx()
+	if err != nil {
+		return nil, governor.NewError("Failed to create kvstore transaction", http.StatusInternalServerError, err)
+	}
 	resget := make(map[string]kvstore.Resulter, roles.Len())
 	for _, i := range roles.ToSlice() {
 		resget[i] = txget.Get(i)
@@ -60,7 +63,10 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 		return nil, err
 	}
 
-	txset := userkv.Tx()
+	txset, err := userkv.Tx()
+	if err != nil {
+		return nil, governor.NewError("Failed to create kvstore transaction", http.StatusInternalServerError, err)
+	}
 	for _, i := range uncachedRoles.ToSlice() {
 		if m.Has(i) {
 			res.AddOne(i)
@@ -167,7 +173,14 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 		return
 	}
 
-	tx := s.kvroleset.Subtree(userid).Tx()
+	tx, err := s.kvroleset.Subtree(userid).Tx()
+	if err != nil {
+		s.logger.Error("Failed to clear role set from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearroleset",
+		})
+		return
+	}
 	for _, i := range roles.ToSlice() {
 		tx.Del(i)
 	}

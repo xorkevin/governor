@@ -49,14 +49,16 @@ func (r *repo) New(userid, role string) *Model {
 
 // GetByID returns a user role model with the given id
 func (r *repo) GetByID(userid, role string) (*Model, error) {
-	var m *Model
-	if mRole, code, err := roleModelGetModelEqUseridEqRole(r.db.DB(), userid, role); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := roleModelGetModelEqUseridEqRole(db, userid, role)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("Role not found for user", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get role", http.StatusInternalServerError, err)
-	} else {
-		m = mRole
 	}
 	return m, nil
 }
@@ -67,7 +69,11 @@ func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 		return rank.Rank{}, nil
 	}
 
-	m, err := roleModelGetModelEqUseridHasRoleOrdRole(r.db.DB(), userid, roles.ToSlice(), true, len(roles), 0)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := roleModelGetModelEqUseridHasRoleOrdRole(db, userid, roles.ToSlice(), true, len(roles), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user roles", http.StatusInternalServerError, err)
 	}
@@ -80,7 +86,11 @@ func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 
 // GetByRole returns a list of userids with the given role
 func (r *repo) GetByRole(role string, limit, offset int) ([]string, error) {
-	m, err := roleModelGetModelEqRoleOrdUserid(r.db.DB(), role, true, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := roleModelGetModelEqRoleOrdUserid(db, role, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get userids of role", http.StatusInternalServerError, err)
 	}
@@ -93,7 +103,11 @@ func (r *repo) GetByRole(role string, limit, offset int) ([]string, error) {
 
 // GetRoles returns a list of a user's roles
 func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
-	m, err := roleModelGetModelEqUseridOrdRole(r.db.DB(), userid, true, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := roleModelGetModelEqUseridOrdRole(db, userid, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get roles of userid", http.StatusInternalServerError, err)
 	}
@@ -106,7 +120,11 @@ func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	if code, err := roleModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := roleModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewErrorUser("Role id must be unique", http.StatusBadRequest, err)
 		}
@@ -128,7 +146,11 @@ func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
 			Role:   i,
 		})
 	}
-	if _, err := roleModelInsertBulk(r.db.DB(), m, true); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := roleModelInsertBulk(db, m, true); err != nil {
 		return governor.NewError("Failed to insert roles", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -136,7 +158,11 @@ func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	if err := roleModelDelEqUseridEqRole(r.db.DB(), m.Userid, m.Role); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := roleModelDelEqUseridEqRole(db, m.Userid, m.Role); err != nil {
 		return governor.NewError("Failed to delete role", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -148,7 +174,11 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 		return nil
 	}
 
-	if err := roleModelDelEqUseridHasRole(r.db.DB(), userid, roles.ToSlice()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := roleModelDelEqUseridHasRole(db, userid, roles.ToSlice()); err != nil {
 		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -156,7 +186,11 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 
 // DeleteUserRoles deletes all the roles of a user
 func (r *repo) DeleteUserRoles(userid string) error {
-	if err := roleModelDelEqUserid(r.db.DB(), userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := roleModelDelEqUserid(db, userid); err != nil {
 		return governor.NewError("Failed to delete user roles", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -164,7 +198,11 @@ func (r *repo) DeleteUserRoles(userid string) error {
 
 // Setup creates a new User role table
 func (r *repo) Setup() error {
-	if err := roleModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := roleModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup role model", http.StatusInternalServerError, err)
 	}
 	return nil

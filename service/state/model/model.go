@@ -47,7 +47,11 @@ func (r *repo) New(orgname string) *Model {
 
 // GetModel returns the state model
 func (r *repo) GetModel() (*Model, error) {
-	m, code, err := stateModelGetModelEqconfig(r.db.DB(), configID)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := stateModelGetModelEqconfig(db, configID)
 	if err != nil {
 		switch code {
 		case 2:
@@ -64,7 +68,11 @@ func (r *repo) GetModel() (*Model, error) {
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
 	m.config = configID
-	if _, err := stateModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := stateModelInsert(db, m); err != nil {
 		return governor.NewError("Failed to insert state", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -73,7 +81,11 @@ func (r *repo) Insert(m *Model) error {
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
 	m.config = configID
-	if _, err := stateModelUpdModelEqconfig(r.db.DB(), m, configID); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := stateModelUpdModelEqconfig(db, m, configID); err != nil {
 		return governor.NewError("Failed to update state", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -117,7 +129,11 @@ func (r *repo) Setup(req state.ReqSetup) error {
 		return governor.NewError("Setup already run", http.StatusForbidden, nil)
 	}
 
-	if err := stateModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := stateModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup state model", http.StatusInternalServerError, err)
 	}
 	if err == nil {

@@ -94,8 +94,12 @@ func (r *repo) NewLinkEmptyPtr() *LinkModel {
 
 // GetLinkGroup gets a list of links ordered by creation time
 func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
 	if len(creatorid) > 0 {
-		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(r.db.DB(), creatorid, false, limit, offset)
+		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(db, creatorid, false, limit, offset)
 		if err != nil {
 			return nil, governor.NewError("Failed to get links of a creator", http.StatusInternalServerError, err)
 		}
@@ -111,7 +115,7 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 		return links, nil
 	}
 
-	m, err := linkModelGetLinkModelOrdCreationTime(r.db.DB(), false, limit, offset)
+	m, err := linkModelGetLinkModelOrdCreationTime(db, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get links", http.StatusInternalServerError, err)
 	}
@@ -120,21 +124,27 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 
 // GetLink returns a link model with the given id
 func (r *repo) GetLink(linkid string) (*LinkModel, error) {
-	var m *LinkModel
-	if mLink, code, err := linkModelGetLinkModelEqLinkID(r.db.DB(), linkid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := linkModelGetLinkModelEqLinkID(db, linkid)
+	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No link found with that id", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get link", http.StatusInternalServerError, err)
-	} else {
-		m = mLink
 	}
 	return m, nil
 }
 
 // InsertLink inserts the link model into the db
 func (r *repo) InsertLink(m *LinkModel) error {
-	if code, err := linkModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := linkModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewError("Link id must be unique", http.StatusBadRequest, err)
 		}
@@ -145,7 +155,11 @@ func (r *repo) InsertLink(m *LinkModel) error {
 
 // DeleteLink deletes the link model in the db
 func (r *repo) DeleteLink(m *LinkModel) error {
-	if err := linkModelDelEqLinkID(r.db.DB(), m.LinkID); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := linkModelDelEqLinkID(db, m.LinkID); err != nil {
 		return governor.NewError("Failed to delete link", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -162,7 +176,11 @@ func (r *repo) NewBrand(brandid, creatorid string) *BrandModel {
 
 // GetBrandGroup gets a list of brands ordered by creation time
 func (r *repo) GetBrandGroup(limit, offset int) ([]BrandModel, error) {
-	m, err := brandModelGetBrandModelOrdCreationTime(r.db.DB(), false, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := brandModelGetBrandModelOrdCreationTime(db, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get brands", http.StatusInternalServerError, err)
 	}
@@ -171,7 +189,11 @@ func (r *repo) GetBrandGroup(limit, offset int) ([]BrandModel, error) {
 
 // GetBrand returns a brand model with the given id
 func (r *repo) GetBrand(brandid string) (*BrandModel, error) {
-	m, code, err := brandModelGetBrandModelEqBrandID(r.db.DB(), brandid)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := brandModelGetBrandModelEqBrandID(db, brandid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No brand found with that id", http.StatusNotFound, err)
@@ -183,7 +205,11 @@ func (r *repo) GetBrand(brandid string) (*BrandModel, error) {
 
 // InsertBrand adds a brand to the db
 func (r *repo) InsertBrand(m *BrandModel) error {
-	if code, err := brandModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := brandModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewError("Brand id must be unique", http.StatusBadRequest, err)
 		}
@@ -194,7 +220,11 @@ func (r *repo) InsertBrand(m *BrandModel) error {
 
 // DeleteBrand removes a brand from the db
 func (r *repo) DeleteBrand(m *BrandModel) error {
-	if err := brandModelDelEqBrandID(r.db.DB(), m.BrandID); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := brandModelDelEqBrandID(db, m.BrandID); err != nil {
 		return governor.NewError("Failed to delete brand", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -202,10 +232,14 @@ func (r *repo) DeleteBrand(m *BrandModel) error {
 
 // Setup creates new Courier tables
 func (r *repo) Setup() error {
-	if err := linkModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := linkModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup link model", http.StatusInternalServerError, err)
 	}
-	if err := brandModelSetup(r.db.DB()); err != nil {
+	if err := brandModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup brand model", http.StatusInternalServerError, err)
 	}
 	return nil

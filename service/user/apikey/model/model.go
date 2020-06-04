@@ -132,7 +132,11 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 }
 
 func (r *repo) GetByID(keyid string) (*Model, error) {
-	m, code, err := apikeyModelGetModelEqKeyid(r.db.DB(), keyid)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := apikeyModelGetModelEqKeyid(db, keyid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No apikey found with that id", http.StatusNotFound, err)
@@ -146,7 +150,11 @@ func (r *repo) GetByID(keyid string) (*Model, error) {
 }
 
 func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
-	m, err := apikeyModelGetModelEqUseridOrdTime(r.db.DB(), userid, false, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := apikeyModelGetModelEqUseridOrdTime(db, userid, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user apikeys", http.StatusInternalServerError, err)
 	}
@@ -159,7 +167,11 @@ func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
 }
 
 func (r *repo) GetUserKeyIDs(userid string, limit, offset int) ([]string, error) {
-	m, err := apikeyModelGetqIDEqUseridOrdKeyid(r.db.DB(), userid, true, limit, offset)
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := apikeyModelGetqIDEqUseridOrdKeyid(db, userid, true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get user apikeys", http.StatusInternalServerError, err)
 	}
@@ -172,7 +184,11 @@ func (r *repo) GetUserKeyIDs(userid string, limit, offset int) ([]string, error)
 
 func (r *repo) Insert(m *Model) error {
 	m.computeAuthTags()
-	if code, err := apikeyModelInsert(r.db.DB(), m); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := apikeyModelInsert(db, m); err != nil {
 		if code == 3 {
 			return governor.NewError("Keyid must be unique", http.StatusBadRequest, err)
 		}
@@ -183,7 +199,11 @@ func (r *repo) Insert(m *Model) error {
 
 func (r *repo) Update(m *Model) error {
 	m.computeAuthTags()
-	if _, err := apikeyModelUpdModelEqKeyid(r.db.DB(), m, m.Keyid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := apikeyModelUpdModelEqKeyid(db, m, m.Keyid); err != nil {
 		return governor.NewError("Failed to update apikey", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -191,21 +211,33 @@ func (r *repo) Update(m *Model) error {
 
 func (r *repo) Delete(m *Model) error {
 	m.computeAuthTags()
-	if err := apikeyModelDelEqKeyid(r.db.DB(), m.Keyid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := apikeyModelDelEqKeyid(db, m.Keyid); err != nil {
 		return governor.NewError("Failed to delete apikey", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (r *repo) DeleteUserKeys(userid string) error {
-	if err := apikeyModelDelEqUserid(r.db.DB(), userid); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := apikeyModelDelEqUserid(db, userid); err != nil {
 		return governor.NewError("Failed to delete user apikeys", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
-	if err := apikeyModelSetup(r.db.DB()); err != nil {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := apikeyModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup user apikeys model", http.StatusInternalServerError, err)
 	}
 	return nil
