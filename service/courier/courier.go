@@ -2,7 +2,6 @@ package courier
 
 import (
 	"context"
-	"fmt"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
@@ -15,9 +14,8 @@ import (
 )
 
 const (
-	time24h int64 = 86400
-	b1            = 1_000_000_000
-	min15         = 900
+	time24h int64 = int64(24 * time.Hour / time.Second)
+	min15         = int64(15 * time.Minute / time.Second)
 )
 
 type (
@@ -83,9 +81,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.fallbackLink = r.GetStr("fallbacklink")
 	s.linkPrefix = r.GetStr("linkprefix")
 	if t, err := time.ParseDuration(r.GetStr("cachetime")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse cache time: %s", r.GetStr("cachetime")), nil)
+		return governor.NewError("Failed to parse cache time", http.StatusBadRequest, nil)
 	} else {
-		s.cacheTime = t.Nanoseconds() / b1
+		s.cacheTime = int64(t / time.Second)
 	}
 	if len(s.fallbackLink) == 0 {
 		l.Warn("fallbacklink is not set", nil)

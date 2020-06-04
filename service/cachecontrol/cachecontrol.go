@@ -23,7 +23,7 @@ func etagToValue(etag string) string {
 }
 
 // Control creates a middleware function to cache the response
-func Control(public, revalidate bool, maxage int, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func Control(public, revalidate bool, maxage int64, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
 	if maxage < 0 {
 		panic("maxage cannot be negative")
 	}

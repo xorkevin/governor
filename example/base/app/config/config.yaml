@@ -52,9 +52,11 @@ mail:
   fromaddress: 'no-reply@xorkevin.com'
   fromname: 'Governor'
 role:
-  rolecache: 24h
+  rolecache: '24h'
+apikey:
+  rolecache: '24h'
 token:
-  issuer: governor
+  issuer: 'governor'
   # secret: secret
 user:
   accesstime: '5m'
@@ -69,4 +71,6 @@ user:
     url:
       base: 'http://localhost:8080'
 courier:
-  cachetime: 24h
+  fallbacklink: ''
+  linkprefix: ''
+  cachetime: '24h'

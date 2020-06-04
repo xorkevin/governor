@@ -2,8 +2,8 @@ package apikey
 
 import (
 	"context"
-	"fmt"
 	"github.com/labstack/echo/v4"
+	"net/http"
 	"strconv"
 	"time"
 	"xorkevin.dev/governor"
@@ -42,8 +42,7 @@ type (
 )
 
 const (
-	time24h int64 = 86400
-	b1            = 1_000_000_000
+	time24h int64 = int64(24 * time.Hour / time.Second)
 )
 
 // New returns a new Apikey
@@ -68,9 +67,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
-		l.Warn(fmt.Sprintf("failed to parse role cache time: %s", r.GetStr("rolecache")), nil)
+		return governor.NewError("Failed to parse role cache time", http.StatusBadRequest, err)
 	} else {
-		s.roleCacheTime = t.Nanoseconds() / b1
+		s.roleCacheTime = int64(t / time.Second)
 	}
 
 	l.Info("loaded config", map[string]string{

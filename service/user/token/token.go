@@ -59,11 +59,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 	secret := r.GetStr("secret")
 	if secret == "" {
-		l.Warn("token secret is not set", nil)
+		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
-		l.Warn("token issuer is not set", nil)
+		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
 	}
 	s.secret = []byte(secret)
 	s.issuer = issuer
