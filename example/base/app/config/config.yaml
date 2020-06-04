@@ -56,8 +56,8 @@ role:
 apikey:
   rolecache: '24h'
 token:
+  tokensecret: 'kv/data/app/governor/token'
   issuer: 'governor'
-  # secret: secret
 user:
   accesstime: '5m'
   refreshtime: '4380h'

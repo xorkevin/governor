@@ -48,7 +48,7 @@ func New() Service {
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("secret", "")
+	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
 }
 
@@ -57,15 +57,19 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	secret := r.GetStr("secret")
-	if secret == "" {
+	secret, err := r.GetSecret("tokensecret")
+	if err != nil {
+		return governor.NewError("Failed to read token secret", http.StatusInternalServerError, err)
+	}
+	tokensecret := secret["token"].(string)
+	if tokensecret == "" {
 		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}
+	s.secret = []byte(tokensecret)
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
 		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
 	}
-	s.secret = []byte(secret)
 	s.issuer = issuer
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
