@@ -57,15 +57,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	secret, err := r.GetSecret("tokensecret")
+	tokensecret, err := r.GetSecret("tokensecret")
 	if err != nil {
 		return governor.NewError("Failed to read token secret", http.StatusInternalServerError, err)
 	}
-	tokensecret := secret["token"].(string)
-	if tokensecret == "" {
+	secret := tokensecret["secret"].(string)
+	if secret == "" {
 		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}
-	s.secret = []byte(tokensecret)
+	s.secret = []byte(secret)
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
 		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)

@@ -17,6 +17,48 @@ spec:
         sidecar.istio.io/inject: 'true'
     spec:
       serviceAccountName: 'governor'
+      initContainers:
+        - name: 'genpass'
+          image: 'xorkevin/alpine-utils:3'
+          command: ['sh']
+          args: ['/home/governor/init.sh']
+          env:
+            - name: 'PASS_LEN'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'passlen'
+                  optional: true
+            - name: 'CURL_BACKOFF'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'curlbackoff'
+                  optional: true
+            - name: 'CURL_REAUTH'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'curlreauth'
+                  optional: true
+            - name: 'VAULT_ADDR'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'vaultaddr'
+            - name: 'VAULT_ROLE'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'vaultrole'
+            - name: 'KV_PATH'
+              valueFrom:
+                configMapKeyRef:
+                  name: 'init-opts'
+                  key: 'kvpath'
+          volumeMounts:
+            - name: 'init-scripts'
+              mountPath: '/home/governor'
       containers:
         - name: 'governor'
           image: 'registry.pkg.dev.home:8080/governor'
