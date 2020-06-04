@@ -209,11 +209,13 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 
 func msgToBytes(subject string, from, fromname string, to []string, body []byte, htmlbody []byte) ([]byte, error) {
 	msg := newMsgBuilder()
-	msg.addHeader("Subject", subject)
+	msg.addHeader("Mime-Version", "1.0")
+	msg.addHeader("Date", time.Now().Round(0).Format(time.RFC1123Z))
+	msg.addHeader("Subject", mime.QEncoding.Encode("utf-8", subject))
 	if fromname == "" {
 		msg.addHeader("From", from)
 	} else {
-		msg.addAddrHeader("From", fromname, from)
+		msg.addAddrHeader("From", mime.QEncoding.Encode("utf-8", fromname), from)
 	}
 	msg.addHeader("To", strings.Join(to, ",\r\n\t"))
 	if body != nil {
@@ -241,7 +243,7 @@ func (b *msgbuilder) addHeader(key, val string) {
 }
 
 func (b *msgbuilder) addAddrHeader(key, name, addr string) {
-	b.headers = append(b.headers, fmt.Sprintf("%s: %s <%s>", key, name, addr))
+	b.addHeader(key, fmt.Sprintf("%s <%s>", name, addr))
 }
 
 func (b *msgbuilder) addBody(body []byte) {
@@ -272,7 +274,7 @@ func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 	defer w.Close()
 	if len(b.body) != 0 {
 		header := textproto.MIMEHeader{
-			"Content-Type":              {mime.FormatMediaType("text/plain", map[string]string{"charset": "UTF-8"})},
+			"Content-Type":              {mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"})},
 			"Content-Transfer-Encoding": {"quoted-printable"},
 		}
 		w, err := w.CreatePart(header)
@@ -285,7 +287,7 @@ func (b *msgbuilder) writeBody(w *multipart.Writer) error {
 	}
 	if len(b.htmlbody) != 0 {
 		header := textproto.MIMEHeader{
-			"Content-Type":              {mime.FormatMediaType("text/html", map[string]string{"charset": "UTF-8"})},
+			"Content-Type":              {mime.FormatMediaType("text/html", map[string]string{"charset": "utf-8"})},
 			"Content-Transfer-Encoding": {"quoted-printable"},
 		}
 		w, err := w.CreatePart(header)
@@ -322,13 +324,11 @@ func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, err
 
 func (b *msgbuilder) build() (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
-	buf.WriteString("Mime-Version: 1.0\r\n")
-	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Round(0).Format(time.RFC1123Z)))
 	b.writeHeaders(buf)
 
 	m := multipart.NewWriter(buf)
 	defer m.Close()
-	fmt.Fprintf(buf, "Content-Type: %s\r\n\r\n", mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": m.Boundary(), "charset": "UTF-8"}))
+	fmt.Fprintf(buf, "Content-Type: %s\r\n\r\n", mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": m.Boundary(), "charset": "utf-8"}))
 
 	part, err := createPart(m, "multipart/alternative")
 	if err != nil {
