@@ -1,0 +1,55 @@
+apiVersion: 'apps/v1'
+kind: 'Deployment'
+metadata:
+  name: 'mailhog'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: 'mailhog-server'
+      version: 'v1'
+  template:
+    metadata:
+      labels:
+        component: 'mailhog-server'
+        version: 'v1'
+      annotations:
+        sidecar.istio.io/inject: 'true'
+    spec:
+      containers:
+        - name: 'mailhog'
+          image: 'mailhog/mailhog'
+          ports:
+            - name: 'smtp'
+              containerPort: 1025
+            - name: 'http'
+              containerPort: 8025
+---
+apiVersion: 'v1'
+kind: 'Service'
+metadata:
+  name: 'mailhog'
+spec:
+  ports:
+    - name: 'smtp'
+      port: 1025
+    - name: 'http'
+      port: 8025
+  selector:
+    component: 'mailhog-server'
+---
+apiVersion: 'networking.istio.io/v1alpha3'
+kind: 'VirtualService'
+metadata:
+  name: 'mailhog'
+spec:
+  gateways:
+    - 'istio-system/istio-gateway'
+  hosts:
+    - 'mailhog.dev.home'
+  http:
+    - route:
+        - destination:
+            host: 'mailhog'
+            port:
+              number: 8025
