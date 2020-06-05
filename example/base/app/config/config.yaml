@@ -1,4 +1,4 @@
-mode: 'INFO'
+mode: 'DEBUG'
 port: '8080'
 baseurl: '/api'
 maxreqsize: '2M'
@@ -10,7 +10,7 @@ vault:
     loginpath: '/auth/kubernetes/login'
     jwtpath: '/var/run/secrets/kubernetes.io/serviceaccount/token'
 database:
-  auth: 'database/creds/governor-role'
+  auth: 'database/creds/governor-postgres-role'
   dbname: 'postgres'
   host: 'postgres-postgres.governor.svc.cluster.local'
   port: '5432'
@@ -26,7 +26,7 @@ kvstore:
   hbmaxfail: 5
 objstore:
   auth: 'kv/data/infra/governor/minio'
-  host: 'minio'
+  host: 'minio-minio.governor.svc.cluster.local'
   port: '9000'
   sslmode: false
   location: 'us-east-1'
@@ -34,14 +34,14 @@ objstore:
   hbmaxfail: 5
 msgqueue:
   auth: 'kv/data/infra/governor/natsstream'
-  host: 'natsstream-nats-streaming.svc.cluster.local'
+  host: 'natsstream-nats-streaming.governor.svc.cluster.local'
   port: '4222'
-  cluster: 'nss'
+  cluster: 'nats-streaming'
   hbinterval: 5
   hbmaxfail: 5
 pubsub:
   auth: 'kv/data/infra/governor/nats'
-  host: 'nats-nats.svc.cluster.local'
+  host: 'nats-nats.governor.svc.cluster.local'
   port: '4222'
   hbinterval: 5
   hbmaxfail: 5

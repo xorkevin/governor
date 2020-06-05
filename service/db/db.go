@@ -158,9 +158,17 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	username, ok := authsecret["username"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
+	password, ok := authsecret["password"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
 	auth := pgauth{
-		username: authsecret["username"].(string),
-		password: authsecret["password"].(string),
+		username: username,
+		password: password,
 	}
 	if auth == s.auth {
 		return s.client, nil

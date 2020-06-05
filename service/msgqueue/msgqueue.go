@@ -92,7 +92,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")
-	r.SetDefault("cluster", "nss")
+	r.SetDefault("cluster", "nats-streaming")
 	r.SetDefault("hbinterval", 5)
 	r.SetDefault("hbmaxfail", 5)
 }
@@ -225,7 +225,10 @@ func (s *service) handleGetClient() (stan.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth := authsecret["password"].(string)
+	auth, ok := authsecret["password"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
 	if auth == s.auth {
 		return s.client, nil
 	}

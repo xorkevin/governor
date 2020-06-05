@@ -61,7 +61,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err != nil {
 		return governor.NewError("Failed to read token secret", http.StatusInternalServerError, err)
 	}
-	secret := tokensecret["secret"].(string)
+	secret, ok := tokensecret["secret"].(string)
+	if !ok {
+		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
 	if secret == "" {
 		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}

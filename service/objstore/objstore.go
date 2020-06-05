@@ -155,9 +155,17 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	username, ok := authsecret["username"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
+	password, ok := authsecret["password"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
 	auth := minioauth{
-		username: authsecret["username"].(string),
-		password: authsecret["password"].(string),
+		username: username,
+		password: password,
 	}
 	if auth == s.auth {
 		return s.client, nil

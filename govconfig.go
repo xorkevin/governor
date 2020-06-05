@@ -315,17 +315,22 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 		return nil, NewError("Failed to read vault secret", http.StatusInternalServerError, err)
 	}
 
+	data := s.Data
+	if v, ok := data["data"].(map[string]interface{}); ok {
+		data = v
+	}
+
 	var expire int64
 	if s.LeaseDuration > 0 {
 		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
 	}
 	r.cache[key] = vaultSecret{
 		key:    key,
-		value:  s.Data,
+		value:  data,
 		expire: expire,
 	}
 
-	return s.Data, nil
+	return data, nil
 }
 
 func (r *configReader) InvalidateSecret(key string) {

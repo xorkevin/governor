@@ -162,7 +162,15 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 		return err
 	}
 
-	smtpauth := smtp.PlainAuth("", authsecret["username"].(string), authsecret["password"].(string), s.host)
+	username, ok := authsecret["username"].(string)
+	if !ok {
+		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
+	password, ok := authsecret["password"].(string)
+	if !ok {
+		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
+	smtpauth := smtp.PlainAuth("", username, password, s.host)
 	if err := smtp.SendMail(s.addr, smtpauth, from, to, msg); err != nil {
 		return err
 	}

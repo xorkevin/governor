@@ -168,7 +168,10 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	auth := authsecret["password"].(string)
+	auth, ok := authsecret["password"].(string)
+	if !ok {
+		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+	}
 	if auth == s.auth {
 		return s.client, nil
 	}
