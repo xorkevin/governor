@@ -3,10 +3,12 @@ port: '8080'
 baseurl: '/api'
 maxreqsize: '2M'
 vault:
-  addr: 'vault.vault.svc.cluster.local'
+  addr: 'http://vault.vault.svc.cluster.local:8200'
   k8s:
     auth: true
-    role: 'governor-role'
+    role: 'governor-governor-role'
+    loginpath: '/auth/kubernetes/login'
+    jwtpath: '/var/run/secrets/kubernetes.io/serviceaccount/token'
 database:
   auth: 'database/creds/governor-role'
   dbname: 'postgres'

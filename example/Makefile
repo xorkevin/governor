@@ -44,16 +44,26 @@ DOCKER_VERSION=0.2.7-0
 
 DOCKER_LATEST_IMAGE=$(DOCKER_NAME):latest
 DOCKER_MAJOR_IMAGE=$(DOCKER_NAME):$(DOCKER_MAJOR_VERSION)
-DOCKER_IMAGE?=$(DOCKER_NAME):$(DOCKER_VERSION)
-
-DOCKER_FILE=cmd/Dockerfile
+DOCKER_IMAGE=$(DOCKER_NAME):$(DOCKER_VERSION)
 
 .PHONY: build-docker publish-docker docker
 
 build-docker:
-	docker build -f $(DOCKER_FILE) -t $(DOCKER_IMAGE) -t $(DOCKER_MAJOR_IMAGE) -t $(DOCKER_LATEST_IMAGE) .
+	docker build -t $(DOCKER_IMAGE) -t $(DOCKER_MAJOR_IMAGE) -t $(DOCKER_LATEST_IMAGE) .
 
 publish-docker:
 	docker push $(DOCKER_IMAGE)
+	docker push $(DOCKER_MAJOR_IMAGE)
+	docker push $(DOCKER_LATEST_IMAGE)
 
 docker: build-docker publish-docker
+
+.PHONY: skaffoldinit
+
+skaffoldinit:
+	skaffold config set -g update-check false
+
+.PHONY: dev
+
+dev:
+	skaffold dev

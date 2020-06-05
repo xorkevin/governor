@@ -62,6 +62,9 @@ spec:
       containers:
         - name: 'governor'
           image: 'docker.pkg.dev.home:8080/governor'
+          env:
+            - name: 'HOME'
+              value: '/home/governor'
           ports:
             - name: 'http'
               containerPort: 8080
@@ -77,3 +80,23 @@ spec:
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 15
+          volumeMounts:
+            - name: 'config'
+              mountPath: '/home/governor/config'
+            - name: 'templates'
+              mountPath: '/home/governor/templates'
+            - name: 'public'
+              mountPath: '/home/governor/public'
+      volumes:
+        - name: 'init-scripts'
+          configMap:
+            name: 'init-scripts'
+        - name: 'config'
+          configMap:
+            name: 'config'
+        - name: 'templates'
+          configMap:
+            name: 'templates'
+        - name: 'public'
+          configMap:
+            name: 'public'

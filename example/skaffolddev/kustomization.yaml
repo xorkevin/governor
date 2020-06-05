@@ -3,5 +3,3 @@ kind: 'Kustomization'
 namespace: 'governor'
 bases:
   - '../base/app'
-resources:
-  - 'patch.yaml'

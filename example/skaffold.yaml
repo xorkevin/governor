@@ -6,14 +6,9 @@ build:
   artifacts:
     - image: 'docker.pkg.dev.home:8080/governor'
       context: '.'
-      custom:
-        buildCommand: './skaffoldbuild.sh'
-        dependencies:
-          dockerfile:
-            path: 'cmd/Dockerfile'
   local:
-    push: true
-    useDockerCLI: false
+    push: false
+    useDockerCLI: true
     useBuildkit: true
     concurrency: 1
   insecureRegistries:
