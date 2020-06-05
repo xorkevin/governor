@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 )
@@ -67,15 +68,16 @@ func newConfig(conf ConfigOpts) *Config {
 	v.SetDefault("vault.k8s.jwtpath", "/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 	v.SetConfigName(conf.DefaultFile)
+	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
 	v.AddConfigPath(path.Join(".", "config"))
 	if cfgdir, err := os.UserConfigDir(); err == nil {
 		v.AddConfigPath(path.Join(cfgdir, conf.Appname))
 	}
-	v.SetConfigType("yaml")
 
 	v.SetEnvPrefix(conf.EnvPrefix)
 	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	return &Config{
 		config:      v,

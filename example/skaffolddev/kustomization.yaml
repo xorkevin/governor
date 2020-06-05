@@ -5,3 +5,5 @@ bases:
   - '../base/app'
 resources:
   - 'mailhog.yaml'
+patchesStrategicMerge:
+  - 'patch.yaml'

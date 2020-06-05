@@ -102,7 +102,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	conf := r.GetStrMap("")
 	s.host = conf["host"]
-	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
+	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.fromAddress = conf["fromaddress"]
 	s.fromName = conf["fromname"]
 	s.insecure = r.GetBool("insecure")

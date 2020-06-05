@@ -50,7 +50,7 @@ template:
 mail:
   auth: 'kv/data/external/smtp'
   host: 'localhost'
-  port: 587
+  port: '587'
   fromaddress: 'no-reply@xorkevin.com'
   fromname: 'Governor'
 role:

@@ -1,0 +1,14 @@
+apiVersion: 'apps/v1'
+kind: 'Deployment'
+metadata:
+  name: 'governor'
+spec:
+  template:
+    spec:
+      containers:
+        - name: 'governor'
+          env:
+            - name: 'GOV_MAIL_HOST'
+              value: 'mailhog.governor.svc.cluster.local'
+            - name: 'GOV_MAIL_PORT'
+              value: '1025'
