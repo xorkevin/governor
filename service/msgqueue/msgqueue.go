@@ -111,9 +111,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.clientid = clientid.Base64()
 
-	conf := r.GetStrMap("")
-	s.clusterid = conf["cluster"]
-	s.addr = fmt.Sprintf("%s:%s", conf["host"], conf["port"])
+	s.clusterid = r.GetStr("cluster")
+	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 

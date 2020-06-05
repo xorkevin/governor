@@ -100,11 +100,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.config = r
 
-	conf := r.GetStrMap("")
-	s.host = conf["host"]
+	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
-	s.fromAddress = conf["fromaddress"]
-	s.fromName = conf["fromname"]
+	s.fromAddress = r.GetStr("fromaddress")
+	s.fromName = r.GetStr("fromname")
 	s.insecure = r.GetBool("insecure")
 
 	done := make(chan struct{})

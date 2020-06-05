@@ -7,8 +7,6 @@ vault:
   k8s:
     auth: true
     role: 'governor-governor-role'
-    loginpath: '/auth/kubernetes/login'
-    jwtpath: '/var/run/secrets/kubernetes.io/serviceaccount/token'
 database:
   auth: 'database/creds/governor-postgres-role'
   dbname: 'postgres'
@@ -71,7 +69,7 @@ user:
   userapproval: false
   email:
     url:
-      base: 'http://localhost:8080'
+      base: 'http://governor.dev.home:8080'
 courier:
   fallbacklink: ''
   linkprefix: ''

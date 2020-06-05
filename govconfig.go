@@ -112,12 +112,11 @@ func (c *Config) init() error {
 }
 
 func (c *Config) initvault() error {
-	vconfig := c.config.GetStringMapString("vault")
 	vaultconfig := vaultapi.DefaultConfig()
 	if err := vaultconfig.Error; err != nil {
 		return err
 	}
-	if vaddr := vconfig["addr"]; vaddr != "" {
+	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
 		vaultconfig.Address = vaddr
 	}
 	vault, err := vaultapi.NewClient(vaultconfig)
@@ -128,10 +127,9 @@ func (c *Config) initvault() error {
 	if c.config.GetBool("vault.k8s.auth") {
 		c.vaultK8sAuth = true
 
-		kconfig := c.config.GetStringMapString("vault.k8s")
-		role := kconfig["role"]
-		loginpath := kconfig["loginpath"]
-		jwtpath := kconfig["jwtpath"]
+		role := c.config.GetString("vault.k8s.role")
+		loginpath := c.config.GetString("vault.k8s.loginpath")
+		jwtpath := c.config.GetString("vault.k8s.jwtpath")
 		if role == "" {
 			return NewError("No vault role set", http.StatusBadRequest, nil)
 		}

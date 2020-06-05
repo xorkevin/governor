@@ -80,8 +80,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.config = r
 
-	conf := r.GetStrMap("")
-	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", conf["dbname"], conf["host"], conf["port"], conf["sslmode"])
+	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", r.GetStr("dbname"), r.GetStr("host"), r.GetStr("port"), r.GetStr("sslmode"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
