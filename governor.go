@@ -222,10 +222,14 @@ func (s *Server) Setup(req ReqSetup) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.init(ctx); err != nil {
-		s.logger.Error("init failed", map[string]string{
-			"error": err.Error(),
-			"phase": "setup",
-		})
+		if s.logger != nil {
+			s.logger.Error("init failed", map[string]string{
+				"error": err.Error(),
+				"phase": "setup",
+			})
+		} else {
+			fmt.Println(err)
+		}
 		return err
 	}
 	if err := s.setupServices(req); err != nil {

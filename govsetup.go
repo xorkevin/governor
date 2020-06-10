@@ -14,7 +14,6 @@ type (
 		Email     string `json:"email"`
 		Firstname string `json:"first_name"`
 		Lastname  string `json:"last_name"`
-		Orgname   string `json:"orgname"`
 	}
 )
 
@@ -32,12 +31,6 @@ func (r *ReqSetup) valid() error {
 	if !emailRegex.MatchString(r.Email) {
 		return NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
 	}
-	if len(r.Orgname) == 0 {
-		return NewErrorUser("organization name must be provided", http.StatusBadRequest, nil)
-	}
-	if len(r.Orgname) > 255 {
-		return NewErrorUser("organization name must be shorter than 256 characters", http.StatusBadRequest, nil)
-	}
 	return nil
 }
 
@@ -47,29 +40,27 @@ type (
 		Firstname string `json:"first_name"`
 		Lastname  string `json:"last_name"`
 		Version   string `json:"version"`
-		Orgname   string `json:"orgname"`
 	}
 )
 
 func (s *Server) initSetup(r *echo.Group) {
 	r.POST("", func(c echo.Context) error {
-		rsetup := &ReqSetup{}
-		if err := c.Bind(rsetup); err != nil {
+		req := &ReqSetup{}
+		if err := c.Bind(req); err != nil {
 			return err
 		}
-		if err := rsetup.valid(); err != nil {
+		if err := req.valid(); err != nil {
 			return err
 		}
-		if err := s.setupServices(*rsetup); err != nil {
+		if err := s.setupServices(*req); err != nil {
 			return err
 		}
 
 		return c.JSON(http.StatusCreated, &responseSetup{
-			Username:  rsetup.Username,
-			Firstname: rsetup.Firstname,
-			Lastname:  rsetup.Lastname,
+			Username:  req.Username,
+			Firstname: req.Firstname,
+			Lastname:  req.Lastname,
 			Version:   s.config.version.Num,
-			Orgname:   rsetup.Orgname,
 		})
 	})
 }

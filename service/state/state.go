@@ -3,18 +3,19 @@ package state
 type (
 	// Model is the data about a governor server in between restarts
 	//
-	// Orgname is the name of the governor server org
 	// Setup is true if setup has already been run
 	// CreationTime is the Unix time of when setup had been first run
 	Model struct {
-		Orgname      string
 		Setup        bool
+		Version      string
+		VHash        string
 		CreationTime int64
 	}
 
 	// ReqSetup are the options necessary to setup the server state
 	ReqSetup struct {
-		Orgname string
+		Version string
+		VHash   string
 	}
 
 	// State is the interface for a service that records governor server state

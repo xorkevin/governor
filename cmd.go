@@ -134,18 +134,11 @@ func getPromptReq() (*ReqSetup, error) {
 		return nil, err
 	}
 
-	fmt.Print("Orgname: ")
-	orgname, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
 	return &ReqSetup{
 		Username:  strings.TrimSpace(username),
 		Password:  password,
 		Email:     strings.TrimSpace(email),
 		Firstname: strings.TrimSpace(firstname),
 		Lastname:  strings.TrimSpace(lastname),
-		Orgname:   strings.TrimSpace(orgname),
 	}, nil
 }

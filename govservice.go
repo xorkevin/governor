@@ -97,7 +97,8 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		})
 	}
 	if err := s.state.Setup(state.ReqSetup{
-		Orgname: rsetup.Orgname,
+		Version: s.config.version.Num,
+		VHash:   s.config.version.Hash,
 	}); err != nil {
 		l.Error("setup state service failed", map[string]string{
 			"error": err.Error(),

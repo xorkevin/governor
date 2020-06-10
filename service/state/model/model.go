@@ -22,8 +22,9 @@ type (
 	// Model is the db State model
 	Model struct {
 		config       int    `model:"config,INT PRIMARY KEY" query:"config,getoneeq,config;updeq,config"`
-		Orgname      string `model:"orgname,VARCHAR(255) NOT NULL" query:"orgname"`
 		Setup        bool   `model:"setup,BOOLEAN NOT NULL" query:"setup"`
+		Version      string `model:"version,VARCHAR(255) NOT NULL" query:"version"`
+		VHash        string `model:"vhash,VARCHAR(255) NOT NULL" query:"vhash"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 )
@@ -36,11 +37,12 @@ func New(database db.Database) state.State {
 }
 
 // New creates a new State Model
-func (r *repo) New(orgname string) *Model {
+func (r *repo) New(version string, vhash string) *Model {
 	return &Model{
 		config:       configID,
-		Orgname:      orgname,
 		Setup:        false,
+		Version:      version,
+		VHash:        vhash,
 		CreationTime: time.Now().Round(0).Unix(),
 	}
 }
@@ -103,8 +105,9 @@ func (r *repo) Get() (*state.Model, error) {
 		return nil, err
 	}
 	return &state.Model{
-		Orgname:      m.Orgname,
 		Setup:        m.Setup,
+		Version:      m.Version,
+		VHash:        m.VHash,
 		CreationTime: m.CreationTime,
 	}, nil
 }
@@ -112,8 +115,9 @@ func (r *repo) Get() (*state.Model, error) {
 // Set updates the server state entry
 func (r *repo) Set(m *state.Model) error {
 	return r.Update(&Model{
-		Orgname:      m.Orgname,
 		Setup:        m.Setup,
+		Version:      m.Version,
+		VHash:        m.VHash,
 		CreationTime: m.CreationTime,
 	})
 }
@@ -142,7 +146,7 @@ func (r *repo) Setup(req state.ReqSetup) error {
 			return err
 		}
 	} else {
-		k := r.New(req.Orgname)
+		k := r.New(req.Version, req.VHash)
 		k.Setup = true
 		if err := r.Insert(k); err != nil {
 			return err
