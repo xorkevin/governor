@@ -71,6 +71,6 @@ user:
     url:
       base: 'http://governor.dev.home:8080'
 courier:
-  fallbacklink: ''
-  linkprefix: ''
+  fallbacklink: 'http://governor.dev.home:8080'
+  linkprefix: 'http://go.governor.dev.home:8080'
   cachetime: '24h'

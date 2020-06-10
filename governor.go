@@ -188,8 +188,8 @@ func (s *Server) Start() error {
 		return err
 	}
 	if s.config.showBanner {
-		fmt.Printf("%s\n%s: %s http server listening on %s\n",
-			color.BlueString(banner),
+		fmt.Printf("%s\n%s: %s\nhttp server listening on %s\n",
+			fmt.Sprintf(color.BlueString(banner), s.config.version.Num),
 			s.config.appname,
 			color.GreenString(s.config.version.String()),
 			color.RedString(":"+s.config.Port))
