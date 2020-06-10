@@ -68,7 +68,7 @@ func (s *Server) initSetup(r *echo.Group) {
 			Username:  rsetup.Username,
 			Firstname: rsetup.Firstname,
 			Lastname:  rsetup.Lastname,
-			Version:   s.config.Version,
+			Version:   s.config.version.Num,
 			Orgname:   rsetup.Orgname,
 		})
 	})

@@ -11,21 +11,32 @@ import (
 )
 
 type (
-	govflags struct {
-		configFile string
+	Cmd struct {
+		s     *Server
+		cmd   *cobra.Command
+		flags govflags
 	}
 )
 
-func (s *Server) initCommand(conf ConfigOpts) {
+func NewCmd(opts Opts, s *Server) *Cmd {
+	c := &Cmd{
+		s:     s,
+		flags: govflags{},
+	}
+	c.initCmd(opts)
+	return c
+}
+
+func (c *Cmd) initCmd(opts Opts) {
 	rootCmd := &cobra.Command{
-		Use:   conf.Appname,
-		Short: conf.Description,
-		Long: conf.Description + `
+		Use:   opts.Appname,
+		Short: opts.Description,
+		Long: opts.Description + `
 
 It is built on the governor microservice framework which handles config
 management, logging, health checks, setup procedures, jobs, authentication, db,
 caching, object storage, emailing, message queues and more.`,
-		Version: conf.Version + " " + conf.VersionHash,
+		Version: opts.Version.String(),
 	}
 
 	serveCmd := &cobra.Command{
@@ -35,7 +46,8 @@ caching, object storage, emailing, message queues and more.`,
 
 The server first runs all init procedures for all services before starting.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			s.Start()
+			c.s.setFlags(c.flags)
+			c.s.Start()
 		},
 	}
 
@@ -56,7 +68,7 @@ setup.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			if err := s.Setup(*req); err != nil {
+			if err := c.s.Setup(*req); err != nil {
 				os.Exit(1)
 			}
 		},
@@ -64,14 +76,14 @@ setup.`,
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
 
-	rootCmd.PersistentFlags().StringVar(&s.flags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", conf.Appname, conf.DefaultFile))
+	rootCmd.PersistentFlags().StringVar(&c.flags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
 
-	s.rootCmd = rootCmd
+	c.cmd = rootCmd
 }
 
 // Execute runs the governor cmd
-func (s *Server) Execute() {
-	if err := s.rootCmd.Execute(); err != nil {
+func (c *Cmd) Execute() {
+	if err := c.cmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

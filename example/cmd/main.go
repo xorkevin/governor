@@ -32,17 +32,21 @@ var (
 )
 
 func main() {
+	opts := governor.Opts{
+		Appname:     "governor",
+		Description: "Governor is a web server with user and auth capabilities",
+		Version: governor.Version{
+			Num:  "v0.3",
+			Hash: GitHash,
+		},
+		DefaultFile: "config",
+		EnvPrefix:   "gov",
+	}
+
 	dbService := db.New()
 	stateService := statemodel.New(dbService)
 
-	gov := governor.New(governor.ConfigOpts{
-		DefaultFile: "config",
-		Appname:     "governor",
-		Description: "Governor is a web server with user and auth capabilities",
-		Version:     "v0.2",
-		VersionHash: GitHash,
-		EnvPrefix:   "gov",
-	}, stateService)
+	gov := governor.New(opts, stateService)
 
 	kvService := kvstore.New()
 	objstoreService := objstore.New()
@@ -80,5 +84,6 @@ func main() {
 	gov.Register("profile", "/profile", profileService)
 	gov.Register("courier", "/courier", courierService)
 
-	gov.Execute()
+	cmd := governor.NewCmd(opts, gov)
+	cmd.Execute()
 }

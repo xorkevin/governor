@@ -6,7 +6,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"os/signal"
@@ -16,31 +15,37 @@ import (
 )
 
 type (
+	govflags struct {
+		configFile string
+	}
+
 	// Server is a governor server to which services may be registered
 	Server struct {
-		services   []serviceDef
-		config     *Config
-		state      state.State
-		logger     Logger
-		i          *echo.Echo
-		rootCmd    *cobra.Command
-		flags      govflags
-		showBanner bool
-		setupRun   bool
+		services []serviceDef
+		config   *Config
+		state    state.State
+		logger   Logger
+		i        *echo.Echo
+		flags    govflags
+		setupRun bool
 	}
 )
 
 // New creates a new Server
-func New(conf ConfigOpts, stateService state.State) *Server {
-	s := &Server{
-		services:   []serviceDef{},
-		config:     newConfig(conf),
-		state:      stateService,
-		showBanner: true,
-		setupRun:   false,
+func New(opts Opts, stateService state.State) *Server {
+	return &Server{
+		services: []serviceDef{},
+		config:   newConfig(opts),
+		state:    stateService,
+		flags: govflags{
+			configFile: "",
+		},
+		setupRun: false,
 	}
-	s.initCommand(conf)
-	return s
+}
+
+func (s *Server) setFlags(flags govflags) {
+	s.flags = flags
 }
 
 // init initializes the config, creates a new logger, and initializes the
@@ -70,13 +75,13 @@ func (s *Server) init(ctx context.Context) error {
 	l.Info("init request binder", nil)
 	i.Pre(middleware.RemoveTrailingSlash())
 	l.Info("init middleware RemoveTrailingSlash", nil)
-	if len(s.config.RouteRewrite) > 0 {
-		rewriteRules := make(map[string]string, len(s.config.RouteRewrite))
-		for k, v := range s.config.RouteRewrite {
+	if len(s.config.routeRewrite) > 0 {
+		rewriteRules := make(map[string]string, len(s.config.routeRewrite))
+		for k, v := range s.config.routeRewrite {
 			rewriteRules["^"+k] = v
 		}
 		i.Pre(middleware.Rewrite(rewriteRules))
-		l.Info("init route rewrite rules", s.config.RouteRewrite)
+		l.Info("init route rewrite rules", s.config.routeRewrite)
 	}
 
 	if s.config.IsDebug() {
@@ -89,19 +94,19 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(middleware.Gzip())
 	l.Info("init middleware gzip", nil)
 
-	if len(s.config.Origins) > 0 {
+	if len(s.config.origins) > 0 {
 		i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins:     s.config.Origins,
+			AllowOrigins:     s.config.origins,
 			AllowCredentials: true,
 		}))
 		l.Info("init middleware CORS", map[string]string{
-			"origins": strings.Join(s.config.Origins, ", "),
+			"origins": strings.Join(s.config.origins, ", "),
 		})
 	}
 
-	i.Use(middleware.BodyLimit(s.config.MaxReqSize))
+	i.Use(middleware.BodyLimit(s.config.maxReqSize))
 	l.Info("init middleware body limit", map[string]string{
-		"maxreqsize": s.config.MaxReqSize,
+		"maxreqsize": s.config.maxReqSize,
 	})
 	i.Use(middleware.Recover())
 	l.Info("init middleware recover", nil)
@@ -110,9 +115,9 @@ func (s *Server) init(ctx context.Context) error {
 		path := c.Request().URL.EscapedPath()
 		return strings.HasPrefix(path, s.config.BaseURL+"/") || s.config.BaseURL == path
 	}
-	if len(s.config.FrontendProxy) > 0 {
-		targets := make([]*middleware.ProxyTarget, 0, len(s.config.FrontendProxy))
-		for _, i := range s.config.FrontendProxy {
+	if len(s.config.frontendProxy) > 0 {
+		targets := make([]*middleware.ProxyTarget, 0, len(s.config.frontendProxy))
+		for _, i := range s.config.frontendProxy {
 			if u, err := url.Parse(i); err == nil {
 				targets = append(targets, &middleware.ProxyTarget{
 					URL: u,
@@ -130,19 +135,19 @@ func (s *Server) init(ctx context.Context) error {
 				Skipper:  apiMiddlewareSkipper,
 			}))
 			l.Info("init middleware frontend proxy", map[string]string{
-				"proxies": strings.Join(s.config.FrontendProxy, ", "),
+				"proxies": strings.Join(s.config.frontendProxy, ", "),
 			})
 		}
 	} else {
 		i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-			Root:    s.config.PublicDir,
+			Root:    s.config.publicDir,
 			Index:   "index.html",
 			Browse:  false,
 			HTML5:   true,
 			Skipper: apiMiddlewareSkipper,
 		}))
 		l.Info("init middleware static dir", map[string]string{
-			"root":  s.config.PublicDir,
+			"root":  s.config.publicDir,
 			"index": "index.html",
 		})
 	}
@@ -182,8 +187,12 @@ func (s *Server) Start() error {
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
-	if s.showBanner {
-		fmt.Printf(color.BlueString(banner+"\n"), color.GreenString(s.config.Version), "build version:"+color.GreenString(s.config.VersionHash), "http server on "+color.RedString(":"+s.config.Port))
+	if s.config.showBanner {
+		fmt.Printf("%s\n%s: %s http server listening on %s\n",
+			color.BlueString(banner),
+			s.config.appname,
+			color.GreenString(s.config.version.String()),
+			color.RedString(":"+s.config.Port))
 	}
 	go func() {
 		if err := s.i.Start(":" + s.config.Port); err != nil {

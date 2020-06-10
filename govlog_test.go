@@ -47,8 +47,8 @@ func TestNewLogger(t *testing.T) {
 	{
 		logbuf := bytes.Buffer{}
 		config := Config{
-			LogLevel:  envToLevel("INFO"),
-			LogOutput: &logbuf,
+			logLevel:  envToLevel("INFO"),
+			logOutput: &logbuf,
 		}
 		l := newLogger(config)
 
@@ -61,8 +61,8 @@ func TestNewLogger(t *testing.T) {
 	{
 		logbuf := bytes.Buffer{}
 		config := Config{
-			LogLevel:  envToLevel("DEBUG"),
-			LogOutput: &logbuf,
+			logLevel:  envToLevel("DEBUG"),
+			logOutput: &logbuf,
 		}
 		l := newLogger(config)
 
@@ -79,8 +79,8 @@ func TestLogger_Log(t *testing.T) {
 	{
 		logbuf := bytes.Buffer{}
 		config := Config{
-			LogLevel:  envToLevel("INFO"),
-			LogOutput: &logbuf,
+			logLevel:  envToLevel("INFO"),
+			logOutput: &logbuf,
 		}
 		l := newLogger(config)
 
@@ -128,8 +128,8 @@ func TestLogger_Log(t *testing.T) {
 	{
 		logbuf := bytes.Buffer{}
 		config := Config{
-			LogLevel:  envToLevel("WARN"),
-			LogOutput: &logbuf,
+			logLevel:  envToLevel("WARN"),
+			logOutput: &logbuf,
 		}
 		l := newLogger(config)
 

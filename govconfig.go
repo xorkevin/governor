@@ -14,18 +14,28 @@ import (
 )
 
 type (
-	// ConfigOpts is the server base configuration
-	ConfigOpts struct {
-		DefaultFile string
-		Appname     string
-		Description string
-		Version     string
-		VersionHash string
-		EnvPrefix   string
+	Version struct {
+		Num  string
+		Hash string
 	}
 
-	// Config is the complete server configuration including the dynamic
-	// (runtime) options
+	// Opts is the static server configuration
+	Opts struct {
+		Appname     string
+		Description string
+		Version
+		DefaultFile string
+		EnvPrefix   string
+	}
+)
+
+func (v Version) String() string {
+	return v.Num + "-" + v.Hash
+}
+
+type (
+	// Config is the server configuration including those from a config file and
+	// environment variables
 	Config struct {
 		config         *viper.Viper
 		vault          *vaultapi.Client
@@ -35,25 +45,26 @@ type (
 		vaultLoginPath string
 		vaultExpire    int64
 		mu             *sync.RWMutex
-		Appname        string
-		Version        string
-		VersionHash    string
-		LogLevel       int
-		LogOutput      io.Writer
+		appname        string
+		version        Version
+		showBanner     bool
+		logLevel       int
+		logOutput      io.Writer
+		publicDir      string
+		maxReqSize     string
+		frontendProxy  []string
+		origins        []string
+		routeRewrite   map[string]string
 		Port           string
 		BaseURL        string
-		PublicDir      string
-		MaxReqSize     string
-		FrontendProxy  []string
-		Origins        []string
-		RouteRewrite   map[string]string
 	}
 )
 
-func newConfig(conf ConfigOpts) *Config {
+func newConfig(opts Opts) *Config {
 	v := viper.New()
 	v.SetDefault("mode", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
+	v.SetDefault("banner", true)
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("publicdir", "public")
@@ -67,24 +78,23 @@ func newConfig(conf ConfigOpts) *Config {
 	v.SetDefault("vault.k8s.loginpath", "/auth/kubernetes/login")
 	v.SetDefault("vault.k8s.jwtpath", "/var/run/secrets/kubernetes.io/serviceaccount/token")
 
-	v.SetConfigName(conf.DefaultFile)
+	v.SetConfigName(opts.DefaultFile)
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
 	v.AddConfigPath(path.Join(".", "config"))
 	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(path.Join(cfgdir, conf.Appname))
+		v.AddConfigPath(path.Join(cfgdir, opts.Appname))
 	}
 
-	v.SetEnvPrefix(conf.EnvPrefix)
+	v.SetEnvPrefix(opts.EnvPrefix)
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	return &Config{
-		config:      v,
-		mu:          &sync.RWMutex{},
-		Appname:     conf.Appname,
-		Version:     conf.Version,
-		VersionHash: conf.VersionHash,
+		config:  v,
+		mu:      &sync.RWMutex{},
+		appname: opts.Appname,
+		version: opts.Version,
 	}
 }
 
@@ -96,15 +106,16 @@ func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
 		return NewError("Failed to read in config", http.StatusInternalServerError, err)
 	}
-	c.LogLevel = envToLevel(c.config.GetString("mode"))
-	c.LogOutput = envToLogOutput(c.config.GetString("logoutput"))
+	c.showBanner = c.config.GetBool("banner")
+	c.logLevel = envToLevel(c.config.GetString("mode"))
+	c.logOutput = envToLogOutput(c.config.GetString("logoutput"))
+	c.publicDir = c.config.GetString("publicdir")
+	c.maxReqSize = c.config.GetString("maxreqsize")
+	c.frontendProxy = c.config.GetStringSlice("frontendproxy")
+	c.origins = c.config.GetStringSlice("alloworigins")
+	c.routeRewrite = c.config.GetStringMapString("routerewrite")
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
-	c.PublicDir = c.config.GetString("publicdir")
-	c.MaxReqSize = c.config.GetString("maxreqsize")
-	c.FrontendProxy = c.config.GetStringSlice("frontendproxy")
-	c.Origins = c.config.GetStringSlice("alloworigins")
-	c.RouteRewrite = c.config.GetStringMapString("routerewrite")
 	if err := c.initvault(); err != nil {
 		return err
 	}
@@ -198,7 +209,7 @@ func (c *Config) authVault() error {
 
 // IsDebug returns if the configuration is in debug mode
 func (c *Config) IsDebug() bool {
-	return c.LogLevel == levelDebug
+	return c.logLevel == levelDebug
 }
 
 type (

@@ -92,10 +92,10 @@ func newLogger(c Config) Logger {
 	} else {
 		l.Formatter = &logrus.JSONFormatter{}
 	}
-	l.Out = c.LogOutput
-	l.Level = logrusLevelToLog(c.LogLevel)
+	l.Out = c.logOutput
+	l.Level = logrusLevelToLog(c.logLevel)
 	return &govlogger{
-		level:  c.LogLevel,
+		level:  c.logLevel,
 		logger: l,
 		module: "",
 		data:   nil,

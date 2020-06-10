@@ -45,7 +45,7 @@ func (s *Server) initHealth(r *echo.Group) {
 
 	if s.config.IsDebug() {
 		r.GET("/version", func(c echo.Context) error {
-			return c.String(http.StatusOK, s.config.Version)
+			return c.String(http.StatusOK, s.config.version.String())
 		})
 
 		r.GET("/ping", func(c echo.Context) error {
