@@ -10,7 +10,7 @@ commonLabels:
 bases:
   - 'github.com/xorkevin/launchcpx//base/nats'
 configMapGenerator:
-  - name: 'nats-opts'
+  - name: 'opts'
     literals:
       - 'vaultaddr=http://vault.vault.svc.cluster.local:8200'
       - 'vaultrole=governor-nats-role'
