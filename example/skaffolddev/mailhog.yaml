@@ -6,12 +6,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      component: 'mailhog-server'
+      app: 'mailhog'
       version: 'v1'
   template:
     metadata:
       labels:
-        component: 'mailhog-server'
+        app: 'mailhog'
         version: 'v1'
       annotations:
         sidecar.istio.io/inject: 'true'
@@ -36,7 +36,7 @@ spec:
     - name: 'http'
       port: 8025
   selector:
-    component: 'mailhog-server'
+    app: 'mailhog'
 ---
 apiVersion: 'networking.istio.io/v1alpha3'
 kind: 'VirtualService'

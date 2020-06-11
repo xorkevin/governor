@@ -6,12 +6,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      component: 'governor-server'
+      app: 'governor'
       version: 'v1'
   template:
     metadata:
       labels:
-        component: 'governor-server'
+        app: 'governor'
         version: 'v1'
       annotations:
         sidecar.istio.io/inject: 'true'
