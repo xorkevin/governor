@@ -35,7 +35,7 @@ func (r *ReqSetup) valid() error {
 }
 
 type (
-	responseSetup struct {
+	ResponseSetup struct {
 		Username  string `json:"username"`
 		Firstname string `json:"first_name"`
 		Lastname  string `json:"last_name"`
@@ -56,7 +56,7 @@ func (s *Server) initSetup(r *echo.Group) {
 			return err
 		}
 
-		return c.JSON(http.StatusCreated, &responseSetup{
+		return c.JSON(http.StatusCreated, &ResponseSetup{
 			Username:  req.Username,
 			Firstname: req.Firstname,
 			Lastname:  req.Lastname,
