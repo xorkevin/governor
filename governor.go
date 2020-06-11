@@ -15,8 +15,8 @@ import (
 )
 
 type (
-	govflags struct {
-		configFile string
+	Flags struct {
+		ConfigFile string
 	}
 
 	// Server is a governor server to which services may be registered
@@ -26,7 +26,7 @@ type (
 		state    state.State
 		logger   Logger
 		i        *echo.Echo
-		flags    govflags
+		flags    Flags
 		setupRun bool
 	}
 )
@@ -37,22 +37,22 @@ func New(opts Opts, stateService state.State) *Server {
 		services: []serviceDef{},
 		config:   newConfig(opts),
 		state:    stateService,
-		flags: govflags{
-			configFile: "",
+		flags: Flags{
+			ConfigFile: "",
 		},
 		setupRun: false,
 	}
 }
 
-func (s *Server) setFlags(flags govflags) {
+func (s *Server) SetFlags(flags Flags) {
 	s.flags = flags
 }
 
 // init initializes the config, creates a new logger, and initializes the
 // server and its registered services
 func (s *Server) init(ctx context.Context) error {
-	if s.flags.configFile != "" {
-		s.config.setConfigFile(s.flags.configFile)
+	if file := s.flags.ConfigFile; file != "" {
+		s.config.setConfigFile(file)
 	}
 	if err := s.config.init(); err != nil {
 		return err

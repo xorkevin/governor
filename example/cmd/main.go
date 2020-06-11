@@ -33,14 +33,16 @@ var (
 
 func main() {
 	opts := governor.Opts{
-		Appname:     "governor",
-		Description: "Governor is a web server with user and auth capabilities",
 		Version: governor.Version{
 			Num:  "v0.3",
 			Hash: GitHash,
 		},
-		DefaultFile: "config",
-		EnvPrefix:   "gov",
+		Appname:       "governor",
+		Description:   "Governor is a web server with user and auth capabilities",
+		DefaultFile:   "config",
+		ClientDefault: "client",
+		ClientPrefix:  "govc",
+		EnvPrefix:     "gov",
 	}
 
 	dbService := db.New()

@@ -14,14 +14,14 @@ type (
 	Cmd struct {
 		s     *Server
 		cmd   *cobra.Command
-		flags govflags
+		flags Flags
 	}
 )
 
 func NewCmd(opts Opts, s *Server) *Cmd {
 	c := &Cmd{
 		s:     s,
-		flags: govflags{},
+		flags: Flags{},
 	}
 	c.initCmd(opts)
 	return c
@@ -46,7 +46,7 @@ caching, object storage, emailing, message queues and more.`,
 
 The server first runs all init procedures for all services before starting.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			c.s.setFlags(c.flags)
+			c.s.SetFlags(c.flags)
 			c.s.Start()
 		},
 	}
@@ -76,7 +76,7 @@ setup.`,
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
 
-	rootCmd.PersistentFlags().StringVar(&c.flags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
+	rootCmd.PersistentFlags().StringVar(&c.flags.ConfigFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
 
 	c.cmd = rootCmd
 }
@@ -91,6 +91,19 @@ func (c *Cmd) Execute() {
 
 func getPromptReq() (*ReqSetup, error) {
 	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("First name: ")
+	firstname, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Print("Last name: ")
+	lastname, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
 	fmt.Print("Username: ")
 	username, err := reader.ReadString('\n')
 	if err != nil {
@@ -118,18 +131,6 @@ func getPromptReq() (*ReqSetup, error) {
 
 	fmt.Print("Email: ")
 	email, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("First name: ")
-	firstname, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("Last name: ")
-	lastname, err := reader.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}

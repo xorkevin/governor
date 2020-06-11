@@ -21,11 +21,13 @@ type (
 
 	// Opts is the static server configuration
 	Opts struct {
-		Appname     string
-		Description string
 		Version
-		DefaultFile string
-		EnvPrefix   string
+		Appname       string
+		Description   string
+		DefaultFile   string
+		ClientDefault string
+		ClientPrefix  string
+		EnvPrefix     string
 	}
 )
 
