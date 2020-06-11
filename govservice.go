@@ -65,21 +65,18 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	})
 	if s.setupRun {
 		l.Warn("setup already run", nil)
-		return NewErrorUser("setup already run", http.StatusForbidden, nil)
+		return NewErrorUser("Setup already run", http.StatusForbidden, nil)
 	}
 	m, err := s.state.Get()
 	if err != nil {
-		return NewError("failed to get state", http.StatusInternalServerError, err)
+		return NewError("Failed to get state", http.StatusInternalServerError, err)
 	}
 	if m.Setup {
 		s.setupRun = true
 		l.Warn("setup already run", nil)
-		return NewErrorUser("setup already run", http.StatusForbidden, nil)
+		return NewErrorUser("Setup already run", http.StatusForbidden, nil)
 	}
 	if err := rsetup.valid(); err != nil {
-		l.Error("setup params not valid", map[string]string{
-			"error": err.Error(),
-		})
 		return err
 	}
 
@@ -103,7 +100,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		l.Error("setup state service failed", map[string]string{
 			"error": err.Error(),
 		})
-		return NewError("failed to set state", http.StatusInternalServerError, err)
+		return NewError("Failed to set state", http.StatusInternalServerError, err)
 	}
 	s.setupRun = true
 	l.Info("setup all services complete", nil)

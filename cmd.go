@@ -12,18 +12,18 @@ import (
 
 type (
 	Cmd struct {
-		s     *Server
-		c     *Client
-		cmd   *cobra.Command
-		flags Flags
+		s          *Server
+		c          *Client
+		cmd        *cobra.Command
+		configFile string
 	}
 )
 
 func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
 	cmd := &Cmd{
-		s:     s,
-		c:     c,
-		flags: Flags{},
+		s:          s,
+		c:          c,
+		configFile: "",
 	}
 	cmd.initCmd(opts)
 	return cmd
@@ -48,7 +48,9 @@ caching, object storage, emailing, message queues and more.`,
 
 The server first runs all init procedures for all services before starting.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			c.s.SetFlags(c.flags)
+			c.s.SetFlags(Flags{
+				ConfigFile: c.configFile,
+			})
 			c.s.Start()
 		},
 	}
@@ -58,8 +60,7 @@ The server first runs all init procedures for all services before starting.`,
 		Short: "runs the setup procedures for all services",
 		Long: `Runs the setup procedures for all services
 
-The server first runs all init procedures for all services before running
-setup.`,
+Calls the server setup endpoint.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			req, err := getPromptReq()
 			if err != nil {
@@ -70,6 +71,9 @@ setup.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
+			c.c.SetFlags(ClientFlags{
+				ConfigFile: c.configFile,
+			})
 			if err := c.c.Init(); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -79,13 +83,13 @@ setup.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			fmt.Printf("Successfully setup governor:%s", res.Version)
+			fmt.Printf("Successfully setup governor:%s\n", res.Version)
 		},
 	}
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
 
-	rootCmd.PersistentFlags().StringVar(&c.flags.ConfigFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
+	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
 
 	c.cmd = rootCmd
 }

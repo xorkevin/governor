@@ -125,14 +125,6 @@ func (r *repo) Set(m *state.Model) error {
 // Setup creates a new State table if it does not exist and updates the server
 // state entry
 func (r *repo) Setup(req state.ReqSetup) error {
-	m, err := r.GetModel()
-	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
-		return err
-	}
-	if err == nil && m.Setup {
-		return governor.NewError("Setup already run", http.StatusForbidden, nil)
-	}
-
 	db, err := r.db.DB()
 	if err != nil {
 		return err
@@ -140,17 +132,10 @@ func (r *repo) Setup(req state.ReqSetup) error {
 	if err := stateModelSetup(db); err != nil {
 		return governor.NewError("Failed to setup state model", http.StatusInternalServerError, err)
 	}
-	if err == nil {
-		m.Setup = true
-		if err := r.Update(m); err != nil {
-			return err
-		}
-	} else {
-		k := r.New(req.Version, req.VHash)
-		k.Setup = true
-		if err := r.Insert(k); err != nil {
-			return err
-		}
+	k := r.New(req.Version, req.VHash)
+	k.Setup = true
+	if err := r.Insert(k); err != nil {
+		return err
 	}
 	return nil
 }

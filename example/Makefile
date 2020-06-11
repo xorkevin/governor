@@ -24,7 +24,7 @@ devconfig:
 # CMD
 BIN_NAME=governor
 MAIN_PATH=cmd/main.go
-BIN_DIR=bin
+BIN_DIR=./bin
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
 .PHONY: clean build
@@ -63,7 +63,10 @@ docker: build-docker publish-docker
 skaffoldinit:
 	skaffold config set -g update-check false
 
-.PHONY: dev
+.PHONY: dev setup
 
-dev:
-	skaffold dev
+dev: build
+	skaffold run --tail
+
+setup: build
+	$(BIN_PATH) setup

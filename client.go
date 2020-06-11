@@ -78,6 +78,9 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 		body = b
 	}
 	req, err := http.NewRequest(method, c.addr+path, body)
+	if body != nil {
+		req.Header.Add("Content-Type", "application/json")
+	}
 	if err != nil {
 		return 0, NewError("Malformed request", http.StatusBadRequest, err)
 	}

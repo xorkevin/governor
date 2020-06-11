@@ -86,6 +86,6 @@ func main() {
 	gov.Register("profile", "/profile", profileService)
 	gov.Register("courier", "/courier", courierService)
 
-	cmd := governor.NewCmd(opts, gov)
+	cmd := governor.NewCmd(opts, gov, governor.NewClient(opts))
 	cmd.Execute()
 }
