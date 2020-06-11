@@ -13,18 +13,20 @@ import (
 type (
 	Cmd struct {
 		s     *Server
+		c     *Client
 		cmd   *cobra.Command
 		flags Flags
 	}
 )
 
-func NewCmd(opts Opts, s *Server) *Cmd {
-	c := &Cmd{
+func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
+	cmd := &Cmd{
 		s:     s,
+		c:     c,
 		flags: Flags{},
 	}
-	c.initCmd(opts)
-	return c
+	cmd.initCmd(opts)
+	return cmd
 }
 
 func (c *Cmd) initCmd(opts Opts) {
@@ -68,9 +70,16 @@ setup.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			if err := c.s.Setup(*req); err != nil {
+			if err := c.c.Init(); err != nil {
+				fmt.Println(err)
 				os.Exit(1)
 			}
+			res, err := c.c.Setup(*req)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			fmt.Printf("Successfully setup governor:%s", res.Version)
 		},
 	}
 
