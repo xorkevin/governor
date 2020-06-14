@@ -73,6 +73,7 @@ func (s *Server) init(ctx context.Context) error {
 	l.Info("init error handler", nil)
 	i.Binder = requestBinder()
 	l.Info("init request binder", nil)
+
 	i.Pre(middleware.RemoveTrailingSlash())
 	l.Info("init middleware RemoveTrailingSlash", nil)
 	if len(s.config.routeRewrite) > 0 {
@@ -138,7 +139,7 @@ func (s *Server) init(ctx context.Context) error {
 				"proxies": strings.Join(s.config.frontendProxy, ", "),
 			})
 		}
-	} else {
+	} else if s.config.publicDir != "" {
 		i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
 			Root:    s.config.publicDir,
 			Index:   "index.html",
@@ -151,9 +152,6 @@ func (s *Server) init(ctx context.Context) error {
 			"index": "index.html",
 		})
 	}
-
-	i.Use(middleware.RequestID())
-	l.Info("init middleware request id", nil)
 
 	s.initSetup(i.Group(s.config.BaseURL + "/setupz"))
 	l.Info("init setup service", nil)
