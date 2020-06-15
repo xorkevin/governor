@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -33,9 +33,9 @@ func NewClient(opts Opts) *Client {
 	v.SetConfigName(opts.ClientDefault)
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath(path.Join(".", "config"))
+	v.AddConfigPath(filepath.Join(".", "config"))
 	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(path.Join(cfgdir, opts.Appname))
+		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
 	}
 
 	v.SetEnvPrefix(opts.EnvPrefix)

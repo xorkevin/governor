@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -83,9 +83,9 @@ func newConfig(opts Opts) *Config {
 	v.SetConfigName(opts.DefaultFile)
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath(path.Join(".", "config"))
+	v.AddConfigPath(filepath.Join(".", "config"))
 	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(path.Join(cfgdir, opts.Appname))
+		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
 	}
 
 	v.SetEnvPrefix(opts.EnvPrefix)
