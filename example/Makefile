@@ -63,17 +63,18 @@ docker: build-docker publish-docker
 skaffoldinit:
 	skaffold config set -g update-check false
 
-.PHONY: dev setup tail
+.PHONY: dev tail setup
 
 dev: build
 	skaffold run
 
-setup: build
-	$(BIN_PATH) setup
-
 NAMESPACE=governor
-DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name | grep governor)
+DEVDEPLOY=governor
+DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.creationTimestamp | grep governor | head -n 1)
 DEVCONTAINER=governor
 
 tail:
-	kubectl -n $(NAMESPACE) logs $(DEVPOD) $(DEVCONTAINER) -f
+	kubectl -n $(NAMESPACE) logs -f --tail=64 $(DEVPOD) $(DEVCONTAINER)
+
+setup: build
+	$(BIN_PATH) setup
