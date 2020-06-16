@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/go-chi/chi"
 	"net/url"
 	"os"
 	"os/signal"
@@ -25,7 +24,7 @@ type (
 		config   *Config
 		state    state.State
 		logger   Logger
-		i        *echo.Echo
+		i        chi.Router
 		flags    Flags
 		setupRun bool
 	}
@@ -63,7 +62,7 @@ func (s *Server) init(ctx context.Context) error {
 		"phase": "init",
 	})
 
-	i := echo.New()
+	i := chi.NewRouter()
 	s.i = i
 
 	l.Info("init server instance", nil)

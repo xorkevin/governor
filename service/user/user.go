@@ -221,9 +221,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	sr.mountRoute(g.Group("/user"))
-	sr.mountAuth(g.Group(authRoutePrefix))
-	sr.mountApikey(g.Group("/apikey"))
+	sr.mountRoute(m.Group("/user"))
+	sr.mountAuth(m.Group(authRoutePrefix))
+	sr.mountApikey(m.Group("/apikey"))
 	l.Info("mounted http routes", nil)
 	return nil
 }

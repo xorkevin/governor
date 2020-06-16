@@ -3,26 +3,105 @@ package governor
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/labstack/echo/v4"
+	"github.com/go-chi/chi"
 	"mime"
 	"net/http"
 )
 
 type (
 	Router interface {
+		Group(path string) Router
+		Get(path string, fn http.HandlerFunc, mw ...Middleware)
+		Post(path string, fn http.HandlerFunc, mw ...Middleware)
+		Put(path string, fn http.HandlerFunc, mw ...Middleware)
+		Patch(path string, fn http.HandlerFunc, mw ...Middleware)
+		Delete(path string, fn http.HandlerFunc, mw ...Middleware)
+		Any(path string, fn http.HandlerFunc, mw ...Middleware)
 	}
 
 	govrouter struct {
-		router *echo.Group
+		r chi.Router
 	}
 
-	Middleware func(next http.Handler) http.Handler
+	Middleware = func(next http.Handler) http.Handler
 )
 
 func (s *Server) router(path string) Router {
 	return &govrouter{
-		router: s.i.Group(path),
+		r: s.i.Route(path, nil),
 	}
+}
+
+func (r *govrouter) Group(path string) Router {
+	return &govrouter{
+		r: r.r.Route(path, nil),
+	}
+}
+
+func (r *govrouter) Get(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.Get(path, fn)
+}
+
+func (r *govrouter) Post(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.Post(path, fn)
+}
+
+func (r *govrouter) Put(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.Put(path, fn)
+}
+
+func (r *govrouter) Patch(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.Patch(path, fn)
+}
+
+func (r *govrouter) Delete(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.Delete(path, fn)
+}
+
+func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if l := len(mw); l > 0 {
+		k = r.r.With(mw...)
+	}
+	k.HandleFunc(path, fn)
 }
 
 type (

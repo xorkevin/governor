@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"strings"
@@ -200,11 +199,11 @@ func (r *router) checkApikey(c echo.Context) error {
 	})
 }
 
-func (r *router) mountApikey(g *echo.Group) {
-	g.GET("", r.getUserApikeys, gate.User(r.s.gate))
-	g.POST("", r.createApikey, gate.User(r.s.gate))
-	g.PUT("/id/:id", r.updateApikey, gate.User(r.s.gate))
-	g.PUT("/id/:id/rotate", r.rotateApikey, gate.User(r.s.gate))
-	g.DELETE("/id/:id", r.deleteApikey, gate.User(r.s.gate))
-	g.Any("/check", r.checkApikey, r.s.gate.WithApikey().Authenticate(r.checkApikeyValidator, "authentication"))
+func (r *router) mountApikey(m governor.Router) {
+	m.Get("", r.getUserApikeys, gate.User(r.s.gate))
+	m.Post("", r.createApikey, gate.User(r.s.gate))
+	m.Put("/id/:id", r.updateApikey, gate.User(r.s.gate))
+	m.Put("/id/:id/rotate", r.rotateApikey, gate.User(r.s.gate))
+	m.Delete("/id/:id", r.deleteApikey, gate.User(r.s.gate))
+	m.Any("/check", r.checkApikey, r.s.gate.WithApikey().Authenticate(r.checkApikeyValidator, "authentication"))
 }

@@ -1,13 +1,13 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
+	"xorkevin.dev/governor"
 )
 
-func (r *router) mountRoute(g *echo.Group) {
-	r.mountGet(g)
-	r.mountSession(g)
-	r.mountCreate(g)
-	r.mountEdit(g)
-	r.mountEditSecure(g)
+func (r *router) mountRoute(m governor.Router) {
+	r.mountGet(m)
+	r.mountSession(m)
+	r.mountCreate(m)
+	r.mountEdit(m)
+	r.mountEditSecure(m)
 }

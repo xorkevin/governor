@@ -1,9 +1,8 @@
 package user
 
 import (
-	"errors"
-	"github.com/labstack/echo/v4"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
@@ -49,40 +48,40 @@ func (r *router) setSessionCookie(c echo.Context, sessionToken string, userid st
 	})
 }
 
-func getAccessCookie(c echo.Context) (string, error) {
+func getAccessCookie(c echo.Context) (string, bool) {
 	cookie, err := c.Cookie("access_token")
 	if err != nil {
-		return "", err
+		return "", false
 	}
 	if cookie.Value == "" {
-		return "", errors.New("no cookie value")
+		return "", false
 	}
-	return cookie.Value, nil
+	return cookie.Value, true
 }
 
-func getRefreshCookie(c echo.Context) (string, error) {
+func getRefreshCookie(c echo.Context) (string, bool) {
 	cookie, err := c.Cookie("refresh_token")
 	if err != nil {
-		return "", err
+		return "", false
 	}
 	if cookie.Value == "" {
-		return "", errors.New("no cookie value")
+		return "", false
 	}
-	return cookie.Value, nil
+	return cookie.Value, true
 }
 
-func getSessionCookie(c echo.Context, userid string) (string, error) {
+func getSessionCookie(c echo.Context, userid string) (string, bool) {
 	if userid == "" {
-		return "", errors.New("no cookie value")
+		return "", false
 	}
 	cookie, err := c.Cookie("session_token_" + userid)
 	if err != nil {
-		return "", err
+		return "", false
 	}
 	if cookie.Value == "" {
-		return "", errors.New("no cookie value")
+		return "", false
 	}
-	return cookie.Value, nil
+	return cookie.Value, true
 }
 
 func (r *router) rmAccessCookie(c echo.Context) {
@@ -149,7 +148,7 @@ func (r *router) loginUser(c echo.Context) error {
 		}
 		userid = m.Userid
 	}
-	if t, err := getSessionCookie(c, userid); err == nil {
+	if t, ok := getSessionCookie(c, userid); ok {
 		req.SessionToken = t
 	}
 
@@ -177,7 +176,7 @@ type (
 
 func (r *router) exchangeToken(c echo.Context) error {
 	ruser := reqRefreshToken{}
-	if t, err := getRefreshCookie(c); err == nil {
+	if t, ok := getRefreshCookie(c); ok {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
 		return err
@@ -225,7 +224,7 @@ func (r *router) refreshToken(c echo.Context) error {
 
 func (r *router) logoutUser(c echo.Context) error {
 	ruser := reqRefreshToken{}
-	if t, err := getRefreshCookie(c); err == nil {
+	if t, ok := getRefreshCookie(c); ok {
 		ruser.RefreshToken = t
 	} else if err := c.Bind(&ruser); err != nil {
 		return err
@@ -243,9 +242,9 @@ func (r *router) logoutUser(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (r *router) mountAuth(g *echo.Group) {
-	g.POST("/login", r.loginUser)
-	g.POST("/exchange", r.exchangeToken)
-	g.POST("/refresh", r.refreshToken)
-	g.POST("/logout", r.logoutUser)
+func (r *router) mountAuth(m governor.Router) {
+	m.Post("/login", r.loginUser)
+	m.Post("/exchange", r.exchangeToken)
+	m.Post("/refresh", r.refreshToken)
+	m.Post("/logout", r.logoutUser)
 }
