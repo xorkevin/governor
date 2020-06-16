@@ -3,7 +3,7 @@ package governor
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"strings"
@@ -32,13 +32,13 @@ func TestEnvToLogOutput(t *testing.T) {
 func TestLogrusLevelToLog(t *testing.T) {
 	assert := assert.New(t)
 
-	assert.Equal(logrus.DebugLevel, logrusLevelToLog(levelDebug))
-	assert.Equal(logrus.InfoLevel, logrusLevelToLog(levelInfo))
-	assert.Equal(logrus.WarnLevel, logrusLevelToLog(levelWarn))
-	assert.Equal(logrus.ErrorLevel, logrusLevelToLog(levelError))
-	assert.Equal(logrus.FatalLevel, logrusLevelToLog(levelFatal))
-	assert.Equal(logrus.PanicLevel, logrusLevelToLog(levelPanic))
-	assert.Equal(logrus.InfoLevel, logrusLevelToLog(123), "default level should be info")
+	assert.Equal(zerolog.DebugLevel, zerologLevelToLog(levelDebug))
+	assert.Equal(zerolog.InfoLevel, zerologLevelToLog(levelInfo))
+	assert.Equal(zerolog.WarnLevel, zerologLevelToLog(levelWarn))
+	assert.Equal(zerolog.ErrorLevel, zerologLevelToLog(levelError))
+	assert.Equal(zerolog.FatalLevel, zerologLevelToLog(levelFatal))
+	assert.Equal(zerolog.PanicLevel, zerologLevelToLog(levelPanic))
+	assert.Equal(zerolog.InfoLevel, zerologLevelToLog(123), "default level should be info")
 }
 
 func TestNewLogger(t *testing.T) {
@@ -54,8 +54,6 @@ func TestNewLogger(t *testing.T) {
 
 		k := l.(*govlogger)
 		assert.Equal(levelInfo, k.level, "log level should be set")
-		assert.Equal(&logbuf, k.logger.Out, "log output should be set from the config")
-		assert.IsType(&logrus.JSONFormatter{}, k.logger.Formatter, "log format should be JSON when not DEBUG")
 	}
 
 	{
@@ -68,8 +66,6 @@ func TestNewLogger(t *testing.T) {
 
 		k := l.(*govlogger)
 		assert.Equal(levelDebug, k.level, "log level should be set")
-		assert.Equal(&logbuf, k.logger.Out, "log output should be set from the config")
-		assert.IsType(&logrus.TextFormatter{}, k.logger.Formatter, "log format should be text when DEBUG")
 	}
 }
 

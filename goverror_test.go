@@ -316,6 +316,6 @@ func TestErrorHandler(t *testing.T) {
 	assert.Equal("test error message: test root error", logjson["msg"], "full error message must be set in log")
 	assert.NotEqual("", logjson["request"], "full request must be set in log")
 	ti := time.Time{}
-	errtime := ti.UnmarshalText([]byte(logjson["logtime"].(string)))
+	errtime := ti.UnmarshalText([]byte(logjson["time"].(string)))
 	assert.NoError(errtime, "full request time must be set in log")
 }
