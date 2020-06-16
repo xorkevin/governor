@@ -3,6 +3,7 @@ package profile
 import (
 	"github.com/labstack/echo/v4"
 	"net/http"
+	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
@@ -161,7 +162,7 @@ func (r *router) getProfileImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) mountProfileRoutes(g *echo.Group) error {
+func (r *router) mountProfileRoutes(m governor.Router) error {
 	g.POST("", r.createProfile, gate.User(r.s.gate))
 	g.PUT("", r.updateProfile, gate.User(r.s.gate))
 	g.PUT("/image", r.updateImage, gate.User(r.s.gate))

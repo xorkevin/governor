@@ -259,7 +259,7 @@ func (r *router) getBrandImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) mountRoutes(g *echo.Group) error {
+func (r *router) mountRoutes(m governor.Router) error {
 	g.GET("/link/:linkid", r.getLink)
 	g.GET("/link/:linkid/image", r.getLinkImage, cachecontrol.Control(true, false, min15, r.getLinkImageCC))
 	g.GET("/link", r.getLinkGroup, gate.MemberF(r.s.gate, r.gateCourier))

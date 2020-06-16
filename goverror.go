@@ -3,7 +3,6 @@ package governor
 import (
 	"errors"
 	"fmt"
-	"github.com/labstack/echo/v4"
 	"net/http"
 )
 
@@ -170,41 +169,42 @@ type (
 	}
 )
 
-func errorHandler(i *echo.Echo, l Logger) echo.HTTPErrorHandler {
-	return echo.HTTPErrorHandler(func(err error, c echo.Context) {
-		goverruser := &goverrorUser{}
-		goverr := &goverror{}
-		if errors.As(err, &goverruser) {
-			status := http.StatusInternalServerError
-			if goverruser.status != 0 {
-				status = goverruser.status
-			}
-			if reserr := c.JSON(status, &responseError{
-				Message: goverruser.message,
-			}); reserr != nil {
-				l.Warn("fail to send err message JSON", map[string]string{
-					"endpoint": c.Path(),
-					"err":      err.Error(),
-				})
-			}
-		} else if errors.As(err, &goverr) {
-			l.Error(goverr.Error(), map[string]string{
-				"endpoint": c.Path(),
-			})
-			status := http.StatusInternalServerError
-			if goverr.status != 0 {
-				status = goverr.status
-			}
-			if reserr := c.JSON(status, &responseError{
-				Message: goverr.message,
-			}); reserr != nil {
-				l.Warn("fail to send err message JSON", map[string]string{
-					"endpoint": c.Path(),
-					"err":      err.Error(),
-				})
-			}
-		} else {
-			i.DefaultHTTPErrorHandler(err, c)
+func (c *govcontext) WriteError(err error) {
+	if err := (&goverrorUser{}); errors.As(err, &err) {
+		status := http.StatusInternalServerError
+		if s := err.status; s != 0 {
+			status = s
 		}
+		c.WriteJSON(status, responseError{
+			Message: err.message,
+		})
+		return
+	}
+
+	if err := (&goverror{}); errors.As(err, &err) {
+		if c.l != nil {
+			c.l.Error(err.message, map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		}
+		status := http.StatusInternalServerError
+		if s := err.status; s != 0 {
+			status = s
+		}
+		c.WriteJSON(status, responseError{
+			Message: err.message,
+		})
+		return
+	}
+
+	if c.l != nil {
+		c.l.Error("non governor error", map[string]string{
+			"endpoint": c.r.URL.EscapedPath(),
+			"error":    err.Error(),
+		})
+	}
+	c.WriteJSON(http.StatusInternalServerError, responseError{
+		Message: "Internal Server Error",
 	})
 }

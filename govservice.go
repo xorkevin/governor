@@ -3,7 +3,6 @@ package governor
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor/service/state"
 )
@@ -29,7 +28,7 @@ type (
 	// Stop runs when the server begins the shutdown process
 	Service interface {
 		Register(r ConfigRegistrar, jr JobRegistrar)
-		Init(ctx context.Context, c Config, r ConfigReader, l Logger, g *echo.Group) error
+		Init(ctx context.Context, c Config, r ConfigReader, l Logger, m Router) error
 		Setup(req ReqSetup) error
 		Start(ctx context.Context) error
 		Stop(ctx context.Context)
@@ -123,7 +122,7 @@ func (s *Server) initServices(ctx context.Context) error {
 	})
 	l.Info("init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.i.Group(s.config.BaseURL+i.url)); err != nil {
+		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.router(s.config.BaseURL+i.url)); err != nil {
 			l.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
 				"service": i.name,
 				"error":   err.Error(),

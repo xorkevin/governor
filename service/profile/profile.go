@@ -2,7 +2,6 @@ package profile
 
 import (
 	"context"
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -63,14 +62,14 @@ func (s *service) router() *router {
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
 
 	sr := s.router()
-	if err := sr.mountProfileRoutes(g); err != nil {
+	if err := sr.mountProfileRoutes(m); err != nil {
 		return err
 	}
 	l.Info("mounted http routes", nil)

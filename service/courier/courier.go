@@ -2,7 +2,6 @@ package courier
 
 import (
 	"context"
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"time"
@@ -72,7 +71,7 @@ func (s *service) router() *router {
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, g *echo.Group) error {
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
@@ -103,7 +102,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	if err := sr.mountRoutes(g); err != nil {
+	if err := sr.mountRoutes(m); err != nil {
 		return err
 	}
 	l.Info("mounted http routes", nil)
