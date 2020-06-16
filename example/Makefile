@@ -71,5 +71,9 @@ dev: build
 setup: build
 	$(BIN_PATH) setup
 
+NAMESPACE=governor
+DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name | grep governor)
+DEVCONTAINER=governor
+
 tail:
-	kubectl -n governor governor
+	kubectl -n $(NAMESPACE) logs $(DEVPOD) $(DEVCONTAINER) -f
