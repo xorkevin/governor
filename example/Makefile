@@ -63,10 +63,13 @@ docker: build-docker publish-docker
 skaffoldinit:
 	skaffold config set -g update-check false
 
-.PHONY: dev setup
+.PHONY: dev setup tail
 
 dev: build
-	skaffold run --tail
+	skaffold run
 
 setup: build
 	$(BIN_PATH) setup
+
+tail:
+	kubectl -n governor governor

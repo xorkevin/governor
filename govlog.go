@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 	"io"
 	"os"
@@ -188,4 +189,24 @@ func (l *govlogger) Error(msg string, data map[string]string) {
 // Fatal logs a fatal error message then exits
 func (l *govlogger) Fatal(msg string, data map[string]string) {
 	l.withFields(l.logger.Fatal(), msg, data)
+}
+
+func (s *Server) reqLoggerMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			method := c.Request().Method
+			path := c.Request().RequestURI
+			start := time.Now()
+			err := next(c)
+			duration := time.Since(start)
+			status := c.Response().Status
+			s.logger.Debug("", map[string]string{
+				"method":  method,
+				"path":    path,
+				"status":  strconv.Itoa(status),
+				"latency": duration.String(),
+			})
+			return err
+		}
+	}
 }

@@ -86,9 +86,7 @@ func (s *Server) init(ctx context.Context) error {
 	}
 
 	if s.config.IsDebug() {
-		i.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-			Format: "time=${time_rfc3339}, method=${method}, uri=${uri}, status=${status}, latency=${latency_human}\n",
-		}))
+		i.Use(s.reqLoggerMiddleware())
 		l.Info("init request logger", nil)
 	}
 
