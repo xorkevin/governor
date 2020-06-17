@@ -73,6 +73,8 @@ func (s *Server) init(ctx context.Context) error {
 
 	i.Use(middleware.StripSlashes)
 	l.Info("init middleware StripSlashes", nil)
+	i.Use(middleware.RealIP)
+	l.Info("init middleware RealIP", nil)
 
 	if s.config.IsDebug() {
 		i.Use(s.reqLoggerMiddleware)

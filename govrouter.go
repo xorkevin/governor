@@ -110,6 +110,9 @@ type (
 	Context interface {
 		Param(key string) string
 		Query() url.Values
+		Header(key string) string
+		Cookie(key string) (*http.Cookie, error)
+		SetCookie(cookie *http.Cookie)
 		Bind(i interface{}) error
 		WriteStatus(status int)
 		WriteString(status int, text string)
@@ -144,6 +147,18 @@ func (c *govcontext) Param(key string) string {
 
 func (c *govcontext) Query() url.Values {
 	return c.r.URL.Query()
+}
+
+func (c *govcontext) Header(key string) string {
+	return c.r.Header.Get(key)
+}
+
+func (c *govcontext) Cookie(key string) (*http.Cookie, error) {
+	return c.r.Cookie(key)
+}
+
+func (c *govcontext) SetCookie(cookie *http.Cookie) {
+	http.SetCookie(c.w, cookie)
 }
 
 func (c *govcontext) Bind(i interface{}) error {
