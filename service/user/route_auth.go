@@ -267,9 +267,9 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) mountAuth(m governor.Router) {
-	m.Post("/login", r.loginUser)
-	m.Post("/exchange", r.exchangeToken)
-	m.Post("/refresh", r.refreshToken)
-	m.Post("/logout", r.logoutUser)
+func (m *router) mountAuth(r governor.Router) {
+	r.Post("/login", m.loginUser)
+	r.Post("/exchange", m.exchangeToken)
+	r.Post("/refresh", m.refreshToken)
+	r.Post("/logout", m.logoutUser)
 }

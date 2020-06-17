@@ -224,11 +224,11 @@ func (m *router) checkApikey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (r *router) mountApikey(m governor.Router) {
-	m.Get("", r.getUserApikeys, gate.User(r.s.gate))
-	m.Post("", r.createApikey, gate.User(r.s.gate))
-	m.Put("/id/:id", r.updateApikey, gate.User(r.s.gate))
-	m.Put("/id/:id/rotate", r.rotateApikey, gate.User(r.s.gate))
-	m.Delete("/id/:id", r.deleteApikey, gate.User(r.s.gate))
-	m.Any("/check", r.checkApikey, r.s.gate.WithApikey().Authenticate(r.checkApikeyValidator, "authentication"))
+func (m *router) mountApikey(r governor.Router) {
+	r.Get("", m.getUserApikeys, gate.User(m.s.gate))
+	r.Post("", m.createApikey, gate.User(m.s.gate))
+	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate))
+	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate))
+	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate))
+	r.Any("/check", m.checkApikey, m.s.gate.WithApikey().Authenticate(m.checkApikeyValidator, "authentication"))
 }
