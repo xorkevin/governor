@@ -21,13 +21,12 @@ type (
 
 func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	query := c.Query()
-	amount, err := strconv.Atoi(query.Get("amount"))
+	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
 		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
 		return
 	}
-	offset, err := strconv.Atoi(query.Get("offset"))
+	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
 		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
 		return
@@ -192,9 +191,8 @@ const (
 
 func (r *router) checkApikeyValidator(t gate.Intersector) bool {
 	c := t.Ctx()
-	query := c.Query()
 	req := reqApikeyCheck{
-		AuthTags: query.Get("authtags"),
+		AuthTags: c.Query("authtags"),
 	}
 	if err := req.valid(); err != nil {
 		return false

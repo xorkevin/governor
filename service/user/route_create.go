@@ -107,15 +107,14 @@ type (
 
 func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	query := c.Query()
-	amount, err := strconv.Atoi(query.Get("amount"))
+	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
 		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
 		return
 	}
-	offset, err := strconv.Atoi(query.Get("offset"))
+	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
 		return
 	}
 	req := reqGetUserApprovals{
@@ -176,7 +175,7 @@ func (m *router) mountCreate(r governor.Router) {
 	r.Post("", m.createUser)
 	r.Post("/confirm", m.commitUser)
 	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "user"))
-	r.Post("/approvals/id/:id", m.approveUser, gate.Member(m.s.gate, "user"))
-	r.Delete("/approvals/id/:id", m.deleteUserApproval, gate.Member(m.s.gate, "user"))
-	r.Delete("/id/:id", m.deleteUser, gate.OwnerParam(m.s.gate, "id"))
+	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "user"))
+	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "user"))
+	r.Delete("/id/{id}", m.deleteUser, gate.OwnerParam(m.s.gate, "id"))
 }

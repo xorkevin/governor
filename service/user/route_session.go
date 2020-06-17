@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,28 +18,33 @@ type (
 	}
 )
 
-func (r *router) getSessions(c echo.Context) error {
-	amount, err := strconv.Atoi(c.QueryParam("amount"))
+func (m *router) getSessions(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		return
 	}
-	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
+		return
 	}
 	req := reqGetUserSessions{
-		Userid: c.Get("userid").(string),
+		Userid: c.Get(gate.CtxUserid).(string),
 		Amount: amount,
 		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	res, err := r.s.GetUserSessions(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserSessions(req.Userid, req.Amount, req.Offset)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
 type (
@@ -60,26 +64,31 @@ func (r *reqUserRmSessions) validUserid() error {
 	return nil
 }
 
-func (r *router) killSessions(c echo.Context) error {
+func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserRmSessions{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.Userid = c.Get("userid").(string)
+	req.Userid = c.Get(gate.CtxUserid).(string)
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.validUserid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.KillSessions(req.SessionIDs); err != nil {
-		return err
+	if err := m.s.KillSessions(req.SessionIDs); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) mountSession(g *echo.Group) {
-	g.GET("/sessions", r.getSessions, gate.User(r.s.gate))
-	g.DELETE("/sessions", r.killSessions, gate.User(r.s.gate))
+func (m *router) mountSession(r governor.Router) {
+	r.Get("/sessions", m.getSessions, gate.User(m.s.gate))
+	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate))
 }

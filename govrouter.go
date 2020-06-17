@@ -109,7 +109,7 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 type (
 	Context interface {
 		Param(key string) string
-		Query() url.Values
+		Query(key string) string
 		Header(key string) string
 		Cookie(key string) (*http.Cookie, error)
 		SetCookie(cookie *http.Cookie)
@@ -126,18 +126,20 @@ type (
 	}
 
 	govcontext struct {
-		w   http.ResponseWriter
-		r   *http.Request
-		ctx context.Context
-		l   Logger
+		w     http.ResponseWriter
+		r     *http.Request
+		query url.Values
+		ctx   context.Context
+		l     Logger
 	}
 )
 
 func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 	return &govcontext{
-		w: w,
-		r: r,
-		l: l,
+		w:     w,
+		r:     r,
+		query: r.URL.Query(),
+		l:     l,
 	}
 }
 
@@ -145,8 +147,8 @@ func (c *govcontext) Param(key string) string {
 	return chi.URLParam(c.r, key)
 }
 
-func (c *govcontext) Query() url.Values {
-	return c.r.URL.Query()
+func (c *govcontext) Query(key string) string {
+	return c.query.Get(key)
 }
 
 func (c *govcontext) Header(key string) string {

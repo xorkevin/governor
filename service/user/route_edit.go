@@ -19,7 +19,7 @@ type (
 
 func (m *router) putUser(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	userid := c.Get("userid").(string)
+	userid := c.Get(gate.CtxUserid).(string)
 
 	req := reqUserPut{}
 	if err := c.Bind(&req); err != nil {
@@ -59,7 +59,7 @@ func (m *router) patchRank(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updaterUserid := c.Get("userid").(string)
+	updaterUserid := c.Get(gate.CtxUserid).(string)
 	editAddRank, _ := rank.FromStringUser(req.Add)
 	editRemoveRank, _ := rank.FromStringUser(req.Remove)
 

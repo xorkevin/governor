@@ -1,8 +1,8 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
+	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -16,20 +16,24 @@ type (
 	}
 )
 
-func (r *router) putEmail(c echo.Context) error {
+func (m *router) putEmail(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPutEmail{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.Userid = c.Get("userid").(string)
+	req.Userid = c.Get(gate.CtxUserid).(string)
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.UpdateEmail(req.Userid, req.Email, req.Password); err != nil {
-		return err
+	if err := m.s.UpdateEmail(req.Userid, req.Email, req.Password); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -40,19 +44,23 @@ type (
 	}
 )
 
-func (r *router) putEmailVerify(c echo.Context) error {
+func (m *router) putEmailVerify(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPutEmailVerify{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.CommitEmail(req.Userid, req.Key, req.Password); err != nil {
-		return err
+	if err := m.s.CommitEmail(req.Userid, req.Key, req.Password); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -63,21 +71,24 @@ type (
 	}
 )
 
-func (r *router) putPassword(c echo.Context) error {
-
+func (m *router) putPassword(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPutPassword{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.Userid = c.Get("userid").(string)
+	req.Userid = c.Get(gate.CtxUserid).(string)
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.UpdatePassword(req.Userid, req.NewPassword, req.OldPassword); err != nil {
-		return err
+	if err := m.s.UpdatePassword(req.Userid, req.NewPassword, req.OldPassword); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -86,19 +97,23 @@ type (
 	}
 )
 
-func (r *router) forgotPassword(c echo.Context) error {
+func (m *router) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqForgotPassword{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.ForgotPassword(req.Username); err != nil {
-		return err
+	if err := m.s.ForgotPassword(req.Username); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -109,25 +124,29 @@ type (
 	}
 )
 
-func (r *router) forgotPasswordReset(c echo.Context) error {
+func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqForgotPasswordReset{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.ResetPassword(req.Userid, req.Key, req.NewPassword); err != nil {
-		return err
+	if err := m.s.ResetPassword(req.Userid, req.Key, req.NewPassword); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) mountEditSecure(g *echo.Group) {
-	g.PUT("/email", r.putEmail, gate.User(r.s.gate))
-	g.PUT("/email/verify", r.putEmailVerify)
-	g.PUT("/password", r.putPassword, gate.User(r.s.gate))
-	g.PUT("/password/forgot", r.forgotPassword)
-	g.PUT("/password/forgot/reset", r.forgotPasswordReset)
+func (m *router) mountEditSecure(r governor.Router) {
+	r.Put("/email", m.putEmail, gate.User(m.s.gate))
+	r.Put("/email/verify", m.putEmailVerify)
+	r.Put("/password", m.putPassword, gate.User(m.s.gate))
+	r.Put("/password/forgot", m.forgotPassword)
+	r.Put("/password/forgot/reset", m.forgotPasswordReset)
 }
