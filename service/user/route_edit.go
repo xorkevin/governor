@@ -1,8 +1,8 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
+	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -17,21 +17,25 @@ type (
 	}
 )
 
-func (r *router) putUser(c echo.Context) error {
+func (m *router) putUser(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	userid := c.Get("userid").(string)
 
 	req := reqUserPut{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.UpdateUser(userid, req); err != nil {
-		return err
+	if err := m.s.UpdateUser(userid, req); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -42,27 +46,31 @@ type (
 	}
 )
 
-func (r *router) patchRank(c echo.Context) error {
+func (m *router) patchRank(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPutRank{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	req.Userid = c.Param("id")
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
 	updaterUserid := c.Get("userid").(string)
 	editAddRank, _ := rank.FromStringUser(req.Add)
 	editRemoveRank, _ := rank.FromStringUser(req.Remove)
 
-	if err := r.s.UpdateRank(req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
-		return err
+	if err := m.s.UpdateRank(req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) mountEdit(g *echo.Group) {
-	g.PUT("", r.putUser, gate.User(r.s.gate))
-	g.PATCH("/id/:id/rank", r.patchRank, gate.User(r.s.gate))
+func (m *router) mountEdit(r governor.Router) {
+	r.Put("", m.putUser, gate.User(m.s.gate))
+	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate))
 }

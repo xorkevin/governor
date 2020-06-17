@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"xorkevin.dev/governor"
@@ -20,20 +19,24 @@ type (
 	}
 )
 
-func (r *router) createUser(c echo.Context) error {
+func (m *router) createUser(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPost{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.CreateUser(req)
+	res, err := m.s.CreateUser(req)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
 type (
@@ -43,20 +46,24 @@ type (
 	}
 )
 
-func (r *router) commitUser(c echo.Context) error {
+func (m *router) commitUser(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserPostConfirm{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.CommitUser(req.Email, req.Key)
+	res, err := m.s.CommitUser(req.Email, req.Key)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
 type (
@@ -67,23 +74,28 @@ type (
 	}
 )
 
-func (r *router) deleteUser(c echo.Context) error {
+func (m *router) deleteUser(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserDelete{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
 	if c.Param("id") != req.Userid {
-		return governor.NewErrorUser("information does not match", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("information does not match", http.StatusBadRequest, nil))
+		return
 	}
 
-	if err := r.s.DeleteUser(req.Userid, req.Username, req.Password); err != nil {
-		return err
+	if err := m.s.DeleteUser(req.Userid, req.Username, req.Password); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -93,70 +105,78 @@ type (
 	}
 )
 
-func (r *router) getUserApprovals(c echo.Context) error {
-	amount, err := strconv.Atoi(c.QueryParam("amount"))
+func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	query := c.Query()
+	amount, err := strconv.Atoi(query.Get("amount"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		return
 	}
-	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	offset, err := strconv.Atoi(query.Get("offset"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		return
 	}
 	req := reqGetUserApprovals{
 		Amount: amount,
 		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.GetUserApprovals(req.Amount, req.Offset)
+	res, err := m.s.GetUserApprovals(req.Amount, req.Offset)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
-func (r *router) approveUser(c echo.Context) error {
+func (m *router) approveUser(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.ApproveUser(req.Userid); err != nil {
-		return err
+	if err := m.s.ApproveUser(req.Userid); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) deleteUserApproval(c echo.Context) error {
+func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.DeleteUserApproval(req.Userid); err != nil {
-		return err
+	if err := m.s.DeleteUserApproval(req.Userid); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) gateUser(c echo.Context, userid string) (string, error) {
-	return "user", nil
-}
-
-func (r *router) mountCreate(g *echo.Group) {
-	g.POST("", r.createUser)
-	g.POST("/confirm", r.commitUser)
-	g.GET("/approvals", r.getUserApprovals, gate.MemberF(r.s.gate, r.gateUser))
-	g.POST("/approvals/id/:id", r.approveUser, gate.MemberF(r.s.gate, r.gateUser))
-	g.DELETE("/approvals/id/:id", r.deleteUserApproval, gate.MemberF(r.s.gate, r.gateUser))
-	g.DELETE("/id/:id", r.deleteUser, gate.Owner(r.s.gate, "id"))
+func (m *router) mountCreate(r governor.Router) {
+	r.Post("", m.createUser)
+	r.Post("/confirm", m.commitUser)
+	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "user"))
+	r.Post("/approvals/id/:id", m.approveUser, gate.Member(m.s.gate, "user"))
+	r.Delete("/approvals/id/:id", m.deleteUserApproval, gate.Member(m.s.gate, "user"))
+	r.Delete("/id/:id", m.deleteUser, gate.OwnerParam(m.s.gate, "id"))
 }
