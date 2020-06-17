@@ -2,10 +2,12 @@ package governor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/go-chi/chi"
 	"mime"
 	"net/http"
+	"net/url"
 )
 
 type (
@@ -106,17 +108,25 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 
 type (
 	Context interface {
+		Param(key string) string
+		Query() url.Values
 		Bind(i interface{}) error
 		WriteStatus(status int)
 		WriteString(status int, text string)
 		WriteJSON(status int, body interface{})
 		WriteError(err error)
+		Get(key interface{}) interface{}
+		Set(key, value interface{})
+		Req() *http.Request
+		Res() http.ResponseWriter
+		R() (http.ResponseWriter, *http.Request)
 	}
 
 	govcontext struct {
-		w http.ResponseWriter
-		r *http.Request
-		l Logger
+		w   http.ResponseWriter
+		r   *http.Request
+		ctx context.Context
+		l   Logger
 	}
 )
 
@@ -126,6 +136,14 @@ func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 		r: r,
 		l: l,
 	}
+}
+
+func (c *govcontext) Param(key string) string {
+	return chi.URLParam(c.r, key)
+}
+
+func (c *govcontext) Query() url.Values {
+	return c.r.URL.Query()
 }
 
 func (c *govcontext) Bind(i interface{}) error {
@@ -175,6 +193,32 @@ func (c *govcontext) WriteJSON(status int, body interface{}) {
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	c.w.Write(b.Bytes())
+}
+
+func (c *govcontext) Get(key interface{}) interface{} {
+	return c.r.Context().Value(key)
+}
+
+func (c *govcontext) Set(key, value interface{}) {
+	if c.ctx == nil {
+		c.ctx = c.r.Context()
+	}
+	c.ctx = context.WithValue(c.ctx, key, value)
+}
+
+func (c *govcontext) Req() *http.Request {
+	if c.ctx != nil {
+		return c.r.WithContext(c.ctx)
+	}
+	return c.r
+}
+
+func (c *govcontext) Res() http.ResponseWriter {
+	return c.w
+}
+
+func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
+	return c.Res(), c.Req()
 }
 
 func (s *Server) bodyLimitMiddleware(limit int64) Middleware {

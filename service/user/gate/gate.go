@@ -3,7 +3,6 @@ package gate
 import (
 	"context"
 	"errors"
-	"github.com/go-chi/chi"
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
@@ -11,6 +10,14 @@ import (
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
+)
+
+type (
+	ctxKey string
+)
+
+const (
+	CtxUserid ctxKey = "userid"
 )
 
 const (
@@ -53,20 +60,20 @@ type (
 	Intersector interface {
 		Userid() string
 		Intersect(roles rank.Rank) (rank.Rank, bool)
-		Request() *http.Request
+		Ctx() governor.Context
 	}
 
 	intersector struct {
 		s      *service
 		userid string
-		req    *http.Request
+		ctx    governor.Context
 	}
 
 	apikeyIntersector struct {
 		s        *apikeyAuth
 		apikeyid string
 		userid   string
-		req      *http.Request
+		ctx      governor.Context
 	}
 
 	// Validator is a function to check the authorization of a user
@@ -133,8 +140,8 @@ func (r *intersector) Userid() string {
 	return r.userid
 }
 
-func (r *intersector) Request() *http.Request {
-	return r.req
+func (r *intersector) Ctx() governor.Context {
+	return r.ctx
 }
 
 func (r *intersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
@@ -149,11 +156,11 @@ func (r *intersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
 	return k, true
 }
 
-func (s *service) intersector(userid string, req *http.Request) Intersector {
+func (s *service) intersector(userid string, ctx governor.Context) Intersector {
 	return &intersector{
 		s:      s,
 		userid: userid,
-		req:    req,
+		ctx:    ctx,
 	}
 }
 
@@ -177,12 +184,12 @@ func (s *service) Authenticate(v Validator, subject string) governor.Middleware 
 				c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
 				return
 			}
-			if !v(s.intersector(claims.Userid, r)) {
+			if !v(s.intersector(claims.Userid, c)) {
 				c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 				return
 			}
-			ctx := context.WithValue(r.Context(), "userid", claims.Userid)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			c.Set(CtxUserid, claims.Userid)
+			next.ServeHTTP(c.R())
 		})
 	}
 }
@@ -200,8 +207,8 @@ func (r *apikeyIntersector) Userid() string {
 	return r.userid
 }
 
-func (r *apikeyIntersector) Request() *http.Request {
-	return r.req
+func (r *apikeyIntersector) Ctx() governor.Context {
+	return r.ctx
 }
 
 func (r *apikeyIntersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
@@ -216,12 +223,12 @@ func (r *apikeyIntersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
 	return k, true
 }
 
-func (s *apikeyAuth) intersector(apikeyid, userid string, req *http.Request) Intersector {
+func (s *apikeyAuth) intersector(apikeyid, userid string, ctx governor.Context) Intersector {
 	return &apikeyIntersector{
 		s:        s,
 		apikeyid: apikeyid,
 		userid:   userid,
-		req:      req,
+		ctx:      ctx,
 	}
 }
 
@@ -242,12 +249,12 @@ func (s *apikeyAuth) Authenticate(v Validator, subject string) governor.Middlewa
 				c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
 				return
 			}
-			if !v(s.intersector(keyid, userid, r)) {
+			if !v(s.intersector(keyid, userid, c)) {
 				c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 				return
 			}
-			ctx := context.WithValue(r.Context(), "userid", userid)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			c.Set(CtxUserid, userid)
+			next.ServeHTTP(c.R())
 		})
 	}
 }
@@ -255,7 +262,7 @@ func (s *apikeyAuth) Authenticate(v Validator, subject string) governor.Middlewa
 // Owner is a middleware function to validate if a user owns the resource
 //
 // idfunc should return true if the resource is owned by the given user
-func Owner(g Authenticator, idfunc func(*http.Request, string) bool) governor.Middleware {
+func Owner(g Authenticator, idfunc func(governor.Context, string) bool) governor.Middleware {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -268,7 +275,7 @@ func Owner(g Authenticator, idfunc func(*http.Request, string) bool) governor.Mi
 		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return idfunc(r.Request(), r.Userid())
+		return idfunc(r.Ctx(), r.Userid())
 	}, authenticationSubject)
 }
 
@@ -279,8 +286,8 @@ func OwnerParam(g Authenticator, idparam string) governor.Middleware {
 		panic("idparam cannot be empty")
 	}
 
-	return Owner(g, func(r *http.Request, userid string) bool {
-		return chi.URLParam(r, idparam) == userid
+	return Owner(g, func(c governor.Context, userid string) bool {
+		return c.Param(idparam) == userid
 	})
 }
 
@@ -314,7 +321,7 @@ func User(g Authenticator) governor.Middleware {
 // the resource owner or an admin
 //
 // idfunc should return true if the resource is owned by the given user
-func OwnerOrAdmin(g Authenticator, idfunc func(*http.Request, string) bool) governor.Middleware {
+func OwnerOrAdmin(g Authenticator, idfunc func(governor.Context, string) bool) governor.Middleware {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -330,7 +337,7 @@ func OwnerOrAdmin(g Authenticator, idfunc func(*http.Request, string) bool) gove
 		if !roles.Has(rank.TagUser) {
 			return false
 		}
-		return idfunc(r.Request(), r.Userid())
+		return idfunc(r.Ctx(), r.Userid())
 	}, authenticationSubject)
 }
 
@@ -341,8 +348,8 @@ func OwnerOrAdminParam(g Authenticator, idparam string) governor.Middleware {
 		panic("idparam cannot be empty")
 	}
 
-	return OwnerOrAdmin(g, func(r *http.Request, userid string) bool {
-		return chi.URLParam(r, idparam) == userid
+	return OwnerOrAdmin(g, func(c governor.Context, userid string) bool {
+		return c.Param(idparam) == userid
 	})
 }
 
@@ -350,13 +357,13 @@ func OwnerOrAdminParam(g Authenticator, idparam string) governor.Middleware {
 // moderator of a group or an admin
 //
 // idfunc should return the group of the resource
-func ModF(g Authenticator, idfunc func(*http.Request, string) (string, error)) governor.Middleware {
+func ModF(g Authenticator, idfunc func(governor.Context, string) (string, error)) governor.Middleware {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
 	return g.Authenticate(func(r Intersector) bool {
-		modtag, err := idfunc(r.Request(), r.Userid())
+		modtag, err := idfunc(r.Ctx(), r.Userid())
 		if err != nil {
 			return false
 		}
@@ -381,7 +388,7 @@ func Mod(g Authenticator, group string) governor.Middleware {
 		panic("group cannot be empty")
 	}
 
-	return ModF(g, func(_ *http.Request, _ string) (string, error) {
+	return ModF(g, func(_ governor.Context, _ string) (string, error) {
 		return group, nil
 	})
 }
@@ -390,13 +397,13 @@ func Mod(g Authenticator, group string) governor.Middleware {
 // not banned from the group
 //
 // idfunc should return the group of the resource
-func NoBanF(g Authenticator, idfunc func(*http.Request, string) (string, error)) governor.Middleware {
+func NoBanF(g Authenticator, idfunc func(governor.Context, string) (string, error)) governor.Middleware {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
 	return g.Authenticate(func(r Intersector) bool {
-		bantag, err := idfunc(r.Request(), r.Userid())
+		bantag, err := idfunc(r.Ctx(), r.Userid())
 		if err != nil {
 			return false
 		}
@@ -421,7 +428,7 @@ func NoBan(g Authenticator, group string) governor.Middleware {
 		panic("group cannot be empty")
 	}
 
-	return NoBanF(g, func(_ *http.Request, _ string) (string, error) {
+	return NoBanF(g, func(_ governor.Context, _ string) (string, error) {
 		return group, nil
 	})
 }
@@ -430,13 +437,13 @@ func NoBan(g Authenticator, group string) governor.Middleware {
 // member of a group
 //
 // idfunc should return the group of the resource
-func MemberF(g Authenticator, idfunc func(*http.Request, string) (string, error)) governor.Middleware {
+func MemberF(g Authenticator, idfunc func(governor.Context, string) (string, error)) governor.Middleware {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
 	return g.Authenticate(func(r Intersector) bool {
-		tag, err := idfunc(r.Request(), r.Userid())
+		tag, err := idfunc(r.Ctx(), r.Userid())
 		if err != nil {
 			return false
 		}
@@ -461,7 +468,7 @@ func Member(g Authenticator, group string) governor.Middleware {
 		panic("group cannot be empty")
 	}
 
-	return MemberF(g, func(_ *http.Request, _ string) (string, error) {
+	return MemberF(g, func(_ governor.Context, _ string) (string, error) {
 		return group, nil
 	})
 }

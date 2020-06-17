@@ -19,28 +19,34 @@ type (
 	}
 )
 
-func (r *router) getUserApikeys(c echo.Context) error {
-	amount, err := strconv.Atoi(c.QueryParam("amount"))
+func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	query := c.Query()
+	amount, err := strconv.Atoi(query.Get("amount"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		return
 	}
-	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	offset, err := strconv.Atoi(query.Get("offset"))
 	if err != nil {
-		return governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil)
+		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
+		return
 	}
 	req := reqGetUserApikeys{
-		Userid: c.Get("userid").(string),
+		Userid: c.Get(gate.CtxUserid).(string),
 		Amount: amount,
 		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	res, err := r.s.GetUserApikeys(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserApikeys(req.Userid, req.Amount, req.Offset)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
 type (
@@ -52,21 +58,25 @@ type (
 	}
 )
 
-func (r *router) createApikey(c echo.Context) error {
+func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyPost{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.Userid = c.Get("userid").(string)
+	req.Userid = c.Get(gate.CtxUserid).(string)
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	res, err := r.s.CreateApikey(req.Userid, authTags, req.Name, req.Desc)
+	res, err := m.s.CreateApikey(req.Userid, authTags, req.Name, req.Desc)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
 type (
@@ -84,21 +94,25 @@ func (r *reqApikeyID) validUserid() error {
 	return nil
 }
 
-func (r *router) deleteApikey(c echo.Context) error {
+func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyID{
-		Userid: c.Get("userid").(string),
+		Userid: c.Get(gate.CtxUserid).(string),
 		Keyid:  c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.validUserid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	if err := r.s.DeleteApikey(req.Keyid); err != nil {
-		return err
+	if err := m.s.DeleteApikey(req.Keyid); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -119,42 +133,51 @@ func (r *reqApikeyUpdate) validUserid() error {
 	return nil
 }
 
-func (r *router) updateApikey(c echo.Context) error {
+func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyUpdate{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.Userid = c.Get("userid").(string)
+	req.Userid = c.Get(gate.CtxUserid).(string)
 	req.Keyid = c.Param("id")
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.validUserid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	authTags, _ := rank.FromStringUser(req.AuthTags)
-	if err := r.s.UpdateApikey(req.Keyid, authTags, req.Name, req.Desc); err != nil {
-		return err
+	if err := m.s.UpdateApikey(req.Keyid, authTags, req.Name, req.Desc); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) rotateApikey(c echo.Context) error {
+func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyID{
-		Userid: c.Get("userid").(string),
+		Userid: c.Get(gate.CtxUserid).(string),
 		Keyid:  c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	if err := req.validUserid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	res, err := r.s.RotateApikey(req.Keyid)
+	res, err := m.s.RotateApikey(req.Keyid)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
 type (
@@ -168,9 +191,10 @@ const (
 )
 
 func (r *router) checkApikeyValidator(t gate.Intersector) bool {
-	c := t.Context()
+	c := t.Ctx()
+	query := c.Query()
 	req := reqApikeyCheck{
-		AuthTags: c.QueryParam("authtags"),
+		AuthTags: query.Get("authtags"),
 	}
 	if err := req.valid(); err != nil {
 		return false
@@ -193,8 +217,9 @@ type (
 	}
 )
 
-func (r *router) checkApikey(c echo.Context) error {
-	return c.JSON(http.StatusOK, resApikeyOK{
+func (m *router) checkApikey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	c.WriteJSON(http.StatusOK, resApikeyOK{
 		Message: "OK",
 	})
 }
