@@ -170,30 +170,30 @@ type (
 )
 
 func (c *govcontext) WriteError(err error) {
-	if err := (&goverrorUser{}); errors.As(err, &err) {
+	if gerr := (&goverrorUser{}); errors.As(err, &gerr) {
 		status := http.StatusInternalServerError
-		if s := err.status; s != 0 {
+		if s := gerr.status; s != 0 {
 			status = s
 		}
 		c.WriteJSON(status, responseError{
-			Message: err.message,
+			Message: gerr.message,
 		})
 		return
 	}
 
-	if err := (&goverror{}); errors.As(err, &err) {
+	if gerr := (&goverror{}); errors.As(err, &gerr) {
 		if c.l != nil {
-			c.l.Error(err.message, map[string]string{
+			c.l.Error(gerr.message, map[string]string{
 				"endpoint": c.r.URL.EscapedPath(),
-				"error":    err.Error(),
+				"error":    gerr.Error(),
 			})
 		}
 		status := http.StatusInternalServerError
-		if s := err.status; s != 0 {
+		if s := gerr.status; s != 0 {
 			status = s
 		}
 		c.WriteJSON(status, responseError{
-			Message: err.message,
+			Message: gerr.message,
 		})
 		return
 	}

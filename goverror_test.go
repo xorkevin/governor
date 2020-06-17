@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -253,29 +253,25 @@ func TestErrorStatus(t *testing.T) {
 	assert.Equal(0, ErrorStatus(rootErr), "error status should be 0 for non goverror errors")
 }
 
-func TestErrorHandler(t *testing.T) {
+func TestContextWriteError(t *testing.T) {
 	assert := assert.New(t)
 
-	logbuf := bytes.Buffer{}
-	config := Config{
+	logbuf1 := &bytes.Buffer{}
+	l1 := newLogger(Config{
 		logLevel:  envToLevel("INFO"),
-		logOutput: &logbuf,
-	}
-	l := newLogger(config)
-	i := echo.New()
-	handler := errorHandler(i, l)
+		logOutput: logbuf1,
+	})
 
 	{
 		pathurl := "/error"
 		reqbody := `{"ping":"pong"}`
 		req := httptest.NewRequest(http.MethodPost, pathurl, strings.NewReader(reqbody))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 		rec := httptest.NewRecorder()
-		c := i.NewContext(req, rec)
-		c.SetPath(pathurl)
+		c := NewContext(rec, req, l1)
 		rootErr := errors.New("test root error")
 		err := NewError("test error message", http.StatusInternalServerError, rootErr)
-		handler(err, c)
+		c.WriteError(err)
 		assert.Equal(http.StatusInternalServerError, rec.Code, "http status should be the status of the error")
 		assert.Equal(`{"message":"test error message"}`, strings.TrimSpace(rec.Body.String()), "json message should be the message of the error")
 	}
@@ -284,38 +280,59 @@ func TestErrorHandler(t *testing.T) {
 		pathurl := "/error"
 		reqbody := `{"ping":"pong"}`
 		req := httptest.NewRequest(http.MethodPost, pathurl, strings.NewReader(reqbody))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 		rec := httptest.NewRecorder()
-		c := i.NewContext(req, rec)
-		c.SetPath(pathurl)
+		c := NewContext(rec, req, l1)
 		err := NewErrorUser("test error message", http.StatusInternalServerError, nil)
-		handler(err, c)
+		c.WriteError(err)
 		assert.Equal(http.StatusInternalServerError, rec.Code, "http status should be the status of the error")
 		assert.Equal(`{"message":"test error message"}`, strings.TrimSpace(rec.Body.String()), "json message should be the message of the error")
 	}
 
 	{
-		pathurl := "/error"
-		reqbody := `{"ping":"pong"}`
-		req := httptest.NewRequest(http.MethodPost, pathurl, strings.NewReader(reqbody))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := i.NewContext(req, rec)
-		c.SetPath(pathurl)
-		echoerr := echo.NewHTTPError(http.StatusNotFound, "Route does not exist")
-		handler(echoerr, c)
-		assert.Equal(http.StatusNotFound, rec.Code, "http status should be the status of the error")
-		assert.Equal(`{"message":"Route does not exist"}`, strings.TrimSpace(rec.Body.String()), "json message should be the message of the error")
+		logjson := map[string]interface{}{}
+		err := json.Unmarshal(logbuf1.Bytes(), &logjson)
+		assert.NoError(err, "log output must be json format")
+		assert.Equal("/error", logjson["endpoint"], "endpoint must be set in log")
+		assert.Equal("error", logjson["level"], "level must be set in log")
+		assert.Equal("test error message", logjson["msg"], "full error message must be set in log")
+		assert.Equal("test error message: test root error", logjson["error"], "full error trace must be set in log")
+		assert.NotEqual("", logjson["request"], "full request must be set in log")
+		ti := time.Time{}
+		errtime := ti.UnmarshalText([]byte(logjson["time"].(string)))
+		assert.NoError(errtime, "full request time must be set in log")
 	}
 
-	logjson := map[string]interface{}{}
-	err := json.Unmarshal(logbuf.Bytes(), &logjson)
-	assert.NoError(err, "log output must be json format")
-	assert.Equal("/error", logjson["endpoint"], "endpoint must be set in log")
-	assert.Equal("error", logjson["level"], "level must be set in log")
-	assert.Equal("test error message: test root error", logjson["msg"], "full error message must be set in log")
-	assert.NotEqual("", logjson["request"], "full request must be set in log")
-	ti := time.Time{}
-	errtime := ti.UnmarshalText([]byte(logjson["time"].(string)))
-	assert.NoError(errtime, "full request time must be set in log")
+	logbuf2 := &bytes.Buffer{}
+	l2 := newLogger(Config{
+		logLevel:  envToLevel("INFO"),
+		logOutput: logbuf2,
+	})
+
+	{
+		pathurl := "/error-plain"
+		reqbody := `{"ping":"pong"}`
+		req := httptest.NewRequest(http.MethodPost, pathurl, strings.NewReader(reqbody))
+		req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
+		rec := httptest.NewRecorder()
+		c := NewContext(rec, req, l2)
+		err := errors.New("Plain error")
+		c.WriteError(err)
+		assert.Equal(http.StatusInternalServerError, rec.Code, "http status should be the status of the error")
+		assert.Equal(`{"message":"Internal Server Error"}`, strings.TrimSpace(rec.Body.String()), "json message should be the message of the error")
+	}
+
+	{
+		logjson := map[string]interface{}{}
+		err := json.Unmarshal(logbuf2.Bytes(), &logjson)
+		assert.NoError(err, "log output must be json format")
+		assert.Equal("/error-plain", logjson["endpoint"], "endpoint must be set in log")
+		assert.Equal("error", logjson["level"], "level must be set in log")
+		assert.Equal("non governor error", logjson["msg"], "error message must be set in log")
+		assert.Equal("Plain error", logjson["error"], "actual error message must be set in log")
+		assert.NotEqual("", logjson["request"], "full request must be set in log")
+		ti := time.Time{}
+		errtime := ti.UnmarshalText([]byte(logjson["time"].(string)))
+		assert.NoError(errtime, "full request time must be set in log")
+	}
 }
