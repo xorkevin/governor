@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -149,8 +148,12 @@ func (s *Server) Start() error {
 			color.GreenString(s.config.version.String()),
 			color.RedString(":"+s.config.Port))
 	}
+	srv := http.Server{
+		Addr:    ":" + s.config.Port,
+		Handler: s.i,
+	}
 	go func() {
-		if err := s.i.Start(":" + s.config.Port); err != nil {
+		if err := srv.ListenAndServe(); err != nil {
 			l.Info("shutting down server", map[string]string{
 				"error": err.Error(),
 			})
@@ -163,7 +166,7 @@ func (s *Server) Start() error {
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 16*time.Second)
 	defer shutdownCancel()
-	if err := s.i.Shutdown(shutdownCtx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		l.Error("shutdown server error", map[string]string{
 			"error": err.Error(),
 		})
