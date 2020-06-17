@@ -1,16 +1,21 @@
 package governor
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"github.com/fatih/color"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/cors"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
 	"xorkevin.dev/governor/service/state"
+	"xorkevin.dev/governor/util/bytefmt"
 )
 
 type (
@@ -67,92 +72,47 @@ func (s *Server) init(ctx context.Context) error {
 
 	l.Info("init server instance", nil)
 
-	i.HideBanner = true
-	i.HTTPErrorHandler = errorHandler(i, s.logger.Subtree("errorhandler"))
-	l.Info("init error handler", nil)
-	i.Binder = requestBinder()
-	l.Info("init request binder", nil)
-
-	i.Pre(middleware.RemoveTrailingSlash())
-	l.Info("init middleware RemoveTrailingSlash", nil)
-	if len(s.config.routeRewrite) > 0 {
-		rewriteRules := make(map[string]string, len(s.config.routeRewrite))
-		for k, v := range s.config.routeRewrite {
-			rewriteRules["^"+k] = v
-		}
-		i.Pre(middleware.Rewrite(rewriteRules))
-		l.Info("init route rewrite rules", s.config.routeRewrite)
-	}
+	i.Use(middleware.StripSlashes)
+	l.Info("init middleware StripSlashes", nil)
 
 	if s.config.IsDebug() {
-		i.Use(s.reqLoggerMiddleware())
+		i.Use(s.reqLoggerMiddleware)
 		l.Info("init request logger", nil)
 	}
 
-	i.Use(middleware.Gzip())
-	l.Info("init middleware gzip", nil)
+	if limit, err := bytefmt.ToBytes(s.config.maxReqSize); err != nil {
+		l.Warn("invalid maxreqsize format for middlware body limit", map[string]string{
+			"maxreqsize": s.config.maxReqSize,
+		})
+	} else {
+		i.Use(s.bodyLimitMiddleware(limit))
+		l.Info("init middleware body limit", map[string]string{
+			"maxreqsize": s.config.maxReqSize,
+		})
+	}
 
 	if len(s.config.origins) > 0 {
-		i.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins:     s.config.origins,
+		i.Use(cors.Handler(cors.Options{
+			AllowedOrigins:   s.config.origins,
+			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+			AllowedHeaders:   []string{"*"},
 			AllowCredentials: true,
+			MaxAge:           300,
 		}))
 		l.Info("init middleware CORS", map[string]string{
 			"origins": strings.Join(s.config.origins, ", "),
 		})
 	}
 
-	i.Use(middleware.BodyLimit(s.config.maxReqSize))
-	l.Info("init middleware body limit", map[string]string{
-		"maxreqsize": s.config.maxReqSize,
-	})
-	i.Use(middleware.Recover())
-	l.Info("init middleware recover", nil)
+	i.Use(middleware.Compress(gzip.DefaultCompression))
+	l.Info("init middleware gzip", nil)
 
-	apiMiddlewareSkipper := func(c echo.Context) bool {
-		path := c.Request().URL.EscapedPath()
-		return strings.HasPrefix(path, s.config.BaseURL+"/") || s.config.BaseURL == path
-	}
-	if len(s.config.frontendProxy) > 0 {
-		targets := make([]*middleware.ProxyTarget, 0, len(s.config.frontendProxy))
-		for _, i := range s.config.frontendProxy {
-			if u, err := url.Parse(i); err == nil {
-				targets = append(targets, &middleware.ProxyTarget{
-					URL: u,
-				})
-			} else {
-				l.Warn("fail add frontend proxy", map[string]string{
-					"proxy": i,
-					"error": err.Error(),
-				})
-			}
-		}
-		if len(targets) > 0 {
-			i.Use(middleware.ProxyWithConfig(middleware.ProxyConfig{
-				Balancer: middleware.NewRoundRobinBalancer(targets),
-				Skipper:  apiMiddlewareSkipper,
-			}))
-			l.Info("init middleware frontend proxy", map[string]string{
-				"proxies": strings.Join(s.config.frontendProxy, ", "),
-			})
-		}
-	} else if s.config.publicDir != "" {
-		i.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-			Root:    s.config.publicDir,
-			Index:   "index.html",
-			Browse:  false,
-			HTML5:   true,
-			Skipper: apiMiddlewareSkipper,
-		}))
-		l.Info("init middleware static dir", map[string]string{
-			"root":  s.config.publicDir,
-			"index": "index.html",
-		})
-	}
+	i.Use(middleware.Recoverer)
+	l.Info("init middleware Recoverer", nil)
 
-	s.initSetup(i.Group(s.config.BaseURL + "/setupz"))
+	s.initSetup(s.router(s.config.BaseURL + "/setupz"))
 	l.Info("init setup service", nil)
-	s.initHealth(i.Group(s.config.BaseURL + "/healthz"))
+	s.initHealth(s.router(s.config.BaseURL + "/healthz"))
 	l.Info("init health service", nil)
 
 	if err := s.initServices(ctx); err != nil {

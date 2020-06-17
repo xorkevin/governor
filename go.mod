@@ -6,6 +6,7 @@ require (
 	github.com/boombuler/barcode v1.0.0
 	github.com/fatih/color v1.9.0
 	github.com/go-chi/chi v4.1.2+incompatible
+	github.com/go-chi/cors v1.1.1
 	github.com/go-redis/redis/v7 v7.4.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/labstack/echo/v4 v4.1.16

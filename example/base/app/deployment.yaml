@@ -85,8 +85,6 @@ spec:
               mountPath: '/home/governor/config'
             - name: 'templates'
               mountPath: '/home/governor/templates'
-            - name: 'public'
-              mountPath: '/home/governor/public'
       volumes:
         - name: 'init-scripts'
           configMap:
@@ -97,6 +95,3 @@ spec:
         - name: 'templates'
           configMap:
             name: 'templates'
-        - name: 'public'
-          configMap:
-            name: 'public'

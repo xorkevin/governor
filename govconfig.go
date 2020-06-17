@@ -52,11 +52,8 @@ type (
 		showBanner     bool
 		logLevel       int
 		logOutput      io.Writer
-		publicDir      string
 		maxReqSize     string
-		frontendProxy  []string
 		origins        []string
-		routeRewrite   map[string]string
 		Port           string
 		BaseURL        string
 	}
@@ -69,10 +66,8 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("banner", true)
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
-	v.SetDefault("publicdir", "public")
 	v.SetDefault("templatedir", "templates")
 	v.SetDefault("maxreqsize", "2M")
-	v.SetDefault("frontendproxy", []string{})
 	v.SetDefault("alloworigins", []string{})
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -111,11 +106,8 @@ func (c *Config) init() error {
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = envToLevel(c.config.GetString("mode"))
 	c.logOutput = envToLogOutput(c.config.GetString("logoutput"))
-	c.publicDir = c.config.GetString("publicdir")
 	c.maxReqSize = c.config.GetString("maxreqsize")
-	c.frontendProxy = c.config.GetStringSlice("frontendproxy")
 	c.origins = c.config.GetStringSlice("alloworigins")
-	c.routeRewrite = c.config.GetStringMapString("routerewrite")
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	if err := c.initvault(); err != nil {

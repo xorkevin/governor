@@ -45,9 +45,6 @@ configMapGenerator:
       - 'templates/passreset.html'
       - 'templates/passreset_subject.txt'
       - 'templates/passreset.txt'
-  - name: 'public'
-    files:
-      - 'public/index.html'
 resources:
   - 'deployment.yaml'
   - 'service.yaml'

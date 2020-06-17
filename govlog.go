@@ -1,9 +1,9 @@
 package governor
 
 import (
-	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -191,22 +191,22 @@ func (l *govlogger) Fatal(msg string, data map[string]string) {
 	l.withFields(l.logger.Fatal(), msg, data)
 }
 
-func (s *Server) reqLoggerMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			method := c.Request().Method
-			path := c.Request().RequestURI
-			start := time.Now()
-			err := next(c)
-			duration := time.Since(start)
-			status := c.Response().Status
-			s.logger.Debug("", map[string]string{
-				"method":  method,
-				"path":    path,
-				"status":  strconv.Itoa(status),
-				"latency": duration.String(),
-			})
-			return err
+func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method := r.Method
+		path := r.URL.EscapedPath()
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		duration := time.Since(start)
+		status := 0
+		if r.Response != nil {
+			status = r.Response.StatusCode
 		}
-	}
+		s.logger.Debug("", map[string]string{
+			"method":  method,
+			"path":    path,
+			"status":  strconv.Itoa(status),
+			"latency": duration.String(),
+		})
+	})
 }

@@ -1,9 +1,7 @@
 package governor
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -18,46 +16,50 @@ type (
 	}
 )
 
-func (s *Server) initHealth(r *echo.Group) {
-	r.GET("/live", func(c echo.Context) error {
-		return c.String(http.StatusOK, strconv.FormatInt(time.Now().Round(0).Unix(), 10))
+func (s *Server) initHealth(m Router) {
+	m.Get("/live", func(w http.ResponseWriter, r *http.Request) {
+		c := NewContext(w, r, s.logger)
+		c.WriteStatus(http.StatusOK)
 	})
 
-	r.GET("/ready", func(c echo.Context) error {
+	m.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		t := time.Now().Round(0).Unix()
-		if errs := s.checkHealthServices(); len(errs) > 0 {
-			errReslist := []errRes{}
-			for _, i := range errs {
-				errReslist = append(errReslist, errRes{
-					Message: i.Error(),
-				})
-			}
-			return c.JSON(http.StatusInternalServerError, &healthRes{
-				Time: t,
-				Errs: errReslist,
+		errs := s.checkHealthServices()
+		errReslist := make([]errRes, 0, len(errs))
+		for _, i := range errs {
+			errReslist = append(errReslist, errRes{
+				Message: i.Error(),
 			})
 		}
-		return c.JSON(http.StatusOK, &healthRes{
+		c := NewContext(w, r, s.logger)
+		status := http.StatusOK
+		if len(errs) > 0 {
+			status = http.StatusInternalServerError
+		}
+		c.WriteJSON(status, &healthRes{
 			Time: t,
-			Errs: nil,
+			Errs: errReslist,
 		})
 	})
 
 	if s.config.IsDebug() {
-		r.GET("/version", func(c echo.Context) error {
-			return c.String(http.StatusOK, s.config.version.String())
+		m.Get("/version", func(w http.ResponseWriter, r *http.Request) {
+			c := NewContext(w, r, s.logger)
+			c.WriteString(http.StatusOK, s.config.version.String())
 		})
 
-		r.GET("/ping", func(c echo.Context) error {
-			s.logger.Debug("Ping", map[string]string{
+		m.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+			s.logger.Info("Ping", map[string]string{
 				"request":  "ping",
 				"response": "pong",
 			})
-			return c.String(http.StatusOK, "Pong")
+			c := NewContext(w, r, s.logger)
+			c.WriteString(http.StatusOK, "Pong")
 		})
 
-		r.GET("/error", func(c echo.Context) error {
-			return NewError("Test error", http.StatusBadRequest, nil)
+		m.Get("/error", func(w http.ResponseWriter, r *http.Request) {
+			c := NewContext(w, r, s.logger)
+			c.WriteError(NewError("Test error", http.StatusBadRequest, nil))
 		})
 	}
 }

@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"regexp"
 )
@@ -43,20 +42,24 @@ type (
 	}
 )
 
-func (s *Server) initSetup(r *echo.Group) {
-	r.POST("", func(c echo.Context) error {
+func (s *Server) initSetup(m Router) {
+	m.Post("", func(w http.ResponseWriter, r *http.Request) {
+		c := NewContext(w, r, s.logger)
 		req := &ReqSetup{}
 		if err := c.Bind(req); err != nil {
-			return err
+			c.WriteError(err)
+			return
 		}
 		if err := req.valid(); err != nil {
-			return err
+			c.WriteError(err)
+			return
 		}
 		if err := s.setupServices(*req); err != nil {
-			return err
+			c.WriteError(err)
+			return
 		}
 
-		return c.JSON(http.StatusCreated, &ResponseSetup{
+		c.WriteJSON(http.StatusCreated, &ResponseSetup{
 			Username:  req.Username,
 			Firstname: req.Firstname,
 			Lastname:  req.Lastname,
