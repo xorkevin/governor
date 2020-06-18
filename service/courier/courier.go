@@ -14,7 +14,6 @@ import (
 
 const (
 	time24h int64 = int64(24 * time.Hour / time.Second)
-	min15         = int64(15 * time.Minute / time.Second)
 )
 
 type (
@@ -102,9 +101,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	if err := sr.mountRoutes(m); err != nil {
-		return err
-	}
+	sr.mountRoutes(m)
 	l.Info("mounted http routes", nil)
 	return nil
 }

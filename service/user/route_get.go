@@ -129,12 +129,12 @@ func (m *router) getUsersByRole(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
-		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
 		return
 	}
 	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
 		return
 	}
 
@@ -173,12 +173,12 @@ func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
-		c.WriteError(governor.NewErrorUser("amount invalid", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
 		return
 	}
 	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		c.WriteError(governor.NewErrorUser("offset invalid", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
 		return
 	}
 

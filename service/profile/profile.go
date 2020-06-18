@@ -17,11 +17,6 @@ const (
 	profilequeueworkerdelete = "gov.profile.worker.delete"
 )
 
-const (
-	min1  = 60
-	min15 = 900
-)
-
 type (
 	Service interface {
 		governor.Service
@@ -69,9 +64,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	if err := sr.mountProfileRoutes(m); err != nil {
-		return err
-	}
+	sr.mountProfileRoutes(m)
 	l.Info("mounted http routes", nil)
 	return nil
 }

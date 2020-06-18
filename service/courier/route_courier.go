@@ -1,7 +1,6 @@
 package courier
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"strconv"
 	"xorkevin.dev/governor"
@@ -18,43 +17,50 @@ type (
 	}
 )
 
-func (r *router) getLink(c echo.Context) error {
+func (m *router) getLink(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	url, err := r.s.GetLinkFast(req.LinkID)
+	url, err := m.s.GetLinkFast(req.LinkID)
 	if err != nil {
-		if len(r.s.fallbackLink) > 0 {
-			return c.Redirect(http.StatusMovedPermanently, r.s.fallbackLink)
+		if len(m.s.fallbackLink) > 0 {
+			c.Redirect(http.StatusTemporaryRedirect, m.s.fallbackLink)
+			return
 		}
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.Redirect(http.StatusTemporaryRedirect, url)
+	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (r *router) getLinkImage(c echo.Context) error {
+func (m *router) getLinkImage(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	img, contentType, err := r.s.GetLinkImage(req.LinkID)
+	img, contentType, err := m.s.GetLinkImage(req.LinkID)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			r.s.logger.Error("Failed to close link image", map[string]string{
+			m.s.logger.Error("failed to close link image", map[string]string{
 				"actiontype": "getlinkimage",
 				"error":      err.Error(),
 			})
 		}
 	}()
-	return c.Stream(http.StatusOK, contentType, img)
+	c.WriteFile(http.StatusOK, contentType, img)
 }
 
 type (
@@ -64,14 +70,17 @@ type (
 	}
 )
 
-func (r *router) getLinkGroup(c echo.Context) error {
-	amount, err := strconv.Atoi(c.QueryParam("amount"))
+func (m *router) getLinkGroup(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
-		return governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err)
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err))
+		return
 	}
-	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		return governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err)
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err))
+		return
 	}
 
 	req := reqGetGroup{
@@ -79,14 +88,16 @@ func (r *router) getLinkGroup(c echo.Context) error {
 		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.GetLinkGroup(amount, offset, c.QueryParam("creatorid"))
+	res, err := m.s.GetLinkGroup(amount, offset, c.Query("creatorid"))
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
 type (
@@ -98,34 +109,41 @@ type (
 	}
 )
 
-func (r *router) createLink(c echo.Context) error {
+func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqLinkPost{}
 	if err := c.Bind(&req); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	req.CreatorID = c.Get("userid").(string)
+	req.CreatorID = c.Get(gate.CtxUserid).(string)
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.CreateLink(req.LinkID, req.URL, req.BrandID, req.CreatorID)
+	res, err := m.s.CreateLink(req.LinkID, req.URL, req.BrandID, req.CreatorID)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (r *router) deleteLink(c echo.Context) error {
+func (m *router) deleteLink(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	if err := r.s.DeleteLink(req.LinkID); err != nil {
-		return err
+	if err := m.s.DeleteLink(req.LinkID); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -134,36 +152,42 @@ type (
 	}
 )
 
-func (r *router) getBrandImage(c echo.Context) error {
+func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqBrandGet{
 		BrandID: c.Param("brandid"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	img, contentType, err := r.s.GetBrandImage(req.BrandID)
+	img, contentType, err := m.s.GetBrandImage(req.BrandID)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			r.s.logger.Error("Failed to close brand image", map[string]string{
+			m.s.logger.Error("failed to close brand image", map[string]string{
 				"actiontype": "getbrandimage",
 				"error":      err.Error(),
 			})
 		}
 	}()
-	return c.Stream(http.StatusOK, contentType, img)
+	c.WriteFile(http.StatusOK, contentType, img)
 }
 
-func (r *router) getBrandGroup(c echo.Context) error {
-	amount, err := strconv.Atoi(c.QueryParam("amount"))
+func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	amount, err := strconv.Atoi(c.Query("amount"))
 	if err != nil {
-		return governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err)
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err))
+		return
 	}
-	offset, err := strconv.Atoi(c.QueryParam("offset"))
+	offset, err := strconv.Atoi(c.Query("offset"))
 	if err != nil {
-		return governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err)
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err))
+		return
 	}
 
 	req := reqGetGroup{
@@ -171,14 +195,16 @@ func (r *router) getBrandGroup(c echo.Context) error {
 		Offset: offset,
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.GetBrandGroup(req.Amount, req.Offset)
+	res, err := m.s.GetBrandGroup(req.Amount, req.Offset)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
 type (
@@ -188,46 +214,49 @@ type (
 	}
 )
 
-func (r *router) createBrand(c echo.Context) error {
-	img, err := image.LoadImage(c, "image")
+func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	img, err := image.LoadImage(m.s.logger, c, "image")
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
 	req := reqBrandPost{
 		BrandID:   c.FormValue("brandid"),
-		CreatorID: c.Get("userid").(string),
+		CreatorID: c.Get(gate.CtxUserid).(string),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.CreateBrand(req.BrandID, img, req.CreatorID)
+	res, err := m.s.CreateBrand(req.BrandID, img, req.CreatorID)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (r *router) deleteBrand(c echo.Context) error {
+func (m *router) deleteBrand(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
 	req := reqBrandGet{
 		BrandID: c.Param("brandid"),
 	}
 	if err := req.valid(); err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
-	if err := r.s.DeleteBrand(req.BrandID); err != nil {
-		return err
+	if err := m.s.DeleteBrand(req.BrandID); err != nil {
+		c.WriteError(err)
+		return
 	}
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) gateCourier(c echo.Context, userid string) (string, error) {
-	return "courier", nil
-}
-
-func (r *router) getLinkImageCC(c echo.Context) (string, error) {
+func (r *router) getLinkImageCC(c governor.Context) (string, error) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -243,7 +272,7 @@ func (r *router) getLinkImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) getBrandImageCC(c echo.Context) (string, error) {
+func (r *router) getBrandImageCC(c governor.Context) (string, error) {
 	req := reqBrandGet{
 		BrandID: c.Param("brandid"),
 	}
@@ -259,15 +288,14 @@ func (r *router) getBrandImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) mountRoutes(m governor.Router) error {
-	g.GET("/link/:linkid", r.getLink)
-	g.GET("/link/:linkid/image", r.getLinkImage, cachecontrol.Control(true, false, min15, r.getLinkImageCC))
-	g.GET("/link", r.getLinkGroup, gate.MemberF(r.s.gate, r.gateCourier))
-	g.POST("/link", r.createLink, gate.MemberF(r.s.gate, r.gateCourier))
-	g.DELETE("/link/:linkid", r.deleteLink, gate.MemberF(r.s.gate, r.gateCourier))
-	g.GET("/brand/:brandid/image", r.getBrandImage, gate.MemberF(r.s.gate, r.gateCourier), cachecontrol.Control(true, false, min15, r.getBrandImageCC))
-	g.GET("/brand", r.getBrandGroup, gate.MemberF(r.s.gate, r.gateCourier))
-	g.POST("/brand", r.createBrand, gate.MemberF(r.s.gate, r.gateCourier))
-	g.DELETE("/brand/:brandid", r.deleteBrand, gate.MemberF(r.s.gate, r.gateCourier))
-	return nil
+func (m *router) mountRoutes(r governor.Router) {
+	r.Get("/link/{linkid}", m.getLink)
+	r.Get("/link/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getLinkImageCC))
+	r.Get("/link", m.getLinkGroup, gate.Member(m.s.gate, "courier"))
+	r.Post("/link", m.createLink, gate.Member(m.s.gate, "courier"))
+	r.Delete("/link/{linkid}", m.deleteLink, gate.Member(m.s.gate, "courier"))
+	r.Get("/brand/{brandid}/image", m.getBrandImage, gate.Member(m.s.gate, "courier"), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
+	r.Get("/brand", m.getBrandGroup, gate.Member(m.s.gate, "courier"))
+	r.Post("/brand", m.createBrand, gate.Member(m.s.gate, "courier"))
+	r.Delete("/brand/{brandid}", m.deleteBrand, gate.Member(m.s.gate, "courier"))
 }

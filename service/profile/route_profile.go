@@ -191,5 +191,5 @@ func (m *router) mountProfileRoutes(r governor.Router) {
 	r.Delete("/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id"))
 	r.Get("", m.getOwnProfile, gate.User(m.s.gate))
 	r.Get("/{id}", m.getProfile)
-	r.Get("/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, min15, m.getProfileImageCC))
+	r.Get("/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getProfileImageCC))
 }

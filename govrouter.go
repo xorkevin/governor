@@ -118,8 +118,10 @@ type (
 		Cookie(key string) (*http.Cookie, error)
 		SetCookie(cookie *http.Cookie)
 		Bind(i interface{}) error
+		FormValue(key string) string
 		FormFile(key string) (multipart.File, *multipart.FileHeader, error)
 		WriteStatus(status int)
+		Redirect(status int, url string)
 		WriteString(status int, text string)
 		WriteJSON(status int, body interface{})
 		WriteFile(status int, contentType string, r io.Reader)
@@ -196,12 +198,20 @@ func (c *govcontext) Bind(i interface{}) error {
 	return nil
 }
 
+func (c *govcontext) FormValue(key string) string {
+	return c.r.FormValue(key)
+}
+
 func (c *govcontext) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
 	return c.r.FormFile(key)
 }
 
 func (c *govcontext) WriteStatus(status int) {
 	c.w.WriteHeader(status)
+}
+
+func (c *govcontext) Redirect(status int, url string) {
+	http.Redirect(c.w, c.r, url, status)
 }
 
 func (c *govcontext) WriteString(status int, text string) {
