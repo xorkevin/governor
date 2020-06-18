@@ -63,10 +63,13 @@ docker: build-docker publish-docker
 skaffoldinit:
 	skaffold config set -g update-check false
 
-.PHONY: dev tail setup
+.PHONY: dev devstop tail setup
 
 dev: build
 	skaffold run
+
+devstop:
+	skaffold delete
 
 NAMESPACE=governor
 DEVDEPLOY=governor
