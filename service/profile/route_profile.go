@@ -1,7 +1,6 @@
 package profile
 
 import (
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
@@ -19,39 +18,47 @@ type (
 	}
 )
 
-func (r *router) createProfile(c echo.Context) error {
-	rprofile := reqProfileModel{}
-	if err := c.Bind(&rprofile); err != nil {
-		return err
+func (m *router) createProfile(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileModel{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
 	}
-	rprofile.Userid = c.Get("userid").(string)
-	if err := rprofile.valid(); err != nil {
-		return err
+	req.Userid = c.Get(gate.CtxUserid).(string)
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.CreateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio)
+	res, err := m.s.CreateProfile(req.Userid, req.Email, req.Bio)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	return c.JSON(http.StatusCreated, res)
+	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (r *router) updateProfile(c echo.Context) error {
-	rprofile := reqProfileModel{}
-	if err := c.Bind(&rprofile); err != nil {
-		return err
+func (m *router) updateProfile(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileModel{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
 	}
-	rprofile.Userid = c.Get("userid").(string)
-	if err := rprofile.valid(); err != nil {
-		return err
+	req.Userid = c.Get(gate.CtxUserid).(string)
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.UpdateProfile(rprofile.Userid, rprofile.Email, rprofile.Bio); err != nil {
-		return err
+	if err := m.s.UpdateProfile(req.Userid, req.Email, req.Bio); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -60,101 +67,116 @@ type (
 	}
 )
 
-func (r *router) updateImage(c echo.Context) error {
-	img, err := image.LoadImage(c, "image")
+func (m *router) updateImage(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	img, err := image.LoadImage(m.s.logger, c, "image")
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	ruser := reqProfileGetID{
-		Userid: c.Get("userid").(string),
+	req := reqProfileGetID{
+		Userid: c.Get(gate.CtxUserid).(string),
 	}
-	if err := ruser.valid(); err != nil {
-		return err
-	}
-
-	if err := r.s.UpdateImage(ruser.Userid, img); err != nil {
-		return err
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	if err := m.s.UpdateImage(req.Userid, img); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) deleteProfile(c echo.Context) error {
-	rprofile := reqProfileGetID{
+func (m *router) deleteProfile(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
-	if err := rprofile.valid(); err != nil {
-		return err
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	if err := r.s.DeleteProfile(rprofile.Userid); err != nil {
-		return err
+	if err := m.s.DeleteProfile(req.Userid); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) getOwnProfile(c echo.Context) error {
-	ruser := reqProfileGetID{
-		Userid: c.Get("userid").(string),
+func (m *router) getOwnProfile(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileGetID{
+		Userid: c.Get(gate.CtxUserid).(string),
 	}
-	res, err := r.s.GetProfile(ruser.Userid)
+	res, err := m.s.GetProfile(req.Userid)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
-func (r *router) getProfile(c echo.Context) error {
-	rprofile := reqProfileGetID{
+func (m *router) getProfile(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
-	if err := rprofile.valid(); err != nil {
-		return err
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	res, err := r.s.GetProfile(rprofile.Userid)
+	res, err := m.s.GetProfile(req.Userid)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 
-	return c.JSON(http.StatusOK, res)
+	c.WriteJSON(http.StatusOK, res)
 }
 
-func (r *router) getProfileImage(c echo.Context) error {
-	rprofile := reqProfileGetID{
+func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
-	if err := rprofile.valid(); err != nil {
-		return err
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
 	}
 
-	image, contentType, err := r.s.GetProfileImage(rprofile.Userid)
+	image, contentType, err := m.s.GetProfileImage(req.Userid)
 	if err != nil {
-		return err
+		c.WriteError(err)
+		return
 	}
 	defer func() {
 		if err := image.Close(); err != nil {
-			r.s.logger.Error("Failed to close profile image", map[string]string{
+			m.s.logger.Error("failed to close profile image", map[string]string{
 				"actiontype": "getprofileimage",
 				"error":      err.Error(),
 			})
 		}
 	}()
-	return c.Stream(http.StatusOK, contentType, image)
+	c.WriteFile(http.StatusOK, contentType, image)
 }
 
-func (r *router) getProfileImageCC(c echo.Context) (string, error) {
-	rprofile := reqProfileGetID{
+func (m *router) getProfileImageCC(c governor.Context) (string, error) {
+	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
-	if err := rprofile.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		return "", err
 	}
 
-	objinfo, err := r.s.StatProfileImage(rprofile.Userid)
+	objinfo, err := m.s.StatProfileImage(req.Userid)
 	if err != nil {
 		return "", err
 	}
@@ -162,13 +184,12 @@ func (r *router) getProfileImageCC(c echo.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) mountProfileRoutes(m governor.Router) error {
-	g.POST("", r.createProfile, gate.User(r.s.gate))
-	g.PUT("", r.updateProfile, gate.User(r.s.gate))
-	g.PUT("/image", r.updateImage, gate.User(r.s.gate))
-	g.DELETE("/:id", r.deleteProfile, gate.OwnerOrAdmin(r.s.gate, "id"))
-	g.GET("", r.getOwnProfile, gate.User(r.s.gate))
-	g.GET("/:id", r.getProfile)
-	g.GET("/:id/image", r.getProfileImage, cachecontrol.Control(true, false, min15, r.getProfileImageCC))
-	return nil
+func (m *router) mountProfileRoutes(r governor.Router) {
+	r.Post("", m.createProfile, gate.User(m.s.gate))
+	r.Put("", m.updateProfile, gate.User(m.s.gate))
+	r.Put("/image", m.updateImage, gate.User(m.s.gate))
+	r.Delete("/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id"))
+	r.Get("", m.getOwnProfile, gate.User(m.s.gate))
+	r.Get("/{id}", m.getProfile)
+	r.Get("/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, min15, m.getProfileImageCC))
 }

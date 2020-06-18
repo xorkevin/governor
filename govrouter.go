@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/go-chi/chi"
+	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 )
@@ -111,12 +113,16 @@ type (
 		Param(key string) string
 		Query(key string) string
 		Header(key string) string
+		SetHeader(key, value string)
+		AddHeader(key, value string)
 		Cookie(key string) (*http.Cookie, error)
 		SetCookie(cookie *http.Cookie)
 		Bind(i interface{}) error
+		FormFile(key string) (multipart.File, *multipart.FileHeader, error)
 		WriteStatus(status int)
 		WriteString(status int, text string)
 		WriteJSON(status int, body interface{})
+		WriteFile(status int, contentType string, r io.Reader)
 		WriteError(err error)
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
@@ -155,6 +161,14 @@ func (c *govcontext) Header(key string) string {
 	return c.r.Header.Get(key)
 }
 
+func (c *govcontext) SetHeader(key, value string) {
+	c.r.Header.Set(key, value)
+}
+
+func (c *govcontext) AddHeader(key, value string) {
+	c.r.Header.Add(key, value)
+}
+
 func (c *govcontext) Cookie(key string) (*http.Cookie, error) {
 	return c.r.Cookie(key)
 }
@@ -180,6 +194,10 @@ func (c *govcontext) Bind(i interface{}) error {
 		return NewErrorUser("Unsupported media type", http.StatusUnsupportedMediaType, nil)
 	}
 	return nil
+}
+
+func (c *govcontext) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	return c.r.FormFile(key)
 }
 
 func (c *govcontext) WriteStatus(status int) {
@@ -210,6 +228,20 @@ func (c *govcontext) WriteJSON(status int, body interface{}) {
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	c.w.Write(b.Bytes())
+}
+
+func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
+	c.w.Header().Set("Content-Type", contentType)
+	c.w.WriteHeader(status)
+	if _, err := io.Copy(c.w, r); err != nil {
+		if c.l != nil {
+			c.l.Error("failed to write file", map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		}
+		return
+	}
 }
 
 func (c *govcontext) Get(key interface{}) interface{} {

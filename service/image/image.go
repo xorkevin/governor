@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/labstack/echo/v4"
 	"golang.org/x/image/draw"
 	goimg "image"
 	"image/color"
@@ -95,13 +94,25 @@ const (
 	MediaTypeGif = "image/gif"
 )
 
-func LoadImage(c echo.Context, formField string) (Image, error) {
-	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, []string{MediaTypePng, MediaTypeJpeg, MediaTypeGif})
+var (
+	allowedMediaTypes = map[string]struct{}{
+		MediaTypePng:  struct{}{},
+		MediaTypeJpeg: struct{}{},
+		MediaTypeGif:  struct{}{},
+	}
+)
+
+func LoadImage(l governor.Logger, c governor.Context, formField string) (Image, error) {
+	file, mediaType, _, err := fileloader.LoadOpenFile(l, c, formField, allowedMediaTypes)
 	if err != nil {
 		return nil, governor.NewErrorUser("Invalid image file", http.StatusBadRequest, err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
+			l.Error("failed to close open file on request", map[string]string{
+				"actiontype": "closefile",
+				"error":      err.Error(),
+			})
 		}
 	}()
 	switch mediaType {

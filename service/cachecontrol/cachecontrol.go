@@ -2,85 +2,71 @@ package cachecontrol
 
 import (
 	"fmt"
-	"github.com/labstack/echo/v4"
 	"net/http"
+	"xorkevin.dev/governor"
 )
 
 const (
-	ccHeader       = "Cache-Control"
-	ccPublic       = "public"
-	ccPrivate      = "private"
-	ccNoCache      = "no-cache"
-	ccNoStore      = "no-store"
-	ccMaxAge       = "max-age"
-	ccEtagH        = "ETag"
-	ccEtagValue    = `W/"%s"`
-	ccIfNoneMatchH = "If-None-Match"
+	ccHeader = "Cache-Control"
 )
 
 func etagToValue(etag string) string {
-	return fmt.Sprintf(ccEtagValue, etag)
+	return fmt.Sprintf(`W/"%s"`, etag)
 }
 
 // Control creates a middleware function to cache the response
-func Control(public, revalidate bool, maxage int64, etagfunc func(echo.Context) (string, error)) echo.MiddlewareFunc {
+func Control(l governor.Logger, public, revalidate bool, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
 	if maxage < 0 {
 		panic("maxage cannot be negative")
 	}
 
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			etag := ""
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := governor.NewContext(w, r, l)
 
+			etag := ""
 			if etagfunc != nil {
-				if tag, err := etagfunc(c); err == nil {
+				if tag, err := etagfunc(c); err != nil {
 					etag = etagToValue(tag)
 				} else {
-					return err
+					c.WriteError(err)
+					return
 				}
 			}
 
-			if val := c.Request().Header.Get(ccIfNoneMatchH); etag != "" && val != "" {
-				if val == etag {
-					return c.NoContent(http.StatusNotModified)
-				}
+			if val := c.Header("If-None-Match"); etag != "" && val == etag {
+				c.WriteStatus(http.StatusNotModified)
+				return
 			}
-
-			resheader := c.Response().Header()
 
 			if public {
-				resheader.Set(ccHeader, ccPublic)
+				c.SetHeader(ccHeader, "public")
 			} else {
-				resheader.Set(ccHeader, ccPrivate)
+				c.SetHeader(ccHeader, "private")
 			}
 
 			if revalidate {
-				resheader.Add(ccHeader, ccNoCache)
+				c.AddHeader(ccHeader, "no-cache")
 			}
 
-			resheader.Add(ccHeader, fmt.Sprintf("%s=%d", ccMaxAge, maxage))
+			c.AddHeader(ccHeader, fmt.Sprintf("maxage=%d", maxage))
 
 			if etag != "" {
-				resheader.Set(ccEtagH, etag)
+				c.SetHeader("ETag", etag)
 			}
 
-			return next(c)
-		}
+			next.ServeHTTP(c.R())
+		})
 	}
 }
 
 // NoStore creates a middleware function to deny caching responses
-func NoStore() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if err := next(c); err != nil {
-				return err
-			}
-
-			resheader := c.Response().Header()
-			resheader.Set(ccHeader, ccNoStore)
-
-			return nil
-		}
+func NoStore(l governor.Logger) governor.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := governor.NewContext(w, r, l)
+			c.SetHeader(ccHeader, "no-store")
+			next.ServeHTTP(c.R())
+		})
 	}
 }
