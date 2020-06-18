@@ -191,21 +191,30 @@ func (l *govlogger) Fatal(msg string, data map[string]string) {
 	l.withFields(l.logger.Fatal(), msg, data)
 }
 
+type (
+	govResponseWriter struct {
+		http.ResponseWriter
+		status int
+	}
+)
+
+func (w *govResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
 func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method := r.Method
 		path := r.URL.EscapedPath()
 		start := time.Now()
-		next.ServeHTTP(w, r)
+		w2 := &govResponseWriter{w, 0}
+		next.ServeHTTP(w2, r)
 		duration := time.Since(start)
-		status := 0
-		if r.Response != nil {
-			status = r.Response.StatusCode
-		}
 		s.logger.Debug("", map[string]string{
 			"method":  method,
 			"path":    path,
-			"status":  strconv.Itoa(status),
+			"status":  strconv.Itoa(w2.status),
 			"latency": duration.String(),
 		})
 	})
