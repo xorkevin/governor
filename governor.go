@@ -4,7 +4,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"github.com/fatih/color"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
@@ -145,10 +144,10 @@ func (s *Server) Start() error {
 	}
 	if s.config.showBanner {
 		fmt.Printf("%s\n%s: %s\nhttp server listening on %s\n",
-			fmt.Sprintf(color.BlueString(banner), s.config.version.Num),
+			fmt.Sprintf(banner, s.config.version.Num),
 			s.config.appname,
-			color.GreenString(s.config.version.String()),
-			color.RedString(":"+s.config.Port))
+			s.config.version.String(),
+			":"+s.config.Port)
 	}
 	srv := http.Server{
 		Addr:    ":" + s.config.Port,
