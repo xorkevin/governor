@@ -126,7 +126,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.queue.Subscribe(govmailchannelid, govmailworker, 10*time.Second, 2, s.mailSubscriber); err != nil {
+	if _, err := s.queue.Subscribe(govmailchannelid, govmailworker, 15*time.Second, 2, s.mailSubscriber); err != nil {
 		return governor.NewError("Failed to subscribe to mail queue", http.StatusInternalServerError, err)
 	}
 	l.Info("subscribed to mail queue", nil)

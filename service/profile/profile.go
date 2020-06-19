@@ -89,10 +89,10 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.NewError("Failed to init profile image bucket", http.StatusInternalServerError, err)
 	}
 
-	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, 10*time.Second, 2, s.UserCreateHook); err != nil {
+	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, 15*time.Second, 2, s.UserCreateHook); err != nil {
 		return governor.NewError("Failed to subscribe to user create queue", http.StatusInternalServerError, err)
 	}
-	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, 10*time.Second, 2, s.UserDeleteHook); err != nil {
+	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, 15*time.Second, 2, s.UserDeleteHook); err != nil {
 		return governor.NewError("Failed to subscribe to user delete queue", http.StatusInternalServerError, err)
 	}
 	l.Info("subscribed to user create/delete queue", nil)
