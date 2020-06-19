@@ -12,6 +12,9 @@ cat <<EOF > "${dir}/policy/governor.policy.hcl"
 path "kv/data/app/governor/token" {
   capabilities = ["create", "update", "read"]
 }
+path "kv/data/external/smtp" {
+  capabilities = ["read"]
+}
 EOF
 flightctl connect vault -n $namespace -k $dir governor
 flightctl connect kube -n $namespace -o $dir governor

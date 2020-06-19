@@ -12,5 +12,7 @@ spec:
               value: 'mailhog.governor.svc.cluster.local'
             - name: 'GOV_MAIL_PORT'
               value: '1025'
+            - name: 'GOV_MAIL_INSECURE'
+              value: 'true'
             - name: 'GOV_ALLOWORIGINS'
               value: 'http://governor.dev.home:3000'

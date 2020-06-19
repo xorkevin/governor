@@ -122,6 +122,14 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.queue.Subscribe(govmailchannelid, govmailworker, 10*time.Second, 2, s.mailSubscriber); err != nil {
+		return governor.NewError("Failed to subscribe to mail queue", http.StatusInternalServerError, err)
+	}
+	l.Info("subscribed to mail queue", nil)
 	return nil
 }
 
@@ -154,6 +162,31 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
+type plainAuth struct {
+	identity, username, password string
+	host                         string
+}
+
+func newPlainAuth(identity, username, password, host string) smtp.Auth {
+	return &plainAuth{identity, username, password, host}
+
+}
+
+func (a *plainAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	if server.Name != a.host {
+		return "", nil, governor.NewError(fmt.Sprintf("Wrong host name: expected %s, have %s", a.host, server.Name), http.StatusInternalServerError, nil)
+	}
+	resp := []byte(a.identity + "\x00" + a.username + "\x00" + a.password)
+	return "PLAIN", resp, nil
+}
+
+func (a *plainAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if more {
+		return nil, governor.NewError("Unexpected server challenge", http.StatusInternalServerError, nil)
+	}
+	return nil, nil
+}
+
 func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 	authsecret, err := s.config.GetSecret("auth")
 	if err != nil {
@@ -168,10 +201,22 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 	if !ok {
 		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
 	}
-	smtpauth := smtp.PlainAuth("", username, password, s.host)
+	var smtpauth smtp.Auth
+	if s.insecure {
+		smtpauth = newPlainAuth("", username, password, s.host)
+	} else {
+		smtpauth = smtp.PlainAuth("", username, password, s.host)
+	}
 	if err := smtp.SendMail(s.addr, smtpauth, from, to, msg); err != nil {
 		return err
 	}
+	s.logger.Debug("mail sent", map[string]string{
+		"actiontype": "sendmail",
+		"addr":       s.addr,
+		"username":   username,
+		"from":       from,
+		"to":         strings.Join(to, ","),
+	})
 	return nil
 }
 
