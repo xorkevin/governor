@@ -15,7 +15,7 @@ func (m *router) setAccessCookie(c governor.Context, accessToken string) {
 		Path:     m.s.baseURL,
 		MaxAge:   int(m.s.accessTime) - 5,
 		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -26,7 +26,7 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Path:     m.s.authURL,
 		MaxAge:   int(m.s.refreshTime) - 5,
 		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "userid",
@@ -34,7 +34,7 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Path:     "/",
 		MaxAge:   int(m.s.refreshTime) - 5,
 		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -45,7 +45,7 @@ func (m *router) setSessionCookie(c governor.Context, sessionToken string, useri
 		Path:     m.s.authURL,
 		MaxAge:   int(m.s.refreshTime),
 		HttpOnly: false,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

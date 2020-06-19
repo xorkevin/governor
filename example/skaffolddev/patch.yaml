@@ -13,4 +13,4 @@ spec:
             - name: 'GOV_MAIL_PORT'
               value: '1025'
             - name: 'GOV_ALLOWORIGINS'
-              value: 'http://localhost:3000'
+              value: 'http://governor.dev.home:3000'

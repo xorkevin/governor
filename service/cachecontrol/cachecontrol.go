@@ -27,10 +27,10 @@ func Control(l governor.Logger, public, revalidate bool, maxage int64, etagfunc 
 			etag := ""
 			if etagfunc != nil {
 				if tag, err := etagfunc(c); err != nil {
-					etag = etagToValue(tag)
-				} else {
 					c.WriteError(err)
 					return
+				} else {
+					etag = etagToValue(tag)
 				}
 			}
 
