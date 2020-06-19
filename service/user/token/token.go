@@ -12,6 +12,7 @@ import (
 type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
+		jwt.Claims
 		Userid string `json:"userid"`
 		ID     string `json:"id"`
 		Key    string `json:"key"`
@@ -102,19 +103,19 @@ func (s *service) Health() error {
 // Generate returns a new jwt token from a user model
 func (s *service) Generate(userid string, duration int64, subject, id, key string) (string, *Claims, error) {
 	now := time.Now().Round(0)
-	stdClaims := jwt.Claims{
-		Subject:   subject,
-		Issuer:    s.issuer,
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
-	}
 	claims := Claims{
+		Claims: jwt.Claims{
+			Subject:   subject,
+			Issuer:    s.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+		},
 		Userid: userid,
 		ID:     id,
 		Key:    key,
 	}
-	token, err := jwt.Signed(s.signer).Claims(stdClaims).Claims(claims).CompactSerialize()
+	token, err := jwt.Signed(s.signer).Claims(claims).CompactSerialize()
 	if err != nil {
 		return "", nil, governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
 	}
@@ -127,12 +128,11 @@ func (s *service) Validate(tokenString, subject string) (bool, *Claims) {
 	if err != nil {
 		return false, nil
 	}
-	stdClaims := &jwt.Claims{}
 	claims := &Claims{}
-	if err := token.Claims(s.secret, stdClaims, claims); err != nil {
+	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
-	if err := stdClaims.ValidateWithLeeway(jwt.Expected{
+	if err := claims.ValidateWithLeeway(jwt.Expected{
 		Subject: subject,
 		Issuer:  s.issuer,
 	}, 0); err != nil {
@@ -147,12 +147,11 @@ func (s *service) GetClaims(tokenString, subject string) (bool, *Claims) {
 	if err != nil {
 		return false, nil
 	}
-	stdClaims := &jwt.Claims{}
 	claims := &Claims{}
-	if err := token.Claims(s.secret, stdClaims, claims); err != nil {
+	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
-	if stdClaims.Subject != subject || stdClaims.Issuer != s.issuer {
+	if claims.Subject != subject || claims.Issuer != s.issuer {
 		return false, nil
 	}
 	return true, claims
