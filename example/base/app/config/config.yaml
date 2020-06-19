@@ -8,7 +8,7 @@ alloworigins: []
 routerewrite:
   - host: 'go.governor.dev.home:8080'
     methods: ['GET']
-    pattern: '^(/[A-Za-z0-9_-]{2,}(?:/image)?)$'
+    pattern: '^/([A-Za-z0-9_-]{2,}(?:/image)?)$'
     replace: '/api/courier/link/$1'
 vault:
   addr: 'http://vault.vault.svc.cluster.local:8200'
