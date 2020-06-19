@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"fmt"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/spf13/viper"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -54,10 +56,54 @@ type (
 		logOutput      io.Writer
 		maxReqSize     string
 		origins        []string
+		rewrite        []*rewriteRule
 		Port           string
 		BaseURL        string
 	}
+
+	rewriteRule struct {
+		Host      string   `mapstructure:"host"`
+		Methods   []string `mapstructure:"methods"`
+		Pattern   string   `mapstructure:"pattern"`
+		Replace   string   `mapstructure:"replace"`
+		regex     *regexp.Regexp
+		methodset map[string]struct{}
+	}
 )
+
+func (r *rewriteRule) init() error {
+	k, err := regexp.Compile(r.Pattern)
+	if err != nil {
+		return err
+	}
+	r.regex = k
+	s := make(map[string]struct{}, len(r.Methods))
+	for _, i := range r.Methods {
+		s[i] = struct{}{}
+	}
+	r.methodset = s
+	return nil
+}
+
+func (r *rewriteRule) match(req *http.Request) bool {
+	if r.Host != "" && req.Host != r.Host {
+		return false
+	}
+	if len(r.methodset) != 0 {
+		if _, ok := r.methodset[req.Method]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *rewriteRule) replace(src string) string {
+	return r.regex.ReplaceAllString(src, r.Replace)
+}
+
+func (r rewriteRule) String() string {
+	return fmt.Sprintf("Host: %s, Methods: %s, Pattern: %s, Replace: %s", r.Host, strings.Join(r.Methods, " "), r.Pattern, r.Replace)
+}
 
 func newConfig(opts Opts) *Config {
 	v := viper.New()
@@ -69,6 +115,7 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("templatedir", "templates")
 	v.SetDefault("maxreqsize", "2M")
 	v.SetDefault("alloworigins", []string{})
+	v.SetDefault("routerewrite", []*rewriteRule{})
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
 	v.SetDefault("vault.k8s.role", "")
@@ -108,6 +155,11 @@ func (c *Config) init() error {
 	c.logOutput = envToLogOutput(c.config.GetString("logoutput"))
 	c.maxReqSize = c.config.GetString("maxreqsize")
 	c.origins = c.config.GetStringSlice("alloworigins")
+	rewrite := []*rewriteRule{}
+	if err := c.config.UnmarshalKey("routerewrite", &rewrite); err != nil {
+		return err
+	}
+	c.rewrite = rewrite
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	if err := c.initvault(); err != nil {
@@ -234,11 +286,12 @@ type (
 	ConfigReader interface {
 		Name() string
 		URL() string
-		GetStrMap(key string) map[string]string
 		GetBool(key string) bool
 		GetInt(key string) int
 		GetStr(key string) string
 		GetStrSlice(key string) []string
+		GetStrMap(key string) map[string]string
+		Unmarshal(key string, val interface{}) error
 		SecretReader
 	}
 
@@ -271,15 +324,6 @@ func (r *configReader) URL() string {
 	return r.url
 }
 
-func (r *configReader) GetStrMap(key string) map[string]string {
-	if key == "" {
-		key = r.name
-	} else {
-		key = r.name + "." + key
-	}
-	return r.c.config.GetStringMapString(key)
-}
-
 func (r *configReader) GetBool(key string) bool {
 	return r.c.config.GetBool(r.name + "." + key)
 }
@@ -294,6 +338,19 @@ func (r *configReader) GetStr(key string) string {
 
 func (r *configReader) GetStrSlice(key string) []string {
 	return r.c.config.GetStringSlice(r.name + "." + key)
+}
+
+func (r *configReader) GetStrMap(key string) map[string]string {
+	if key == "" {
+		key = r.name
+	} else {
+		key = r.name + "." + key
+	}
+	return r.c.config.GetStringMapString(key)
+}
+
+func (r *configReader) Unmarshal(key string, val interface{}) error {
+	return r.c.config.UnmarshalKey(r.name+"."+key, val)
 }
 
 func (s *vaultSecret) isValid() bool {

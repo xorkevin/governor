@@ -205,6 +205,7 @@ func (w *govResponseWriter) WriteHeader(status int) {
 
 func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
 		method := r.Method
 		path := r.URL.EscapedPath()
 		start := time.Now()
@@ -212,6 +213,7 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w2, r)
 		duration := time.Since(start)
 		s.logger.Debug("", map[string]string{
+			"host":    host,
 			"method":  method,
 			"path":    path,
 			"status":  strconv.Itoa(w2.status),

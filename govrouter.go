@@ -292,3 +292,34 @@ func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 		})
 	}
 }
+
+func stripSlashesMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r2 := new(http.Request)
+		*r2 = *r
+		r2.URL = new(url.URL)
+		*r2.URL = *r.URL
+		path := r2.URL.Path
+		if l := len(path); l > 1 && path[l-1] == '/' {
+			r2.URL.Path = path[:l-1]
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func routeRewriteMiddleware(rules []*rewriteRule) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r2 := new(http.Request)
+			*r2 = *r
+			r2.URL = new(url.URL)
+			*r2.URL = *r.URL
+			for _, i := range rules {
+				if i.match(r2) {
+					r2.URL.Path = i.replace(r2.URL.Path)
+				}
+			}
+			next.ServeHTTP(w, r2)
+		})
+	}
+}

@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	linkRegex = regexp.MustCompile(`^[a-z][a-z0-9_-]+$`)
+	linkRegex = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 )
 
 func validLinkID(linkid string) error {
@@ -29,7 +29,7 @@ func validLinkID(linkid string) error {
 		return governor.NewErrorUser("Link id must be shorter than 64 characters", http.StatusBadRequest, nil)
 	}
 	if !linkRegex.MatchString(linkid) {
-		return governor.NewErrorUser("Link id can only contain a-z,0-9,_,-", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Link id can only contain A-Z,a-z,0-9,_,-", http.StatusBadRequest, nil)
 	}
 	return nil
 }

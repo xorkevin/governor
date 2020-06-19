@@ -2,7 +2,6 @@ package couriermodel
 
 import (
 	"net/http"
-	"strings"
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -78,8 +77,7 @@ func (r *repo) NewLinkAuto(url, creatorid string) (*LinkModel, error) {
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
 	}
-	rawb64 := strings.TrimRight(mUID.Base64(), "=")
-	return r.NewLink(rawb64, url, creatorid), nil
+	return r.NewLink(mUID.Base64(), url, creatorid), nil
 }
 
 // NewLinkEmpty creates an empty link model

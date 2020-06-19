@@ -70,8 +70,21 @@ func (s *Server) init(ctx context.Context) error {
 
 	l.Info("init server instance", nil)
 
-	i.Use(middleware.StripSlashes)
-	l.Info("init middleware StripSlashes", nil)
+	i.Use(stripSlashesMiddleware)
+	l.Info("init strip slashes middleware", nil)
+	if len(s.config.rewrite) > 0 {
+		k := make([]string, 0, len(s.config.rewrite))
+		for _, i := range s.config.rewrite {
+			if err := i.init(); err != nil {
+				return err
+			}
+			k = append(k, i.String())
+		}
+		i.Use(routeRewriteMiddleware(s.config.rewrite))
+		l.Info("init route rewriter middleware", map[string]string{
+			"rules": strings.Join(k, "; "),
+		})
+	}
 	i.Use(middleware.RealIP)
 	l.Info("init middleware RealIP", nil)
 

@@ -75,9 +75,10 @@ NAMESPACE=governor
 DEVDEPLOY=governor
 DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.creationTimestamp | grep governor | head -n 1)
 DEVCONTAINER=governor
+TAILLINES?=64
 
 tail:
-	kubectl -n $(NAMESPACE) logs -f --tail=64 $(DEVPOD) $(DEVCONTAINER)
+	kubectl -n $(NAMESPACE) logs -f --tail=$(TAILLINES) $(DEVPOD) $(DEVCONTAINER)
 
 setup: build
 	$(BIN_PATH) setup
