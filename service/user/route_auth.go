@@ -126,6 +126,14 @@ type (
 	}
 )
 
+func getHost(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserAuth{}
@@ -163,8 +171,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	res, err := m.s.Login(userid, req.Password, req.SessionToken, host, c.Header("User-Agent"))
+	res, err := m.s.Login(userid, req.Password, req.SessionToken, getHost(r), c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -197,8 +204,7 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	res, err := m.s.ExchangeToken(ruser.RefreshToken, host, c.Header("User-Agent"))
+	res, err := m.s.ExchangeToken(ruser.RefreshToken, getHost(r), c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -228,8 +234,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	res, err := m.s.RefreshToken(ruser.RefreshToken, host, c.Header("User-Agent"))
+	res, err := m.s.RefreshToken(ruser.RefreshToken, getHost(r), c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
