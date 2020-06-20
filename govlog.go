@@ -208,6 +208,7 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		host := r.Host
 		method := r.Method
 		path := r.URL.EscapedPath()
+		remote := r.RemoteAddr
 		start := time.Now()
 		w2 := &govResponseWriter{w, 0}
 		next.ServeHTTP(w2, r)
@@ -216,6 +217,7 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			"host":    host,
 			"method":  method,
 			"path":    path,
+			"remote":  remote,
 			"status":  strconv.Itoa(w2.status),
 			"latency": duration.String(),
 		})
