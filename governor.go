@@ -93,17 +93,6 @@ func (s *Server) init(ctx context.Context) error {
 		l.Info("init request logger", nil)
 	}
 
-	if limit, err := bytefmt.ToBytes(s.config.maxReqSize); err != nil {
-		l.Warn("invalid maxreqsize format for middlware body limit", map[string]string{
-			"maxreqsize": s.config.maxReqSize,
-		})
-	} else {
-		i.Use(s.bodyLimitMiddleware(limit))
-		l.Info("init middleware body limit", map[string]string{
-			"maxreqsize": s.config.maxReqSize,
-		})
-	}
-
 	if len(s.config.origins) > 0 {
 		i.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   s.config.origins,
@@ -114,6 +103,17 @@ func (s *Server) init(ctx context.Context) error {
 		}))
 		l.Info("init middleware CORS", map[string]string{
 			"origins": strings.Join(s.config.origins, ", "),
+		})
+	}
+
+	if limit, err := bytefmt.ToBytes(s.config.maxReqSize); err != nil {
+		l.Warn("invalid maxreqsize format for middlware body limit", map[string]string{
+			"maxreqsize": s.config.maxReqSize,
+		})
+	} else {
+		i.Use(s.bodyLimitMiddleware(limit))
+		l.Info("init middleware body limit", map[string]string{
+			"maxreqsize": s.config.maxReqSize,
 		})
 	}
 
