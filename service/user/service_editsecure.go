@@ -281,7 +281,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 		mu, err := s.users.GetByEmail(useroremail)
 		if err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
-				return governor.NewErrorUser("", 0, err)
+				return nil
 			}
 			return err
 		}
@@ -290,7 +290,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 		mu, err := s.users.GetByUsername(useroremail)
 		if err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
-				return governor.NewErrorUser("", 0, err)
+				return nil
 			}
 			return err
 		}
