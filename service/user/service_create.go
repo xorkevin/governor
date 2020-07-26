@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	htmlTemplate "html/template"
 	"net/http"
+	"net/url"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"
@@ -21,6 +22,15 @@ type (
 		Key       string
 		URL       string
 		FirstName string
+		LastName  string
+		Username  string
+	}
+
+	queryEmailNewUser struct {
+		Email     string
+		Key       string
+		FirstName string
+		LastName  string
 		Username  string
 	}
 )
@@ -29,9 +39,19 @@ const (
 	newUserTemplate = "newuser"
 )
 
+func (e *emailNewUser) Query() queryEmailNewUser {
+	return queryEmailNewUser{
+		Email:     url.QueryEscape(e.Email),
+		Key:       url.QueryEscape(e.Key),
+		FirstName: url.QueryEscape(e.FirstName),
+		LastName:  url.QueryEscape(e.LastName),
+		Username:  url.QueryEscape(e.Username),
+	}
+}
+
 func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, *e); err != nil {
+	if err := tpl.Execute(b, e.Query()); err != nil {
 		return governor.NewError("Failed executing new user url template", http.StatusInternalServerError, err)
 	}
 	e.URL = base + b.String()
@@ -193,6 +213,7 @@ func (s *service) CreateUserVerify(m *usermodel.Model) error {
 		Email:     m.Email,
 		Key:       nonce,
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {

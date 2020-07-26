@@ -4,6 +4,7 @@ import (
 	"bytes"
 	htmlTemplate "html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
@@ -20,11 +21,21 @@ type (
 		Key       string
 		URL       string
 		FirstName string
+		LastName  string
+		Username  string
+	}
+
+	queryEmailEmailChange struct {
+		Userid    string
+		Key       string
+		FirstName string
+		LastName  string
 		Username  string
 	}
 
 	emailEmailChangeNotify struct {
 		FirstName string
+		LastName  string
 		Username  string
 	}
 )
@@ -38,9 +49,19 @@ const (
 	emailChangeSeparator = "|email|"
 )
 
+func (e *emailEmailChange) Query() queryEmailEmailChange {
+	return queryEmailEmailChange{
+		Userid:    url.QueryEscape(e.Userid),
+		Key:       url.QueryEscape(e.Key),
+		FirstName: url.QueryEscape(e.FirstName),
+		LastName:  url.QueryEscape(e.LastName),
+		Username:  url.QueryEscape(e.Username),
+	}
+}
+
 func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, *e); err != nil {
+	if err := tpl.Execute(b, e.Query()); err != nil {
 		return governor.NewError("Failed executing email change url template", http.StatusInternalServerError, err)
 	}
 	e.URL = base + b.String()
@@ -83,6 +104,7 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		Userid:    userid,
 		Key:       nonce,
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplemailchange); err != nil {
@@ -148,6 +170,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 
 	emdatanotify := emailEmailChangeNotify{
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, emailChangeNotifyTemplate, emdatanotify); err != nil {
@@ -162,6 +185,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 type (
 	emailPassChange struct {
 		FirstName string
+		LastName  string
 		Username  string
 	}
 
@@ -170,18 +194,38 @@ type (
 		Key       string
 		URL       string
 		FirstName string
+		LastName  string
+		Username  string
+	}
+
+	queryEmailForgotPass struct {
+		Userid    string
+		Key       string
+		FirstName string
+		LastName  string
 		Username  string
 	}
 
 	emailPassReset struct {
 		FirstName string
+		LastName  string
 		Username  string
 	}
 )
 
+func (e *emailForgotPass) Query() queryEmailForgotPass {
+	return queryEmailForgotPass{
+		Userid:    url.QueryEscape(e.Userid),
+		Key:       url.QueryEscape(e.Key),
+		FirstName: url.QueryEscape(e.FirstName),
+		LastName:  url.QueryEscape(e.LastName),
+		Username:  url.QueryEscape(e.Username),
+	}
+}
+
 func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, *e); err != nil {
+	if err := tpl.Execute(b, e.Query()); err != nil {
 		return governor.NewError("Failed executing forgot pass url template", http.StatusInternalServerError, err)
 	}
 	e.URL = base + b.String()
@@ -218,6 +262,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 
 	emdata := emailPassChange{
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, passChangeTemplate, emdata); err != nil {
@@ -270,6 +315,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 		Userid:    m.Userid,
 		Key:       nonce,
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplforgotpass); err != nil {
@@ -322,6 +368,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 
 	emdata := emailPassReset{
 		FirstName: m.FirstName,
+		LastName:  m.LastName,
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, passResetTemplate, emdata); err != nil {

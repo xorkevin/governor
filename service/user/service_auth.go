@@ -20,6 +20,7 @@ const (
 type (
 	emailNewLogin struct {
 		FirstName string
+		LastName  string
 		Username  string
 		SessionID string
 		IP        string
@@ -100,6 +101,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	if s.newLoginEmail && !sessionExists {
 		emdata := emailNewLogin{
 			FirstName: m.FirstName,
+			LastName:  m.LastName,
 			Username:  m.Username,
 			SessionID: sm.SessionID,
 			IP:        sm.IPAddr,
