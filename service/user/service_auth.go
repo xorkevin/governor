@@ -49,12 +49,12 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Invalid password", http.StatusUnauthorized, nil)
+			return nil, governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil)
 		}
 		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
 	}
 	if ok, err := s.users.ValidatePass(password, m); err != nil || !ok {
-		return nil, governor.NewErrorUser("Invalid password", http.StatusUnauthorized, nil)
+		return nil, governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil)
 	}
 
 	sessionExists := false

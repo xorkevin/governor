@@ -150,6 +150,10 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	if isEmail(req.Username) {
 		m, err := m.s.GetByEmail(req.Username)
 		if err != nil {
+			if governor.ErrorStatus(err) == http.StatusNotFound {
+				c.WriteError(governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil))
+				return
+			}
 			c.WriteError(err)
 			return
 		}
@@ -157,6 +161,10 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	} else {
 		m, err := m.s.GetByUsername(req.Username)
 		if err != nil {
+			if governor.ErrorStatus(err) == http.StatusNotFound {
+				c.WriteError(governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil))
+				return
+			}
 			c.WriteError(err)
 			return
 		}
