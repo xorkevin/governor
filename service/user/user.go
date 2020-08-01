@@ -140,7 +140,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
 	r.SetDefault("email.url.base", "http://localhost:8080")
-	r.SetDefault("email.url.emailchange", "/a/account/email/confirm?key={{.Userid}}.{{.Key}}")
+	r.SetDefault("email.url.emailchange", "/a/security/email/confirm?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.newuser", "/x/confirm?email={{.Email}}&key={{.Key}}")
 }
