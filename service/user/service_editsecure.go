@@ -70,6 +70,13 @@ func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) e
 
 // UpdateEmail creates a pending user email update
 func (s *service) UpdateEmail(userid string, newEmail string, password string) error {
+	if _, err := s.users.GetByEmail(newEmail); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+	} else {
+		return governor.NewErrorUser("Email is already in use", http.StatusBadRequest, err)
+	}
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
