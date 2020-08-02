@@ -219,10 +219,8 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.setAccessCookie(c, res.AccessToken)
-	if res.RefreshToken != "" {
+	if res.Refresh {
 		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
-	}
-	if res.SessionToken != "" {
 		m.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
 	}
 	c.WriteJSON(http.StatusOK, res)

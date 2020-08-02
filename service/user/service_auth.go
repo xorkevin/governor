@@ -36,6 +36,7 @@ const (
 type (
 	resUserAuth struct {
 		Valid        bool          `json:"valid"`
+		Refresh      bool          `json:"refresh"`
 		AccessToken  string        `json:"access_token,omitempty"`
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		SessionToken string        `json:"session_token,omitempty"`
@@ -136,6 +137,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 
 	return &resUserAuth{
 		Valid:        true,
+		Refresh:      true,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
@@ -178,6 +180,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 
 	return &resUserAuth{
 		Valid:        true,
+		Refresh:      false,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionToken: claims.ID,
@@ -239,6 +242,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 
 	return &resUserAuth{
 		Valid:        true,
+		Refresh:      true,
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
