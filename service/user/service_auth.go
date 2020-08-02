@@ -177,10 +177,12 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 	}
 
 	return &resUserAuth{
-		Valid:       true,
-		AccessToken: accessToken,
-		Claims:      accessClaims,
-		AuthTags:    roles.Stringify(),
+		Valid:        true,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		SessionToken: claims.ID,
+		Claims:       accessClaims,
+		AuthTags:     roles.Stringify(),
 	}, nil
 }
 
