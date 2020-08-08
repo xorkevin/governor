@@ -6,9 +6,10 @@ import (
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetRoleUser reqGetUserBulk reqGetUsers
+//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetUserRoles reqGetUserRolesIntersect reqGetRoleUser reqGetUserBulk reqGetUsers
 
 type (
 	reqUserGetID struct {
@@ -109,6 +110,127 @@ func (m *router) getByUsernamePrivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := m.s.GetByUsername(req.Username)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetUserRoles struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
+
+func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	amount, err := strconv.Atoi(c.Query("amount"))
+	if err != nil {
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
+		return
+	}
+	offset, err := strconv.Atoi(c.Query("offset"))
+	if err != nil {
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
+		return
+	}
+
+	req := reqGetUserRoles{
+		Userid: c.Param("id"),
+		Amount: amount,
+		Offset: offset,
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetUserRoles(req.Userid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	amount, err := strconv.Atoi(c.Query("amount"))
+	if err != nil {
+		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
+		return
+	}
+	offset, err := strconv.Atoi(c.Query("offset"))
+	if err != nil {
+		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
+		return
+	}
+
+	req := reqGetUserRoles{
+		Userid: c.Get(gate.CtxUserid).(string),
+		Amount: amount,
+		Offset: offset,
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetUserRoles(req.Userid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetUserRolesIntersect struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Roles  string `valid:"rank" json:"-"`
+	}
+)
+
+func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetUserRolesIntersect{
+		Userid: c.Param("id"),
+		Roles:  c.Query("roles"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	roles, _ := rank.FromStringUser(req.Roles)
+	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetUserRolesIntersect{
+		Userid: c.Get(gate.CtxUserid).(string),
+		Roles:  c.Query("roles"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	roles, _ := rank.FromStringUser(req.Roles)
+	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -238,7 +360,11 @@ func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 func (m *router) mountGet(r governor.Router) {
 	r.Get("/id/{id}", m.getByID)
 	r.Get("", m.getByIDPersonal, gate.User(m.s.gate))
+	r.Get("/roles", m.getUserRolesPersonal, gate.User(m.s.gate))
+	r.Get("/roleint", m.getUserRolesIntersectPersonal, gate.User(m.s.gate))
 	r.Get("/id/{id}/private", m.getByIDPrivate, gate.Admin(m.s.gate))
+	r.Get("/id/{id}/roles", m.getUserRoles)
+	r.Get("/id/{id}/roleint", m.getUserRolesIntersect)
 	r.Get("/name/{username}", m.getByUsername)
 	r.Get("/name/{username}/private", m.getByUsernamePrivate, gate.Admin(m.s.gate))
 	r.Get("/role/{role}", m.getUsersByRole)

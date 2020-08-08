@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/util/rank"
 )
 
 type (
@@ -122,6 +123,34 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 		return nil, err
 	}
 	return getUserFields(m, roles.ToSlice()), nil
+}
+
+type (
+	resUserRoles struct {
+		Roles []string `json:"auth_tags"`
+	}
+)
+
+// GetUserRoles returns a list of user roles
+func (s *service) GetUserRoles(userid string, amount, offset int) (*resUserRoles, error) {
+	roles, err := s.roles.GetRoles(userid, amount, offset)
+	if err != nil {
+		return nil, err
+	}
+	return &resUserRoles{
+		Roles: roles.ToSlice(),
+	}, nil
+}
+
+// GetUserRolesIntersect returns the intersected roles of a user
+func (s *service) GetUserRolesIntersect(userid string, roleset rank.Rank) (*resUserRoles, error) {
+	roles, err := s.roles.IntersectRoles(userid, roleset)
+	if err != nil {
+		return nil, err
+	}
+	return &resUserRoles{
+		Roles: roles.ToSlice(),
+	}, nil
 }
 
 type (
