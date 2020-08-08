@@ -9,16 +9,16 @@ import (
 type (
 	// ResUserGetPublic holds the public fields of a user
 	ResUserGetPublic struct {
-		Userid       string `json:"userid"`
-		Username     string `json:"username"`
-		AuthTags     string `json:"auth_tags"`
-		FirstName    string `json:"first_name"`
-		LastName     string `json:"last_name"`
-		CreationTime int64  `json:"creation_time"`
+		Userid       string   `json:"userid"`
+		Username     string   `json:"username"`
+		AuthTags     []string `json:"auth_tags"`
+		FirstName    string   `json:"first_name"`
+		LastName     string   `json:"last_name"`
+		CreationTime int64    `json:"creation_time"`
 	}
 )
 
-func getUserPublicFields(m *usermodel.Model, roles string) *ResUserGetPublic {
+func getUserPublicFields(m *usermodel.Model, roles []string) *ResUserGetPublic {
 	return &ResUserGetPublic{
 		Userid:       m.Userid,
 		Username:     m.Username,
@@ -37,7 +37,7 @@ type (
 	}
 )
 
-func getUserFields(m *usermodel.Model, roles string) *ResUserGet {
+func getUserFields(m *usermodel.Model, roles []string) *ResUserGet {
 	return &ResUserGet{
 		ResUserGetPublic: *getUserPublicFields(m, roles),
 		Email:            m.Email,
@@ -57,7 +57,7 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getUserPublicFields(m, roles.Stringify()), nil
+	return getUserPublicFields(m, roles.ToSlice()), nil
 }
 
 // GetByID gets and returns all fields of the user
@@ -73,7 +73,7 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles.Stringify()), nil
+	return getUserFields(m, roles.ToSlice()), nil
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
@@ -89,7 +89,7 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 	if err != nil {
 		return nil, err
 	}
-	return getUserPublicFields(m, roles.Stringify()), nil
+	return getUserPublicFields(m, roles.ToSlice()), nil
 }
 
 // GetByUsername gets and returns all fields of the user
@@ -105,7 +105,7 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles.Stringify()), nil
+	return getUserFields(m, roles.ToSlice()), nil
 }
 
 // GetByEmail gets and returns all fields of the user
@@ -121,7 +121,7 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getUserFields(m, roles.Stringify()), nil
+	return getUserFields(m, roles.ToSlice()), nil
 }
 
 type (
