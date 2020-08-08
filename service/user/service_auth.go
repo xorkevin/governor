@@ -41,7 +41,6 @@ type (
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		SessionToken string        `json:"session_token,omitempty"`
 		Claims       *token.Claims `json:"claims,omitempty"`
-		AuthTags     string        `json:"auth_tags,omitempty"`
 	}
 )
 
@@ -130,11 +129,6 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
-	roles, err := s.roles.GetRoleSummary(m.Userid)
-	if err != nil {
-		return nil, err
-	}
-
 	return &resUserAuth{
 		Valid:        true,
 		Refresh:      true,
@@ -142,7 +136,6 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     roles.Stringify(),
 	}, nil
 }
 
@@ -173,11 +166,6 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 
-	roles, err := s.roles.GetRoleSummary(accessClaims.Userid)
-	if err != nil {
-		return nil, err
-	}
-
 	return &resUserAuth{
 		Valid:        true,
 		Refresh:      false,
@@ -185,7 +173,6 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		RefreshToken: refreshToken,
 		SessionToken: claims.ID,
 		Claims:       accessClaims,
-		AuthTags:     roles.Stringify(),
 	}, nil
 }
 
@@ -206,24 +193,17 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
-	m, err := s.users.GetByID(claims.Userid)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
-		}
-		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
-	}
 
 	sessionKey, err := s.sessions.RehashKey(sm)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, authenticationSubject, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(claims.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -235,11 +215,6 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 	}
 
-	roles, err := s.roles.GetRoleSummary(m.Userid)
-	if err != nil {
-		return nil, err
-	}
-
 	return &resUserAuth{
 		Valid:        true,
 		Refresh:      true,
@@ -247,7 +222,6 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
-		AuthTags:     roles.Stringify(),
 	}, nil
 }
 
