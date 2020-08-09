@@ -127,7 +127,7 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 
 type (
 	resUserRoles struct {
-		Roles []string `json:"auth_tags"`
+		Roles []string `json:"roles"`
 	}
 )
 
