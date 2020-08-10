@@ -51,7 +51,7 @@ func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 type (
 	reqApikeyPost struct {
 		Userid   string `valid:"userid,has" json:"-"`
-		AuthTags string `valid:"rank" json:"auth_tags"`
+		AuthTags string `valid:"rankStr" json:"auth_tags"`
 		Name     string `valid:"apikeyName" json:"name"`
 		Desc     string `valid:"apikeyDesc" json:"desc"`
 	}
@@ -118,7 +118,7 @@ type (
 	reqApikeyUpdate struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Keyid    string `valid:"apikeyid,has" json:"-"`
-		AuthTags string `valid:"rank" json:"auth_tags"`
+		AuthTags string `valid:"rankStr" json:"auth_tags"`
 		Name     string `valid:"apikeyName" json:"name"`
 		Desc     string `valid:"apikeyDesc" json:"desc"`
 	}
@@ -181,7 +181,7 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqApikeyCheck struct {
-		AuthTags string `valid:"rank"`
+		AuthTags string `valid:"rankStr"`
 	}
 )
 

@@ -152,7 +152,14 @@ func validhasToken(token string) error {
 	return nil
 }
 
-func validRank(rankString string) error {
+func validRank(rankSlice []string) error {
+	if len(rankSlice) > lengthCap {
+		return governor.NewErrorUser("Rank update is too large", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func validRankStr(rankString string) error {
 	if len(rankString) > lengthCapLarge {
 		return governor.NewErrorUser("Rank update is too large", http.StatusBadRequest, nil)
 	}

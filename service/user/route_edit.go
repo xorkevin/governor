@@ -40,9 +40,9 @@ func (m *router) putUser(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqUserPutRank struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Add    string `valid:"rank" json:"add"`
-		Remove string `valid:"rank" json:"remove"`
+		Userid string   `valid:"userid,has" json:"-"`
+		Add    []string `valid:"rank" json:"add"`
+		Remove []string `valid:"rank" json:"remove"`
 	}
 )
 
@@ -60,8 +60,8 @@ func (m *router) patchRank(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updaterUserid := c.Get(gate.CtxUserid).(string)
-	editAddRank, _ := rank.FromStringUser(req.Add)
-	editRemoveRank, _ := rank.FromStringUser(req.Remove)
+	editAddRank := rank.FromSlice(req.Add)
+	editRemoveRank := rank.FromSlice(req.Remove)
 
 	if err := m.s.UpdateRank(req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
 		c.WriteError(err)

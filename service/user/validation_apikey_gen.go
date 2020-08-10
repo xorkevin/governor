@@ -19,7 +19,7 @@ func (r reqApikeyPost) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validRank(r.AuthTags); err != nil {
+	if err := validRankStr(r.AuthTags); err != nil {
 		return err
 	}
 	if err := validApikeyName(r.Name); err != nil {
@@ -48,7 +48,7 @@ func (r reqApikeyUpdate) valid() error {
 	if err := validhasApikeyid(r.Keyid); err != nil {
 		return err
 	}
-	if err := validRank(r.AuthTags); err != nil {
+	if err := validRankStr(r.AuthTags); err != nil {
 		return err
 	}
 	if err := validApikeyName(r.Name); err != nil {
@@ -61,7 +61,7 @@ func (r reqApikeyUpdate) valid() error {
 }
 
 func (r reqApikeyCheck) valid() error {
-	if err := validRank(r.AuthTags); err != nil {
+	if err := validRankStr(r.AuthTags); err != nil {
 		return err
 	}
 	return nil

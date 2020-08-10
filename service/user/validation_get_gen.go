@@ -33,7 +33,7 @@ func (r reqGetUserRolesIntersect) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validRank(r.Roles); err != nil {
+	if err := validRankStr(r.Roles); err != nil {
 		return err
 	}
 	return nil

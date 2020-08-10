@@ -193,7 +193,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 type (
 	reqGetUserRolesIntersect struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Roles  string `valid:"rank" json:"-"`
+		Roles  string `valid:"rankStr" json:"-"`
 	}
 )
 
