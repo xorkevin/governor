@@ -43,5 +43,5 @@ configMapGenerator:
 resources:
   - 'deployment.yaml'
   - 'service.yaml'
-  - 'virtualservice.yaml'
+  - 'ingressroute.yaml'
   - 'rsrc/serviceaccount.yaml'

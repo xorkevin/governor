@@ -42,18 +42,18 @@ spec:
   selector:
     app: 'mailhog'
 ---
-apiVersion: 'networking.istio.io/v1alpha3'
-kind: 'VirtualService'
+apiVersion: 'traefik.containo.us/v1alpha1'
+kind: 'IngressRoute'
 metadata:
   name: 'mailhog'
 spec:
-  gateways:
-    - 'istio-system/istio-gateway'
-  hosts:
-    - 'mailhog.dev.home'
-  http:
-    - route:
-        - destination:
-            host: 'mailhog'
-            port:
-              number: 8025
+  entryPoints:
+    - 'web'
+  routes:
+    - kind: 'Rule'
+      match: 'Host(`mailhog.dev.home`)'
+      services:
+        - kind: 'Service'
+          scheme: 'http'
+          name: 'whoami'
+          port: 8025
