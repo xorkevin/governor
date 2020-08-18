@@ -32,7 +32,7 @@ func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := reqGetUserApikeys{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Amount: amount,
 		Offset: offset,
 	}
@@ -64,7 +64,7 @@ func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid = c.Get(gate.CtxUserid).(string)
+	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
@@ -96,7 +96,7 @@ func (r *reqApikeyID) validUserid() error {
 func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyID{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
@@ -139,7 +139,7 @@ func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid = c.Get(gate.CtxUserid).(string)
+	req.Userid = gate.GetCtxUserid(c)
 	req.Keyid = c.Param("id")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
@@ -160,7 +160,7 @@ func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
 func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqApikeyID{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
 	}
 	if err := req.valid(); err != nil {

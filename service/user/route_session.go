@@ -31,7 +31,7 @@ func (m *router) getSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := reqGetUserSessions{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Amount: amount,
 		Offset: offset,
 	}
@@ -71,7 +71,7 @@ func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid = c.Get(gate.CtxUserid).(string)
+	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return

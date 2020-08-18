@@ -39,7 +39,7 @@ func (m *router) getByID(w http.ResponseWriter, r *http.Request) {
 func (m *router) getByIDPersonal(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserGetID{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
@@ -172,7 +172,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := reqGetUserRoles{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Amount: amount,
 		Offset: offset,
 	}
@@ -221,7 +221,7 @@ func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
 func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqGetUserRolesIntersect{
-		Userid: c.Get(gate.CtxUserid).(string),
+		Userid: gate.GetCtxUserid(c),
 		Roles:  c.Query("roles"),
 	}
 	if err := req.valid(); err != nil {

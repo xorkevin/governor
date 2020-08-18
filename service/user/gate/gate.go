@@ -13,12 +13,20 @@ import (
 )
 
 type (
-	ctxKey string
+	ctxKeyUserid struct{}
 )
 
-const (
-	CtxUserid ctxKey = "userid"
-)
+func GetCtxUserid(c governor.Context) string {
+	v := c.Get(ctxKeyUserid{})
+	if v == nil {
+		return ""
+	}
+	return v.(string)
+}
+
+func setCtxUserid(c governor.Context, userid string) {
+	c.Set(ctxKeyUserid{}, userid)
+}
 
 const (
 	authenticationSubject = "authentication"
@@ -188,7 +196,7 @@ func (s *service) Authenticate(v Validator, subject string) governor.Middleware 
 				c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 				return
 			}
-			c.Set(CtxUserid, claims.Userid)
+			setCtxUserid(c, claims.Userid)
 			next.ServeHTTP(c.R())
 		})
 	}
@@ -253,7 +261,7 @@ func (s *apikeyAuth) Authenticate(v Validator, subject string) governor.Middlewa
 				c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 				return
 			}
-			c.Set(CtxUserid, userid)
+			setCtxUserid(c, userid)
 			next.ServeHTTP(c.R())
 		})
 	}

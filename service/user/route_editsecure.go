@@ -23,7 +23,7 @@ func (m *router) putEmail(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid = c.Get(gate.CtxUserid).(string)
+	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
@@ -78,7 +78,7 @@ func (m *router) putPassword(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid = c.Get(gate.CtxUserid).(string)
+	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return

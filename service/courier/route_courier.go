@@ -116,7 +116,7 @@ func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.CreatorID = c.Get(gate.CtxUserid).(string)
+	req.CreatorID = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
@@ -224,7 +224,7 @@ func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
 
 	req := reqBrandPost{
 		BrandID:   c.FormValue("brandid"),
-		CreatorID: c.Get(gate.CtxUserid).(string),
+		CreatorID: gate.GetCtxUserid(c),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
