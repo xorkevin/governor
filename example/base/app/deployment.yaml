@@ -1,101 +1,93 @@
-apiVersion: 'apps/v1'
-kind: 'Deployment'
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: 'governor'
+  name: governor
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: 'governor'
-      version: 'v1'
+      app: governor
   template:
     metadata:
       labels:
-        app: 'governor'
-        version: 'v1'
-      annotations:
-        sidecar.istio.io/inject: 'true'
-        sidecar.istio.io/proxyCPU: '100m'
-        sidecar.istio.io/proxyCPULimit: '100m'
-        sidecar.istio.io/proxyMemory: '100Mi'
-        sidecar.istio.io/proxyMemoryLimit: '100Mi'
+        app: governor
     spec:
-      serviceAccountName: 'governor'
+      serviceAccountName: governor
       initContainers:
-        - name: 'gentokensecret'
-          image: 'xorkevin/alpine-utils:3'
+        - name: gentokensecret
+          image: xorkevin/alpine-utils:3
           command: ['sh']
           args: ['/home/governor/init.sh']
           env:
-            - name: 'PASS_LEN'
+            - name: PASS_LEN
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'passlen'
+                  name: init-opts
+                  key: passlen
                   optional: true
-            - name: 'CURL_BACKOFF'
+            - name: CURL_BACKOFF
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'curlbackoff'
+                  name: init-opts
+                  key: curlbackoff
                   optional: true
-            - name: 'CURL_REAUTH'
+            - name: CURL_REAUTH
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'curlreauth'
+                  name: init-opts
+                  key: curlreauth
                   optional: true
-            - name: 'VAULT_ADDR'
+            - name: VAULT_ADDR
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'vaultaddr'
-            - name: 'VAULT_ROLE'
+                  name: init-opts
+                  key: vaultaddr
+            - name: VAULT_ROLE
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'vaultrole'
-            - name: 'KV_PATH'
+                  name: init-opts
+                  key: vaultrole
+            - name: KV_PATH
               valueFrom:
                 configMapKeyRef:
-                  name: 'init-opts'
-                  key: 'kvpath'
+                  name: init-opts
+                  key: kvpath
           volumeMounts:
-            - name: 'init-scripts'
-              mountPath: '/home/governor'
+            - name: init-scripts
+              mountPath: /home/governor
       containers:
-        - name: 'governor'
-          image: 'docker.pkg.dev.home:8080/governor'
+        - name: governor
+          image: docker.pkg.dev.home:8080/governor
           env:
-            - name: 'HOME'
-              value: '/home/governor'
+            - name: HOME
+              value: /home/governor
           ports:
-            - name: 'http'
+            - name: http
               containerPort: 8080
           readinessProbe:
             httpGet:
-              path: '/api/healthz/ready'
+              path: /api/healthz/ready
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 15
           livenessProbe:
             httpGet:
-              path: '/api/healthz/live'
+              path: /api/healthz/live
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 15
           volumeMounts:
-            - name: 'config'
-              mountPath: '/home/governor/config'
-            - name: 'templates'
-              mountPath: '/home/governor/templates'
+            - name: config
+              mountPath: /home/governor/config
+            - name: templates
+              mountPath: /home/governor/templates
       volumes:
-        - name: 'init-scripts'
+        - name: init-scripts
           configMap:
-            name: 'init-scripts'
-        - name: 'config'
+            name: init-scripts
+        - name: config
           configMap:
-            name: 'config'
-        - name: 'templates'
+            name: config
+        - name: templates
           configMap:
-            name: 'templates'
+            name: templates

@@ -1,10 +1,10 @@
-apiVersion: 'skaffold/v2beta4'
-kind: 'Config'
+apiVersion: skaffold/v2beta4
+kind: Config
 metadata:
-  name: 'governor'
+  name: governor
 build:
   artifacts:
-    - image: 'docker.pkg.dev.home:8080/governor'
+    - image: docker.pkg.dev.home:8080/governor
       context: '.'
   local:
     push: false
@@ -12,8 +12,8 @@ build:
     useBuildkit: true
     concurrency: 1
   insecureRegistries:
-    - 'docker.pkg.dev.home:8080'
+    - docker.pkg.dev.home:8080
 deploy:
   kustomize:
     paths:
-      - 'skaffolddev'
+      - skaffolddev

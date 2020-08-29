@@ -1,20 +1,15 @@
-apiVersion: 'kustomize.config.k8s.io/v1beta1'
-kind: 'Kustomization'
-namespace: 'governor'
-namePrefix: 'postgres-'
-commonLabels:
-  app.kubernetes.io/name: 'postgres'
-  app.kubernetes.io/instance: 'postgres-postgres'
-  app.kubernetes.io/part-of: 'postgres-postgres'
-  app.kubernetes.io/managed-by: 'launchcpx'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: governor
+namePrefix: postgres-
 bases:
-  - 'github.com/xorkevin/launchcpx//base/postgres'
+  - github.com/xorkevin/launchcpx//base/postgres
 configMapGenerator:
-  - name: 'opts'
+  - name: opts
     literals:
-      - 'vaultaddr=http://vault.vault.svc.cluster.local:8200'
-      - 'vaultrole=governor-postgres-role'
-      - 'kvpath=kv/data/infra/governor/postgres'
-      - 'passlen=64'
-      - 'curlbackoff=5'
-      - 'curlreauth=12'
+      - vaultaddr=http://vault.vault.svc.cluster.local:8200
+      - vaultrole=governor-postgres-role
+      - kvpath=kv/data/infra/governor/postgres
+      - passlen=64
+      - curlbackoff=5
+      - curlreauth=12

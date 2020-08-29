@@ -1,47 +1,47 @@
-apiVersion: 'kustomize.config.k8s.io/v1beta1'
-kind: 'Kustomization'
-namespace: 'governor'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: governor
 configMapGenerator:
-  - name: 'init-scripts'
+  - name: init-scripts
     files:
-      - 'init.sh'
-      - '_init_lib.sh'
-  - name: 'init-opts'
+      - init.sh
+      - _init_lib.sh
+  - name: init-opts
     literals:
-      - 'vaultaddr=http://vault.vault.svc.cluster.local:8200'
-      - 'vaultrole=governor-governor-role'
-      - 'kvpath=kv/data/app/governor/token'
-      - 'passlen=64'
-      - 'curlbackoff=5'
-      - 'curlreauth=12'
-  - name: 'config'
+      - vaultaddr=http://vault.vault.svc.cluster.local:8200
+      - vaultrole=governor-governor-role
+      - kvpath=kv/data/app/governor/token
+      - passlen=64
+      - curlbackoff=5
+      - curlreauth=12
+  - name: config
     files:
-      - 'config/config.yaml'
-  - name: 'templates'
+      - config/config.yaml
+  - name: templates
     files:
-      - 'templates/emailchange.html'
-      - 'templates/emailchangenotify.html'
-      - 'templates/emailchangenotify_subject.txt'
-      - 'templates/emailchangenotify.txt'
-      - 'templates/emailchange_subject.txt'
-      - 'templates/emailchange.txt'
-      - 'templates/forgotpass.html'
-      - 'templates/forgotpass_subject.txt'
-      - 'templates/forgotpass.txt'
-      - 'templates/newlogin.html'
-      - 'templates/newlogin_subject.txt'
-      - 'templates/newlogin.txt'
-      - 'templates/newuser.html'
-      - 'templates/newuser_subject.txt'
-      - 'templates/newuser.txt'
-      - 'templates/passchange.html'
-      - 'templates/passchange_subject.txt'
-      - 'templates/passchange.txt'
-      - 'templates/passreset.html'
-      - 'templates/passreset_subject.txt'
-      - 'templates/passreset.txt'
+      - templates/emailchange.html
+      - templates/emailchangenotify.html
+      - templates/emailchangenotify_subject.txt
+      - templates/emailchangenotify.txt
+      - templates/emailchange_subject.txt
+      - templates/emailchange.txt
+      - templates/forgotpass.html
+      - templates/forgotpass_subject.txt
+      - templates/forgotpass.txt
+      - templates/newlogin.html
+      - templates/newlogin_subject.txt
+      - templates/newlogin.txt
+      - templates/newuser.html
+      - templates/newuser_subject.txt
+      - templates/newuser.txt
+      - templates/passchange.html
+      - templates/passchange_subject.txt
+      - templates/passchange.txt
+      - templates/passreset.html
+      - templates/passreset_subject.txt
+      - templates/passreset.txt
 resources:
-  - 'deployment.yaml'
-  - 'service.yaml'
-  - 'ingressroute.yaml'
-  - 'rsrc/serviceaccount.yaml'
+  - deployment.yaml
+  - service.yaml
+  - ingressroute.yaml
+  - rsrc/serviceaccount.yaml

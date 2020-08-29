@@ -1,15 +1,15 @@
-apiVersion: 'traefik.containo.us/v1alpha1'
-kind: 'IngressRoute'
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
 metadata:
-  name: 'governor'
+  name: governor
 spec:
   entryPoints:
-    - 'web'
+    - web
   routes:
-    - kind: 'Rule'
-      match: 'Host(`governor.dev.home`) || Host(`go.governor.dev.home`)'
+    - kind: Rule
+      match: Host(`governor.dev.home`) || Host(`go.governor.dev.home`)
       services:
-        - kind: 'Service'
-          scheme: 'http'
-          name: 'governor'
+        - kind: Service
+          scheme: http
+          name: governor
           port: 8080

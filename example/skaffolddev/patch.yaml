@@ -1,18 +1,18 @@
-apiVersion: 'apps/v1'
-kind: 'Deployment'
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: 'governor'
+  name: governor
 spec:
   template:
     spec:
       containers:
-        - name: 'governor'
+        - name: governor
           env:
-            - name: 'GOV_MAIL_HOST'
-              value: 'mailhog.governor.svc.cluster.local'
-            - name: 'GOV_MAIL_PORT'
+            - name: GOV_MAIL_HOST
+              value: mailhog.governor.svc.cluster.local
+            - name: GOV_MAIL_PORT
               value: '1025'
-            - name: 'GOV_MAIL_INSECURE'
+            - name: GOV_MAIL_INSECURE
               value: 'true'
-            - name: 'GOV_ALLOWORIGINS'
-              value: 'http://governor.dev.home:3000'
+            - name: GOV_ALLOWORIGINS
+              value: http://governor.dev.home:3000
