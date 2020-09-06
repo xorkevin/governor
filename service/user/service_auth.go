@@ -12,11 +12,6 @@ const (
 	uidSize = 16
 )
 
-const (
-	authenticationSubject = "authentication"
-	refreshSubject        = "refresh"
-)
-
 type (
 	emailNewLogin struct {
 		FirstName string
@@ -88,12 +83,12 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, token.SubjectAuth, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, token.SubjectRefresh, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -141,7 +136,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 
 // ExchangeToken validates a refresh token and returns an auth token
 func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(refreshToken, refreshSubject)
+	validToken, claims := s.tokenizer.Validate(refreshToken, token.SubjectSet{token.SubjectRefresh: struct{}{}})
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -161,7 +156,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, token.SubjectAuth, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -178,7 +173,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 
 // RefreshToken invalidates the previous refresh token and creates a new one
 func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(refreshToken, refreshSubject)
+	validToken, claims := s.tokenizer.Validate(refreshToken, token.SubjectSet{token.SubjectRefresh: struct{}{}})
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -199,11 +194,11 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, authenticationSubject, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Userid, s.accessTime, token.SubjectAuth, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(claims.Userid, s.refreshTime, refreshSubject, sm.SessionID, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(claims.Userid, s.refreshTime, token.SubjectRefresh, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -229,7 +224,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 func (s *service) Logout(refreshToken string) error {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
-	okToken, claims := s.tokenizer.GetClaims(refreshToken, refreshSubject)
+	okToken, claims := s.tokenizer.GetClaims(refreshToken, token.SubjectSet{token.SubjectRefresh: struct{}{}})
 	if !okToken {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}

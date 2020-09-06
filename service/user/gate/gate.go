@@ -28,14 +28,10 @@ func setCtxUserid(c governor.Context, userid string) {
 	c.Set(ctxKeyUserid{}, userid)
 }
 
-const (
-	authenticationSubject = "authentication"
-)
-
 type (
 	// Authenticator creates new authenticating middleware
 	Authenticator interface {
-		Authenticate(v Validator, subject string) governor.Middleware
+		Authenticate(v Validator, subjectSet token.SubjectSet) governor.Middleware
 	}
 
 	// Gate creates new middleware to gate routes
@@ -173,7 +169,7 @@ func (s *service) intersector(userid string, ctx governor.Context) Intersector {
 }
 
 // Authenticate builds a middleware function to validate tokens and set claims
-func (s *service) Authenticate(v Validator, subject string) governor.Middleware {
+func (s *service) Authenticate(v Validator, subjectSet token.SubjectSet) governor.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := governor.NewContext(w, r, s.logger)
@@ -186,7 +182,7 @@ func (s *service) Authenticate(v Validator, subject string) governor.Middleware 
 				}
 				accessToken = h[1]
 			}
-			validToken, claims := s.tokenizer.Validate(accessToken, subject)
+			validToken, claims := s.tokenizer.Validate(accessToken, subjectSet)
 			if !validToken {
 				rmAccessCookie(w, s.baseurl)
 				c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
@@ -240,8 +236,8 @@ func (s *apikeyAuth) intersector(apikeyid, userid string, ctx governor.Context) 
 	}
 }
 
-func (s *apikeyAuth) Authenticate(v Validator, subject string) governor.Middleware {
-	middle := s.base.Authenticate(v, subject)
+func (s *apikeyAuth) Authenticate(v Validator, subjectSet token.SubjectSet) governor.Middleware {
+	middle := s.base.Authenticate(v, subjectSet)
 	return func(next http.Handler) http.Handler {
 		base := middle(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -284,7 +280,7 @@ func Owner(g Authenticator, idfunc func(governor.Context, string) bool) governor
 			return false
 		}
 		return idfunc(r.Ctx(), r.Userid())
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // OwnerParam is a middleware function to validate if a url param is the given
@@ -307,7 +303,7 @@ func Admin(g Authenticator) governor.Middleware {
 			return false
 		}
 		return roles.Has(rank.TagAdmin)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // User is a middleware function to validate if a user is authenticated and not
@@ -322,7 +318,7 @@ func User(g Authenticator) governor.Middleware {
 			return true
 		}
 		return roles.Has(rank.TagUser)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by
@@ -346,7 +342,7 @@ func OwnerOrAdmin(g Authenticator, idfunc func(governor.Context, string) bool) g
 			return false
 		}
 		return idfunc(r.Ctx(), r.Userid())
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // OwnerOrAdminParam is a middleware function to validate if a url param is the
@@ -386,7 +382,7 @@ func ModF(g Authenticator, idfunc func(governor.Context, string) (string, error)
 			return false
 		}
 		return roles.HasMod(modtag)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // Mod is a middleware function to validate if the request is made by a
@@ -426,7 +422,7 @@ func NoBanF(g Authenticator, idfunc func(governor.Context, string) (string, erro
 			return false
 		}
 		return !roles.HasBan(bantag)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // NoBan is a middleware function to validate if the request is made by a
@@ -466,7 +462,7 @@ func MemberF(g Authenticator, idfunc func(governor.Context, string) (string, err
 			return false
 		}
 		return roles.HasUser(tag) && !roles.HasBan(tag)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }
 
 // Member is a middleware function to validate if the request is made by a
@@ -489,5 +485,5 @@ func System(g Authenticator) governor.Middleware {
 			return false
 		}
 		return roles.Has(rank.TagSystem)
-	}, authenticationSubject)
+	}, token.SubjectSet{token.SubjectAuth: struct{}{}})
 }

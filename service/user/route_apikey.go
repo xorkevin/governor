@@ -6,6 +6,7 @@ import (
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -228,5 +229,5 @@ func (m *router) mountApikey(r governor.Router) {
 	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate))
 	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate))
 	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate))
-	r.Any("/check", m.checkApikey, m.s.gate.WithApikey().Authenticate(m.checkApikeyValidator, "authentication"))
+	r.Any("/check", m.checkApikey, m.s.gate.WithApikey().Authenticate(m.checkApikeyValidator, token.SubjectSet{token.SubjectAuth: struct{}{}}))
 }

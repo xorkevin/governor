@@ -9,7 +9,15 @@ import (
 	"xorkevin.dev/governor"
 )
 
+const (
+	SubjectAuth    = "authentication"
+	SubjectRefresh = "refresh"
+)
+
 type (
+	// SubjectSet is a set of token subjects
+	SubjectSet map[string]struct{}
+
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.Claims
@@ -21,8 +29,8 @@ type (
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		Generate(userid string, duration int64, subject, id, key string) (string, *Claims, error)
-		Validate(tokenString, subject string) (bool, *Claims)
-		GetClaims(tokenString, subject string) (bool, *Claims)
+		Validate(tokenString string, subjects SubjectSet) (bool, *Claims)
+		GetClaims(tokenString string, subject SubjectSet) (bool, *Claims)
 	}
 
 	Service interface {
@@ -123,7 +131,7 @@ func (s *service) Generate(userid string, duration int64, subject, id, key strin
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(tokenString, subject string) (bool, *Claims) {
+func (s *service) Validate(tokenString string, subjectSet SubjectSet) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -132,8 +140,11 @@ func (s *service) Validate(tokenString, subject string) (bool, *Claims) {
 	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
+	if _, ok := subjectSet[claims.Subject]; !ok {
+		return false, nil
+	}
 	if err := claims.ValidateWithLeeway(jwt.Expected{
-		Subject: subject,
+		Subject: claims.Subject,
 		Issuer:  s.issuer,
 	}, 0); err != nil {
 		return false, nil
@@ -142,7 +153,7 @@ func (s *service) Validate(tokenString, subject string) (bool, *Claims) {
 }
 
 // GetClaims returns the tokens claims without validating time
-func (s *service) GetClaims(tokenString, subject string) (bool, *Claims) {
+func (s *service) GetClaims(tokenString string, subjectSet SubjectSet) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -151,7 +162,7 @@ func (s *service) GetClaims(tokenString, subject string) (bool, *Claims) {
 	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
-	if claims.Subject != subject || claims.Issuer != s.issuer {
+	if _, ok := subjectSet[claims.Subject]; !ok || claims.Issuer != s.issuer {
 		return false, nil
 	}
 	return true, claims
