@@ -14,7 +14,7 @@ const (
 )
 
 func sessionModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS usersessions (sessionid VARCHAR(31) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023));")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS usersessions (sessionid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023));")
 	if err != nil {
 		return err
 	}
