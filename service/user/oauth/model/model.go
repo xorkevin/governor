@@ -95,9 +95,9 @@ func (r *repo) GetByID(appid string) (*Model, error) {
 	m, code, err := oauthappModelGetModelEqAppID(db, appid)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No oauth app found with that id", http.StatusNotFound, err)
+			return nil, governor.NewError("No OAuth app found with that id", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError("Failed to get oauth app config", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to get OAuth app config", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
@@ -111,7 +111,7 @@ func (r *repo) Insert(m *Model) error {
 		if code == 3 {
 			return governor.NewError("AppID must be unique", http.StatusBadRequest, err)
 		}
-		return governor.NewError("Failed to insert oauth app config", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to insert OAuth app config", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func (r *repo) Update(m *Model) error {
 		return err
 	}
 	if _, err := oauthappModelUpdModelEqAppID(db, m, m.AppID); err != nil {
-		return governor.NewError("Failed to update oauth app config", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to update OAuth app config", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -133,11 +133,18 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := oauthappModelDelEqAppID(db, m.AppID); err != nil {
-		return governor.NewError("Failed to delete oauth app config", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to delete OAuth app config", http.StatusInternalServerError, err)
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := oauthappModelSetup(db); err != nil {
+		return governor.NewError("Failed to setup OAuth app model", http.StatusInternalServerError, err)
+	}
 	return nil
 }
