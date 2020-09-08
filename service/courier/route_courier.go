@@ -288,14 +288,21 @@ func (r *router) getBrandImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
+const (
+	scopeLinkRead   = "gov.courier.link:read"
+	scopeLinkWrite  = "gov.courier.link:write"
+	scopeBrandRead  = "gov.courier.brand:read"
+	scopeBrandWrite = "gov.courier.brand:write"
+)
+
 func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/link/{linkid}", m.getLink)
 	r.Get("/link/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getLinkImageCC))
-	r.Get("/link", m.getLinkGroup, gate.Member(m.s.gate, "courier"))
-	r.Post("/link", m.createLink, gate.Member(m.s.gate, "courier"))
-	r.Delete("/link/{linkid}", m.deleteLink, gate.Member(m.s.gate, "courier"))
-	r.Get("/brand/{brandid}/image", m.getBrandImage, gate.Member(m.s.gate, "courier"), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
-	r.Get("/brand", m.getBrandGroup, gate.Member(m.s.gate, "courier"))
-	r.Post("/brand", m.createBrand, gate.Member(m.s.gate, "courier"))
-	r.Delete("/brand/{brandid}", m.deleteBrand, gate.Member(m.s.gate, "courier"))
+	r.Get("/link", m.getLinkGroup, gate.Member(m.s.gate, "courier", scopeLinkRead))
+	r.Post("/link", m.createLink, gate.Member(m.s.gate, "courier", scopeLinkWrite))
+	r.Delete("/link/{linkid}", m.deleteLink, gate.Member(m.s.gate, "courier", scopeLinkWrite))
+	r.Get("/brand/{brandid}/image", m.getBrandImage, gate.Member(m.s.gate, "courier", scopeBrandRead), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
+	r.Get("/brand", m.getBrandGroup, gate.Member(m.s.gate, "courier", scopeBrandRead))
+	r.Post("/brand", m.createBrand, gate.Member(m.s.gate, "courier", scopeBrandWrite))
+	r.Delete("/brand/{brandid}", m.deleteBrand, gate.Member(m.s.gate, "courier", scopeBrandWrite))
 }

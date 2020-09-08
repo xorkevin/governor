@@ -184,12 +184,17 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
+const (
+	scopeProfileRead  = "gov.profile:read"
+	scopeProfileWrite = "gov.profile:write"
+)
+
 func (m *router) mountProfileRoutes(r governor.Router) {
-	r.Post("", m.createProfile, gate.User(m.s.gate))
-	r.Put("", m.updateProfile, gate.User(m.s.gate))
-	r.Put("/image", m.updateImage, gate.User(m.s.gate))
-	r.Delete("/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id"))
-	r.Get("", m.getOwnProfile, gate.User(m.s.gate))
+	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite))
+	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite))
+	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite))
+	r.Delete("/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite))
+	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead))
 	r.Get("/{id}", m.getProfile)
 	r.Get("/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getProfileImageCC))
 }
