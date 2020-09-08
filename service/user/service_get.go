@@ -12,7 +12,7 @@ type (
 	ResUserGetPublic struct {
 		Userid       string   `json:"userid"`
 		Username     string   `json:"username"`
-		AuthTags     []string `json:"auth_tags"`
+		Roles        []string `json:"roles"`
 		FirstName    string   `json:"first_name"`
 		LastName     string   `json:"last_name"`
 		CreationTime int64    `json:"creation_time"`
@@ -23,7 +23,7 @@ func getUserPublicFields(m *usermodel.Model, roles []string) *ResUserGetPublic {
 	return &ResUserGetPublic{
 		Userid:       m.Userid,
 		Username:     m.Username,
-		AuthTags:     roles,
+		Roles:        roles,
 		FirstName:    m.FirstName,
 		LastName:     m.LastName,
 		CreationTime: m.CreationTime,
