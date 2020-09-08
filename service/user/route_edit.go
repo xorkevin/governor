@@ -70,7 +70,12 @@ func (m *router) patchRank(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+const (
+	scopeAccountWrite = "gov.user.account:write"
+	scopeAdminWrite   = "gov.user.admin:write"
+)
+
 func (m *router) mountEdit(r governor.Router) {
-	r.Put("", m.putUser, gate.User(m.s.gate))
-	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate))
+	r.Put("", m.putUser, gate.User(m.s.gate, "gov.user.account:write"))
+	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite))
 }

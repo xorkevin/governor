@@ -59,7 +59,7 @@ func main() {
 	roleModel := rolemodel.New(dbService)
 	roleService := role.New(roleModel, kvService.Subtree("roles"))
 	apikeyModel := apikeymodel.New(dbService)
-	apikeyService := apikey.New(apikeyModel, roleService, kvService.Subtree("apikeys"))
+	apikeyService := apikey.New(apikeyModel, kvService.Subtree("apikeys"))
 	tokenService := token.New()
 	gateService := gate.New(roleService, apikeyService, tokenService)
 	userModel := usermodel.New(dbService)

@@ -88,7 +88,12 @@ func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+const (
+	scopeSessionRead  = "gov.user.session:read"
+	scopeSessionWrite = "gov.user.session:write"
+)
+
 func (m *router) mountSession(r governor.Router) {
-	r.Get("/sessions", m.getSessions, gate.User(m.s.gate))
-	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate))
+	r.Get("/sessions", m.getSessions, gate.User(m.s.gate, scopeSessionRead))
+	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate, scopeSessionWrite))
 }

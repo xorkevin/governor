@@ -144,9 +144,9 @@ func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountEditSecure(r governor.Router) {
-	r.Put("/email", m.putEmail, gate.User(m.s.gate))
+	r.Put("/email", m.putEmail, gate.User(m.s.gate, scopeAccountWrite))
 	r.Put("/email/verify", m.putEmailVerify)
-	r.Put("/password", m.putPassword, gate.User(m.s.gate))
+	r.Put("/password", m.putPassword, gate.User(m.s.gate, scopeAccountWrite))
 	r.Put("/password/forgot", m.forgotPassword)
 	r.Put("/password/forgot/reset", m.forgotPasswordReset)
 }
