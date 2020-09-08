@@ -3,16 +3,15 @@ package user
 import (
 	"net/http"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/util/rank"
 )
 
 type (
 	resApikey struct {
-		Keyid    string `json:"keyid"`
-		AuthTags string `json:"auth_tags"`
-		Name     string `json:"name"`
-		Desc     string `json:"desc"`
-		Time     int64  `json:"time"`
+		Keyid string `json:"keyid"`
+		Scope string `json:"scope"`
+		Name  string `json:"name"`
+		Desc  string `json:"desc"`
+		Time  int64  `json:"time"`
 	}
 
 	resApikeys struct {
@@ -28,11 +27,11 @@ func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys,
 	res := make([]resApikey, 0, len(m))
 	for _, i := range m {
 		res = append(res, resApikey{
-			Keyid:    i.Keyid,
-			AuthTags: i.AuthTags.Stringify(),
-			Name:     i.Name,
-			Desc:     i.Desc,
-			Time:     i.Time,
+			Keyid: i.Keyid,
+			Scope: i.Scope,
+			Name:  i.Name,
+			Desc:  i.Desc,
+			Time:  i.Time,
 		})
 	}
 	return &resApikeys{
@@ -47,8 +46,8 @@ type (
 	}
 )
 
-func (s *service) CreateApikey(userid string, authtags rank.Rank, name, desc string) (*resApikeyModel, error) {
-	m, err := s.apikeys.Insert(userid, authtags, name, desc)
+func (s *service) CreateApikey(userid string, scope string, name, desc string) (*resApikeyModel, error) {
+	m, err := s.apikeys.Insert(userid, scope, name, desc)
 	if err != nil {
 		return nil, governor.NewError("Failed to create apikey", http.StatusInternalServerError, err)
 	}
@@ -72,8 +71,8 @@ func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
 	}, nil
 }
 
-func (s *service) UpdateApikey(keyid string, authtags rank.Rank, name, desc string) error {
-	if err := s.apikeys.UpdateKey(keyid, authtags, name, desc); err != nil {
+func (s *service) UpdateApikey(keyid string, scope string, name, desc string) error {
+	if err := s.apikeys.UpdateKey(keyid, scope, name, desc); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return governor.NewErrorUser("Invalid apikey", http.StatusBadRequest, err)
 		}

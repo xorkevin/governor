@@ -169,6 +169,13 @@ func validRankStr(rankString string) error {
 	return nil
 }
 
+func validScope(scopeString string) error {
+	if len(scopeString) > lengthCapLarge {
+		return governor.NewErrorUser("Scope must be shorter than 4096 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func isEmail(useroremail string) bool {
 	return strings.ContainsRune(useroremail, '@')
 }

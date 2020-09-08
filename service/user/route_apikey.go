@@ -6,7 +6,6 @@ import (
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -51,10 +50,10 @@ func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqApikeyPost struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		AuthTags string `valid:"rankStr" json:"auth_tags"`
-		Name     string `valid:"apikeyName" json:"name"`
-		Desc     string `valid:"apikeyDesc" json:"desc"`
+		Userid string `valid:"userid,has" json:"-"`
+		Scope  string `valid:"scope" json:"scope"`
+		Name   string `valid:"apikeyName" json:"name"`
+		Desc   string `valid:"apikeyDesc" json:"desc"`
 	}
 )
 
@@ -70,8 +69,7 @@ func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	authTags, _ := rank.FromStringUser(req.AuthTags)
-	res, err := m.s.CreateApikey(req.Userid, authTags, req.Name, req.Desc)
+	res, err := m.s.CreateApikey(req.Userid, req.Scope, req.Name, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -117,11 +115,11 @@ func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqApikeyUpdate struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		Keyid    string `valid:"apikeyid,has" json:"-"`
-		AuthTags string `valid:"rankStr" json:"auth_tags"`
-		Name     string `valid:"apikeyName" json:"name"`
-		Desc     string `valid:"apikeyDesc" json:"desc"`
+		Userid string `valid:"userid,has" json:"-"`
+		Keyid  string `valid:"apikeyid,has" json:"-"`
+		Scope  string `valid:"scope" json:"scope"`
+		Name   string `valid:"apikeyName" json:"name"`
+		Desc   string `valid:"apikeyDesc" json:"desc"`
 	}
 )
 
@@ -150,8 +148,7 @@ func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	authTags, _ := rank.FromStringUser(req.AuthTags)
-	if err := m.s.UpdateApikey(req.Keyid, authTags, req.Name, req.Desc); err != nil {
+	if err := m.s.UpdateApikey(req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -182,29 +179,30 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqApikeyCheck struct {
-		AuthTags string `valid:"rankStr"`
+		Roles string `valid:"rankStr"`
+		Scope string
 	}
-)
-
-const (
-	basicAuthRealm = "governor"
 )
 
 func (r *router) checkApikeyValidator(t gate.Intersector) bool {
 	c := t.Ctx()
 	req := reqApikeyCheck{
-		AuthTags: c.Query("authtags"),
+		Roles: c.Query("roles"),
+		Scope: c.Query("scope"),
 	}
 	if err := req.valid(); err != nil {
 		return false
 	}
-	authTags, _ := rank.FromStringUser(req.AuthTags)
 
-	roles, ok := t.Intersect(authTags)
+	if !t.HasScope(req.Scope) {
+		return false
+	}
+	expected, _ := rank.FromStringUser(req.Roles)
+	roles, ok := t.Intersect(expected)
 	if !ok {
 		return false
 	}
-	if roles.Len() != authTags.Len() {
+	if roles.Len() != expected.Len() {
 		return false
 	}
 	return true
@@ -223,11 +221,16 @@ func (m *router) checkApikey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const (
+	scopeApikeyRead  = "gov.user.apikey:read"
+	scopeApikeyWrite = "gov.user.apikey:write"
+)
+
 func (m *router) mountApikey(r governor.Router) {
-	r.Get("", m.getUserApikeys, gate.User(m.s.gate))
-	r.Post("", m.createApikey, gate.User(m.s.gate))
-	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate))
-	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate))
-	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate))
-	r.Any("/check", m.checkApikey, m.s.gate.WithApikey().Authenticate(m.checkApikeyValidator, token.SubjectSet{token.SubjectAuth: struct{}{}}))
+	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead))
+	r.Post("", m.createApikey, gate.User(m.s.gate, scopeApikeyWrite))
+	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, scopeApikeyWrite))
+	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate, scopeApikeyWrite))
+	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate, scopeApikeyWrite))
+	r.Any("/check", m.checkApikey, m.s.gate.Authenticate(m.checkApikeyValidator, ""))
 }

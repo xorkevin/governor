@@ -51,12 +51,14 @@ type (
 	Intersector interface {
 		Userid() string
 		Intersect(roles rank.Rank) (rank.Rank, bool)
+		HasScope(scope string) bool
 		Ctx() governor.Context
 	}
 
 	intersector struct {
 		s      *service
 		userid string
+		scope  string
 		ctx    governor.Context
 	}
 
@@ -152,10 +154,15 @@ func (r *intersector) Intersect(roles rank.Rank) (rank.Rank, bool) {
 	return k, true
 }
 
-func (s *service) intersector(userid string, ctx governor.Context) Intersector {
+func (r *intersector) HasScope(scope string) bool {
+	return token.HasScope(r.scope, scope)
+}
+
+func (s *service) intersector(userid string, scope string, ctx governor.Context) Intersector {
 	return &intersector{
 		s:      s,
 		userid: userid,
+		scope:  scope,
 		ctx:    ctx,
 	}
 }
@@ -176,7 +183,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 				if !token.HasScope(keyscope, scope) {
 					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 				}
-				if !v(s.intersector(userid, c)) {
+				if !v(s.intersector(userid, keyscope, c)) {
 					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 					return
 				}
@@ -197,7 +204,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
 					return
 				}
-				if !v(s.intersector(claims.Subject, c)) {
+				if !v(s.intersector(claims.Subject, claims.Scope, c)) {
 					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 					return
 				}
