@@ -8,19 +8,16 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
-	"xorkevin.dev/governor/service/user/role"
-	"xorkevin.dev/governor/util/rank"
 )
 
 type (
 	// Apikey manages apikeys
 	Apikey interface {
 		GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error)
-		CheckKey(keyid, key string) (string, error)
-		IntersectRoles(keyid string, authtags rank.Rank) (rank.Rank, error)
-		Insert(userid string, authtags rank.Rank, name, desc string) (*ResApikeyModel, error)
+		CheckKey(keyid, key string) (string, string, error)
+		Insert(userid string, scope string, name, desc string) (*ResApikeyModel, error)
 		RotateKey(keyid string) (*ResApikeyModel, error)
-		UpdateKey(keyid string, authtags rank.Rank, name, desc string) error
+		UpdateKey(keyid string, scope string, name, desc string) error
 		DeleteKey(keyid string) error
 		DeleteUserKeys(userid string) error
 	}
@@ -31,12 +28,11 @@ type (
 	}
 
 	service struct {
-		apikeys       apikeymodel.Repo
-		roles         role.Role
-		kvkey         kvstore.KVStore
-		kvroleset     kvstore.KVStore
-		logger        governor.Logger
-		roleCacheTime int64
+		apikeys        apikeymodel.Repo
+		kvkey          kvstore.KVStore
+		kvscope        kvstore.KVStore
+		logger         governor.Logger
+		scopeCacheTime int64
 	}
 )
 
@@ -45,18 +41,17 @@ const (
 )
 
 // New returns a new Apikey
-func New(apikeys apikeymodel.Repo, roles role.Role, kv kvstore.KVStore) Service {
+func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {
 	return &service{
-		apikeys:       apikeys,
-		roles:         roles,
-		kvkey:         kv.Subtree("key"),
-		kvroleset:     kv.Subtree("roleset"),
-		roleCacheTime: time24h,
+		apikeys:        apikeys,
+		kvkey:          kv.Subtree("key"),
+		kvscope:        kv.Subtree("scope"),
+		scopeCacheTime: time24h,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	r.SetDefault("rolecache", "24h")
+	r.SetDefault("scopecache", "24h")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -65,14 +60,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
-	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
-		return governor.NewError("Failed to parse role cache time", http.StatusBadRequest, err)
+	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
+		return governor.NewError("Failed to parse scope cache time", http.StatusBadRequest, err)
 	} else {
-		s.roleCacheTime = int64(t / time.Second)
+		s.scopeCacheTime = int64(t / time.Second)
 	}
 
 	l.Info("loaded config", map[string]string{
-		"rolecache (s)": strconv.FormatInt(s.roleCacheTime, 10),
+		"scopecache (s)": strconv.FormatInt(s.scopeCacheTime, 10),
 	})
 
 	return nil

@@ -5,32 +5,29 @@ import (
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"net/http"
+	"strings"
 	"time"
 	"xorkevin.dev/governor"
 )
 
 const (
-	SubjectAuth    = "authentication"
-	SubjectRefresh = "refresh"
+	// ScopeAll grants all scopes to a token
+	ScopeAll = "all"
 )
 
 type (
-	// SubjectSet is a set of token subjects
-	SubjectSet map[string]struct{}
-
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.Claims
-		Userid string `json:"userid"`
-		ID     string `json:"id"`
-		Key    string `json:"key"`
+		Scope string `json:"scope"`
+		Key   string `json:"key"`
 	}
 
 	// Tokenizer is a token generator
 	Tokenizer interface {
-		Generate(userid string, duration int64, subject, id, key string) (string, *Claims, error)
-		Validate(tokenString string, subjects SubjectSet) (bool, *Claims)
-		GetClaims(tokenString string, subject SubjectSet) (bool, *Claims)
+		Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error)
+		Validate(tokenString string, audience []string, scope string) (bool, *Claims)
+		GetClaims(tokenString string, audience []string, scope string) (bool, *Claims)
 	}
 
 	Service interface {
@@ -39,25 +36,28 @@ type (
 	}
 
 	service struct {
-		secret []byte
-		issuer string
-		signer jose.Signer
-		logger governor.Logger
+		secret   []byte
+		issuer   string
+		audience string
+		signer   jose.Signer
+		logger   governor.Logger
 	}
 )
 
 // New creates a new Tokenizer
 func New() Service {
 	return &service{
-		secret: nil,
-		issuer: "",
-		signer: nil,
+		secret:   nil,
+		issuer:   "",
+		audience: "",
+		signer:   nil,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
+	r.SetDefault("audience", "governor")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -109,19 +109,23 @@ func (s *service) Health() error {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(userid string, duration int64, subject, id, key string) (string, *Claims, error) {
+func (s *service) Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error) {
 	now := time.Now().Round(0)
+	if len(audience) == 0 {
+		audience = []string{s.audience}
+	}
 	claims := Claims{
 		Claims: jwt.Claims{
-			Subject:   subject,
 			Issuer:    s.issuer,
+			Subject:   userid,
+			Audience:  audience,
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+			ID:        id,
 		},
-		Userid: userid,
-		ID:     id,
-		Key:    key,
+		Scope: scope,
+		Key:   key,
 	}
 	token, err := jwt.Signed(s.signer).Claims(claims).CompactSerialize()
 	if err != nil {
@@ -130,8 +134,21 @@ func (s *service) Generate(userid string, duration int64, subject, id, key strin
 	return token, &claims, nil
 }
 
+// HasScope returns if a token scope contains a scope
+func HasScope(tokenScope string, scope string) bool {
+	if scope == "" {
+		return true
+	}
+	for _, i := range strings.Fields(tokenScope) {
+		if i == ScopeAll || i == scope {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate returns whether a token is valid
-func (s *service) Validate(tokenString string, subjectSet SubjectSet) (bool, *Claims) {
+func (s *service) Validate(tokenString string, audience []string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -140,12 +157,17 @@ func (s *service) Validate(tokenString string, subjectSet SubjectSet) (bool, *Cl
 	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
-	if _, ok := subjectSet[claims.Subject]; !ok {
+	if !HasScope(claims.Scope, scope) {
 		return false, nil
 	}
+	now := time.Now().Round(0)
+	if len(audience) == 0 {
+		audience = []string{s.audience}
+	}
 	if err := claims.ValidateWithLeeway(jwt.Expected{
-		Subject: claims.Subject,
-		Issuer:  s.issuer,
+		Issuer:   s.issuer,
+		Audience: audience,
+		Time:     now,
 	}, 0); err != nil {
 		return false, nil
 	}
@@ -153,7 +175,7 @@ func (s *service) Validate(tokenString string, subjectSet SubjectSet) (bool, *Cl
 }
 
 // GetClaims returns the tokens claims without validating time
-func (s *service) GetClaims(tokenString string, subjectSet SubjectSet) (bool, *Claims) {
+func (s *service) GetClaims(tokenString string, audience []string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -162,7 +184,16 @@ func (s *service) GetClaims(tokenString string, subjectSet SubjectSet) (bool, *C
 	if err := token.Claims(s.secret, claims); err != nil {
 		return false, nil
 	}
-	if _, ok := subjectSet[claims.Subject]; !ok || claims.Issuer != s.issuer {
+	if !HasScope(claims.Scope, scope) {
+		return false, nil
+	}
+	if len(audience) == 0 {
+		audience = []string{s.audience}
+	}
+	if err := claims.ValidateWithLeeway(jwt.Expected{
+		Issuer:   s.issuer,
+		Audience: audience,
+	}, 0); err != nil {
 		return false, nil
 	}
 	return true, claims

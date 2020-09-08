@@ -186,8 +186,8 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.setAccessCookie(c, res.AccessToken)
-	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
-	m.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
+	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -220,8 +220,8 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 
 	m.setAccessCookie(c, res.AccessToken)
 	if res.Refresh {
-		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
-		m.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
+		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+		m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -247,8 +247,8 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m.setAccessCookie(c, res.AccessToken)
-	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Userid)
-	m.setSessionCookie(c, res.SessionToken, res.Claims.Userid)
+	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
