@@ -2,6 +2,9 @@ package token
 
 import (
 	"context"
+	"crypto"
+	"crypto/ed25519"
+	"crypto/sha512"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"net/http"
@@ -36,11 +39,14 @@ type (
 	}
 
 	service struct {
-		secret   []byte
-		issuer   string
-		audience string
-		signer   jose.Signer
-		logger   governor.Logger
+		secret     []byte
+		privateKey crypto.Signer
+		publicKey  crypto.PublicKey
+		issuer     string
+		audience   string
+		signer     jose.Signer
+		keySigner  jose.Signer
+		logger     governor.Logger
 	}
 )
 
@@ -77,6 +83,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}
 	s.secret = []byte(secret)
+	seed := sha512.Sum512(s.secret)
+	if len(seed) < ed25519.SeedSize {
+		return governor.NewError("ed25519 seed too small", http.StatusInternalServerError, nil)
+	}
+	s.privateKey = ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
+	s.publicKey = s.privateKey.Public()
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
 		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
@@ -87,6 +99,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Failed to create new jwt signer", http.StatusInternalServerError, err)
 	}
 	s.signer = sig
+	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: s.privateKey}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		return governor.NewError("Failed to create new jwt eddsa signer", http.StatusInternalServerError, err)
+	}
+	s.keySigner = keySig
 	l.Info("loaded config", map[string]string{
 		"issuer": issuer,
 	})
@@ -132,6 +149,25 @@ func (s *service) Generate(userid string, audience []string, duration int64, sco
 		return "", nil, governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
 	}
 	return token, &claims, nil
+}
+
+// Sign creates a new id token
+func (s *service) Sign(userid string, audience []string, duration int64, id string, claims interface{}) (string, error) {
+	now := time.Now().Round(0)
+	baseClaims := jwt.Claims{
+		Issuer:    s.issuer,
+		Subject:   userid,
+		Audience:  audience,
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+		ID:        id,
+	}
+	token, err := jwt.Signed(s.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
+	if err != nil {
+		return "", governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
+	}
+	return token, nil
 }
 
 // HasScope returns if a token scope contains a scope
