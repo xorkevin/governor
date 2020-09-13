@@ -12,6 +12,8 @@ configMapGenerator:
       - vaultrole=governor-governor-role
       - kvpath=kv/data/app/governor/token
       - passlen=64
+      - kvpathrsa=kv/data/app/governor/rsakey
+      - rsabits=4096
       - curlbackoff=5
       - curlreauth=12
   - name: config

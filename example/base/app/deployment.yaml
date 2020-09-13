@@ -25,6 +25,12 @@ spec:
                   name: init-opts
                   key: passlen
                   optional: true
+            - name: RSA_BITS
+              valueFrom:
+                configMapKeyRef:
+                  name: init-opts
+                  key: rsabits
+                  optional: true
             - name: CURL_BACKOFF
               valueFrom:
                 configMapKeyRef:
@@ -52,6 +58,11 @@ spec:
                 configMapKeyRef:
                   name: init-opts
                   key: kvpath
+            - name: KV_PATH_RSA
+              valueFrom:
+                configMapKeyRef:
+                  name: init-opts
+                  key: kvpathrsa
           volumeMounts:
             - name: init-scripts
               mountPath: /home/governor

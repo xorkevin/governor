@@ -72,3 +72,8 @@ gen_pass() {
   local passlen=$1
   head -c "$passlen" < /dev/urandom | base64 | tr -d '\n=' | tr '+/' '-_'
 }
+
+gen_rsa() {
+  local bits=$1
+  openssl genpkey -algorithm RSA -pkeyopt "rsa_keygen_bits:$bits"
+}
