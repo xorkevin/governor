@@ -3,8 +3,9 @@ package token
 import (
 	"context"
 	"crypto"
-	"crypto/ed25519"
-	"crypto/sha512"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"net/http"
@@ -16,6 +17,10 @@ import (
 const (
 	// ScopeAll grants all scopes to a token
 	ScopeAll = "all"
+)
+
+const (
+	pemBlockType = "PRIVATE KEY"
 )
 
 type (
@@ -71,6 +76,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
+
 	tokensecret, err := r.GetSecret("tokensecret")
 	if err != nil {
 		return governor.NewError("Failed to read token secret", http.StatusInternalServerError, err)
@@ -83,27 +89,47 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
 	}
 	s.secret = []byte(secret)
-	seed := sha512.Sum512(s.secret)
-	if len(seed) < ed25519.SeedSize {
-		return governor.NewError("ed25519 seed too small", http.StatusInternalServerError, nil)
-	}
-	s.privateKey = ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
-	s.publicKey = s.privateKey.Public()
-	issuer := r.GetStr("issuer")
-	if issuer == "" {
-		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
-	}
-	s.issuer = issuer
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
 		return governor.NewError("Failed to create new jwt signer", http.StatusInternalServerError, err)
 	}
 	s.signer = sig
-	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: s.privateKey}, (&jose.SignerOptions{}).WithType("JWT"))
+
+	rsakeysecret, err := r.GetSecret("rsakey")
 	if err != nil {
-		return governor.NewError("Failed to create new jwt eddsa signer", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to read rsakey", http.StatusInternalServerError, err)
+	}
+	rsakeyPem, ok := rsakeysecret["secret"].(string)
+	if !ok {
+		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+	}
+	pemBlock, _ := pem.Decode([]byte(rsakeyPem))
+	if pemBlock == nil || pemBlock.Type != pemBlockType {
+		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+	}
+	rawKey, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
+	if err != nil {
+		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, err)
+	}
+	key, ok := rawKey.(*rsa.PrivateKey)
+	if !ok {
+		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+	}
+	key.Precompute()
+	s.privateKey = key
+	s.publicKey = key.Public()
+	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.privateKey}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		return governor.NewError("Failed to create new jwt RS256 signer", http.StatusInternalServerError, err)
 	}
 	s.keySigner = keySig
+
+	issuer := r.GetStr("issuer")
+	if issuer == "" {
+		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
+	}
+	s.issuer = issuer
+
 	l.Info("loaded config", map[string]string{
 		"issuer": issuer,
 	})
