@@ -14,7 +14,7 @@ const (
 )
 
 func oauthappModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (appid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, callback_url VARCHAR(255) NOT NULL, keyhash VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(255) NOT NULL, redirect_uri VARCHAR(2047) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -22,7 +22,7 @@ func oauthappModelSetup(db *sql.DB) error {
 }
 
 func oauthappModelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec("INSERT INTO oauthapps (appid, name, description, callback_url, keyhash, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.AppID, m.Name, m.Desc, m.CallbackURL, m.KeyHash, m.CreationTime)
+	_, err := db.Exec("INSERT INTO oauthapps (clientid, name, url, redirect_uri, logo, keyhash, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -42,13 +42,13 @@ func oauthappModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (i
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*6)
+	args := make([]interface{}, 0, len(models)*7)
 	for c, m := range models {
-		n := c * 6
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
-		args = append(args, m.AppID, m.Name, m.Desc, m.CallbackURL, m.KeyHash, m.CreationTime)
+		n := c * 7
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
+		args = append(args, m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO oauthapps (appid, name, description, callback_url, keyhash, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO oauthapps (clientid, name, url, redirect_uri, logo, keyhash, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -62,9 +62,9 @@ func oauthappModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (i
 	return 0, nil
 }
 
-func oauthappModelGetModelEqAppID(db *sql.DB, appid string) (*Model, int, error) {
+func oauthappModelGetModelEqClientID(db *sql.DB, clientid string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT appid, name, description, callback_url, keyhash, creation_time FROM oauthapps WHERE appid = $1;", appid).Scan(&m.AppID, &m.Name, &m.Desc, &m.CallbackURL, &m.KeyHash, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT clientid, name, url, redirect_uri, logo, keyhash, creation_time FROM oauthapps WHERE clientid = $1;", clientid).Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -81,8 +81,8 @@ func oauthappModelGetModelEqAppID(db *sql.DB, appid string) (*Model, int, error)
 	return m, 0, nil
 }
 
-func oauthappModelUpdModelEqAppID(db *sql.DB, m *Model, appid string) (int, error) {
-	_, err := db.Exec("UPDATE oauthapps SET (appid, name, description, callback_url, keyhash, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE appid = $7;", m.AppID, m.Name, m.Desc, m.CallbackURL, m.KeyHash, m.CreationTime, appid)
+func oauthappModelUpdModelEqClientID(db *sql.DB, m *Model, clientid string) (int, error) {
+	_, err := db.Exec("UPDATE oauthapps SET (clientid, name, url, redirect_uri, logo, keyhash, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE clientid = $8;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.CreationTime, clientid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -96,7 +96,7 @@ func oauthappModelUpdModelEqAppID(db *sql.DB, m *Model, appid string) (int, erro
 	return 0, nil
 }
 
-func oauthappModelDelEqAppID(db *sql.DB, appid string) error {
-	_, err := db.Exec("DELETE FROM oauthapps WHERE appid = $1;", appid)
+func oauthappModelDelEqClientID(db *sql.DB, clientid string) error {
+	_, err := db.Exec("DELETE FROM oauthapps WHERE clientid = $1;", clientid)
 	return err
 }

@@ -34,6 +34,7 @@ type (
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error)
+		Sign(userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
 		Validate(tokenString string, audience []string, scope string) (bool, *Claims)
 		GetClaims(tokenString string, audience []string, scope string) (bool, *Claims)
 	}

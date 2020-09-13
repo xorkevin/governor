@@ -12,16 +12,15 @@ import (
 //go:generate forge model -m Model -t oauthapps -p oauthapp -o model_gen.go Model
 
 const (
-	defaultUIDSize = 8
-	keySize        = 32
+	uidSize = 16
+	keySize = 32
 )
 
 type (
 	// Repo is an OAuthApp repository
 	Repo interface {
-		New(appid, name, desc, callbackURL string) (*Model, string, error)
-		NewAuto(name, desc, callbackURL string) (*Model, string, error)
-		GetByID(appid string) (*Model, error)
+		New(name, url, callbackURL string) (*Model, string, error)
+		GetByID(clientid string) (*Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
@@ -36,10 +35,11 @@ type (
 
 	// Model is the db OAuthApp model
 	Model struct {
-		AppID        string `model:"appid,VARCHAR(31) PRIMARY KEY" query:"appid,getoneeq,appid;updeq,appid;deleq,appid"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
-		CallbackURL  string `model:"callback_url,VARCHAR(255) NOT NULL" query:"callback_url"`
+		URL          string `model:"url,VARCHAR(255) NOT NULL" query:"url"`
+		RedirectURI  string `model:"redirect_uri,VARCHAR(2047) NOT NULL" query:"redirect_uri"`
+		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
@@ -58,7 +58,13 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(appid, name, desc, callbackURL string) (*Model, string, error) {
+func (r *repo) New(name, url, redirectURI string) (*Model, string, error) {
+	mUID, err := uid.New(uidSize)
+	if err != nil {
+		return nil, "", governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+	}
+	clientid := mUID.Base64()
+
 	key, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create oauth client secret", http.StatusInternalServerError, err)
@@ -68,31 +74,24 @@ func (r *repo) New(appid, name, desc, callbackURL string) (*Model, string, error
 	if err != nil {
 		return nil, "", governor.NewError("Failed to hash oauth client secret", http.StatusInternalServerError, err)
 	}
+
 	now := time.Now().Round(0).Unix()
 	return &Model{
-		AppID:        appid,
+		ClientID:     clientid,
 		Name:         name,
-		Desc:         desc,
-		CallbackURL:  callbackURL,
+		URL:          url,
+		RedirectURI:  redirectURI,
 		KeyHash:      hash,
 		CreationTime: now,
 	}, keystr, nil
 }
 
-func (r *repo) NewAuto(name, desc, callbackURL string) (*Model, string, error) {
-	mUID, err := uid.New(defaultUIDSize)
-	if err != nil {
-		return nil, "", governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
-	}
-	return r.New(mUID.Base64(), name, desc, callbackURL)
-}
-
-func (r *repo) GetByID(appid string) (*Model, error) {
+func (r *repo) GetByID(clientid string) (*Model, error) {
 	db, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := oauthappModelGetModelEqAppID(db, appid)
+	m, code, err := oauthappModelGetModelEqClientID(db, clientid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.NewError("No OAuth app found with that id", http.StatusNotFound, err)
@@ -109,7 +108,7 @@ func (r *repo) Insert(m *Model) error {
 	}
 	if code, err := oauthappModelInsert(db, m); err != nil {
 		if code == 3 {
-			return governor.NewError("AppID must be unique", http.StatusBadRequest, err)
+			return governor.NewError("clientid must be unique", http.StatusBadRequest, err)
 		}
 		return governor.NewError("Failed to insert OAuth app config", http.StatusInternalServerError, err)
 	}
@@ -121,7 +120,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := oauthappModelUpdModelEqAppID(db, m, m.AppID); err != nil {
+	if _, err := oauthappModelUpdModelEqClientID(db, m, m.ClientID); err != nil {
 		return governor.NewError("Failed to update OAuth app config", http.StatusInternalServerError, err)
 	}
 	return nil
@@ -132,7 +131,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelDelEqAppID(db, m.AppID); err != nil {
+	if err := oauthappModelDelEqClientID(db, m.ClientID); err != nil {
 		return governor.NewError("Failed to delete OAuth app config", http.StatusInternalServerError, err)
 	}
 	return nil
