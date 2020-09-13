@@ -104,6 +104,12 @@ func (s *service) DeleteProfile(userid string) error {
 		return err
 	}
 
+	if err := s.profileDir.Del(userid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return governor.NewError("Unable to delete profile picture", http.StatusInternalServerError, err)
+		}
+	}
+
 	if err := s.profiles.Delete(m); err != nil {
 		return err
 	}

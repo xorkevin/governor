@@ -7,21 +7,25 @@ import (
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/oauth/model"
 )
 
 type (
-	// OAuthApp manages OAuth apps
-	OAuthApp interface {
+	// App manages OAuth apps
+	App interface {
 	}
 
 	Service interface {
 		governor.Service
-		OAuthApp
+		App
 	}
 
 	service struct {
-		oauthapps    oauthmodel.Repo
+		apps         oauthmodel.Repo
+		sessions     oauthmodel.SessionRepo
+		logoBucket   objstore.Bucket
+		logoImgDir   objstore.Dir
 		kvkey        kvstore.KVStore
 		logger       governor.Logger
 		keyCacheTime int64
@@ -33,9 +37,12 @@ const (
 )
 
 // New returns a new Apikey
-func New(oauthapps oauthmodel.Repo, kv kvstore.KVStore) Service {
+func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, obj objstore.Bucket, kv kvstore.KVStore) Service {
 	return &service{
-		oauthapps:    oauthapps,
+		apps:         apps,
+		sessions:     sessions,
+		logoBucket:   obj,
+		logoImgDir:   obj.Subdir("logo"),
 		kvkey:        kv.Subtree("key"),
 		keyCacheTime: time24h,
 	}
@@ -69,10 +76,15 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.oauthapps.Setup(); err != nil {
+	if err := s.apps.Setup(); err != nil {
 		return err
 	}
 	l.Info("created oauthapps table", nil)
+
+	if err := s.sessions.Setup(); err != nil {
+		return err
+	}
+	l.Info("created oauthsessions table", nil)
 
 	return nil
 }

@@ -18,15 +18,16 @@ const (
 )
 
 type (
-	// Repo is an OAuthApp repository
+	// Repo is an OAuth app repository
 	Repo interface {
 		New(name, url, callbackURL string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
 		GetByID(clientid string) (*Model, error)
-		GetApps(limit, offset int) ([]Model, error)
+		GetApps(limit, offset int, creatorid string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
+		DeleteCreatorApps(creatorid string) error
 		Delete(m *Model) error
 		Setup() error
 	}
@@ -37,7 +38,7 @@ type (
 		verifier *hunter2.Verifier
 	}
 
-	// Model is the db OAuthApp model
+	// Model is the db OAuth app model
 	Model struct {
 		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
@@ -45,12 +46,13 @@ type (
 		RedirectURI  string `model:"redirect_uri,VARCHAR(2047) NOT NULL" query:"redirect_uri"`
 		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
-		Time         int64  `model:"time,BIGINT NOT NULL" query:"time,getgroup"`
+		Time         int64  `model:"time,BIGINT NOT NULL" query:"time,getgroup;getgroupeq,creator_id"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id,deleq,creator_id"`
 	}
 )
 
-// New creates a new OAuthApp repository
+// New creates a new OAuth app repository
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
@@ -131,12 +133,19 @@ func (r *repo) GetByID(clientid string) (*Model, error) {
 	return m, nil
 }
 
-func (r *repo) GetApps(limit, offset int) ([]Model, error) {
+func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
 	db, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := oauthappModelGetModelOrdTime(db, false, limit, offset)
+	if creatorid == "" {
+		m, err := oauthappModelGetModelOrdTime(db, false, limit, offset)
+		if err != nil {
+			return nil, governor.NewError("Failed to get OAuth app configs", http.StatusInternalServerError, err)
+		}
+		return m, nil
+	}
+	m, err := oauthappModelGetModelEqCreatorIDOrdTime(db, creatorid, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get OAuth app configs", http.StatusInternalServerError, err)
 	}
@@ -175,6 +184,17 @@ func (r *repo) Delete(m *Model) error {
 	}
 	if err := oauthappModelDelEqClientID(db, m.ClientID); err != nil {
 		return governor.NewError("Failed to delete OAuth app config", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+func (r *repo) DeleteCreatorApps(creatorid string) error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := oauthappModelDelEqCreatorID(db, creatorid); err != nil {
+		return governor.NewError("Failed to delete OAuth app configs", http.StatusInternalServerError, err)
 	}
 	return nil
 }

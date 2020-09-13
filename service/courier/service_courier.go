@@ -194,9 +194,6 @@ func (s *service) DeleteLink(linkid string) error {
 		}
 		return err
 	}
-	if err := s.repo.DeleteLink(m); err != nil {
-		return err
-	}
 	if err := s.kvlinks.Del(linkid); err != nil {
 		s.logger.Error("failed to delete linkid url", map[string]string{
 			"linkid":     linkid,
@@ -206,6 +203,9 @@ func (s *service) DeleteLink(linkid string) error {
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {
 		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
+	}
+	if err := s.repo.DeleteLink(m); err != nil {
+		return err
 	}
 	return nil
 }
@@ -300,11 +300,11 @@ func (s *service) DeleteBrand(brandid string) error {
 		}
 		return err
 	}
-	if err := s.repo.DeleteBrand(m); err != nil {
-		return err
-	}
 	if err := s.brandImgDir.Del(brandid); err != nil {
 		return governor.NewError("Failed to delete brand image", http.StatusInternalServerError, err)
+	}
+	if err := s.repo.DeleteBrand(m); err != nil {
+		return err
 	}
 	return nil
 }

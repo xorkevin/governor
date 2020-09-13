@@ -96,21 +96,12 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 	if err != nil {
 		return nil, err
 	}
-	if len(creatorid) > 0 {
+	if creatorid == "" {
 		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(db, creatorid, false, limit, offset)
 		if err != nil {
-			return nil, governor.NewError("Failed to get links of a creator", http.StatusInternalServerError, err)
+			return nil, governor.NewError("Failed to get links", http.StatusInternalServerError, err)
 		}
-		links := make([]LinkModel, 0, len(m))
-		for _, i := range m {
-			links = append(links, LinkModel{
-				LinkID:       i.LinkID,
-				URL:          i.URL,
-				CreatorID:    creatorid,
-				CreationTime: i.CreationTime,
-			})
-		}
-		return links, nil
+		return m, nil
 	}
 
 	m, err := linkModelGetLinkModelOrdCreationTime(db, false, limit, offset)
