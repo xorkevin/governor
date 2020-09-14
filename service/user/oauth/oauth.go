@@ -81,6 +81,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"keycache (s)": strconv.FormatInt(s.keyCacheTime, 10),
 	})
 
+	sr := s.router()
+	sr.mountRoutes(m)
+	l.Info("mounted http routes", nil)
+
 	return nil
 }
 
@@ -103,6 +107,9 @@ func (s *service) Setup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	if err := s.logoBucket.Init(); err != nil {
+		return governor.NewError("Failed to init oauth app logo bucket", http.StatusInternalServerError, err)
+	}
 	return nil
 }
 

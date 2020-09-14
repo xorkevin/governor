@@ -256,7 +256,7 @@ func (m *router) deleteBrand(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (r *router) getLinkImageCC(c governor.Context) (string, error) {
+func (m *router) getLinkImageCC(c governor.Context) (string, error) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -264,7 +264,7 @@ func (r *router) getLinkImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := r.s.StatLinkImage(req.LinkID)
+	objinfo, err := m.s.StatLinkImage(req.LinkID)
 	if err != nil {
 		return "", err
 	}
@@ -272,7 +272,7 @@ func (r *router) getLinkImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (r *router) getBrandImageCC(c governor.Context) (string, error) {
+func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 	req := reqBrandGet{
 		BrandID: c.Param("brandid"),
 	}
@@ -280,7 +280,7 @@ func (r *router) getBrandImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := r.s.StatBrandImage(req.BrandID)
+	objinfo, err := m.s.StatBrandImage(req.BrandID)
 	if err != nil {
 		return "", err
 	}

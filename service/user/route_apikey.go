@@ -184,7 +184,7 @@ type (
 	}
 )
 
-func (r *router) checkApikeyValidator(t gate.Intersector) bool {
+func (m *router) checkApikeyValidator(t gate.Intersector) bool {
 	c := t.Ctx()
 	req := reqApikeyCheck{
 		Roles: c.Query("roles"),

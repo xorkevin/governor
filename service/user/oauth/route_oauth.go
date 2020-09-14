@@ -5,10 +5,11 @@ import (
 	"strconv"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
+	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetGroup reqAppPost
+//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetGroup reqAppPost reqAppPut
 
 type (
 	reqAppGet struct {
@@ -125,7 +126,78 @@ func (m *router) createApp(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (r *router) getAppLogoCC(c governor.Context) (string, error) {
+type (
+	reqAppPut struct {
+		ClientID    string `valid:"clientID,has" json:"-"`
+		Name        string `valid:"name" json:"name"`
+		URL         string `valid:"URL" json:"url"`
+		RedirectURI string `valid:"redirect" json:"redirect_uri"`
+	}
+)
+
+func (m *router) updateApp(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAppPut{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.ClientID = c.Param("clientid")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.UpdateApp(req.ClientID, req.Name, req.URL, req.RedirectURI); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	img, err := image.LoadImage(m.s.logger, c, "image")
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	req := reqAppGet{
+		ClientID: c.Param("clientid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.UpdateLogo(req.ClientID, img); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAppGet{
+		ClientID: c.Param("clientid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.Delete(req.ClientID); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) getAppLogoCC(c governor.Context) (string, error) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -133,7 +205,7 @@ func (r *router) getAppLogoCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := r.s.StatLogo(req.ClientID)
+	objinfo, err := m.s.StatLogo(req.ClientID)
 	if err != nil {
 		return "", err
 	}
@@ -151,4 +223,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/app/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
 	r.Get("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
 	r.Post("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/app/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Delete("/app/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 }

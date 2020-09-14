@@ -34,3 +34,19 @@ func (r reqAppPost) valid() error {
 	}
 	return nil
 }
+
+func (r reqAppPut) valid() error {
+	if err := validhasClientID(r.ClientID); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validURL(r.URL); err != nil {
+		return err
+	}
+	if err := validRedirect(r.RedirectURI); err != nil {
+		return err
+	}
+	return nil
+}
