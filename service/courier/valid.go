@@ -85,10 +85,10 @@ func validURL(rawurl string) error {
 
 func validhasCreatorID(creatorid string) error {
 	if len(creatorid) == 0 {
-		return governor.NewErrorUser("Creatorid must be provided", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Creator id must be provided", http.StatusBadRequest, nil)
 	}
 	if len(creatorid) > lengthCapUserid {
-		return governor.NewErrorUser("Creatorid must be shorter than 32 characters", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Creator id must be shorter than 32 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }

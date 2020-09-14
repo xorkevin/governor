@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/oauth/model"
 )
 
@@ -27,8 +28,13 @@ type (
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
 		kvkey        kvstore.KVStore
+		gate         gate.Gate
 		logger       governor.Logger
 		keyCacheTime int64
+	}
+
+	router struct {
+		s service
 	}
 )
 
@@ -37,19 +43,26 @@ const (
 )
 
 // New returns a new Apikey
-func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, obj objstore.Bucket, kv kvstore.KVStore) Service {
+func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
 		sessions:     sessions,
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
 		kvkey:        kv.Subtree("key"),
+		gate:         g,
 		keyCacheTime: time24h,
 	}
 }
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("keycache", "24h")
+}
+
+func (s *service) router() *router {
+	return &router{
+		s: *s,
+	}
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {

@@ -68,8 +68,8 @@ type (
 	}
 )
 
-func (s *service) CreateApp(name, url, redirectURI string) (*resCreate, error) {
-	m, key, err := s.apps.New(name, url, redirectURI)
+func (s *service) CreateApp(name, url, redirectURI, creatorID string) (*resCreate, error) {
+	m, key, err := s.apps.New(name, url, redirectURI, creatorID)
 	if err != nil {
 		return nil, err
 	}

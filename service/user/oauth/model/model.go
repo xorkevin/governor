@@ -20,7 +20,7 @@ const (
 type (
 	// Repo is an OAuth app repository
 	Repo interface {
-		New(name, url, callbackURL string) (*Model, string, error)
+		New(name, url, redirectURI, creatorID string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
 		GetByID(clientid string) (*Model, error)
@@ -65,7 +65,7 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(name, url, redirectURI string) (*Model, string, error) {
+func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
@@ -91,6 +91,7 @@ func (r *repo) New(name, url, redirectURI string) (*Model, string, error) {
 		KeyHash:      hash,
 		Time:         now,
 		CreationTime: now,
+		CreatorID:    creatorID,
 	}, keystr, nil
 }
 
