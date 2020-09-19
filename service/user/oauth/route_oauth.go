@@ -222,8 +222,8 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/app/{clientid}", m.getApp)
 	r.Get("/app/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
 	r.Get("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
-	r.Post("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Post("/app", m.createApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 	r.Put("/app/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Post("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 	r.Delete("/app/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 }
