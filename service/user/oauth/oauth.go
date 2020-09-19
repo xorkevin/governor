@@ -13,13 +13,13 @@ import (
 )
 
 type (
-	// App manages OAuth apps
-	App interface {
+	// OAuth manages OAuth apps
+	OAuth interface {
 	}
 
 	Service interface {
 		governor.Service
-		App
+		OAuth
 	}
 
 	service struct {
