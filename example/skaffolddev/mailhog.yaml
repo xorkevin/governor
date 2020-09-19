@@ -47,5 +47,5 @@ spec:
       services:
         - kind: Service
           scheme: http
-          name: whoami
+          name: mailhog
           port: 8025
