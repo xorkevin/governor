@@ -76,6 +76,6 @@ const (
 )
 
 func (m *router) mountEdit(r governor.Router) {
-	r.Put("", m.putUser, gate.User(m.s.gate, "gov.user.account:write"))
+	r.Put("", m.putUser, gate.User(m.s.gate, scopeAccountWrite))
 	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite))
 }
