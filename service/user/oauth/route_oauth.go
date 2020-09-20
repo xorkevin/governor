@@ -179,6 +179,23 @@ func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+func (m *router) rotateAppKey(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAppGet{
+		ClientID: c.Param("clientid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.RotateAppKey(req.ClientID)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqAppGet{
@@ -224,6 +241,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
 	r.Post("/app", m.createApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 	r.Put("/app/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Post("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/app/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 	r.Delete("/app/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 }
