@@ -10,6 +10,10 @@ routerewrite:
     methods: ['GET']
     pattern: '^/([A-Za-z0-9_-]{2,}(?:/image)?)$'
     replace: /api/courier/link/$1
+  - host: governor.dev.home:8080
+    methods: ['GET']
+    pattern: '^\/\.well-known\/openid-configuration$'
+    replace: /api/oauth/openid-configuration
 vault:
   addr: http://vault.vault.svc.cluster.local:8200
   k8s:
@@ -70,6 +74,7 @@ token:
   audience: governor
 oauth:
   keycache: 24h
+  issuer: http://governor.dev.home:8080
   epbase: http://governor.dev.home:8080/api/oauth
   epauthorization: /auth/authorize
   eptoken: /auth/token

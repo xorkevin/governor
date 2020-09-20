@@ -11,6 +11,20 @@ import (
 
 //go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetGroup reqAppPost reqAppPut
 
+func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	res, err := m.s.GetOpenidConfig()
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) mountRoutes(r governor.Router) {
+	r.Get("/openid-configuration", m.getOpenidConfig)
+}
+
 type (
 	reqAppGet struct {
 		ClientID string `valid:"clientID,has" json:"-"`
@@ -235,13 +249,13 @@ const (
 	scopeAppWrite = "gov.user.oauth.app:write"
 )
 
-func (m *router) mountRoutes(r governor.Router) {
-	r.Get("/app/{clientid}", m.getApp)
-	r.Get("/app/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
-	r.Get("/app", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
-	r.Post("/app", m.createApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/app/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/app/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/app/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Delete("/app/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+func (m *router) mountAppRoutes(r governor.Router) {
+	r.Get("/{clientid}", m.getApp)
+	r.Get("/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
+	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
+	r.Post("", m.createApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Put("/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Delete("/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
 }

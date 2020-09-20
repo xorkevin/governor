@@ -31,6 +31,11 @@ type (
 		gate         gate.Gate
 		logger       governor.Logger
 		keyCacheTime int64
+		issuer       string
+		epauth       string
+		eptoken      string
+		epuserinfo   string
+		epjwks       string
 	}
 
 	router struct {
@@ -82,12 +87,24 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.keyCacheTime = int64(t / time.Second)
 	}
 
+	s.issuer = r.GetStr("issuer")
+	base := r.GetStr("epbase")
+	s.epauth = base + r.GetStr("epauthorization")
+	s.eptoken = base + r.GetStr("eptoken")
+	s.epuserinfo = base + r.GetStr("epuserinfo")
+	s.epjwks = base + r.GetStr("epjwks")
+
 	l.Info("loaded config", map[string]string{
-		"keycache (s)": strconv.FormatInt(s.keyCacheTime, 10),
+		"keycache (s)":           strconv.FormatInt(s.keyCacheTime, 10),
+		"authorization_endpoint": s.epauth,
+		"token_endpoint":         s.eptoken,
+		"userinfo_endpoint":      s.epuserinfo,
+		"jwks_uri":               s.epjwks,
 	})
 
 	sr := s.router()
 	sr.mountRoutes(m)
+	sr.mountAppRoutes(m.Group("/app"))
 	l.Info("mounted http routes", nil)
 
 	return nil
