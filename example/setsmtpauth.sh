@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export VAULT_ADDR=http://127.0.0.1:8200/
+. ./source.sh
 
 kvpath=kv/external/smtp
 

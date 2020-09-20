@@ -1,5 +1,7 @@
 #!/bin/sh
 
+. ./source.sh
+
 namespace=governor
 
 flightctl plan postgres -n $namespace -o base/postgres postgres

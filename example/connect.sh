@@ -1,5 +1,7 @@
 #!/bin/sh
 
+. ./source.sh
+
 namespace=governor
 dir=base/app
 
