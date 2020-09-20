@@ -57,6 +57,11 @@ func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, obj objstore.Buc
 
 func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	r.SetDefault("keycache", "24h")
+	r.SetDefault("epbase", "http://localhost:8080/api/oauth")
+	r.SetDefault("epauthorization", "/auth/authorize")
+	r.SetDefault("eptoken", "/auth/token")
+	r.SetDefault("epuserinfo", "/userinfo")
+	r.SetDefault("epjwks", "/jwks")
 }
 
 func (s *service) router() *router {

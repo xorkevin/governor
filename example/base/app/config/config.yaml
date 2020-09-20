@@ -66,8 +66,15 @@ apikey:
 token:
   tokensecret: kv/data/app/governor/token
   rsakey: kv/data/app/governor/rsakey
-  issuer: governor
+  issuer: http://governor.dev.home:8080
   audience: governor
+oauth:
+  keycache: 24h
+  epbase: http://governor.dev.home:8080/api/oauth
+  epauthorization: /auth/authorize
+  eptoken: /auth/token
+  epuserinfo: /userinfo
+  epjwks: /jwks
 user:
   accesstime: 5m
   refreshtime: 4380h
