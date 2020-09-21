@@ -22,6 +22,7 @@ type (
 		SubjectTypes    []string `json:"subject_types_supported"`
 		SigningAlgs     []string `json:"id_token_signing_alg_values_supported"`
 		EPTokenAuth     []string `json:"token_endpoint_auth_methods_supported"`
+		CodeChallenge   []string `json:"code_challenge_methods_supported"`
 		Claims          []string `json:"claims_supported"`
 	}
 )
@@ -40,6 +41,7 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 		SubjectTypes:    []string{"public"},
 		SigningAlgs:     []string{"RS256"},
 		EPTokenAuth:     []string{"client_secret_basic", "client_secret_post"},
+		CodeChallenge:   []string{"plain", "S256"},
 		Claims: []string{
 			"iss",
 			"sub",
