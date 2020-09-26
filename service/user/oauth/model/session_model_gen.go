@@ -14,7 +14,7 @@ const (
 )
 
 func sessionModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthsessions (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, codehash VARCHAR(31) NOT NULL, time BIGINT NOT NULL, auth_time BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthsessions (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, codehash VARCHAR(31) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func sessionModelSetup(db *sql.DB) error {
 }
 
 func sessionModelInsert(db *sql.DB, m *SessionModel) (int, error) {
-	_, err := db.Exec("INSERT INTO oauthsessions (userid, clientid, scope, codehash, time, auth_time, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.LastAuthTime, m.CreationTime)
+	_, err := db.Exec("INSERT INTO oauthsessions (userid, clientid, scope, codehash, time, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -50,13 +50,13 @@ func sessionModelInsertBulk(db *sql.DB, models []*SessionModel, allowConflict bo
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*7)
+	args := make([]interface{}, 0, len(models)*6)
 	for c, m := range models {
-		n := c * 7
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
-		args = append(args, m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.LastAuthTime, m.CreationTime)
+		n := c * 6
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
+		args = append(args, m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO oauthsessions (userid, clientid, scope, codehash, time, auth_time, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO oauthsessions (userid, clientid, scope, codehash, time, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -77,7 +77,7 @@ func sessionModelDelEqUserid(db *sql.DB, userid string) error {
 
 func sessionModelGetSessionModelEqUseridEqClientID(db *sql.DB, userid string, clientid string) (*SessionModel, int, error) {
 	m := &SessionModel{}
-	if err := db.QueryRow("SELECT userid, clientid, scope, codehash, time, auth_time, creation_time FROM oauthsessions WHERE userid = $1 AND clientid = $2;", userid, clientid).Scan(&m.Userid, &m.ClientID, &m.Scope, &m.CodeHash, &m.Time, &m.LastAuthTime, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT userid, clientid, scope, codehash, time, creation_time FROM oauthsessions WHERE userid = $1 AND clientid = $2;", userid, clientid).Scan(&m.Userid, &m.ClientID, &m.Scope, &m.CodeHash, &m.Time, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -95,7 +95,7 @@ func sessionModelGetSessionModelEqUseridEqClientID(db *sql.DB, userid string, cl
 }
 
 func sessionModelUpdSessionModelEqUseridEqClientID(db *sql.DB, m *SessionModel, userid string, clientid string) (int, error) {
-	_, err := db.Exec("UPDATE oauthsessions SET (userid, clientid, scope, codehash, time, auth_time, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE userid = $8 AND clientid = $9;", m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.LastAuthTime, m.CreationTime, userid, clientid)
+	_, err := db.Exec("UPDATE oauthsessions SET (userid, clientid, scope, codehash, time, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE userid = $7 AND clientid = $8;", m.Userid, m.ClientID, m.Scope, m.CodeHash, m.Time, m.CreationTime, userid, clientid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -133,7 +133,7 @@ func sessionModelGetSessionModelEqUseridOrdTime(db *sql.DB, userid string, order
 		order = "ASC"
 	}
 	res := make([]SessionModel, 0, limit)
-	rows, err := db.Query("SELECT userid, clientid, scope, codehash, time, auth_time, creation_time FROM oauthsessions WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT userid, clientid, scope, codehash, time, creation_time FROM oauthsessions WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func sessionModelGetSessionModelEqUseridOrdTime(db *sql.DB, userid string, order
 	}()
 	for rows.Next() {
 		m := SessionModel{}
-		if err := rows.Scan(&m.Userid, &m.ClientID, &m.Scope, &m.CodeHash, &m.Time, &m.LastAuthTime, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.Userid, &m.ClientID, &m.Scope, &m.CodeHash, &m.Time, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

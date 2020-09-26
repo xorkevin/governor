@@ -47,6 +47,7 @@ type (
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
+		LastAuthTime int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
 		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`

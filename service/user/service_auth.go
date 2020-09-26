@@ -124,6 +124,14 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
+	m.LastAuthTime = sm.Time
+	if err := s.users.Update(m); err != nil {
+		s.logger.Error("fail to update user last auth time", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "updatelastauth",
+		})
+	}
+
 	return &resUserAuth{
 		Valid:        true,
 		Refresh:      true,

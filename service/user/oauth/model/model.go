@@ -239,7 +239,6 @@ type (
 		Scope        string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		CodeHash     string `model:"codehash,VARCHAR(31) NOT NULL" query:"codehash"`
 		Time         int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
-		LastAuthTime int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 )
@@ -275,7 +274,6 @@ func (r *srepo) New(userid, clientid, scope string) (*SessionModel, string, erro
 		Scope:        scope,
 		CodeHash:     codehash,
 		Time:         now,
-		LastAuthTime: now,
 		CreationTime: now,
 	}, codestr, nil
 }
