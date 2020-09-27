@@ -26,7 +26,7 @@ func sessionModelSetup(db *sql.DB) error {
 }
 
 func sessionModelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.SessionID, m.Userid, m.KeyHash, m.Time, m.LastAuthTime, m.IPAddr, m.UserAgent)
+	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -50,7 +50,7 @@ func sessionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 	for c, m := range models {
 		n := c * 7
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
-		args = append(args, m.SessionID, m.Userid, m.KeyHash, m.Time, m.LastAuthTime, m.IPAddr, m.UserAgent)
+		args = append(args, m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
 	}
 	_, err := db.Exec("INSERT INTO usersessions (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
@@ -68,7 +68,7 @@ func sessionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (in
 
 func sessionModelGetModelEqSessionID(db *sql.DB, sessionid string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent FROM usersessions WHERE sessionid = $1;", sessionid).Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.LastAuthTime, &m.IPAddr, &m.UserAgent); err != nil {
+	if err := db.QueryRow("SELECT sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent FROM usersessions WHERE sessionid = $1;", sessionid).Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -86,7 +86,7 @@ func sessionModelGetModelEqSessionID(db *sql.DB, sessionid string) (*Model, int,
 }
 
 func sessionModelUpdModelEqSessionID(db *sql.DB, m *Model, sessionid string) (int, error) {
-	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE sessionid = $8;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.LastAuthTime, m.IPAddr, m.UserAgent, sessionid)
+	_, err := db.Exec("UPDATE usersessions SET (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE sessionid = $8;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent, sessionid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -143,7 +143,7 @@ func sessionModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc boo
 	}()
 	for rows.Next() {
 		m := Model{}
-		if err := rows.Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.LastAuthTime, &m.IPAddr, &m.UserAgent); err != nil {
+		if err := rows.Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
