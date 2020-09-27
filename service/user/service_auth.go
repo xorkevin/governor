@@ -79,6 +79,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		if err != nil {
 			return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 		}
+		sm.AuthTime = sm.Time
 		sessionKey = key
 	}
 
@@ -122,14 +123,6 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		if err := s.sessions.Update(sm); err != nil {
 			return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 		}
-	}
-
-	m.LastAuthTime = sm.Time
-	if err := s.users.Update(m); err != nil {
-		s.logger.Error("fail to update user last auth time", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "updatelastauth",
-		})
 	}
 
 	return &resUserAuth{

@@ -10,6 +10,7 @@ type (
 		SessionID string `json:"session_id"`
 		Userid    string `json:"userid"`
 		Time      int64  `json:"time"`
+		AuthTime  int64  `json:"auth_time"`
 		IPAddr    string `json:"ip"`
 		UserAgent string `json:"user_agent"`
 	}
@@ -30,6 +31,7 @@ func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGet
 			SessionID: i.SessionID,
 			Userid:    i.Userid,
 			Time:      i.Time,
+			AuthTime:  i.AuthTime,
 			IPAddr:    i.IPAddr,
 			UserAgent: i.UserAgent,
 		})

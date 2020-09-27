@@ -44,6 +44,7 @@ type (
 		Userid    string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid,deleq,userid"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Time      int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
+		AuthTime  int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
 		IPAddr    string `model:"ipaddr,VARCHAR(63)" query:"ipaddr"`
 		UserAgent string `model:"user_agent,VARCHAR(1023)" query:"user_agent"`
 	}
@@ -87,6 +88,7 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 		Userid:    userid,
 		KeyHash:   hash,
 		Time:      now,
+		AuthTime:  now,
 		IPAddr:    ipaddr,
 		UserAgent: useragent,
 	}, keystr, nil
