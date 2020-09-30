@@ -163,8 +163,13 @@ func (s *Server) Start() error {
 			":"+s.config.Port)
 	}
 	srv := http.Server{
-		Addr:    ":" + s.config.Port,
-		Handler: s.i,
+		Addr:              ":" + s.config.Port,
+		Handler:           s.i,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		IdleTimeout:       5 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
