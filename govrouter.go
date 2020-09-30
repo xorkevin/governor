@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi"
 	"io"
+	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -189,7 +190,14 @@ func (c *govcontext) Bind(i interface{}) error {
 	}
 	switch mediaType {
 	case "application/json":
-		if err := json.NewDecoder(c.r.Body).Decode(i); err != nil {
+		data, err := ioutil.ReadAll(c.r.Body)
+		if err != nil {
+			if err.Error() == "http: request body too large" {
+				return NewErrorUser("Request too large", http.StatusRequestEntityTooLarge, err)
+			}
+			return NewErrorUser("Failed reading request", http.StatusBadRequest, err)
+		}
+		if err := json.Unmarshal(data, i); err != nil {
 			return NewErrorUser("Invalid JSON", http.StatusBadRequest, err)
 		}
 	default:
@@ -288,6 +296,7 @@ func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 				c.WriteError(NewErrorUser("Request too large", http.StatusRequestEntityTooLarge, nil))
 				return
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 			next.ServeHTTP(w, r)
 		})
 	}

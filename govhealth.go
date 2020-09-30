@@ -14,6 +14,10 @@ type (
 		Time int64    `json:"time"`
 		Errs []errRes `json:"errs"`
 	}
+
+	reqTestPost struct {
+		Test string `json:"test"`
+	}
 )
 
 func (s *Server) initHealth(m Router) {
@@ -60,6 +64,16 @@ func (s *Server) initHealth(m Router) {
 		m.Get("/error", func(w http.ResponseWriter, r *http.Request) {
 			c := NewContext(w, r, s.logger)
 			c.WriteError(NewError("Test error", http.StatusBadRequest, nil))
+		})
+
+		m.Post("/testpost", func(w http.ResponseWriter, r *http.Request) {
+			c := NewContext(w, r, s.logger)
+			req := reqTestPost{}
+			if err := c.Bind(&req); err != nil {
+				c.WriteError(err)
+				return
+			}
+			c.WriteString(http.StatusOK, "Hello, World!")
 		})
 	}
 }
