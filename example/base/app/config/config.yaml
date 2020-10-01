@@ -4,6 +4,11 @@ port: 8080
 baseurl: /api
 templatedir: templates
 maxreqsize: 2M
+maxheadersize: 1M
+maxconnread: 5s
+maxconnheader: 2s
+maxconnwrite: 5s
+maxconnidle: 5s
 alloworigins: []
 routerewrite:
   - host: go.governor.dev.home:8080

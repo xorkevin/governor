@@ -55,6 +55,11 @@ type (
 		logLevel       int
 		logOutput      io.Writer
 		maxReqSize     string
+		maxHeaderSize  string
+		maxConnRead    string
+		maxConnHeader  string
+		maxConnWrite   string
+		maxConnIdle    string
 		origins        []string
 		rewrite        []*rewriteRule
 		Port           string
@@ -114,6 +119,11 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("templatedir", "templates")
 	v.SetDefault("maxreqsize", "2M")
+	v.SetDefault("maxheadersize", "1M")
+	v.SetDefault("maxconnread", "5s")
+	v.SetDefault("maxconnheader", "2s")
+	v.SetDefault("maxconnwrite", "5s")
+	v.SetDefault("maxconnidle", "5s")
 	v.SetDefault("alloworigins", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
 	v.SetDefault("vault.addr", "")
@@ -154,6 +164,11 @@ func (c *Config) init() error {
 	c.logLevel = envToLevel(c.config.GetString("mode"))
 	c.logOutput = envToLogOutput(c.config.GetString("logoutput"))
 	c.maxReqSize = c.config.GetString("maxreqsize")
+	c.maxHeaderSize = c.config.GetString("maxheadersize")
+	c.maxConnRead = c.config.GetString("maxconnread")
+	c.maxConnHeader = c.config.GetString("maxconnheader")
+	c.maxConnWrite = c.config.GetString("maxconnwrite")
+	c.maxConnIdle = c.config.GetString("maxconnidle")
 	c.origins = c.config.GetStringSlice("alloworigins")
 	rewrite := []*rewriteRule{}
 	if err := c.config.UnmarshalKey("routerewrite", &rewrite); err != nil {

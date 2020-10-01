@@ -10,10 +10,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 	"xorkevin.dev/governor/service/state"
 	"xorkevin.dev/governor/util/bytefmt"
+)
+
+const (
+	defaultMaxHeaderSize = 1 << 20 // 1MB
+
+	seconds5 = 5 * time.Second
+	seconds2 = 2 * time.Second
 )
 
 type (
@@ -155,21 +163,69 @@ func (s *Server) Start() error {
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
+
+	maxHeaderSize := defaultMaxHeaderSize
+	if limit, err := bytefmt.ToBytes(s.config.maxHeaderSize); err != nil {
+		l.Warn("invalid maxheadersize format for http server", map[string]string{
+			"maxreqsize": s.config.maxReqSize,
+		})
+	} else {
+		maxHeaderSize = int(limit)
+	}
+	maxConnRead := seconds5
+	if t, err := time.ParseDuration(s.config.maxConnRead); err != nil {
+		l.Warn("invalid maxconnread time for http server", map[string]string{
+			"maxconnread": s.config.maxConnRead,
+		})
+	} else {
+		maxConnRead = t
+	}
+	maxConnHeader := seconds2
+	if t, err := time.ParseDuration(s.config.maxConnHeader); err != nil {
+		l.Warn("invalid maxconnheader time for http server", map[string]string{
+			"maxconnheader": s.config.maxConnHeader,
+		})
+	} else {
+		maxConnHeader = t
+	}
+	maxConnWrite := seconds5
+	if t, err := time.ParseDuration(s.config.maxConnWrite); err != nil {
+		l.Warn("invalid maxconnwrite time for http server", map[string]string{
+			"maxconnwrite": s.config.maxConnWrite,
+		})
+	} else {
+		maxConnWrite = t
+	}
+	maxConnIdle := seconds5
+	if t, err := time.ParseDuration(s.config.maxConnIdle); err != nil {
+		l.Warn("invalid maxconnidle time for http server", map[string]string{
+			"maxconnidle": s.config.maxConnIdle,
+		})
+	} else {
+		maxConnIdle = t
+	}
+	l.Info("init http server with configuration", map[string]string{
+		"maxheadersize": strconv.Itoa(maxHeaderSize),
+		"maxconnread":   maxConnRead.String(),
+		"maxconnheader": maxConnHeader.String(),
+		"maxconnwrite":  maxConnWrite.String(),
+		"maxconnidle":   maxConnIdle.String(),
+	})
+	srv := http.Server{
+		Addr:              ":" + s.config.Port,
+		Handler:           s.i,
+		ReadTimeout:       maxConnRead,
+		ReadHeaderTimeout: maxConnHeader,
+		WriteTimeout:      maxConnWrite,
+		IdleTimeout:       maxConnIdle,
+		MaxHeaderBytes:    maxHeaderSize,
+	}
 	if s.config.showBanner {
 		fmt.Printf("%s\n%s: %s\nhttp server listening on %s\n",
 			fmt.Sprintf(banner, s.config.version.Num),
 			s.config.appname,
 			s.config.version.String(),
 			":"+s.config.Port)
-	}
-	srv := http.Server{
-		Addr:              ":" + s.config.Port,
-		Handler:           s.i,
-		ReadTimeout:       5 * time.Second,
-		ReadHeaderTimeout: 2 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		IdleTimeout:       5 * time.Second,
-		MaxHeaderBytes:    1 << 20,
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
