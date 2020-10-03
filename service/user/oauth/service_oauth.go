@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"gopkg.in/square/go-jose.v2"
 	"io"
 	"net/http"
 	"xorkevin.dev/governor"
@@ -61,6 +62,10 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 			"email_verified",
 		},
 	}, nil
+}
+
+func (s *service) GetJWKS() (*jose.JSONWebKeySet, error) {
+	return s.tokenizer.GetJWKS(), nil
 }
 
 type (

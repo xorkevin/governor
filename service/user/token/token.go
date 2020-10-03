@@ -5,12 +5,15 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 	"net/http"
 	"strings"
 	"time"
+
+	_ "golang.org/x/crypto/blake2b"
+	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
 )
 
@@ -33,6 +36,7 @@ type (
 
 	// Tokenizer is a token generator
 	Tokenizer interface {
+		GetJWKS() *jose.JSONWebKeySet
 		Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error)
 		Sign(userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
 		Validate(tokenString string, audience []string, scope string) (bool, *Claims)
@@ -52,6 +56,7 @@ type (
 		audience   string
 		signer     jose.Signer
 		keySigner  jose.Signer
+		jwk        *jose.JSONWebKey
 		logger     governor.Logger
 	}
 )
@@ -125,6 +130,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.keySigner = keySig
 
+	jwk := &jose.JSONWebKey{
+		Key:       s.publicKey,
+		Algorithm: "RS256",
+		Use:       "sig",
+	}
+	kid, err := jwk.Thumbprint(crypto.BLAKE2b_512)
+	if err != nil {
+		return governor.NewError("Failed to calculate jwk thumbprint", http.StatusInternalServerError, err)
+	}
+	jwk.KeyID = base64.RawURLEncoding.EncodeToString(kid)
+	s.jwk = jwk
+
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
 		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
@@ -150,6 +167,17 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	return nil
+}
+
+// GetJWKS returns an RFC 7517 representation of the public signing key
+func (s *service) GetJWKS() *jose.JSONWebKeySet {
+	keys := make([]jose.JSONWebKey, 0, 1)
+	if s.jwk == nil {
+		keys = append(keys, *s.jwk)
+	}
+	return &jose.JSONWebKeySet{
+		Keys: keys,
+	}
 }
 
 // Generate returns a new jwt token from a user model

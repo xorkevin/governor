@@ -70,7 +70,7 @@ func main() {
 	userService := user.New(userModel, sessionModel, approvalModel, roleService, apikeyService, kvService.Subtree("user"), msgqueueService, mailService, tokenService, gateService)
 	oauthModel := oauthmodel.New(dbService)
 	oauthSessionModel := oauthmodel.NewSessionRepo(dbService)
-	oauthService := oauth.New(oauthModel, oauthSessionModel, objstoreService.GetBucket("oauth-app-logo"), kvService.Subtree("oauth"), gateService)
+	oauthService := oauth.New(oauthModel, oauthSessionModel, tokenService, objstoreService.GetBucket("oauth-app-logo"), kvService.Subtree("oauth"), gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), msgqueueService, gateService)
 	courierModel := couriermodel.New(dbService)

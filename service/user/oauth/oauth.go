@@ -10,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/oauth/model"
+	"xorkevin.dev/governor/service/user/token"
 )
 
 type (
@@ -25,6 +26,7 @@ type (
 	service struct {
 		apps         oauthmodel.Repo
 		sessions     oauthmodel.SessionRepo
+		tokenizer    token.Tokenizer
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
 		kvkey        kvstore.KVStore
@@ -48,10 +50,11 @@ const (
 )
 
 // New returns a new Apikey
-func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
+func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, tokenizer token.Tokenizer, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
 		sessions:     sessions,
+		tokenizer:    tokenizer,
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
 		kvkey:        kv.Subtree("key"),
