@@ -112,9 +112,6 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
-	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
-		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
-	}
 	if !sessionExists {
 		if err := s.sessions.Insert(sm); err != nil {
 			return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
@@ -123,6 +120,13 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		if err := s.sessions.Update(sm); err != nil {
 			return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
 		}
+	}
+
+	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
+		s.logger.Error("Failed to cache user session", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "cachesession",
+		})
 	}
 
 	return &resUserAuth{
@@ -204,11 +208,15 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
 
-	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
-		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
-	}
 	if err := s.sessions.Update(sm); err != nil {
 		return nil, governor.NewError("Failed to save user session", http.StatusInternalServerError, err)
+	}
+
+	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
+		s.logger.Error("Failed to cache user session", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "cachesession",
+		})
 	}
 
 	return &resUserAuth{
@@ -241,12 +249,10 @@ func (s *service) Logout(refreshToken string) error {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	if err := s.kvsessions.Del(claims.ID); err != nil {
-		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
-	}
 	if err := s.sessions.Delete(sm); err != nil {
 		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
+	s.killCacheSessions([]string{claims.ID})
 
 	return nil
 }
