@@ -29,7 +29,7 @@ type (
 		tokenizer    token.Tokenizer
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
-		kvkey        kvstore.KVStore
+		kvclient     kvstore.KVStore
 		gate         gate.Gate
 		logger       governor.Logger
 		keyCacheTime int64
@@ -57,7 +57,7 @@ func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, tokenizer token.
 		tokenizer:    tokenizer,
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
-		kvkey:        kv.Subtree("key"),
+		kvclient:     kv.Subtree("client"),
 		gate:         g,
 		keyCacheTime: time24h,
 	}

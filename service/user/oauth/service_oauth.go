@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"encoding/json"
 	"gopkg.in/square/go-jose.v2"
 	"io"
 	"net/http"
@@ -8,6 +9,10 @@ import (
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/oauth/model"
+)
+
+const (
+	cacheValDNE = "-"
 )
 
 type (
@@ -107,12 +112,56 @@ func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error)
 	}, nil
 }
 
-func (s *service) getCachedKey(clientid string) (*oauthmodel.Model, error) {
-	return nil, nil
+func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
+	cm := &oauthmodel.Model{}
+	if clientstr, err := s.kvclient.Get(clientid); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			s.logger.Error("Failed to get oauth client from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcacheclient",
+			})
+		}
+	} else if clientstr == cacheValDNE {
+		return nil, governor.NewError("App not found", http.StatusNotFound, nil)
+	} else if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
+		s.logger.Error("Malformed oauth client cache json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "unmarshalclientjson",
+		})
+	} else {
+		return cm, nil
+	}
+
+	m, err := s.apps.GetByID(clientid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			if err := s.kvclient.Set(clientid, cacheValDNE, s.keyCacheTime); err != nil {
+				s.logger.Error("Failed to set oauth client in cache", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "setcacheclient",
+				})
+			}
+		}
+		return nil, err
+	}
+
+	if clientbytes, err := json.Marshal(m); err != nil {
+		s.logger.Error("Failed to marshal client to json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshalclientjson",
+		})
+	} else if err := s.kvclient.Set(clientid, string(clientbytes), s.keyCacheTime); err != nil {
+		s.logger.Error("Failed to set oauth client in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setcacheclient",
+		})
+	}
+
+	return m, nil
 }
 
 func (s *service) CheckKey(clientid, key string) error {
-	m, err := s.apps.GetByID(clientid)
+	m, err := s.getCachedClient(clientid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
@@ -248,7 +297,7 @@ func (s *service) Delete(clientid string) error {
 }
 
 func (s *service) GetApp(clientid string) (*resApp, error) {
-	m, err := s.apps.GetByID(clientid)
+	m, err := s.getCachedClient(clientid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("", 0, err)
@@ -289,4 +338,10 @@ func (s *service) GetLogo(clientid string) (io.ReadCloser, string, error) {
 }
 
 func (s *service) clearCache(clientid string) {
+	if err := s.kvclient.Del(clientid); err != nil {
+		s.logger.Error("Failed to clear oauth client from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearcacheclient",
+		})
+	}
 }
