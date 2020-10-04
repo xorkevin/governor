@@ -7,6 +7,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/user/oauth/model"
 )
 
 type (
@@ -104,6 +105,10 @@ func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error)
 	return &resApps{
 		Apps: res,
 	}, nil
+}
+
+func (s *service) getCachedKey(clientid string) (*oauthmodel.Model, error) {
+	return nil, nil
 }
 
 func (s *service) CheckKey(clientid, key string) error {

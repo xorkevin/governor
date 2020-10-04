@@ -9,6 +9,10 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 )
 
+const (
+	cacheValDNE = "-"
+)
+
 type (
 	resGetLink struct {
 		LinkID       string `json:"linkid"`
@@ -36,18 +40,34 @@ func (s *service) GetLink(linkid string) (*resGetLink, error) {
 }
 
 func (s *service) GetLinkFast(linkid string) (string, error) {
-	if cachedURL, err := s.kvlinks.Get(linkid); err == nil {
+	if cachedURL, err := s.kvlinks.Get(linkid); err != nil {
+		s.logger.Error("failed to get linkid url from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "getcachelink",
+		})
+	} else if cachedURL == cacheValDNE {
+		return "", governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
+	} else {
 		return cachedURL, nil
 	}
 	res, err := s.GetLink(linkid)
 	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			if err := s.kvlinks.Set(linkid, cacheValDNE, s.cacheTime); err != nil {
+				s.logger.Error("failed to cache linkid url", map[string]string{
+					"linkid":     linkid,
+					"error":      err.Error(),
+					"actiontype": "setcachelink",
+				})
+			}
+		}
 		return "", err
 	}
 	if err := s.kvlinks.Set(linkid, res.URL, s.cacheTime); err != nil {
 		s.logger.Error("failed to cache linkid url", map[string]string{
 			"linkid":     linkid,
 			"error":      err.Error(),
-			"actiontype": "linkcache",
+			"actiontype": "setcachelink",
 		})
 	}
 	return res.URL, nil
@@ -194,18 +214,18 @@ func (s *service) DeleteLink(linkid string) error {
 		}
 		return err
 	}
+	if err := s.linkImgDir.Del(linkid); err != nil {
+		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
+	}
+	if err := s.repo.DeleteLink(m); err != nil {
+		return err
+	}
 	if err := s.kvlinks.Del(linkid); err != nil {
 		s.logger.Error("failed to delete linkid url", map[string]string{
 			"linkid":     linkid,
 			"error":      err.Error(),
 			"actiontype": "linkcache",
 		})
-	}
-	if err := s.linkImgDir.Del(linkid); err != nil {
-		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
-	}
-	if err := s.repo.DeleteLink(m); err != nil {
-		return err
 	}
 	return nil
 }

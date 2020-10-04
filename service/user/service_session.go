@@ -41,44 +41,40 @@ func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGet
 	}, nil
 }
 
-// KillCacheSessions terminates user sessions in cache
-func (s *service) KillCacheSessions(sessionids []string) error {
+func (s *service) killCacheSessions(sessionids []string) {
 	if err := s.kvsessions.Del(sessionids...); err != nil {
-		return governor.NewError("Failed to delete session keys", http.StatusInternalServerError, err)
+		s.logger.Error("Failed to delete session keys", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearcachesessionids",
+		})
 	}
-	return nil
 }
 
 // KillSessions terminates user sessions
 func (s *service) KillSessions(sessionids []string) error {
-	if err := s.KillCacheSessions(sessionids); err != nil {
-		return err
-	}
 	if err := s.sessions.DeleteSessions(sessionids); err != nil {
 		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
 	}
+	s.killCacheSessions(sessionids)
 	return nil
 }
 
-// KillAllCacheSessions terminates all sessions of a user in cache
-func (s *service) KillAllCacheSessions(userid string) error {
+func (s *service) killAllCacheSessions(userid string) error {
 	sessionids, err := s.sessions.GetUserSessionIDs(userid, 65536, 0)
 	if err != nil {
 		return governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
 	}
-	if err := s.KillCacheSessions(sessionids); err != nil {
-		return err
-	}
+	s.killCacheSessions(sessionids)
 	return nil
 }
 
 // KillAllSessions terminates all sessions of a user
 func (s *service) KillAllSessions(userid string) error {
-	if err := s.KillAllCacheSessions(userid); err != nil {
-		return err
-	}
 	if err := s.sessions.DeleteUserSessions(userid); err != nil {
 		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
+	}
+	if err := s.killAllCacheSessions(userid); err != nil {
+		return err
 	}
 	return nil
 }
