@@ -41,10 +41,12 @@ func (s *service) GetLink(linkid string) (*resGetLink, error) {
 
 func (s *service) GetLinkFast(linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(linkid); err != nil {
-		s.logger.Error("failed to get linkid url from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "getcachelink",
-		})
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			s.logger.Error("failed to get linkid url from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcachelink",
+			})
+		}
 	} else if cachedURL == cacheValDNE {
 		return "", governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
 	} else {
