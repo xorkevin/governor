@@ -22,11 +22,11 @@ type (
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
 		GetByID(userid, clientid string) (*Model, error)
-		GetUserSessions(userid string, limit, offset int) ([]Model, error)
+		GetUserConnections(userid string, limit, offset int) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(userid string, clientids []string) error
-		DeleteUserSessions(userid string) error
+		DeleteUserConnections(userid string) error
 		Setup() error
 	}
 
@@ -121,7 +121,7 @@ func (r *repo) GetByID(userid, clientid string) (*Model, error) {
 	return m, nil
 }
 
-func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error) {
+func (r *repo) GetUserConnections(userid string, limit, offset int) ([]Model, error) {
 	db, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (r *repo) Delete(userid string, clientids []string) error {
 	return nil
 }
 
-func (r *repo) DeleteUserSessions(userid string) error {
+func (r *repo) DeleteUserConnections(userid string) error {
 	db, err := r.db.DB()
 	if err != nil {
 		return err
