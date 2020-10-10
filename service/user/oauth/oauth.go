@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/oauth/connection/model"
 	"xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/token"
 )
@@ -25,7 +26,7 @@ type (
 
 	service struct {
 		apps         oauthmodel.Repo
-		sessions     oauthmodel.SessionRepo
+		connections  connectionmodel.Repo
 		tokenizer    token.Tokenizer
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
@@ -50,10 +51,10 @@ const (
 )
 
 // New returns a new Apikey
-func New(apps oauthmodel.Repo, sessions oauthmodel.SessionRepo, tokenizer token.Tokenizer, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
+func New(apps oauthmodel.Repo, connections connectionmodel.Repo, tokenizer token.Tokenizer, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
-		sessions:     sessions,
+		connections:  connections,
 		tokenizer:    tokenizer,
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
@@ -123,10 +124,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("created oauthapps table", nil)
 
-	if err := s.sessions.Setup(); err != nil {
+	if err := s.connections.Setup(); err != nil {
 		return err
 	}
-	l.Info("created oauthsessions table", nil)
+	l.Info("created oauthconnections table", nil)
 
 	return nil
 }

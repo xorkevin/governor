@@ -21,6 +21,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/oauth"
+	"xorkevin.dev/governor/service/user/oauth/connection/model"
 	"xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/role/model"
@@ -69,8 +70,8 @@ func main() {
 	approvalModel := approvalmodel.New(dbService)
 	userService := user.New(userModel, sessionModel, approvalModel, roleService, apikeyService, kvService.Subtree("user"), msgqueueService, mailService, tokenService, gateService)
 	oauthModel := oauthmodel.New(dbService)
-	oauthSessionModel := oauthmodel.NewSessionRepo(dbService)
-	oauthService := oauth.New(oauthModel, oauthSessionModel, tokenService, objstoreService.GetBucket("oauth-app-logo"), kvService.Subtree("oauth"), gateService)
+	oauthConnectionModel := connectionmodel.NewRepo(dbService)
+	oauthService := oauth.New(oauthModel, oauthConnectionModel, tokenService, objstoreService.GetBucket("oauth-app-logo"), kvService.Subtree("oauth"), gateService)
 	profileModel := profilemodel.New(dbService)
 	profileService := profile.New(profileModel, objstoreService.GetBucket("profile-image"), msgqueueService, gateService)
 	courierModel := couriermodel.New(dbService)
