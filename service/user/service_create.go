@@ -214,6 +214,9 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		}
 		return nil, err
 	}
+	if !am.Approved {
+		return nil, governor.NewErrorUser("Not approved", 0, nil)
+	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
 		return nil, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
 	} else if !ok {
