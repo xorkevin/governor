@@ -41,8 +41,8 @@ func (m *router) createUser(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqUserPostConfirm struct {
-		Email string `valid:"email" json:"email"`
-		Key   string `valid:"token,has" json:"key"`
+		Userid string `valid:"userid,has" json:"userid"`
+		Key    string `valid:"token,has" json:"key"`
 	}
 )
 
@@ -58,7 +58,7 @@ func (m *router) commitUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CommitUser(req.Email, req.Key)
+	res, err := m.s.CommitUser(req.Userid, req.Key)
 	if err != nil {
 		c.WriteError(err)
 		return

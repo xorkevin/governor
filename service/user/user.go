@@ -42,7 +42,6 @@ type (
 		approvals         approvalmodel.Repo
 		roles             role.Role
 		apikeys           apikey.Apikey
-		kvnewuser         kvstore.KVStore
 		kvemailchange     kvstore.KVStore
 		kvpassreset       kvstore.KVStore
 		kvsessions        kvstore.KVStore
@@ -112,7 +111,6 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 		approvals:         approvals,
 		roles:             roles,
 		apikeys:           apikeys,
-		kvnewuser:         kv.Subtree("newuser"),
 		kvemailchange:     kv.Subtree("emailchange"),
 		kvpassreset:       kv.Subtree("passreset"),
 		kvsessions:        kv.Subtree("sessions"),
@@ -142,7 +140,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("email.url.base", "http://localhost:8080")
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
-	r.SetDefault("email.url.newuser", "/x/confirm?email={{.Email}}&key={{.Key}}")
+	r.SetDefault("email.url.newuser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
 }
 
 func (s *service) router() *router {

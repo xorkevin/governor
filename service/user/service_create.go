@@ -7,18 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
-	"xorkevin.dev/governor/util/uid"
-)
-
-const (
-	uidUserSize = 16
 )
 
 type (
 	emailNewUser struct {
-		Email     string
+		Userid    string
 		Key       string
 		URL       string
 		FirstName string
@@ -27,7 +22,7 @@ type (
 	}
 
 	queryEmailNewUser struct {
-		Email     string
+		Userid    string
 		Key       string
 		FirstName string
 		LastName  string
@@ -41,7 +36,7 @@ const (
 
 func (e *emailNewUser) Query() queryEmailNewUser {
 	return queryEmailNewUser{
-		Email:     url.QueryEscape(e.Email),
+		Userid:    url.QueryEscape(e.Userid),
 		Key:       url.QueryEscape(e.Key),
 		FirstName: url.QueryEscape(e.FirstName),
 		LastName:  url.QueryEscape(e.LastName),
@@ -65,11 +60,7 @@ type (
 	}
 )
 
-func prefixEmailKey(email string) string {
-	return "nonce:" + email
-}
-
-// CreateUser creates a new user and places it into the cache
+// CreateUser creates a new user and places it into approvals
 func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	m2, err := s.users.GetByUsername(ruser.Username)
 	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
@@ -92,12 +83,26 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 		return nil, err
 	}
 
+	am := s.approvals.New(m)
 	if s.userApproval {
-		if err := s.CreateUserEnqueue(m); err != nil {
+		if err := s.approvals.Insert(am); err != nil {
+			if governor.ErrorStatus(err) == http.StatusBadRequest {
+				return nil, governor.NewErrorUser("", 0, err)
+			}
 			return nil, err
 		}
 	} else {
-		if err := s.CreateUserVerify(m); err != nil {
+		code, err := s.approvals.RehashCode(am)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.approvals.Insert(am); err != nil {
+			if governor.ErrorStatus(err) == http.StatusBadRequest {
+				return nil, governor.NewErrorUser("", 0, err)
+			}
+			return nil, err
+		}
+		if err := s.sendNewUserEmail(code, am); err != nil {
 			return nil, err
 		}
 	}
@@ -108,17 +113,6 @@ func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	}, nil
 }
 
-func (s *service) CreateUserEnqueue(m *usermodel.Model) error {
-	if err := s.approvals.Insert(s.approvals.New(m)); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return governor.NewErrorUser("", 0, err)
-		}
-		return err
-	}
-
-	return nil
-}
-
 type (
 	resApproval struct {
 		Userid       string `json:"userid"`
@@ -127,6 +121,8 @@ type (
 		FirstName    string `json:"first_name"`
 		LastName     string `json:"last_name"`
 		CreationTime int64  `json:"creation_time"`
+		Approved     bool   `json:"approved"`
+		CodeTime     int64  `json:"code_time"`
 	}
 
 	resApprovals struct {
@@ -148,6 +144,8 @@ func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
 			FirstName:    i.FirstName,
 			LastName:     i.LastName,
 			CreationTime: i.CreationTime,
+			Approved:     i.Approved,
+			CodeTime:     i.CodeTime,
 		})
 	}
 	return &resApprovals{
@@ -163,10 +161,14 @@ func (s *service) ApproveUser(userid string) error {
 		}
 		return err
 	}
-	if err := s.approvals.Delete(m); err != nil {
+	code, err := s.approvals.RehashCode(m)
+	if err != nil {
 		return err
 	}
-	if err := s.CreateUserVerify(s.approvals.ToUserModel(m)); err != nil {
+	if err := s.approvals.Update(m); err != nil {
+		return err
+	}
+	if err := s.sendNewUserEmail(code, m); err != nil {
 		return err
 	}
 	return nil
@@ -186,32 +188,10 @@ func (s *service) DeleteUserApproval(userid string) error {
 	return nil
 }
 
-func (s *service) CreateUserVerify(m *usermodel.Model) error {
-	b := bytes.Buffer{}
-	if err := json.NewEncoder(&b).Encode(m); err != nil {
-		return governor.NewError("Failed to encode user info", http.StatusInternalServerError, err)
-	}
-
-	key, err := uid.New(uidUserSize)
-	if err != nil {
-		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
-	}
-	nonce := key.Base64()
-	noncehash, err := s.hasher.Hash(nonce)
-	if err != nil {
-		return governor.NewError("Failed to hash email validation key", http.StatusInternalServerError, err)
-	}
-
-	if err := s.kvnewuser.Set(prefixEmailKey(m.Email), noncehash, s.confirmTime); err != nil {
-		return governor.NewError("Failed to store email validation key", http.StatusInternalServerError, err)
-	}
-	if err := s.kvnewuser.Set(m.Email, b.String(), s.confirmTime); err != nil {
-		return governor.NewError("Failed to store new user info", http.StatusInternalServerError, err)
-	}
-
+func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 	emdata := emailNewUser{
-		Email:     m.Email,
-		Key:       nonce,
+		Userid:    m.Userid,
+		Key:       code,
 		FirstName: m.FirstName,
 		LastName:  m.LastName,
 		Username:  m.Username,
@@ -222,37 +202,24 @@ func (s *service) CreateUserVerify(m *usermodel.Model) error {
 	if err := s.mailer.Send("", "", []string{m.Email}, newUserTemplate, emdata); err != nil {
 		return governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
 	}
-
 	return nil
 }
 
-// CommitUser takes a user from the cache and places it into the db
-func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
-	noncehash, err := s.kvnewuser.Get(prefixEmailKey(email))
+// CommitUser takes a user from approvals and places it into the user db
+func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) {
+	am, err := s.approvals.GetByID(userid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
+			return nil, governor.NewErrorUser("", 0, err)
 		}
-		return nil, governor.NewError("Failed to get account", http.StatusInternalServerError, err)
+		return nil, err
 	}
-	if ok, err := s.verifier.Verify(key, noncehash); err != nil {
+	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
 		return nil, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
 	} else if !ok {
 		return nil, governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
 	}
-
-	jsonUser, err := s.kvnewuser.Get(email)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Account verification expired", http.StatusBadRequest, err)
-		}
-		return nil, governor.NewError("Failed to get user info", http.StatusInternalServerError, err)
-	}
-
-	m := s.users.NewEmpty()
-	if err := json.NewDecoder(bytes.NewBufferString(jsonUser)).Decode(&m); err != nil {
-		return nil, governor.NewError("Failed to decode user info", http.StatusInternalServerError, err)
-	}
+	m := s.approvals.ToUserModel(am)
 
 	userProps := NewUserProps{
 		Userid:       m.Userid,
@@ -268,7 +235,7 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 		return nil, governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
 	}
 
-	if err := s.users.Insert(&m); err != nil {
+	if err := s.users.Insert(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
@@ -279,14 +246,14 @@ func (s *service) CommitUser(email string, key string) (*resUserUpdate, error) {
 	}
 
 	if err := s.queue.Publish(NewUserQueueID, b.Bytes()); err != nil {
-		s.logger.Error("failed to publish new user", map[string]string{
+		s.logger.Error("Failed to publish new user", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishnewuser",
 		})
 	}
 
-	if err := s.kvnewuser.Del(prefixEmailKey(email), email); err != nil {
-		s.logger.Error("failed to clean up new user info", map[string]string{
+	if err := s.approvals.Delete(am); err != nil {
+		s.logger.Error("Failed to clean up user approval", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitusercleanup",
 		})
