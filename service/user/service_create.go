@@ -6,6 +6,7 @@ import (
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
@@ -215,7 +216,10 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		return nil, err
 	}
 	if !am.Approved {
-		return nil, governor.NewErrorUser("Not approved", 0, nil)
+		return nil, governor.NewErrorUser("Not approved", http.StatusBadRequest, nil)
+	}
+	if time.Now().Round(0).Unix() > am.CodeTime+s.confirmTime {
+		return nil, governor.NewErrorUser("Code expired", http.StatusBadRequest, nil)
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
 		return nil, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
