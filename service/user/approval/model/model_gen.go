@@ -18,6 +18,10 @@ func approvalModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapprovals_creation_time_index ON userapprovals (creation_time);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

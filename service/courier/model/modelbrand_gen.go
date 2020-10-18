@@ -22,6 +22,10 @@ func brandModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creation_time_index ON courierbrands (creation_time);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

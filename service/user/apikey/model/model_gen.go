@@ -22,6 +22,10 @@ func apikeyModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_time_index ON userapikeys (time);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

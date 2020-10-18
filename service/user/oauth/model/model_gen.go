@@ -18,6 +18,10 @@ func oauthappModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_time_index ON oauthapps (time);")
+	if err != nil {
+		return err
+	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creator_id_index ON oauthapps (creator_id);")
 	if err != nil {
 		return err

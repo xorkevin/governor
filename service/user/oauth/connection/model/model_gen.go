@@ -26,6 +26,10 @@ func connectionModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_time_index ON oauthconnections (time);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

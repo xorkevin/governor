@@ -42,7 +42,7 @@ type (
 		ClientID     string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid,getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
 		Scope        string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		CodeHash     string `model:"codehash,VARCHAR(31) NOT NULL" query:"codehash"`
-		Time         int64  `model:"time,BIGINT NOT NULL" query:"time,getgroupeq,userid"`
+		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 )

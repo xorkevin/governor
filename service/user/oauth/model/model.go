@@ -39,15 +39,15 @@ type (
 
 	// Model is the db OAuth app model
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid" json:"clientid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name" json:"name"`
-		URL          string `model:"url,VARCHAR(255) NOT NULL" query:"url" json:"url"`
-		RedirectURI  string `model:"redirect_uri,VARCHAR(2047) NOT NULL" query:"redirect_uri" json:"redirect_uri"`
-		Logo         string `model:"logo,VARCHAR(4095)" query:"logo" json:"logo"`
-		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash" json:"keyhash"`
-		Time         int64  `model:"time,BIGINT NOT NULL" query:"time,getgroup;getgroupeq,creator_id" json:"time"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time" json:"creation_time"`
-		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id,deleq,creator_id" json:"creator_id"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
+		URL          string `model:"url,VARCHAR(255) NOT NULL" query:"url"`
+		RedirectURI  string `model:"redirect_uri,VARCHAR(2047) NOT NULL" query:"redirect_uri"`
+		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
+		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
+		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroup;getgroupeq,creator_id"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id,deleq,creator_id"`
 	}
 )
 
