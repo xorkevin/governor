@@ -18,6 +18,7 @@ const (
 	TagUserPrefix = "usr"
 	TagBanPrefix  = "ban"
 	TagModPrefix  = "mod"
+	TagOrgPrefix  = "org"
 	TagAdmin      = "admin"
 	TagSystem     = "system"
 )
@@ -121,10 +122,10 @@ func (r Rank) Intersect(other Rank) Rank {
 }
 
 var (
-	rankRegexMod   = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
-	rankRegexUser  = regexp.MustCompile(`^usr_[a-z][a-z0-9.-_]+$`)
-	rankRegexBan   = regexp.MustCompile(`^ban_[a-z][a-z0-9.-_]+$`)
-	rankRegexGroup = regexp.MustCompile(`^grp_[a-z][a-z0-9.-_]+$`)
+	rankRegexMod = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
+	rankRegexUsr = regexp.MustCompile(`^usr_[a-z][a-z0-9.-_]+$`)
+	rankRegexBan = regexp.MustCompile(`^ban_[a-z][a-z0-9.-_]+$`)
+	rankRegexOrg = regexp.MustCompile(`^org_[a-z][a-z0-9.-_]+$`)
 )
 
 // FromSlice creates a new Rank from a list of strings
@@ -146,25 +147,21 @@ func FromStringUser(rankString string) (Rank, error) {
 	}
 	rankSlice := strings.Split(rankString, ",")
 	for _, i := range rankSlice {
-		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUser.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
+		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
 		}
 	}
 	return FromSlice(rankSlice), nil
 }
 
-// FromStringGroup creates a new Group Rank from a string
-func FromStringGroup(rankString string) (Rank, error) {
-	if len(rankString) < 1 {
-		return Rank{}, nil
-	}
-	rankSlice := strings.Split(rankString, ",")
-	for _, i := range rankSlice {
-		if !rankRegexGroup.MatchString(i) {
-			return Rank{}, governor.NewErrorUser("Illegal rank string", http.StatusBadRequest, nil)
-		}
-	}
-	return FromSlice(rankSlice), nil
+// ToOrgName creates a new org name from a string
+func ToOrgName(name string) string {
+	return TagOrgPrefix + "_" + name
+}
+
+// IsValidOrgName validates an orgname
+func IsValidOrgName(orgname string) bool {
+	return rankRegexOrg.MatchString(orgname)
 }
 
 // BaseUser creates a new user rank
