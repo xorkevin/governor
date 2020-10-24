@@ -121,6 +121,18 @@ func (s *service) GetByRole(roleName string, amount, offset int) ([]string, erro
 	return s.roles.GetByRole(roleName, amount, offset)
 }
 
+func (s *service) DeleteByRole(roleName string) error {
+	userids, err := s.GetByRole(roleName, 65536, 0)
+	if err != nil {
+		return err
+	}
+	if err := s.roles.DeleteByRole(roleName); err != nil {
+		return err
+	}
+	s.clearCacheRoles(roleName, userids)
+	return nil
+}
+
 const (
 	roleLimit = 256
 )
@@ -173,7 +185,23 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 		return
 	}
 
-	tx, err := s.kvroleset.Subtree(userid).Tx()
+	if err := s.kvroleset.Subtree(userid).Del(roles.ToSlice()...); err != nil {
+		s.logger.Error("Failed to clear role set from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearroleset",
+		})
+	}
+}
+
+func (s *service) clearCacheRoles(role string, userids []string) {
+	if err := s.kvsummary.Del(userids...); err != nil {
+		s.logger.Error("Failed to clear role summary from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "clearcachesummary",
+		})
+	}
+
+	tx, err := s.kvroleset.Tx()
 	if err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
@@ -181,8 +209,8 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 		})
 		return
 	}
-	for _, i := range roles.ToSlice() {
-		tx.Del(i)
+	for _, i := range userids {
+		tx.Subtree(i).Del(role)
 	}
 	if err := tx.Exec(); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{

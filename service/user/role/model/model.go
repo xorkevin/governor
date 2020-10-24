@@ -18,6 +18,7 @@ type (
 		GetRoles(userid string, limit, offset int) (rank.Rank, error)
 		InsertRoles(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles rank.Rank) error
+		DeleteByRole(role string) error
 		DeleteUserRoles(userid string) error
 		Setup() error
 	}
@@ -29,7 +30,7 @@ type (
 	// Model is the db User role model
 	Model struct {
 		Userid string `model:"userid,VARCHAR(31);index" query:"userid,getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;deleq,userid,role;deleq,userid,role|arr"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
 	}
 )
 
@@ -179,6 +180,18 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 		return err
 	}
 	if err := roleModelDelEqUseridHasRole(db, userid, roles.ToSlice()); err != nil {
+		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
+	}
+	return nil
+}
+
+// DeleteByRole deletes by role name
+func (r *repo) DeleteByRole(role string) error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := roleModelDelEqRole(db, role); err != nil {
 		return governor.NewError("Failed to delete roles", http.StatusInternalServerError, err)
 	}
 	return nil

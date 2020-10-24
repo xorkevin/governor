@@ -122,10 +122,10 @@ func (r Rank) Intersect(other Rank) Rank {
 }
 
 var (
-	rankRegexMod = regexp.MustCompile(`^mod_[a-z][a-z0-9.-_]+$`)
-	rankRegexUsr = regexp.MustCompile(`^usr_[a-z][a-z0-9.-_]+$`)
-	rankRegexBan = regexp.MustCompile(`^ban_[a-z][a-z0-9.-_]+$`)
-	rankRegexOrg = regexp.MustCompile(`^org_[a-z][a-z0-9.-_]+$`)
+	rankRegexMod = regexp.MustCompile(`^mod_[A-Za-z0-9.-_]+$`)
+	rankRegexUsr = regexp.MustCompile(`^usr_[A-Za-z0-9.-_]+$`)
+	rankRegexBan = regexp.MustCompile(`^ban_[A-Za-z0-9.-_]+$`)
+	rankRegexOrg = regexp.MustCompile(`^org_[A-Za-z0-9.-_]+$`)
 )
 
 // FromSlice creates a new Rank from a list of strings

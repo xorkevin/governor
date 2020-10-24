@@ -188,6 +188,11 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []s
 	return res, nil
 }
 
+func roleModelDelEqRole(db *sql.DB, role string) error {
+	_, err := db.Exec("DELETE FROM userroles WHERE role = $1;", role)
+	return err
+}
+
 func roleModelDelEqUseridEqRole(db *sql.DB, userid string, role string) error {
 	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role = $2;", userid, role)
 	return err

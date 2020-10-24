@@ -85,6 +85,46 @@ func orgModelGetModelEqOrgID(db *sql.DB, orgid string) (*Model, int, error) {
 	return m, 0, nil
 }
 
+func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(orgid))
+	args = append(args, limit, offset)
+	var placeholdersorgid string
+	{
+		placeholders := make([]string, 0, len(orgid))
+		for _, i := range orgid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersorgid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func orgModelUpdModelEqOrgID(db *sql.DB, m *Model, orgid string) (int, error) {
 	_, err := db.Exec("UPDATE userorgs SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
 	if err != nil {

@@ -20,6 +20,7 @@ type (
 		DeleteAllRoles(userid string) error
 		GetRoles(userid string, amount, offset int) (rank.Rank, error)
 		GetByRole(roleName string, amount, offset int) ([]string, error)
+		DeleteByRole(roleName string) error
 		GetRoleSummary(userid string) (rank.Rank, error)
 	}
 

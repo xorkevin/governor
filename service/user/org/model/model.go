@@ -19,7 +19,9 @@ type (
 	Repo interface {
 		New(name, displayName, desc string) (*Model, error)
 		GetByID(orgid string) (*Model, error)
-		GetOrgs(limit, offset int) ([]Model, error)
+		GetByName(orgname string) (*Model, error)
+		GetAllOrgs(limit, offset int) ([]Model, error)
+		GetOrgs(orgids []string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
@@ -32,7 +34,7 @@ type (
 
 	// Model is the user org model
 	Model struct {
-		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid,getoneeq,orgid;updeq,orgid;deleq,orgid"`
+		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid,getoneeq,orgid;getgroupeq,orgid|arr;updeq,orgid;deleq,orgid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE" query:"name,getoneeq,name"`
 		DisplayName  string `model:"display_name,VARCHAR(255) NOT NULL" query:"display_name"`
 		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
@@ -79,12 +81,38 @@ func (r *repo) GetByID(orgid string) (*Model, error) {
 	return m, nil
 }
 
-func (r *repo) GetOrgs(limit, offset int) ([]Model, error) {
+func (r *repo) GetByName(orgname string) (*Model, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := orgModelGetModelEqName(db, orgname)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.NewError("No org found with that name", http.StatusNotFound, err)
+		}
+		return nil, governor.NewError("Failed to get org", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+func (r *repo) GetAllOrgs(limit, offset int) ([]Model, error) {
 	db, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
 	m, err := orgModelGetModelOrdCreationTime(db, false, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get orgs", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := orgModelGetModelHasOrgIDOrdOrgID(db, orgids, true, len(orgids), 0)
 	if err != nil {
 		return nil, governor.NewError("Failed to get orgs", http.StatusInternalServerError, err)
 	}
@@ -98,7 +126,7 @@ func (r *repo) Insert(m *Model) error {
 	}
 	if code, err := orgModelInsert(db, m); err != nil {
 		if code == 3 {
-			return governor.NewError("org name must be unique", http.StatusBadRequest, err)
+			return governor.NewError("Org name must be unique", http.StatusBadRequest, err)
 		}
 		return governor.NewError("Failed to insert org", http.StatusInternalServerError, err)
 	}
@@ -110,7 +138,10 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := orgModelUpdModelEqOrgID(db, m, m.OrgID); err != nil {
+	if code, err := orgModelUpdModelEqOrgID(db, m, m.OrgID); err != nil {
+		if code == 3 {
+			return governor.NewError("Org name must be unique", http.StatusBadRequest, err)
+		}
 		return governor.NewError("Failed to update org", http.StatusInternalServerError, err)
 	}
 	return nil
