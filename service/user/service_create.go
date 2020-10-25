@@ -63,19 +63,19 @@ type (
 
 // CreateUser creates a new user and places it into approvals
 func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
-	m2, err := s.users.GetByUsername(ruser.Username)
-	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
-		return nil, err
-	}
-	if m2 != nil && m2.Username == ruser.Username {
+	if _, err := s.users.GetByUsername(ruser.Username); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return nil, err
+		}
+	} else {
 		return nil, governor.NewErrorUser("Username is already taken", http.StatusBadRequest, nil)
 	}
 
-	m2, err = s.users.GetByEmail(ruser.Email)
-	if err != nil && governor.ErrorStatus(err) != http.StatusNotFound {
-		return nil, err
-	}
-	if m2 != nil && m2.Email == ruser.Email {
+	if _, err := s.users.GetByEmail(ruser.Email); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return nil, err
+		}
+	} else {
 		return nil, governor.NewErrorUser("Email is already used by another account", http.StatusBadRequest, nil)
 	}
 

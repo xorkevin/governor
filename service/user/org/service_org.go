@@ -66,7 +66,10 @@ func (s *service) CreateOrg(userid, name, displayName, desc string) (*resOrg, er
 		if governor.ErrorStatus(err) != http.StatusNotFound {
 			return nil, err
 		}
+	} else {
+		return nil, governor.NewErrorUser("Org name already taken", http.StatusBadRequest, nil)
 	}
+
 	m, err := s.orgs.New(name, displayName, desc)
 	if err != nil {
 		return nil, err
