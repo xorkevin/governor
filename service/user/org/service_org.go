@@ -24,6 +24,23 @@ func orgRole(orgid string) string {
 	return "org_" + orgid
 }
 
+func (s *service) GetByID(orgid string) (*resOrg, error) {
+	m, err := s.orgs.GetByID(orgid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		return nil, err
+	}
+	return &resOrg{
+		OrgID:        m.OrgID,
+		Name:         m.Name,
+		DisplayName:  m.DisplayName,
+		Desc:         m.Desc,
+		CreationTime: m.CreationTime,
+	}, nil
+}
+
 func (s *service) GetByName(name string) (*resOrg, error) {
 	m, err := s.orgs.GetByName(name)
 	if err != nil {
@@ -43,6 +60,26 @@ func (s *service) GetByName(name string) (*resOrg, error) {
 
 func (s *service) GetOrgs(orgids []string) (*resOrgs, error) {
 	m, err := s.orgs.GetOrgs(orgids)
+	if err != nil {
+		return nil, err
+	}
+	orgs := make([]resOrg, 0, len(m))
+	for _, i := range m {
+		orgs = append(orgs, resOrg{
+			OrgID:        i.OrgID,
+			Name:         i.Name,
+			DisplayName:  i.DisplayName,
+			Desc:         i.Desc,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resOrgs{
+		Orgs: orgs,
+	}, nil
+}
+
+func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
+	m, err := s.orgs.GetAllOrgs(limit, offset)
 	if err != nil {
 		return nil, err
 	}

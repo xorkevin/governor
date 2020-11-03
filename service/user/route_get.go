@@ -275,12 +275,6 @@ func (m *router) getUsersByRole(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-
-	if len(res.Users) == 0 {
-		c.WriteStatus(http.StatusNotFound)
-		return
-	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -318,12 +312,6 @@ func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-
-	if len(res.Users) == 0 {
-		c.WriteStatus(http.StatusNotFound)
-		return
-	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -348,12 +336,6 @@ func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-
-	if len(res.Users) == 0 {
-		c.WriteStatus(http.StatusNotFound)
-		return
-	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
