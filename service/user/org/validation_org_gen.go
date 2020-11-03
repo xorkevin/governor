@@ -3,21 +3,21 @@
 package org
 
 func (r reqOrgGet) valid() error {
-	if err := validhasOrgID(r.OrgID); err != nil {
+	if err := validhasOrgid(r.OrgID); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (r reqOrgNameGet) valid() error {
-	if err := validhasOrgName(r.Name); err != nil {
+	if err := validhasName(r.Name); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (r reqOrgsGet) valid() error {
-	if err := validhasOrgIDs(r.OrgIDs); err != nil {
+	if err := validhasOrgids(r.OrgIDs); err != nil {
 		return err
 	}
 	return nil
@@ -28,6 +28,38 @@ func (r reqOrgsGetBulk) valid() error {
 		return err
 	}
 	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqOrgPost) valid() error {
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDisplay(r.Display); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqOrgPut) valid() error {
+	if err := validhasOrgid(r.OrgID); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDisplay(r.Display); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
 		return err
 	}
 	return nil

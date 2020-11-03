@@ -3,6 +3,7 @@ package org
 import (
 	"context"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
 )
@@ -15,6 +16,7 @@ type (
 	service struct {
 		orgs   orgmodel.Repo
 		roles  role.Role
+		gate   gate.Gate
 		logger governor.Logger
 	}
 
@@ -24,10 +26,11 @@ type (
 )
 
 // New returns a new org service
-func New(orgs orgmodel.Repo, roles role.Role) Service {
+func New(orgs orgmodel.Repo, roles role.Role, g gate.Gate) Service {
 	return &service{
 		orgs:  orgs,
 		roles: roles,
+		gate:  g,
 	}
 }
 
