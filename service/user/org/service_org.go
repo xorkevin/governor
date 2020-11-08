@@ -98,16 +98,8 @@ func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
 	}, nil
 }
 
-func (s *service) CreateOrg(userid, name, displayName, desc string) (*resOrg, error) {
-	if _, err := s.orgs.GetByName(name); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return nil, err
-		}
-	} else {
-		return nil, governor.NewErrorUser("Org name already taken", http.StatusBadRequest, nil)
-	}
-
-	m, err := s.orgs.New(name, displayName, desc)
+func (s *service) CreateOrg(userid, displayName, desc string) (*resOrg, error) {
+	m, err := s.orgs.New(displayName, desc)
 	if err != nil {
 		return nil, err
 	}

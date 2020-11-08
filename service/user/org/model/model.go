@@ -17,7 +17,7 @@ const (
 type (
 	// Repo is an user org repository
 	Repo interface {
-		New(name, displayName, desc string) (*Model, error)
+		New(displayName, desc string) (*Model, error)
 		GetByID(orgid string) (*Model, error)
 		GetByName(orgname string) (*Model, error)
 		GetAllOrgs(limit, offset int) ([]Model, error)
@@ -49,7 +49,7 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(name, displayName, desc string) (*Model, error) {
+func (r *repo) New(displayName, desc string) (*Model, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
 		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
@@ -59,7 +59,7 @@ func (r *repo) New(name, displayName, desc string) (*Model, error) {
 	now := time.Now().Round(0).Unix()
 	return &Model{
 		OrgID:        orgid,
-		Name:         name,
+		Name:         orgid,
 		DisplayName:  displayName,
 		Desc:         desc,
 		CreationTime: now,

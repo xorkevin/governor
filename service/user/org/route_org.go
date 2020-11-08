@@ -115,7 +115,6 @@ func (m *router) getAllOrgs(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqOrgPost struct {
-		Name    string `valid:"name" json:"name"`
 		Display string `valid:"display" json:"display_name"`
 		Desc    string `valid:"desc" json:"desc"`
 		Userid  string `valid:"userid,has" json:"-"`
@@ -135,7 +134,7 @@ func (m *router) createOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateOrg(req.Userid, req.Name, req.Display, req.Desc)
+	res, err := m.s.CreateOrg(req.Userid, req.Display, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return

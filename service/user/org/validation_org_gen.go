@@ -34,9 +34,6 @@ func (r reqOrgsGetBulk) valid() error {
 }
 
 func (r reqOrgPost) valid() error {
-	if err := validName(r.Name); err != nil {
-		return err
-	}
 	if err := validDisplay(r.Display); err != nil {
 		return err
 	}
