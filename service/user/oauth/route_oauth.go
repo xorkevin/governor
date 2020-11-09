@@ -263,10 +263,10 @@ const (
 func (m *router) mountAppRoutes(r governor.Router) {
 	r.Get("/{clientid}", m.getApp)
 	r.Get("/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
-	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "oauth", scopeAppRead))
-	r.Post("", m.createApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/{clientid}", m.updateApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Put("/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "oauth", scopeAppWrite))
-	r.Delete("/{clientid}", m.deleteApp, gate.Member(m.s.gate, "oauth", scopeAppWrite))
+	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "gov.oauth", scopeAppRead))
+	r.Post("", m.createApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
+	r.Put("/{clientid}", m.updateApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
+	r.Put("/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
+	r.Put("/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
+	r.Delete("/{clientid}", m.deleteApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
 }

@@ -180,8 +180,8 @@ const (
 func (m *router) mountCreate(r governor.Router) {
 	r.Post("", m.createUser)
 	r.Post("/confirm", m.commitUser)
-	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "user", scopeApprovalRead))
-	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "user", scopeApprovalWrite))
-	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "user", scopeApprovalWrite))
+	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "gov.user", scopeApprovalRead))
+	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))
+	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))
 	r.Delete("/id/{id}", m.deleteUser, gate.OwnerParam(m.s.gate, "id", scopeAccountDelete))
 }
