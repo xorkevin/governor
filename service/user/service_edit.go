@@ -2,7 +2,6 @@ package user
 
 import (
 	"net/http"
-	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -78,18 +77,18 @@ func combineModRoles(r1, r2 rank.Rank) rank.Rank {
 		rank.TagAdmin: struct{}{},
 	}
 	for key := range r1 {
-		k := strings.SplitN(key, "_", 2)
-		if len(k) == 1 {
+		_, tag, err := rank.SplitTag(key)
+		if err != nil {
 			continue
 		}
-		roles.AddMod(k[1])
+		roles.AddMod(tag)
 	}
 	for key := range r2 {
-		k := strings.SplitN(key, "_", 2)
-		if len(k) == 1 {
+		_, tag, err := rank.SplitTag(key)
+		if err != nil {
 			continue
 		}
-		roles.AddMod(k[1])
+		roles.AddMod(tag)
 	}
 	return roles
 }
@@ -97,9 +96,9 @@ func combineModRoles(r1, r2 rank.Rank) rank.Rank {
 func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) error {
 	updaterIsAdmin := updater.Has(rank.TagAdmin)
 	for key := range edit {
-		k := strings.SplitN(key, "_", 2)
-		if len(k) == 1 {
-			switch k[0] {
+		prefix, tag, err := rank.SplitTag(key)
+		if err != nil {
+			switch key {
 			case rank.TagAdmin:
 				// updater cannot change one's own admin status nor change another's admin status if not an admin
 				if editid == updaterid {
@@ -121,29 +120,29 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 				return governor.NewErrorUser("Invalid tag name", http.StatusForbidden, nil)
 			}
 		} else {
-			switch k[0] {
+			switch prefix {
 			case rank.TagModPrefix:
 				// updater cannot change one's own mod status nor edit mod rank if not an admin and not a mod of that group
 				if !updaterIsAdmin && editid == updaterid {
 					return governor.NewErrorUser("Cannot modify own mod status", http.StatusForbidden, nil)
 				}
-				if !updaterIsAdmin && !updater.HasMod(k[1]) {
+				if !updaterIsAdmin && !updater.HasMod(tag) {
 					return governor.NewErrorUser("Must be moderator of the group to modify mod status", http.StatusForbidden, nil)
 				}
 			case rank.TagBanPrefix:
 				// cannot edit ban group rank if not an admin and not a moderator of that group
-				if !updaterIsAdmin && !updater.HasMod(k[1]) {
+				if !updaterIsAdmin && !updater.HasMod(tag) {
 					return governor.NewErrorUser("Must be moderator of the group to modify ban status", http.StatusForbidden, nil)
 				}
 			case rank.TagUserPrefix:
 				if add {
 					// cannot add user if not admin and not a moderator of that group
-					if !updaterIsAdmin && !updater.HasMod(k[1]) {
+					if !updaterIsAdmin && !updater.HasMod(tag) {
 						return governor.NewErrorUser("Must be a moderator of the group to add user status", http.StatusForbidden, nil)
 					}
 				} else {
 					// cannot remove user if not admin and not a moderator of that group and not self
-					if !updaterIsAdmin && !updater.HasMod(k[1]) && editid != updaterid {
+					if !updaterIsAdmin && !updater.HasMod(tag) && editid != updaterid {
 						return governor.NewErrorUser("Cannot update other user status", http.StatusForbidden, nil)
 					}
 				}

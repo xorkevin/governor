@@ -23,6 +23,10 @@ const (
 	TagSystem     = "system"
 )
 
+const (
+	rankSeparator = "."
+)
+
 type (
 	// Rank represents the set of all user auth tags
 	Rank map[string]struct{}
@@ -56,37 +60,37 @@ func (r Rank) Has(tag string) bool {
 
 // HasMod checks if a Rank has a moderator tag
 func (r Rank) HasMod(tag string) bool {
-	_, ok := r[TagModPrefix+"_"+tag]
+	_, ok := r[TagModPrefix+rankSeparator+tag]
 	return ok
 }
 
 // HasUser checks if a Rank has a user tag
 func (r Rank) HasUser(tag string) bool {
-	_, ok := r[TagUserPrefix+"_"+tag]
+	_, ok := r[TagUserPrefix+rankSeparator+tag]
 	return ok
 }
 
 // HasBan checks if a Rank has a ban tag
 func (r Rank) HasBan(tag string) bool {
-	_, ok := r[TagBanPrefix+"_"+tag]
+	_, ok := r[TagBanPrefix+rankSeparator+tag]
 	return ok
 }
 
 // AddMod adds a mod tag
 func (r Rank) AddMod(tag string) Rank {
-	r[TagModPrefix+"_"+tag] = struct{}{}
+	r[TagModPrefix+rankSeparator+tag] = struct{}{}
 	return r
 }
 
 // AddUser adds a user tag
 func (r Rank) AddUser(tag string) Rank {
-	r[TagUserPrefix+"_"+tag] = struct{}{}
+	r[TagUserPrefix+rankSeparator+tag] = struct{}{}
 	return r
 }
 
 // AddBan adds a ban tag
 func (r Rank) AddBan(tag string) Rank {
-	r[TagBanPrefix+"_"+tag] = struct{}{}
+	r[TagBanPrefix+rankSeparator+tag] = struct{}{}
 	return r
 }
 
@@ -122,10 +126,10 @@ func (r Rank) Intersect(other Rank) Rank {
 }
 
 var (
-	rankRegexMod = regexp.MustCompile(`^mod_[A-Za-z0-9.-_]+$`)
-	rankRegexUsr = regexp.MustCompile(`^usr_[A-Za-z0-9.-_]+$`)
-	rankRegexBan = regexp.MustCompile(`^ban_[A-Za-z0-9.-_]+$`)
-	rankRegexOrg = regexp.MustCompile(`^org_[A-Za-z0-9.-_]+$`)
+	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9.-_]+$`)
+	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9.-_]+$`)
+	rankRegexBan = regexp.MustCompile(`^ban.[A-Za-z0-9.-_]+$`)
+	rankRegexOrg = regexp.MustCompile(`^org.[A-Za-z0-9.-_]+$`)
 )
 
 // FromSlice creates a new Rank from a list of strings
@@ -154,9 +158,22 @@ func FromStringUser(rankString string) (Rank, error) {
 	return FromSlice(rankSlice), nil
 }
 
+func SplitTag(key string) (string, string, error) {
+	k := strings.SplitN(key, rankSeparator, 2)
+	if len(k) < 2 {
+		return "", "", governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
+	}
+	switch k[0] {
+	case TagModPrefix, TagUserPrefix, TagBanPrefix:
+	default:
+		return "", "", governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
+	}
+	return k[0], k[1], nil
+}
+
 // ToOrgName creates a new org name from a string
 func ToOrgName(name string) string {
-	return TagOrgPrefix + "_" + name
+	return TagOrgPrefix + rankSeparator + name
 }
 
 // IsValidOrgName validates an orgname
