@@ -245,8 +245,8 @@ type (
 )
 
 // GetBrandGroup gets a list of brand images
-func (s *service) GetBrandGroup(limit, offset int) (*resBrandGroup, error) {
-	brands, err := s.repo.GetBrandGroup(limit, offset)
+func (s *service) GetBrandGroup(limit, offset int, creatorid string) (*resBrandGroup, error) {
+	brands, err := s.repo.GetBrandGroup(limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}

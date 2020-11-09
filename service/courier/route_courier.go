@@ -199,7 +199,7 @@ func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetBrandGroup(req.Amount, req.Offset)
+	res, err := m.s.GetBrandGroup(req.Amount, req.Offset, c.Query("creatorid"))
 	if err != nil {
 		c.WriteError(err)
 		return

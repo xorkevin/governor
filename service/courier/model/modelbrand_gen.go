@@ -14,11 +14,7 @@ const (
 )
 
 func brandModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (brandid VARCHAR(63) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creatorid_index ON courierbrands (creatorid);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (brandid VARCHAR(63), creatorid VARCHAR(31), PRIMARY KEY (brandid, creatorid), creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}

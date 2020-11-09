@@ -27,7 +27,7 @@ type (
 		InsertLink(m *LinkModel) error
 		DeleteLink(m *LinkModel) error
 		NewBrand(brandid, creatorid string) *BrandModel
-		GetBrandGroup(limit, offset int) ([]BrandModel, error)
+		GetBrandGroup(limit, offset int, creatorid string) ([]BrandModel, error)
 		GetBrand(brandid string) (*BrandModel, error)
 		InsertBrand(m *BrandModel) error
 		DeleteBrand(m *BrandModel) error
@@ -48,8 +48,8 @@ type (
 
 	// BrandModel is the db brand model
 	BrandModel struct {
-		BrandID      string `model:"brandid,VARCHAR(63) PRIMARY KEY" query:"brandid,getoneeq,brandid;deleq,brandid"`
-		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL;index" query:"creatorid"`
+		BrandID      string `model:"brandid,VARCHAR(63)" query:"brandid,getoneeq,brandid;deleq,brandid"`
+		CreatorID    string `model:"creatorid,VARCHAR(31), PRIMARY KEY (brandid, creatorid)" query:"creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroup;getgroupeq,creatorid"`
 	}
 )
@@ -96,7 +96,8 @@ func (r *repo) GetLinkGroup(limit, offset int, creatorid string) ([]LinkModel, e
 	if err != nil {
 		return nil, err
 	}
-	if creatorid == "" {
+
+	if creatorid != "" {
 		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(db, creatorid, false, limit, offset)
 		if err != nil {
 			return nil, governor.NewError("Failed to get links", http.StatusInternalServerError, err)
@@ -164,11 +165,20 @@ func (r *repo) NewBrand(brandid, creatorid string) *BrandModel {
 }
 
 // GetBrandGroup gets a list of brands ordered by creation time
-func (r *repo) GetBrandGroup(limit, offset int) ([]BrandModel, error) {
+func (r *repo) GetBrandGroup(limit, offset int, creatorid string) ([]BrandModel, error) {
 	db, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
+
+	if creatorid != "" {
+		m, err := brandModelGetBrandModelEqCreatorIDOrdCreationTime(db, creatorid, false, limit, offset)
+		if err != nil {
+			return nil, governor.NewError("Failed to get brands", http.StatusInternalServerError, err)
+		}
+		return m, nil
+	}
+
 	m, err := brandModelGetBrandModelOrdCreationTime(db, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get brands", http.StatusInternalServerError, err)
