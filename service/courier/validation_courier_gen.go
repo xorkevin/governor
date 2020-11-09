@@ -10,6 +10,9 @@ func (r reqLinkGet) valid() error {
 }
 
 func (r reqGetGroup) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
@@ -20,6 +23,9 @@ func (r reqGetGroup) valid() error {
 }
 
 func (r reqLinkPost) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
 	if err := validLinkID(r.LinkID); err != nil {
 		return err
 	}
@@ -29,13 +35,13 @@ func (r reqLinkPost) valid() error {
 	if err := validhasBrandID(r.BrandID); err != nil {
 		return err
 	}
-	if err := validhasCreatorID(r.CreatorID); err != nil {
-		return err
-	}
 	return nil
 }
 
 func (r reqBrandGet) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
 	if err := validhasBrandID(r.BrandID); err != nil {
 		return err
 	}
@@ -43,10 +49,10 @@ func (r reqBrandGet) valid() error {
 }
 
 func (r reqBrandPost) valid() error {
-	if err := validBrandID(r.BrandID); err != nil {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err
 	}
-	if err := validhasCreatorID(r.CreatorID); err != nil {
+	if err := validBrandID(r.BrandID); err != nil {
 		return err
 	}
 	return nil

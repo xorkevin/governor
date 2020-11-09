@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
+	"xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
 )
@@ -104,8 +105,8 @@ type (
 )
 
 // GetLinkGroup retrieves a group of links
-func (s *service) GetLinkGroup(limit, offset int, creatorid string) (*resLinkGroup, error) {
-	links, err := s.repo.GetLinkGroup(limit, offset, creatorid)
+func (s *service) GetLinkGroup(creatorid string, limit, offset int) (*resLinkGroup, error) {
+	links, err := s.repo.GetLinkGroup(creatorid, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -134,20 +135,20 @@ type (
 )
 
 // CreateLink creates a new link
-func (s *service) CreateLink(linkid, url, brandid, creatorid string) (*resCreateLink, error) {
-	m := s.repo.NewLinkEmptyPtr()
+func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreateLink, error) {
+	m := &couriermodel.LinkModel{}
 	if len(linkid) == 0 {
-		ml, err := s.repo.NewLinkAuto(url, creatorid)
+		var err error
+		m, err = s.repo.NewLinkAuto(creatorid, url)
 		if err != nil {
 			return nil, err
 		}
-		m = ml
 	} else {
-		m = s.repo.NewLink(linkid, url, creatorid)
+		m = s.repo.NewLink(creatorid, linkid, url)
 	}
 
 	if brandid != "" {
-		objinfo, err := s.brandImgDir.Stat(brandid)
+		objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(brandid)
 		if err != nil {
 			if governor.ErrorStatus(err) == http.StatusNotFound {
 				return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
@@ -171,7 +172,7 @@ func (s *service) CreateLink(linkid, url, brandid, creatorid string) (*resCreate
 	}
 
 	if brandid != "" {
-		brandimg, _, err := s.brandImgDir.Get(brandid)
+		brandimg, _, err := s.brandImgDir.Subdir(creatorid).Get(brandid)
 		if err != nil {
 			return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
 		}
@@ -245,8 +246,8 @@ type (
 )
 
 // GetBrandGroup gets a list of brand images
-func (s *service) GetBrandGroup(limit, offset int, creatorid string) (*resBrandGroup, error) {
-	brands, err := s.repo.GetBrandGroup(limit, offset, creatorid)
+func (s *service) GetBrandGroup(creatorid string, limit, offset int) (*resBrandGroup, error) {
+	brands, err := s.repo.GetBrandGroup(creatorid, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -263,8 +264,8 @@ func (s *service) GetBrandGroup(limit, offset int, creatorid string) (*resBrandG
 	}, nil
 }
 
-func (s *service) StatBrandImage(brandid string) (*objstore.ObjectInfo, error) {
-	objinfo, err := s.brandImgDir.Stat(brandid)
+func (s *service) StatBrandImage(creatorid, brandid string) (*objstore.ObjectInfo, error) {
+	objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(brandid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
@@ -274,8 +275,8 @@ func (s *service) StatBrandImage(brandid string) (*objstore.ObjectInfo, error) {
 	return objinfo, nil
 }
 
-func (s *service) GetBrandImage(brandid string) (io.ReadCloser, string, error) {
-	brandimg, objinfo, err := s.brandImgDir.Get(brandid)
+func (s *service) GetBrandImage(creatorid, brandid string) (io.ReadCloser, string, error) {
+	brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(brandid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return nil, "", governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
@@ -287,13 +288,14 @@ func (s *service) GetBrandImage(brandid string) (io.ReadCloser, string, error) {
 
 type (
 	resCreateBrand struct {
-		BrandID string `json:"brandid"`
+		CreatorID string `json:"creatorid"`
+		BrandID   string `json:"brandid"`
 	}
 )
 
 // CreateBrand adds a brand image
-func (s *service) CreateBrand(brandid string, img image.Image, creatorid string) (*resCreateBrand, error) {
-	m := s.repo.NewBrand(brandid, creatorid)
+func (s *service) CreateBrand(creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
+	m := s.repo.NewBrand(creatorid, brandid)
 	if err := s.repo.InsertBrand(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return nil, governor.NewErrorUser("", 0, err)
@@ -305,17 +307,18 @@ func (s *service) CreateBrand(brandid string, img image.Image, creatorid string)
 	if err != nil {
 		return nil, governor.NewError("Failed to encode png image", http.StatusInternalServerError, err)
 	}
-	if err := s.brandImgDir.Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
+	if err := s.brandImgDir.Subdir(creatorid).Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
 		return nil, governor.NewError("Failed to save image", http.StatusInternalServerError, err)
 	}
 	return &resCreateBrand{
-		BrandID: brandid,
+		CreatorID: creatorid,
+		BrandID:   brandid,
 	}, nil
 }
 
 // DeleteBrand removes a brand image
-func (s *service) DeleteBrand(brandid string) error {
-	m, err := s.repo.GetBrand(brandid)
+func (s *service) DeleteBrand(creatorid, brandid string) error {
+	m, err := s.repo.GetBrand(creatorid, brandid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)

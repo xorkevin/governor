@@ -14,7 +14,7 @@ const (
 )
 
 func brandModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (brandid VARCHAR(63), creatorid VARCHAR(31), PRIMARY KEY (brandid, creatorid), creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func brandModelSetup(db *sql.DB) error {
 }
 
 func brandModelInsert(db *sql.DB, m *BrandModel) (int, error) {
-	_, err := db.Exec("INSERT INTO courierbrands (brandid, creatorid, creation_time) VALUES ($1, $2, $3);", m.BrandID, m.CreatorID, m.CreationTime)
+	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -50,9 +50,9 @@ func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) 
 	for c, m := range models {
 		n := c * 3
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
-		args = append(args, m.BrandID, m.CreatorID, m.CreationTime)
+		args = append(args, m.CreatorID, m.BrandID, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO courierbrands (brandid, creatorid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -66,9 +66,9 @@ func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) 
 	return 0, nil
 }
 
-func brandModelGetBrandModelEqBrandID(db *sql.DB, brandid string) (*BrandModel, int, error) {
+func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) (*BrandModel, int, error) {
 	m := &BrandModel{}
-	if err := db.QueryRow("SELECT brandid, creatorid, creation_time FROM courierbrands WHERE brandid = $1;", brandid).Scan(&m.BrandID, &m.CreatorID, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT creatorid, brandid, creation_time FROM courierbrands WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -85,8 +85,8 @@ func brandModelGetBrandModelEqBrandID(db *sql.DB, brandid string) (*BrandModel, 
 	return m, 0, nil
 }
 
-func brandModelDelEqBrandID(db *sql.DB, brandid string) error {
-	_, err := db.Exec("DELETE FROM courierbrands WHERE brandid = $1;", brandid)
+func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) error {
+	_, err := db.Exec("DELETE FROM courierbrands WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid)
 	return err
 }
 
@@ -96,7 +96,7 @@ func brandModelGetBrandModelOrdCreationTime(db *sql.DB, orderasc bool, limit, of
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT brandid, creatorid, creation_time FROM courierbrands ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM courierbrands ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func brandModelGetBrandModelOrdCreationTime(db *sql.DB, orderasc bool, limit, of
 	}()
 	for rows.Next() {
 		m := BrandModel{}
-		if err := rows.Scan(&m.BrandID, &m.CreatorID, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -123,7 +123,7 @@ func brandModelGetBrandModelEqCreatorIDOrdCreationTime(db *sql.DB, creatorid str
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT brandid, creatorid, creation_time FROM courierbrands WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM courierbrands WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func brandModelGetBrandModelEqCreatorIDOrdCreationTime(db *sql.DB, creatorid str
 	}()
 	for rows.Next() {
 		m := BrandModel{}
-		if err := rows.Scan(&m.BrandID, &m.CreatorID, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
