@@ -403,7 +403,11 @@ func MemberF(g Gate, idfunc func(governor.Context, string) (string, error), scop
 		if err != nil {
 			return false
 		}
-		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddUser(tag).AddBan(tag))
+		s := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
+		if tag != "" {
+			s = s.AddUser(tag).AddBan(tag)
+		}
+		roles, ok := r.Intersect(s)
 		if !ok {
 			return false
 		}
@@ -412,6 +416,9 @@ func MemberF(g Gate, idfunc func(governor.Context, string) (string, error), scop
 		}
 		if !roles.Has(rank.TagUser) {
 			return false
+		}
+		if tag == "" {
+			return true
 		}
 		return roles.HasUser(tag) && !roles.HasBan(tag)
 	}, scope)
