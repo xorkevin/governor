@@ -14,7 +14,7 @@ routerewrite:
   - host: go.governor.dev.home:8080
     methods: ['GET']
     pattern: '^/([A-Za-z0-9_-]{2,}(?:/image)?)$'
-    replace: /api/courier/link/$1
+    replace: /api/courier/link/id/$1
   - host: governor.dev.home:8080
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
