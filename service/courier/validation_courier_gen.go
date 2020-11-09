@@ -38,6 +38,16 @@ func (r reqLinkPost) valid() error {
 	return nil
 }
 
+func (r reqLinkDelete) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validhasLinkID(r.LinkID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqBrandGet) valid() error {
 	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err

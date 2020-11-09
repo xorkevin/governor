@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_courier_gen.go reqLinkGet reqGetGroup reqLinkPost reqBrandGet reqBrandPost
+//go:generate forge validation -o validation_courier_gen.go reqLinkGet reqGetGroup reqLinkPost reqLinkDelete reqBrandGet reqBrandPost
 
 type (
 	reqLinkGet struct {
@@ -132,16 +132,24 @@ func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
+type (
+	reqLinkDelete struct {
+		CreatorID string `valid:"creatorID,has" json:"-"`
+		LinkID    string `valid:"linkID,has" json:"-"`
+	}
+)
+
 func (m *router) deleteLink(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqLinkGet{
-		LinkID: c.Param("linkid"),
+	req := reqLinkDelete{
+		LinkID:    c.Param("linkid"),
+		CreatorID: c.Param("creatorid"),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteLink(req.LinkID); err != nil {
+	if err := m.s.DeleteLink(req.CreatorID, req.LinkID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -294,6 +302,17 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
+func (m *router) courierOwner(c governor.Context, userid string) (string, error) {
+	creatorid := c.Param("creatorid")
+	if len(creatorid) == 0 {
+		return "", governor.NewErrorUser("Invalid creator id", http.StatusBadRequest, nil)
+	}
+	if creatorid == userid {
+		return "", nil
+	}
+	return creatorid, nil
+}
+
 const (
 	scopeLinkRead   = "gov.courier.link:read"
 	scopeLinkWrite  = "gov.courier.link:write"
@@ -304,11 +323,11 @@ const (
 func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/link/id/{linkid}", m.getLink)
 	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getLinkImageCC))
-	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.Member(m.s.gate, "courier", scopeLinkRead))
-	r.Post("/link/c/{creatorid}", m.createLink, gate.Member(m.s.gate, "courier", scopeLinkWrite))
-	r.Delete("/link/id/{linkid}", m.deleteLink, gate.Member(m.s.gate, "courier", scopeLinkWrite))
-	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.Member(m.s.gate, "courier", scopeBrandRead), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
-	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.Member(m.s.gate, "courier", scopeBrandRead))
-	r.Post("/brand/c/{creatorid}", m.createBrand, gate.Member(m.s.gate, "courier", scopeBrandWrite))
-	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.Member(m.s.gate, "courier", scopeBrandWrite))
+	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead))
+	r.Post("/link/c/{creatorid}", m.createLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
+	r.Delete("/link/c/{creatorid}/id/{linkid}", m.deleteLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
+	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
+	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead))
+	r.Post("/brand/c/{creatorid}", m.createBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
+	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
 }

@@ -20,10 +20,6 @@ type (
 	}
 )
 
-func orgRole(orgid string) string {
-	return "org_" + orgid
-}
-
 func (s *service) GetByID(orgid string) (*resOrg, error) {
 	m, err := s.orgs.GetByID(orgid)
 	if err != nil {
@@ -109,7 +105,7 @@ func (s *service) CreateOrg(userid, displayName, desc string) (*resOrg, error) {
 		}
 		return nil, err
 	}
-	orgrole := orgRole(m.OrgID)
+	orgrole := rank.ToOrgName(m.OrgID)
 	if err := s.roles.InsertRoles(userid, rank.Rank{}.AddMod(orgrole).AddUser(orgrole)); err != nil {
 		return nil, governor.NewError("Failed to add mod roles to user", 0, err)
 	}
@@ -150,7 +146,7 @@ func (s *service) DeleteOrg(orgid string) error {
 		}
 		return err
 	}
-	orgrole := orgRole(orgid)
+	orgrole := rank.ToOrgName(orgid)
 	if err := s.roles.DeleteByRole(rank.Rank{}.AddUser(orgrole).Stringify()); err != nil {
 		return governor.NewError("Failed to remove org users", 0, err)
 	}

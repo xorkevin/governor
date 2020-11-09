@@ -6,6 +6,7 @@ import (
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/rank"
 )
 
 //go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgsGetBulk reqOrgPost reqOrgPut
@@ -193,7 +194,7 @@ func (m *router) orgMember(c governor.Context, _ string) (string, error) {
 	if len(orgid) == 0 {
 		return "", governor.NewErrorUser("Invalid org id", http.StatusBadRequest, nil)
 	}
-	return orgRole(orgid), nil
+	return rank.ToOrgName(orgid), nil
 }
 
 const (

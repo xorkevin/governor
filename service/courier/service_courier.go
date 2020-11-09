@@ -209,13 +209,16 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 }
 
 // DeleteLink deletes a link
-func (s *service) DeleteLink(linkid string) error {
+func (s *service) DeleteLink(creatorid, linkid string) error {
 	m, err := s.repo.GetLink(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("", 0, err)
 		}
 		return err
+	}
+	if m.CreatorID != creatorid {
+		return governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {
 		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
