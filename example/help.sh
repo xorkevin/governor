@@ -15,7 +15,7 @@ printf "\t$cmdname - $cmddesc\n"
 awkprg=$(cat <<'EOF'
 /^[#]/ {printf "\n%s%s%s\n", colorsec, $2, colornorm}
 /^[^#]/ {printf "\t%s%-*s%s %s\n", colorcmd, cmdwidth, $1, colornorm, $3}
-/^[^#].*##.+##/ {printf "\t    Runs %s%s%s\n", colorsub, $2, colornorm}
+/^[^#].*##.+##/ {printf "\t    Depends on %s%s%s\n", colorsub, $2, colornorm}
 EOF
 )
 
