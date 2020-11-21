@@ -1,27 +1,38 @@
-.PHONY: all
+## PROLOG
 
-all: build
+.PHONY: help all
 
-.PHONY: devinit devinit2 devconfig devup devdown
+CMDNAME=governor
+CMDDESC=example project
 
-devinit:
+help: ## Print this help
+	@./help.sh '$(CMDNAME)' '$(CMDDESC)'
+
+all: build ## Default
+
+## DEV ENV
+
+.PHONY: devinit devup devinit2 devconfig devdown
+
+devinit: ## Init and register k8s resources
 	./plan.sh
 	./register.sh
 	./connect.sh
 
-devup:
+devup: ## Deploy k8s resources to cluster
 	kubectl apply -k base
 
-devdown:
-	kubectl delete -k base
-
-devinit2:
+devinit2: ## Register k8s resources post deploy
 	./register2.sh
 
-devconfig:
+devconfig: ## Set app config
 	./setsmtpauth.sh
 
-# CMD
+devdown: ## Destroy k8s resources
+	kubectl delete -k base
+
+## APP BUILD
+
 BIN_NAME=governor
 MAIN_PATH=cmd/main.go
 BIN_DIR=./bin
@@ -29,14 +40,15 @@ BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
 .PHONY: clean build
 
-clean:
+clean: ## Remove build artifacts
 	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
 
-build:
+build: ## Build app
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
 
-# Docker
+## DOCKER
+
 DOCKER_NAME=docker.pkg.dev.home:8080/governor
 
 DOCKER_MAJOR_VERSION=0.2
@@ -48,27 +60,29 @@ DOCKER_IMAGE=$(DOCKER_NAME):$(DOCKER_VERSION)
 
 .PHONY: build-docker publish-docker docker
 
-build-docker:
+build-docker: build ## Build docker image
 	docker build -t $(DOCKER_IMAGE) -t $(DOCKER_MAJOR_IMAGE) -t $(DOCKER_LATEST_IMAGE) .
 
-publish-docker:
+publish-docker: ## Publish docker image
 	docker push $(DOCKER_IMAGE)
 	docker push $(DOCKER_MAJOR_IMAGE)
 	docker push $(DOCKER_LATEST_IMAGE)
 
-docker: build-docker publish-docker
+docker: build-docker publish-docker ## Release new image
+
+## APP DEPLOY
 
 .PHONY: skaffoldinit
 
-skaffoldinit:
+skaffoldinit: ## Initialize skaffold
 	skaffold config set -g update-check false
 
 .PHONY: dev devstop tail setup
 
-dev: build
+dev: build ## Deploy app to cluster
 	skaffold run
 
-devstop:
+devstop: ## Stop running app
 	skaffold delete
 
 NAMESPACE=governor
@@ -77,8 +91,8 @@ DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.crea
 DEVCONTAINER=governor
 TAILLINES?=64
 
-tail:
+tail: ## Tail log lines
 	kubectl -n $(NAMESPACE) logs -f --tail=$(TAILLINES) $(DEVPOD) $(DEVCONTAINER)
 
-setup: build
+setup: build ## Run app setup
 	$(BIN_PATH) setup
