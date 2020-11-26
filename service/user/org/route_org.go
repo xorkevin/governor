@@ -191,8 +191,8 @@ func (m *router) deleteOrg(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) orgMember(c governor.Context, _ string) (string, error) {
 	orgid := c.Param("id")
-	if len(orgid) == 0 {
-		return "", governor.NewErrorUser("Invalid org id", http.StatusBadRequest, nil)
+	if err := validhasOrgid(orgid); err != nil {
+		return "", err
 	}
 	return rank.ToOrgName(orgid), nil
 }
