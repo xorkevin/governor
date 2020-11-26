@@ -7,6 +7,7 @@ import (
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/rank"
 )
 
 //go:generate forge validation -o validation_courier_gen.go reqLinkGet reqGetGroup reqLinkPost reqLinkDelete reqBrandGet reqBrandPost
@@ -304,11 +305,14 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 
 func (m *router) courierOwner(c governor.Context, userid string) (string, error) {
 	creatorid := c.Param("creatorid")
-	if len(creatorid) == 0 {
-		return "", governor.NewErrorUser("Invalid creator id", http.StatusBadRequest, nil)
+	if err := validhasCreatorID(creatorid); err != nil {
+		return "", err
 	}
 	if creatorid == userid {
 		return "", nil
+	}
+	if !rank.IsValidOrgName(creatorid) {
+		return "", governor.NewErrorUser("Invalid org id", http.StatusBadRequest, nil)
 	}
 	return creatorid, nil
 }
