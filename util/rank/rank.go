@@ -47,8 +47,8 @@ func (r Rank) ToSlice() []string {
 	return keys
 }
 
-// Stringify transforms the rank into an alphabetically ordered, comma delimited string
-func (r Rank) Stringify() string {
+// String transforms the rank into an alphabetically ordered, comma delimited string
+func (r Rank) String() string {
 	return strings.Join(r.ToSlice(), ",")
 }
 
@@ -76,21 +76,36 @@ func (r Rank) HasBan(tag string) bool {
 	return ok
 }
 
+// ToModName creates a mod name from a string
+func ToModName(tag string) string {
+	return TagModPrefix + rankSeparator + tag
+}
+
+// ToUserName creates a usr name from a string
+func ToUserName(tag string) string {
+	return TagUserPrefix + rankSeparator + tag
+}
+
+// ToBanName creates a ban name from a string
+func ToBanName(tag string) string {
+	return TagBanPrefix + rankSeparator + tag
+}
+
 // AddMod adds a mod tag
 func (r Rank) AddMod(tag string) Rank {
-	r[TagModPrefix+rankSeparator+tag] = struct{}{}
+	r[ToModName(tag)] = struct{}{}
 	return r
 }
 
 // AddUser adds a user tag
 func (r Rank) AddUser(tag string) Rank {
-	r[TagUserPrefix+rankSeparator+tag] = struct{}{}
+	r[ToUserName(tag)] = struct{}{}
 	return r
 }
 
 // AddBan adds a ban tag
 func (r Rank) AddBan(tag string) Rank {
-	r[TagBanPrefix+rankSeparator+tag] = struct{}{}
+	r[ToBanName(tag)] = struct{}{}
 	return r
 }
 

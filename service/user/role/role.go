@@ -21,7 +21,6 @@ type (
 		GetRoles(userid string, amount, offset int) (rank.Rank, error)
 		GetByRole(roleName string, amount, offset int) ([]string, error)
 		DeleteByRole(roleName string) error
-		GetRoleSummary(userid string) (rank.Rank, error)
 	}
 
 	Service interface {
@@ -32,7 +31,6 @@ type (
 	service struct {
 		roles         rolemodel.Repo
 		kvroleset     kvstore.KVStore
-		kvsummary     kvstore.KVStore
 		logger        governor.Logger
 		roleCacheTime int64
 	}
@@ -47,7 +45,6 @@ func New(roles rolemodel.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		roles:         roles,
 		kvroleset:     kv.Subtree("roleset"),
-		kvsummary:     kv.Subtree("summary"),
 		roleCacheTime: time24h,
 	}
 }

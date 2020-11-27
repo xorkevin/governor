@@ -62,6 +62,7 @@ type (
 		newLoginEmail     bool
 		passwordMinSize   int
 		userApproval      bool
+		rolesummary       rank.Rank
 		emailurlbase      string
 		tplemailchange    *htmlTemplate.Template
 		tplforgotpass     *htmlTemplate.Template
@@ -137,6 +138,7 @@ func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar)
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
+	r.SetDefault("rolesummary", []string{rank.TagUser, rank.TagAdmin})
 	r.SetDefault("email.url.base", "http://localhost:8080")
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
@@ -185,6 +187,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
+	s.rolesummary = rank.FromSlice(r.GetStrSlice("rolesummary"))
 
 	s.emailurlbase = r.GetStr("email.url.base")
 	if t, err := htmlTemplate.New("email.url.emailchange").Parse(r.GetStr("email.url.emailchange")); err != nil {
@@ -213,6 +216,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"issuer":                r.GetStr("issuer"),
 		"userapproval":          strconv.FormatBool(s.userApproval),
+		"rolesummary":           s.rolesummary.String(),
 		"tplemailchange":        r.GetStr("email.url.emailchange"),
 		"tplforgotpass":         r.GetStr("email.url.forgotpass"),
 		"tplnewuser":            r.GetStr("email.url.newuser"),

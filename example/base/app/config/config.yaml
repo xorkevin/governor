@@ -94,6 +94,13 @@ user:
   newloginemail: true
   passwordminsize: 8
   userapproval: false
+  rolesummary:
+    - user
+    - admin
+    - usr.gov.user
+    - mod.gov.user
+    - usr.gov.oauth
+    - mod.gov.oauth
   email:
     url:
       base: http://governor.dev.home:8080

@@ -45,6 +45,14 @@ func getUserFields(m *usermodel.Model, roles []string) *ResUserGet {
 	}
 }
 
+func (s *service) getRoleSummary(userid string) (rank.Rank, error) {
+	roles, err := s.roles.IntersectRoles(userid, s.rolesummary)
+	if err != nil {
+		return nil, err
+	}
+	return roles, nil
+}
+
 // GetByIDPublic gets and returns the public fields of the user
 func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByID(userid)
@@ -54,7 +62,7 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoleSummary(userid)
+	roles, err := s.getRoleSummary(userid)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +78,7 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoleSummary(userid)
+	roles, err := s.getRoleSummary(userid)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +94,7 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +110,7 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +126,7 @@ func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 		}
 		return nil, err
 	}
-	roles, err := s.roles.GetRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
 		return nil, err
 	}

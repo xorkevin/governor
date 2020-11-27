@@ -133,58 +133,10 @@ func (s *service) DeleteByRole(roleName string) error {
 	return nil
 }
 
-const (
-	roleLimit = 256
-)
-
-func (s *service) getRoleSummaryRepo(userid string) (rank.Rank, error) {
-	roles, err := s.GetRoles(userid, roleLimit, 0)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.kvsummary.Set(userid, roles.Stringify(), s.roleCacheTime); err != nil {
-		s.logger.Error("Failed to cache role summary", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "cachesummary",
-		})
-	}
-	return roles, nil
-}
-
-func (s *service) GetRoleSummary(userid string) (rank.Rank, error) {
-	k, err := s.kvsummary.Get(userid)
-	if err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			s.logger.Error("Failed to get role summary from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "getcachesummary",
-			})
-		}
-		return s.getRoleSummaryRepo(userid)
-	}
-	roles, err := rank.FromStringUser(k)
-	if err != nil {
-		s.logger.Error("Invalid role summary", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "parsecachesummary",
-		})
-		return s.getRoleSummaryRepo(userid)
-	}
-	return roles, nil
-}
-
 func (s *service) clearCache(userid string, roles rank.Rank) {
-	if err := s.kvsummary.Del(userid); err != nil {
-		s.logger.Error("Failed to clear role summary from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "clearcachesummary",
-		})
-	}
-
 	if len(roles) == 0 {
 		return
 	}
-
 	if err := s.kvroleset.Subtree(userid).Del(roles.ToSlice()...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
@@ -194,13 +146,9 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 }
 
 func (s *service) clearCacheRoles(role string, userids []string) {
-	if err := s.kvsummary.Del(userids...); err != nil {
-		s.logger.Error("Failed to clear role summary from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "clearcachesummary",
-		})
+	if len(userids) == 0 {
+		return
 	}
-
 	tx, err := s.kvroleset.Tx()
 	if err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
