@@ -16,6 +16,7 @@ type (
 		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 		GetByRole(role string, limit, offset int) ([]string, error)
 		GetRoles(userid string, limit, offset int) (rank.Rank, error)
+		GetRolesPrefix(userid string, prefix string, limit, offset int) (rank.Rank, error)
 		InsertRoles(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles rank.Rank) error
 		DeleteByRole(role string) error
@@ -30,7 +31,7 @@ type (
 	// Model is the db User role model
 	Model struct {
 		Userid string `model:"userid,VARCHAR(31);index" query:"userid,getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
 	}
 )
 
@@ -109,6 +110,23 @@ func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
 		return nil, err
 	}
 	m, err := roleModelGetModelEqUseridOrdRole(db, userid, true, limit, offset)
+	if err != nil {
+		return nil, governor.NewError("Failed to get roles of userid", http.StatusInternalServerError, err)
+	}
+	roles := make(rank.Rank, len(m))
+	for _, i := range m {
+		roles[i.Role] = struct{}{}
+	}
+	return roles, nil
+}
+
+// GetRolesPrefix returns a list of a user's roles with a prefix
+func (r *repo) GetRolesPrefix(userid string, prefix string, limit, offset int) (rank.Rank, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := roleModelGetModelEqUseridLikeRoleOrdRole(db, userid, prefix+"%", true, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get roles of userid", http.StatusInternalServerError, err)
 	}

@@ -188,6 +188,33 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []s
 	return res, nil
 }
 
+func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT userid, role FROM userroles WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func roleModelDelEqRole(db *sql.DB, role string) error {
 	_, err := db.Exec("DELETE FROM userroles WHERE role = $1;", role)
 	return err

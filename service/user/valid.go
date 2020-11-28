@@ -65,6 +65,13 @@ func validhasRole(role string) error {
 	return nil
 }
 
+func validhasRolePrefix(prefix string) error {
+	if len(prefix) > lengthCap {
+		return governor.NewErrorUser("Role prefix must be shorter than 128 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validAmount(amt int) error {
 	if amt == 0 {
 		return governor.NewErrorUser("Amount must be positive", http.StatusBadRequest, nil)

@@ -140,8 +140,8 @@ type (
 )
 
 // GetUserRoles returns a list of user roles
-func (s *service) GetUserRoles(userid string, amount, offset int) (*resUserRoles, error) {
-	roles, err := s.roles.GetRoles(userid, amount, offset)
+func (s *service) GetUserRoles(userid string, prefix string, amount, offset int) (*resUserRoles, error) {
+	roles, err := s.roles.GetRoles(userid, prefix, amount, offset)
 	if err != nil {
 		return nil, err
 	}

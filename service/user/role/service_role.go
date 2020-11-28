@@ -102,7 +102,7 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 }
 
 func (s *service) DeleteAllRoles(userid string) error {
-	roles, err := s.GetRoles(userid, 65536, 0)
+	roles, err := s.GetRoles(userid, "", 65536, 0)
 	if err != nil {
 		return err
 	}
@@ -113,8 +113,11 @@ func (s *service) DeleteAllRoles(userid string) error {
 	return nil
 }
 
-func (s *service) GetRoles(userid string, amount, offset int) (rank.Rank, error) {
-	return s.roles.GetRoles(userid, amount, offset)
+func (s *service) GetRoles(userid string, prefix string, amount, offset int) (rank.Rank, error) {
+	if len(prefix) == 0 {
+		return s.roles.GetRoles(userid, amount, offset)
+	}
+	return s.roles.GetRolesPrefix(userid, prefix, amount, offset)
 }
 
 func (s *service) GetByRole(roleName string, amount, offset int) ([]string, error) {

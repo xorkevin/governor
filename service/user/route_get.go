@@ -121,6 +121,7 @@ func (m *router) getByUsernamePrivate(w http.ResponseWriter, r *http.Request) {
 type (
 	reqGetUserRoles struct {
 		Userid string `valid:"userid,has" json:"-"`
+		Prefix string `valid:"rolePrefix,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
 	}
@@ -141,6 +142,7 @@ func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
 
 	req := reqGetUserRoles{
 		Userid: c.Param("id"),
+		Prefix: c.Query("prefix"),
 		Amount: amount,
 		Offset: offset,
 	}
@@ -149,7 +151,7 @@ func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserRoles(req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -173,6 +175,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 
 	req := reqGetUserRoles{
 		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
 		Amount: amount,
 		Offset: offset,
 	}
@@ -181,7 +184,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserRoles(req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
