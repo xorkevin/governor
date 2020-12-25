@@ -4,7 +4,7 @@ metadata:
   name: governor
 build:
   artifacts:
-    - image: docker.pkg.dev.home:8080/governor
+    - image: docker.pkg.dev.localhost:8080/governor
       context: '.'
   local:
     push: false
@@ -12,7 +12,7 @@ build:
     useBuildkit: true
     concurrency: 1
   insecureRegistries:
-    - docker.pkg.dev.home:8080
+    - docker.pkg.dev.localhost:8080
 deploy:
   kustomize:
     paths:

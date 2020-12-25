@@ -11,11 +11,11 @@ maxconnwrite: 5s
 maxconnidle: 5s
 alloworigins: []
 routerewrite:
-  - host: go.governor.dev.home:8080
+  - host: go.governor.dev.localhost:8080
     methods: ['GET']
     pattern: '^/([A-Za-z0-9_-]{2,}(?:/image)?)$'
     replace: /api/courier/link/id/$1
-  - host: governor.dev.home:8080
+  - host: governor.dev.localhost:8080
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
     replace: /api/oauth/openid-configuration
@@ -75,12 +75,12 @@ apikey:
 token:
   tokensecret: kv/data/app/governor/token
   rsakey: kv/data/app/governor/rsakey
-  issuer: http://governor.dev.home:8080
+  issuer: http://governor.dev.localhost:8080
   audience: governor
 oauth:
   keycache: 24h
-  issuer: http://governor.dev.home:8080
-  epbase: http://governor.dev.home:8080/api/oauth
+  issuer: http://governor.dev.localhost:8080
+  epbase: http://governor.dev.localhost:8080/api/oauth
   epauthorization: /auth/authorize
   eptoken: /auth/token
   epuserinfo: /userinfo
@@ -103,8 +103,8 @@ user:
     - mod.gov.oauth
   email:
     url:
-      base: http://governor.dev.home:8080
+      base: http://governor.dev.localhost:8080
 courier:
-  fallbacklink: http://governor.dev.home:8080
-  linkprefix: http://go.governor.dev.home:8080
+  fallbacklink: http://governor.dev.localhost:8080
+  linkprefix: http://go.governor.dev.localhost:8080
   cachetime: 24h

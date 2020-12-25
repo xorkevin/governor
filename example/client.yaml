@@ -1,2 +1,2 @@
-addr: http://governor.dev.home:8080/api
+addr: http://governor.dev.localhost:8080/api
 timeout: 5s

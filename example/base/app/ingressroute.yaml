@@ -7,7 +7,7 @@ spec:
     - web
   routes:
     - kind: Rule
-      match: Host(`governor.dev.home`) || Host(`go.governor.dev.home`)
+      match: Host(`governor.dev.localhost`) || Host(`go.governor.dev.localhost`)
       services:
         - kind: Service
           scheme: http

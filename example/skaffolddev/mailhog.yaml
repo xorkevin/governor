@@ -43,7 +43,7 @@ spec:
     - web
   routes:
     - kind: Rule
-      match: Host(`mailhog.dev.home`)
+      match: Host(`mailhog.dev.localhost`)
       services:
         - kind: Service
           scheme: http

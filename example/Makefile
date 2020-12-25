@@ -49,7 +49,7 @@ build: ## Build app
 
 ## DOCKER
 
-DOCKER_NAME=docker.pkg.dev.home:8080/governor
+DOCKER_NAME=docker.pkg.dev.localhost:8080/governor
 
 DOCKER_MAJOR_VERSION=0.2
 DOCKER_VERSION=0.2.7-0

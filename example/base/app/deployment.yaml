@@ -68,7 +68,7 @@ spec:
               mountPath: /home/governor
       containers:
         - name: governor
-          image: docker.pkg.dev.home:8080/governor
+          image: docker.pkg.dev.localhost:8080/governor
           env:
             - name: HOME
               value: /home/governor

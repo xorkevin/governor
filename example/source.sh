@@ -1,1 +1,1 @@
-export VAULT_ADDR=http://vault.dev.home:8080/
+export VAULT_ADDR=http://vault.dev.localhost:8080/

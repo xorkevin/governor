@@ -6,8 +6,8 @@ spec:
   gateways:
     - istio-system/istio-gateway
   hosts:
-    - governor.dev.home
-    - go.governor.dev.home
+    - governor.dev.localhost
+    - go.governor.dev.localhost
   http:
     - route:
         - destination:

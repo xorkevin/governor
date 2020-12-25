@@ -15,4 +15,4 @@ spec:
             - name: GOV_MAIL_INSECURE
               value: 'true'
             - name: GOV_ALLOWORIGINS
-              value: http://governor.dev.home:3000
+              value: http://governor.dev.localhost:3000
