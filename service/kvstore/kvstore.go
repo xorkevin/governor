@@ -6,8 +6,13 @@ import (
 	"github.com/go-redis/redis/v7"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"xorkevin.dev/governor"
+)
+
+const (
+	kvpathSeparator = ":"
 )
 
 type (
@@ -19,6 +24,7 @@ type (
 		Get(key string) Resulter
 		Set(key, val string, seconds int64)
 		Del(key ...string)
+		Subkey(keypath ...string) string
 		Subtree(prefix string) Tx
 		Exec() error
 	}
@@ -28,6 +34,7 @@ type (
 		Get(key string) (string, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
+		Subkey(keypath ...string) string
 		Tx() (Tx, error)
 		Subtree(prefix string) KVStore
 	}
@@ -299,6 +306,13 @@ func (s *service) Del(key ...string) error {
 	return nil
 }
 
+func (s *service) Subkey(keypath ...string) string {
+	if len(keypath) == 0 {
+		return ""
+	}
+	return strings.Join(keypath, kvpathSeparator)
+}
+
 func (s *service) Tx() (Tx, error) {
 	client, err := s.getClient()
 	if err != nil {
@@ -341,6 +355,13 @@ func (t *baseTransaction) Del(key ...string) {
 	t.base.Del(key...)
 }
 
+func (t *baseTransaction) Subkey(keypath ...string) string {
+	if len(keypath) == 0 {
+		return ""
+	}
+	return strings.Join(keypath, kvpathSeparator)
+}
+
 func (t *baseTransaction) Subtree(prefix string) Tx {
 	return &transaction{
 		prefix: prefix,
@@ -358,17 +379,17 @@ func (t *baseTransaction) Exec() error {
 }
 
 func (t *transaction) Get(key string) Resulter {
-	return t.base.Get(t.prefix + ":" + key)
+	return t.base.Get(t.prefix + kvpathSeparator + key)
 }
 
 func (t *transaction) Set(key, val string, seconds int64) {
-	t.base.Set(t.prefix+":"+key, val, seconds)
+	t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
 }
 
 func (t *transaction) Del(key ...string) {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
-		args = append(args, t.prefix+":"+i)
+		args = append(args, t.prefix+kvpathSeparator+i)
 	}
 	t.base.Del(args...)
 }
@@ -377,9 +398,16 @@ func (t *transaction) Exec() error {
 	return t.base.Exec()
 }
 
+func (t *transaction) Subkey(keypath ...string) string {
+	if len(keypath) == 0 {
+		return ""
+	}
+	return strings.Join(keypath, kvpathSeparator)
+}
+
 func (t *transaction) Subtree(prefix string) Tx {
 	return &transaction{
-		prefix: t.prefix + ":" + prefix,
+		prefix: t.prefix + kvpathSeparator + prefix,
 		base:   t.base,
 	}
 }
@@ -392,19 +420,26 @@ type (
 )
 
 func (t *tree) Get(key string) (string, error) {
-	return t.base.Get(t.prefix + ":" + key)
+	return t.base.Get(t.prefix + kvpathSeparator + key)
 }
 
 func (t *tree) Set(key, val string, seconds int64) error {
-	return t.base.Set(t.prefix+":"+key, val, seconds)
+	return t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
 }
 
 func (t *tree) Del(key ...string) error {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
-		args = append(args, t.prefix+":"+i)
+		args = append(args, t.prefix+kvpathSeparator+i)
 	}
 	return t.base.Del(args...)
+}
+
+func (t *tree) Subkey(keypath ...string) string {
+	if len(keypath) == 0 {
+		return ""
+	}
+	return strings.Join(keypath, kvpathSeparator)
 }
 
 func (t *tree) Tx() (Tx, error) {
@@ -417,7 +452,7 @@ func (t *tree) Tx() (Tx, error) {
 
 func (t *tree) Subtree(prefix string) KVStore {
 	return &tree{
-		prefix: t.prefix + ":" + prefix,
+		prefix: t.prefix + kvpathSeparator + prefix,
 		base:   t.base,
 	}
 }

@@ -152,18 +152,11 @@ func (s *service) clearCacheRoles(role string, userids []string) {
 	if len(userids) == 0 {
 		return
 	}
-	tx, err := s.kvroleset.Tx()
-	if err != nil {
-		s.logger.Error("Failed to clear role set from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "clearroleset",
-		})
-		return
-	}
+	args := make([]string, 0, len(userids))
 	for _, i := range userids {
-		tx.Subtree(i).Del(role)
+		args = append(args, s.kvroleset.Subkey(i, role))
 	}
-	if err := tx.Exec(); err != nil {
+	if err := s.kvroleset.Del(args...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "clearroleset",
