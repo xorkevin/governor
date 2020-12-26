@@ -97,8 +97,8 @@ func (r Rank) AddMod(tag string) Rank {
 	return r
 }
 
-// AddUser adds a user tag
-func (r Rank) AddUser(tag string) Rank {
+// AddUsr adds a user tag
+func (r Rank) AddUsr(tag string) Rank {
 	r[ToUsrName(tag)] = struct{}{}
 	return r
 }

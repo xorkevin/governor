@@ -405,7 +405,7 @@ func MemberF(g Gate, idfunc func(governor.Context, string) (string, error), scop
 		}
 		s := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
 		if tag != "" {
-			s = s.AddUser(tag).AddBan(tag)
+			s = s.AddUsr(tag).AddBan(tag)
 		}
 		roles, ok := r.Intersect(s)
 		if !ok {

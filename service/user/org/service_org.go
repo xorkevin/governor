@@ -106,7 +106,7 @@ func (s *service) CreateOrg(userid, displayName, desc string) (*resOrg, error) {
 		return nil, err
 	}
 	orgrole := rank.ToOrgName(m.OrgID)
-	if err := s.roles.InsertRoles(userid, rank.Rank{}.AddMod(orgrole).AddUser(orgrole)); err != nil {
+	if err := s.roles.InsertRoles(userid, rank.Rank{}.AddMod(orgrole).AddUsr(orgrole)); err != nil {
 		return nil, governor.NewError("Failed to add mod roles to user", 0, err)
 	}
 	return &resOrg{
