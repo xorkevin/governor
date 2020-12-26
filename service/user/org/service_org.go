@@ -147,7 +147,7 @@ func (s *service) DeleteOrg(orgid string) error {
 		return err
 	}
 	orgrole := rank.ToOrgName(orgid)
-	if err := s.roles.DeleteByRole(rank.ToUserName(orgrole)); err != nil {
+	if err := s.roles.DeleteByRole(rank.ToUsrName(orgrole)); err != nil {
 		return governor.NewError("Failed to remove org users", 0, err)
 	}
 	if err := s.roles.DeleteByRole(rank.ToModName(orgrole)); err != nil {

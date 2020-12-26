@@ -81,8 +81,8 @@ func ToModName(tag string) string {
 	return TagModPrefix + rankSeparator + tag
 }
 
-// ToUserName creates a usr name from a string
-func ToUserName(tag string) string {
+// ToUsrName creates a usr name from a string
+func ToUsrName(tag string) string {
 	return TagUserPrefix + rankSeparator + tag
 }
 
@@ -99,7 +99,7 @@ func (r Rank) AddMod(tag string) Rank {
 
 // AddUser adds a user tag
 func (r Rank) AddUser(tag string) Rank {
-	r[ToUserName(tag)] = struct{}{}
+	r[ToUsrName(tag)] = struct{}{}
 	return r
 }
 
