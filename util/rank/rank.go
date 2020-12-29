@@ -141,15 +141,15 @@ func (r Rank) Intersect(other Rank) Rank {
 }
 
 var (
-	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9.-_]+$`)
-	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9.-_]+$`)
-	rankRegexBan = regexp.MustCompile(`^ban.[A-Za-z0-9.-_]+$`)
-	rankRegexOrg = regexp.MustCompile(`^org.[A-Za-z0-9.-_]+$`)
+	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9._-]+$`)
+	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9._-]+$`)
+	rankRegexBan = regexp.MustCompile(`^ban.[A-Za-z0-9._-]+$`)
+	rankRegexOrg = regexp.MustCompile(`^org.[A-Za-z0-9._-]+$`)
 )
 
 // FromSlice creates a new Rank from a list of strings
 func FromSlice(rankSlice []string) Rank {
-	if len(rankSlice) < 1 {
+	if len(rankSlice) == 0 {
 		return Rank{}
 	}
 	r := make(Rank, len(rankSlice))
@@ -159,12 +159,12 @@ func FromSlice(rankSlice []string) Rank {
 	return r
 }
 
-// FromStringUser creates a new User Rank from a string
-func FromStringUser(rankString string) (Rank, error) {
-	if len(rankString) < 1 {
+// FromString creates a new Rank from a string
+func FromString(rankStr string) (Rank, error) {
+	if len(rankStr) == 0 {
 		return Rank{}, nil
 	}
-	rankSlice := strings.Split(rankString, ",")
+	rankSlice := strings.Split(rankStr, ",")
 	for _, i := range rankSlice {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
 			return Rank{}, governor.NewError("Illegal rank string", http.StatusBadRequest, nil)

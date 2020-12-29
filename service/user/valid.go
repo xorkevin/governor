@@ -168,9 +168,9 @@ func validRank(rankSlice []string) error {
 
 func validRankStr(rankString string) error {
 	if len(rankString) > lengthCapLarge {
-		return governor.NewErrorUser("Rank update is too large", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Rank string is too large", http.StatusBadRequest, nil)
 	}
-	if _, err := rank.FromStringUser(rankString); err != nil {
+	if _, err := rank.FromString(rankString); err != nil {
 		return err
 	}
 	return nil
