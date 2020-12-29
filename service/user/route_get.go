@@ -211,7 +211,11 @@ func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles, _ := rank.FromStringUser(req.Roles)
+	roles, err := rank.FromString(req.Roles)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
@@ -232,7 +236,11 @@ func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	roles, _ := rank.FromStringUser(req.Roles)
+	roles, err := rank.FromString(req.Roles)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)

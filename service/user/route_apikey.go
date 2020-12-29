@@ -197,7 +197,10 @@ func (m *router) checkApikeyValidator(t gate.Intersector) bool {
 	if !t.HasScope(req.Scope) {
 		return false
 	}
-	expected, _ := rank.FromStringUser(req.Roles)
+	expected, err := rank.FromString(req.Roles)
+	if err != nil {
+		return false
+	}
 	roles, ok := t.Intersect(expected)
 	if !ok {
 		return false
