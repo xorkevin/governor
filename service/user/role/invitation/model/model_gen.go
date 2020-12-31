@@ -196,3 +196,8 @@ func invModelGetModelLikeRoleGtCreationTimeOrdCreationTime(db *sql.DB, role stri
 	}
 	return res, nil
 }
+
+func invModelDelLeqCreationTime(db *sql.DB, creationtime int64) error {
+	_, err := db.Exec("DELETE FROM userroleinvitations WHERE creation_time <= $1;", creationtime)
+	return err
+}
