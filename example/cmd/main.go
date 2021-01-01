@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/courier"
 	"xorkevin.dev/governor/service/courier/model"
@@ -51,107 +50,65 @@ func main() {
 		EnvPrefix:     "gov",
 	}
 
-	ctx := context.Background()
-
 	dbService := db.New()
 	stateService := statemodel.New(dbService)
 
 	gov := governor.New(opts, stateService)
 
 	gov.Register("database", "/null/db", dbService)
-	kvService := kvstore.New()
-	gov.Register("kvstore", "/null/kv", kvService)
-	objstoreService := objstore.New()
-	gov.Register("objstore", "/null/obj", objstoreService)
-
+	gov.Register("kvstore", "/null/kv", kvstore.New())
+	gov.Register("objstore", "/null/obj", objstore.New())
+	gov.Register("msgqueue", "/null/msg", msgqueue.New())
+	gov.Register("pubsub", "/null/pubsub", pubsub.New())
+	gov.Register("template", "/null/tpl", template.New())
+	gov.Register("mail", "/null/mail", mail.NewCtx(gov.Injector()))
 	{
-		msgqueueService := msgqueue.New()
-		gov.Register("msgqueue", "/null/msg", msgqueueService)
-		ctx = msgqueue.SetCtxMsgqueue(ctx, msgqueueService)
+		inj := gov.Injector()
+		rolemodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "roles")
+		gov.Register("role", "/null/role", role.NewCtx(inj))
 	}
 	{
-		pubsubService := pubsub.New()
-		gov.Register("pubsub", "/null/pubsub", pubsubService)
-		ctx = pubsub.SetCtxPubsub(ctx, pubsubService)
+		inj := gov.Injector()
+		apikeymodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "apikeys")
+		gov.Register("apikey", "/null/apikey", apikey.NewCtx(inj))
+	}
+	gov.Register("token", "/null/token", token.New())
+	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
+	{
+		inj := gov.Injector()
+		usermodel.NewInCtx(inj)
+		sessionmodel.NewInCtx(inj)
+		approvalmodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "user")
+		gov.Register("user", "/u", user.NewCtx(inj))
 	}
 	{
-		templateService := template.New()
-		gov.Register("template", "/null/tpl", templateService)
-		ctx = template.SetCtxTemplate(ctx, templateService)
+		inj := gov.Injector()
+		orgmodel.NewInCtx(inj)
+		gov.Register("org", "/org", org.NewCtx(inj))
 	}
 	{
-		mailService, err := mail.NewCtx(ctx)
-		governor.Must(err)
-		gov.Register("mail", "/null/mail", mailService)
-		ctx = mail.SetCtxMail(ctx, mailService)
+		inj := gov.Injector()
+		oauthmodel.NewInCtx(inj)
+		connectionmodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "oauth")
+		objstore.NewBucketInCtx(inj, "oauth-app-logo")
+		gov.Register("oauth", "/oauth", oauth.NewCtx(inj))
 	}
 	{
-		roleModel := rolemodel.New(dbService)
-		roleService := role.New(roleModel, kvService.Subtree("roles"))
-		gov.Register("role", "/null/role", roleService)
-		ctx = role.SetCtxRole(ctx, roleService)
+		inj := gov.Injector()
+		profilemodel.NewInCtx(inj)
+		objstore.NewBucketInCtx(inj, "profile-image")
+		gov.Register("profile", "/profile", profile.NewCtx(inj))
 	}
 	{
-		apikeyModel := apikeymodel.New(dbService)
-		apikeyService := apikey.New(apikeyModel, kvService.Subtree("apikeys"))
-		gov.Register("apikey", "/null/apikey", apikeyService)
-		ctx = apikey.SetCtxApikey(ctx, apikeyService)
-	}
-	{
-		tokenService := token.New()
-		gov.Register("token", "/null/token", tokenService)
-		ctx = token.SetCtxTokenizer(ctx, tokenService)
-	}
-	{
-		gateService, err := gate.NewCtx(ctx)
-		governor.Must(err)
-		gov.Register("gate", "/null/gate", gateService)
-		ctx = gate.SetCtxGate(ctx, gateService)
-	}
-	{
-		c := usermodel.SetCtxRepo(ctx, usermodel.New(dbService))
-		c = sessionmodel.SetCtxRepo(c, sessionmodel.New(dbService))
-		c = approvalmodel.SetCtxRepo(c, approvalmodel.New(dbService))
-		c = approvalmodel.SetCtxRepo(c, approvalmodel.New(dbService))
-		c = kvstore.SetCtxKVStore(c, kvService.Subtree("user"))
-		userService, err := user.NewCtx(c)
-		governor.Must(err)
-		gov.Register("user", "/u", userService)
-		ctx = user.SetCtxUser(ctx, userService)
-	}
-	{
-		c := orgmodel.SetCtxRepo(ctx, orgmodel.New(dbService))
-		orgService, err := org.NewCtx(c)
-		governor.Must(err)
-		gov.Register("org", "/org", orgService)
-		ctx = org.SetCtxOrg(ctx, orgService)
-	}
-	{
-		c := oauthmodel.SetCtxRepo(ctx, oauthmodel.New(dbService))
-		c = connectionmodel.SetCtxRepo(c, connectionmodel.NewRepo(dbService))
-		c = objstore.SetCtxBucket(c, objstoreService.GetBucket("oauth-app-logo"))
-		c = kvstore.SetCtxKVStore(c, kvService.Subtree("oauth"))
-		oauthService, err := oauth.NewCtx(c)
-		governor.Must(err)
-		gov.Register("oauth", "/oauth", oauthService)
-		ctx = oauth.SetCtxOAuth(ctx, oauthService)
-	}
-	{
-		c := profilemodel.SetCtxRepo(ctx, profilemodel.New(dbService))
-		c = objstore.SetCtxBucket(c, objstoreService.GetBucket("profile-image"))
-		profileService, err := profile.NewCtx(c)
-		governor.Must(err)
-		gov.Register("profile", "/profile", profileService)
-		ctx = profile.SetCtxProfile(ctx, profileService)
-	}
-	{
-		c := couriermodel.SetCtxRepo(ctx, couriermodel.New(dbService))
-		c = objstore.SetCtxBucket(c, objstoreService.GetBucket("link-qr-image"))
-		c = kvstore.SetCtxKVStore(c, kvService.Subtree("courier"))
-		courierService, err := courier.NewCtx(c)
-		governor.Must(err)
-		gov.Register("courier", "/courier", courierService)
-		ctx = courier.SetCtxCourier(ctx, courierService)
+		inj := gov.Injector()
+		couriermodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "courier")
+		objstore.NewBucketInCtx(inj, "link-qr-image")
+		gov.Register("courier", "/courier", courier.NewCtx(inj))
 	}
 
 	cmd := governor.NewCmd(opts, gov, governor.NewClient(opts))

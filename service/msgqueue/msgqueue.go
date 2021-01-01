@@ -80,17 +80,17 @@ type (
 )
 
 // GetCtxMsgqueue returns a Msgqueue from the context
-func GetCtxMsgqueue(ctx context.Context) (Msgqueue, error) {
-	v := ctx.Value(ctxKeyMsgqueue{})
+func GetCtxMsgqueue(inj governor.Injector) Msgqueue {
+	v := inj.Get(ctxKeyMsgqueue{})
 	if v == nil {
-		return nil, governor.NewError("Msgqueue not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Msgqueue), nil
+	return v.(Msgqueue)
 }
 
-// SetCtxMsgqueue sets a Msgqueue in the context
-func SetCtxMsgqueue(ctx context.Context, q Msgqueue) context.Context {
-	return context.WithValue(ctx, ctxKeyMsgqueue{}, q)
+// setCtxMsgqueue sets a Msgqueue in the context
+func setCtxMsgqueue(inj governor.Injector, q Msgqueue) {
+	inj.Set(ctxKeyMsgqueue{}, q)
 }
 
 // New creates a new msgqueue service
@@ -103,7 +103,9 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxMsgqueue(inj, s)
+
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")

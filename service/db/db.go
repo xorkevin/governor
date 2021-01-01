@@ -50,7 +50,23 @@ type (
 		hbmaxfail  int
 		done       <-chan struct{}
 	}
+
+	ctxKeyDatabase struct{}
 )
+
+// GetCtxDB returns a Database from the context
+func GetCtxDB(inj governor.Injector) Database {
+	v := inj.Get(ctxKeyDatabase{})
+	if v == nil {
+		return nil
+	}
+	return v.(Database)
+}
+
+// setCtxDB sets a Database in the context
+func setCtxDB(inj governor.Injector, d Database) {
+	inj.Set(ctxKeyDatabase{}, d)
+}
 
 // New creates a new db service
 func New() Service {
@@ -61,7 +77,9 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxDB(inj, s)
+
 	r.SetDefault("auth", "")
 	r.SetDefault("dbname", "postgres")
 	r.SetDefault("host", "localhost")

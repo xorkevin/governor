@@ -64,17 +64,17 @@ type (
 )
 
 // GetCtxTokenizer returns a Tokenizer from the context
-func GetCtxTokenizer(ctx context.Context) (Tokenizer, error) {
-	v := ctx.Value(ctxKeyTokenizer{})
+func GetCtxTokenizer(inj governor.Injector) Tokenizer {
+	v := inj.Get(ctxKeyTokenizer{})
 	if v == nil {
-		return nil, governor.NewError("Tokenizer not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Tokenizer), nil
+	return v.(Tokenizer)
 }
 
-// SetCtxTokenizer sets a Tokenizer in the context
-func SetCtxTokenizer(ctx context.Context, t Tokenizer) context.Context {
-	return context.WithValue(ctx, ctxKeyTokenizer{}, t)
+// setCtxTokenizer sets a Tokenizer in the context
+func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
+	inj.Set(ctxKeyTokenizer{}, t)
 }
 
 // New creates a new Tokenizer
@@ -87,7 +87,9 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxTokenizer(inj, s)
+
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")

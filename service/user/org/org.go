@@ -2,7 +2,6 @@ package org
 
 import (
 	"context"
-	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
@@ -34,34 +33,25 @@ type (
 )
 
 // GetCtxOrg returns an Org service from the context
-func GetCtxOrg(ctx context.Context) (Org, error) {
-	v := ctx.Value(ctxKeyOrg{})
+func GetCtxOrg(inj governor.Injector) Org {
+	v := inj.Get(ctxKeyOrg{})
 	if v == nil {
-		return nil, governor.NewError("User service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Org), nil
+	return v.(Org)
 }
 
-// SetCtxOrg sets an Org service in the context
-func SetCtxOrg(ctx context.Context, o Org) context.Context {
-	return context.WithValue(ctx, ctxKeyOrg{}, o)
+// setCtxOrg sets an Org service in the context
+func setCtxOrg(inj governor.Injector, o Org) {
+	inj.Set(ctxKeyOrg{}, o)
 }
 
 // NewCtx creates a new Org service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	orgs, err := orgmodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	roles, err := role.GetCtxRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-	g, err := gate.GetCtxGate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(orgs, roles, g), nil
+func NewCtx(inj governor.Injector) Service {
+	orgs := orgmodel.GetCtxRepo(inj)
+	roles := role.GetCtxRole(inj)
+	g := gate.GetCtxGate(inj)
+	return New(orgs, roles, g)
 }
 
 // New returns a new org service
@@ -73,7 +63,8 @@ func New(orgs orgmodel.Repo, roles role.Role, g gate.Gate) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxOrg(inj, s)
 }
 
 func (s *service) router() *router {

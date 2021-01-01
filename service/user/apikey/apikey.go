@@ -43,20 +43,27 @@ type (
 )
 
 // GetCtxApikey returns a Apikey service from the context
-func GetCtxApikey(ctx context.Context) (Apikey, error) {
-	v := ctx.Value(ctxKeyApikey{})
+func GetCtxApikey(inj governor.Injector) Apikey {
+	v := inj.Get(ctxKeyApikey{})
 	if v == nil {
-		return nil, governor.NewError("Apikey service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Apikey), nil
+	return v.(Apikey)
 }
 
-// SetCtxApikey sets a Apikey service in the context
-func SetCtxApikey(ctx context.Context, a Apikey) context.Context {
-	return context.WithValue(ctx, ctxKeyApikey{}, a)
+// setCtxApikey sets a Apikey service in the context
+func setCtxApikey(inj governor.Injector, a Apikey) {
+	inj.Set(ctxKeyApikey{}, a)
 }
 
-// New returns a new Apikey
+// NewCtx returns a new Apikey service from a context
+func NewCtx(inj governor.Injector) Service {
+	apikeys := apikeymodel.GetCtxRepo(inj)
+	kv := kvstore.GetCtxKVStore(inj)
+	return New(apikeys, kv)
+}
+
+// New returns a new Apikey service
 func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		apikeys:        apikeys,
@@ -66,7 +73,9 @@ func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxApikey(inj, s)
+
 	r.SetDefault("scopecache", "24h")
 }
 

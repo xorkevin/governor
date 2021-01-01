@@ -1,7 +1,6 @@
 package profilemodel
 
 import (
-	"context"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -36,17 +35,26 @@ type (
 )
 
 // GetCtxRepo returns a Repo from the context
-func GetCtxRepo(ctx context.Context) (Repo, error) {
-	v := ctx.Value(ctxKeyRepo{})
+func GetCtxRepo(inj governor.Injector) Repo {
+	v := inj.Get(ctxKeyRepo{})
 	if v == nil {
-		return nil, governor.NewError("Profile repo not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Repo), nil
+	return v.(Repo)
 }
 
 // SetCtxRepo sets a Repo in the context
-func SetCtxRepo(ctx context.Context, r Repo) context.Context {
-	return context.WithValue(ctx, ctxKeyRepo{}, r)
+func SetCtxRepo(inj governor.Injector, r Repo) {
+	inj.Set(ctxKeyRepo{}, r)
+}
+
+func NewInCtx(inj governor.Injector) {
+	SetCtxRepo(inj, NewCtx(inj))
+}
+
+func NewCtx(inj governor.Injector) Repo {
+	dbService := db.GetCtxDB(inj)
+	return New(dbService)
 }
 
 // New creates a new profile repo

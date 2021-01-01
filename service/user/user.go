@@ -105,62 +105,32 @@ type (
 )
 
 // GetCtxUser returns a User service from the context
-func GetCtxUser(ctx context.Context) (User, error) {
-	v := ctx.Value(ctxKeyUser{})
+func GetCtxUser(inj governor.Injector) User {
+	v := inj.Get(ctxKeyUser{})
 	if v == nil {
-		return nil, governor.NewError("User service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(User), nil
+	return v.(User)
 }
 
-// SetCtxUser sets a User service in the context
-func SetCtxUser(ctx context.Context, u User) context.Context {
-	return context.WithValue(ctx, ctxKeyUser{}, u)
+// setCtxUser sets a User service in the context
+func setCtxUser(inj governor.Injector, u User) {
+	inj.Set(ctxKeyUser{}, u)
 }
 
 // NewCtx creates a new User service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	users, err := usermodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	sessions, err := sessionmodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	approvals, err := approvalmodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	roles, err := role.GetCtxRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-	apikeys, err := apikey.GetCtxApikey(ctx)
-	if err != nil {
-		return nil, err
-	}
-	kv, err := kvstore.GetCtxKVStore(ctx)
-	if err != nil {
-		return nil, err
-	}
-	queue, err := msgqueue.GetCtxMsgqueue(ctx)
-	if err != nil {
-		return nil, err
-	}
-	mailer, err := mail.GetCtxMail(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tokenizer, err := token.GetCtxTokenizer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	g, err := gate.GetCtxGate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(users, sessions, approvals, roles, apikeys, kv, queue, mailer, tokenizer, g), nil
+func NewCtx(inj governor.Injector) Service {
+	users := usermodel.GetCtxRepo(inj)
+	sessions := sessionmodel.GetCtxRepo(inj)
+	approvals := approvalmodel.GetCtxRepo(inj)
+	roles := role.GetCtxRole(inj)
+	apikeys := apikey.GetCtxApikey(inj)
+	kv := kvstore.GetCtxKVStore(inj)
+	queue := msgqueue.GetCtxMsgqueue(inj)
+	mailer := mail.GetCtxMail(inj)
+	tokenizer := token.GetCtxTokenizer(inj)
+	g := gate.GetCtxGate(inj)
+	return New(users, sessions, approvals, roles, apikeys, kv, queue, mailer, tokenizer, g)
 }
 
 // New creates a new User service
@@ -192,7 +162,9 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxUser(inj, s)
+
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")

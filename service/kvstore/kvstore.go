@@ -68,21 +68,42 @@ type (
 		done       <-chan struct{}
 	}
 
+	ctxKeyRootKV struct{}
+
 	ctxKeyKVStore struct{}
 )
 
-// GetCtxKVStore returns a KVStore from the context
-func GetCtxKVStore(ctx context.Context) (KVStore, error) {
-	v := ctx.Value(ctxKeyKVStore{})
+// getCtxRootKV returns a root KVStore from the context
+func getCtxRootKV(inj governor.Injector) KVStore {
+	v := inj.Get(ctxKeyRootKV{})
 	if v == nil {
-		return nil, governor.NewError("KVStore not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(KVStore), nil
+	return v.(KVStore)
 }
 
-// SetCtxKVStore sets a KVStore in the context
-func SetCtxKVStore(ctx context.Context, k KVStore) context.Context {
-	return context.WithValue(ctx, ctxKeyKVStore{}, k)
+// setCtxRootKV sets a root KVStore in the context
+func setCtxRootKV(inj governor.Injector, k KVStore) {
+	inj.Set(ctxKeyRootKV{}, k)
+}
+
+// GetCtxKVStore returns a KVStore from the context
+func GetCtxKVStore(inj governor.Injector) KVStore {
+	v := inj.Get(ctxKeyKVStore{})
+	if v == nil {
+		return nil
+	}
+	return v.(KVStore)
+}
+
+// setCtxKVStore sets a KVStore in the context
+func setCtxKVStore(inj governor.Injector, k KVStore) {
+	inj.Set(ctxKeyKVStore{}, k)
+}
+
+func NewSubtreeInCtx(inj governor.Injector, prefix string) {
+	kv := getCtxRootKV(inj)
+	setCtxKVStore(inj, kv.Subtree(prefix))
 }
 
 // New creates a new cache service
@@ -94,7 +115,9 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxRootKV(inj, s)
+
 	r.SetDefault("auth", "")
 	r.SetDefault("dbname", 0)
 	r.SetDefault("host", "localhost")

@@ -29,10 +29,10 @@ type (
 
 	service struct {
 		repo          couriermodel.Repo
+		kvlinks       kvstore.KVStore
 		linkImgBucket objstore.Bucket
 		linkImgDir    objstore.Dir
 		brandImgDir   objstore.Dir
-		kvlinks       kvstore.KVStore
 		gate          gate.Gate
 		logger        governor.Logger
 		fallbackLink  string
@@ -48,54 +48,44 @@ type (
 )
 
 // GetCtxCourier returns a Courier service from the context
-func GetCtxCourier(ctx context.Context) (Courier, error) {
-	v := ctx.Value(ctxKeyCourier{})
+func GetCtxCourier(inj governor.Injector) Courier {
+	v := inj.Get(ctxKeyCourier{})
 	if v == nil {
-		return nil, governor.NewError("Courier service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Courier), nil
+	return v.(Courier)
 }
 
-// SetCtxCourier sets a Courier service in the context
-func SetCtxCourier(ctx context.Context, c Courier) context.Context {
-	return context.WithValue(ctx, ctxKeyCourier{}, c)
+// setCtxCourier sets a Courier service in the context
+func setCtxCourier(inj governor.Injector, c Courier) {
+	inj.Set(ctxKeyCourier{}, c)
 }
 
 // NewCtx creates a new Courier service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	repo, err := couriermodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	obj, err := objstore.GetCtxBucket(ctx)
-	if err != nil {
-		return nil, err
-	}
-	kv, err := kvstore.GetCtxKVStore(ctx)
-	if err != nil {
-		return nil, err
-	}
-	g, err := gate.GetCtxGate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(repo, obj, kv, g), nil
+func NewCtx(inj governor.Injector) Service {
+	repo := couriermodel.GetCtxRepo(inj)
+	kv := kvstore.GetCtxKVStore(inj)
+	obj := objstore.GetCtxBucket(inj)
+	g := gate.GetCtxGate(inj)
+	return New(repo, kv, obj, g)
 }
 
 // New creates a new Courier service
-func New(repo couriermodel.Repo, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
+func New(repo couriermodel.Repo, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) Service {
 	return &service{
 		repo:          repo,
+		kvlinks:       kv.Subtree("links"),
 		linkImgBucket: obj,
 		linkImgDir:    obj.Subdir("qr"),
 		brandImgDir:   obj.Subdir("brand"),
-		kvlinks:       kv.Subtree("links"),
 		gate:          g,
 		cacheTime:     time24h,
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxCourier(inj, s)
+
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
 	r.SetDefault("cachetime", "24h")

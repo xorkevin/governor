@@ -52,21 +52,42 @@ type (
 		done       <-chan struct{}
 	}
 
+	ctxKeyObjstore struct{}
+
 	ctxKeyBucket struct{}
 )
 
-// GetCtxBucket returns a Bucket from the context
-func GetCtxBucket(ctx context.Context) (Bucket, error) {
-	v := ctx.Value(ctxKeyBucket{})
+// getCtxObjstore returns an Objstore from the context
+func getCtxObjstore(inj governor.Injector) Objstore {
+	v := inj.Get(ctxKeyObjstore{})
 	if v == nil {
-		return nil, governor.NewError("Bucket not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Bucket), nil
+	return v.(Objstore)
 }
 
-// SetCtxBucket sets a Bucket in the context
-func SetCtxBucket(ctx context.Context, o Bucket) context.Context {
-	return context.WithValue(ctx, ctxKeyBucket{}, o)
+// setCtxObjstore sets an Objstore in the context
+func setCtxObjstore(inj governor.Injector, o Objstore) {
+	inj.Set(ctxKeyObjstore{}, o)
+}
+
+// GetCtxBucket returns a Bucket from the context
+func GetCtxBucket(inj governor.Injector) Bucket {
+	v := inj.Get(ctxKeyBucket{})
+	if v == nil {
+		return nil
+	}
+	return v.(Bucket)
+}
+
+// setCtxBucket sets a Bucket in the context
+func setCtxBucket(inj governor.Injector, b Bucket) {
+	inj.Set(ctxKeyBucket{}, b)
+}
+
+func NewBucketInCtx(inj governor.Injector, name string) {
+	obj := getCtxObjstore(inj)
+	setCtxBucket(inj, obj.GetBucket(name))
 }
 
 // New creates a new object store service instance
@@ -78,7 +99,9 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxObjstore(inj, s)
+
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "9000")

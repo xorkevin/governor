@@ -76,30 +76,24 @@ type (
 )
 
 // GetCtxMail returns a Mail service from the context
-func GetCtxMail(ctx context.Context) (Mail, error) {
-	v := ctx.Value(ctxKeyMail{})
+func GetCtxMail(inj governor.Injector) Mail {
+	v := inj.Get(ctxKeyMail{})
 	if v == nil {
-		return nil, governor.NewError("Mail service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Mail), nil
+	return v.(Mail)
 }
 
-// SetCtxMail sets a Mail service in the context
-func SetCtxMail(ctx context.Context, m Mail) context.Context {
-	return context.WithValue(ctx, ctxKeyMail{}, m)
+// setCtxMail sets a Mail service in the context
+func setCtxMail(inj governor.Injector, m Mail) {
+	inj.Set(ctxKeyMail{}, m)
 }
 
 // NewCtx creates a new Mail service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	tpl, err := template.GetCtxTemplate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	queue, err := msgqueue.GetCtxMsgqueue(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(tpl, queue), nil
+func NewCtx(inj governor.Injector) Service {
+	tpl := template.GetCtxTemplate(inj)
+	queue := msgqueue.GetCtxMsgqueue(inj)
+	return New(tpl, queue)
 }
 
 // New creates a new mailer service
@@ -111,7 +105,9 @@ func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxMail(inj, s)
+
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "587")

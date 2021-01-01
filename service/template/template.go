@@ -33,17 +33,17 @@ type (
 )
 
 // GetCtxTemplate returns a Template service from the context
-func GetCtxTemplate(ctx context.Context) (Template, error) {
-	v := ctx.Value(ctxKeyTemplate{})
+func GetCtxTemplate(inj governor.Injector) Template {
+	v := inj.Get(ctxKeyTemplate{})
 	if v == nil {
-		return nil, governor.NewError("Template service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Template), nil
+	return v.(Template)
 }
 
-// SetCtxTemplate sets a Template service in the context
-func SetCtxTemplate(ctx context.Context, t Template) context.Context {
-	return context.WithValue(ctx, ctxKeyTemplate{}, t)
+// setCtxTemplate sets a Template service in the context
+func setCtxTemplate(inj governor.Injector, t Template) {
+	inj.Set(ctxKeyTemplate{}, t)
 }
 
 // New creates a new Template service
@@ -51,7 +51,9 @@ func New() Service {
 	return &service{}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxTemplate(inj, s)
+
 	r.SetDefault("dir", "templates")
 }
 

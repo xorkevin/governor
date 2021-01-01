@@ -43,17 +43,24 @@ type (
 )
 
 // GetCtxRole returns a Role service from the context
-func GetCtxRole(ctx context.Context) (Role, error) {
-	v := ctx.Value(ctxKeyRole{})
+func GetCtxRole(inj governor.Injector) Role {
+	v := inj.Get(ctxKeyRole{})
 	if v == nil {
-		return nil, governor.NewError("Role service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Role), nil
+	return v.(Role)
 }
 
-// SetCtxRole sets a Role service in the context
-func SetCtxRole(ctx context.Context, r Role) context.Context {
-	return context.WithValue(ctx, ctxKeyRole{}, r)
+// setCtxRole sets a Role service in the context
+func setCtxRole(inj governor.Injector, r Role) {
+	inj.Set(ctxKeyRole{}, r)
+}
+
+// NewCtx creates a new Role service from a context
+func NewCtx(inj governor.Injector) Service {
+	roles := rolemodel.GetCtxRepo(inj)
+	kv := kvstore.GetCtxKVStore(inj)
+	return New(roles, kv)
 }
 
 // New returns a new Role
@@ -65,7 +72,9 @@ func New(roles rolemodel.Repo, kv kvstore.KVStore) Service {
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxRole(inj, s)
+
 	r.SetDefault("rolecache", "24h")
 }
 

@@ -70,34 +70,25 @@ type (
 )
 
 // GetCtxGate returns a Gate from the context
-func GetCtxGate(ctx context.Context) (Gate, error) {
-	v := ctx.Value(ctxKeyGate{})
+func GetCtxGate(inj governor.Injector) Gate {
+	v := inj.Get(ctxKeyGate{})
 	if v == nil {
-		return nil, governor.NewError("Gate not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Gate), nil
+	return v.(Gate)
 }
 
-// SetCtxGate sets a Gate in the context
-func SetCtxGate(ctx context.Context, g Gate) context.Context {
-	return context.WithValue(ctx, ctxKeyGate{}, g)
+// setCtxGate sets a Gate in the context
+func setCtxGate(inj governor.Injector, g Gate) {
+	inj.Set(ctxKeyGate{}, g)
 }
 
 // NewCtx creates a new Gate from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	roles, err := role.GetCtxRole(ctx)
-	if err != nil {
-		return nil, err
-	}
-	apikeys, err := apikey.GetCtxApikey(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tokenizer, err := token.GetCtxTokenizer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(roles, apikeys, tokenizer), nil
+func NewCtx(inj governor.Injector) Service {
+	roles := role.GetCtxRole(inj)
+	apikeys := apikey.GetCtxApikey(inj)
+	tokenizer := token.GetCtxTokenizer(inj)
+	return New(roles, apikeys, tokenizer)
 }
 
 // New returns a new Gate
@@ -109,7 +100,8 @@ func New(roles role.Role, apikeys apikey.Apikey, tokenizer token.Tokenizer) Serv
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxGate(inj, s)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {

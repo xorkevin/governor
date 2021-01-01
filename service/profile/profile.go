@@ -44,38 +44,26 @@ type (
 )
 
 // GetCtxProfile returns a Profile service from the context
-func GetCtxProfile(ctx context.Context) (Profile, error) {
-	v := ctx.Value(ctxKeyProfile{})
+func GetCtxProfile(inj governor.Injector) Profile {
+	v := inj.Get(ctxKeyProfile{})
 	if v == nil {
-		return nil, governor.NewError("Profile serivce not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(Profile), nil
+	return v.(Profile)
 }
 
-// SetCtxProfile sets a profile service in the context
-func SetCtxProfile(ctx context.Context, p Profile) context.Context {
-	return context.WithValue(ctx, ctxKeyProfile{}, p)
+// setCtxProfile sets a profile service in the context
+func setCtxProfile(inj governor.Injector, p Profile) {
+	inj.Set(ctxKeyProfile{}, p)
 }
 
 // NewCtx creates a new Profile service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	profiles, err := profilemodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	obj, err := objstore.GetCtxBucket(ctx)
-	if err != nil {
-		return nil, err
-	}
-	queue, err := msgqueue.GetCtxMsgqueue(ctx)
-	if err != nil {
-		return nil, err
-	}
-	g, err := gate.GetCtxGate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(profiles, obj, queue, g), nil
+func NewCtx(inj governor.Injector) Service {
+	profiles := profilemodel.GetCtxRepo(inj)
+	obj := objstore.GetCtxBucket(inj)
+	queue := msgqueue.GetCtxMsgqueue(inj)
+	g := gate.GetCtxGate(inj)
+	return New(profiles, obj, queue, g)
 }
 
 // New creates a new Profile service
@@ -89,7 +77,8 @@ func New(profiles profilemodel.Repo, obj objstore.Bucket, queue msgqueue.Msgqueu
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxProfile(inj, s)
 }
 
 func (s *service) router() *router {

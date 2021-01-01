@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -33,6 +32,7 @@ type (
 	// Server is a governor server to which services may be registered
 	Server struct {
 		services []serviceDef
+		inj      Injector
 		config   *Config
 		state    state.State
 		logger   Logger
@@ -46,6 +46,7 @@ type (
 func New(opts Opts, stateService state.State) *Server {
 	return &Server{
 		services: []serviceDef{},
+		inj:      newInjector(context.Background()),
 		config:   newConfig(opts),
 		state:    stateService,
 		flags: Flags{
@@ -270,11 +271,4 @@ func (s *Server) Setup(req ReqSetup) error {
 		return err
 	}
 	return nil
-}
-
-// Must exits if error is not nil
-func Must(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
 }

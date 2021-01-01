@@ -32,9 +32,9 @@ type (
 		apps         oauthmodel.Repo
 		connections  connectionmodel.Repo
 		tokenizer    token.Tokenizer
+		kvclient     kvstore.KVStore
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
-		kvclient     kvstore.KVStore
 		gate         gate.Gate
 		logger       governor.Logger
 		keyCacheTime int64
@@ -53,63 +53,47 @@ type (
 )
 
 // GetCtxOAuth returns an OAuth service from the context
-func GetCtxOAuth(ctx context.Context) (OAuth, error) {
-	v := ctx.Value(ctxKeyOAuth{})
+func GetCtxOAuth(inj governor.Injector) OAuth {
+	v := inj.Get(ctxKeyOAuth{})
 	if v == nil {
-		return nil, governor.NewError("OAuth service not found in context", http.StatusInternalServerError, nil)
+		return nil
 	}
-	return v.(OAuth), nil
+	return v.(OAuth)
 }
 
-// SetCtxOAuth sets an OAuth service in the context
-func SetCtxOAuth(ctx context.Context, o OAuth) context.Context {
-	return context.WithValue(ctx, ctxKeyOAuth{}, o)
+// setCtxOAuth sets an OAuth service in the context
+func setCtxOAuth(inj governor.Injector, o OAuth) {
+	inj.Set(ctxKeyOAuth{}, o)
 }
 
 // NewCtx creates a new OAuth service from a context
-func NewCtx(ctx context.Context) (Service, error) {
-	apps, err := oauthmodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	connections, err := connectionmodel.GetCtxRepo(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tokenizer, err := token.GetCtxTokenizer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	obj, err := objstore.GetCtxBucket(ctx)
-	if err != nil {
-		return nil, err
-	}
-	kv, err := kvstore.GetCtxKVStore(ctx)
-	if err != nil {
-		return nil, err
-	}
-	g, err := gate.GetCtxGate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return New(apps, connections, tokenizer, obj, kv, g), nil
+func NewCtx(inj governor.Injector) Service {
+	apps := oauthmodel.GetCtxRepo(inj)
+	connections := connectionmodel.GetCtxRepo(inj)
+	tokenizer := token.GetCtxTokenizer(inj)
+	kv := kvstore.GetCtxKVStore(inj)
+	obj := objstore.GetCtxBucket(inj)
+	g := gate.GetCtxGate(inj)
+	return New(apps, connections, tokenizer, kv, obj, g)
 }
 
 // New returns a new Apikey
-func New(apps oauthmodel.Repo, connections connectionmodel.Repo, tokenizer token.Tokenizer, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {
+func New(apps oauthmodel.Repo, connections connectionmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
 		connections:  connections,
 		tokenizer:    tokenizer,
+		kvclient:     kv.Subtree("client"),
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
-		kvclient:     kv.Subtree("client"),
 		gate:         g,
 		keyCacheTime: time24h,
 	}
 }
 
-func (s *service) Register(r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+	setCtxOAuth(inj, s)
+
 	r.SetDefault("keycache", "24h")
 	r.SetDefault("epbase", "http://localhost:8080/api/oauth")
 	r.SetDefault("epauthorization", "/auth/authorize")
