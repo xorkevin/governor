@@ -1,6 +1,7 @@
 package approvalmodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -48,7 +49,23 @@ type (
 		CodeHash     string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
 		CodeTime     int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("Approval repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()

@@ -1,6 +1,7 @@
 package apikeymodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -45,7 +46,23 @@ type (
 		Desc    string `model:"description,VARCHAR(255)" query:"description"`
 		Time    int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context, r Repo) Repo {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil
+	}
+	return v.(Repo)
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()

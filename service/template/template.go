@@ -28,7 +28,23 @@ type (
 		ht     *htmlTemplate.Template
 		logger governor.Logger
 	}
+
+	ctxKeyTemplate struct{}
 )
+
+// GetCtxTemplate returns a Template service from the context
+func GetCtxTemplate(ctx context.Context) (Template, error) {
+	v := ctx.Value(ctxKeyTemplate{})
+	if v == nil {
+		return nil, governor.NewError("Template service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Template), nil
+}
+
+// SetCtxTemplate sets a Template service in the context
+func SetCtxTemplate(ctx context.Context, t Template) context.Context {
+	return context.WithValue(ctx, ctxKeyTemplate{}, t)
+}
 
 // New creates a new Template service
 func New() Service {

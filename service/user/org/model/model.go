@@ -1,6 +1,7 @@
 package orgmodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -40,7 +41,23 @@ type (
 		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroup"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("Org repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 // New creates a new OAuth app repository
 func New(database db.Database) Repo {

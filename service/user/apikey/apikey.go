@@ -10,6 +10,10 @@ import (
 	"xorkevin.dev/governor/service/user/apikey/model"
 )
 
+const (
+	time24h int64 = int64(24 * time.Hour / time.Second)
+)
+
 type (
 	// Apikey manages apikeys
 	Apikey interface {
@@ -34,11 +38,23 @@ type (
 		logger         governor.Logger
 		scopeCacheTime int64
 	}
+
+	ctxKeyApikey struct{}
 )
 
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
-)
+// GetCtxApikey returns a Apikey service from the context
+func GetCtxApikey(ctx context.Context) (Apikey, error) {
+	v := ctx.Value(ctxKeyApikey{})
+	if v == nil {
+		return nil, governor.NewError("Apikey service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Apikey), nil
+}
+
+// SetCtxApikey sets a Apikey service in the context
+func SetCtxApikey(ctx context.Context, a Apikey) context.Context {
+	return context.WithValue(ctx, ctxKeyApikey{}, a)
+}
 
 // New returns a new Apikey
 func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {

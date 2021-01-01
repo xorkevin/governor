@@ -51,7 +51,23 @@ type (
 		hbmaxfail  int
 		done       <-chan struct{}
 	}
+
+	ctxKeyBucket struct{}
 )
+
+// GetCtxBucket returns a Bucket from the context
+func GetCtxBucket(ctx context.Context) (Bucket, error) {
+	v := ctx.Value(ctxKeyBucket{})
+	if v == nil {
+		return nil, governor.NewError("Bucket not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Bucket), nil
+}
+
+// SetCtxBucket sets a Bucket in the context
+func SetCtxBucket(ctx context.Context, o Bucket) context.Context {
+	return context.WithValue(ctx, ctxKeyBucket{}, o)
+}
 
 // New creates a new object store service instance
 func New() Service {

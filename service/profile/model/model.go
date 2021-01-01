@@ -1,6 +1,7 @@
 package profilemodel
 
 import (
+	"context"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -30,7 +31,23 @@ type (
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("Profile repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 // New creates a new profile repo
 func New(db db.Database) Repo {

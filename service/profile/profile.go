@@ -18,13 +18,17 @@ const (
 )
 
 type (
+	// Profile is a user profile management service
+	Profile interface {
+	}
+
 	Service interface {
 		governor.Service
+		Profile
 	}
 
 	service struct {
 		profiles      profilemodel.Repo
-		objstore      objstore.Objstore
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
 		queue         msgqueue.Msgqueue
@@ -35,7 +39,44 @@ type (
 	router struct {
 		s service
 	}
+
+	ctxKeyProfile struct{}
 )
+
+// GetCtxProfile returns a Profile service from the context
+func GetCtxProfile(ctx context.Context) (Profile, error) {
+	v := ctx.Value(ctxKeyProfile{})
+	if v == nil {
+		return nil, governor.NewError("Profile serivce not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Profile), nil
+}
+
+// SetCtxProfile sets a profile service in the context
+func SetCtxProfile(ctx context.Context, p Profile) context.Context {
+	return context.WithValue(ctx, ctxKeyProfile{}, p)
+}
+
+// NewCtx creates a new Profile service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	profiles, err := profilemodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	obj, err := objstore.GetCtxBucket(ctx)
+	if err != nil {
+		return nil, err
+	}
+	queue, err := msgqueue.GetCtxMsgqueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, err := gate.GetCtxGate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(profiles, obj, queue, g), nil
+}
 
 // New creates a new Profile service
 func New(profiles profilemodel.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g gate.Gate) Service {

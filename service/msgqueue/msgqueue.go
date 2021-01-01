@@ -75,7 +75,23 @@ type (
 		logger   governor.Logger
 		sub      stan.Subscription
 	}
+
+	ctxKeyMsgqueue struct{}
 )
+
+// GetCtxMsgqueue returns a Msgqueue from the context
+func GetCtxMsgqueue(ctx context.Context) (Msgqueue, error) {
+	v := ctx.Value(ctxKeyMsgqueue{})
+	if v == nil {
+		return nil, governor.NewError("Msgqueue not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Msgqueue), nil
+}
+
+// SetCtxMsgqueue sets a Msgqueue in the context
+func SetCtxMsgqueue(ctx context.Context, q Msgqueue) context.Context {
+	return context.WithValue(ctx, ctxKeyMsgqueue{}, q)
+}
 
 // New creates a new msgqueue service
 func New() Service {

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -269,4 +270,11 @@ func (s *Server) Setup(req ReqSetup) error {
 		return err
 	}
 	return nil
+}
+
+// Must exits if error is not nil
+func Must(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }

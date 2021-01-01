@@ -1,6 +1,7 @@
 package usermodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -61,7 +62,23 @@ type (
 		FirstName string `query:"first_name"`
 		LastName  string `query:"last_name"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("User repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 // New creates a new user repository
 func New(database db.Database) Repo {

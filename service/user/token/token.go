@@ -59,7 +59,23 @@ type (
 		jwk        *jose.JSONWebKey
 		logger     governor.Logger
 	}
+
+	ctxKeyTokenizer struct{}
 )
+
+// GetCtxTokenizer returns a Tokenizer from the context
+func GetCtxTokenizer(ctx context.Context) (Tokenizer, error) {
+	v := ctx.Value(ctxKeyTokenizer{})
+	if v == nil {
+		return nil, governor.NewError("Tokenizer not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Tokenizer), nil
+}
+
+// SetCtxTokenizer sets a Tokenizer in the context
+func SetCtxTokenizer(ctx context.Context, t Tokenizer) context.Context {
+	return context.WithValue(ctx, ctxKeyTokenizer{}, t)
+}
 
 // New creates a new Tokenizer
 func New() Service {

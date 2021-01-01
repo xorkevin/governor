@@ -66,7 +66,23 @@ type (
 		logger  governor.Logger
 		sub     *nats.Subscription
 	}
+
+	ctxKeyPubsub struct{}
 )
+
+// GetCtxPubsub returns a Pubsub from the context
+func GetCtxPubsub(ctx context.Context) (Pubsub, error) {
+	v := ctx.Value(ctxKeyPubsub{})
+	if v == nil {
+		return nil, governor.NewError("Pubsub not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Pubsub), nil
+}
+
+// SetCtxPubsub sets a Pubsub in the context
+func SetCtxPubsub(ctx context.Context, p Pubsub) context.Context {
+	return context.WithValue(ctx, ctxKeyPubsub{}, p)
+}
 
 // New creates a new pubsub service
 func New() Service {

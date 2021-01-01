@@ -1,6 +1,7 @@
 package rolemodel
 
 import (
+	"context"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -33,7 +34,23 @@ type (
 		Userid string `model:"userid,VARCHAR(31);index" query:"userid,getgroupeq,role;deleq,userid"`
 		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context, r Repo) Repo {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil
+	}
+	return v.(Repo)
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 func New(database db.Database) Repo {
 	return &repo{

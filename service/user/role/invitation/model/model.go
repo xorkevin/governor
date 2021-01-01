@@ -1,6 +1,7 @@
 package invitationmodel
 
 import (
+	"context"
 	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -32,7 +33,23 @@ type (
 		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;getgroupeq,role|like,creation_time|gt;deleq,creation_time|leq"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context, r Repo) Repo {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil
+	}
+	return v.(Repo)
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 func New(database db.Database) Repo {
 	return &repo{

@@ -2,6 +2,7 @@ package org
 
 import (
 	"context"
+	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
@@ -9,8 +10,13 @@ import (
 )
 
 type (
+	// Org is an organization management service
+	Org interface {
+	}
+
 	Service interface {
 		governor.Service
+		Org
 	}
 
 	service struct {
@@ -23,7 +29,40 @@ type (
 	router struct {
 		s service
 	}
+
+	ctxKeyOrg struct{}
 )
+
+// GetCtxOrg returns an Org service from the context
+func GetCtxOrg(ctx context.Context) (Org, error) {
+	v := ctx.Value(ctxKeyOrg{})
+	if v == nil {
+		return nil, governor.NewError("User service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Org), nil
+}
+
+// SetCtxOrg sets an Org service in the context
+func SetCtxOrg(ctx context.Context, o Org) context.Context {
+	return context.WithValue(ctx, ctxKeyOrg{}, o)
+}
+
+// NewCtx creates a new Org service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	orgs, err := orgmodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := role.GetCtxRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, err := gate.GetCtxGate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(orgs, roles, g), nil
+}
 
 // New returns a new org service
 func New(orgs orgmodel.Repo, roles role.Role, g gate.Gate) Service {

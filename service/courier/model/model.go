@@ -1,6 +1,7 @@
 package couriermodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -50,7 +51,23 @@ type (
 		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid,getoneeq,creatorid,brandid;deleq,creatorid,brandid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroup;getgroupeq,creatorid"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("Courier repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 // New creates a new courier repo
 func New(database db.Database) Repo {

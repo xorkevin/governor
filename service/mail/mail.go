@@ -71,7 +71,36 @@ type (
 		outbox      chan mailOp
 		done        <-chan struct{}
 	}
+
+	ctxKeyMail struct{}
 )
+
+// GetCtxMail returns a Mail service from the context
+func GetCtxMail(ctx context.Context) (Mail, error) {
+	v := ctx.Value(ctxKeyMail{})
+	if v == nil {
+		return nil, governor.NewError("Mail service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Mail), nil
+}
+
+// SetCtxMail sets a Mail service in the context
+func SetCtxMail(ctx context.Context, m Mail) context.Context {
+	return context.WithValue(ctx, ctxKeyMail{}, m)
+}
+
+// NewCtx creates a new Mail service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	tpl, err := template.GetCtxTemplate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	queue, err := msgqueue.GetCtxMsgqueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(tpl, queue), nil
+}
 
 // New creates a new mailer service
 func New(tpl template.Template, queue msgqueue.Msgqueue) Service {

@@ -11,6 +11,10 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
+const (
+	time24h int64 = int64(24 * time.Hour / time.Second)
+)
+
 type (
 	// Role manages user roles
 	Role interface {
@@ -34,11 +38,23 @@ type (
 		logger        governor.Logger
 		roleCacheTime int64
 	}
+
+	ctxKeyRole struct{}
 )
 
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
-)
+// GetCtxRole returns a Role service from the context
+func GetCtxRole(ctx context.Context) (Role, error) {
+	v := ctx.Value(ctxKeyRole{})
+	if v == nil {
+		return nil, governor.NewError("Role service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Role), nil
+}
+
+// SetCtxRole sets a Role service in the context
+func SetCtxRole(ctx context.Context, r Role) context.Context {
+	return context.WithValue(ctx, ctxKeyRole{}, r)
+}
 
 // New returns a new Role
 func New(roles rolemodel.Repo, kv kvstore.KVStore) Service {

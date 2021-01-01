@@ -43,7 +43,44 @@ type (
 	router struct {
 		s service
 	}
+
+	ctxKeyCourier struct{}
 )
+
+// GetCtxCourier returns a Courier service from the context
+func GetCtxCourier(ctx context.Context) (Courier, error) {
+	v := ctx.Value(ctxKeyCourier{})
+	if v == nil {
+		return nil, governor.NewError("Courier service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Courier), nil
+}
+
+// SetCtxCourier sets a Courier service in the context
+func SetCtxCourier(ctx context.Context, c Courier) context.Context {
+	return context.WithValue(ctx, ctxKeyCourier{}, c)
+}
+
+// NewCtx creates a new Courier service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	repo, err := couriermodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	obj, err := objstore.GetCtxBucket(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kv, err := kvstore.GetCtxKVStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, err := gate.GetCtxGate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(repo, obj, kv, g), nil
+}
 
 // New creates a new Courier service
 func New(repo couriermodel.Repo, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {

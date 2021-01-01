@@ -67,7 +67,23 @@ type (
 		hbmaxfail  int
 		done       <-chan struct{}
 	}
+
+	ctxKeyKVStore struct{}
 )
+
+// GetCtxKVStore returns a KVStore from the context
+func GetCtxKVStore(ctx context.Context) (KVStore, error) {
+	v := ctx.Value(ctxKeyKVStore{})
+	if v == nil {
+		return nil, governor.NewError("KVStore not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(KVStore), nil
+}
+
+// SetCtxKVStore sets a KVStore in the context
+func SetCtxKVStore(ctx context.Context, k KVStore) context.Context {
+	return context.WithValue(ctx, ctxKeyKVStore{}, k)
+}
 
 // New creates a new cache service
 func New() Service {

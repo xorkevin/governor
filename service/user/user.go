@@ -25,6 +25,19 @@ const (
 	authRoutePrefix = "/auth"
 )
 
+const (
+	// NewUserQueueID is emitted when a new user is created
+	NewUserQueueID = "gov.user.new"
+	// DeleteUserQueueID is emitted when a user is deleted
+	DeleteUserQueueID = "gov.user.delete"
+)
+
+const (
+	time5m     int64 = int64(5 * time.Minute / time.Second)
+	time24h    int64 = int64(24 * time.Hour / time.Second)
+	time6month int64 = time24h * 365 / 2
+)
+
 type (
 	// User is a user management service
 	User interface {
@@ -87,20 +100,70 @@ type (
 	DeleteUserProps struct {
 		Userid string `json:"userid"`
 	}
+
+	ctxKeyUser struct{}
 )
 
-const (
-	NewUserQueueID    = "gov.user.new"
-	DeleteUserQueueID = "gov.user.delete"
-)
+// GetCtxUser returns a User service from the context
+func GetCtxUser(ctx context.Context) (User, error) {
+	v := ctx.Value(ctxKeyUser{})
+	if v == nil {
+		return nil, governor.NewError("User service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(User), nil
+}
 
-const (
-	time5m     int64 = int64(5 * time.Minute / time.Second)
-	time24h    int64 = int64(24 * time.Hour / time.Second)
-	time6month int64 = time24h * 365 / 2
-)
+// SetCtxUser sets a User service in the context
+func SetCtxUser(ctx context.Context, u User) context.Context {
+	return context.WithValue(ctx, ctxKeyUser{}, u)
+}
 
-// New creates a new User
+// NewCtx creates a new User service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	users, err := usermodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := sessionmodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	approvals, err := approvalmodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := role.GetCtxRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	apikeys, err := apikey.GetCtxApikey(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kv, err := kvstore.GetCtxKVStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	queue, err := msgqueue.GetCtxMsgqueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	mailer, err := mail.GetCtxMail(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tokenizer, err := token.GetCtxTokenizer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, err := gate.GetCtxGate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(users, sessions, approvals, roles, apikeys, kv, queue, mailer, tokenizer, g), nil
+}
+
+// New creates a new User service
 func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, roles role.Role, apikeys apikey.Apikey, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, tokenizer token.Tokenizer, g gate.Gate) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()

@@ -14,6 +14,10 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 )
 
+const (
+	time24h int64 = int64(24 * time.Hour / time.Second)
+)
+
 type (
 	// OAuth manages OAuth apps
 	OAuth interface {
@@ -44,11 +48,52 @@ type (
 	router struct {
 		s service
 	}
+
+	ctxKeyOAuth struct{}
 )
 
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
-)
+// GetCtxOAuth returns an OAuth service from the context
+func GetCtxOAuth(ctx context.Context) (OAuth, error) {
+	v := ctx.Value(ctxKeyOAuth{})
+	if v == nil {
+		return nil, governor.NewError("OAuth service not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(OAuth), nil
+}
+
+// SetCtxOAuth sets an OAuth service in the context
+func SetCtxOAuth(ctx context.Context, o OAuth) context.Context {
+	return context.WithValue(ctx, ctxKeyOAuth{}, o)
+}
+
+// NewCtx creates a new OAuth service from a context
+func NewCtx(ctx context.Context) (Service, error) {
+	apps, err := oauthmodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	connections, err := connectionmodel.GetCtxRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tokenizer, err := token.GetCtxTokenizer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	obj, err := objstore.GetCtxBucket(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kv, err := kvstore.GetCtxKVStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, err := gate.GetCtxGate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return New(apps, connections, tokenizer, obj, kv, g), nil
+}
 
 // New returns a new Apikey
 func New(apps oauthmodel.Repo, connections connectionmodel.Repo, tokenizer token.Tokenizer, obj objstore.Bucket, kv kvstore.KVStore, g gate.Gate) Service {

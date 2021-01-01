@@ -1,6 +1,7 @@
 package connectionmodel
 
 import (
+	"context"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -45,7 +46,23 @@ type (
 		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(ctx context.Context) (Repo, error) {
+	v := ctx.Value(ctxKeyRepo{})
+	if v == nil {
+		return nil, governor.NewError("OAuth connection repo not found in context", http.StatusInternalServerError, nil)
+	}
+	return v.(Repo), nil
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(ctx context.Context, r Repo) context.Context {
+	return context.WithValue(ctx, ctxKeyRepo{}, r)
+}
 
 // NewRepo creates a new OAuth connection repository
 func NewRepo(database db.Database) Repo {
