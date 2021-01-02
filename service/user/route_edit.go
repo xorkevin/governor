@@ -88,6 +88,7 @@ func (m *router) postAcceptRoleInvitation(w http.ResponseWriter, r *http.Request
 		c.WriteError(err)
 		return
 	}
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
