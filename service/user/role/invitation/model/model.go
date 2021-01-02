@@ -14,7 +14,6 @@ type (
 		GetByID(userid, role string, after int64) (*Model, error)
 		GetByUser(userid string, after int64, limit, offset int) ([]Model, error)
 		GetByRole(role string, after int64, limit, offset int) ([]Model, error)
-		GetByRolePrefix(prefix string, after int64, limit, offset int) ([]Model, error)
 		Insert(userid string, roles rank.Rank, by string, at int64) error
 		DeleteByID(userid, role string) error
 		DeleteByRoles(userid string, roles rank.Rank) error
@@ -31,7 +30,7 @@ type (
 		Userid       string `model:"userid,VARCHAR(31);index" query:"userid"`
 		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role,getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr"`
 		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;getgroupeq,role|like,creation_time|gt;deleq,creation_time|leq"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
 	}
 
 	ctxKeyRepo struct{}
@@ -101,19 +100,6 @@ func (r *repo) GetByRole(role string, after int64, limit, offset int) ([]Model, 
 		return nil, err
 	}
 	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db, role, after, false, limit, offset)
-	if err != nil {
-		return nil, governor.NewError("Failed to get invitations", http.StatusInternalServerError, err)
-	}
-	return m, nil
-}
-
-// GetByRolePrefix returns invitations matching a role prefix
-func (r *repo) GetByRolePrefix(prefix string, after int64, limit, offset int) ([]Model, error) {
-	db, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := invModelGetModelLikeRoleGtCreationTimeOrdCreationTime(db, prefix+"%", after, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get invitations", http.StatusInternalServerError, err)
 	}

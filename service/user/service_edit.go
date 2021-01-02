@@ -201,3 +201,67 @@ func (s *service) AcceptRoleInvitation(userid, role string) error {
 	}
 	return nil
 }
+
+type (
+	resUserRoleInvitation struct {
+		Userid       string `json:"userid"`
+		Role         string `json:"role"`
+		InvitedBy    string `json:"invited_by"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	resUserRoleInvitations struct {
+		Invitations []resUserRoleInvitation `json:"invitations"`
+	}
+)
+
+func (s *service) GetUserRoleInvitations(userid string, amount, offset int) (*resUserRoleInvitations, error) {
+	now := time.Now().Round(0).Unix()
+	after := now - s.invitationTime
+
+	m, err := s.invitations.GetByUser(userid, after, amount, offset)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]resUserRoleInvitation, 0, len(m))
+	for _, i := range m {
+		res = append(res, resUserRoleInvitation{
+			Userid:       i.Userid,
+			Role:         i.Role,
+			InvitedBy:    i.InvitedBy,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resUserRoleInvitations{
+		Invitations: res,
+	}, nil
+}
+
+func (s *service) GetRoleInvitations(role string, amount, offset int) (*resUserRoleInvitations, error) {
+	now := time.Now().Round(0).Unix()
+	after := now - s.invitationTime
+
+	m, err := s.invitations.GetByRole(role, after, amount, offset)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]resUserRoleInvitation, 0, len(m))
+	for _, i := range m {
+		res = append(res, resUserRoleInvitation{
+			Userid:       i.Userid,
+			Role:         i.Role,
+			InvitedBy:    i.InvitedBy,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resUserRoleInvitations{
+		Invitations: res,
+	}, nil
+}
+
+func (s *service) DeleteUserRoleInvitation(userid, role string) error {
+	if err := s.invitations.DeleteByID(userid, role); err != nil {
+		return err
+	}
+	return nil
+}

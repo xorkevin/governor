@@ -170,33 +170,6 @@ func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, role string
 	return res, nil
 }
 
-func invModelGetModelLikeRoleGtCreationTimeOrdCreationTime(db *sql.DB, role string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM userroleinvitations WHERE role LIKE $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, role, creationtime)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := Model{}
-		if err := rows.Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 func invModelDelLeqCreationTime(db *sql.DB, creationtime int64) error {
 	_, err := db.Exec("DELETE FROM userroleinvitations WHERE creation_time <= $1;", creationtime)
 	return err
