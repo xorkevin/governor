@@ -15,6 +15,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/role"
+	"xorkevin.dev/governor/service/user/role/invitation/model"
 	"xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
@@ -53,6 +54,7 @@ type (
 		users             usermodel.Repo
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
+		invitations       invitationmodel.Repo
 		roles             role.Role
 		apikeys           apikey.Apikey
 		kvemailchange     kvstore.KVStore
@@ -123,6 +125,7 @@ func NewCtx(inj governor.Injector) Service {
 	users := usermodel.GetCtxRepo(inj)
 	sessions := sessionmodel.GetCtxRepo(inj)
 	approvals := approvalmodel.GetCtxRepo(inj)
+	invitations := invitationmodel.GetCtxRepo(inj)
 	roles := role.GetCtxRole(inj)
 	apikeys := apikey.GetCtxApikey(inj)
 	kv := kvstore.GetCtxKVStore(inj)
@@ -130,11 +133,35 @@ func NewCtx(inj governor.Injector) Service {
 	mailer := mail.GetCtxMail(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	g := gate.GetCtxGate(inj)
-	return New(users, sessions, approvals, roles, apikeys, kv, queue, mailer, tokenizer, g)
+	return New(
+		users,
+		sessions,
+		approvals,
+		invitations,
+		roles,
+		apikeys,
+		kv,
+		queue,
+		mailer,
+		tokenizer,
+		g,
+	)
 }
 
 // New creates a new User service
-func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmodel.Repo, roles role.Role, apikeys apikey.Apikey, kv kvstore.KVStore, queue msgqueue.Msgqueue, mailer mail.Mail, tokenizer token.Tokenizer, g gate.Gate) Service {
+func New(
+	users usermodel.Repo,
+	sessions sessionmodel.Repo,
+	approvals approvalmodel.Repo,
+	invitations invitationmodel.Repo,
+	roles role.Role,
+	apikeys apikey.Apikey,
+	kv kvstore.KVStore,
+	queue msgqueue.Msgqueue,
+	mailer mail.Mail,
+	tokenizer token.Tokenizer,
+	g gate.Gate,
+) Service {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
@@ -143,6 +170,7 @@ func New(users usermodel.Repo, sessions sessionmodel.Repo, approvals approvalmod
 		users:             users,
 		sessions:          sessions,
 		approvals:         approvals,
+		invitations:       invitations,
 		roles:             roles,
 		apikeys:           apikeys,
 		kvemailchange:     kv.Subtree("emailchange"),
@@ -289,6 +317,11 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("created userapprovals table", nil)
+
+	if err := s.invitations.Setup(); err != nil {
+		return err
+	}
+	l.Info("created userroleinvitations table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err

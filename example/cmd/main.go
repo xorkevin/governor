@@ -26,6 +26,7 @@ import (
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
+	"xorkevin.dev/governor/service/user/role/invitation/model"
 	"xorkevin.dev/governor/service/user/role/model"
 	"xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
@@ -81,6 +82,7 @@ func main() {
 		usermodel.NewInCtx(inj)
 		sessionmodel.NewInCtx(inj)
 		approvalmodel.NewInCtx(inj)
+		invitationmodel.NewInCtx(inj)
 		kvstore.NewSubtreeInCtx(inj, "user")
 		gov.Register("user", "/u", user.NewCtx(inj))
 	}
