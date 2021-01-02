@@ -27,3 +27,49 @@ func (r reqUserPutRank) valid() error {
 	}
 	return nil
 }
+
+func (r reqAcceptRoleInvitation) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasRole(r.Role); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetRoleInvitations) valid() error {
+	if err := validhasRole(r.Role); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetUserRoleInvitations) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqDelRoleInvitation) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasRole(r.Role); err != nil {
+		return err
+	}
+	return nil
+}

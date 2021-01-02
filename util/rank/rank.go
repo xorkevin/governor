@@ -175,7 +175,7 @@ func FromString(rankStr string) (Rank, error) {
 
 func SplitTag(key string) (string, string, error) {
 	k := strings.SplitN(key, rankSeparator, 2)
-	if len(k) < 2 {
+	if len(k) != 2 {
 		return "", "", governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
 	}
 	switch k[0] {

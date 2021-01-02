@@ -259,7 +259,7 @@ func (s *service) GetRoleInvitations(role string, amount, offset int) (*resUserR
 	}, nil
 }
 
-func (s *service) DeleteUserRoleInvitation(userid, role string) error {
+func (s *service) DeleteRoleInvitation(userid, role string) error {
 	if err := s.invitations.DeleteByID(userid, role); err != nil {
 		return err
 	}
