@@ -2,6 +2,7 @@ package user
 
 import (
 	"net/http"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -49,20 +50,32 @@ func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.R
 
 	editAddRank.Remove(editRemoveRank)
 
-	if editAddRank.Has("admin") {
-		s.logger.Info("add admin status", map[string]string{
-			"userid":   userid,
+	currentRoles, err := s.roles.IntersectRoles(userid, editAddRank)
+	if err != nil {
+		return err
+	}
+
+	editAddRank.Remove(currentRoles)
+
+	if editAddRank.Has(rank.TagAdmin) {
+		s.logger.Info("invite add admin role", map[string]string{
+			"userid":   m.Userid,
 			"username": m.Username,
 		})
 	}
-	if editRemoveRank.Has("admin") {
-		s.logger.Info("remove admin status", map[string]string{
-			"userid":   userid,
+	if editRemoveRank.Has(rank.TagAdmin) {
+		s.logger.Info("remove admin role", map[string]string{
+			"userid":   m.Userid,
 			"username": m.Username,
 		})
 	}
 
-	if err := s.roles.InsertRoles(m.Userid, editAddRank); err != nil {
+	now := time.Now().Round(0).Unix()
+
+	if err := s.invitations.DeleteByRoles(m.Userid, editAddRank); err != nil {
+		return err
+	}
+	if err := s.invitations.Insert(m.Userid, editAddRank, updaterid, now); err != nil {
 		return err
 	}
 	if err := s.roles.DeleteRoles(m.Userid, editRemoveRank); err != nil {
@@ -151,6 +164,40 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 				return governor.NewErrorUser("Invalid tag name", http.StatusBadRequest, nil)
 			}
 		}
+	}
+	return nil
+}
+
+func (s *service) AcceptRoleInvitation(userid, role string) error {
+	m, err := s.users.GetByID(userid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+
+	now := time.Now().Round(0).Unix()
+	after := now - s.invitationTime
+
+	inv, err := s.invitations.GetByID(userid, role, after)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if inv.Role == rank.TagAdmin {
+		s.logger.Info("add admin role", map[string]string{
+			"userid":   m.Userid,
+			"username": m.Username,
+		})
+	}
+	if err := s.invitations.DeleteByID(userid, role); err != nil {
+		return err
+	}
+	if err := s.roles.InsertRoles(m.Userid, rank.Rank{}.AddOne(inv.Role)); err != nil {
+		return err
 	}
 	return nil
 }

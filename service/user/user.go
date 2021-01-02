@@ -74,6 +74,7 @@ type (
 		refreshCacheTime  int64
 		confirmTime       int64
 		passwordResetTime int64
+		invitationTime    int64
 		newLoginEmail     bool
 		passwordMinSize   int
 		userApproval      bool
@@ -187,6 +188,7 @@ func New(
 		refreshCacheTime:  time24h,
 		confirmTime:       time24h,
 		passwordResetTime: time24h,
+		invitationTime:    time24h,
 	}
 }
 
@@ -198,6 +200,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("refreshcache", "24h")
 	r.SetDefault("confirmtime", "24h")
 	r.SetDefault("passwordresettime", "24h")
+	r.SetDefault("invitationtime", "24h")
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
@@ -247,6 +250,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	} else {
 		s.passwordResetTime = int64(t / time.Second)
 	}
+	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
+		return governor.NewError("Failed to parse role invitation time", http.StatusBadRequest, err)
+	} else {
+		s.invitationTime = int64(t / time.Second)
+	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
@@ -275,6 +283,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
 		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
 		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
+		"invitationtime (s)":    strconv.FormatInt(s.invitationTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"issuer":                r.GetStr("issuer"),
