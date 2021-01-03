@@ -72,6 +72,14 @@ func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.R
 
 	now := time.Now().Round(0).Unix()
 
+	if editAddRank.Has(rank.TagUser) {
+		userRole := rank.Rank{}.AddOne(rank.TagUser)
+		editAddRank.Remove(userRole)
+		if err := s.roles.InsertRoles(m.Userid, userRole); err != nil {
+			return err
+		}
+	}
+
 	if err := s.invitations.DeleteByRoles(m.Userid, editAddRank); err != nil {
 		return err
 	}
