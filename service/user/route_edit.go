@@ -88,6 +88,10 @@ func (m *router) postAcceptRoleInvitation(w http.ResponseWriter, r *http.Request
 		c.WriteError(err)
 		return
 	}
+	if err := m.s.AcceptRoleInvitation(req.Userid, req.Role); err != nil {
+		c.WriteError(err)
+		return
+	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
