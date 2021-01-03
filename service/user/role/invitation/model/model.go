@@ -145,6 +145,10 @@ func (r *repo) DeleteByID(userid, role string) error {
 
 // DeleteByRoles deletes invitations by userid and roles
 func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
+	if len(roles) == 0 {
+		return nil
+	}
+
 	db, err := r.db.DB()
 	if err != nil {
 		return err
