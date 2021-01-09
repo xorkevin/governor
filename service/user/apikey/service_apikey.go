@@ -1,6 +1,7 @@
 package apikey
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"xorkevin.dev/governor"
@@ -8,7 +9,14 @@ import (
 )
 
 const (
-	cacheValDNE = "-"
+	cacheValTombstone = "-"
+)
+
+type (
+	keyhashKVVal struct {
+		Hash  string `json:"hash"`
+		Scope string `json:"scope"`
+	}
 )
 
 func (s *service) GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error) {
@@ -24,30 +32,31 @@ func (s *service) useridFromKeyid(keyid string) (string, error) {
 }
 
 func (s *service) getKeyHash(keyid string) (string, string, error) {
-	if keyhash, err := s.kvkey.Get(keyid); err != nil {
+	if result, err := s.kvkey.Get(keyid); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {
 			s.logger.Error("Failed to get apikey key from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcacheapikey",
 			})
 		}
-	} else if keyhash == cacheValDNE {
+	} else if result == cacheValTombstone {
 		return "", "", governor.NewError("Apikey not found", http.StatusNotFound, nil)
-	} else if keyscope, err := s.kvscope.Get(keyid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			s.logger.Error("Failed to get apikey scope from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "getcacheapikeyscope",
-			})
-		}
 	} else {
-		return keyhash, keyscope, nil
+		kvVal := keyhashKVVal{}
+		if err := json.Unmarshal([]byte(result), &kvVal); err != nil {
+			s.logger.Error("Failed to decode apikey from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcacheapikeydecode",
+			})
+		} else {
+			return kvVal.Hash, kvVal.Scope, nil
+		}
 	}
 
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			if err := s.kvkey.Set(keyid, cacheValDNE, s.scopeCacheTime); err != nil {
+			if err := s.kvkey.Set(keyid, cacheValTombstone, s.scopeCacheTime); err != nil {
 				s.logger.Error("Failed to set apikey key in cache", map[string]string{
 					"error":      err.Error(),
 					"actiontype": "setcacheapikey",
@@ -57,16 +66,18 @@ func (s *service) getKeyHash(keyid string) (string, string, error) {
 		return "", "", err
 	}
 
-	if err := s.kvkey.Set(keyid, m.KeyHash, s.scopeCacheTime); err != nil {
+	if kvVal, err := json.Marshal(keyhashKVVal{
+		Hash:  m.KeyHash,
+		Scope: m.Scope,
+	}); err != nil {
+		s.logger.Error("Failed to marshal json for apikey", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "cacheapikeyencode",
+		})
+	} else if err := s.kvkey.Set(keyid, string(kvVal), s.scopeCacheTime); err != nil {
 		s.logger.Error("Failed to set apikey key in cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "setcacheapikey",
-		})
-	}
-	if err := s.kvscope.Set(keyid, m.Scope, s.scopeCacheTime); err != nil {
-		s.logger.Error("Failed to set apikey scope in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "setcacheapikeyscope",
 		})
 	}
 
@@ -190,12 +201,6 @@ func (s *service) clearCache(keyids ...string) {
 		s.logger.Error("Failed to clear keys from cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "clearcacheapikey",
-		})
-	}
-	if err := s.kvscope.Del(keyids...); err != nil {
-		s.logger.Error("Failed to clear rolesets from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "clearcacheroleset",
 		})
 	}
 }

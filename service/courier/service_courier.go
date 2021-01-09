@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	cacheValDNE = "-"
+	cacheValTombstone = "-"
 )
 
 type (
@@ -43,12 +43,12 @@ func (s *service) GetLink(linkid string) (*resGetLink, error) {
 func (s *service) GetLinkFast(linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(linkid); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {
-			s.logger.Error("failed to get linkid url from cache", map[string]string{
+			s.logger.Error("Failed to get linkid url from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcachelink",
 			})
 		}
-	} else if cachedURL == cacheValDNE {
+	} else if cachedURL == cacheValTombstone {
 		return "", governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
 	} else {
 		return cachedURL, nil
@@ -56,8 +56,8 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 	res, err := s.GetLink(linkid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			if err := s.kvlinks.Set(linkid, cacheValDNE, s.cacheTime); err != nil {
-				s.logger.Error("failed to cache linkid url", map[string]string{
+			if err := s.kvlinks.Set(linkid, cacheValTombstone, s.cacheTime); err != nil {
+				s.logger.Error("Failed to cache linkid url", map[string]string{
 					"linkid":     linkid,
 					"error":      err.Error(),
 					"actiontype": "setcachelink",
@@ -67,7 +67,7 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 		return "", err
 	}
 	if err := s.kvlinks.Set(linkid, res.URL, s.cacheTime); err != nil {
-		s.logger.Error("failed to cache linkid url", map[string]string{
+		s.logger.Error("Failed to cache linkid url", map[string]string{
 			"linkid":     linkid,
 			"error":      err.Error(),
 			"actiontype": "setcachelink",

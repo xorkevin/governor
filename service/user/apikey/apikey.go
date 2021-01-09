@@ -34,7 +34,6 @@ type (
 	service struct {
 		apikeys        apikeymodel.Repo
 		kvkey          kvstore.KVStore
-		kvscope        kvstore.KVStore
 		logger         governor.Logger
 		scopeCacheTime int64
 	}
@@ -68,7 +67,6 @@ func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		apikeys:        apikeys,
 		kvkey:          kv.Subtree("key"),
-		kvscope:        kv.Subtree("scope"),
 		scopeCacheTime: time24h,
 	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	cacheValDNE = "-"
+	cacheValTombstone = "-"
 )
 
 type (
@@ -113,7 +113,6 @@ func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error)
 }
 
 func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
-	cm := &oauthmodel.Model{}
 	if clientstr, err := s.kvclient.Get(clientid); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {
 			s.logger.Error("Failed to get oauth client from cache", map[string]string{
@@ -121,21 +120,24 @@ func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
 				"actiontype": "getcacheclient",
 			})
 		}
-	} else if clientstr == cacheValDNE {
+	} else if clientstr == cacheValTombstone {
 		return nil, governor.NewError("App not found", http.StatusNotFound, nil)
-	} else if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
-		s.logger.Error("Malformed oauth client cache json", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "unmarshalclientjson",
-		})
 	} else {
-		return cm, nil
+		cm := &oauthmodel.Model{}
+		if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
+			s.logger.Error("Malformed oauth client cache json", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "unmarshalclientjson",
+			})
+		} else {
+			return cm, nil
+		}
 	}
 
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			if err := s.kvclient.Set(clientid, cacheValDNE, s.keyCacheTime); err != nil {
+			if err := s.kvclient.Set(clientid, cacheValTombstone, s.keyCacheTime); err != nil {
 				s.logger.Error("Failed to set oauth client in cache", map[string]string{
 					"error":      err.Error(),
 					"actiontype": "setcacheclient",

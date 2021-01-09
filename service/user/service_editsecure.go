@@ -2,10 +2,10 @@ package user
 
 import (
 	"bytes"
+	"encoding/json"
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
-	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )
@@ -38,15 +38,16 @@ type (
 		LastName  string
 		Username  string
 	}
+
+	emailChangeKVVal struct {
+		NewEmail  string `json:"email"`
+		NonceHash string `json:"hash"`
+	}
 )
 
 const (
 	emailChangeTemplate       = "emailchange"
 	emailChangeNotifyTemplate = "emailchangenotify"
-)
-
-const (
-	emailChangeSeparator = "|email|"
 )
 
 func (e *emailEmailChange) Query() queryEmailEmailChange {
@@ -103,7 +104,15 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		return governor.NewError("Failed to hash email reset key", http.StatusInternalServerError, err)
 	}
 
-	if err := s.kvemailchange.Set(userid, noncehash+emailChangeSeparator+newEmail, s.passwordResetTime); err != nil {
+	kvVal, err := json.Marshal(emailChangeKVVal{
+		NewEmail:  newEmail,
+		NonceHash: noncehash,
+	})
+	if err != nil {
+		return governor.NewError("Failed to marshal json for new email info", http.StatusInternalServerError, err)
+	}
+
+	if err := s.kvemailchange.Set(userid, string(kvVal), s.passwordResetTime); err != nil {
 		return governor.NewError("Failed to store new email info", http.StatusInternalServerError, err)
 	}
 
@@ -133,14 +142,12 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		return governor.NewError("Failed to get user email reset info", http.StatusInternalServerError, err)
 	}
 
-	k := strings.SplitN(result, emailChangeSeparator, 2)
-	if len(k) != 2 {
+	kvVal := emailChangeKVVal{}
+	if err := json.Unmarshal([]byte(result), &kvVal); err != nil || kvVal.NonceHash == "" || kvVal.NewEmail == "" {
 		return governor.NewError("Failed to decode new email info", http.StatusInternalServerError, nil)
 	}
-	noncehash := k[0]
-	newEmail := k[1]
 
-	if ok, err := s.verifier.Verify(key, noncehash); err != nil {
+	if ok, err := s.verifier.Verify(key, kvVal.NonceHash); err != nil {
 		return governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
 	} else if !ok {
 		return governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
@@ -160,7 +167,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
-	m.Email = newEmail
+	m.Email = kvVal.NewEmail
 	if err = s.users.Update(m); err != nil {
 		if governor.ErrorStatus(err) == http.StatusBadRequest {
 			return governor.NewErrorUser("Email is already in use by another account", 0, err)
@@ -169,7 +176,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 	}
 
 	if err := s.kvemailchange.Del(userid); err != nil {
-		s.logger.Error("failed to clean up new email info", map[string]string{
+		s.logger.Error("Failed to clean up new email info", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailcleanup",
 		})
@@ -181,7 +188,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, emailChangeNotifyTemplate, emdatanotify); err != nil {
-		s.logger.Error("failed to send old email change notification", map[string]string{
+		s.logger.Error("Failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailoldmail",
 		})
@@ -273,7 +280,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, passChangeTemplate, emdata); err != nil {
-		s.logger.Error("failed to send password change notification email", map[string]string{
+		s.logger.Error("Failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "updatepasswordmail",
 		})
@@ -367,7 +374,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 	}
 
 	if err := s.kvpassreset.Del(userid); err != nil {
-		s.logger.Error("failed to clean up password reset info", map[string]string{
+		s.logger.Error("Failed to clean up password reset info", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpasswordcleanup",
 		})
@@ -379,7 +386,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		Username:  m.Username,
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, passResetTemplate, emdata); err != nil {
-		s.logger.Error("failed to send password change notification email", map[string]string{
+		s.logger.Error("Failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpasswordmail",
 		})

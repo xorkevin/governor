@@ -59,22 +59,15 @@ func (s *service) KillSessions(sessionids []string) error {
 	return nil
 }
 
-func (s *service) killAllCacheSessions(userid string) error {
+// KillAllSessions terminates all sessions of a user
+func (s *service) KillAllSessions(userid string) error {
 	sessionids, err := s.sessions.GetUserSessionIDs(userid, 65536, 0)
 	if err != nil {
 		return governor.NewError("Failed to get user session ids", http.StatusInternalServerError, err)
 	}
-	s.killCacheSessions(sessionids)
-	return nil
-}
-
-// KillAllSessions terminates all sessions of a user
-func (s *service) KillAllSessions(userid string) error {
 	if err := s.sessions.DeleteUserSessions(userid); err != nil {
 		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
 	}
-	if err := s.killAllCacheSessions(userid); err != nil {
-		return err
-	}
+	s.killCacheSessions(sessionids)
 	return nil
 }
