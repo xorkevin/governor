@@ -5,23 +5,28 @@ import (
 )
 
 const (
-	oidResponseTypeCode     = "code"
+	oidResponseTypeCode = "code"
+
 	oidResponseModeQuery    = "query"
 	oidResponseModeFragment = "fragment"
-	oidScopeOpenid          = "openid"
-	oidScopeProfile         = "profile"
-	oidScopeEmail           = "email"
-	oidScopeOffline         = "offline_access"
-	oidChallengePlain       = "plain"
-	oidChallengeS256        = "S256"
-	oidDisplayPage          = "page"
-	oidDisplayPopup         = "popup"
-	oidDisplayTouch         = "touch"
-	oidDisplayWap           = "wap"
-	oidPromptNone           = "none"
-	oidPromptLogin          = "login"
-	oidPromptConsent        = "consent"
-	oidPromptSelectAcct     = "select_account"
+
+	oidScopeOpenid  = "openid"
+	oidScopeProfile = "profile"
+	oidScopeEmail   = "email"
+	oidScopeOffline = "offline_access"
+
+	oidChallengePlain = "plain"
+	oidChallengeS256  = "S256"
+
+	oidDisplayPage  = "page"
+	oidDisplayPopup = "popup"
+	oidDisplayTouch = "touch"
+	oidDisplayWap   = "wap"
+
+	oidPromptNone       = "none"
+	oidPromptLogin      = "login"
+	oidPromptConsent    = "consent"
+	oidPromptSelectAcct = "select_account"
 )
 
 type (

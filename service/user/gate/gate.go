@@ -33,6 +33,7 @@ type (
 	// Gate creates new authenticating middleware
 	Gate interface {
 		Authenticate(v Validator, scope string) governor.Middleware
+		TryAuthenticate(v Validator, scope string) governor.Middleware
 	}
 
 	Service interface {
@@ -241,6 +242,27 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 	}
 }
 
+// TryAuthenticate builds a middleware function to attempt to validate tokens and set claims
+func (s *service) TryAuthenticate(v Validator, scope string) governor.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := governor.NewContext(w, r, s.logger)
+			accessToken, err := getAuthHeader(r)
+			if err != nil {
+				accessToken, _ = getAccessCookie(r)
+			}
+			if accessToken != "" {
+				if validToken, claims := s.tokenizer.Validate(accessToken, nil, scope); validToken {
+					if v(s.intersector(claims.Subject, claims.Scope, c)) {
+						setCtxUserid(c, claims.Subject)
+					}
+				}
+			}
+			next.ServeHTTP(c.R())
+		})
+	}
+}
+
 // Owner is a middleware function to validate if a user owns the resource
 //
 // idfunc should return true if the resource is owned by the given user
@@ -288,6 +310,21 @@ func Admin(g Gate, scope string) governor.Middleware {
 // banned
 func User(g Gate, scope string) governor.Middleware {
 	return g.Authenticate(func(r Intersector) bool {
+		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		if !ok {
+			return false
+		}
+		if roles.Has(rank.TagAdmin) {
+			return true
+		}
+		return roles.Has(rank.TagUser)
+	}, scope)
+}
+
+// TryUser is a middleware function to attempt validate if a user is
+// authenticated and not banned
+func TryUser(g Gate, scope string) governor.Middleware {
+	return g.TryAuthenticate(func(r Intersector) bool {
 		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
 		if !ok {
 			return false
