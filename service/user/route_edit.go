@@ -2,7 +2,6 @@ package user
 
 import (
 	"net/http"
-	"strconv"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
@@ -105,20 +104,10 @@ type (
 
 func (m *router) getRoleInvitations(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	amount, err := strconv.Atoi(c.Query("amount"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
-		return
-	}
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
-		return
-	}
 	req := reqGetRoleInvitations{
 		Role:   c.Param("role"),
-		Amount: amount,
-		Offset: offset,
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
@@ -143,20 +132,10 @@ type (
 
 func (m *router) getUserRoleInvitations(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	amount, err := strconv.Atoi(c.Query("amount"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
-		return
-	}
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
-		return
-	}
 	req := reqGetUserRoleInvitations{
 		Userid: gate.GetCtxUserid(c),
-		Amount: amount,
-		Offset: offset,
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)

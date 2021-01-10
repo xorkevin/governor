@@ -2,7 +2,6 @@ package org
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
@@ -86,20 +85,9 @@ func (m *router) getOrgs(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) getAllOrgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	amount, err := strconv.Atoi(c.Query("amount"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, nil))
-		return
-	}
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, nil))
-		return
-	}
-
 	req := reqOrgsGetBulk{
-		Amount: amount,
-		Offset: offset,
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)

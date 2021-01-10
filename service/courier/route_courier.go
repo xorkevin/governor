@@ -2,7 +2,6 @@ package courier
 
 import (
 	"net/http"
-	"strconv"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
@@ -74,21 +73,10 @@ type (
 
 func (m *router) getLinkGroup(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	amount, err := strconv.Atoi(c.Query("amount"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err))
-		return
-	}
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err))
-		return
-	}
-
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
-		Amount:    amount,
-		Offset:    offset,
+		Amount:    c.QueryInt("amount", -1),
+		Offset:    c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
@@ -192,20 +180,10 @@ func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	amount, err := strconv.Atoi(c.Query("amount"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Amount invalid", http.StatusBadRequest, err))
-		return
-	}
-	offset, err := strconv.Atoi(c.Query("offset"))
-	if err != nil {
-		c.WriteError(governor.NewErrorUser("Offset invalid", http.StatusBadRequest, err))
-		return
-	}
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
-		Amount:    amount,
-		Offset:    offset,
+		Amount:    c.QueryInt("amount", -1),
+		Offset:    c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
