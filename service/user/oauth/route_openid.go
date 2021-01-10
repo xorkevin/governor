@@ -21,7 +21,7 @@ type (
 		Display             string `valid:"oidDisplay" json:"-"`
 		Prompt              string `valid:"oidPrompt" json:"-"`
 		MaxAge              int    `valid:"oidMaxAge"`
-		IDTokenHint         string `json:"-"`
+		IDTokenHint         string `valid:"oidIDTokenHint" json:"-"`
 		LoginHint           string `valid:"oidLoginHint" json:"-"`
 	}
 )

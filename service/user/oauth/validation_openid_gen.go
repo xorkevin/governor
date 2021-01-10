@@ -39,6 +39,9 @@ func (r reqOidAuthorize) valid() error {
 	if err := validOidMaxAge(r.MaxAge); err != nil {
 		return err
 	}
+	if err := validOidIDTokenHint(r.IDTokenHint); err != nil {
+		return err
+	}
 	if err := validOidLoginHint(r.LoginHint); err != nil {
 		return err
 	}

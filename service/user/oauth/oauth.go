@@ -39,6 +39,7 @@ type (
 		logger       governor.Logger
 		keyCacheTime int64
 		issuer       string
+		eplogin      string
 		epauth       string
 		eptoken      string
 		epuserinfo   string
@@ -96,7 +97,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 
 	r.SetDefault("keycache", "24h")
 	r.SetDefault("epbase", "http://localhost:8080/api/oauth")
-	r.SetDefault("epauthorization", "/auth/authorize")
+	r.SetDefault("epauthorize", "/auth/authorize")
 	r.SetDefault("eptoken", "/auth/token")
 	r.SetDefault("epuserinfo", "/userinfo")
 	r.SetDefault("epjwks", "/jwks")
@@ -121,14 +122,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 
 	s.issuer = r.GetStr("issuer")
+	s.eplogin = r.GetStr("eplogin")
 	base := r.GetStr("epbase")
-	s.epauth = base + r.GetStr("epauthorization")
+	s.epauth = base + r.GetStr("epauthorize")
 	s.eptoken = base + r.GetStr("eptoken")
 	s.epuserinfo = base + r.GetStr("epuserinfo")
 	s.epjwks = base + r.GetStr("epjwks")
 
 	l.Info("loaded config", map[string]string{
 		"keycache (s)":           strconv.FormatInt(s.keyCacheTime, 10),
+		"login_endpoint":         s.eplogin,
 		"authorization_endpoint": s.epauth,
 		"token_endpoint":         s.eptoken,
 		"userinfo_endpoint":      s.epuserinfo,

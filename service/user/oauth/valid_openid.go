@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	lengthCapNonce = 2047
+	lengthCapQuery   = 255
+	lengthCapIDToken = 1023
 )
 
 var (
@@ -32,6 +33,9 @@ func validOidResponseMode(responseMode string) error {
 }
 
 func validOidScope(scope string) error {
+	if len(scope) > lengthCapQuery {
+		return governor.NewErrorUser("Scope must be less than 256 characters", http.StatusBadRequest, nil)
+	}
 	for _, i := range strings.Fields(scope) {
 		if i == oidScopeOpenid {
 			return nil
@@ -44,8 +48,8 @@ func validOidState(state string) error {
 	if state == "" {
 		return governor.NewErrorUser("State must be provided", http.StatusBadRequest, nil)
 	}
-	if len(state) > lengthCapNonce {
-		return governor.NewErrorUser("State must be less than 2048 characters", http.StatusBadRequest, nil)
+	if len(state) > lengthCapQuery {
+		return governor.NewErrorUser("State must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	if !printableRegex.MatchString(state) {
 		return governor.NewErrorUser("Invalid state", http.StatusBadRequest, nil)
@@ -57,8 +61,8 @@ func validOidNonce(nonce string) error {
 	if nonce == "" {
 		return governor.NewErrorUser("Nonce must be provided", http.StatusBadRequest, nil)
 	}
-	if len(nonce) > lengthCapNonce {
-		return governor.NewErrorUser("Nonce must be less than 2048 characters", http.StatusBadRequest, nil)
+	if len(nonce) > lengthCapQuery {
+		return governor.NewErrorUser("Nonce must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	if !printableRegex.MatchString(nonce) {
 		return governor.NewErrorUser("Invalid nonce", http.StatusBadRequest, nil)
@@ -67,8 +71,8 @@ func validOidNonce(nonce string) error {
 }
 
 func validOidCodeChallenge(challenge string) error {
-	if len(challenge) > lengthCapNonce {
-		return governor.NewErrorUser("Code challenge must be less than 2048 characters", http.StatusBadRequest, nil)
+	if len(challenge) > lengthCapQuery {
+		return governor.NewErrorUser("Code challenge must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	if !printableRegex.MatchString(challenge) {
 		return governor.NewErrorUser("Invalid nonce", http.StatusBadRequest, nil)
@@ -121,9 +125,16 @@ func validOidMaxAge(age int) error {
 	return nil
 }
 
+func validOidIDTokenHint(hint string) error {
+	if len(hint) > lengthCapIDToken {
+		return governor.NewErrorUser("ID token hint must be less than 1024 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validOidLoginHint(hint string) error {
-	if len(hint) > lengthCapNonce {
-		return governor.NewErrorUser("Login hint must be less than 2048 characters", http.StatusBadRequest, nil)
+	if len(hint) > lengthCapQuery {
+		return governor.NewErrorUser("Login hint must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }

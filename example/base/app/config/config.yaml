@@ -80,8 +80,9 @@ token:
 oauth:
   keycache: 24h
   issuer: http://governor.dev.localhost:8080
+  eplogin: http://localhost:3000/oauth
   epbase: http://governor.dev.localhost:8080/api/oauth
-  epauthorization: /auth/authorize
+  epauthorize: /auth/authorize
   eptoken: /auth/token
   epuserinfo: /userinfo
   epjwks: /jwks
