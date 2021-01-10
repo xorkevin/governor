@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 type (
@@ -113,6 +114,8 @@ type (
 	Context interface {
 		Param(key string) string
 		Query(key string) string
+		QueryDef(key string, def string) string
+		QueryInt(key string, def int) int
 		Header(key string) string
 		SetHeader(key, value string)
 		AddHeader(key, value string)
@@ -158,6 +161,26 @@ func (c *govcontext) Param(key string) string {
 
 func (c *govcontext) Query(key string) string {
 	return c.query.Get(key)
+}
+
+func (c *govcontext) QueryDef(key string, def string) string {
+	v := c.query.Get(key)
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+func (c *govcontext) QueryInt(key string, def int) int {
+	s := c.query.Get(key)
+	if s == "" {
+		return def
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return v
 }
 
 func (c *govcontext) Header(key string) string {

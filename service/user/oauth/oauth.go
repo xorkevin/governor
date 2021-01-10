@@ -136,7 +136,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	sr := s.router()
-	sr.mountRoutes(m)
+	sr.mountOidRoutes(m)
 	sr.mountAppRoutes(m.Group("/app"))
 	l.Info("mounted http routes", nil)
 

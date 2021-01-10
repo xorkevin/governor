@@ -11,31 +11,6 @@ import (
 
 //go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetGroup reqAppPost reqAppPut
 
-func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	res, err := m.s.GetOpenidConfig()
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) getJWKS(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	res, err := m.s.GetJWKS()
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) mountRoutes(r governor.Router) {
-	r.Get("/openid-configuration", m.getOpenidConfig)
-	r.Get("/jwks", m.getJWKS)
-}
-
 type (
 	reqAppGet struct {
 		ClientID string `valid:"clientID,has" json:"-"`
