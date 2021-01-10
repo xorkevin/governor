@@ -45,9 +45,6 @@ func validOidScope(scope string) error {
 }
 
 func validOidState(state string) error {
-	if state == "" {
-		return governor.NewErrorUser("State must be provided", http.StatusBadRequest, nil)
-	}
 	if len(state) > lengthCapQuery {
 		return governor.NewErrorUser("State must be less than 256 characters", http.StatusBadRequest, nil)
 	}
@@ -58,9 +55,6 @@ func validOidState(state string) error {
 }
 
 func validOidNonce(nonce string) error {
-	if nonce == "" {
-		return governor.NewErrorUser("Nonce must be provided", http.StatusBadRequest, nil)
-	}
 	if len(nonce) > lengthCapQuery {
 		return governor.NewErrorUser("Nonce must be less than 256 characters", http.StatusBadRequest, nil)
 	}

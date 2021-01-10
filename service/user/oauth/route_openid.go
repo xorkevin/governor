@@ -11,21 +11,20 @@ import (
 
 type (
 	reqOidAuthorize struct {
-		ResponseType        string `valid:"oidResponseType" json:"-"`
-		ResponseMode        string `valid:"oidResponseMode" json:"-"`
-		ClientID            string `valid:"clientID,has" json:"-"`
-		Scope               string `valid:"oidScope" json:"-"`
-		RedirectURI         string `valid:"redirect" json:"-"`
-		State               string `valid:"oidState" json:"-"`
-		Nonce               string `valid:"oidNonce" json:"-"`
-		CodeChallenge       string `valid:"oidCodeChallenge" json:"-"`
-		CodeChallengeMethod string `valid:"oidCodeChallengeMethod" json:"-"`
-		Display             string `valid:"oidDisplay" json:"-"`
-		Prompt              string `valid:"oidPrompt" json:"-"`
-		MaxAge              int    `valid:"oidMaxAge" json:"-"`
-		IDTokenHint         string `valid:"oidIDTokenHint" json:"-"`
-		LoginHint           string `valid:"oidLoginHint" json:"-"`
-		DoneLogin           int    `json:"-"`
+		ResponseType        string `valid:"oidResponseType" json:"response_type"`
+		ResponseMode        string `valid:"oidResponseMode" json:"response_mode"`
+		ClientID            string `valid:"clientID,has" json:"client_id"`
+		Scope               string `valid:"oidScope" json:"scope"`
+		RedirectURI         string `valid:"redirect" json:"redirect_uri"`
+		State               string `valid:"oidState" json:"state"`
+		Nonce               string `valid:"oidNonce" json:"nonce"`
+		CodeChallenge       string `valid:"oidCodeChallenge" json:"code_challenge"`
+		CodeChallengeMethod string `valid:"oidCodeChallengeMethod" json:"code_challenge_method"`
+		Display             string `valid:"oidDisplay" json:"display"`
+		Prompt              string `valid:"oidPrompt" json:"prompt"`
+		MaxAge              int    `valid:"oidMaxAge" json:"max_age"`
+		IDTokenHint         string `valid:"oidIDTokenHint" json:"id_token_hint"`
+		LoginHint           string `valid:"oidLoginHint" json:"login_hint"`
 	}
 )
 
@@ -81,7 +80,6 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 		MaxAge:              c.QueryInt("max_age", -1),
 		IDTokenHint:         c.Query("id_token_hint"),
 		LoginHint:           c.Query("login_hint"),
-		DoneLogin:           c.QueryInt("done_login", 0),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
