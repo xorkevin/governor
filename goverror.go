@@ -96,6 +96,14 @@ func ErrorStatus(target error) int {
 	return 0
 }
 
+// ErrorMsg reports the error status of the top most governor error in the chain
+func ErrorMsg(target error) string {
+	if goverr := (&goverror{}); errors.As(target, &goverr) {
+		return goverr.message
+	}
+	return ""
+}
+
 type (
 	responseError struct {
 		Message string `json:"message"`

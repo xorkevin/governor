@@ -37,10 +37,11 @@ type (
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		GetJWKS() *jose.JSONWebKeySet
-		Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error)
-		Sign(userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
-		Validate(tokenString string, audience []string, scope string) (bool, *Claims)
-		GetClaims(tokenString string, audience []string, scope string) (bool, *Claims)
+		Generate(userid string, duration int64, scope, id, key string) (string, *Claims, error)
+		GenerateExt(userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
+		Validate(tokenString string, scope string) (bool, *Claims)
+		GetClaims(tokenString string, scope string) (bool, *Claims)
+		GetClaimsExt(tokenString string, audience []string, scope string) (bool, *Claims)
 	}
 
 	Service interface {
@@ -199,16 +200,13 @@ func (s *service) GetJWKS() *jose.JSONWebKeySet {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(userid string, audience []string, duration int64, scope, id, key string) (string, *Claims, error) {
+func (s *service) Generate(userid string, duration int64, scope, id, key string) (string, *Claims, error) {
 	now := time.Now().Round(0)
-	if len(audience) == 0 {
-		audience = []string{s.audience}
-	}
 	claims := Claims{
 		Claims: jwt.Claims{
 			Issuer:    s.issuer,
 			Subject:   userid,
-			Audience:  audience,
+			Audience:  []string{s.audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
@@ -224,8 +222,8 @@ func (s *service) Generate(userid string, audience []string, duration int64, sco
 	return token, &claims, nil
 }
 
-// Sign creates a new id token
-func (s *service) Sign(userid string, audience []string, duration int64, id string, claims interface{}) (string, error) {
+// GenerateExt creates a new id token
+func (s *service) GenerateExt(userid string, audience []string, duration int64, id string, claims interface{}) (string, error) {
 	now := time.Now().Round(0)
 	baseClaims := jwt.Claims{
 		Issuer:    s.issuer,
@@ -257,7 +255,7 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(tokenString string, audience []string, scope string) (bool, *Claims) {
+func (s *service) Validate(tokenString string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -270,12 +268,9 @@ func (s *service) Validate(tokenString string, audience []string, scope string) 
 		return false, nil
 	}
 	now := time.Now().Round(0)
-	if len(audience) == 0 {
-		audience = []string{s.audience}
-	}
 	if err := claims.ValidateWithLeeway(jwt.Expected{
 		Issuer:   s.issuer,
-		Audience: audience,
+		Audience: []string{s.audience},
 		Time:     now,
 	}, 0); err != nil {
 		return false, nil
@@ -283,8 +278,8 @@ func (s *service) Validate(tokenString string, audience []string, scope string) 
 	return true, claims
 }
 
-// GetClaims returns the tokens claims without validating time
-func (s *service) GetClaims(tokenString string, audience []string, scope string) (bool, *Claims) {
+// GetClaims returns token claims without validating time
+func (s *service) GetClaims(tokenString string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -296,8 +291,27 @@ func (s *service) GetClaims(tokenString string, audience []string, scope string)
 	if !HasScope(claims.Scope, scope) {
 		return false, nil
 	}
-	if len(audience) == 0 {
-		audience = []string{s.audience}
+	if err := claims.ValidateWithLeeway(jwt.Expected{
+		Issuer:   s.issuer,
+		Audience: []string{s.audience},
+	}, 0); err != nil {
+		return false, nil
+	}
+	return true, claims
+}
+
+// GetClaimsExt returns external token claims without validating time
+func (s *service) GetClaimsExt(tokenString string, audience []string, scope string) (bool, *Claims) {
+	token, err := jwt.ParseSigned(tokenString)
+	if err != nil {
+		return false, nil
+	}
+	claims := &Claims{}
+	if err := token.Claims(s.publicKey, claims); err != nil {
+		return false, nil
+	}
+	if !HasScope(claims.Scope, scope) {
+		return false, nil
 	}
 	if err := claims.ValidateWithLeeway(jwt.Expected{
 		Issuer:   s.issuer,

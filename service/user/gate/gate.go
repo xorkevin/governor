@@ -225,7 +225,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					}
 					accessToken = a
 				}
-				validToken, claims := s.tokenizer.Validate(accessToken, nil, scope)
+				validToken, claims := s.tokenizer.Validate(accessToken, scope)
 				if !validToken {
 					rmAccessCookie(w, s.baseurl)
 					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
@@ -252,7 +252,7 @@ func (s *service) TryAuthenticate(v Validator, scope string) governor.Middleware
 				accessToken, _ = getAccessCookie(r)
 			}
 			if accessToken != "" {
-				if validToken, claims := s.tokenizer.Validate(accessToken, nil, scope); validToken {
+				if validToken, claims := s.tokenizer.Validate(accessToken, scope); validToken {
 					if v(s.intersector(claims.Subject, claims.Scope, c)) {
 						setCtxUserid(c, claims.Subject)
 					}

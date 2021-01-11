@@ -84,12 +84,12 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, nil, s.accessTime, token.ScopeAll, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(m.Userid, s.accessTime, token.ScopeAll, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(m.Userid, nil, s.refreshTime, token.ScopeAll, sm.SessionID, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(m.Userid, s.refreshTime, token.ScopeAll, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -139,9 +139,41 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}, nil
 }
 
+// ValidRefreshToken validates a refresh token
+func (s *service) ValidRefreshToken(refreshToken string) (string, error) {
+	validToken, claims := s.tokenizer.Validate(refreshToken, "")
+	if !validToken {
+		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+	}
+
+	keyhash, err := s.kvsessions.Get(claims.ID)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			sm, err := s.sessions.GetByID(claims.ID)
+			if err != nil {
+				if governor.ErrorStatus(err) == http.StatusNotFound {
+					return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+				}
+				return "", governor.NewError("Failed to get session", http.StatusInternalServerError, err)
+			}
+			if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
+				return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+			}
+			return claims.Subject, nil
+		}
+		return "", governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
+	}
+	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
+		KeyHash: keyhash,
+	}); err != nil || !ok {
+		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+	}
+	return claims.Subject, nil
+}
+
 // ExchangeToken validates a refresh token and returns an auth token
 func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(refreshToken, nil, "")
+	validToken, claims := s.tokenizer.Validate(refreshToken, "")
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -154,14 +186,13 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
 	}
 
-	k := sessionmodel.Model{
+	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
 		KeyHash: keyhash,
-	}
-	if ok, err := s.sessions.ValidateKey(claims.Key, &k); err != nil || !ok {
+	}); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Subject, nil, s.accessTime, claims.Scope, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Subject, s.accessTime, claims.Scope, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -178,7 +209,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 
 // RefreshToken invalidates the previous refresh token and creates a new one
 func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(refreshToken, nil, "")
+	validToken, claims := s.tokenizer.Validate(refreshToken, "")
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -199,11 +230,11 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Subject, nil, s.accessTime, claims.Scope, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(claims.Subject, s.accessTime, claims.Scope, "", "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(claims.Subject, nil, s.refreshTime, claims.Scope, sm.SessionID, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(claims.Subject, s.refreshTime, claims.Scope, sm.SessionID, sessionKey)
 	if err != nil {
 		return nil, governor.NewError("Failed to generate refresh token", http.StatusInternalServerError, err)
 	}
@@ -233,8 +264,8 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 func (s *service) Logout(refreshToken string) error {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
-	okToken, claims := s.tokenizer.GetClaims(refreshToken, nil, "")
-	if !okToken {
+	ok, claims := s.tokenizer.GetClaims(refreshToken, "")
+	if !ok {
 		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 

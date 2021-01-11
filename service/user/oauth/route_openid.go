@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
@@ -63,6 +64,28 @@ func dedupSSV(s string, allowed map[string]struct{}) string {
 	return strings.Join(next, " ")
 }
 
+func (m *router) oidAuthError(c governor.Context, base, errcode, msg, state string, modeFrag bool) {
+	u, err := url.Parse(base)
+	if err != nil || !u.IsAbs() {
+		c.WriteError(governor.NewError("Invalid redirect uri", http.StatusInternalServerError, err))
+		return
+	}
+	q := u.Query()
+	q.Add("error", errcode)
+	if msg != "" {
+		q.Add("error_description", msg)
+	}
+	if state != "" {
+		q.Add("state", state)
+	}
+	if modeFrag {
+		u.RawFragment = q.Encode()
+	} else {
+		u.RawQuery = q.Encode()
+	}
+	c.Redirect(http.StatusFound, u.String())
+}
+
 func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqOidAuthorize{
@@ -81,19 +104,24 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 		IDTokenHint:         c.Query("id_token_hint"),
 		LoginHint:           c.Query("login_hint"),
 	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
 
 	// check if client app exists and redirect uri matches
-	if m, err := m.s.GetApp(req.ClientID); err != nil {
+	if a, err := m.s.GetApp(req.ClientID); err != nil {
 		c.WriteError(err)
 		return
-	} else if m.RedirectURI != req.RedirectURI {
+	} else if a.RedirectURI != req.RedirectURI {
 		c.WriteError(governor.NewErrorUser("Redirect URI does not match", http.StatusBadRequest, nil))
 		return
 	}
+
+	modeFrag := req.ResponseMode == oidResponseModeFragment
+
+	// validate oid fields
+	if err := req.valid(); err != nil {
+		m.oidAuthError(c, req.RedirectURI, oidErrorInvalidRequest, governor.ErrorMsg(err), req.State, modeFrag)
+		return
+	}
+
 	// filter unknown scopes
 	req.Scope = dedupSSV(req.Scope, map[string]struct{}{
 		oidScopeOpenid:  {},
@@ -109,7 +137,40 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 		oidPromptSelectAcct: {},
 	})
 
-	if req.DoneLogin == 0 && req.MaxAge > -1 {
+	// check if prompt is none
+	for _, i := range strings.Fields(req.Prompt) {
+		if i == oidPromptNone {
+			// TODO: use ValidRefreshToken
+			userid := gate.GetCtxUserid(c)
+			if userid == "" {
+				m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "User is not logged in", req.State, modeFrag)
+				return
+			}
+			// TODO: check for consent
+			break
+		}
+	}
+
+	// check id token hint
+	if req.IDTokenHint != "" {
+		ok, claims := m.s.tokenizer.GetClaimsExt(req.IDTokenHint, []string{req.ClientID}, oidScopeOpenid)
+		if !ok {
+			m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "Invalid id token", req.State, modeFrag)
+			return
+		}
+		// TODO: use ValidRefreshToken
+		userid := gate.GetCtxUserid(c)
+		if userid == "" {
+			m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "User is not logged in", req.State, modeFrag)
+			return
+		}
+		if claims.Subject != userid {
+			m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "Different user is logged in", req.State, modeFrag)
+			return
+		}
+	}
+
+	if req.MaxAge > -1 {
 		// validate user session
 	}
 
