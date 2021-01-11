@@ -140,7 +140,6 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 	// check if prompt is none
 	for _, i := range strings.Fields(req.Prompt) {
 		if i == oidPromptNone {
-			// TODO: use ValidRefreshToken
 			userid := gate.GetCtxUserid(c)
 			if userid == "" {
 				m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "User is not logged in", req.State, modeFrag)
@@ -158,7 +157,6 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 			m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "Invalid id token", req.State, modeFrag)
 			return
 		}
-		// TODO: use ValidRefreshToken
 		userid := gate.GetCtxUserid(c)
 		if userid == "" {
 			m.oidAuthError(c, req.RedirectURI, oidErrorLoginRequired, "User is not logged in", req.State, modeFrag)
@@ -170,17 +168,10 @@ func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.MaxAge > -1 {
-		// validate user session
-	}
-
 	c.WriteStatus(http.StatusOK)
 }
 
 func (m *router) mountOidRoutes(r governor.Router) {
 	r.Get("/openid-configuration", m.getOpenidConfig)
-	r.Get("/jwks", m.getJWKS)
-	ar := r.Group("/auth/authorize")
-	ar.Get("", m.oidAuthorize, gate.TryUser(m.s.gate, ""))
-	ar.Post("", m.oidAuthorize, gate.TryUser(m.s.gate, ""))
+	r.Get(jwksRoute, m.getJWKS)
 }

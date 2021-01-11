@@ -139,38 +139,6 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}, nil
 }
 
-// ValidRefreshToken validates a refresh token
-func (s *service) ValidRefreshToken(refreshToken string) (string, error) {
-	validToken, claims := s.tokenizer.Validate(refreshToken, "")
-	if !validToken {
-		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
-	}
-
-	keyhash, err := s.kvsessions.Get(claims.ID)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			sm, err := s.sessions.GetByID(claims.ID)
-			if err != nil {
-				if governor.ErrorStatus(err) == http.StatusNotFound {
-					return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
-				}
-				return "", governor.NewError("Failed to get session", http.StatusInternalServerError, err)
-			}
-			if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
-				return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
-			}
-			return claims.Subject, nil
-		}
-		return "", governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
-	}
-	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
-		KeyHash: keyhash,
-	}); err != nil || !ok {
-		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
-	}
-	return claims.Subject, nil
-}
-
 // ExchangeToken validates a refresh token and returns an auth token
 func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
 	validToken, claims := s.tokenizer.Validate(refreshToken, "")
