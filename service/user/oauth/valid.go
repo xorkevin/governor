@@ -72,7 +72,7 @@ func validRedirect(rawurl string) error {
 	if len(rawurl) > lengthCapRedirect {
 		return governor.NewErrorUser("Redirect URI must be shorter than 2048 characters", http.StatusBadRequest, nil)
 	}
-	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
+	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Fragment != "" {
 		return governor.NewErrorUser("Redirect URI is invalid", http.StatusBadRequest, nil)
 	}
 	return nil
