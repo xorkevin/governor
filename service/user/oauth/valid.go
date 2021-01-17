@@ -11,8 +11,8 @@ const (
 	lengthCapUserid   = 31
 	lengthCap         = 127
 	amountCap         = 1024
-	lengthCapURL      = 255
-	lengthCapRedirect = 255
+	lengthCapURL      = 512
+	lengthCapRedirect = 512
 )
 
 func validhasClientID(clientid string) error {
@@ -57,7 +57,7 @@ func validURL(rawurl string) error {
 		return nil
 	}
 	if len(rawurl) > lengthCapURL {
-		return governor.NewErrorUser("URL must be shorter than 256 characters", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("URL must be shorter than 513 characters", http.StatusBadRequest, nil)
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
 		return governor.NewErrorUser("URL is invalid", http.StatusBadRequest, nil)
@@ -70,7 +70,7 @@ func validRedirect(rawurl string) error {
 		return governor.NewErrorUser("Redirect URI must be provided", http.StatusBadRequest, nil)
 	}
 	if len(rawurl) > lengthCapRedirect {
-		return governor.NewErrorUser("Redirect URI must be shorter than 2048 characters", http.StatusBadRequest, nil)
+		return governor.NewErrorUser("Redirect URI must be shorter than 513 characters", http.StatusBadRequest, nil)
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Fragment != "" {
 		return governor.NewErrorUser("Redirect URI is invalid", http.StatusBadRequest, nil)

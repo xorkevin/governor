@@ -41,8 +41,8 @@ type (
 	Model struct {
 		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		URL          string `model:"url,VARCHAR(255) NOT NULL" query:"url"`
-		RedirectURI  string `model:"redirect_uri,VARCHAR(255) NOT NULL" query:"redirect_uri"`
+		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
+		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
 		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
 		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroup;getgroupeq,creator_id"`

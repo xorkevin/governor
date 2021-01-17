@@ -18,7 +18,7 @@ const (
 type (
 	// Repo is the OAuth account connection repository
 	Repo interface {
-		New(userid, clientid, scope string) (*Model, string, error)
+		New(userid, clientid, scope, nonce, challenge, method string) (*Model, string, error)
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
 		GetByID(userid, clientid string) (*Model, error)
@@ -38,12 +38,15 @@ type (
 
 	// Model is an connected OAuth app to a user account
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31);index" query:"userid,deleq,userid"`
-		ClientID     string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid,getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
-		Scope        string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
-		CodeHash     string `model:"codehash,VARCHAR(31) NOT NULL" query:"codehash"`
-		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		Userid          string `model:"userid,VARCHAR(31);index" query:"userid,deleq,userid"`
+		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid,getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
+		Scope           string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
+		Nonce           string `model:"nonce,VARCHAR(255)" query:"nonce"`
+		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`
+		ChallengeMethod string `model:"challenge_method,VARCHAR(31)" query:"challenge_method"`
+		CodeHash        string `model:"codehash,VARCHAR(31) NOT NULL" query:"codehash"`
+		Time            int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
+		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
 	ctxKeyRepo struct{}
@@ -85,7 +88,7 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(userid, clientid, scope string) (*Model, string, error) {
+func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string) (*Model, string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create OAuth authorization code", http.StatusInternalServerError, err)
@@ -98,12 +101,15 @@ func (r *repo) New(userid, clientid, scope string) (*Model, string, error) {
 
 	now := time.Now().Round(0).Unix()
 	return &Model{
-		Userid:       userid,
-		ClientID:     clientid,
-		Scope:        scope,
-		CodeHash:     codehash,
-		Time:         now,
-		CreationTime: now,
+		Userid:          userid,
+		ClientID:        clientid,
+		Scope:           scope,
+		Nonce:           nonce,
+		Challenge:       challenge,
+		ChallengeMethod: challengeMethod,
+		CodeHash:        codehash,
+		Time:            now,
+		CreationTime:    now,
 	}, codestr, nil
 }
 

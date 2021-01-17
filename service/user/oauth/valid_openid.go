@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	lengthCapQuery   = 255
-	lengthCapNonce   = 128
-	lengthFloorNonce = 43
+	lengthCapQuery       = 255
+	lengthCapChallenge   = 128
+	lengthFloorChallenge = 43
 )
 
 var (
@@ -44,10 +44,10 @@ func validOidCodeChallenge(challenge string) error {
 	if challenge == "" {
 		return nil
 	}
-	if len(challenge) > lengthCapNonce {
+	if len(challenge) > lengthCapChallenge {
 		return governor.NewErrorUser("Code challenge must be less than 129 characters", http.StatusBadRequest, nil)
 	}
-	if len(challenge) < lengthFloorNonce {
+	if len(challenge) < lengthFloorChallenge {
 		return governor.NewErrorUser("Code challenge must be greater than 42 characters", http.StatusBadRequest, nil)
 	}
 	if !codeChallengeRegex.MatchString(challenge) {
