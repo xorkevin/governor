@@ -1,6 +1,7 @@
 package user
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
@@ -22,6 +23,11 @@ type (
 		UserAgent string
 		Time      string
 	}
+
+	sessionKVVal struct {
+		KeyHash  string `json:"keyhash"`
+		AuthTime int64  `json:"auth_time"`
+	}
 )
 
 const (
@@ -36,6 +42,7 @@ type (
 		RefreshToken string        `json:"refresh_token,omitempty"`
 		SessionToken string        `json:"session_token,omitempty"`
 		Claims       *token.Claims `json:"claims,omitempty"`
+		AuthTime     int64         `json:"auth_time,omitempty"`
 	}
 )
 
@@ -122,10 +129,18 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		}
 	}
 
-	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
+	if kvVal, err := json.Marshal(sessionKVVal{
+		KeyHash:  sm.KeyHash,
+		AuthTime: sm.AuthTime,
+	}); err != nil {
+		s.logger.Error("Failed to marshal session to json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshalsession",
+		})
+	} else if err := s.kvsessions.Set(sm.SessionID, string(kvVal), s.refreshCacheTime); err != nil {
 		s.logger.Error("Failed to cache user session", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "cachesession",
+			"actiontype": "setcachesession",
 		})
 	}
 
@@ -136,6 +151,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 		RefreshToken: refreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
+		AuthTime:     sm.AuthTime,
 	}, nil
 }
 
@@ -146,16 +162,25 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	keyhash, err := s.kvsessions.Get(claims.ID)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return s.RefreshToken(refreshToken, ipaddr, useragent)
+	var kvVal sessionKVVal
+	if sessionstr, err := s.kvsessions.Get(claims.ID); err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			s.logger.Error("Failed to get cached session", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getcachesession",
+			})
 		}
-		return nil, governor.NewError("Failed to get session key", http.StatusInternalServerError, err)
+		return s.RefreshToken(refreshToken, ipaddr, useragent)
+	} else if err := json.Unmarshal([]byte(sessionstr), &kvVal); err != nil {
+		s.logger.Error("Malformed session cache json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "unmarshalsession",
+		})
+		return s.RefreshToken(refreshToken, ipaddr, useragent)
 	}
 
 	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
-		KeyHash: keyhash,
+		KeyHash: kvVal.KeyHash,
 	}); err != nil || !ok {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -172,6 +197,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		RefreshToken: refreshToken,
 		SessionToken: claims.ID,
 		Claims:       accessClaims,
+		AuthTime:     kvVal.AuthTime,
 	}, nil
 }
 
@@ -214,7 +240,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 	if err := s.kvsessions.Set(sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
 		s.logger.Error("Failed to cache user session", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "cachesession",
+			"actiontype": "setcachesession",
 		})
 	}
 
@@ -225,6 +251,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		RefreshToken: newRefreshToken,
 		SessionToken: sm.SessionID,
 		Claims:       accessClaims,
+		AuthTime:     sm.AuthTime,
 	}, nil
 }
 
