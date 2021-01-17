@@ -18,32 +18,8 @@ const (
 	oidChallengePlain = "plain"
 	oidChallengeS256  = "S256"
 
-	oidDisplayPage  = "page"
-	oidDisplayPopup = "popup"
-	oidDisplayTouch = "touch"
-	oidDisplayWap   = "wap"
-
-	oidPromptNone       = "none"
-	oidPromptLogin      = "login"
-	oidPromptConsent    = "consent"
-	oidPromptSelectAcct = "select_account"
-
-	oidErrorInvalidRequest                = "invalid_request"
-	oidErrorUnauthorizedClient            = "unauthorized_client"
-	oidErrorAccessDenied                  = "access_denied"
-	oidErrorUnsupportedResponseType       = "unsupported_response_type"
-	oidErrorInvalidScope                  = "invalid_scope"
-	oidErrorServerError                   = "server_error"
-	oidErrorTemporarilyUnavailable        = "temporarily_unavailable"
-	oidErrorInteractionRequired           = "interaction_required"
-	oidErrorLoginRequired                 = "login_required"
-	oidErrorAccountSelectionRequired      = "account_selection_required"
-	oidErrorConsentRequired               = "consent_required"
-	oidErrorInvalidRequestURI             = "invalid_request_uri"
-	oidErrorInvalidRequestObject          = "invalid_request_object"
-	oidErrorInvalidRequestNotSupported    = "request_not_supported"
-	oidErrorInvalidRequestURINotSupported = "request_uri_not_supported"
-	oidErrorRegistrationNotSupported      = "registration_not_supported"
+	oidErrorInvalidRequest = "invalid_request"
+	oidErrorInvalidScope   = "invalid_scope"
 )
 
 type (

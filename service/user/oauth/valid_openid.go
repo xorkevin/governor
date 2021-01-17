@@ -20,22 +20,22 @@ var (
 
 func validOidScope(scope string) error {
 	if len(scope) > lengthCapQuery {
-		return governor.NewErrorUser("Scope must be less than 256 characters", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidScope, "Scope must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	for _, i := range strings.Fields(scope) {
 		if i == oidScopeOpenid {
 			return nil
 		}
 	}
-	return governor.NewErrorUser("Invalid OpenID scope", http.StatusBadRequest, nil)
+	return governor.NewCodeErrorUser(oidErrorInvalidScope, "Invalid OpenID scope", http.StatusBadRequest, nil)
 }
 
 func validOidNonce(nonce string) error {
 	if len(nonce) > lengthCapQuery {
-		return governor.NewErrorUser("Nonce must be less than 256 characters", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Nonce must be less than 256 characters", http.StatusBadRequest, nil)
 	}
 	if !printableRegex.MatchString(nonce) {
-		return governor.NewErrorUser("Invalid nonce", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid nonce", http.StatusBadRequest, nil)
 	}
 	return nil
 }
@@ -45,22 +45,25 @@ func validOidCodeChallenge(challenge string) error {
 		return nil
 	}
 	if len(challenge) > lengthCapChallenge {
-		return governor.NewErrorUser("Code challenge must be less than 129 characters", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Code challenge must be less than 129 characters", http.StatusBadRequest, nil)
 	}
 	if len(challenge) < lengthFloorChallenge {
-		return governor.NewErrorUser("Code challenge must be greater than 42 characters", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Code challenge must be greater than 42 characters", http.StatusBadRequest, nil)
 	}
 	if !codeChallengeRegex.MatchString(challenge) {
-		return governor.NewErrorUser("Invalid code challenge", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid code challenge", http.StatusBadRequest, nil)
 	}
 	return nil
 }
 
 func validOidCodeChallengeMethod(method string) error {
+	if method == "" {
+		return nil
+	}
 	switch method {
 	case oidChallengePlain, oidChallengeS256:
 		return nil
 	default:
-		return governor.NewErrorUser("Invalid code challenge method", http.StatusBadRequest, nil)
+		return governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid code challenge method", http.StatusBadRequest, nil)
 	}
 }
