@@ -3,22 +3,10 @@
 package oauth
 
 func (r reqOidAuthorize) valid() error {
-	if err := validOidResponseType(r.ResponseType); err != nil {
-		return err
-	}
-	if err := validOidResponseMode(r.ResponseMode); err != nil {
-		return err
-	}
 	if err := validhasClientID(r.ClientID); err != nil {
 		return err
 	}
 	if err := validOidScope(r.Scope); err != nil {
-		return err
-	}
-	if err := validRedirect(r.RedirectURI); err != nil {
-		return err
-	}
-	if err := validOidState(r.State); err != nil {
 		return err
 	}
 	if err := validOidNonce(r.Nonce); err != nil {
@@ -28,21 +16,6 @@ func (r reqOidAuthorize) valid() error {
 		return err
 	}
 	if err := validOidCodeChallengeMethod(r.CodeChallengeMethod); err != nil {
-		return err
-	}
-	if err := validOidDisplay(r.Display); err != nil {
-		return err
-	}
-	if err := validOidPrompt(r.Prompt); err != nil {
-		return err
-	}
-	if err := validOidMaxAge(r.MaxAge); err != nil {
-		return err
-	}
-	if err := validOidIDTokenHint(r.IDTokenHint); err != nil {
-		return err
-	}
-	if err := validOidLoginHint(r.LoginHint); err != nil {
 		return err
 	}
 	return nil

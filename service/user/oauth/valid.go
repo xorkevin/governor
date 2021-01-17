@@ -12,7 +12,7 @@ const (
 	lengthCap         = 127
 	amountCap         = 1024
 	lengthCapURL      = 255
-	lengthCapRedirect = 2047
+	lengthCapRedirect = 255
 )
 
 func validhasClientID(clientid string) error {
