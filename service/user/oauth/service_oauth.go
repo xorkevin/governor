@@ -52,6 +52,28 @@ func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error)
 	}, nil
 }
 
+func (s *service) GetAppsBulk(clientids []string) (*resApps, error) {
+	m, err := s.apps.GetBulk(clientids)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]resApp, 0, len(m))
+	for _, i := range m {
+		res = append(res, resApp{
+			ClientID:     i.ClientID,
+			Name:         i.Name,
+			URL:          i.URL,
+			RedirectURI:  i.RedirectURI,
+			Logo:         i.Logo,
+			Time:         i.Time,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resApps{
+		Apps: res,
+	}, nil
+}
+
 func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
 	if clientstr, err := s.kvclient.Get(clientid); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {

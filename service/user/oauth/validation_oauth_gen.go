@@ -22,6 +22,13 @@ func (r reqGetAppGroup) valid() error {
 	return nil
 }
 
+func (r reqGetAppBulk) valid() error {
+	if err := validhasClientIDs(r.ClientIDs); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqAppPost) valid() error {
 	if err := validName(r.Name); err != nil {
 		return err

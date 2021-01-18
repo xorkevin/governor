@@ -24,6 +24,7 @@ type (
 		RehashKey(m *Model) (string, error)
 		GetByID(clientid string) (*Model, error)
 		GetApps(limit, offset int, creatorid string) ([]Model, error)
+		GetBulk(clientids []string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		DeleteCreatorApps(creatorid string) error
@@ -39,7 +40,7 @@ type (
 
 	// Model is the db OAuth app model
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;updeq,clientid;deleq,clientid"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;getgroupeq,clientid|arr;updeq,clientid;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
 		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
@@ -153,7 +154,7 @@ func (r *repo) GetByID(clientid string) (*Model, error) {
 		if code == 2 {
 			return nil, governor.NewError("No OAuth app found with that id", http.StatusNotFound, err)
 		}
-		return nil, governor.NewError("Failed to get OAuth app config", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to get OAuth app", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
@@ -166,13 +167,25 @@ func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
 	if creatorid == "" {
 		m, err := oauthappModelGetModelOrdTime(db, false, limit, offset)
 		if err != nil {
-			return nil, governor.NewError("Failed to get OAuth app configs", http.StatusInternalServerError, err)
+			return nil, governor.NewError("Failed to get OAuth apps", http.StatusInternalServerError, err)
 		}
 		return m, nil
 	}
 	m, err := oauthappModelGetModelEqCreatorIDOrdTime(db, creatorid, false, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get OAuth app configs", http.StatusInternalServerError, err)
+		return nil, governor.NewError("Failed to get OAuth apps", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+func (r *repo) GetBulk(clientids []string) ([]Model, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := oauthappModelGetModelHasClientIDOrdClientID(db, clientids, true, len(clientids), 0)
+	if err != nil {
+		return nil, governor.NewError("Failed to get OAuth apps", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }
@@ -208,7 +221,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := oauthappModelDelEqClientID(db, m.ClientID); err != nil {
-		return governor.NewError("Failed to delete OAuth app config", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to delete OAuth app", http.StatusInternalServerError, err)
 	}
 	return nil
 }
@@ -219,7 +232,7 @@ func (r *repo) DeleteCreatorApps(creatorid string) error {
 		return err
 	}
 	if err := oauthappModelDelEqCreatorID(db, creatorid); err != nil {
-		return governor.NewError("Failed to delete OAuth app configs", http.StatusInternalServerError, err)
+		return governor.NewError("Failed to delete OAuth apps", http.StatusInternalServerError, err)
 	}
 	return nil
 }

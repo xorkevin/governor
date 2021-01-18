@@ -89,6 +89,46 @@ func oauthappModelGetModelEqClientID(db *sql.DB, clientid string) (*Model, int, 
 	return m, 0, nil
 }
 
+func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, clientid []string, orderasc bool, limit, offset int) ([]Model, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(clientid))
+	args = append(args, limit, offset)
+	var placeholdersclientid string
+	{
+		placeholders := make([]string, 0, len(clientid))
+		for _, i := range clientid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersclientid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps WHERE clientid IN (VALUES "+placeholdersclientid+") ORDER BY clientid "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func oauthappModelUpdModelEqClientID(db *sql.DB, m *Model, clientid string) (int, error) {
 	_, err := db.Exec("UPDATE oauthapps SET (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE clientid = $10;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID, clientid)
 	if err != nil {

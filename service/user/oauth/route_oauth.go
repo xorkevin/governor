@@ -2,13 +2,14 @@ package oauth
 
 import (
 	"net/http"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetAppGroup reqAppPost reqAppPut
+//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetAppGroup reqGetAppBulk reqAppPost reqAppPut
 
 type (
 	reqAppGet struct {
@@ -79,6 +80,30 @@ func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := m.s.GetApps(req.Amount, req.Offset, req.CreatorID)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetAppBulk struct {
+		ClientIDs string `valid:"clientIDs,has" json:"-"`
+	}
+)
+
+func (m *router) getAppBulk(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetAppBulk{
+		ClientIDs: c.Query("ids"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetAppsBulk(strings.Split(req.ClientIDs, ","))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -229,6 +254,7 @@ func (m *router) mountAppRoutes(r governor.Router) {
 	r.Get("/{clientid}", m.getApp)
 	r.Get("/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
 	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "gov.oauth", scopeAppRead))
+	r.Get("/ids", m.getAppBulk)
 	r.Post("", m.createApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
 	r.Put("/{clientid}", m.updateApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
 	r.Put("/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
