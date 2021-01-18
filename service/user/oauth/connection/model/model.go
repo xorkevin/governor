@@ -44,7 +44,7 @@ type (
 		Nonce           string `model:"nonce,VARCHAR(255)" query:"nonce"`
 		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`
 		ChallengeMethod string `model:"challenge_method,VARCHAR(31)" query:"challenge_method"`
-		CodeHash        string `model:"codehash,VARCHAR(31) NOT NULL" query:"codehash"`
+		CodeHash        string `model:"codehash,VARCHAR(255) NOT NULL" query:"codehash"`
 		Time            int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
 		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
