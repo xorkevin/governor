@@ -89,7 +89,7 @@ type (
 		Name        string `valid:"name" json:"name"`
 		URL         string `valid:"URL" json:"url"`
 		RedirectURI string `valid:"redirect" json:"redirect_uri"`
-		CreatorID   string `valid:"creatorID,has" json:"-"`
+		CreatorID   string `valid:"userid,has" json:"-"`
 	}
 )
 

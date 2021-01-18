@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"net/http"
-	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -11,6 +10,7 @@ import (
 
 type (
 	reqOidAuthorize struct {
+		Userid              string `valid:"userid,has" json:"-"`
 		ClientID            string `valid:"clientID,has" json:"client_id"`
 		Scope               string `valid:"oidScope" json:"scope"`
 		Nonce               string `valid:"oidNonce" json:"nonce"`
@@ -39,44 +39,33 @@ func (m *router) getJWKS(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func dedupSSV(s string, allowed map[string]struct{}) string {
-	k := strings.Fields(s)
-	next := make([]string, 0, len(k))
-	nextSet := make(map[string]struct{}, len(k))
-	for _, i := range k {
-		if _, ok := allowed[i]; ok {
-			if _, ok := nextSet[i]; !ok {
-				nextSet[i] = struct{}{}
-				next = append(next, i)
-			}
-		}
-	}
-	return strings.Join(next, " ")
-}
-
 func (m *router) oidAuthorize(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqOidAuthorize{
-		ClientID:            c.Query("client_id"),
-		Scope:               c.Query("scope"),
-		Nonce:               c.Query("nonce"),
-		CodeChallenge:       c.Query("code_challenge"),
-		CodeChallengeMethod: c.QueryDef("code_challenge_method", oidChallengePlain),
+	req := reqOidAuthorize{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
 	}
+	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
+	if req.CodeChallengeMethod == "" && req.CodeChallenge != "" {
+		c.WriteError(governor.NewCodeError(oidErrorInvalidRequest, "No code challenge method provided", http.StatusBadRequest, nil))
+		return
+	}
+	if req.CodeChallengeMethod != "" && req.CodeChallenge == "" {
+		c.WriteError(governor.NewCodeError(oidErrorInvalidRequest, "No code challenge provided", http.StatusBadRequest, nil))
+		return
+	}
 
-	// filter unknown scopes
-	req.Scope = dedupSSV(req.Scope, map[string]struct{}{
-		oidScopeOpenid:  {},
-		oidScopeProfile: {},
-		oidScopeEmail:   {},
-		oidScopeOffline: {},
-	})
-
-	c.WriteStatus(http.StatusOK)
+	res, err := m.s.AuthCode(req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
 }
 
 const (

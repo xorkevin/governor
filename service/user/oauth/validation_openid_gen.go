@@ -3,6 +3,9 @@
 package oauth
 
 func (r reqOidAuthorize) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
 	if err := validhasClientID(r.ClientID); err != nil {
 		return err
 	}

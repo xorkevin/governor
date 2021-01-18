@@ -2,6 +2,10 @@ package oauth
 
 import (
 	"gopkg.in/square/go-jose.v2"
+	"net/http"
+	"sort"
+	"strings"
+	"xorkevin.dev/governor"
 )
 
 const (
@@ -90,4 +94,71 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 
 func (s *service) GetJWKS() (*jose.JSONWebKeySet, error) {
 	return s.tokenizer.GetJWKS(), nil
+}
+
+func dedupSSV(s string, allowed map[string]struct{}) string {
+	k := strings.Fields(s)
+	next := make([]string, 0, len(k))
+	nextSet := make(map[string]struct{}, len(k))
+	for _, i := range k {
+		if _, ok := allowed[i]; ok {
+			if _, ok := nextSet[i]; !ok {
+				nextSet[i] = struct{}{}
+				next = append(next, i)
+			}
+		}
+	}
+	sort.Strings(next)
+	return strings.Join(next, " ")
+}
+
+type (
+	resAuthCode struct {
+		Code string `json:"code"`
+	}
+)
+
+func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method string) (*resAuthCode, error) {
+	// sort and filter unknown scopes
+	scope = dedupSSV(scope, map[string]struct{}{
+		oidScopeOpenid:  {},
+		oidScopeProfile: {},
+		oidScopeEmail:   {},
+		oidScopeOffline: {},
+	})
+
+	m, err := s.connections.GetByID(userid, clientid)
+	if err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		m, code, err := s.connections.New(userid, clientid, scope, nonce, challenge, method)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.connections.Insert(m); err != nil {
+			if governor.ErrorStatus(err) == http.StatusBadRequest {
+				return nil, governor.NewErrorUser("", 0, err)
+			}
+			return nil, err
+		}
+		return &resAuthCode{
+			Code: code,
+		}, nil
+	}
+
+	m.Scope = scope
+	m.Nonce = nonce
+	m.Challenge = challenge
+	m.ChallengeMethod = method
+	code, err := s.connections.RehashCode(m)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.connections.Update(m); err != nil {
+		return nil, err
+	}
+	return &resAuthCode{
+		Code: code,
+	}, nil
 }

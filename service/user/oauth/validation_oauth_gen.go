@@ -29,7 +29,7 @@ func (r reqAppPost) valid() error {
 	if err := validRedirect(r.RedirectURI); err != nil {
 		return err
 	}
-	if err := validhasCreatorID(r.CreatorID); err != nil {
+	if err := validhasUserid(r.CreatorID); err != nil {
 		return err
 	}
 	return nil

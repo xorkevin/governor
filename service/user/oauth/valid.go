@@ -15,6 +15,16 @@ const (
 	lengthCapRedirect = 512
 )
 
+func validhasUserid(userid string) error {
+	if len(userid) == 0 {
+		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
+	}
+	if len(userid) > lengthCapUserid {
+		return governor.NewErrorUser("Userid must be shorter than 32 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validhasClientID(clientid string) error {
 	if len(clientid) == 0 {
 		return governor.NewErrorUser("Client id must be provided", http.StatusBadRequest, nil)
@@ -74,16 +84,6 @@ func validRedirect(rawurl string) error {
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Fragment != "" {
 		return governor.NewErrorUser("Redirect URI is invalid", http.StatusBadRequest, nil)
-	}
-	return nil
-}
-
-func validhasCreatorID(creatorid string) error {
-	if len(creatorid) == 0 {
-		return governor.NewErrorUser("Creator id must be provided", http.StatusBadRequest, nil)
-	}
-	if len(creatorid) > lengthCapUserid {
-		return governor.NewErrorUser("Creator id must be shorter than 32 characters", http.StatusBadRequest, nil)
 	}
 	return nil
 }
