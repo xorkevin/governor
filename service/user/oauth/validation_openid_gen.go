@@ -2,7 +2,7 @@
 
 package oauth
 
-func (r reqOidAuthorize) valid() error {
+func (r reqOAuthAuthorize) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -19,6 +19,29 @@ func (r reqOidAuthorize) valid() error {
 		return err
 	}
 	if err := validOidCodeChallengeMethod(r.CodeChallengeMethod); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetConnectionGroup) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetConnection) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasClientID(r.ClientID); err != nil {
 		return err
 	}
 	return nil

@@ -9,7 +9,10 @@ func (r reqAppGet) valid() error {
 	return nil
 }
 
-func (r reqGetGroup) valid() error {
+func (r reqGetAppGroup) valid() error {
+	if err := validoptUserid(r.CreatorID); err != nil {
+		return err
+	}
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}

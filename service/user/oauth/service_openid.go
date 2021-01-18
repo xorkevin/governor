@@ -162,3 +162,51 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 		Code: code,
 	}, nil
 }
+
+type (
+	resConnection struct {
+		ClientID     string `json:"client_id"`
+		Scope        string `json:"scope"`
+		Time         int64  `json:"time"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	resConnections struct {
+		Connections []resConnection `json:"connections"`
+	}
+)
+
+func (s *service) GetConnections(userid string, amount, offset int) (*resConnections, error) {
+	m, err := s.connections.GetUserConnections(userid, amount, offset)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]resConnection, 0, len(m))
+	for _, i := range m {
+		res = append(res, resConnection{
+			ClientID:     i.ClientID,
+			Scope:        i.Scope,
+			Time:         i.Time,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resConnections{
+		Connections: res,
+	}, nil
+}
+
+func (s *service) GetConnection(userid string, clientid string) (*resConnection, error) {
+	m, err := s.connections.GetByID(userid, clientid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewErrorUser("", 0, err)
+		}
+		return nil, err
+	}
+	return &resConnection{
+		ClientID:     m.ClientID,
+		Scope:        m.Scope,
+		Time:         m.Time,
+		CreationTime: m.CreationTime,
+	}, nil
+}

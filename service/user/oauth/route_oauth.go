@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetGroup reqAppPost reqAppPut
+//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetAppGroup reqAppPost reqAppPut
 
 type (
 	reqAppGet struct {
@@ -59,24 +59,26 @@ func (m *router) getAppLogo(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqGetGroup struct {
-		Amount int `valid:"amount" json:"-"`
-		Offset int `valid:"offset" json:"-"`
+	reqGetAppGroup struct {
+		CreatorID string `valid:"userid,opt" json:"-"`
+		Amount    int    `valid:"amount" json:"-"`
+		Offset    int    `valid:"offset" json:"-"`
 	}
 )
 
 func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqGetGroup{
-		Amount: c.QueryInt("amount", -1),
-		Offset: c.QueryInt("offset", -1),
+	req := reqGetAppGroup{
+		CreatorID: c.Query("creatorid"),
+		Amount:    c.QueryInt("amount", -1),
+		Offset:    c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := m.s.GetApps(req.Amount, req.Offset, c.Query("creatorid"))
+	res, err := m.s.GetApps(req.Amount, req.Offset, req.CreatorID)
 	if err != nil {
 		c.WriteError(err)
 		return

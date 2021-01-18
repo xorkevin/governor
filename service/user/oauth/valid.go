@@ -25,6 +25,13 @@ func validhasUserid(userid string) error {
 	return nil
 }
 
+func validoptUserid(userid string) error {
+	if len(userid) > lengthCapUserid {
+		return governor.NewErrorUser("Userid must be shorter than 32 characters", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
 func validhasClientID(clientid string) error {
 	if len(clientid) == 0 {
 		return governor.NewErrorUser("Client id must be provided", http.StatusBadRequest, nil)
