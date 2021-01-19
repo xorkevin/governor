@@ -210,3 +210,16 @@ func (s *service) GetConnection(userid string, clientid string) (*resConnection,
 		CreationTime: m.CreationTime,
 	}, nil
 }
+
+func (s *service) DelConnection(userid string, clientid string) error {
+	if _, err := s.connections.GetByID(userid, clientid); err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		return err
+	}
+	if err := s.connections.Delete(userid, []string{clientid}); err != nil {
+		return err
+	}
+	return nil
+}

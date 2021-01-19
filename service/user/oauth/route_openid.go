@@ -122,6 +122,24 @@ func (m *router) getConnection(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetConnection{
+		Userid:   gate.GetCtxUserid(c),
+		ClientID: c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.DelConnection(req.Userid, req.ClientID); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 const (
 	scopeAuthorize       = "gov.user.oauth.authorize"
 	scopeConnectionRead  = "gov.user.oauth.connections:read"
@@ -134,4 +152,5 @@ func (m *router) mountOidRoutes(r governor.Router) {
 	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize))
 	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead))
 	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead))
+	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite))
 }
