@@ -142,8 +142,8 @@ func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
 
 const (
 	scopeAuthorize       = "gov.user.oauth.authorize"
-	scopeConnectionRead  = "gov.user.oauth.connections:read"
-	scopeConnectionWrite = "gov.user.oauth.connections:write"
+	scopeConnectionRead  = "gov.user.oauth.connection:read"
+	scopeConnectionWrite = "gov.user.oauth.connection:write"
 )
 
 func (m *router) mountOidRoutes(r governor.Router) {
