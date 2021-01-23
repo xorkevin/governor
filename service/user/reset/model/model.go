@@ -17,7 +17,7 @@ const (
 
 type (
 	Repo interface {
-		New(userid, kind, params string) *Model
+		New(userid, kind string) *Model
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
 		GetByID(userid, kind string) (*Model, error)
@@ -80,13 +80,13 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(userid, kind, params string) *Model {
+func (r *repo) New(userid, kind string) *Model {
 	return &Model{
 		Userid:   userid,
 		Kind:     kind,
 		CodeHash: "",
 		CodeTime: 0,
-		Params:   params,
+		Params:   "",
 	}
 }
 
