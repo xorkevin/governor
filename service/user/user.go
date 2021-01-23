@@ -14,6 +14,7 @@ import (
 	"xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/reset/model"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/role/invitation/model"
 	"xorkevin.dev/governor/service/user/session/model"
@@ -55,10 +56,10 @@ type (
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
 		invitations       invitationmodel.Repo
+		resets            resetmodel.Repo
 		roles             role.Role
 		apikeys           apikey.Apikey
 		kvemailchange     kvstore.KVStore
-		kvpassreset       kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		queue             msgqueue.Msgqueue
 		mailer            mail.Mail
@@ -127,6 +128,7 @@ func NewCtx(inj governor.Injector) Service {
 	sessions := sessionmodel.GetCtxRepo(inj)
 	approvals := approvalmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
+	resets := resetmodel.GetCtxRepo(inj)
 	roles := role.GetCtxRole(inj)
 	apikeys := apikey.GetCtxApikey(inj)
 	kv := kvstore.GetCtxKVStore(inj)
@@ -134,11 +136,13 @@ func NewCtx(inj governor.Injector) Service {
 	mailer := mail.GetCtxMail(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	g := gate.GetCtxGate(inj)
+
 	return New(
 		users,
 		sessions,
 		approvals,
 		invitations,
+		resets,
 		roles,
 		apikeys,
 		kv,
@@ -155,6 +159,7 @@ func New(
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
 	invitations invitationmodel.Repo,
+	resets resetmodel.Repo,
 	roles role.Role,
 	apikeys apikey.Apikey,
 	kv kvstore.KVStore,
@@ -172,10 +177,10 @@ func New(
 		sessions:          sessions,
 		approvals:         approvals,
 		invitations:       invitations,
+		resets:            resets,
 		roles:             roles,
 		apikeys:           apikeys,
 		kvemailchange:     kv.Subtree("emailchange"),
-		kvpassreset:       kv.Subtree("passreset"),
 		kvsessions:        kv.Subtree("sessions"),
 		queue:             queue,
 		mailer:            mailer,

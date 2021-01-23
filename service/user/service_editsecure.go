@@ -6,13 +6,15 @@ import (
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
+	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )
 
 const (
-	uidEmailSize = 16
-	uidPassSize  = 16
+	uidEmailSize   = 16
+	kindResetEmail = "email"
+	kindResetPass  = "pass"
 )
 
 type (
@@ -311,23 +313,35 @@ func (s *service) ForgotPassword(useroremail string) error {
 		m = mu
 	}
 
-	key, err := uid.New(uidPassSize)
+	needInsert := false
+	mr, err := s.resets.GetByID(m.Userid, kindResetPass)
 	if err != nil {
-		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return governor.NewErrorUser("", 0, err)
+		}
+		needInsert = true
+		mr = s.resets.New(m.Userid, kindResetPass, "")
 	}
-	nonce := key.Base64()
-	noncehash, err := s.hasher.Hash(nonce)
+	code, err := s.resets.RehashCode(mr)
 	if err != nil {
-		return governor.NewError("Failed to hash password reset key", http.StatusInternalServerError, err)
+		return err
 	}
-
-	if err := s.kvpassreset.Set(m.Userid, noncehash, s.passwordResetTime); err != nil {
-		return governor.NewError("Failed to store password reset info", http.StatusInternalServerError, err)
+	if needInsert {
+		if err := s.resets.Insert(mr); err != nil {
+			if governor.ErrorStatus(err) == http.StatusBadRequest {
+				return governor.NewErrorUser("", 0, err)
+			}
+			return err
+		}
+	} else {
+		if err := s.resets.Update(mr); err != nil {
+			return err
+		}
 	}
 
 	emdata := emailForgotPass{
 		Userid:    m.Userid,
-		Key:       nonce,
+		Key:       code,
 		FirstName: m.FirstName,
 		LastName:  m.LastName,
 		Username:  m.Username,
@@ -343,7 +357,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 
 // ResetPassword completes the forgot password procedure
 func (s *service) ResetPassword(userid string, key string, newPassword string) error {
-	noncehash, err := s.kvpassreset.Get(userid)
+	mr, err := s.resets.GetByID(userid, kindResetPass)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
 			return governor.NewErrorUser("Password reset expired", http.StatusBadRequest, err)
@@ -351,10 +365,13 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		return governor.NewError("Failed to reset password", http.StatusInternalServerError, err)
 	}
 
-	if ok, err := s.verifier.Verify(key, noncehash); err != nil {
-		return governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
+	if time.Now().Round(0).Unix() > mr.CodeTime+s.passwordResetTime {
+		return governor.NewErrorUser("Password reset expired", http.StatusBadRequest, err)
+	}
+	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
+		return governor.NewError("Failed to reset password", http.StatusInternalServerError, err)
 	} else if !ok {
-		return governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
+		return governor.NewErrorUser("Invalid code", http.StatusForbidden, nil)
 	}
 
 	m, err := s.users.GetByID(userid)
@@ -369,15 +386,12 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		return err
 	}
 
-	if err := s.users.Update(m); err != nil {
+	if err := s.resets.Delete(userid, kindResetPass); err != nil {
 		return err
 	}
 
-	if err := s.kvpassreset.Del(userid); err != nil {
-		s.logger.Error("Failed to clean up password reset info", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "resetpasswordcleanup",
-		})
+	if err := s.users.Update(m); err != nil {
+		return err
 	}
 
 	emdata := emailPassReset{
