@@ -162,6 +162,12 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
+	if ok, err := s.CheckUserExists(claims.Subject); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, governor.NewErrorUser("Invalid user", http.StatusNotFound, nil)
+	}
+
 	var kvVal sessionKVVal
 	if sessionstr, err := s.kvsessions.Get(claims.ID); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {

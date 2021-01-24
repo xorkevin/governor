@@ -246,12 +246,12 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 }
 
 func (s *service) mailSubscriber(msgdata []byte) error {
-	emmsg := mailmsg{}
-	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(&emmsg); err != nil {
+	emmsg := &mailmsg{}
+	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.NewError("Failed to decode mail message", http.StatusInternalServerError, err)
 	}
 	emdata := map[string]string{}
-	if err := json.NewDecoder(bytes.NewBufferString(emmsg.Emdata)).Decode(&emdata); err != nil {
+	if err := json.Unmarshal([]byte(emmsg.Emdata), &emdata); err != nil {
 		return governor.NewError("Failed to decode mail data", http.StatusInternalServerError, err)
 	}
 
@@ -432,8 +432,8 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 	if len(to) == 0 {
 		return governor.NewError("Email must have at least one recipient", http.StatusBadRequest, nil)
 	}
-	datastring := &bytes.Buffer{}
-	if err := json.NewEncoder(datastring).Encode(emdata); err != nil {
+	datastring, err := json.Marshal(emdata)
+	if err != nil {
 		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
 	}
 
@@ -444,7 +444,7 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 		Subjecttpl:  tpl + "_subject.txt",
 		Bodytpl:     tpl + ".txt",
 		HtmlBodytpl: tpl + ".html",
-		Emdata:      datastring.String(),
+		Emdata:      string(datastring),
 	}
 	if msg.From == "" {
 		msg.From = s.fromAddress
@@ -453,11 +453,11 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 		msg.FromName = s.fromName
 	}
 
-	b := &bytes.Buffer{}
-	if err := json.NewEncoder(b).Encode(msg); err != nil {
+	b, err := json.Marshal(msg)
+	if err != nil {
 		return governor.NewError("Failed to encode email to json", http.StatusInternalServerError, err)
 	}
-	if err := s.queue.Publish(govmailchannelid, b.Bytes()); err != nil {
+	if err := s.queue.Publish(govmailchannelid, b); err != nil {
 		return governor.NewError("Failed to publish new email to message queue", http.StatusInternalServerError, err)
 	}
 	return nil

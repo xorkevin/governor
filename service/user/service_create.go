@@ -228,17 +228,15 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 	}
 	m := s.approvals.ToUserModel(am)
 
-	userProps := NewUserProps{
+	b, err := json.Marshal(NewUserProps{
 		Userid:       m.Userid,
 		Username:     m.Username,
 		Email:        m.Email,
 		FirstName:    m.FirstName,
 		LastName:     m.LastName,
 		CreationTime: m.CreationTime,
-	}
-
-	b := bytes.Buffer{}
-	if err := json.NewEncoder(&b).Encode(userProps); err != nil {
+	})
+	if err != nil {
 		return nil, governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
 	}
 
@@ -252,7 +250,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		return nil, err
 	}
 
-	if err := s.queue.Publish(NewUserQueueID, b.Bytes()); err != nil {
+	if err := s.queue.Publish(NewUserQueueID, b); err != nil {
 		s.logger.Error("Failed to publish new user", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishnewuser",
@@ -301,12 +299,21 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
 	}
 
-	userProps := DeleteUserProps{
+	b, err := json.Marshal(DeleteUserProps{
 		Userid: m.Userid,
-	}
-	b := bytes.Buffer{}
-	if err := json.NewEncoder(&b).Encode(userProps); err != nil {
+	})
+	if err != nil {
 		return governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
+	}
+	if err := s.queue.Publish(DeleteUserQueueID, b); err != nil {
+		s.logger.Error("Failed to publish delete user", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishdeleteuser",
+		})
+	}
+
+	if err := s.resets.DeleteByUserid(userid); err != nil {
+		return err
 	}
 
 	if err := s.DeleteUserApikeys(userid); err != nil {
@@ -332,19 +339,13 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		})
 	}
 
-	if err := s.queue.Publish(DeleteUserQueueID, b.Bytes()); err != nil {
-		s.logger.Error("Failed to publish delete user", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "publishdeleteuser",
-		})
-	}
 	return nil
 }
 
 // DecodeNewUserProps marshals json encoded new user props into a struct
 func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	m := &NewUserProps{}
-	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(m); err != nil {
+	if err := json.Unmarshal(msgdata, m); err != nil {
 		return nil, governor.NewError("Failed to decode new user props", http.StatusInternalServerError, err)
 	}
 	return m, nil
@@ -353,7 +354,7 @@ func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 // DecodeDeleteUserProps marshals json encoded delete user props into a struct
 func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
-	if err := json.NewDecoder(bytes.NewBuffer(msgdata)).Decode(m); err != nil {
+	if err := json.Unmarshal(msgdata, m); err != nil {
 		return nil, governor.NewError("Failed to decode delete user props", http.StatusInternalServerError, err)
 	}
 	return m, nil
