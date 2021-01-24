@@ -264,6 +264,13 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		})
 	}
 
+	if err := s.kvusers.Del(userid); err != nil {
+		s.logger.Error("Failed to delete user exists in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "deluserexists",
+		})
+	}
+
 	s.logger.Info("created user", map[string]string{
 		"userid":     m.Userid,
 		"username":   m.Username,
