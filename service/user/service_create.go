@@ -325,8 +325,15 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return err
 	}
 
+	if err := s.kvusers.Del(userid); err != nil {
+		s.logger.Error("Failed to delete user exists in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "deluserexists",
+		})
+	}
+
 	if err := s.queue.Publish(DeleteUserQueueID, b.Bytes()); err != nil {
-		s.logger.Error("failed to publish delete user", map[string]string{
+		s.logger.Error("Failed to publish delete user", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishdeleteuser",
 		})
