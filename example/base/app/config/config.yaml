@@ -88,6 +88,8 @@ user:
   refreshcache: 24h
   confirmtime: 24h
   passwordresettime: 24h
+  invitationtime: 24h
+  usercachetime: 24h
   newloginemail: true
   passwordminsize: 8
   userapproval: false

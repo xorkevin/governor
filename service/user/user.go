@@ -43,6 +43,7 @@ type (
 	// User is a user management service
 	User interface {
 		GetByID(userid string) (*ResUserGet, error)
+		CheckUserExists(userid string) (bool, error)
 	}
 
 	Service interface {
@@ -58,6 +59,7 @@ type (
 		resets            resetmodel.Repo
 		roles             role.Role
 		apikeys           apikey.Apikey
+		kvusers           kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		queue             msgqueue.Msgqueue
 		mailer            mail.Mail
@@ -72,6 +74,7 @@ type (
 		confirmTime       int64
 		passwordResetTime int64
 		invitationTime    int64
+		userCacheTime     int64
 		newLoginEmail     bool
 		passwordMinSize   int
 		userApproval      bool
@@ -172,6 +175,7 @@ func New(
 		resets:            resets,
 		roles:             roles,
 		apikeys:           apikeys,
+		kvusers:           kv.Subtree("users"),
 		kvsessions:        kv.Subtree("sessions"),
 		queue:             queue,
 		mailer:            mailer,
@@ -183,6 +187,7 @@ func New(
 		confirmTime:       time24h,
 		passwordResetTime: time24h,
 		invitationTime:    time24h,
+		userCacheTime:     time24h,
 	}
 }
 
@@ -195,6 +200,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("confirmtime", "24h")
 	r.SetDefault("passwordresettime", "24h")
 	r.SetDefault("invitationtime", "24h")
+	r.SetDefault("usercachetime", "24h")
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
@@ -249,6 +255,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	} else {
 		s.invitationTime = int64(t / time.Second)
 	}
+	if t, err := time.ParseDuration(r.GetStr("usercachetime")); err != nil {
+		return governor.NewError("Failed to parse user cache time", http.StatusBadRequest, err)
+	} else {
+		s.userCacheTime = int64(t / time.Second)
+	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
@@ -278,6 +289,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
 		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
 		"invitationtime (s)":    strconv.FormatInt(s.invitationTime, 10),
+		"usercachetime (s)":     strconv.FormatInt(s.userCacheTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"issuer":                r.GetStr("issuer"),

@@ -245,3 +245,45 @@ func (s *service) GetIDsByRole(role string, amount int, offset int) (*resUserLis
 		Users: userids,
 	}, nil
 }
+
+const (
+	cacheValY = "y"
+	cacheValN = "n"
+)
+
+// CheckUserExists is a fast check to determine if a user exists
+func (s *service) CheckUserExists(userid string) (bool, error) {
+	if v, err := s.kvusers.Get(userid); err != nil {
+		s.logger.Error("Failed to get user exists from cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "getuserexists",
+		})
+	} else {
+		if v == cacheValY {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	exists := true
+	_, err := s.users.GetByID(userid)
+	if err != nil {
+		if governor.ErrorStatus(err) != http.StatusNotFound {
+			return false, err
+		}
+		exists = false
+	}
+
+	v := cacheValN
+	if exists {
+		v = cacheValY
+	}
+	if err := s.kvusers.Set(userid, v, s.userCacheTime); err != nil {
+		s.logger.Error("Failed to set user exists in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setuserexists",
+		})
+	}
+
+	return exists, nil
+}
