@@ -264,18 +264,13 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		})
 	}
 
-	if err := s.kvusers.Del(userid); err != nil {
-		s.logger.Error("Failed to delete user exists in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "deluserexists",
-		})
-	}
-
 	s.logger.Info("created user", map[string]string{
 		"userid":     m.Userid,
 		"username":   m.Username,
 		"actiontype": "commituser",
 	})
+
+	s.clearUserExists(userid)
 
 	return &resUserUpdate{
 		Userid:   m.Userid,
@@ -339,14 +334,17 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return err
 	}
 
+	s.clearUserExists(userid)
+	return nil
+}
+
+func (s *service) clearUserExists(userid string) {
 	if err := s.kvusers.Del(userid); err != nil {
 		s.logger.Error("Failed to delete user exists in cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "deluserexists",
 		})
 	}
-
-	return nil
 }
 
 // DecodeNewUserProps marshals json encoded new user props into a struct
