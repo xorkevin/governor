@@ -326,7 +326,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	l.Info("created usersession table", nil)
+	l.Info("created usersessions table", nil)
 
 	if err := s.approvals.Setup(); err != nil {
 		return err
@@ -337,6 +337,11 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("created userroleinvitations table", nil)
+
+	if err := s.resets.Setup(); err != nil {
+		return err
+	}
+	l.Info("created userresets table", nil)
 
 	if err := s.users.Insert(madmin); err != nil {
 		return err
