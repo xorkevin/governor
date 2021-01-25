@@ -166,7 +166,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 
 	m.Email = mr.Params
 
-	if err := s.resets.Delete(userid, kindResetPass); err != nil {
+	if err := s.resets.Delete(userid, kindResetEmail); err != nil {
 		return err
 	}
 
