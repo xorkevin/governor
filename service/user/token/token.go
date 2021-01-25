@@ -191,7 +191,7 @@ func (s *service) Health() error {
 // GetJWKS returns an RFC 7517 representation of the public signing key
 func (s *service) GetJWKS() *jose.JSONWebKeySet {
 	keys := make([]jose.JSONWebKey, 0, 1)
-	if s.jwk == nil {
+	if s.jwk != nil {
 		keys = append(keys, *s.jwk)
 	}
 	return &jose.JSONWebKeySet{
