@@ -142,7 +142,7 @@ func newConfig(opts Opts) *Config {
 
 	v.SetEnvPrefix(opts.EnvPrefix)
 	v.AutomaticEnv()
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 
 	return &Config{
 		config:  v,

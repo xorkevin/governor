@@ -8,11 +8,9 @@ spec:
       containers:
         - name: governor
           env:
-            - name: GOV_MAIL_HOST
+            - name: GOV_MAIL__HOST
               value: mailhog.governor.svc.cluster.local
-            - name: GOV_MAIL_PORT
+            - name: GOV_MAIL__PORT
               value: '1025'
-            - name: GOV_MAIL_INSECURE
+            - name: GOV_MAIL__INSECURE
               value: 'true'
-            - name: GOV_ALLOWORIGINS
-              value: http://governor.dev.localhost:3000
