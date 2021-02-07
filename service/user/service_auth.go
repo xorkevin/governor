@@ -91,7 +91,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, m.Userid, s.accessTime, token.ScopeAll, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, m.Userid, s.accessTime, token.ScopeAll, sm.SessionID, "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -191,7 +191,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, claims.Subject, s.accessTime, claims.Scope, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, claims.Subject, s.accessTime, claims.Scope, claims.ID, "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
@@ -230,7 +230,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.NewError("Failed to generate session key", http.StatusInternalServerError, err)
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, claims.Subject, s.accessTime, claims.Scope, "", "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(token.KindAccess, claims.Subject, s.accessTime, claims.Scope, sm.SessionID, "")
 	if err != nil {
 		return nil, governor.NewError("Failed to generate access token", http.StatusInternalServerError, err)
 	}
