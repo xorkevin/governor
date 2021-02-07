@@ -45,6 +45,7 @@ type (
 		apikeys   apikey.Apikey
 		tokenizer token.Tokenizer
 		baseurl   string
+		realm     string
 		logger    governor.Logger
 	}
 
@@ -102,6 +103,8 @@ func New(roles role.Role, apikeys apikey.Apikey, tokenizer token.Tokenizer) Serv
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxGate(inj, s)
+
+	r.SetDefault("realm", "governor")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -110,6 +113,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 	s.baseurl = c.BaseURL
+	s.realm = r.GetStr("realm")
+	l.Info("loaded config", map[string]string{
+		"realm": s.realm,
+	})
 	return nil
 }
 
@@ -148,8 +155,8 @@ func rmAccessCookie(w http.ResponseWriter, baseurl string) {
 	})
 }
 
-func getAuthHeader(r *http.Request) (string, error) {
-	h := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+func getAuthHeader(c governor.Context) (string, error) {
+	h := strings.SplitN(c.Header("Authorization"), " ", 2)
 	if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
 		return "", errors.New("no header value")
 	}
@@ -202,7 +209,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 			if ok {
 				userid, keyscope, err := s.apikeys.CheckKey(keyid, password)
 				if err != nil {
-					w.Header().Add("WWW-Authenticate", "Basic realm=\"governor\"")
+					c.SetHeader("WWW-Authenticate", "Basic realm=\""+s.realm+"\"")
 					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
 					return
 				}
@@ -216,7 +223,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 				}
 				setCtxUserid(c, userid)
 			} else {
-				accessToken, err := getAuthHeader(r)
+				accessToken, err := getAuthHeader(c)
 				if err != nil {
 					a, err := getAccessCookie(r)
 					if err != nil {

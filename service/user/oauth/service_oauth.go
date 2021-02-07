@@ -124,21 +124,6 @@ func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
 	return m, nil
 }
 
-func (s *service) CheckKey(clientid, key string) error {
-	m, err := s.getCachedClient(clientid)
-	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
-		}
-		return err
-	}
-
-	if ok, err := s.apps.ValidateKey(key, m); err != nil || !ok {
-		return governor.NewError("Invalid key", http.StatusUnauthorized, nil)
-	}
-	return nil
-}
-
 type (
 	resCreate struct {
 		ClientID string `json:"client_id"`

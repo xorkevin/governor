@@ -188,11 +188,11 @@ func (c *govcontext) Header(key string) string {
 }
 
 func (c *govcontext) SetHeader(key, value string) {
-	c.r.Header.Set(key, value)
+	c.w.Header().Set(key, value)
 }
 
 func (c *govcontext) AddHeader(key, value string) {
-	c.r.Header.Add(key, value)
+	c.w.Header().Add(key, value)
 }
 
 func (c *govcontext) Cookie(key string) (*http.Cookie, error) {

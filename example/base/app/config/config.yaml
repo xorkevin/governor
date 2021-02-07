@@ -77,6 +77,8 @@ token:
   rsakey: kv/data/app/governor/rsakey
   issuer: http://governor.dev.localhost:8080
   audience: governor
+gate:
+  realm: governor
 oauth:
   keycache: 24h
   issuer: http://governor.dev.localhost:8080

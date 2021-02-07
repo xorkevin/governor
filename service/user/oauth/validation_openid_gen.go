@@ -24,6 +24,28 @@ func (r reqOAuthAuthorize) valid() error {
 	return nil
 }
 
+func (r reqOAuthTokenCode) valid() error {
+	if err := validhasOidClientID(r.ClientID); err != nil {
+		return err
+	}
+	if err := validhasOidClientSecret(r.ClientSecret); err != nil {
+		return err
+	}
+	if err := validhasOidUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasOidCode(r.Code); err != nil {
+		return err
+	}
+	if err := validoptOidCodeVerifier(r.CodeVerifier); err != nil {
+		return err
+	}
+	if err := validhasOidRedirect(r.RedirectURI); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqGetConnectionGroup) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err

@@ -2,22 +2,13 @@ package oauth
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_openid_gen.go reqOAuthAuthorize reqGetConnectionGroup reqGetConnection
-
-type (
-	reqOAuthAuthorize struct {
-		Userid              string `valid:"userid,has" json:"-"`
-		ClientID            string `valid:"clientID,has" json:"client_id"`
-		Scope               string `valid:"oidScope" json:"scope"`
-		Nonce               string `valid:"oidNonce" json:"nonce"`
-		CodeChallenge       string `valid:"oidCodeChallenge" json:"code_challenge"`
-		CodeChallengeMethod string `valid:"oidCodeChallengeMethod" json:"code_challenge_method"`
-	}
-)
+//go:generate forge validation -o validation_openid_gen.go reqOAuthAuthorize reqOAuthTokenCode reqGetConnectionGroup reqGetConnection
 
 func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
@@ -39,6 +30,17 @@ func (m *router) getJWKS(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+type (
+	reqOAuthAuthorize struct {
+		Userid              string `valid:"userid,has" json:"-"`
+		ClientID            string `valid:"clientID,has" json:"client_id"`
+		Scope               string `valid:"oidScope" json:"scope"`
+		Nonce               string `valid:"oidNonce" json:"nonce"`
+		CodeChallenge       string `valid:"oidCodeChallenge" json:"code_challenge"`
+		CodeChallengeMethod string `valid:"oidCodeChallengeMethod" json:"code_challenge_method"`
+	}
+)
+
 func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqOAuthAuthorize{}
@@ -52,11 +54,11 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.CodeChallengeMethod == "" && req.CodeChallenge != "" {
-		c.WriteError(governor.NewCodeError(oidErrorInvalidRequest, "No code challenge method provided", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "No code challenge method provided", http.StatusBadRequest, nil))
 		return
 	}
 	if req.CodeChallengeMethod != "" && req.CodeChallenge == "" {
-		c.WriteError(governor.NewCodeError(oidErrorInvalidRequest, "No code challenge provided", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "No code challenge provided", http.StatusBadRequest, nil))
 		return
 	}
 
@@ -66,6 +68,87 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqOAuthTokenCode struct {
+		ClientID     string `valid:"oidClientID,has" json:"-"`
+		ClientSecret string `valid:"oidClientSecret,has" json:"-"`
+		Userid       string `valid:"oidUserid,has" json:"-"`
+		Code         string `valid:"oidCode,has" json:"-"`
+		CodeVerifier string `valid:"oidCodeVerifier,opt" json:"-"`
+		RedirectURI  string `valid:"oidRedirect,has" json:"-"`
+	}
+
+	resAuthTokenErr struct {
+		Error string `json:"error"`
+		Desc  string `json:"error_description,omitempty"`
+		URI   string `json:"error_uri,omitempty"`
+	}
+)
+
+func (m *router) writeOAuthTokenError(c governor.Context, err error) {
+	if governor.ErrorStatus(err) == http.StatusUnauthorized {
+		c.SetHeader("WWW-Authenticate", "Basic realm=\"governor\"")
+	}
+	c.WriteJSON(governor.ErrorStatus(err), resAuthTokenErr{
+		Error: governor.ErrorCode(err),
+		Desc:  governor.ErrorMsg(err),
+	})
+}
+
+func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	grantType := c.FormValue("grant_type")
+	if err := validOidGrantType(grantType); err != nil {
+		m.writeOAuthTokenError(c, err)
+		return
+	}
+	if grantType == oidGrantTypeCode {
+		req := reqOAuthTokenCode{
+			ClientID:     c.FormValue("client_id"),
+			ClientSecret: c.FormValue("client_secret"),
+			CodeVerifier: c.FormValue("code_verifier"),
+			RedirectURI:  c.FormValue("redirect_uri"),
+		}
+		if user, pass, ok := r.BasicAuth(); ok {
+			var err error
+			req.ClientID, err = url.QueryUnescape(user)
+			if err != nil {
+				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid client id encoding", http.StatusBadRequest, err))
+				return
+			}
+			req.ClientSecret, err = url.QueryUnescape(pass)
+			if err != nil {
+				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid client secret encoding", http.StatusBadRequest, err))
+				return
+			}
+		}
+		if j := strings.SplitN(c.FormValue("code"), "|", 2); len(j) == 2 {
+			req.Userid = j[0]
+			req.Code = j[1]
+		}
+		if err := req.valid(); err != nil {
+			c.WriteJSON(governor.ErrorStatus(err), resAuthTokenErr{
+				Error: governor.ErrorCode(err),
+				Desc:  governor.ErrorMsg(err),
+			})
+			return
+		}
+		res, err := m.s.AuthTokenCode(req.ClientID, req.ClientSecret, req.Userid, req.Code, req.CodeVerifier, req.RedirectURI)
+		if err != nil {
+			m.writeOAuthTokenError(c, err)
+			return
+		}
+		c.WriteJSON(http.StatusOK, res)
+		return
+	} else {
+		c.WriteJSON(http.StatusBadRequest, resAuthTokenErr{
+			Error: oidErrorUnsupportedGrant,
+			Desc:  "Invalid grant type",
+		})
+		return
+	}
 }
 
 type (

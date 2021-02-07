@@ -22,8 +22,15 @@ const (
 	oidChallengePlain = "plain"
 	oidChallengeS256  = "S256"
 
-	oidErrorInvalidRequest = "invalid_request"
-	oidErrorInvalidScope   = "invalid_scope"
+	oidGrantTypeCode    = "authorization_code"
+	oidGrantTypeRefresh = "refresh_token"
+
+	oidErrorInvalidRequest   = "invalid_request"
+	oidErrorInvalidScope     = "invalid_scope"
+	oidErrorInvalidClient    = "invalid_client"
+	oidErrorInvalidGrant     = "invalid_grant"
+	oidErrorUnsupportedGrant = "unsupported_grant_type"
+	oidErrorServer           = "server_error"
 )
 
 type (
@@ -63,7 +70,7 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 			oidResponseModeQuery,
 			oidResponseModeFragment,
 		},
-		GrantTypes:   []string{"authorization_code", "refresh_token"},
+		GrantTypes:   []string{oidGrantTypeCode, oidGrantTypeRefresh},
 		SubjectTypes: []string{"public"},
 		SigningAlgs:  []string{"RS256"},
 		EPTokenAuth:  []string{"client_secret_basic", "client_secret_post"},
@@ -159,8 +166,48 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 		return nil, err
 	}
 	return &resAuthCode{
-		Code: code,
+		Code: userid + "|" + code,
 	}, nil
+}
+
+type (
+	resAuthToken struct {
+		AccessToken string `json:"access_token"`
+	}
+)
+
+func (s *service) checkClientKey(clientid, key, redirect string) error {
+	m, err := s.getCachedClient(clientid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return governor.NewCodeErrorUser(oidErrorInvalidClient, "Invalid client", http.StatusUnauthorized, nil)
+		}
+		return governor.NewCodeError(oidErrorServer, "", http.StatusInternalServerError, err)
+	}
+	if ok, err := s.apps.ValidateKey(key, m); err != nil || !ok {
+		return governor.NewCodeErrorUser(oidErrorInvalidClient, "Invalid client", http.StatusUnauthorized, nil)
+	}
+	if redirect != m.RedirectURI {
+		return governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid redirect", http.StatusBadRequest, nil)
+	}
+	return nil
+}
+
+func (s *service) AuthTokenCode(clientid, secret, userid, code, verifier, redirect string) (*resAuthToken, error) {
+	if err := s.checkClientKey(clientid, secret, redirect); err != nil {
+		return nil, err
+	}
+	m, err := s.connections.GetByID(userid, clientid)
+	if err != nil {
+		if governor.ErrorStatus(err) == http.StatusNotFound {
+			return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code", http.StatusBadRequest, nil)
+		}
+		return nil, governor.NewCodeError(oidErrorServer, "", http.StatusInternalServerError, err)
+	}
+	if ok, err := s.connections.ValidateCode(code, m); err != nil || !ok {
+		return nil, governor.NewCodeError(oidErrorInvalidGrant, "Invalid code", http.StatusBadRequest, nil)
+	}
+	return nil, nil
 }
 
 type (
