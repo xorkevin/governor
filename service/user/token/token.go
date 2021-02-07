@@ -23,6 +23,13 @@ const (
 )
 
 const (
+	// KindAccess is an access token kind
+	KindAccess = "access"
+	// KindRefresh is a refresh token kind
+	KindRefresh = "refresh"
+)
+
+const (
 	pemBlockType = "PRIVATE KEY"
 )
 
@@ -30,18 +37,19 @@ type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.Claims
-		Scope string `json:"scope"`
-		Key   string `json:"key"`
+		Kind  string `json:"kind"`
+		Scope string `json:"scope,omitempty"`
+		Key   string `json:"key,omitempty"`
 	}
 
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		GetJWKS() *jose.JSONWebKeySet
-		Generate(userid string, duration int64, scope, id, key string) (string, *Claims, error)
-		GenerateExt(userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
-		Validate(tokenString string, scope string) (bool, *Claims)
-		GetClaims(tokenString string, scope string) (bool, *Claims)
-		GetClaimsExt(tokenString string, audience []string, scope string) (bool, *Claims)
+		Generate(kind string, userid string, duration int64, scope, id, key string) (string, *Claims, error)
+		GenerateExt(kind string, userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
+		Validate(kind string, tokenString string, scope string) (bool, *Claims)
+		GetClaims(kind string, tokenString string, scope string) (bool, *Claims)
+		GetClaimsExt(kind string, tokenString string, audience []string, scope string, claims interface{}) (bool, *Claims)
 	}
 
 	Service interface {
@@ -200,7 +208,7 @@ func (s *service) GetJWKS() *jose.JSONWebKeySet {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(userid string, duration int64, scope, id, key string) (string, *Claims, error) {
+func (s *service) Generate(kind string, userid string, duration int64, scope, id, key string) (string, *Claims, error) {
 	now := time.Now().Round(0)
 	claims := Claims{
 		Claims: jwt.Claims{
@@ -212,6 +220,7 @@ func (s *service) Generate(userid string, duration int64, scope, id, key string)
 			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
 			ID:        id,
 		},
+		Kind:  kind,
 		Scope: scope,
 		Key:   key,
 	}
@@ -223,16 +232,19 @@ func (s *service) Generate(userid string, duration int64, scope, id, key string)
 }
 
 // GenerateExt creates a new id token
-func (s *service) GenerateExt(userid string, audience []string, duration int64, id string, claims interface{}) (string, error) {
+func (s *service) GenerateExt(kind string, userid string, audience []string, duration int64, id string, claims interface{}) (string, error) {
 	now := time.Now().Round(0)
-	baseClaims := jwt.Claims{
-		Issuer:    s.issuer,
-		Subject:   userid,
-		Audience:  audience,
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
-		ID:        id,
+	baseClaims := Claims{
+		Claims: jwt.Claims{
+			Issuer:    s.issuer,
+			Subject:   userid,
+			Audience:  audience,
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+			ID:        id,
+		},
+		Kind: kind,
 	}
 	token, err := jwt.Signed(s.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
@@ -255,13 +267,16 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(tokenString string, scope string) (bool, *Claims) {
+func (s *service) Validate(kind string, tokenString string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
 	}
 	claims := &Claims{}
 	if err := token.Claims(s.secret, claims); err != nil {
+		return false, nil
+	}
+	if claims.Kind != kind {
 		return false, nil
 	}
 	if !HasScope(claims.Scope, scope) {
@@ -279,13 +294,16 @@ func (s *service) Validate(tokenString string, scope string) (bool, *Claims) {
 }
 
 // GetClaims returns token claims without validating time
-func (s *service) GetClaims(tokenString string, scope string) (bool, *Claims) {
+func (s *service) GetClaims(kind string, tokenString string, scope string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
 	}
 	claims := &Claims{}
 	if err := token.Claims(s.secret, claims); err != nil {
+		return false, nil
+	}
+	if claims.Kind != kind {
 		return false, nil
 	}
 	if !HasScope(claims.Scope, scope) {
@@ -301,23 +319,29 @@ func (s *service) GetClaims(tokenString string, scope string) (bool, *Claims) {
 }
 
 // GetClaimsExt returns external token claims without validating time
-func (s *service) GetClaimsExt(tokenString string, audience []string, scope string) (bool, *Claims) {
+func (s *service) GetClaimsExt(kind string, tokenString string, audience []string, scope string, claims interface{}) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
 	}
-	claims := &Claims{}
-	if err := token.Claims(s.publicKey, claims); err != nil {
+	if claims == nil {
+		claims = &struct{}{}
+	}
+	baseClaims := &Claims{}
+	if err := token.Claims(s.publicKey, baseClaims, claims); err != nil {
 		return false, nil
 	}
-	if !HasScope(claims.Scope, scope) {
+	if baseClaims.Kind != kind {
 		return false, nil
 	}
-	if err := claims.ValidateWithLeeway(jwt.Expected{
+	if !HasScope(baseClaims.Scope, scope) {
+		return false, nil
+	}
+	if err := baseClaims.ValidateWithLeeway(jwt.Expected{
 		Issuer:   s.issuer,
 		Audience: audience,
 	}, 0); err != nil {
 		return false, nil
 	}
-	return true, claims
+	return true, baseClaims
 }

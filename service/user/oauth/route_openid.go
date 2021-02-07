@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -231,6 +232,7 @@ func (m *router) mountOidRoutes(r governor.Router) {
 	r.Get("/openid-configuration", m.getOpenidConfig)
 	r.Get(jwksRoute, m.getJWKS)
 	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize))
+	r.Post(tokenRoute, m.authToken, cachecontrol.NoStore(m.s.logger))
 	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead))
 	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead))
 	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite))

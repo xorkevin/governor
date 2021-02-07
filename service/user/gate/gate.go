@@ -232,7 +232,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					}
 					accessToken = a
 				}
-				validToken, claims := s.tokenizer.Validate(accessToken, scope)
+				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken, scope)
 				if !validToken {
 					rmAccessCookie(w, s.baseurl)
 					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
