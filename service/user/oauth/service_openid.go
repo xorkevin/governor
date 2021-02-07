@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"gopkg.in/square/go-jose.v2"
 	"net/http"
 	"sort"
@@ -24,6 +26,8 @@ const (
 
 	oidGrantTypeCode    = "authorization_code"
 	oidGrantTypeRefresh = "refresh_token"
+
+	oidTokenTypeBearer = "Bearer"
 
 	oidErrorInvalidRequest   = "invalid_request"
 	oidErrorInvalidScope     = "invalid_scope"
@@ -172,7 +176,10 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 
 type (
 	resAuthToken struct {
-		AccessToken string `json:"access_token"`
+		AccessToken  string `json:"access_token"`
+		TokenType    string `json:"token_type"`
+		ExpiresIn    string `json:"expires_in"`
+		RefreshToken string `json:"refresh_token"`
 	}
 )
 
@@ -205,9 +212,28 @@ func (s *service) AuthTokenCode(clientid, secret, userid, code, verifier, redire
 		return nil, governor.NewCodeError(oidErrorServer, "", http.StatusInternalServerError, err)
 	}
 	if ok, err := s.connections.ValidateCode(code, m); err != nil || !ok {
-		return nil, governor.NewCodeError(oidErrorInvalidGrant, "Invalid code", http.StatusBadRequest, nil)
+		return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code", http.StatusBadRequest, nil)
 	}
-	return nil, nil
+	switch m.ChallengeMethod {
+	case "":
+		if verifier != "" {
+			return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code verifier", http.StatusBadRequest, nil)
+		}
+	case oidChallengePlain:
+		if verifier != m.Challenge {
+			return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code verifier", http.StatusBadRequest, nil)
+		}
+	case oidChallengeS256:
+		h := sha256.Sum256([]byte(verifier))
+		if base64.RawURLEncoding.EncodeToString(h[:]) != m.Challenge {
+			return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code verifier", http.StatusBadRequest, nil)
+		}
+	default:
+		return nil, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid code challenge method", http.StatusBadRequest, nil)
+	}
+	return &resAuthToken{
+		TokenType: oidTokenTypeBearer,
+	}, nil
 }
 
 type (

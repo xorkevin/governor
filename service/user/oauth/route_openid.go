@@ -112,6 +112,10 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 			RedirectURI:  c.FormValue("redirect_uri"),
 		}
 		if user, pass, ok := r.BasicAuth(); ok {
+			if req.ClientID != "" || req.ClientSecret != "" {
+				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Client secret basic and post used", http.StatusBadRequest, nil))
+				return
+			}
 			var err error
 			req.ClientID, err = url.QueryUnescape(user)
 			if err != nil {
@@ -129,10 +133,7 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 			req.Code = j[1]
 		}
 		if err := req.valid(); err != nil {
-			c.WriteJSON(governor.ErrorStatus(err), resAuthTokenErr{
-				Error: governor.ErrorCode(err),
-				Desc:  governor.ErrorMsg(err),
-			})
+			m.writeOAuthTokenError(c, err)
 			return
 		}
 		res, err := m.s.AuthTokenCode(req.ClientID, req.ClientSecret, req.Userid, req.Code, req.CodeVerifier, req.RedirectURI)
@@ -143,10 +144,7 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		c.WriteJSON(http.StatusOK, res)
 		return
 	} else {
-		c.WriteJSON(http.StatusBadRequest, resAuthTokenErr{
-			Error: oidErrorUnsupportedGrant,
-			Desc:  "Invalid grant type",
-		})
+		m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorUnsupportedGrant, "Unsupported grant type", http.StatusBadRequest, nil))
 		return
 	}
 }
