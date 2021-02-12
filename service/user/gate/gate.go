@@ -238,6 +238,10 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
 					return
 				}
+				if !token.HasScope(claims.Scope, scope) {
+					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
+					return
+				}
 				if !v(s.intersector(claims.Subject, claims.Scope, c)) {
 					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
 					return
