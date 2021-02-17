@@ -444,7 +444,7 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 		To:          to,
 		Subjecttpl:  tpl + "_subject.txt",
 		Bodytpl:     tpl + ".txt",
-		HtmlBodytpl: tpl + ".html",
+		HTMLBodytpl: tpl + ".html",
 		Emdata:      string(datastring),
 	}
 	if msg.From == "" {
