@@ -16,6 +16,7 @@ const (
 )
 
 type (
+	// Repo is a user reset request repository
 	Repo interface {
 		New(userid, kind string) *Model
 		ValidateCode(code string, m *Model) (bool, error)
@@ -34,6 +35,7 @@ type (
 		verifier *hunter2.Verifier
 	}
 
+	// Model is the user reset request model
 	Model struct {
 		Userid   string `model:"userid,VARCHAR(31)" query:"userid,deleq,userid"`
 		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind,getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`
@@ -59,15 +61,18 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new user reset request repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new user reset request repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)
 }
 
+// New creates a new user reset request repo
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()

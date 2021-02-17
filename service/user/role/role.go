@@ -27,6 +27,7 @@ type (
 		DeleteByRole(roleName string) error
 	}
 
+	// Service is a Role and governor.Service
 	Service interface {
 		governor.Service
 		Role

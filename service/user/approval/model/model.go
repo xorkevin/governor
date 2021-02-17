@@ -17,6 +17,7 @@ const (
 )
 
 type (
+	// Repo is an approval repository
 	Repo interface {
 		New(m *usermodel.Model) *Model
 		ToUserModel(m *Model) *usermodel.Model
@@ -36,6 +37,7 @@ type (
 		verifier *hunter2.Verifier
 	}
 
+	// Model is the db Approval model
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
@@ -66,15 +68,18 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new approval repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new approval repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)
 }
 
+// New creates a new approval repository
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()

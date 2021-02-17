@@ -35,6 +35,7 @@ type (
 		Authenticate(v Validator, scope string) governor.Middleware
 	}
 
+	// Service is a Gate and governor.Service
 	Service interface {
 		governor.Service
 		Gate

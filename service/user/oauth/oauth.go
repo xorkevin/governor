@@ -29,6 +29,7 @@ type (
 	OAuth interface {
 	}
 
+	// Service is an OAuth and governor.Service
 	Service interface {
 		governor.Service
 		OAuth

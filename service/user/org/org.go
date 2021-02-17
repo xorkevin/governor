@@ -13,6 +13,7 @@ type (
 	Org interface {
 	}
 
+	// Service is an Org and governor.Service
 	Service interface {
 		governor.Service
 		Org

@@ -15,7 +15,7 @@ const (
 )
 
 type (
-	// Repo is an user org repository
+	// Repo is a user org repository
 	Repo interface {
 		New(displayName, desc string) (*Model, error)
 		GetByID(orgid string) (*Model, error)
@@ -58,10 +58,12 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new org repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new org repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)

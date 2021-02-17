@@ -144,10 +144,9 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		}
 		c.WriteJSON(http.StatusOK, res)
 		return
-	} else {
-		m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorUnsupportedGrant, "Unsupported grant type", http.StatusBadRequest, nil))
-		return
 	}
+	m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorUnsupportedGrant, "Unsupported grant type", http.StatusBadRequest, nil))
+	return
 }
 
 type (

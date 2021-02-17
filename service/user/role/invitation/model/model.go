@@ -10,6 +10,7 @@ import (
 //go:generate forge model -m Model -t userroleinvitations -p inv -o model_gen.go Model
 
 type (
+	// Repo is a role invitation repository
 	Repo interface {
 		GetByID(userid, role string, after int64) (*Model, error)
 		GetByUser(userid string, after int64, limit, offset int) ([]Model, error)
@@ -50,15 +51,18 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new role invitation repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new role invitation repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)
 }
 
+// New creates a new role invitation repo
 func New(database db.Database) Repo {
 	return &repo{
 		db: database,
