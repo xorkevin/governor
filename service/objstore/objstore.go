@@ -18,6 +18,7 @@ type (
 		DelBucket(name string) error
 	}
 
+	// Service is an Objstore and governor.Service
 	Service interface {
 		governor.Service
 		Objstore
@@ -86,6 +87,7 @@ func setCtxBucket(inj governor.Injector, b Bucket) {
 	inj.Set(ctxKeyBucket{}, b)
 }
 
+// NewBucketInCtx creates a new bucket from a context and sets it in the context
 func NewBucketInCtx(inj governor.Injector, name string) {
 	obj := getCtxObjstore(inj)
 	setCtxBucket(inj, obj.GetBucket(name))
@@ -307,6 +309,7 @@ func (s *service) DelBucket(name string) error {
 }
 
 type (
+	// ObjectInfo is stored object metadata
 	ObjectInfo struct {
 		Size         int64
 		ContentType  string

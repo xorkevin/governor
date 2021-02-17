@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor"
 )
 
+// LoadOpenFile returns an open file from a Context
 func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeTypes map[string]struct{}) (multipart.File, string, int64, error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {

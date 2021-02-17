@@ -16,10 +16,12 @@ const (
 )
 
 type (
+	// Resulter returns the result of a command in a transaction after it has executed
 	Resulter interface {
 		Result() (string, error)
 	}
 
+	// Tx is a kvstore transaction
 	Tx interface {
 		Get(key string) Resulter
 		Set(key, val string, seconds int64)
@@ -39,6 +41,7 @@ type (
 		Subtree(prefix string) KVStore
 	}
 
+	// Service is a KVStore and governor.Service
 	Service interface {
 		governor.Service
 		KVStore
@@ -101,6 +104,7 @@ func setCtxKVStore(inj governor.Injector, k KVStore) {
 	inj.Set(ctxKeyKVStore{}, k)
 }
 
+// NewSubtreeInCtx creates a new kv subtree with a prefix and sets it in the context
 func NewSubtreeInCtx(inj governor.Injector, prefix string) {
 	kv := getCtxRootKV(inj)
 	setCtxKVStore(inj, kv.Subtree(prefix))

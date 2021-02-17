@@ -9,6 +9,7 @@ import (
 //go:generate forge model -m Model -t profiles -p profile -o model_gen.go Model
 
 type (
+	// Repo is a profile repository
 	Repo interface {
 		New(userid, email, bio string) (*Model, error)
 		GetByID(userid string) (*Model, error)
@@ -48,10 +49,12 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new profile repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new profile repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)

@@ -19,6 +19,7 @@ type (
 		DB() (*sql.DB, error)
 	}
 
+	// Service is a DB and governor.Service
 	Service interface {
 		governor.Service
 		Database

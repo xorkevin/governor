@@ -18,6 +18,7 @@ type (
 		ExecuteHTML(filename string, data interface{}) ([]byte, error)
 	}
 
+	// Service is a Template and governor.Service
 	Service interface {
 		governor.Service
 		Template

@@ -16,6 +16,7 @@ import (
 )
 
 type (
+	// Size is width and height dimensions
 	Size struct {
 		W, H int
 	}
@@ -52,6 +53,7 @@ type (
 	}
 )
 
+// FromImage translates a go image.Image to Image
 func FromImage(img goimg.Image) Image {
 	bounds := img.Bounds()
 	target := goimg.NewNRGBA64(bounds)
@@ -61,6 +63,7 @@ func FromImage(img goimg.Image) Image {
 	}
 }
 
+// FromJpeg parses a jpeg file
 func FromJpeg(file io.Reader) (Image, error) {
 	i, err := jpeg.Decode(file)
 	if err != nil {
@@ -69,6 +72,7 @@ func FromJpeg(file io.Reader) (Image, error) {
 	return FromImage(i), nil
 }
 
+// FromPng parses a png file
 func FromPng(file io.Reader) (Image, error) {
 	i, err := png.Decode(file)
 	if err != nil {
@@ -77,6 +81,7 @@ func FromPng(file io.Reader) (Image, error) {
 	return FromImage(i), nil
 }
 
+// FromGif parses a gif file
 func FromGif(file io.Reader) (Image, error) {
 	i, err := gif.Decode(file)
 	if err != nil {
@@ -102,6 +107,7 @@ var (
 	}
 )
 
+// LoadImage returns an image file from a Context
 func LoadImage(l governor.Logger, c governor.Context, formField string) (Image, error) {
 	file, mediaType, _, err := fileloader.LoadOpenFile(l, c, formField, allowedMediaTypes)
 	if err != nil {
@@ -172,10 +178,9 @@ func dimensionsFit(fromWidth, fromHeight, toWidth, toHeight int) (int, int) {
 	if fromWidth*toHeight < toWidth*fromHeight {
 		// height is fit
 		return fromWidth * toHeight / fromHeight, toHeight
-	} else {
-		// width is fit
-		return toWidth, fromHeight * toWidth / fromWidth
 	}
+	// width is fit
+	return toWidth, fromHeight * toWidth / fromWidth
 }
 
 func (i *imageData) ResizeFit(width, height int) {
@@ -211,11 +216,10 @@ func dimensionsFill(fromWidth, fromHeight, toWidth, toHeight int) (int, int, int
 		// width is fit
 		height := toHeight * fromWidth / toWidth
 		return fromWidth, height, 0, maxInt((fromHeight-height)/2, 0)
-	} else {
-		// height is fit
-		width := toWidth * fromHeight / toHeight
-		return width, fromHeight, maxInt((fromWidth-width)/2, 0), 0
 	}
+	// height is fit
+	width := toWidth * fromHeight / toHeight
+	return width, fromHeight, maxInt((fromWidth-width)/2, 0), 0
 }
 
 func (i *imageData) ResizeFill(width, height int) {
@@ -238,8 +242,10 @@ func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
 	return b, nil
 }
 
+// PngCompressionOpt represents PNG compression levels
 type PngCompressionOpt int
 
+// PNG compression levels
 const (
 	PngDefault PngCompressionOpt = iota
 	PngNone

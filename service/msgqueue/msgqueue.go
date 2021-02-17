@@ -16,7 +16,8 @@ const (
 )
 
 type (
-	WorkerFunc func(msgdata []byte) error
+	// WorkerFunc is a type alias for a subscriber handler
+	WorkerFunc = func(msgdata []byte) error
 
 	// Msgqueue is a service wrapper around a nats streaming client instance
 	Msgqueue interface {
@@ -24,6 +25,7 @@ type (
 		Publish(channel string, msgdata []byte) error
 	}
 
+	// Service is a Msgqueue and governor.Service
 	Service interface {
 		governor.Service
 		Msgqueue
@@ -61,6 +63,7 @@ type (
 		done       <-chan struct{}
 	}
 
+	// Subscription manages an active subscription
 	Subscription interface {
 		Unsubscribe() error
 		Close() error

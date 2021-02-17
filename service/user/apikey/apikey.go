@@ -26,6 +26,7 @@ type (
 		DeleteUserKeys(userid string) error
 	}
 
+	// Service is an Apikey and governor.Service
 	Service interface {
 		governor.Service
 		Apikey

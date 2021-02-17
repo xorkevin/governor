@@ -30,6 +30,7 @@ type (
 		Send(from, fromname string, to []string, tpl string, emdata interface{}) error
 	}
 
+	// Service is a Mail and governor.Service
 	Service interface {
 		governor.Service
 		Mail
@@ -48,7 +49,7 @@ type (
 		To          []string `json:"to"`
 		Subjecttpl  string   `json:"subjecttpl"`
 		Bodytpl     string   `json:"bodytpl"`
-		HtmlBodytpl string   `json:"htmlbodytpl"`
+		HTMLBodytpl string   `json:"htmlbodytpl"`
 		Emdata      string   `json:"emdata"`
 	}
 
@@ -263,12 +264,12 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 	if err != nil {
 		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
 	}
-	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HtmlBodytpl, emdata)
+	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HTMLBodytpl, emdata)
 	if err != nil {
 		s.logger.Error("failed to execute mail html body template", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "executehtmlbody",
-			"bodytpl":    emmsg.HtmlBodytpl,
+			"bodytpl":    emmsg.HTMLBodytpl,
 		})
 		htmlbody = nil
 	}
@@ -308,7 +309,7 @@ func msgToBytes(subject string, from, fromname string, to []string, body []byte,
 		msg.addBody(body)
 	}
 	if htmlbody != nil {
-		msg.addHtmlBody(htmlbody)
+		msg.addHTMLBody(htmlbody)
 	}
 	buf, err := msg.build()
 	if err != nil {
@@ -336,7 +337,7 @@ func (b *msgbuilder) addBody(body []byte) {
 	b.body = body
 }
 
-func (b *msgbuilder) addHtmlBody(body []byte) {
+func (b *msgbuilder) addHTMLBody(body []byte) {
 	b.htmlbody = body
 }
 

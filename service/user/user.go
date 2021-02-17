@@ -47,6 +47,7 @@ type (
 		CheckUserExists(userid string) (bool, error)
 	}
 
+	// Service is a User and governor.Service
 	Service interface {
 		governor.Service
 		User

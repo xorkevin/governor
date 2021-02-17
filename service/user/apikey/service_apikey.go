@@ -108,6 +108,7 @@ func (s *service) CheckKey(keyid, key string) (string, string, error) {
 }
 
 type (
+	// ResApikeyModel is apikey info
 	ResApikeyModel struct {
 		Keyid string `json:"keyid"`
 		Key   string `json:"key"`

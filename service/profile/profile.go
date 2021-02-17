@@ -22,6 +22,7 @@ type (
 	Profile interface {
 	}
 
+	// Service is a Profile and governor.Service
 	Service interface {
 		governor.Service
 		Profile

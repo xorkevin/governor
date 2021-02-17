@@ -9,7 +9,7 @@ import (
 )
 
 type (
-	// QRECLevel represents the qr error correction level
+	// QRECLevel represents qr error correction levels
 	QRECLevel int
 )
 

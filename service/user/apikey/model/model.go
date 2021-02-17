@@ -17,6 +17,7 @@ const (
 )
 
 type (
+	// Repo is an apikey repository
 	Repo interface {
 		New(userid string, scope string, name, desc string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
@@ -36,6 +37,7 @@ type (
 		verifier *hunter2.Verifier
 	}
 
+	// Model is the db Apikey model
 	Model struct {
 		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid,getoneeq,keyid;updeq,keyid;deleq,keyid"`
 		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid,deleq,userid"`
@@ -63,15 +65,18 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
+// NewInCtx creates a new apikey repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector) {
 	SetCtxRepo(inj, NewCtx(inj))
 }
 
+// NewCtx creates a new apikey repo from a context
 func NewCtx(inj governor.Injector) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService)
 }
 
+// New creates a new apikey repository
 func New(database db.Database) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()

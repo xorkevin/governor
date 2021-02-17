@@ -11,7 +11,8 @@ import (
 )
 
 type (
-	WorkerFunc func(msgdata []byte)
+	// WorkerFunc is a type alias for a subscriber handler
+	WorkerFunc = func(msgdata []byte)
 
 	// Pubsub is a service wrapper around a nats pub sub client
 	Pubsub interface {
@@ -20,6 +21,7 @@ type (
 		Publish(channel string, msgdata []byte) error
 	}
 
+	// Service is a Pubsub and governor.Service
 	Service interface {
 		governor.Service
 		Pubsub
@@ -55,6 +57,7 @@ type (
 		done       <-chan struct{}
 	}
 
+	// Subscription manages an active subscription
 	Subscription interface {
 		Close() error
 	}
