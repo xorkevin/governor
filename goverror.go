@@ -92,8 +92,8 @@ func (e *goverror) Unwrap() error {
 }
 
 func (e *goverror) Is(target error) bool {
-	t, ok := target.(*goverror)
-	if !ok {
+	t := &goverror{}
+	if ok := errors.As(target, &t); !ok {
 		return false
 	}
 	return t.code == e.code

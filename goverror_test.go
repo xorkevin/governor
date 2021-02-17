@@ -21,7 +21,8 @@ func TestNewError(t *testing.T) {
 	{
 		err := NewError("test message", 123, rootErr)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("test message", k.message, "error should have the message that was passed in")
 		assert.Equal(123, k.status, "error should have the status that was passed in")
 		assert.Equal(rootErr, k.err, "error should have the err that was passed in")
@@ -29,7 +30,8 @@ func TestNewError(t *testing.T) {
 
 		err2 := NewError("", 0, err)
 		assert.Error(err2, "should not return an empty error")
-		k2 := err2.(*goverror)
+		k2 := &goverror{}
+		assert.True(errors.As(err2, &k2))
 		assert.Equal("test message", k2.message, "error should have its nearest goverror causer message by default")
 		assert.Equal(123, k2.status, "error should have its nearest goverror causer status by default")
 		assert.Equal(err, k2.err, "error should have the err that was passed in")
@@ -39,7 +41,8 @@ func TestNewError(t *testing.T) {
 	{
 		err := NewError("", 0, rootErr)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("test root err", k.message, "error should have its nearest causer message if no goverror by default")
 		assert.Equal(0, k.status, "error should have its nearest goverror causer status if no goverror by default")
 		assert.Equal(rootErr, k.err, "error should have the err that was passed in")
@@ -49,7 +52,8 @@ func TestNewError(t *testing.T) {
 	{
 		err := NewError("test message", 123, nil)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("", k.code, "error should have an empty code")
 		assert.Equal("test message", k.message, "error should have the message that was passed in")
 		assert.Equal(123, k.status, "error should have the status that was passed in")
@@ -60,7 +64,8 @@ func TestNewError(t *testing.T) {
 	{
 		err := NewCodeError("err_code_321", "test message", 123, nil)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("err_code_321", k.code, "error should have the code that was passed in")
 		assert.Equal("test message", k.message, "error should have the message that was passed in")
 		assert.Equal(123, k.status, "error should have the status that was passed in")
@@ -73,7 +78,8 @@ func TestNewError(t *testing.T) {
 		assert.Error(usererr, "should not return an empty error")
 		err := NewError("", 0, usererr)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("test user err", k.message, "error should have its nearest causer message by default")
 		assert.Equal(123, k.status, "error should have its nearest causer status by default")
 		assert.Equal(usererr, k.err, "error should have the err that was passed in")
@@ -85,7 +91,8 @@ func TestNewError(t *testing.T) {
 		assert.Error(usererr, "should not return an empty error")
 		err := NewError("", 0, usererr)
 		assert.Error(err, "should not return an empty error")
-		k := err.(*goverror)
+		k := &goverror{}
+		assert.True(errors.As(err, &k))
 		assert.Equal("err_code_321", k.code, "error should have the code that was passed in")
 		assert.Equal("test user err", k.message, "error should have its nearest causer message by default")
 		assert.Equal(123, k.status, "error should have its nearest causer status by default")

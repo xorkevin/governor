@@ -341,7 +341,7 @@ func (b *msgbuilder) addHTMLBody(body []byte) {
 	b.htmlbody = body
 }
 
-func (b *msgbuilder) writeHeaders(buf *bytes.Buffer) {
+func (b *msgbuilder) writeHeaders(buf io.StringWriter) {
 	for _, h := range b.headers {
 		buf.WriteString(h)
 		buf.WriteString("\r\n")

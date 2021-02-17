@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/go-redis/redis/v7"
 	"net/http"
@@ -321,7 +322,7 @@ func (s *service) Get(key string) (string, error) {
 	}
 	val, err := client.Get(key).Result()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return "", governor.NewError("Key not found", http.StatusNotFound, err)
 		}
 		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)
@@ -421,7 +422,7 @@ func (t *baseTransaction) Subtree(prefix string) Tx {
 
 func (t *baseTransaction) Exec() error {
 	if _, err := t.base.Exec(); err != nil {
-		if err != redis.Nil {
+		if !errors.Is(err, redis.Nil) {
 			return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
 		}
 	}
@@ -516,7 +517,7 @@ type (
 func (r *resulter) Result() (string, error) {
 	val, err := r.res.Result()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return "", governor.NewError("Key not found", http.StatusNotFound, err)
 		}
 		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)

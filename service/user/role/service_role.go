@@ -47,10 +47,8 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 				})
 			}
 			uncachedRoles.AddOne(k)
-		} else {
-			if r == cacheValY {
-				res.AddOne(k)
-			}
+		} else if r == cacheValY {
+			res.AddOne(k)
 		}
 	}
 
