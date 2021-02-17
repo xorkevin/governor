@@ -49,17 +49,6 @@ func (m *router) setSessionCookie(c governor.Context, sessionToken string, useri
 	})
 }
 
-func getAccessCookie(c governor.Context) (string, bool) {
-	cookie, err := c.Cookie("access_token")
-	if err != nil {
-		return "", false
-	}
-	if cookie.Value == "" {
-		return "", false
-	}
-	return cookie.Value, true
-}
-
 func getRefreshCookie(c governor.Context) (string, bool) {
 	cookie, err := c.Cookie("refresh_token")
 	if err != nil {
@@ -106,15 +95,6 @@ func (m *router) rmRefreshCookie(c governor.Context) {
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   "/",
-	})
-}
-
-func (m *router) rmSessionCookie(c governor.Context, userid string) {
-	c.SetCookie(&http.Cookie{
-		Name:   "session_token_" + userid,
-		Value:  "invalid",
-		MaxAge: -1,
-		Path:   m.s.authURL,
 	})
 }
 

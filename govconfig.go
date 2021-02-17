@@ -16,6 +16,7 @@ import (
 )
 
 type (
+	// Version is the app version
 	Version struct {
 		Num  string
 		Hash string

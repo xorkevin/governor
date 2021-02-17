@@ -173,6 +173,7 @@ func FromString(rankStr string) (Rank, error) {
 	return FromSlice(rankSlice), nil
 }
 
+// SplitTag splits a tag into a prefix and tag name
 func SplitTag(key string) (string, string, error) {
 	k := strings.SplitN(key, rankSeparator, 2)
 	if len(k) != 2 {

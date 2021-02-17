@@ -7,8 +7,12 @@ import (
 	"unicode"
 )
 
-var ErrFmt = errors.New("Invalid byte format")
+var (
+	// ErrFmt is returned when failing to parse human byte representations
+	ErrFmt = errors.New("Invalid byte format")
+)
 
+// Byte constants for every 2^(10*n) bytes
 const (
 	BYTE = 1 << (10 * iota)
 	KILOBYTE
@@ -18,6 +22,7 @@ const (
 	PETABYTE
 )
 
+// ToBytes transforms human byte representations to int64
 func ToBytes(s string) (int64, error) {
 	s = strings.ToUpper(s)
 

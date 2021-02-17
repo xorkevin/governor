@@ -34,6 +34,7 @@ func (r *ReqSetup) valid() error {
 }
 
 type (
+	// ResponseSetup is the response to a setup request
 	ResponseSetup struct {
 		Username  string `json:"username"`
 		Firstname string `json:"first_name"`

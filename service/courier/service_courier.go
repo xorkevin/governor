@@ -136,7 +136,7 @@ type (
 
 // CreateLink creates a new link
 func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreateLink, error) {
-	m := &couriermodel.LinkModel{}
+	var m *couriermodel.LinkModel
 	if len(linkid) == 0 {
 		var err error
 		m, err = s.repo.NewLinkAuto(creatorid, url)

@@ -145,15 +145,11 @@ func (l *govlogger) Subtree(module string) Logger {
 
 func (l *govlogger) WithData(data map[string]string) Logger {
 	nextData := make(map[string]string, len(data)+len(l.data))
-	if l.data != nil {
-		for k, v := range l.data {
-			nextData[k] = v
-		}
+	for k, v := range l.data {
+		nextData[k] = v
 	}
-	if data != nil {
-		for k, v := range data {
-			nextData[k] = v
-		}
+	for k, v := range data {
+		nextData[k] = v
 	}
 	return &govlogger{
 		level:  l.level,

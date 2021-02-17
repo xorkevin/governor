@@ -35,7 +35,7 @@ func TestBuildMail(t *testing.T) {
 	for _, ti := range tests {
 		msg, err := msgToBytes(ti.subject, ti.from, ti.fromName, ti.to, []byte(ti.body), []byte(ti.htmlbody))
 		assert.NoError(err)
-		fmt.Printf(string(msg))
+		fmt.Print(string(msg))
 		m, err := mail.ReadMessage(bytes.NewBuffer(msg))
 		assert.NoError(err)
 		assert.Equal(ti.subject, m.Header.Get("Subject"))

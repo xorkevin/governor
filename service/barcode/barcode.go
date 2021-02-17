@@ -8,8 +8,12 @@ import (
 	"xorkevin.dev/governor/service/image"
 )
 
-type QRECLevel int
+type (
+	// QRECLevel represents the qr error correction level
+	QRECLevel int
+)
 
+// QR error correction levels
 const (
 	QRECDefault QRECLevel = iota
 	QRECLow

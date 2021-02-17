@@ -96,9 +96,9 @@ const (
 
 var (
 	allowedMediaTypes = map[string]struct{}{
-		MediaTypePng:  struct{}{},
-		MediaTypeJpeg: struct{}{},
-		MediaTypeGif:  struct{}{},
+		MediaTypePng:  {},
+		MediaTypeJpeg: {},
+		MediaTypeGif:  {},
 	}
 )
 
@@ -162,7 +162,7 @@ func (i *imageData) Draw(img Image, x, y int, over bool) {
 
 func (i *imageData) Resize(width, height int) {
 	target := goimg.NewNRGBA64(goimg.Rect(0, 0, width, height))
-	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
+	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.Point{}, draw.Src)
 	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, i.img.Bounds(), draw.Src, nil)
 	i.img = target
 }
@@ -222,7 +222,7 @@ func (i *imageData) ResizeFill(width, height int) {
 	s := i.img.Bounds().Size()
 	targetWidth, targetHeight, offsetX, offsetY := dimensionsFill(s.X, s.Y, width, height)
 	target := goimg.NewNRGBA64(goimg.Rect(0, 0, width, height))
-	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.ZP, draw.Src)
+	draw.Draw(target, target.Bounds(), goimg.Transparent, goimg.Point{}, draw.Src)
 	draw.ApproxBiLinear.Scale(target, target.Bounds(), i.img, goimg.Rect(offsetX, offsetY, offsetX+targetWidth, offsetY+targetHeight), draw.Src, nil)
 	i.img = target
 }

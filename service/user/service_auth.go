@@ -9,10 +9,6 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 )
 
-const (
-	uidSize = 16
-)
-
 type (
 	emailNewLogin struct {
 		FirstName string

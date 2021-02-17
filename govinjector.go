@@ -37,6 +37,7 @@ func (g *govinjector) Clone() Injector {
 	}
 }
 
+// Injector gets a clone of the server injector instance
 func (s *Server) Injector() Injector {
 	return s.inj.Clone()
 }

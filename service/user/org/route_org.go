@@ -186,7 +186,8 @@ func (m *router) orgMember(c governor.Context, _ string) (string, error) {
 }
 
 const (
-	scopeOrgRead  = "gov.user.org:read"
+	// scopeOrgRead  = "gov.user.org:read"
+
 	scopeOrgWrite = "gov.user.org:write"
 )
 

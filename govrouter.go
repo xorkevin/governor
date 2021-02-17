@@ -15,6 +15,7 @@ import (
 )
 
 type (
+	// Router adds route handlers to the server
 	Router interface {
 		Group(path string) Router
 		Get(path string, fn http.HandlerFunc, mw ...Middleware)
@@ -29,6 +30,7 @@ type (
 		r chi.Router
 	}
 
+	// Middleware is a type alias for Router middleware
 	Middleware = func(next http.Handler) http.Handler
 )
 
@@ -111,6 +113,7 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 }
 
 type (
+	// Context is an http request and writer wrapper
 	Context interface {
 		Param(key string) string
 		Query(key string) string
@@ -146,6 +149,7 @@ type (
 	}
 )
 
+// NewContext creates a Context
 func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 	return &govcontext{
 		w:     w,
@@ -248,7 +252,14 @@ func (c *govcontext) Redirect(status int, url string) {
 func (c *govcontext) WriteString(status int, text string) {
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
-	c.w.Write([]byte(text))
+	if _, err := c.w.Write([]byte(text)); err != nil {
+		if c.l != nil {
+			c.l.Error("Failed to write string bytes", map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		}
+	}
 }
 
 func (c *govcontext) WriteJSON(status int, body interface{}) {
@@ -257,7 +268,7 @@ func (c *govcontext) WriteJSON(status int, body interface{}) {
 	e.SetEscapeHTML(false)
 	if err := e.Encode(body); err != nil {
 		if c.l != nil {
-			c.l.Error("failed to write json", map[string]string{
+			c.l.Error("Failed to write json", map[string]string{
 				"endpoint": c.r.URL.EscapedPath(),
 				"error":    err.Error(),
 			})
@@ -268,7 +279,14 @@ func (c *govcontext) WriteJSON(status int, body interface{}) {
 
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
-	c.w.Write(b.Bytes())
+	if _, err := c.w.Write(b.Bytes()); err != nil {
+		if c.l != nil {
+			c.l.Error("Failed to write json bytes", map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		}
+	}
 }
 
 func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
@@ -276,7 +294,7 @@ func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
 		if c.l != nil {
-			c.l.Error("failed to write file", map[string]string{
+			c.l.Error("Failed to write file", map[string]string{
 				"endpoint": c.r.URL.EscapedPath(),
 				"error":    err.Error(),
 			})

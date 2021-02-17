@@ -13,10 +13,12 @@ import (
 )
 
 type (
+	// ClientFlags are flags for the client cmd
 	ClientFlags struct {
 		ConfigFile string
 	}
 
+	// Client is a server client
 	Client struct {
 		config *viper.Viper
 		httpc  *http.Client
@@ -25,6 +27,7 @@ type (
 	}
 )
 
+// NewClient creates a new Client
 func NewClient(opts Opts) *Client {
 	v := viper.New()
 	v.SetDefault("addr", "http://localhost:8080/api")
@@ -50,10 +53,12 @@ func NewClient(opts Opts) *Client {
 	}
 }
 
+// SetFlags sets Client flags
 func (c *Client) SetFlags(flags ClientFlags) {
 	c.flags = flags
 }
 
+// Init initializes the Client by reading a config
 func (c *Client) Init() error {
 	if file := c.flags.ConfigFile; file != "" {
 		c.config.SetConfigFile(file)
@@ -68,6 +73,7 @@ func (c *Client) Init() error {
 	return nil
 }
 
+// Request sends a request to the server
 func (c *Client) Request(method, path string, data interface{}, response interface{}) (int, error) {
 	var body io.Reader
 	if data != nil {
@@ -105,6 +111,7 @@ func isStatusOK(status int) bool {
 	return status >= 200 && status < 300
 }
 
+// Setup sends a setup request to the server
 func (c *Client) Setup(req ReqSetup) (*ResponseSetup, error) {
 	res := &ResponseSetup{}
 	if status, err := c.Request("POST", "/setupz", req, res); err != nil {

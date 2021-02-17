@@ -6,6 +6,7 @@ import (
 	"fmt"
 	_ "github.com/lib/pq" // depends upon postgres
 	"net/http"
+	"strconv"
 	"time"
 	"xorkevin.dev/governor"
 )
@@ -100,6 +101,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", r.GetStr("dbname"), r.GetStr("host"), r.GetStr("port"), r.GetStr("sslmode"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
+
+	l.Info("loaded config", map[string]string{
+		"connopts":   s.connopts,
+		"hbinterval": strconv.Itoa(s.hbinterval),
+		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	})
 
 	done := make(chan struct{})
 	go s.execute(ctx, done)

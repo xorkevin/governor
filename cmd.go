@@ -11,6 +11,7 @@ import (
 )
 
 type (
+	// Cmd is the governor cli with both the server and client
 	Cmd struct {
 		s          *Server
 		c          *Client
@@ -19,6 +20,7 @@ type (
 	}
 )
 
+// NewCmd creates a new Cmd
 func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
 	cmd := &Cmd{
 		s:          s,
@@ -51,7 +53,10 @@ The server first runs all init procedures for all services before starting.`,
 			c.s.SetFlags(Flags{
 				ConfigFile: c.configFile,
 			})
-			c.s.Start()
+			if err := c.s.Start(); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
 		},
 	}
 

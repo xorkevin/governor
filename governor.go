@@ -25,6 +25,7 @@ const (
 )
 
 type (
+	// Flags are flags for the server cmd
 	Flags struct {
 		ConfigFile string
 	}
@@ -56,6 +57,7 @@ func New(opts Opts, stateService state.State) *Server {
 	}
 }
 
+// SetFlags sets server flags
 func (s *Server) SetFlags(flags Flags) {
 	s.flags = flags
 }
@@ -236,7 +238,7 @@ func (s *Server) Start() error {
 			})
 		}
 	}()
-	sigShutdown := make(chan os.Signal)
+	sigShutdown := make(chan os.Signal, 1)
 	signal.Notify(sigShutdown, os.Interrupt)
 	<-sigShutdown
 	l.Info("shutdown process begin", nil)

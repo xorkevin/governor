@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/nats-io/stan.go"
 	"net/http"
+	"strconv"
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
@@ -132,6 +133,13 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
+
+	l.Info("loaded config", map[string]string{
+		"clusterid":  s.clusterid,
+		"addr":       s.addr,
+		"hbinterval": strconv.Itoa(s.hbinterval),
+		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	})
 
 	done := make(chan struct{})
 	go s.execute(ctx, done)

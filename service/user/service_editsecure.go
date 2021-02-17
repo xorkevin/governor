@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 	"xorkevin.dev/governor"
+	usermodel "xorkevin.dev/governor/service/user/model"
 )
 
 const (
@@ -285,7 +286,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 
 // ForgotPassword invokes the forgot password reset procedure
 func (s *service) ForgotPassword(useroremail string) error {
-	m := s.users.NewEmptyPtr()
+	var m *usermodel.Model
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(useroremail)
 		if err != nil {

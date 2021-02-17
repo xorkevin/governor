@@ -6,6 +6,7 @@ import (
 	"github.com/minio/minio-go/v6"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 	"xorkevin.dev/governor"
 )
@@ -124,6 +125,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.location = r.GetStr("location")
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
+
+	l.Info("loaded config", map[string]string{
+		"addr":       s.addr,
+		"sslmode":    strconv.FormatBool(s.sslmode),
+		"location":   s.location,
+		"hbinterval": strconv.Itoa(s.hbinterval),
+		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	})
 
 	done := make(chan struct{})
 	go s.execute(ctx, done)

@@ -21,8 +21,6 @@ type (
 	// Repo is a user repository
 	Repo interface {
 		New(username, password, email, firstname, lastname string) (*Model, error)
-		NewEmpty() Model
-		NewEmptyPtr() *Model
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
 		GetGroup(limit, offset int) ([]Info, error)
@@ -122,14 +120,6 @@ func (r *repo) New(username, password, email, firstname, lastname string) (*Mode
 		LastName:     lastname,
 		CreationTime: time.Now().Round(0).Unix(),
 	}, nil
-}
-
-func (r *repo) NewEmpty() Model {
-	return Model{}
-}
-
-func (r *repo) NewEmptyPtr() *Model {
-	return &Model{}
 }
 
 // ValidatePass validates the password against a hash
