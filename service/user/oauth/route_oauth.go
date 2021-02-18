@@ -3,6 +3,7 @@ package oauth
 import (
 	"net/http"
 	"strings"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"

@@ -7,12 +7,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	_ "golang.org/x/crypto/blake2b" // depends on registering blake2b hash
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 	"net/http"
 	"strings"
 	"time"
+
+	_ "golang.org/x/crypto/blake2b" // depends on registering blake2b hash
+	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
 )
 

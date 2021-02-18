@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
-	"golang.org/x/image/draw"
 	goimg "image"
 	"image/color"
 	"image/gif"
@@ -11,6 +10,8 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+
+	"golang.org/x/image/draw"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/fileloader"
 )

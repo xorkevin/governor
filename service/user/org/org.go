@@ -2,6 +2,7 @@ package org
 
 import (
 	"context"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"

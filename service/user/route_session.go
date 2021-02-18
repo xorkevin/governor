@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 	"strings"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )

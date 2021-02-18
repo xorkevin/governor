@@ -3,6 +3,7 @@ package org
 import (
 	"net/http"
 	"strings"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"

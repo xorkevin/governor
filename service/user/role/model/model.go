@@ -2,6 +2,7 @@ package model
 
 import (
 	"net/http"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"

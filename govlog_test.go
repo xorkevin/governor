@@ -3,11 +3,12 @@ package governor
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/rs/zerolog"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEnvToLevel(t *testing.T) {

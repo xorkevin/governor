@@ -3,10 +3,11 @@ package msgqueue
 import (
 	"context"
 	"fmt"
-	"github.com/nats-io/stan.go"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/nats-io/stan.go"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
 )

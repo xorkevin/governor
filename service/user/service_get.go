@@ -2,6 +2,7 @@ package user
 
 import (
 	"net/http"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"

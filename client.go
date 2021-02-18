@@ -3,13 +3,14 @@ package governor
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/spf13/viper"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type (

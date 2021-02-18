@@ -3,10 +3,11 @@ package oauth
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"gopkg.in/square/go-jose.v2"
 	"net/http"
 	"sort"
 	"strings"
+
+	"gopkg.in/square/go-jose.v2"
 	"xorkevin.dev/governor"
 )
 

@@ -3,11 +3,12 @@ package objstore
 import (
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v6"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/minio/minio-go/v6"
 	"xorkevin.dev/governor"
 )
 

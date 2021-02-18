@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq" // depends upon postgres
 	"net/http"
 	"strconv"
 	"time"
+
+	_ "github.com/lib/pq" // depends upon postgres
 	"xorkevin.dev/governor"
 )
 

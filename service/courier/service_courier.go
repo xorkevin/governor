@@ -3,6 +3,7 @@ package courier
 import (
 	"io"
 	"net/http"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
 	"xorkevin.dev/governor/service/courier/model"

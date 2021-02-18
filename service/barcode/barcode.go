@@ -1,9 +1,10 @@
 package barcode
 
 import (
+	"net/http"
+
 	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
-	"net/http"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
 )

@@ -2,8 +2,6 @@ package governor
 
 import (
 	"fmt"
-	vaultapi "github.com/hashicorp/vault/api"
-	"github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/spf13/viper"
 )
 
 type (

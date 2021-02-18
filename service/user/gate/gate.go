@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/apikey"
 	"xorkevin.dev/governor/service/user/role"

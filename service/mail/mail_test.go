@@ -3,13 +3,14 @@ package mail
 import (
 	"bytes"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/mail"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildMail(t *testing.T) {

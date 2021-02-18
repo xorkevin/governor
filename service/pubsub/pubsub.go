@@ -3,10 +3,11 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"github.com/nats-io/nats.go"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 )
 

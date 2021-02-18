@@ -1,12 +1,13 @@
 package governor
 
 import (
-	"github.com/rs/zerolog"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 const (

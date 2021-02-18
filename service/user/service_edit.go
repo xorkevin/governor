@@ -3,6 +3,7 @@ package user
 import (
 	"net/http"
 	"time"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
 )

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/go-chi/chi"
 	"io"
 	"io/ioutil"
 	"mime"
@@ -12,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/go-chi/chi"
 )
 
 type (

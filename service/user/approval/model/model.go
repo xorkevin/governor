@@ -3,6 +3,7 @@ package model
 import (
 	"net/http"
 	"time"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	usermodel "xorkevin.dev/governor/service/user/model"
