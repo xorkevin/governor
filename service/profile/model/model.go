@@ -1,4 +1,4 @@
-package profilemodel
+package model
 
 import (
 	"net/http"

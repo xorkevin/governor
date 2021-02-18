@@ -1,4 +1,4 @@
-package sessionmodel
+package model
 
 import (
 	"net/http"

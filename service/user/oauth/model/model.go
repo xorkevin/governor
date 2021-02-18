@@ -1,4 +1,4 @@
-package oauthmodel
+package model
 
 import (
 	"net/http"

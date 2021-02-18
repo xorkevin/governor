@@ -1,4 +1,4 @@
-package rolemodel
+package model
 
 import (
 	"net/http"

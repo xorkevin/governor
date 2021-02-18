@@ -1,4 +1,4 @@
-package connectionmodel
+package model
 
 import (
 	"net/http"

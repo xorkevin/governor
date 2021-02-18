@@ -74,7 +74,7 @@ func (s *service) GetAppsBulk(clientids []string) (*resApps, error) {
 	}, nil
 }
 
-func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
+func (s *service) getCachedClient(clientid string) (*model.Model, error) {
 	if clientstr, err := s.kvclient.Get(clientid); err != nil {
 		if governor.ErrorStatus(err) != http.StatusNotFound {
 			s.logger.Error("Failed to get oauth client from cache", map[string]string{
@@ -85,7 +85,7 @@ func (s *service) getCachedClient(clientid string) (*oauthmodel.Model, error) {
 	} else if clientstr == cacheValTombstone {
 		return nil, governor.NewError("App not found", http.StatusNotFound, nil)
 	} else {
-		cm := &oauthmodel.Model{}
+		cm := &model.Model{}
 		if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
 			s.logger.Error("Malformed oauth client cache json", map[string]string{
 				"error":      err.Error(),

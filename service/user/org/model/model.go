@@ -1,4 +1,4 @@
-package orgmodel
+package model
 
 import (
 	"net/http"

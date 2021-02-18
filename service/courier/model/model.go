@@ -1,4 +1,4 @@
-package couriermodel
+package model
 
 import (
 	"net/http"

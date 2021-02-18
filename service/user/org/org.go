@@ -20,7 +20,7 @@ type (
 	}
 
 	service struct {
-		orgs   orgmodel.Repo
+		orgs   model.Repo
 		roles  role.Role
 		gate   gate.Gate
 		logger governor.Logger
@@ -49,14 +49,14 @@ func setCtxOrg(inj governor.Injector, o Org) {
 
 // NewCtx creates a new Org service from a context
 func NewCtx(inj governor.Injector) Service {
-	orgs := orgmodel.GetCtxRepo(inj)
+	orgs := model.GetCtxRepo(inj)
 	roles := role.GetCtxRole(inj)
 	g := gate.GetCtxGate(inj)
 	return New(orgs, roles, g)
 }
 
 // New returns a new org service
-func New(orgs orgmodel.Repo, roles role.Role, g gate.Gate) Service {
+func New(orgs model.Repo, roles role.Role, g gate.Gate) Service {
 	return &service{
 		orgs:  orgs,
 		roles: roles,

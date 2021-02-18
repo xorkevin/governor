@@ -34,7 +34,7 @@ type (
 	}
 
 	service struct {
-		roles         rolemodel.Repo
+		roles         model.Repo
 		kvroleset     kvstore.KVStore
 		logger        governor.Logger
 		roleCacheTime int64
@@ -59,13 +59,13 @@ func setCtxRole(inj governor.Injector, r Role) {
 
 // NewCtx creates a new Role service from a context
 func NewCtx(inj governor.Injector) Service {
-	roles := rolemodel.GetCtxRepo(inj)
+	roles := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(roles, kv)
 }
 
 // New returns a new Role
-func New(roles rolemodel.Repo, kv kvstore.KVStore) Service {
+func New(roles model.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		roles:         roles,
 		kvroleset:     kv.Subtree("roleset"),

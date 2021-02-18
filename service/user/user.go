@@ -12,13 +12,13 @@ import (
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/user/apikey"
-	"xorkevin.dev/governor/service/user/approval/model"
+	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/model"
-	"xorkevin.dev/governor/service/user/reset/model"
+	resetmodel "xorkevin.dev/governor/service/user/reset/model"
 	"xorkevin.dev/governor/service/user/role"
-	"xorkevin.dev/governor/service/user/role/invitation/model"
-	"xorkevin.dev/governor/service/user/session/model"
+	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
+	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -54,7 +54,7 @@ type (
 	}
 
 	service struct {
-		users             usermodel.Repo
+		users             model.Repo
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
 		invitations       invitationmodel.Repo
@@ -125,7 +125,7 @@ func setCtxUser(inj governor.Injector, u User) {
 
 // NewCtx creates a new User service from a context
 func NewCtx(inj governor.Injector) Service {
-	users := usermodel.GetCtxRepo(inj)
+	users := model.GetCtxRepo(inj)
 	sessions := sessionmodel.GetCtxRepo(inj)
 	approvals := approvalmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
@@ -156,7 +156,7 @@ func NewCtx(inj governor.Injector) Service {
 
 // New creates a new User service
 func New(
-	users usermodel.Repo,
+	users model.Repo,
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
 	invitations invitationmodel.Repo,

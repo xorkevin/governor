@@ -1,4 +1,4 @@
-package resetmodel
+package model
 
 import (
 	"net/http"

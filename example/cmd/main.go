@@ -3,33 +3,33 @@ package main
 import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/courier"
-	"xorkevin.dev/governor/service/courier/model"
+	couriermodel "xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
-	"xorkevin.dev/governor/service/profile/model"
+	profilemodel "xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/pubsub"
-	"xorkevin.dev/governor/service/state/model"
+	statemodel "xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/apikey"
-	"xorkevin.dev/governor/service/user/apikey/model"
-	"xorkevin.dev/governor/service/user/approval/model"
+	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
+	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/model"
+	usermodel "xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/oauth"
-	"xorkevin.dev/governor/service/user/oauth/connection/model"
-	"xorkevin.dev/governor/service/user/oauth/model"
+	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
+	oauthmodel "xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/org"
-	"xorkevin.dev/governor/service/user/org/model"
-	"xorkevin.dev/governor/service/user/reset/model"
+	orgmodel "xorkevin.dev/governor/service/user/org/model"
+	resetmodel "xorkevin.dev/governor/service/user/reset/model"
 	"xorkevin.dev/governor/service/user/role"
-	"xorkevin.dev/governor/service/user/role/invitation/model"
-	"xorkevin.dev/governor/service/user/role/model"
-	"xorkevin.dev/governor/service/user/session/model"
+	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
+	rolemodel "xorkevin.dev/governor/service/user/role/model"
+	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 )
 
@@ -96,7 +96,7 @@ func main() {
 	{
 		inj := gov.Injector()
 		oauthmodel.NewInCtx(inj)
-		connectionmodel.NewInCtx(inj)
+		connmodel.NewInCtx(inj)
 		kvstore.NewSubtreeInCtx(inj, "oauth")
 		objstore.NewBucketInCtx(inj, "oauth-app-logo")
 		gov.Register("oauth", "/oauth", oauth.NewCtx(inj))

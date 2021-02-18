@@ -28,7 +28,7 @@ type (
 	}
 
 	service struct {
-		repo          couriermodel.Repo
+		repo          model.Repo
 		kvlinks       kvstore.KVStore
 		linkImgBucket objstore.Bucket
 		linkImgDir    objstore.Dir
@@ -63,7 +63,7 @@ func setCtxCourier(inj governor.Injector, c Courier) {
 
 // NewCtx creates a new Courier service from a context
 func NewCtx(inj governor.Injector) Service {
-	repo := couriermodel.GetCtxRepo(inj)
+	repo := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	obj := objstore.GetCtxBucket(inj)
 	g := gate.GetCtxGate(inj)
@@ -71,7 +71,7 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new Courier service
-func New(repo couriermodel.Repo, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) Service {
+func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) Service {
 	return &service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),

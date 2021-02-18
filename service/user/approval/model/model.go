@@ -1,11 +1,11 @@
-package approvalmodel
+package model
 
 import (
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/user/model"
+	usermodel "xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 )

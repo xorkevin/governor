@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func (s *service) GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error) {
+func (s *service) GetUserKeys(userid string, limit, offset int) ([]model.Model, error) {
 	return s.apikeys.GetUserKeys(userid, limit, offset)
 }
 
@@ -98,7 +98,7 @@ func (s *service) CheckKey(keyid, key string) (string, string, error) {
 		return "", "", err
 	}
 
-	m := apikeymodel.Model{
+	m := model.Model{
 		KeyHash: keyhash,
 	}
 	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil || !ok {

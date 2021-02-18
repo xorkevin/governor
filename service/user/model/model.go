@@ -1,4 +1,4 @@
-package usermodel
+package model
 
 import (
 	"net/http"

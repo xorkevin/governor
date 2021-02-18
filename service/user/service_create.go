@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/approval/model"
+	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
 )
 

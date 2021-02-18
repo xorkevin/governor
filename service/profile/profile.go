@@ -29,7 +29,7 @@ type (
 	}
 
 	service struct {
-		profiles      profilemodel.Repo
+		profiles      model.Repo
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
 		queue         msgqueue.Msgqueue
@@ -60,7 +60,7 @@ func setCtxProfile(inj governor.Injector, p Profile) {
 
 // NewCtx creates a new Profile service from a context
 func NewCtx(inj governor.Injector) Service {
-	profiles := profilemodel.GetCtxRepo(inj)
+	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
 	queue := msgqueue.GetCtxMsgqueue(inj)
 	g := gate.GetCtxGate(inj)
@@ -68,7 +68,7 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new Profile service
-func New(profiles profilemodel.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g gate.Gate) Service {
+func New(profiles model.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g gate.Gate) Service {
 	return &service{
 		profiles:      profiles,
 		profileBucket: obj,

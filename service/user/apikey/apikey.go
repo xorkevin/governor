@@ -17,7 +17,7 @@ const (
 type (
 	// Apikey manages apikeys
 	Apikey interface {
-		GetUserKeys(userid string, limit, offset int) ([]apikeymodel.Model, error)
+		GetUserKeys(userid string, limit, offset int) ([]model.Model, error)
 		CheckKey(keyid, key string) (string, string, error)
 		Insert(userid string, scope string, name, desc string) (*ResApikeyModel, error)
 		RotateKey(keyid string) (*ResApikeyModel, error)
@@ -33,7 +33,7 @@ type (
 	}
 
 	service struct {
-		apikeys        apikeymodel.Repo
+		apikeys        model.Repo
 		kvkey          kvstore.KVStore
 		logger         governor.Logger
 		scopeCacheTime int64
@@ -58,13 +58,13 @@ func setCtxApikey(inj governor.Injector, a Apikey) {
 
 // NewCtx returns a new Apikey service from a context
 func NewCtx(inj governor.Injector) Service {
-	apikeys := apikeymodel.GetCtxRepo(inj)
+	apikeys := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(apikeys, kv)
 }
 
 // New returns a new Apikey service
-func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) Service {
+func New(apikeys model.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		apikeys:        apikeys,
 		kvkey:          kv.Subtree("key"),

@@ -1,4 +1,4 @@
-package invitationmodel
+package model
 
 import (
 	"net/http"

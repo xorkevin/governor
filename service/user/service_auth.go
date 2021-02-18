@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/session/model"
+	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 )
 

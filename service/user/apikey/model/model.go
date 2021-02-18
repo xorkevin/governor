@@ -1,4 +1,4 @@
-package apikeymodel
+package model
 
 import (
 	"net/http"

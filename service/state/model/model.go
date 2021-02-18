@@ -1,4 +1,4 @@
-package statemodel
+package model
 
 import (
 	"net/http"

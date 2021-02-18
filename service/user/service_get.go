@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func getUserPublicFields(m *usermodel.Model, roles []string) *ResUserGetPublic {
+func getUserPublicFields(m *model.Model, roles []string) *ResUserGetPublic {
 	return &ResUserGetPublic{
 		Userid:       m.Userid,
 		Username:     m.Username,
@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func getUserFields(m *usermodel.Model, roles []string) *ResUserGet {
+func getUserFields(m *model.Model, roles []string) *ResUserGet {
 	return &ResUserGet{
 		ResUserGetPublic: *getUserPublicFields(m, roles),
 		Email:            m.Email,
