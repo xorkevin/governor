@@ -17,8 +17,8 @@ const (
 )
 
 type (
-	// Role manages user roles
-	Role interface {
+	// Roles manages user roles
+	Roles interface {
 		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 		InsertRoles(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles rank.Rank) error
@@ -28,10 +28,10 @@ type (
 		DeleteByRole(roleName string) error
 	}
 
-	// Service is a Role and governor.Service
+	// Service is a Roles and governor.Service
 	Service interface {
 		governor.Service
-		Role
+		Roles
 	}
 
 	service struct {
@@ -41,31 +41,31 @@ type (
 		roleCacheTime int64
 	}
 
-	ctxKeyRole struct{}
+	ctxKeyRoles struct{}
 )
 
-// GetCtxRole returns a Role service from the context
-func GetCtxRole(inj governor.Injector) Role {
-	v := inj.Get(ctxKeyRole{})
+// GetCtxRoles returns a Roles service from the context
+func GetCtxRoles(inj governor.Injector) Roles {
+	v := inj.Get(ctxKeyRoles{})
 	if v == nil {
 		return nil
 	}
-	return v.(Role)
+	return v.(Roles)
 }
 
-// setCtxRole sets a Role service in the context
-func setCtxRole(inj governor.Injector, r Role) {
-	inj.Set(ctxKeyRole{}, r)
+// setCtxRoles sets a Roles service in the context
+func setCtxRoles(inj governor.Injector, r Roles) {
+	inj.Set(ctxKeyRoles{}, r)
 }
 
-// NewCtx creates a new Role service from a context
+// NewCtx creates a new Roles service from a context
 func NewCtx(inj governor.Injector) Service {
 	roles := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(roles, kv)
 }
 
-// New returns a new Role
+// New returns a new Roles
 func New(roles model.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		roles:         roles,
@@ -75,7 +75,7 @@ func New(roles model.Repo, kv kvstore.KVStore) Service {
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxRole(inj, s)
+	setCtxRoles(inj, s)
 
 	r.SetDefault("rolecache", "24h")
 }

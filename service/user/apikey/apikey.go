@@ -16,8 +16,8 @@ const (
 )
 
 type (
-	// Apikey manages apikeys
-	Apikey interface {
+	// Apikeys manages apikeys
+	Apikeys interface {
 		GetUserKeys(userid string, limit, offset int) ([]model.Model, error)
 		CheckKey(keyid, key string) (string, string, error)
 		Insert(userid string, scope string, name, desc string) (*ResApikeyModel, error)
@@ -27,10 +27,10 @@ type (
 		DeleteUserKeys(userid string) error
 	}
 
-	// Service is an Apikey and governor.Service
+	// Service is an Apikeys and governor.Service
 	Service interface {
 		governor.Service
-		Apikey
+		Apikeys
 	}
 
 	service struct {
@@ -40,31 +40,31 @@ type (
 		scopeCacheTime int64
 	}
 
-	ctxKeyApikey struct{}
+	ctxKeyApikeys struct{}
 )
 
-// GetCtxApikey returns a Apikey service from the context
-func GetCtxApikey(inj governor.Injector) Apikey {
-	v := inj.Get(ctxKeyApikey{})
+// GetCtxApikeys returns a Apikeys service from the context
+func GetCtxApikeys(inj governor.Injector) Apikeys {
+	v := inj.Get(ctxKeyApikeys{})
 	if v == nil {
 		return nil
 	}
-	return v.(Apikey)
+	return v.(Apikeys)
 }
 
-// setCtxApikey sets a Apikey service in the context
-func setCtxApikey(inj governor.Injector, a Apikey) {
-	inj.Set(ctxKeyApikey{}, a)
+// setCtxApikeys sets a Apikeys service in the context
+func setCtxApikeys(inj governor.Injector, a Apikeys) {
+	inj.Set(ctxKeyApikeys{}, a)
 }
 
-// NewCtx returns a new Apikey service from a context
+// NewCtx returns a new Apikeys service from a context
 func NewCtx(inj governor.Injector) Service {
 	apikeys := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(apikeys, kv)
 }
 
-// New returns a new Apikey service
+// New returns a new Apikeys service
 func New(apikeys model.Repo, kv kvstore.KVStore) Service {
 	return &service{
 		apikeys:        apikeys,
@@ -74,7 +74,7 @@ func New(apikeys model.Repo, kv kvstore.KVStore) Service {
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxApikey(inj, s)
+	setCtxApikeys(inj, s)
 
 	r.SetDefault("scopecache", "24h")
 }

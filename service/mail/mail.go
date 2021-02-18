@@ -26,15 +26,15 @@ const (
 )
 
 type (
-	// Mail is a service wrapper around a mailer instance
-	Mail interface {
+	// Mailer is a service wrapper around a mailer instance
+	Mailer interface {
 		Send(from, fromname string, to []string, tpl string, emdata interface{}) error
 	}
 
-	// Service is a Mail and governor.Service
+	// Service is a Mailer and governor.Service
 	Service interface {
 		governor.Service
-		Mail
+		Mailer
 	}
 
 	mailOp struct {
@@ -74,31 +74,31 @@ type (
 		done        <-chan struct{}
 	}
 
-	ctxKeyMail struct{}
+	ctxKeyMailer struct{}
 )
 
-// GetCtxMail returns a Mail service from the context
-func GetCtxMail(inj governor.Injector) Mail {
-	v := inj.Get(ctxKeyMail{})
+// GetCtxMailer returns a Mailer service from the context
+func GetCtxMailer(inj governor.Injector) Mailer {
+	v := inj.Get(ctxKeyMailer{})
 	if v == nil {
 		return nil
 	}
-	return v.(Mail)
+	return v.(Mailer)
 }
 
-// setCtxMail sets a Mail service in the context
-func setCtxMail(inj governor.Injector, m Mail) {
-	inj.Set(ctxKeyMail{}, m)
+// setCtxMailer sets a Mailer service in the context
+func setCtxMailer(inj governor.Injector, m Mailer) {
+	inj.Set(ctxKeyMailer{}, m)
 }
 
-// NewCtx creates a new Mail service from a context
+// NewCtx creates a new Mailer service from a context
 func NewCtx(inj governor.Injector) Service {
 	tpl := template.GetCtxTemplate(inj)
 	queue := msgqueue.GetCtxMsgqueue(inj)
 	return New(tpl, queue)
 }
 
-// New creates a new mailer service
+// New creates a new Mailer
 func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 	return &service{
 		tpl:    tpl,
@@ -108,7 +108,7 @@ func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxMail(inj, s)
+	setCtxMailer(inj, s)
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")

@@ -43,8 +43,8 @@ type (
 	}
 
 	service struct {
-		roles     role.Role
-		apikeys   apikey.Apikey
+		roles     role.Roles
+		apikeys   apikey.Apikeys
 		tokenizer token.Tokenizer
 		baseurl   string
 		realm     string
@@ -88,14 +88,14 @@ func setCtxGate(inj governor.Injector, g Gate) {
 
 // NewCtx creates a new Gate from a context
 func NewCtx(inj governor.Injector) Service {
-	roles := role.GetCtxRole(inj)
-	apikeys := apikey.GetCtxApikey(inj)
+	roles := role.GetCtxRoles(inj)
+	apikeys := apikey.GetCtxApikeys(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	return New(roles, apikeys, tokenizer)
 }
 
 // New returns a new Gate
-func New(roles role.Role, apikeys apikey.Apikey, tokenizer token.Tokenizer) Service {
+func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) Service {
 	return &service{
 		roles:     roles,
 		apikeys:   apikeys,

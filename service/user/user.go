@@ -42,16 +42,16 @@ const (
 )
 
 type (
-	// User is a user management service
-	User interface {
+	// Users is a user management service
+	Users interface {
 		GetByID(userid string) (*ResUserGet, error)
 		CheckUserExists(userid string) (bool, error)
 	}
 
-	// Service is a User and governor.Service
+	// Service is a Users and governor.Service
 	Service interface {
 		governor.Service
-		User
+		Users
 	}
 
 	service struct {
@@ -60,12 +60,12 @@ type (
 		approvals         approvalmodel.Repo
 		invitations       invitationmodel.Repo
 		resets            resetmodel.Repo
-		roles             role.Role
-		apikeys           apikey.Apikey
+		roles             role.Roles
+		apikeys           apikey.Apikeys
 		kvusers           kvstore.KVStore
 		kvsessions        kvstore.KVStore
 		queue             msgqueue.Msgqueue
-		mailer            mail.Mail
+		mailer            mail.Mailer
 		gate              gate.Gate
 		tokenizer         token.Tokenizer
 		logger            governor.Logger
@@ -107,35 +107,35 @@ type (
 		Userid string `json:"userid"`
 	}
 
-	ctxKeyUser struct{}
+	ctxKeyUsers struct{}
 )
 
-// GetCtxUser returns a User service from the context
-func GetCtxUser(inj governor.Injector) User {
-	v := inj.Get(ctxKeyUser{})
+// GetCtxUsers returns a Users service from the context
+func GetCtxUsers(inj governor.Injector) Users {
+	v := inj.Get(ctxKeyUsers{})
 	if v == nil {
 		return nil
 	}
-	return v.(User)
+	return v.(Users)
 }
 
-// setCtxUser sets a User service in the context
-func setCtxUser(inj governor.Injector, u User) {
-	inj.Set(ctxKeyUser{}, u)
+// setCtxUser sets a Users service in the context
+func setCtxUser(inj governor.Injector, u Users) {
+	inj.Set(ctxKeyUsers{}, u)
 }
 
-// NewCtx creates a new User service from a context
+// NewCtx creates a new Users service from a context
 func NewCtx(inj governor.Injector) Service {
 	users := model.GetCtxRepo(inj)
 	sessions := sessionmodel.GetCtxRepo(inj)
 	approvals := approvalmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
 	resets := resetmodel.GetCtxRepo(inj)
-	roles := role.GetCtxRole(inj)
-	apikeys := apikey.GetCtxApikey(inj)
+	roles := role.GetCtxRoles(inj)
+	apikeys := apikey.GetCtxApikeys(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	queue := msgqueue.GetCtxMsgqueue(inj)
-	mailer := mail.GetCtxMail(inj)
+	mailer := mail.GetCtxMailer(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	g := gate.GetCtxGate(inj)
 
@@ -155,18 +155,18 @@ func NewCtx(inj governor.Injector) Service {
 	)
 }
 
-// New creates a new User service
+// New creates a new Users service
 func New(
 	users model.Repo,
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
 	invitations invitationmodel.Repo,
 	resets resetmodel.Repo,
-	roles role.Role,
-	apikeys apikey.Apikey,
+	roles role.Roles,
+	apikeys apikey.Apikeys,
 	kv kvstore.KVStore,
 	queue msgqueue.Msgqueue,
-	mailer mail.Mail,
+	mailer mail.Mailer,
 	tokenizer token.Tokenizer,
 	g gate.Gate,
 ) Service {

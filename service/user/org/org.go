@@ -10,19 +10,19 @@ import (
 )
 
 type (
-	// Org is an organization management service
-	Org interface {
+	// Orgs is an organization management service
+	Orgs interface {
 	}
 
-	// Service is an Org and governor.Service
+	// Service is an Orgs and governor.Service
 	Service interface {
 		governor.Service
-		Org
+		Orgs
 	}
 
 	service struct {
 		orgs   model.Repo
-		roles  role.Role
+		roles  role.Roles
 		gate   gate.Gate
 		logger governor.Logger
 	}
@@ -31,33 +31,33 @@ type (
 		s service
 	}
 
-	ctxKeyOrg struct{}
+	ctxKeyOrgs struct{}
 )
 
-// GetCtxOrg returns an Org service from the context
-func GetCtxOrg(inj governor.Injector) Org {
-	v := inj.Get(ctxKeyOrg{})
+// GetCtxOrgs returns an Orgs service from the context
+func GetCtxOrgs(inj governor.Injector) Orgs {
+	v := inj.Get(ctxKeyOrgs{})
 	if v == nil {
 		return nil
 	}
-	return v.(Org)
+	return v.(Orgs)
 }
 
-// setCtxOrg sets an Org service in the context
-func setCtxOrg(inj governor.Injector, o Org) {
-	inj.Set(ctxKeyOrg{}, o)
+// setCtxOrgs sets an Orgs service in the context
+func setCtxOrgs(inj governor.Injector, o Orgs) {
+	inj.Set(ctxKeyOrgs{}, o)
 }
 
-// NewCtx creates a new Org service from a context
+// NewCtx creates a new Orgs service from a context
 func NewCtx(inj governor.Injector) Service {
 	orgs := model.GetCtxRepo(inj)
-	roles := role.GetCtxRole(inj)
+	roles := role.GetCtxRoles(inj)
 	g := gate.GetCtxGate(inj)
 	return New(orgs, roles, g)
 }
 
-// New returns a new org service
-func New(orgs model.Repo, roles role.Role, g gate.Gate) Service {
+// New returns a new Orgs service
+func New(orgs model.Repo, roles role.Roles, g gate.Gate) Service {
 	return &service{
 		orgs:  orgs,
 		roles: roles,
@@ -66,7 +66,7 @@ func New(orgs model.Repo, roles role.Role, g gate.Gate) Service {
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxOrg(inj, s)
+	setCtxOrgs(inj, s)
 }
 
 func (s *service) router() *router {

@@ -19,14 +19,14 @@ const (
 )
 
 type (
-	// Profile is a user profile management service
-	Profile interface {
+	// Profiles is a user profile management service
+	Profiles interface {
 	}
 
-	// Service is a Profile and governor.Service
+	// Service is a Profiles and governor.Service
 	Service interface {
 		governor.Service
-		Profile
+		Profiles
 	}
 
 	service struct {
@@ -42,24 +42,24 @@ type (
 		s service
 	}
 
-	ctxKeyProfile struct{}
+	ctxKeyProfiles struct{}
 )
 
-// GetCtxProfile returns a Profile service from the context
-func GetCtxProfile(inj governor.Injector) Profile {
-	v := inj.Get(ctxKeyProfile{})
+// GetCtxProfiles returns a Profiles service from the context
+func GetCtxProfiles(inj governor.Injector) Profiles {
+	v := inj.Get(ctxKeyProfiles{})
 	if v == nil {
 		return nil
 	}
-	return v.(Profile)
+	return v.(Profiles)
 }
 
-// setCtxProfile sets a profile service in the context
-func setCtxProfile(inj governor.Injector, p Profile) {
-	inj.Set(ctxKeyProfile{}, p)
+// setCtxProfiles sets a profile service in the context
+func setCtxProfiles(inj governor.Injector, p Profiles) {
+	inj.Set(ctxKeyProfiles{}, p)
 }
 
-// NewCtx creates a new Profile service from a context
+// NewCtx creates a new Profiles service from a context
 func NewCtx(inj governor.Injector) Service {
 	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
@@ -68,7 +68,7 @@ func NewCtx(inj governor.Injector) Service {
 	return New(profiles, obj, queue, g)
 }
 
-// New creates a new Profile service
+// New creates a new Profiles service
 func New(profiles model.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g gate.Gate) Service {
 	return &service{
 		profiles:      profiles,
@@ -80,7 +80,7 @@ func New(profiles model.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g ga
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxProfile(inj, s)
+	setCtxProfiles(inj, s)
 }
 
 func (s *service) router() *router {
