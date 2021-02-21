@@ -9,9 +9,17 @@ import (
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
-func (m *router) setAccessCookie(c governor.Context, accessToken string) {
+func (m *router) setAccessCookie(c governor.Context, accessToken string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
+		Value:    accessToken,
+		Path:     m.s.baseURL,
+		MaxAge:   int(m.s.accessTime) - 5,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     "access_token_" + userid,
 		Value:    accessToken,
 		Path:     m.s.baseURL,
 		MaxAge:   int(m.s.accessTime) - 5,
@@ -30,7 +38,23 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		SameSite: http.SameSiteLaxMode,
 	})
 	c.SetCookie(&http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     m.s.authURL + "/id/" + userid,
+		MaxAge:   int(m.s.refreshTime) - 5,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	})
+	c.SetCookie(&http.Cookie{
 		Name:     "userid",
+		Value:    userid,
+		Path:     "/",
+		MaxAge:   int(m.s.refreshTime) - 5,
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     "userid_" + userid,
 		Value:    userid,
 		Path:     "/",
 		MaxAge:   int(m.s.refreshTime) - 5,
@@ -75,16 +99,22 @@ func getSessionCookie(c governor.Context, userid string) (string, bool) {
 	return cookie.Value, true
 }
 
-func (m *router) rmAccessCookie(c governor.Context) {
+func (m *router) rmAccessCookie(c governor.Context, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:   "access_token",
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   m.s.baseURL,
 	})
+	c.SetCookie(&http.Cookie{
+		Name:   "access_token_" + userid,
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   m.s.baseURL,
+	})
 }
 
-func (m *router) rmRefreshCookie(c governor.Context) {
+func (m *router) rmRefreshCookie(c governor.Context, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:   "refresh_token",
 		Value:  "invalid",
@@ -92,7 +122,19 @@ func (m *router) rmRefreshCookie(c governor.Context) {
 		Path:   m.s.authURL,
 	})
 	c.SetCookie(&http.Cookie{
+		Name:   "refresh_token",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   m.s.authURL + "/id/" + userid,
+	})
+	c.SetCookie(&http.Cookie{
 		Name:   "userid",
+		Value:  "invalid",
+		MaxAge: -1,
+		Path:   "/",
+	})
+	c.SetCookie(&http.Cookie{
+		Name:   "userid_" + userid,
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   "/",
@@ -166,7 +208,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
+	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
@@ -199,7 +241,7 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
+	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
 	if res.Refresh {
 		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 		m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
@@ -227,7 +269,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
+	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
@@ -248,13 +290,14 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.Logout(ruser.RefreshToken); err != nil {
+	userid, err := m.s.Logout(ruser.RefreshToken)
+	if err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	m.rmAccessCookie(c)
-	m.rmRefreshCookie(c)
+	m.rmAccessCookie(c, userid)
+	m.rmRefreshCookie(c, userid)
 
 	c.WriteStatus(http.StatusNoContent)
 }
@@ -263,5 +306,7 @@ func (m *router) mountAuth(r governor.Router) {
 	r.Post("/login", m.loginUser)
 	r.Post("/exchange", m.exchangeToken)
 	r.Post("/refresh", m.refreshToken)
+	r.Post("/id/{id}/exchange", m.exchangeToken)
+	r.Post("/id/{id}/refresh", m.refreshToken)
 	r.Post("/logout", m.logoutUser)
 }

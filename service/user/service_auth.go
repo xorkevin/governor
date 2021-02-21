@@ -259,29 +259,29 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 }
 
 // Logout removes the user session in cache
-func (s *service) Logout(refreshToken string) error {
+func (s *service) Logout(refreshToken string) (string, error) {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
 	ok, claims := s.tokenizer.GetClaims(token.KindRefresh, refreshToken, "")
 	if !ok {
-		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
 	sm, err := s.sessions.GetByID(claims.ID)
 	if err != nil {
 		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+			return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 		}
-		return governor.NewError("Failed to get session", http.StatusInternalServerError, err)
+		return "", governor.NewError("Failed to get session", http.StatusInternalServerError, err)
 	}
 	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil || !ok {
-		return governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
+		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
 
 	if err := s.sessions.Delete(sm); err != nil {
-		return governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
+		return "", governor.NewError("Failed to delete session", http.StatusInternalServerError, err)
 	}
 	s.killCacheSessions([]string{claims.ID})
 
-	return nil
+	return claims.Subject, nil
 }
