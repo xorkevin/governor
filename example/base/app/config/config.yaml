@@ -79,6 +79,7 @@ token:
   audience: governor
 gate:
   realm: governor
+  compassheader: governor-userid-compass
 oauth:
   keycache: 24h
   issuer: http://governor.dev.localhost:8080
