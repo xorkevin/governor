@@ -3,6 +3,7 @@ package governor
 import (
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,6 +25,9 @@ const (
 	seconds5 = 5 * time.Second
 	seconds2 = 2 * time.Second
 )
+
+//go:embed banner.txt
+var banner string
 
 type (
 	// Flags are flags for the server cmd
@@ -147,6 +151,12 @@ func (s *Server) init(ctx context.Context) error {
 	return nil
 }
 
+func (s *Server) waitForInterrupt() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	<-ctx.Done()
+}
+
 // Start starts the registered services and the server
 func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -239,9 +249,7 @@ func (s *Server) Start() error {
 			})
 		}
 	}()
-	sigShutdown := make(chan os.Signal, 1)
-	signal.Notify(sigShutdown, os.Interrupt)
-	<-sigShutdown
+	s.waitForInterrupt()
 	l.Info("shutdown process begin", nil)
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 16*time.Second)

@@ -1,6 +1,6 @@
 module xorkevin.dev/governor
 
-go 1.14
+go 1.16
 
 require (
 	github.com/boombuler/barcode v1.0.0

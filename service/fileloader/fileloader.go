@@ -2,15 +2,15 @@ package fileloader
 
 import (
 	"fmt"
+	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 
 	"xorkevin.dev/governor"
 )
 
 // LoadOpenFile returns an open file from a Context
-func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeTypes map[string]struct{}) (multipart.File, string, int64, error) {
+func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {
 		return nil, "", 0, governor.NewErrorUser("Invalid file format", http.StatusBadRequest, err)

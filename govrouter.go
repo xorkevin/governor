@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -218,7 +217,7 @@ func (c *govcontext) Bind(i interface{}) error {
 	}
 	switch mediaType {
 	case "application/json":
-		data, err := ioutil.ReadAll(c.r.Body)
+		data, err := io.ReadAll(c.r.Body)
 		if err != nil {
 			if err.Error() == "http: request body too large" {
 				return NewErrorUser("Request too large", http.StatusRequestEntityTooLarge, err)

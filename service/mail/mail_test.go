@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime"
 	"mime/multipart"
 	"net/mail"
@@ -71,7 +70,7 @@ func TestBuildMail(t *testing.T) {
 		assert.NoError(err)
 		assert.Equal("text/plain", plaincontenttype)
 		assert.Equal("utf-8", plainparams["charset"])
-		plainbytes, err := ioutil.ReadAll(plain)
+		plainbytes, err := io.ReadAll(plain)
 		assert.NoError(err)
 		assert.Equal(ti.body, string(plainbytes))
 		htmlpart, err := b.NextPart()
@@ -80,7 +79,7 @@ func TestBuildMail(t *testing.T) {
 		assert.NoError(err)
 		assert.Equal("text/html", htmlcontenttype)
 		assert.Equal("utf-8", htmlparams["charset"])
-		htmlbytes, err := ioutil.ReadAll(htmlpart)
+		htmlbytes, err := io.ReadAll(htmlpart)
 		assert.NoError(err)
 		assert.Equal(ti.htmlbody, string(htmlbytes))
 		_, err = b.NextPart()

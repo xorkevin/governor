@@ -3,7 +3,6 @@ package governor
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -213,7 +212,7 @@ func (c *Config) initvault() error {
 		if jwtpath == "" {
 			return NewError("No path for vault k8s service account jwt auth", http.StatusBadRequest, nil)
 		}
-		jwtbytes, err := ioutil.ReadFile(jwtpath)
+		jwtbytes, err := os.ReadFile(jwtpath)
 		if err != nil {
 			return NewError("Failed to read vault k8s service account jwt", http.StatusInternalServerError, err)
 		}

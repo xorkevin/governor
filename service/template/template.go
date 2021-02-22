@@ -6,6 +6,7 @@ import (
 	"fmt"
 	htmlTemplate "html/template"
 	"net/http"
+	"os"
 	"strings"
 	textTemplate "text/template"
 
@@ -57,6 +58,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	setCtxTemplate(inj, s)
 
 	r.SetDefault("dir", "templates")
+	r.SetDefault("txtglob", "*.txt")
+	r.SetDefault("htmlglob", "*.html")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -64,8 +67,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	templateDir := r.GetStr("dir")
-	tt, err := textTemplate.ParseGlob(templateDir + "/*.txt")
+	templateDir := os.DirFS(r.GetStr("dir"))
+	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
 	if err != nil {
 		if err.Error() == fmt.Sprintf("text/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
 			l.Warn("no templates loaded", nil)
@@ -75,7 +78,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		}
 	}
 	s.tt = tt
-	ht, err := htmlTemplate.ParseGlob(templateDir + "/*.html")
+	ht, err := htmlTemplate.ParseFS(templateDir, r.GetStr("htmlglob"))
 	if err != nil {
 		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
 			l.Warn("no templates loaded", nil)
