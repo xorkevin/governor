@@ -82,6 +82,46 @@ func profileModelGetModelEqUserid(db *sql.DB, userid string) (*Model, int, error
 	return m, 0, nil
 }
 
+func profileModelGetModelHasUseridOrdUserid(db *sql.DB, userid []string, orderasc bool, limit, offset int) ([]Model, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(userid))
+	args = append(args, limit, offset)
+	var placeholdersuserid string
+	{
+		placeholders := make([]string, 0, len(userid))
+		for _, i := range userid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT userid, contact_email, bio, profile_image_url FROM profiles WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func profileModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) (int, error) {
 	_, err := db.Exec("UPDATE profiles SET (userid, contact_email, bio, profile_image_url) = ROW($1, $2, $3, $4) WHERE userid = $5;", m.Userid, m.Email, m.Bio, m.Image, userid)
 	if err != nil {

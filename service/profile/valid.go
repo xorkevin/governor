@@ -46,3 +46,13 @@ func validBio(bio string) error {
 	}
 	return nil
 }
+
+func validhasUserids(userids string) error {
+	if len(userids) == 0 {
+		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
+	}
+	if len(userids) > lengthCapLarge {
+		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
+	}
+	return nil
+}

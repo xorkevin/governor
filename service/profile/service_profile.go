@@ -15,9 +15,14 @@ type (
 	}
 
 	resProfileModel struct {
-		Email string `json:"contact_email"`
-		Bio   string `json:"bio"`
-		Image string `json:"image"`
+		Userid string `json:"userid"`
+		Email  string `json:"contact_email"`
+		Bio    string `json:"bio"`
+		Image  string `json:"image"`
+	}
+
+	resProfiles struct {
+		Profiles []resProfileModel `json:"profiles"`
 	}
 )
 
@@ -126,9 +131,10 @@ func (s *service) GetProfile(userid string) (*resProfileModel, error) {
 		return nil, err
 	}
 	return &resProfileModel{
-		Email: m.Email,
-		Bio:   m.Bio,
-		Image: m.Image,
+		Userid: m.Userid,
+		Email:  m.Email,
+		Bio:    m.Bio,
+		Image:  m.Image,
 	}, nil
 }
 
@@ -152,4 +158,25 @@ func (s *service) GetProfileImage(userid string) (io.ReadCloser, string, error) 
 		return nil, "", governor.NewError("Failed to get profile image", http.StatusInternalServerError, err)
 	}
 	return obj, objinfo.ContentType, nil
+}
+
+func (s *service) GetProfilesBulk(userids []string) (*resProfiles, error) {
+	m, err := s.profiles.GetBulk(userids)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]resProfileModel, 0, len(m))
+	for _, i := range m {
+		res = append(res, resProfileModel{
+			Userid: i.Userid,
+			Email:  i.Email,
+			Bio:    i.Bio,
+			Image:  i.Image,
+		})
+	}
+
+	return &resProfiles{
+		Profiles: res,
+	}, nil
 }

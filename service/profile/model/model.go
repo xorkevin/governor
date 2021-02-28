@@ -14,6 +14,7 @@ type (
 	Repo interface {
 		New(userid, email, bio string) (*Model, error)
 		GetByID(userid string) (*Model, error)
+		GetBulk(userids []string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
@@ -27,7 +28,7 @@ type (
 	// Model is the db profile model
 	// Image should be mostly be under 1024
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;getgroupeq,userid|arr;updeq,userid;deleq,userid"`
 		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
@@ -89,6 +90,18 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 			return nil, governor.NewError("No profile found with that id", http.StatusNotFound, err)
 		}
 		return nil, governor.NewError("Failed to get profile", http.StatusInternalServerError, err)
+	}
+	return m, nil
+}
+
+func (r *repo) GetBulk(userids []string) ([]Model, error) {
+	db, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := profileModelGetModelHasUseridOrdUserid(db, userids, true, len(userids), 0)
+	if err != nil {
+		return nil, governor.NewError("Failed to get profiles of userids", http.StatusInternalServerError, err)
 	}
 	return m, nil
 }

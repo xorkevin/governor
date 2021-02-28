@@ -21,3 +21,10 @@ func (r reqProfileModel) valid() error {
 	}
 	return nil
 }
+
+func (r reqGetProfiles) valid() error {
+	if err := validhasUserids(r.Userids); err != nil {
+		return err
+	}
+	return nil
+}

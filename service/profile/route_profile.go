@@ -2,6 +2,7 @@ package profile
 
 import (
 	"net/http"
+	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
@@ -9,7 +10,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel
+//go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel reqGetProfiles
 
 type (
 	reqProfileModel struct {
@@ -169,6 +170,30 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 	c.WriteFile(http.StatusOK, contentType, image)
 }
 
+type (
+	reqGetProfiles struct {
+		Userids string `valid:"userids,has" json:"-"`
+	}
+)
+
+func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetProfiles{
+		Userids: c.Query("ids"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetProfilesBulk(strings.Split(req.Userids, ","))
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
@@ -194,8 +219,9 @@ func (m *router) mountProfileRoutes(r governor.Router) {
 	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite))
 	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite))
 	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite))
-	r.Delete("/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite))
+	r.Delete("/id/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite))
 	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead))
-	r.Get("/{id}", m.getProfile)
-	r.Get("/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getProfileImageCC))
+	r.Get("/id/{id}", m.getProfile)
+	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getProfileImageCC))
+	r.Get("/ids", m.getProfilesBulk)
 }
