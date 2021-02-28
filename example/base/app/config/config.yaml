@@ -81,6 +81,9 @@ gate:
   realm: governor
   compassheader: governor-userid-compass
 oauth:
+  codetime: 1m
+  accesstime: 5m
+  refreshtime: 168h
   keycache: 24h
   issuer: http://governor.dev.localhost:8080
   epauthorize: http://localhost:3000/oauth/auth

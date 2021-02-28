@@ -22,7 +22,10 @@ const (
 )
 
 const (
+	time1m  int64 = int64(time.Minute / time.Second)
+	time5m  int64 = time1m * 5
 	time24h int64 = int64(24 * time.Hour / time.Second)
+	time7d  int64 = time24h * 7
 )
 
 type (
@@ -45,6 +48,9 @@ type (
 		logoImgDir   objstore.Dir
 		gate         gate.Gate
 		logger       governor.Logger
+		codeTime     int64
+		accessTime   int64
+		refreshTime  int64
 		keyCacheTime int64
 		issuer       string
 		epauth       string
@@ -95,6 +101,9 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
 		gate:         g,
+		codeTime:     time1m,
+		accessTime:   time5m,
+		refreshTime:  time7d,
 		keyCacheTime: time24h,
 	}
 }
@@ -102,6 +111,9 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOAuth(inj, s)
 
+	r.SetDefault("codetime", "1m")
+	r.SetDefault("accesstime", "5m")
+	r.SetDefault("refreshtime", "168h")
 	r.SetDefault("keycache", "24h")
 	r.SetDefault("ephost", "http://localhost:8080")
 }
@@ -118,6 +130,24 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
+		return governor.NewError("Failed to parse code time", http.StatusBadRequest, err)
+	} else {
+		s.codeTime = int64(t / time.Second)
+	}
+
+	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
+		return governor.NewError("Failed to parse access time", http.StatusBadRequest, err)
+	} else {
+		s.accessTime = int64(t / time.Second)
+	}
+
+	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
+		return governor.NewError("Failed to parse refresh time", http.StatusBadRequest, err)
+	} else {
+		s.refreshTime = int64(t / time.Second)
+	}
+
 	if t, err := time.ParseDuration(r.GetStr("keycache")); err != nil {
 		return governor.NewError("Failed to parse key cache time", http.StatusBadRequest, err)
 	} else {
@@ -132,6 +162,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.epjwks = base + jwksRoute
 
 	l.Info("loaded config", map[string]string{
+		"codetime (s)":           strconv.FormatInt(s.codeTime, 10),
+		"accesstime (s)":         strconv.FormatInt(s.accessTime, 10),
+		"refreshtime (s)":        strconv.FormatInt(s.refreshTime, 10),
 		"keycache (s)":           strconv.FormatInt(s.keyCacheTime, 10),
 		"issuer":                 s.issuer,
 		"authorization_endpoint": s.epauth,

@@ -76,10 +76,10 @@ type (
 	reqOAuthTokenCode struct {
 		ClientID     string `valid:"oidClientID,has" json:"-"`
 		ClientSecret string `valid:"oidClientSecret,has" json:"-"`
+		RedirectURI  string `valid:"oidRedirect,has" json:"-"`
 		Userid       string `valid:"oidUserid,has" json:"-"`
 		Code         string `valid:"oidCode,has" json:"-"`
 		CodeVerifier string `valid:"oidCodeVerifier,opt" json:"-"`
-		RedirectURI  string `valid:"oidRedirect,has" json:"-"`
 	}
 
 	resAuthTokenErr struct {
@@ -110,8 +110,8 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		req := reqOAuthTokenCode{
 			ClientID:     c.FormValue("client_id"),
 			ClientSecret: c.FormValue("client_secret"),
-			CodeVerifier: c.FormValue("code_verifier"),
 			RedirectURI:  c.FormValue("redirect_uri"),
+			CodeVerifier: c.FormValue("code_verifier"),
 		}
 		if user, pass, ok := r.BasicAuth(); ok {
 			if req.ClientID != "" || req.ClientSecret != "" {
@@ -138,7 +138,7 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 			m.writeOAuthTokenError(c, err)
 			return
 		}
-		res, err := m.s.AuthTokenCode(req.ClientID, req.ClientSecret, req.Userid, req.Code, req.CodeVerifier, req.RedirectURI)
+		res, err := m.s.AuthTokenCode(req.ClientID, req.ClientSecret, req.RedirectURI, req.Userid, req.Code, req.CodeVerifier)
 		if err != nil {
 			m.writeOAuthTokenError(c, err)
 			return

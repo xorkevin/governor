@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/square/go-jose.v2"
 	"xorkevin.dev/governor"
@@ -179,8 +180,10 @@ type (
 	resAuthToken struct {
 		AccessToken  string `json:"access_token"`
 		TokenType    string `json:"token_type"`
-		ExpiresIn    string `json:"expires_in"`
+		ExpiresIn    int64  `json:"expires_in"`
 		RefreshToken string `json:"refresh_token"`
+		Scope        string `json:"scope"`
+		IDToken      string `json:"id_token"`
 	}
 )
 
@@ -201,7 +204,7 @@ func (s *service) checkClientKey(clientid, key, redirect string) error {
 	return nil
 }
 
-func (s *service) AuthTokenCode(clientid, secret, userid, code, verifier, redirect string) (*resAuthToken, error) {
+func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifier string) (*resAuthToken, error) {
 	if err := s.checkClientKey(clientid, secret, redirect); err != nil {
 		return nil, err
 	}
@@ -232,8 +235,23 @@ func (s *service) AuthTokenCode(clientid, secret, userid, code, verifier, redire
 	default:
 		return nil, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid code challenge method", http.StatusBadRequest, nil)
 	}
+	if now := time.Now().Round(0).Unix(); now > m.Time+s.codeTime {
+		return nil, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Code expired", http.StatusBadRequest, nil)
+	}
+
+	m.CodeHash = ""
+	m.Time = 0
+	if err := s.connections.Update(m); err != nil {
+		return nil, err
+	}
+
 	return &resAuthToken{
-		TokenType: oidTokenTypeBearer,
+		AccessToken:  "",
+		TokenType:    oidTokenTypeBearer,
+		ExpiresIn:    s.accessTime,
+		RefreshToken: "",
+		Scope:        m.Scope,
+		IDToken:      "",
 	}, nil
 }
 
