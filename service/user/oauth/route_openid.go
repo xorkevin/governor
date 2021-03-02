@@ -45,6 +45,11 @@ type (
 
 func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
+	claims := gate.GetCtxClaims(c)
+	if claims == nil {
+		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "Unauthorized", http.StatusBadRequest, nil))
+		return
+	}
 	req := reqOAuthAuthorize{}
 	if err := c.Bind(&req); err != nil {
 		c.WriteError(err)
@@ -64,7 +69,7 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.AuthCode(req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod)
+	res, err := m.s.AuthCode(req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod, claims.AuthTime)
 	if err != nil {
 		c.WriteError(err)
 		return

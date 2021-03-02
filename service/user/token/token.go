@@ -27,6 +27,12 @@ const (
 	KindAccess = "access"
 	// KindRefresh is a refresh token kind
 	KindRefresh = "refresh"
+	// KindOAuthAccess is an oauth access token kind
+	KindOAuthAccess = "oauth:access"
+	// KindOAuthRefresh is an oauth refresh token kind
+	KindOAuthRefresh = "oauth:refresh"
+	// KindOAuthID is an openid id token kind
+	KindOAuthID = "oauth:id"
 )
 
 const (
@@ -37,15 +43,16 @@ type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.Claims
-		Kind  string `json:"kind"`
-		Scope string `json:"scope,omitempty"`
-		Key   string `json:"key,omitempty"`
+		Kind     string `json:"kind"`
+		AuthTime int64  `json:"auth_time,omitempty"`
+		Scope    string `json:"scope,omitempty"`
+		Key      string `json:"key,omitempty"`
 	}
 
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		GetJWKS() *jose.JSONWebKeySet
-		Generate(kind string, userid string, duration int64, scope, id, key string) (string, *Claims, error)
+		Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
 		GenerateExt(kind string, userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
 		Validate(kind string, tokenString string, scope string) (bool, *Claims)
 		GetClaims(kind string, tokenString string, scope string) (bool, *Claims)
@@ -209,7 +216,7 @@ func (s *service) GetJWKS() *jose.JSONWebKeySet {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(kind string, userid string, duration int64, scope, id, key string) (string, *Claims, error) {
+func (s *service) Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
 	now := time.Now().Round(0)
 	claims := Claims{
 		Claims: jwt.Claims{
@@ -221,9 +228,10 @@ func (s *service) Generate(kind string, userid string, duration int64, scope, id
 			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
 			ID:        id,
 		},
-		Kind:  kind,
-		Scope: scope,
-		Key:   key,
+		Kind:     kind,
+		AuthTime: authTime,
+		Scope:    scope,
+		Key:      key,
 	}
 	token, err := jwt.Signed(s.signer).Claims(claims).CompactSerialize()
 	if err != nil {

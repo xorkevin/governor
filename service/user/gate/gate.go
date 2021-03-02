@@ -15,6 +15,7 @@ import (
 
 type (
 	ctxKeyUserid struct{}
+	ctxKeyClaims struct{}
 )
 
 // GetCtxUserid returns a userid from the context
@@ -28,6 +29,19 @@ func GetCtxUserid(c governor.Context) string {
 
 func setCtxUserid(c governor.Context, userid string) {
 	c.Set(ctxKeyUserid{}, userid)
+}
+
+// GetCtxClaims returns token claims from the context
+func GetCtxClaims(c governor.Context) *token.Claims {
+	v := c.Get(ctxKeyClaims{})
+	if v == nil {
+		return nil
+	}
+	return v.(*token.Claims)
+}
+
+func setCtxClaims(c governor.Context, claims *token.Claims) {
+	c.Set(ctxKeyClaims{}, claims)
 }
 
 type (
@@ -270,6 +284,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					return
 				}
 				setCtxUserid(c, claims.Subject)
+				setCtxClaims(c, claims)
 			}
 			next.ServeHTTP(c.R())
 		})

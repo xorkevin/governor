@@ -15,7 +15,7 @@ const (
 )
 
 func connectionModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthconnections (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, nonce VARCHAR(255), challenge VARCHAR(128), challenge_method VARCHAR(31), codehash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthconnections (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, nonce VARCHAR(255), challenge VARCHAR(128), challenge_method VARCHAR(31), codehash VARCHAR(255) NOT NULL, auth_time BIGINT NOT NULL, code_time BIGINT NOT NULL, access_time BIGINT NOT NULL, creation_time BIGINT NOT NULL, keyhash VARCHAR(255) NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -27,7 +27,7 @@ func connectionModelSetup(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_time_index ON oauthconnections (time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_access_time_index ON oauthconnections (access_time);")
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func connectionModelSetup(db *sql.DB) error {
 }
 
 func connectionModelInsert(db *sql.DB, m *Model) (int, error) {
-	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, time, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.Time, m.CreationTime)
+	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.AuthTime, m.CodeTime, m.AccessTime, m.CreationTime, m.KeyHash)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -55,13 +55,13 @@ func connectionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) 
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*9)
+	args := make([]interface{}, 0, len(models)*12)
 	for c, m := range models {
-		n := c * 9
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9))
-		args = append(args, m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.Time, m.CreationTime)
+		n := c * 12
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12))
+		args = append(args, m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.AuthTime, m.CodeTime, m.AccessTime, m.CreationTime, m.KeyHash)
 	}
-	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, time, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -82,7 +82,7 @@ func connectionModelDelEqUserid(db *sql.DB, userid string) error {
 
 func connectionModelGetModelEqUseridEqClientID(db *sql.DB, userid string, clientid string) (*Model, int, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, clientid, scope, nonce, challenge, challenge_method, codehash, time, creation_time FROM oauthconnections WHERE userid = $1 AND clientid = $2;", userid, clientid).Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.Time, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash FROM oauthconnections WHERE userid = $1 AND clientid = $2;", userid, clientid).Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.AuthTime, &m.CodeTime, &m.AccessTime, &m.CreationTime, &m.KeyHash); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -100,7 +100,7 @@ func connectionModelGetModelEqUseridEqClientID(db *sql.DB, userid string, client
 }
 
 func connectionModelUpdModelEqUseridEqClientID(db *sql.DB, m *Model, userid string, clientid string) (int, error) {
-	_, err := db.Exec("UPDATE oauthconnections SET (userid, clientid, scope, nonce, challenge, challenge_method, codehash, time, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE userid = $10 AND clientid = $11;", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.Time, m.CreationTime, userid, clientid)
+	_, err := db.Exec("UPDATE oauthconnections SET (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13 AND clientid = $14;", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.AuthTime, m.CodeTime, m.AccessTime, m.CreationTime, m.KeyHash, userid, clientid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -132,13 +132,13 @@ func connectionModelDelEqUseridHasClientID(db *sql.DB, userid string, clientid [
 	return err
 }
 
-func connectionModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+func connectionModelGetModelEqUseridOrdAccessTime(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, clientid, scope, nonce, challenge, challenge_method, codehash, time, creation_time FROM oauthconnections WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash FROM oauthconnections WHERE userid = $3 ORDER BY access_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func connectionModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc 
 	}()
 	for rows.Next() {
 		m := Model{}
-		if err := rows.Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.Time, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.AuthTime, &m.CodeTime, &m.AccessTime, &m.CreationTime, &m.KeyHash); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

@@ -19,9 +19,11 @@ const (
 type (
 	// Repo is the OAuth account connection repository
 	Repo interface {
-		New(userid, clientid, scope, nonce, challenge, method string) (*Model, string, error)
+		New(userid, clientid, scope, nonce, challenge, method string, authTime int64) (*Model, string, error)
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
+		ValidateKey(key string, m *Model) (bool, error)
+		RehashKey(m *Model) (string, error)
 		GetByID(userid, clientid string) (*Model, error)
 		GetUserConnections(userid string, limit, offset int) ([]Model, error)
 		Insert(m *Model) error
@@ -46,8 +48,11 @@ type (
 		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`
 		ChallengeMethod string `model:"challenge_method,VARCHAR(31)" query:"challenge_method"`
 		CodeHash        string `model:"codehash,VARCHAR(255) NOT NULL" query:"codehash"`
-		Time            int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
+		AuthTime        int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
+		CodeTime        int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
+		AccessTime      int64  `model:"access_time,BIGINT NOT NULL;index" query:"access_time,getgroupeq,userid"`
 		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		KeyHash         string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
 	}
 
 	ctxKeyRepo struct{}
@@ -91,7 +96,7 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string) (*Model, string, error) {
+func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string, authTime int64) (*Model, string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", governor.NewError("Failed to create OAuth authorization code", http.StatusInternalServerError, err)
@@ -111,7 +116,9 @@ func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod st
 		Challenge:       challenge,
 		ChallengeMethod: challengeMethod,
 		CodeHash:        codehash,
-		Time:            now,
+		AuthTime:        authTime,
+		CodeTime:        now,
+		AccessTime:      now,
 		CreationTime:    now,
 	}, codestr, nil
 }
@@ -136,8 +143,33 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 	}
 	now := time.Now().Round(0).Unix()
 	m.CodeHash = codehash
-	m.Time = now
+	m.CodeTime = now
+	m.AccessTime = now
 	return codestr, nil
+}
+
+func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
+	ok, err := r.verifier.Verify(key, m.KeyHash)
+	if err != nil {
+		return false, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
+	}
+	return ok, nil
+}
+
+func (r *repo) RehashKey(m *Model) (string, error) {
+	key, err := uid.New(keySize)
+	if err != nil {
+		return "", governor.NewError("Failed to create OAuth session key", http.StatusInternalServerError, err)
+	}
+	keystr := key.Base64()
+	keyhash, err := r.hasher.Hash(keystr)
+	if err != nil {
+		return "", governor.NewError("Failed to hash OAuth session key", http.StatusInternalServerError, err)
+	}
+	now := time.Now().Round(0).Unix()
+	m.KeyHash = keyhash
+	m.AccessTime = now
+	return keystr, nil
 }
 
 func (r *repo) GetByID(userid, clientid string) (*Model, error) {
@@ -160,7 +192,7 @@ func (r *repo) GetUserConnections(userid string, limit, offset int) ([]Model, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := connectionModelGetModelEqUseridOrdTime(db, userid, false, limit, offset)
+	m, err := connectionModelGetModelEqUseridOrdAccessTime(db, userid, false, limit, offset)
 	if err != nil {
 		return nil, governor.NewError("Failed to get connected OAuth apps", http.StatusInternalServerError, err)
 	}

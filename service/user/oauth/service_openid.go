@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/token"
 )
 
 const (
@@ -131,7 +132,7 @@ type (
 	}
 )
 
-func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method string) (*resAuthCode, error) {
+func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method string, authTime int64) (*resAuthCode, error) {
 	// sort and filter unknown scopes
 	scope = dedupSSV(scope, map[string]struct{}{
 		oidScopeOpenid:  {},
@@ -145,7 +146,7 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 		if governor.ErrorStatus(err) != http.StatusNotFound {
 			return nil, governor.NewErrorUser("", 0, err)
 		}
-		m, code, err := s.connections.New(userid, clientid, scope, nonce, challenge, method)
+		m, code, err := s.connections.New(userid, clientid, scope, nonce, challenge, method, authTime)
 		if err != nil {
 			return nil, err
 		}
@@ -164,6 +165,7 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 	m.Nonce = nonce
 	m.Challenge = challenge
 	m.ChallengeMethod = method
+	m.AuthTime = authTime
 	code, err := s.connections.RehashCode(m)
 	if err != nil {
 		return nil, err
@@ -235,23 +237,41 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	default:
 		return nil, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid code challenge method", http.StatusBadRequest, nil)
 	}
-	if now := time.Now().Round(0).Unix(); now > m.Time+s.codeTime {
+	if now := time.Now().Round(0).Unix(); now > m.CodeTime+s.codeTime {
 		return nil, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Code expired", http.StatusBadRequest, nil)
 	}
 
 	m.CodeHash = ""
-	m.Time = 0
-	if err := s.connections.Update(m); err != nil {
+	m.CodeTime = 0
+	key, err := s.connections.RehashKey(m)
+	if err != nil {
 		return nil, err
+	}
+	if err := s.connections.Update(m); err != nil {
+		return nil, governor.NewCodeError(oidErrorServer, "Failed to update oauth session", http.StatusInternalServerError, err)
+	}
+
+	sessionID := "oauth:" + userid + "|" + clientid
+	accessToken, _, err := s.tokenizer.Generate(token.KindOAuthAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
+	if err != nil {
+		return nil, governor.NewCodeError(oidErrorServer, "Failed to generate access token", http.StatusInternalServerError, err)
+	}
+	refreshToken, _, err := s.tokenizer.Generate(token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
+	if err != nil {
+		return nil, governor.NewCodeError(oidErrorServer, "Failed to generate refresh token", http.StatusInternalServerError, err)
+	}
+	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, userid, []string{clientid}, s.accessTime, sessionID, nil)
+	if err != nil {
+		return nil, governor.NewCodeError(oidErrorServer, "Failed to generate id token", http.StatusInternalServerError, err)
 	}
 
 	return &resAuthToken{
-		AccessToken:  "",
+		AccessToken:  accessToken,
 		TokenType:    oidTokenTypeBearer,
 		ExpiresIn:    s.accessTime,
-		RefreshToken: "",
+		RefreshToken: refreshToken,
 		Scope:        m.Scope,
-		IDToken:      "",
+		IDToken:      idToken,
 	}, nil
 }
 
@@ -259,7 +279,8 @@ type (
 	resConnection struct {
 		ClientID     string `json:"client_id"`
 		Scope        string `json:"scope"`
-		Time         int64  `json:"time"`
+		AuthTime     int64  `json:"auth_time"`
+		AccessTime   int64  `json:"access_time"`
 		CreationTime int64  `json:"creation_time"`
 	}
 
@@ -278,7 +299,8 @@ func (s *service) GetConnections(userid string, amount, offset int) (*resConnect
 		res = append(res, resConnection{
 			ClientID:     i.ClientID,
 			Scope:        i.Scope,
-			Time:         i.Time,
+			AuthTime:     i.AuthTime,
+			AccessTime:   i.AccessTime,
 			CreationTime: i.CreationTime,
 		})
 	}
@@ -298,7 +320,8 @@ func (s *service) GetConnection(userid string, clientid string) (*resConnection,
 	return &resConnection{
 		ClientID:     m.ClientID,
 		Scope:        m.Scope,
-		Time:         m.Time,
+		AuthTime:     m.AuthTime,
+		AccessTime:   m.AccessTime,
 		CreationTime: m.CreationTime,
 	}, nil
 }
