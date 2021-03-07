@@ -7,7 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"net/http"
+	"errors"
 	"strings"
 	"time"
 
@@ -112,6 +112,21 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("audience", "governor")
 }
 
+type (
+	// ErrSigner is returned when failing to create a signer
+	ErrSigner struct{}
+	// ErrGenerate is returned when failing to generate a token
+	ErrGenerate struct{}
+)
+
+func (e ErrSigner) Error() string {
+	return "Error creating signer"
+}
+
+func (e ErrGenerate) Error() string {
+	return "Error generating token"
+}
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -120,48 +135,48 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	tokensecret, err := r.GetSecret("tokensecret")
 	if err != nil {
-		return governor.NewError("Failed to read token secret", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to read token secret")
 	}
 	secret, ok := tokensecret["secret"].(string)
 	if !ok {
-		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if secret == "" {
-		return governor.NewError("Token secret is not set", http.StatusBadRequest, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Token secret is not set")
 	}
 	s.secret = []byte(secret)
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
-		return governor.NewError("Failed to create new jwt signer", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt signer")
 	}
 	s.signer = sig
 
 	rsakeysecret, err := r.GetSecret("rsakey")
 	if err != nil {
-		return governor.NewError("Failed to read rsakey", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to read rsakey")
 	}
 	rsakeyPem, ok := rsakeysecret["secret"].(string)
 	if !ok {
-		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid rsakey secret")
 	}
 	pemBlock, _ := pem.Decode([]byte(rsakeyPem))
 	if pemBlock == nil || pemBlock.Type != pemBlockType {
-		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid rsakey pem")
 	}
 	rawKey, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
 	if err != nil {
-		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid rsakey pkcs8")
 	}
 	key, ok := rawKey.(*rsa.PrivateKey)
 	if !ok {
-		return governor.NewError("Invalid rsakey", http.StatusInternalServerError, nil)
+		return errors.New("Failed to create rsa key")
 	}
 	key.Precompute()
 	s.privateKey = key
 	s.publicKey = key.Public()
 	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.privateKey}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
-		return governor.NewError("Failed to create new jwt RS256 signer", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt RS256 signer")
 	}
 	s.keySigner = keySig
 
@@ -172,14 +187,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	kid, err := jwk.Thumbprint(crypto.BLAKE2b_512)
 	if err != nil {
-		return governor.NewError("Failed to calculate jwk thumbprint", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrSigner{}, "Failed to calculate jwk thumbprint")
 	}
 	jwk.KeyID = base64.RawURLEncoding.EncodeToString(kid)
 	s.jwk = jwk
 
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
-		return governor.NewError("Token issuer is not set", http.StatusBadRequest, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Token issuer is not set")
 	}
 	s.issuer = issuer
 
@@ -235,7 +250,7 @@ func (s *service) Generate(kind string, userid string, duration int64, id string
 	}
 	token, err := jwt.Signed(s.signer).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", nil, governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
+		return "", nil, governor.ErrWithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
 	}
 	return token, &claims, nil
 }
@@ -257,7 +272,7 @@ func (s *service) GenerateExt(kind string, userid string, audience []string, dur
 	}
 	token, err := jwt.Signed(s.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", governor.NewError("Failed to generate a new jwt token", http.StatusInternalServerError, err)
+		return "", governor.ErrWithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
 	}
 	return token, nil
 }

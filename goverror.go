@@ -126,6 +126,16 @@ func ErrOptUser(e *Error) {
 	e.Kind = ErrorUser{}
 }
 
+// ErrWithMsg returns a wrapped error with a message
+func ErrWithMsg(err error, msg string) error {
+	return NewError(ErrOptMsg(msg), ErrOptInner(err))
+}
+
+// ErrWithKind returns a wrapped error with a kind and message
+func ErrWithKind(err error, kind error, msg string) error {
+	return NewError(ErrOptKind(kind), ErrOptMsg(msg), ErrOptInner(err))
+}
+
 type (
 	// ErrorRes is an http error response
 	ErrorRes struct {

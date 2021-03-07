@@ -1,7 +1,6 @@
 package rank
 
 import (
-	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -160,6 +159,15 @@ func FromSlice(rankSlice []string) Rank {
 	return r
 }
 
+type (
+	// ErrInvalidRank is returned when a rank is invalid
+	ErrInvalidRank struct{}
+)
+
+func (e ErrInvalidRank) Error() string {
+	return "Invalid rank"
+}
+
 // FromString creates a new Rank from a string
 func FromString(rankStr string) (Rank, error) {
 	if len(rankStr) == 0 {
@@ -168,7 +176,7 @@ func FromString(rankStr string) (Rank, error) {
 	rankSlice := strings.Split(rankStr, ",")
 	for _, i := range rankSlice {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
+			return Rank{}, governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 		}
 	}
 	return FromSlice(rankSlice), nil
@@ -178,12 +186,12 @@ func FromString(rankStr string) (Rank, error) {
 func SplitTag(key string) (string, string, error) {
 	k := strings.SplitN(key, rankSeparator, 2)
 	if len(k) != 2 {
-		return "", "", governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
+		return "", "", governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
 	switch k[0] {
 	case TagModPrefix, TagUserPrefix, TagBanPrefix:
 	default:
-		return "", "", governor.NewError("Illegal rank string", http.StatusBadRequest, nil)
+		return "", "", governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
 	return k[0], k[1], nil
 }
