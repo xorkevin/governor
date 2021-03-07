@@ -1,7 +1,7 @@
 package model
 
 import (
-	"net/http"
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -50,19 +50,19 @@ func (r *repo) New(version string, vhash string) *Model {
 
 // GetModel returns the state model
 func (r *repo) GetModel() (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := stateModelGetModelEqconfig(db, configID)
+	m, code, err := stateModelGetModelEqconfig(d, configID)
 	if err != nil {
 		switch code {
 		case 2:
-			return nil, governor.NewError("No state found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No state found with that id")
 		case 4:
-			return nil, governor.NewError("No state found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No state found with that id")
 		default:
-			return nil, governor.NewError("Failed to get state", http.StatusInternalServerError, err)
+			return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get state")
 		}
 	}
 	return m, nil
@@ -71,12 +71,15 @@ func (r *repo) GetModel() (*Model, error) {
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
 	m.config = configID
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := stateModelInsert(db, m); err != nil {
-		return governor.NewError("Failed to insert state", http.StatusInternalServerError, err)
+	if code, err := stateModelInsert(d, m); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Failed to insert state")
+		}
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to insert state")
 	}
 	return nil
 }
@@ -84,12 +87,12 @@ func (r *repo) Insert(m *Model) error {
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
 	m.config = configID
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := stateModelUpdModelEqconfig(db, m, configID); err != nil {
-		return governor.NewError("Failed to update state", http.StatusInternalServerError, err)
+	if _, err := stateModelUpdModelEqconfig(d, m, configID); err != nil {
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to update state")
 	}
 	return nil
 }
@@ -98,7 +101,7 @@ func (r *repo) Update(m *Model) error {
 func (r *repo) Get() (*state.Model, error) {
 	m, err := r.GetModel()
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
+		if errors.Is(err, db.ErrNotFound{}) {
 			return &state.Model{
 				Setup: false,
 			}, nil
@@ -126,12 +129,12 @@ func (r *repo) Set(m *state.Model) error {
 // Setup creates a new State table if it does not exist and updates the server
 // state entry
 func (r *repo) Setup(req state.ReqSetup) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := stateModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup state model", http.StatusInternalServerError, err)
+	if err := stateModelSetup(d); err != nil {
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup state model")
 	}
 	k := r.New(req.Version, req.VHash)
 	k.Setup = true
