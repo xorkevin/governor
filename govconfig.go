@@ -157,9 +157,24 @@ func (c *Config) setConfigFile(file string) {
 	c.config.SetConfigFile(file)
 }
 
+type (
+	// ErrInvalidConfig is returned when the config is invalid
+	ErrInvalidConfig struct{}
+	// ErrVault is returned when failing to contact vault
+	ErrVault struct{}
+)
+
+func (e ErrInvalidConfig) Error() string {
+	return "Invalid config"
+}
+
+func (e ErrVault) Error() string {
+	return "Failed vault request"
+}
+
 func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
-		return NewError("Failed to read in config", http.StatusInternalServerError, err)
+		return NewError(ErrOptMsg("Failed to read in config"), ErrOptInner(err))
 	}
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = envToLevel(c.config.GetString("mode"))
@@ -194,7 +209,7 @@ func (c *Config) initvault() error {
 	}
 	vault, err := vaultapi.NewClient(vaultconfig)
 	if err != nil {
-		return NewError("Failed to create vault client", http.StatusInternalServerError, err)
+		return NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("Failed to create vault client"), ErrOptInner(err))
 	}
 	c.vault = vault
 	if c.config.GetBool("vault.k8s.auth") {
@@ -204,17 +219,17 @@ func (c *Config) initvault() error {
 		loginpath := c.config.GetString("vault.k8s.loginpath")
 		jwtpath := c.config.GetString("vault.k8s.jwtpath")
 		if role == "" {
-			return NewError("No vault role set", http.StatusBadRequest, nil)
+			return NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("No vault role set"))
 		}
 		if loginpath == "" {
-			return NewError("No vault k8s login path set", http.StatusBadRequest, nil)
+			return NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("No vault k8s login path set"))
 		}
 		if jwtpath == "" {
-			return NewError("No path for vault k8s service account jwt auth", http.StatusBadRequest, nil)
+			return NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("No path for vault k8s service account jwt auth"))
 		}
 		jwtbytes, err := os.ReadFile(jwtpath)
 		if err != nil {
-			return NewError("Failed to read vault k8s service account jwt", http.StatusInternalServerError, err)
+			return NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("Failed to read vault k8s service account jwt"), ErrOptInner(err))
 		}
 		jwt := string(jwtbytes)
 		c.vaultRole = role
@@ -262,7 +277,7 @@ func (c *Config) authVault() error {
 		"role": c.vaultRole,
 	})
 	if err != nil {
-		return NewError("Failed to auth with vault k8s", http.StatusInternalServerError, err)
+		return NewError(ErrOptKind(ErrVault{}), ErrOptMsg("Failed to auth with vault k8s"), ErrOptInner(err))
 	}
 	c.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
 	c.vault.SetToken(authsecret.Auth.ClientToken)
@@ -380,7 +395,7 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 
 	kvpath := r.GetStr(key)
 	if kvpath == "" {
-		return nil, NewError("Invalid secret key "+key, http.StatusInternalServerError, nil)
+		return nil, NewError(ErrOptKind(ErrInvalidConfig{}), ErrOptMsg("Empty secret key "+key))
 	}
 
 	if err := r.c.ensureValidAuth(); err != nil {
@@ -390,7 +405,7 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 	vault := r.c.vault.Logical()
 	s, err := vault.Read(kvpath)
 	if err != nil {
-		return nil, NewError("Failed to read vault secret", http.StatusInternalServerError, err)
+		return nil, NewError(ErrOptKind(ErrVault{}), ErrOptMsg("Failed to read vault secret"), ErrOptInner(err))
 	}
 
 	data := s.Data

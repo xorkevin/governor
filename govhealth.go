@@ -63,7 +63,11 @@ func (s *Server) initHealth(m Router) {
 
 		m.Get("/error", func(w http.ResponseWriter, r *http.Request) {
 			c := NewContext(w, r, s.logger)
-			c.WriteError(NewError("Test error", http.StatusBadRequest, nil))
+			c.WriteError(NewError(ErrOptRes(ErrorRes{
+				Status:  http.StatusTeapot,
+				Code:    "test_error",
+				Message: "Test error",
+			})))
 		})
 
 		m.Post("/testpost", func(w http.ResponseWriter, r *http.Request) {

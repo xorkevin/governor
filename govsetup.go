@@ -22,13 +22,22 @@ var (
 
 func (r *ReqSetup) valid() error {
 	if len(r.Username) < 3 {
-		return NewErrorUser("Username must be longer than 2 chars", http.StatusBadRequest, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username must be longer than 2 chars",
+		}))
 	}
 	if len(r.Password) < 10 {
-		return NewErrorUser("Password must be longer than 9 chars", http.StatusBadRequest, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Password must be longer than 9 chars",
+		}))
 	}
 	if !emailRegex.MatchString(r.Email) {
-		return NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is invalid",
+		}))
 	}
 	return nil
 }

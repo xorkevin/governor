@@ -17,7 +17,7 @@ require (
 	github.com/rs/zerolog v1.19.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/viper v1.7.0
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
 	golang.org/x/image v0.0.0-20200609002522-3f4726a040e8
 	google.golang.org/protobuf v1.24.0 // indirect

@@ -65,7 +65,7 @@ func (c *Client) Init() error {
 		c.config.SetConfigFile(file)
 	}
 	if err := c.config.ReadInConfig(); err != nil {
-		return NewError("Failed to read in config", http.StatusInternalServerError, err)
+		return NewError(ErrOptMsg("Failed to read in config"), ErrOptInner(err))
 	}
 	c.addr = c.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.GetString("timeout")); err == nil {
@@ -74,13 +74,34 @@ func (c *Client) Init() error {
 	return nil
 }
 
+type (
+	// ErrInvalidClientReq is returned when the client request could not be made
+	ErrInvalidClientReq struct{}
+	// ErrInvalidServerRes is returned on an invalid server response
+	ErrInvalidServerRes struct{}
+	// ErrServerRes is a returned server error
+	ErrServerRes struct{}
+)
+
+func (e ErrInvalidClientReq) Error() string {
+	return "Invalid client request"
+}
+
+func (e ErrInvalidServerRes) Error() string {
+	return "Invalid server response"
+}
+
+func (e ErrServerRes) Error() string {
+	return "Error server response"
+}
+
 // Request sends a request to the server
 func (c *Client) Request(method, path string, data interface{}, response interface{}) (int, error) {
 	var body io.Reader
 	if data != nil {
 		b := &bytes.Buffer{}
 		if err := json.NewEncoder(b).Encode(data); err != nil {
-			return 0, NewError("Failed to encode body to json", http.StatusBadRequest, err)
+			return 0, NewError(ErrOptKind(ErrInvalidClientReq{}), ErrOptMsg("Failed to encode body to json"), ErrOptInner(err))
 		}
 		body = b
 	}
@@ -89,27 +110,27 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 		req.Header.Add("Content-Type", "application/json")
 	}
 	if err != nil {
-		return 0, NewError("Malformed request", http.StatusBadRequest, err)
+		return 0, NewError(ErrOptKind(ErrInvalidClientReq{}), ErrOptMsg("Malformed request"), ErrOptInner(err))
 	}
 	res, err := c.httpc.Do(req)
 	if err != nil {
-		return 0, NewError("Failed request", http.StatusInternalServerError, err)
+		return 0, NewError(ErrOptKind(ErrInvalidClientReq{}), ErrOptMsg("Failed request"), ErrOptInner(err))
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
-		errres := &responseError{}
+		errres := &ErrorRes{}
 		if err := json.NewDecoder(res.Body).Decode(errres); err != nil {
-			return 0, NewError("Failed decoding response", http.StatusInternalServerError, err)
+			return 0, NewError(ErrOptKind(ErrInvalidServerRes{}), ErrOptMsg("Failed decoding response"), ErrOptInner(err))
 		}
-		return res.StatusCode, NewError(errres.Message, res.StatusCode, nil)
+		return res.StatusCode, NewError(ErrOptKind(ErrServerRes{}), ErrOptMsg(errres.Message))
 	} else if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-		return 0, NewError("Failed decoding response", http.StatusInternalServerError, err)
+		return 0, NewError(ErrOptKind(ErrInvalidServerRes{}), ErrOptMsg("Failed decoding response"), ErrOptInner(err))
 	}
 	return res.StatusCode, nil
 }
 
 func isStatusOK(status int) bool {
-	return status >= 200 && status < 300
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
 }
 
 // Setup sends a setup request to the server
@@ -118,7 +139,7 @@ func (c *Client) Setup(req ReqSetup) (*ResponseSetup, error) {
 	if status, err := c.Request("POST", "/setupz", req, res); err != nil {
 		return nil, err
 	} else if !isStatusOK(status) {
-		return nil, NewError("Non success response", status, nil)
+		return nil, NewError(ErrOptKind(ErrServerRes{}), ErrOptMsg("Non success response"))
 	}
 	return res, nil
 }

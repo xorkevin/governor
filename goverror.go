@@ -2,173 +2,168 @@ package governor
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"strings"
 )
 
 type (
-	goverror struct {
-		code    string
-		message string
-		status  int
-		err     error
-		noLog   bool
+	// Error is a governor error
+	Error struct {
+		Kind    error
+		Status  int
+		Code    string
+		Message string
+		Inner   error
 	}
+
+	// ErrOpt is a error options function
+	ErrorOpt = func(e *Error)
 )
 
-func newGovError(code, message string, status int, err error) *goverror {
-	if err == nil {
-		return &goverror{
-			code:    code,
-			message: message,
-			status:  status,
-			err:     nil,
-		}
+// NewError creates a new governor error
+func NewError(opts ...ErrorOpt) error {
+	e := &Error{}
+	for _, i := range opts {
+		i(e)
 	}
-	if code == "" || message == "" || status == 0 {
-		c := ""
-		m := ""
-		st := 0
-		goverr := &goverror{}
-		if errors.As(err, &goverr) {
-			c = goverr.code
-			m = goverr.message
-			st = goverr.status
-		} else {
-			m = err.Error()
-		}
-		if code == "" {
-			code = c
-		}
-		if message == "" {
-			message = m
-		}
-		if status == 0 {
-			status = st
-		}
-	}
-	return &goverror{
-		code:    code,
-		message: message,
-		status:  status,
-		err:     err,
+	return e
+}
+
+// ErrOptKind sets the error kind
+func ErrOptKind(kind error) ErrorOpt {
+	return func(e *Error) {
+		e.Kind = kind
 	}
 }
 
-// NewError creates a new governor Error
-func NewError(message string, status int, err error) error {
-	return newGovError("", message, status, err)
+// ErrOptInner sets the wrapped error
+func ErrOptInner(inner error) ErrorOpt {
+	return func(e *Error) {
+		e.Inner = inner
+	}
 }
 
-// NewCodeError creates a new governor Error with an error code
-func NewCodeError(code, message string, status int, err error) error {
-	return newGovError(code, message, status, err)
+// ErrOptMsg sets the error message
+func ErrOptMsg(msg string) ErrorOpt {
+	return func(e *Error) {
+		e.Message = msg
+	}
 }
 
-// NewErrorUser creates a new governor User Error
-func NewErrorUser(message string, status int, err error) error {
-	gerr := newGovError("", message, status, err)
-	gerr.noLog = true
-	return gerr
-}
-
-// NewCodeErrorUser creates a new governor User Error with an error code
-func NewCodeErrorUser(code, message string, status int, err error) error {
-	gerr := newGovError(code, message, status, err)
-	gerr.noLog = true
-	return gerr
+// ErrOptRes sets the error response
+func ErrOptRes(res ErrorRes) ErrorOpt {
+	return func(e *Error) {
+		e.Status = res.Status
+		e.Code = res.Code
+		e.Message = res.Message
+	}
 }
 
 // Error formats the messages of all wrapped errors
-func (e *goverror) Error() string {
-	if e.err == nil {
-		return e.message
+func (e Error) Error() string {
+	b := strings.Builder{}
+	if e.Kind != nil {
+		b.WriteString("[")
+		b.WriteString(e.Kind.Error())
+		b.WriteString("] ")
 	}
-	return fmt.Sprintf("%s: %s", e.message, e.err.Error())
+	if e.Code != "" {
+		b.WriteString(e.Code)
+		b.WriteString(" ")
+	}
+	b.WriteString(e.Message)
+	if e.Inner == nil {
+		return b.String()
+	}
+	b.WriteString(": ")
+	b.WriteString(e.Inner.Error())
+	return b.String()
 }
 
-func (e *goverror) Unwrap() error {
-	return e.err
+// Unwrap returns the wrapped error
+func (e *Error) Unwrap() error {
+	return e.Inner
 }
 
-func (e *goverror) Is(target error) bool {
-	t := &goverror{}
-	if ok := errors.As(target, &t); !ok {
+// Is returns if the error kind is equal
+func (e *Error) Is(target error) bool {
+	if e.Kind == nil {
 		return false
 	}
-	return t.code == e.code
+	return errors.Is(e.Kind, target)
 }
 
-func (e *goverror) As(target interface{}) bool {
-	err, ok := target.(*goverror)
-	if !ok {
+// As sets the top *Error or *ErrorRes
+func (e *Error) As(target interface{}) bool {
+	if err, ok := target.(*Error); ok {
+		*err = *e
+		return true
+	}
+	if e.Status == 0 {
 		return false
 	}
-	err.message = e.message
-	err.status = e.status
-	err.err = e.err
-	err.noLog = e.noLog
-	return true
-}
-
-// ErrorStatus reports the error status of the top most governor error in the chain
-func ErrorStatus(target error) int {
-	if goverr := (&goverror{}); errors.As(target, &goverr) {
-		return goverr.status
+	if err, ok := target.(*ErrorRes); ok {
+		err.Status = e.Status
+		err.Code = e.Code
+		err.Message = e.Message
+		return true
 	}
-	return 0
-}
-
-// ErrorCode reports the error code of the top most governor error in the chain
-func ErrorCode(target error) string {
-	if goverr := (&goverror{}); errors.As(target, &goverr) {
-		return goverr.code
-	}
-	return ""
-}
-
-// ErrorMsg reports the error status of the top most governor error in the chain
-func ErrorMsg(target error) string {
-	if goverr := (&goverror{}); errors.As(target, &goverr) {
-		return goverr.message
-	}
-	return ""
+	return false
 }
 
 type (
-	responseError struct {
+	// ErrorUser is a user error
+	ErrorUser struct{}
+)
+
+// Error implements error
+func (e ErrorUser) Error() string {
+	return "User error"
+}
+
+// ErrOptUser sets the error kind to a user error
+func ErrOptUser(e *Error) {
+	e.Kind = ErrorUser{}
+}
+
+type (
+	// ErrorRes is an http error response
+	ErrorRes struct {
+		Status  int    `json:"-"`
 		Code    string `json:"code,omitempty"`
 		Message string `json:"message"`
 	}
 )
 
-func (c *govcontext) WriteError(err error) {
-	if gerr := (&goverror{}); errors.As(err, &gerr) {
-		if c.l != nil && !gerr.noLog {
-			c.l.Error(gerr.message, map[string]string{
-				"endpoint": c.r.URL.EscapedPath(),
-				"error":    gerr.Error(),
-				"code":     gerr.code,
-			})
-		}
-		status := http.StatusInternalServerError
-		if s := gerr.status; s != 0 {
-			status = s
-		}
-		c.WriteJSON(status, responseError{
-			Code:    gerr.code,
-			Message: gerr.message,
-		})
-		return
-	}
+func (e ErrorRes) Error() string {
+	return e.Message
+}
 
-	if c.l != nil {
-		c.l.Error("non governor error", map[string]string{
+func (c *govcontext) WriteError(err error) {
+	gerr := &Error{}
+	isError := errors.As(err, gerr)
+
+	if c.l != nil && !errors.Is(err, ErrorUser{}) {
+		msg := "non governor error"
+		if isError {
+			msg = gerr.Message
+		}
+		c.l.Error(msg, map[string]string{
 			"endpoint": c.r.URL.EscapedPath(),
 			"error":    err.Error(),
 		})
 	}
-	c.WriteJSON(http.StatusInternalServerError, responseError{
-		Message: "Internal Server Error",
-	})
+
+	rerr := &ErrorRes{}
+	if !errors.As(err, rerr) {
+		rerr.Status = http.StatusInternalServerError
+		if isError {
+			rerr.Code = gerr.Code
+			rerr.Message = gerr.Message
+		} else {
+			rerr.Message = "Internal Server Error"
+		}
+	}
+
+	c.WriteJSON(rerr.Status, rerr)
 }

@@ -94,9 +94,8 @@ type (
 func (h zerologTimestampHook) Run(e *zerolog.Event, _ zerolog.Level, _ string) {
 	now := time.Now().Round(0)
 	nowStr := now.Format(time.RFC3339)
-	nowUnix := strconv.FormatInt(now.Unix(), 10)
 	e.Str("time", nowStr)
-	e.Str("unixtime", nowUnix)
+	e.Int64("unixtime", now.Unix())
 }
 
 func newLogger(c Config) Logger {

@@ -65,16 +65,25 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	})
 	if s.setupRun {
 		l.Warn("setup already run", nil)
-		return NewErrorUser("Setup already run", http.StatusForbidden, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusForbidden,
+			Message: "Setup already run",
+		}))
 	}
 	m, err := s.state.Get()
 	if err != nil {
-		return NewError("Failed to get state", http.StatusInternalServerError, err)
+		return NewError(ErrOptRes(ErrorRes{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to get state",
+		}), ErrOptInner(err))
 	}
 	if m.Setup {
 		s.setupRun = true
 		l.Warn("setup already run", nil)
-		return NewErrorUser("Setup already run", http.StatusForbidden, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusForbidden,
+			Message: "Setup already run",
+		}))
 	}
 	if err := rsetup.valid(); err != nil {
 		return err
@@ -100,7 +109,10 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		l.Error("setup state service failed", map[string]string{
 			"error": err.Error(),
 		})
-		return NewError("Failed to set state", http.StatusInternalServerError, err)
+		return NewError(ErrOptRes(ErrorRes{
+			Status:  http.StatusInternalServerError,
+			Message: "Failed to set state",
+		}), ErrOptInner(err))
 	}
 	s.setupRun = true
 	l.Info("setup all services complete", nil)

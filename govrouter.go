@@ -208,27 +208,47 @@ func (c *govcontext) SetCookie(cookie *http.Cookie) {
 }
 
 func (c *govcontext) Bind(i interface{}) error {
+	// ContentLength of -1 is unknown
 	if c.r.ContentLength == 0 {
-		return NewErrorUser("Empty request body", http.StatusBadRequest, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Empty request body",
+		}))
 	}
 	mediaType, _, err := mime.ParseMediaType(c.r.Header.Get("Content-Type"))
 	if err != nil {
-		return NewErrorUser("Invalid mime type", http.StatusBadRequest, err)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid mime type",
+		}))
 	}
 	switch mediaType {
 	case "application/json":
 		data, err := io.ReadAll(c.r.Body)
 		if err != nil {
+			// No exported error is returned as of go@v1.16
 			if err.Error() == "http: request body too large" {
-				return NewErrorUser("Request too large", http.StatusRequestEntityTooLarge, err)
+				return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+					Status:  http.StatusRequestEntityTooLarge,
+					Message: "Request too large",
+				}), ErrOptInner(err))
 			}
-			return NewErrorUser("Failed reading request", http.StatusBadRequest, err)
+			return NewError(ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Failed reading request",
+			}), ErrOptInner(err))
 		}
 		if err := json.Unmarshal(data, i); err != nil {
-			return NewErrorUser("Invalid JSON", http.StatusBadRequest, err)
+			return NewError(ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid JSON",
+			}), ErrOptInner(err))
 		}
 	default:
-		return NewErrorUser("Unsupported media type", http.StatusUnsupportedMediaType, nil)
+		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusUnsupportedMediaType,
+			Message: "Unsupported media type",
+		}), ErrOptInner(err))
 	}
 	return nil
 }
@@ -332,9 +352,13 @@ func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
 func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// ContentLength of -1 is unknown
 			if r.ContentLength > limit {
 				c := NewContext(w, r, s.logger)
-				c.WriteError(NewErrorUser("Request too large", http.StatusRequestEntityTooLarge, nil))
+				c.WriteError(NewError(ErrOptUser, ErrOptRes(ErrorRes{
+					Status:  http.StatusRequestEntityTooLarge,
+					Message: "Request too large",
+				})))
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
