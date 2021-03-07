@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +131,21 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("hbmaxfail", 5)
 }
 
+type (
+	// ErrConn is returned on a kvstore connection error
+	ErrConn struct{}
+	// ErrNotFound is returned when a key is not found
+	ErrNotFound struct{}
+)
+
+func (e ErrConn) Error() string {
+	return "KVStore connection error"
+}
+
+func (e ErrNotFound) Error() string {
+	return "KVStore not found"
+}
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -227,7 +241,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 	}
 	auth, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
 		return s.client, nil
@@ -242,7 +256,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 	})
 	if _, err := client.Ping().Result(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.NewError("Failed to ping kvstore", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping kvstore")
 	}
 
 	s.client = client
@@ -297,7 +311,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.NewError("KVStore service not ready", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrHealth{}, "KVStore service not ready")
 	}
 	return nil
 }
@@ -309,7 +323,7 @@ func (s *service) getClient() (*redis.Client, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, governor.NewError("KVStore service shutdown", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, ErrConn{}, "KVStore service shutdown")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
@@ -324,9 +338,9 @@ func (s *service) Get(key string) (string, error) {
 	val, err := client.Get(key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", governor.NewError("Key not found", http.StatusNotFound, err)
+			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)
+		return "", governor.ErrWithKind(err, ErrConn{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -337,7 +351,7 @@ func (s *service) Set(key, val string, seconds int64) error {
 		return err
 	}
 	if err := client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return governor.NewError("Failed to set key", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrConn{}, "Failed to set key")
 	}
 	return nil
 }
@@ -353,7 +367,7 @@ func (s *service) Del(key ...string) error {
 	}
 
 	if err := client.Del(key...).Err(); err != nil {
-		return governor.NewError("Failed to delete key", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrConn{}, "Failed to delete key")
 	}
 	return nil
 }
@@ -424,7 +438,7 @@ func (t *baseTransaction) Subtree(prefix string) Tx {
 func (t *baseTransaction) Exec() error {
 	if _, err := t.base.Exec(); err != nil {
 		if !errors.Is(err, redis.Nil) {
-			return governor.NewError("Failed to execute transaction", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to execute transaction")
 		}
 	}
 	return nil
@@ -519,9 +533,9 @@ func (r *resulter) Result() (string, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", governor.NewError("Key not found", http.StatusNotFound, err)
+			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.NewError("Failed to get key", http.StatusInternalServerError, err)
+		return "", governor.ErrWithKind(err, ErrConn{}, "Failed to get key")
 	}
 	return val, nil
 }

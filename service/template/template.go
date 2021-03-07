@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	htmlTemplate "html/template"
-	"net/http"
 	"os"
 	"strings"
 	textTemplate "text/template"
@@ -74,7 +73,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 			l.Warn("no templates loaded", nil)
 			tt = textTemplate.New("default")
 		} else {
-			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
 		}
 	}
 	s.tt = tt
@@ -84,7 +83,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 			l.Warn("no templates loaded", nil)
 			ht = htmlTemplate.New("default")
 		} else {
-			return governor.NewError("Failed to load templates", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
 		}
 	}
 	s.ht = ht
@@ -117,11 +116,20 @@ func (s *service) Health() error {
 	return nil
 }
 
+type (
+	// ErrExecute is returned when failing to execute a template
+	ErrExecute struct{}
+)
+
+func (e ErrExecute) Error() string {
+	return "Error executing template"
+}
+
 // Execute executes a template and returns the templated string
 func (s *service) Execute(templateName string, data interface{}) ([]byte, error) {
 	b := &bytes.Buffer{}
 	if err := s.tt.ExecuteTemplate(b, templateName, data); err != nil {
-		return nil, governor.NewError("Failed executing text template", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
 	}
 	return b.Bytes(), nil
 }
@@ -130,7 +138,7 @@ func (s *service) Execute(templateName string, data interface{}) ([]byte, error)
 func (s *service) ExecuteHTML(templateName string, data interface{}) ([]byte, error) {
 	b := &bytes.Buffer{}
 	if err := s.ht.ExecuteTemplate(b, templateName, data); err != nil {
-		return nil, governor.NewError("Failed executing html template", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
 	}
 	return b.Bytes(), nil
 }

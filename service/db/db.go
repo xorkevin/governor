@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -90,6 +89,27 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("sslmode", "disable")
 	r.SetDefault("hbinterval", 5)
 	r.SetDefault("hbmaxfail", 5)
+}
+
+type (
+	// ErrConn is returned on a db connection error
+	ErrConn struct{}
+	// ErrNotFound is returned when a row is not found
+	ErrNotFound struct{}
+	// ErrUnique is returned when a unique constraint is violated
+	ErrUnique struct{}
+)
+
+func (e ErrConn) Error() string {
+	return "DB connection error"
+}
+
+func (e ErrNotFound) Error() string {
+	return "DB not found"
+}
+
+func (e ErrUnique) Error() string {
+	return "DB uniqueness constraint violated"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -185,11 +205,11 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 	}
 	username, ok := authsecret["username"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	password, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := pgauth{
 		username: username,
@@ -204,11 +224,11 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 	opts := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
 	client, err := sql.Open("postgres", opts)
 	if err != nil {
-		return nil, governor.NewError("Failed to init db conn", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to init db conn")
 	}
 	if err := client.Ping(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.NewError("Failed to ping db", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping db")
 	}
 
 	s.client = client
@@ -263,7 +283,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.NewError("DB service not ready", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrHealth{}, "DB service not ready")
 	}
 	return nil
 }
@@ -276,7 +296,7 @@ func (s *service) DB() (*sql.DB, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, governor.NewError("DB service shutdown", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, ErrConn{}, "DB service shutdown")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
