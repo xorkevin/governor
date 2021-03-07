@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -194,7 +195,7 @@ func TestError(t *testing.T) {
 					Msg      string `json:"msg"`
 					Error    string `json:"error"`
 					Time     string `json:"time"`
-					UnixTime int64  `json:"unixtime"`
+					UnixTime string `json:"unixtime"`
 				}{}
 				assert.NoError(json.Unmarshal(logbuf.Bytes(), &logjson))
 				assert.Equal("error", logjson.Level)
@@ -205,7 +206,9 @@ func TestError(t *testing.T) {
 				ti, err := time.Parse(time.RFC3339, logjson.Time)
 				assert.NoError(err)
 				assert.True(ti.After(time.Unix(0, 0)))
-				assert.True(time.Unix(logjson.UnixTime, 0).After(time.Unix(0, 0)))
+				ut, err := strconv.ParseInt(logjson.UnixTime, 10, 64)
+				assert.NoError(err)
+				assert.True(time.Unix(ut, 0).After(time.Unix(0, 0)))
 			})
 		}
 	})

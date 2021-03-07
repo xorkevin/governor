@@ -68,7 +68,7 @@ type (
 	}
 )
 
-func zerologLevelToLog(level int) zerolog.Level {
+func levelToZerologLevel(level int) zerolog.Level {
 	switch level {
 	case levelDebug:
 		return zerolog.DebugLevel
@@ -95,7 +95,7 @@ func (h zerologTimestampHook) Run(e *zerolog.Event, _ zerolog.Level, _ string) {
 	now := time.Now().Round(0)
 	nowStr := now.Format(time.RFC3339)
 	e.Str("time", nowStr)
-	e.Int64("unixtime", now.Unix())
+	e.Str("unixtime", strconv.FormatInt(now.Unix(), 10))
 }
 
 func newLogger(c Config) Logger {
@@ -106,7 +106,7 @@ func newLogger(c Config) Logger {
 			w.Out = c.logOutput
 		})
 	}
-	l := zerolog.New(w).Level(zerologLevelToLog(c.logLevel)).Hook(zerologTimestampHook{})
+	l := zerolog.New(w).Level(levelToZerologLevel(c.logLevel)).Hook(zerologTimestampHook{})
 	return &govlogger{
 		level:  c.logLevel,
 		logger: &l,
@@ -206,7 +206,10 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		path := r.URL.EscapedPath()
 		remote := r.RemoteAddr
 		start := time.Now()
-		w2 := &govResponseWriter{w, 0}
+		w2 := &govResponseWriter{
+			ResponseWriter: w,
+			status:         0,
+		}
 		next.ServeHTTP(w2, r)
 		duration := time.Since(start)
 		s.logger.Debug("", map[string]string{
