@@ -115,6 +115,27 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("hbmaxfail", 5)
 }
 
+type (
+	// ErrConn is returned on an objstore connection error
+	ErrConn struct{}
+	// ErrClient is returned for unknown client errors
+	ErrClient struct{}
+	// ErrNotFound is returned when an object is not found
+	ErrNotFound struct{}
+)
+
+func (e ErrConn) Error() string {
+	return "Objstore connection error"
+}
+
+func (e ErrClient) Error() string {
+	return "Objstore client error"
+}
+
+func (e ErrNotFound) Error() string {
+	return "Object not found"
+}
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -206,11 +227,11 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 	}
 	username, ok := authsecret["username"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	password, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := minioauth{
 		username: username,
@@ -224,11 +245,11 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 
 	client, err := minio.New(s.addr, auth.username, auth.password, s.sslmode)
 	if err != nil {
-		return nil, governor.NewError("Failed to create objstore client", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrClient{}, "Failed to create objstore client")
 	}
 	if _, err := client.ListBuckets(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.NewError("Failed to ping objstore", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping objstore")
 	}
 
 	s.client = client
@@ -266,7 +287,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.NewError("Objstore service not ready", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, ErrConn{}, "Objstore service not ready")
 	}
 	return nil
 }
@@ -278,7 +299,7 @@ func (s *service) getClient() (*minio.Client, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, governor.NewError("Objstore service shutdown", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, ErrConn{}, "Objstore service shutdown")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
@@ -302,9 +323,9 @@ func (s *service) DelBucket(name string) error {
 	}
 	if err := client.RemoveBucket(name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return governor.NewError("Failed to get bucket", http.StatusNotFound, err)
+			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to get bucket")
 		}
-		return governor.NewError("Failed to remove bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to remove bucket")
 	}
 	return nil
 }
@@ -353,11 +374,11 @@ func (b *bucket) Init() error {
 	}
 	exists, err := client.BucketExists(b.name)
 	if err != nil {
-		return governor.NewError("Failed to get bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to get bucket")
 	}
 	if !exists {
 		if err := client.MakeBucket(b.name, b.location); err != nil {
-			return governor.NewError("Failed to create bucket", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to create bucket")
 		}
 	}
 	return nil
@@ -372,9 +393,9 @@ func (b *bucket) Stat(name string) (*ObjectInfo, error) {
 	info, err := client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
 		}
-		return nil, governor.NewError("Failed to stat object", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrClient{}, "Failed to stat object")
 	}
 	return &ObjectInfo{
 		Size:         info.Size,
@@ -393,13 +414,13 @@ func (b *bucket) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
 	obj, err := client.GetObject(b.name, name, minio.GetObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return nil, nil, governor.NewError("Failed to find object", http.StatusNotFound, err)
+			return nil, nil, governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
 		}
-		return nil, nil, governor.NewError("Failed to get object", http.StatusInternalServerError, err)
+		return nil, nil, governor.ErrWithKind(err, ErrClient{}, "Failed to get object")
 	}
 	info, err := obj.Stat()
 	if err != nil {
-		return nil, nil, governor.NewError("Failed to stat object", http.StatusInternalServerError, err)
+		return nil, nil, governor.ErrWithKind(err, ErrClient{}, "Failed to stat object")
 	}
 	return obj, &ObjectInfo{
 		Size:         info.Size,
@@ -416,7 +437,7 @@ func (b *bucket) Put(name string, contentType string, size int64, object io.Read
 		return err
 	}
 	if _, err := client.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
-		return governor.NewError("Failed to save object to bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to save object to bucket")
 	}
 	return nil
 }
@@ -429,9 +450,9 @@ func (b *bucket) Del(name string) error {
 	}
 	if err := client.RemoveObject(b.name, name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return governor.NewError("Failed to find object", http.StatusNotFound, err)
+			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
 		}
-		return governor.NewError("Failed to remove object", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to remove object")
 	}
 	return nil
 }

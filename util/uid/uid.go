@@ -3,6 +3,8 @@ package uid
 import (
 	"crypto/rand"
 	"encoding/base64"
+
+	"xorkevin.dev/governor"
 )
 
 type (
@@ -13,12 +15,27 @@ type (
 	}
 )
 
+type (
+	// ErrRand is returned when failing to read random bytes
+	ErrRand struct{}
+	// ErrInvalidUID is returned on an invalid uid
+	ErrInvalidUID struct{}
+)
+
+func (e ErrRand) Error() string {
+	return "Error reading rand"
+}
+
+func (e ErrInvalidUID) Error() string {
+	return "Invalid uid"
+}
+
 // New creates a new UID
 func New(size int) (*UID, error) {
 	u := make([]byte, size)
 	_, err := rand.Read(u)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithKind(err, ErrRand{}, "Failed reading crypto/rand")
 	}
 
 	return &UID{
@@ -39,7 +56,7 @@ func FromBytes(b []byte) *UID {
 func FromBase64(ustring string) (*UID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithKind(err, ErrInvalidUID{}, "Invalid uid string")
 	}
 	return FromBytes(b), nil
 }

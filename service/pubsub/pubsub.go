@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -107,6 +106,21 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("port", "4222")
 	r.SetDefault("hbinterval", 5)
 	r.SetDefault("hbmaxfail", 5)
+}
+
+type (
+	// ErrConn is returned on a connection error
+	ErrConn struct{}
+	// ErrClient is returned for unknown client errors
+	ErrClient struct{}
+)
+
+func (e ErrConn) Error() string {
+	return "Pubsub connection error"
+}
+
+func (e ErrClient) Error() string {
+	return "Pubsub client error"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -237,7 +251,7 @@ func (s *service) handleGetClient() (*nats.Conn, error) {
 	}
 	auth, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
 		return s.client, nil
@@ -258,7 +272,7 @@ func (s *service) handleGetClient() (*nats.Conn, error) {
 			close(canary)
 		}))
 	if err != nil {
-		return nil, governor.NewError("Failed to connect to pubsub", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to pubsub")
 	}
 
 	s.client = conn
@@ -287,7 +301,7 @@ func (s *service) getClient() (*nats.Conn, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, governor.NewError("Pubsub service shutdown", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, ErrConn{}, "Pubsub service shutdown")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
@@ -316,7 +330,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.NewError("Pubsub service not ready", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, ErrConn{}, "Pubsub service not ready")
 	}
 	return nil
 }
@@ -383,7 +397,7 @@ func (s *service) Publish(channel string, msgdata []byte) error {
 		return err
 	}
 	if err := client.Publish(channel, msgdata); err != nil {
-		return governor.NewError("Failed to publish message", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to publish message")
 	}
 	return nil
 }
@@ -392,13 +406,13 @@ func (s *subscription) init(client *nats.Conn) error {
 	if s.group == "" {
 		sub, err := client.Subscribe(s.channel, s.subscriber)
 		if err != nil {
-			return governor.NewError("Failed to create subscription to channel", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to channel")
 		}
 		s.sub = sub
 	} else {
 		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
 		if err != nil {
-			return governor.NewError("Failed to create subscription to channel as queue group", http.StatusInternalServerError, err)
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to channel as queue group")
 		}
 		s.sub = sub
 	}
@@ -429,7 +443,7 @@ func (s *subscription) Close() error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription")
 	}
 	return nil
 }

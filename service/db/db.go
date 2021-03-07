@@ -94,6 +94,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 type (
 	// ErrConn is returned on a db connection error
 	ErrConn struct{}
+	// ErrClient is returned for unknown client errors
+	ErrClient struct{}
 	// ErrNotFound is returned when a row is not found
 	ErrNotFound struct{}
 	// ErrUnique is returned when a unique constraint is violated
@@ -104,12 +106,16 @@ func (e ErrConn) Error() string {
 	return "DB connection error"
 }
 
+func (e ErrClient) Error() string {
+	return "DB client error"
+}
+
 func (e ErrNotFound) Error() string {
-	return "DB not found"
+	return "Row not found"
 }
 
 func (e ErrUnique) Error() string {
-	return "DB uniqueness constraint violated"
+	return "Uniqueness constraint violated"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -224,7 +230,7 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 	opts := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
 	client, err := sql.Open("postgres", opts)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to init db conn")
+		return nil, governor.ErrWithKind(err, ErrClient{}, "Failed to init db conn")
 	}
 	if err := client.Ping(); err != nil {
 		s.config.InvalidateSecret("auth")
@@ -283,7 +289,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.ErrWithKind(nil, governor.ErrHealth{}, "DB service not ready")
+		return governor.ErrWithKind(nil, ErrConn{}, "DB service not ready")
 	}
 	return nil
 }

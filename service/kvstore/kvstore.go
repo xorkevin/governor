@@ -134,6 +134,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 type (
 	// ErrConn is returned on a kvstore connection error
 	ErrConn struct{}
+	// ErrClient is returned for unknown client errors
+	ErrClient struct{}
 	// ErrNotFound is returned when a key is not found
 	ErrNotFound struct{}
 )
@@ -142,8 +144,12 @@ func (e ErrConn) Error() string {
 	return "KVStore connection error"
 }
 
+func (e ErrClient) Error() string {
+	return "KVStore client error"
+}
+
 func (e ErrNotFound) Error() string {
-	return "KVStore not found"
+	return "Key not found"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -311,7 +317,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.ErrWithKind(nil, governor.ErrHealth{}, "KVStore service not ready")
+		return governor.ErrWithKind(nil, ErrConn{}, "KVStore service not ready")
 	}
 	return nil
 }
@@ -340,7 +346,7 @@ func (s *service) Get(key string) (string, error) {
 		if errors.Is(err, redis.Nil) {
 			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.ErrWithKind(err, ErrConn{}, "Failed to get key")
+		return "", governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -351,7 +357,7 @@ func (s *service) Set(key, val string, seconds int64) error {
 		return err
 	}
 	if err := client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return governor.ErrWithKind(err, ErrConn{}, "Failed to set key")
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to set key")
 	}
 	return nil
 }
@@ -367,7 +373,7 @@ func (s *service) Del(key ...string) error {
 	}
 
 	if err := client.Del(key...).Err(); err != nil {
-		return governor.ErrWithKind(err, ErrConn{}, "Failed to delete key")
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to delete key")
 	}
 	return nil
 }
@@ -535,7 +541,7 @@ func (r *resulter) Result() (string, error) {
 		if errors.Is(err, redis.Nil) {
 			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.ErrWithKind(err, ErrConn{}, "Failed to get key")
+		return "", governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }

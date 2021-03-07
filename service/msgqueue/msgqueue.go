@@ -3,7 +3,6 @@ package msgqueue
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -119,6 +118,21 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("hbmaxfail", 5)
 }
 
+type (
+	// ErrConn is returned on a connection error
+	ErrConn struct{}
+	// ErrClient is returned for unknown client errors
+	ErrClient struct{}
+)
+
+func (e ErrConn) Error() string {
+	return "Msgqueue connection error"
+}
+
+func (e ErrClient) Error() string {
+	return "Msgqueue client error"
+}
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -129,7 +143,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	clientid, err := uid.New(uidSize)
 	if err != nil {
-		return governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to create new uid")
 	}
 	s.clientid = clientid.Base64()
 
@@ -255,7 +269,7 @@ func (s *service) handleGetClient() (stan.Conn, error) {
 	}
 	auth, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
 		return s.client, nil
@@ -275,7 +289,7 @@ func (s *service) handleGetClient() (stan.Conn, error) {
 			close(canary)
 		}))
 	if err != nil {
-		return nil, governor.NewError("Failed to connect to msgqueue", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to msgqueue")
 	}
 
 	s.client = conn
@@ -315,7 +329,7 @@ func (s *service) getClient() (stan.Conn, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, governor.NewError("Msgqueue service shutdown", http.StatusInternalServerError, nil)
+		return nil, governor.ErrWithKind(nil, ErrConn{}, "Msgqueue service shutdown")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
@@ -344,7 +358,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.NewError("Msgqueue service not ready", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, ErrConn{}, "Msgqueue service not ready")
 	}
 	return nil
 }
@@ -398,7 +412,7 @@ func (s *service) Publish(channel string, msgdata []byte) error {
 		return err
 	}
 	if err := client.Publish(channel, msgdata); err != nil {
-		return governor.NewError("Failed to publish message", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to publish message")
 	}
 	return nil
 }
@@ -453,7 +467,7 @@ func (s *subscription) Unsubscribe() error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return governor.NewError("Failed to unsubscribe", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to unsubscribe")
 	}
 	return nil
 }
@@ -465,7 +479,7 @@ func (s *subscription) Close() error {
 		return nil
 	}
 	if err := s.sub.Close(); err != nil {
-		return governor.NewError("Failed to close subscription", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription")
 	}
 	return nil
 }

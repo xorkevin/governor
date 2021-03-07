@@ -20,15 +20,6 @@ type (
 	}
 )
 
-type (
-	// ErrHealth is returned for a failed health check
-	ErrHealth struct{}
-)
-
-func (e ErrHealth) Error() string {
-	return "Error health check"
-}
-
 func (s *Server) initHealth(m Router) {
 	m.Get("/live", func(w http.ResponseWriter, r *http.Request) {
 		c := NewContext(w, r, s.logger)

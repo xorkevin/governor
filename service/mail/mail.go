@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -154,7 +155,7 @@ func (s *service) Start(ctx context.Context) error {
 	})
 
 	if _, err := s.queue.Subscribe(govmailchannelid, govmailworker, 15*time.Second, 2, s.mailSubscriber); err != nil {
-		return governor.NewError("Failed to subscribe to mail queue", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to subscribe to mail queue")
 	}
 	l.Info("subscribed to mail queue", nil)
 	return nil
@@ -201,7 +202,7 @@ func newPlainAuth(identity, username, password, host string) smtp.Auth {
 
 func (a *plainAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
 	if server.Name != a.host {
-		return "", nil, governor.NewError(fmt.Sprintf("Wrong host name: expected %s, have %s", a.host, server.Name), http.StatusInternalServerError, nil)
+		return "", nil, fmt.Errorf("Wrong host name: expected %s, have %s", a.host, server.Name)
 	}
 	resp := []byte(a.identity + "\x00" + a.username + "\x00" + a.password)
 	return "PLAIN", resp, nil
@@ -209,7 +210,7 @@ func (a *plainAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
 
 func (a *plainAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 	if more {
-		return nil, governor.NewError("Unexpected server challenge", http.StatusInternalServerError, nil)
+		return nil, errors.New("Unexpected server challenge")
 	}
 	return nil, nil
 }
@@ -222,11 +223,11 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 
 	username, ok := authsecret["username"].(string)
 	if !ok {
-		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	password, ok := authsecret["password"].(string)
 	if !ok {
-		return governor.NewError("Invalid secret", http.StatusInternalServerError, nil)
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	var smtpauth smtp.Auth
 	if s.insecure {
@@ -247,23 +248,50 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 	return nil
 }
 
+type (
+	// ErrWorker is returned for mail worker errors
+	ErrWorker struct{}
+	// ErrMailMsg is returned when the msgqueue mail message is malformed
+	ErrMailMsg struct{}
+	// ErrInvalidMail is returned when the mail message is invalid
+	ErrInvalidMail struct{}
+	// ErrBuildMail is returned when failing to build an email message
+	ErrBuildMail struct{}
+)
+
+func (e ErrWorker) Error() string {
+	return "Mail worker error"
+}
+
+func (e ErrMailMsg) Error() string {
+	return "Malformed mail message"
+}
+
+func (e ErrInvalidMail) Error() string {
+	return "Invalid mail"
+}
+
+func (e ErrBuildMail) Error() string {
+	return "Error building email"
+}
+
 func (s *service) mailSubscriber(msgdata []byte) error {
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
-		return governor.NewError("Failed to decode mail message", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail message")
 	}
 	emdata := map[string]string{}
 	if err := json.Unmarshal([]byte(emmsg.Emdata), &emdata); err != nil {
-		return governor.NewError("Failed to decode mail data", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail data")
 	}
 
 	subject, err := s.tpl.Execute(emmsg.Subjecttpl, emdata)
 	if err != nil {
-		return governor.NewError("Failed to execute mail subject template", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to execute mail subject template")
 	}
 	body, err := s.tpl.Execute(emmsg.Bodytpl, emdata)
 	if err != nil {
-		return governor.NewError("Failed to execute mail body template", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to execute mail body template")
 	}
 	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HTMLBodytpl, emdata)
 	if err != nil {
@@ -289,7 +317,7 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 	}
 	select {
 	case <-s.done:
-		return governor.NewError("Mail service shutdown", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(nil, ErrWorker{}, "Mail service shutdown")
 	case s.outbox <- op:
 		return <-res
 	}
@@ -314,7 +342,7 @@ func msgToBytes(subject string, from, fromname string, to []string, body []byte,
 	}
 	buf, err := msg.build()
 	if err != nil {
-		return nil, governor.NewError("Failed to write mail", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, ErrBuildMail{}, "Failed to construct email")
 	}
 	return buf.Bytes(), nil
 }
@@ -432,11 +460,11 @@ func (b *msgbuilder) build() (*bytes.Buffer, error) {
 // Send creates and enqueues a new message to be sent
 func (s *service) Send(from, fromname string, to []string, tpl string, emdata interface{}) error {
 	if len(to) == 0 {
-		return governor.NewError("Email must have at least one recipient", http.StatusBadRequest, nil)
+		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
 	datastring, err := json.Marshal(emdata)
 	if err != nil {
-		return governor.NewError("Failed to encode email data to JSON", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email data to JSON")
 	}
 
 	msg := mailmsg{
@@ -457,10 +485,10 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.NewError("Failed to encode email to json", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email to json")
 	}
 	if err := s.queue.Publish(govmailchannelid, b); err != nil {
-		return governor.NewError("Failed to publish new email to message queue", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to publish new email to message queue")
 	}
 	return nil
 }
