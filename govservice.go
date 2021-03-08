@@ -64,7 +64,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		"phase": "setup",
 	})
 	if s.setupRun {
-		l.Warn("setup already run", nil)
+		l.Warn("Setup already run", nil)
 		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
 			Status:  http.StatusForbidden,
 			Message: "Setup already run",
@@ -79,7 +79,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	}
 	if m.Setup {
 		s.setupRun = true
-		l.Warn("setup already run", nil)
+		l.Warn("Setup already run", nil)
 		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
 			Status:  http.StatusForbidden,
 			Message: "Setup already run",
@@ -89,16 +89,16 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		return err
 	}
 
-	l.Info("setup all services begin", nil)
+	l.Info("Setup all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Setup(rsetup); err != nil {
-			l.Error(fmt.Sprintf("setup service %s failed", i.name), map[string]string{
+			l.Error(fmt.Sprintf("Setup service %s failed", i.name), map[string]string{
 				"service": i.name,
 				"error":   err.Error(),
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("setup service %s", i.name), map[string]string{
+		l.Info(fmt.Sprintf("Setup service %s", i.name), map[string]string{
 			"service": i.name,
 		})
 	}
@@ -106,7 +106,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		Version: s.config.version.Num,
 		VHash:   s.config.version.Hash,
 	}); err != nil {
-		l.Error("setup state service failed", map[string]string{
+		l.Error("Setup state service failed", map[string]string{
 			"error": err.Error(),
 		})
 		return NewError(ErrOptRes(ErrorRes{
@@ -115,7 +115,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		}), ErrOptInner(err))
 	}
 	s.setupRun = true
-	l.Info("setup all services complete", nil)
+	l.Info("Setup all services complete", nil)
 	return nil
 }
 
@@ -133,20 +133,20 @@ func (s *Server) initServices(ctx context.Context) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
-	l.Info("init all services begin", nil)
+	l.Info("Init all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.router(s.config.BaseURL+i.url)); err != nil {
-			l.Error(fmt.Sprintf("init service %s failed", i.name), map[string]string{
+			l.Error(fmt.Sprintf("Init service %s failed", i.name), map[string]string{
 				"service": i.name,
 				"error":   err.Error(),
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("init service %s", i.name), map[string]string{
+		l.Info(fmt.Sprintf("Init service %s", i.name), map[string]string{
 			"service": i.name,
 		})
 	}
-	l.Info("init all services complete", nil)
+	l.Info("Init all services complete", nil)
 	return nil
 }
 
@@ -154,20 +154,20 @@ func (s *Server) startServices(ctx context.Context) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "start",
 	})
-	l.Info("start all services begin", nil)
+	l.Info("Start all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Start(ctx); err != nil {
-			l.Error(fmt.Sprintf("start service %s failed", i.name), map[string]string{
+			l.Error(fmt.Sprintf("Start service %s failed", i.name), map[string]string{
 				"service": i.name,
 				"error":   err.Error(),
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("start service %s", i.name), map[string]string{
+		l.Info(fmt.Sprintf("Start service %s", i.name), map[string]string{
 			"service": i.name,
 		})
 	}
-	l.Info("start all services complete", nil)
+	l.Info("Start all services complete", nil)
 	return nil
 }
 
@@ -175,14 +175,14 @@ func (s *Server) stopServices(ctx context.Context) {
 	l := s.logger.WithData(map[string]string{
 		"phase": "stop",
 	})
-	l.Info("stop all services begin", nil)
+	l.Info("Stop all services begin", nil)
 	sl := len(s.services)
 	for n := range s.services {
 		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
-		l.Info(fmt.Sprintf("stop service %s", i.name), map[string]string{
+		l.Info(fmt.Sprintf("Stop service %s", i.name), map[string]string{
 			"service": i.name,
 		})
 	}
-	l.Info("stop all services complete", nil)
+	l.Info("Stop all services complete", nil)
 }

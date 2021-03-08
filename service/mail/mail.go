@@ -10,7 +10,6 @@ import (
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
-	"net/http"
 	"net/smtp"
 	"net/textproto"
 	"strings"

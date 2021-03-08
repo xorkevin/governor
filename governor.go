@@ -181,7 +181,7 @@ func (s *Server) Start() error {
 
 	maxHeaderSize := defaultMaxHeaderSize
 	if limit, err := bytefmt.ToBytes(s.config.maxHeaderSize); err != nil {
-		l.Warn("invalid maxheadersize format for http server", map[string]string{
+		l.Warn("Invalid maxheadersize format for http server", map[string]string{
 			"maxreqsize": s.config.maxReqSize,
 		})
 	} else {
@@ -189,7 +189,7 @@ func (s *Server) Start() error {
 	}
 	maxConnRead := seconds5
 	if t, err := time.ParseDuration(s.config.maxConnRead); err != nil {
-		l.Warn("invalid maxconnread time for http server", map[string]string{
+		l.Warn("Invalid maxconnread time for http server", map[string]string{
 			"maxconnread": s.config.maxConnRead,
 		})
 	} else {
@@ -197,7 +197,7 @@ func (s *Server) Start() error {
 	}
 	maxConnHeader := seconds2
 	if t, err := time.ParseDuration(s.config.maxConnHeader); err != nil {
-		l.Warn("invalid maxconnheader time for http server", map[string]string{
+		l.Warn("Invalid maxconnheader time for http server", map[string]string{
 			"maxconnheader": s.config.maxConnHeader,
 		})
 	} else {
@@ -205,7 +205,7 @@ func (s *Server) Start() error {
 	}
 	maxConnWrite := seconds5
 	if t, err := time.ParseDuration(s.config.maxConnWrite); err != nil {
-		l.Warn("invalid maxconnwrite time for http server", map[string]string{
+		l.Warn("Invalid maxconnwrite time for http server", map[string]string{
 			"maxconnwrite": s.config.maxConnWrite,
 		})
 	} else {
@@ -213,13 +213,13 @@ func (s *Server) Start() error {
 	}
 	maxConnIdle := seconds5
 	if t, err := time.ParseDuration(s.config.maxConnIdle); err != nil {
-		l.Warn("invalid maxconnidle time for http server", map[string]string{
+		l.Warn("Invalid maxconnidle time for http server", map[string]string{
 			"maxconnidle": s.config.maxConnIdle,
 		})
 	} else {
 		maxConnIdle = t
 	}
-	l.Info("init http server with configuration", map[string]string{
+	l.Info("Init http server with configuration", map[string]string{
 		"maxheadersize": strconv.Itoa(maxHeaderSize),
 		"maxconnread":   maxConnRead.String(),
 		"maxconnheader": maxConnHeader.String(),
@@ -244,7 +244,7 @@ func (s *Server) Start() error {
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			l.Info("shutting down server", map[string]string{
+			l.Info("Shutting down server", map[string]string{
 				"error": err.Error(),
 			})
 		}
@@ -260,26 +260,5 @@ func (s *Server) Start() error {
 		})
 	}
 	s.stopServices(shutdownCtx)
-	return nil
-}
-
-// Setup runs the setup procedures for all services
-func (s *Server) Setup(req ReqSetup) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := s.init(ctx); err != nil {
-		if s.logger != nil {
-			s.logger.Error("init failed", map[string]string{
-				"error": err.Error(),
-				"phase": "setup",
-			})
-		} else {
-			fmt.Println(err)
-		}
-		return err
-	}
-	if err := s.setupServices(req); err != nil {
-		return err
-	}
 	return nil
 }
