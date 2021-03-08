@@ -1,10 +1,12 @@
 package profile
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
 )
@@ -27,16 +29,16 @@ type (
 )
 
 func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, error) {
-	m, err := s.profiles.New(userid, email, bio)
-	if err != nil {
-		return nil, err
-	}
+	m := s.profiles.New(userid, email, bio)
 
 	if err := s.profiles.Insert(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Profile already created",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create profile")
 	}
 
 	return &resProfileUpdate{
@@ -47,17 +49,20 @@ func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, e
 func (s *service) UpdateProfile(userid, email, bio string) error {
 	m, err := s.profiles.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "No profile found with that id",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get profile")
 	}
 
 	m.Email = email
 	m.Bio = bio
 
 	if err := s.profiles.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update profile")
 	}
 	return nil
 }
@@ -72,10 +77,13 @@ const (
 func (s *service) UpdateImage(userid string, img image.Image) error {
 	m, err := s.profiles.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "No profile found with that id",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get profile")
 	}
 
 	img.ResizeFill(imgSize, imgSize)
@@ -83,20 +91,20 @@ func (s *service) UpdateImage(userid string, img image.Image) error {
 	thumb.ResizeLimit(thumbSize, thumbSize)
 	thumb64, err := thumb.ToBase64(thumbQuality)
 	if err != nil {
-		return governor.NewError("Failed to encode thumbnail to base64", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode image thumbnail")
 	}
 	imgJpeg, err := img.ToJpeg(imgQuality)
 	if err != nil {
-		return governor.NewError("Failed to encode image to jpeg", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode image")
 	}
 
 	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), imgJpeg); err != nil {
-		return governor.NewError("Failed to save profile picture", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to save profile picture")
 	}
 
 	m.Image = thumb64
 	if err := s.profiles.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update profile")
 	}
 	return nil
 }
@@ -104,20 +112,23 @@ func (s *service) UpdateImage(userid string, img image.Image) error {
 func (s *service) DeleteProfile(userid string) error {
 	m, err := s.profiles.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "No profile found with that id",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get profile")
 	}
 
 	if err := s.profileDir.Del(userid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return governor.NewError("Unable to delete profile picture", http.StatusInternalServerError, err)
+		if !errors.Is(err, objstore.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to delete profile picture")
 		}
 	}
 
 	if err := s.profiles.Delete(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete profile")
 	}
 	return nil
 }
@@ -125,10 +136,13 @@ func (s *service) DeleteProfile(userid string) error {
 func (s *service) GetProfile(userid string) (*resProfileModel, error) {
 	m, err := s.profiles.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "No profile found with that id",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get profile")
 	}
 	return &resProfileModel{
 		Userid: m.Userid,
@@ -141,10 +155,13 @@ func (s *service) GetProfile(userid string) (*resProfileModel, error) {
 func (s *service) StatProfileImage(userid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.profileDir.Stat(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Profile image not found", 0, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Profile image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, governor.NewError("Failed to get profile image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get profile image")
 	}
 	return objinfo, nil
 }
@@ -152,10 +169,13 @@ func (s *service) StatProfileImage(userid string) (*objstore.ObjectInfo, error) 
 func (s *service) GetProfileImage(userid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.profileDir.Get(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, "", governor.NewErrorUser("Profile image not found", 0, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Profile image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, "", governor.NewError("Failed to get profile image", http.StatusInternalServerError, err)
+		return nil, "", governor.ErrWithMsg(err, "Failed to get profile image")
 	}
 	return obj, objinfo.ContentType, nil
 }

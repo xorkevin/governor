@@ -1,8 +1,6 @@
 package model
 
 import (
-	"net/http"
-
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 )
@@ -12,7 +10,7 @@ import (
 type (
 	// Repo is a profile repository
 	Repo interface {
-		New(userid, email, bio string) (*Model, error)
+		New(userid, email, bio string) *Model
 		GetByID(userid string) (*Model, error)
 		GetBulk(userids []string) ([]Model, error)
 		Insert(m *Model) error
@@ -70,89 +68,89 @@ func New(db db.Database) Repo {
 }
 
 // New creates a new profile model
-func (r *repo) New(userid, email, bio string) (*Model, error) {
+func (r *repo) New(userid, email, bio string) *Model {
 	return &Model{
 		Userid: userid,
 		Email:  email,
 		Bio:    bio,
-	}, nil
+	}
 }
 
 // GetByID returns a profile model with the given base64 id
 func (r *repo) GetByID(userid string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := profileModelGetModelEqUserid(db, userid)
+	m, code, err := profileModelGetModelEqUserid(d, userid)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No profile found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No profile found with that id")
 		}
-		return nil, governor.NewError("Failed to get profile", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get profile")
 	}
 	return m, nil
 }
 
 func (r *repo) GetBulk(userids []string) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := profileModelGetModelHasUseridOrdUserid(db, userids, true, len(userids), 0)
+	m, err := profileModelGetModelHasUseridOrdUserid(d, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, governor.NewError("Failed to get profiles of userids", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get profiles of userids")
 	}
 	return m, nil
 }
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := profileModelInsert(db, m); err != nil {
+	if code, err := profileModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.NewErrorUser("Profile id must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Profile id must be unique")
 		}
-		return governor.NewError("Failed to insert profile", http.StatusInternalServerError, err)
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to insert profile")
 	}
 	return nil
 }
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := profileModelUpdModelEqUserid(db, m, m.Userid); err != nil {
-		return governor.NewError("Failed to update profile", http.StatusInternalServerError, err)
+	if _, err := profileModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to update profile")
 	}
 	return nil
 }
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := profileModelDelEqUserid(db, m.Userid); err != nil {
-		return governor.NewError("Failed to delete profile", http.StatusInternalServerError, err)
+	if err := profileModelDelEqUserid(d, m.Userid); err != nil {
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to delete profile")
 	}
 	return nil
 }
 
 // Setup creates a new Profile table
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := profileModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup profile model", http.StatusInternalServerError, err)
+	if err := profileModelSetup(d); err != nil {
+		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup profile model")
 	}
 	return nil
 }

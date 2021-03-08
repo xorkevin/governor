@@ -19,10 +19,16 @@ var (
 
 func validhasUserid(userid string) error {
 	if len(userid) < 1 {
-		return governor.NewErrorUser("Userid must be provided", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Userid must be provided",
+		}))
 	}
 	if len(userid) > lengthCap {
-		return governor.NewErrorUser("Userid must be shorter than 32 characters", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Userid must be shorter than 32 characters",
+		}))
 	}
 	return nil
 }
@@ -32,27 +38,42 @@ func validEmail(email string) error {
 		return nil
 	}
 	if !emailRegex.MatchString(email) {
-		return governor.NewErrorUser("Email is invalid", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is invalid",
+		}))
 	}
 	if len(email) > lengthCapEmail {
-		return governor.NewErrorUser("Email must be shorter than 256 characters", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email must be shorter than 256 characters",
+		}))
 	}
 	return nil
 }
 
 func validBio(bio string) error {
 	if len(bio) > lengthCapLarge {
-		return governor.NewErrorUser("Bio must be shorter than 4096 characters", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Bio must be shorter than 4096 characters",
+		}))
 	}
 	return nil
 }
 
 func validhasUserids(userids string) error {
 	if len(userids) == 0 {
-		return governor.NewErrorUser("IDs must be provided", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "IDs must be provided",
+		}))
 	}
 	if len(userids) > lengthCapLarge {
-		return governor.NewErrorUser("Request is too large", http.StatusBadRequest, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
+		}))
 	}
 	return nil
 }

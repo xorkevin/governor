@@ -2,7 +2,6 @@ package profile
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -118,14 +117,14 @@ func (s *service) Start(ctx context.Context) error {
 	})
 
 	if err := s.profileBucket.Init(); err != nil {
-		return governor.NewError("Failed to init profile image bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to init profile image bucket")
 	}
 
 	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, 15*time.Second, 2, s.UserCreateHook); err != nil {
-		return governor.NewError("Failed to subscribe to user create queue", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
 	}
 	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, 15*time.Second, 2, s.UserDeleteHook); err != nil {
-		return governor.NewError("Failed to subscribe to user delete queue", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("subscribed to user create/delete queue", nil)
 	return nil
