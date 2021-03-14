@@ -1,7 +1,6 @@
 package model
 
 import (
-	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -80,7 +79,7 @@ func New(database db.Database) Repo {
 func (r *repo) New(displayName, desc string) (*Model, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
-		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
 	}
 	orgid := mUID.Base64()
 
@@ -95,104 +94,104 @@ func (r *repo) New(displayName, desc string) (*Model, error) {
 }
 
 func (r *repo) GetByID(orgid string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := orgModelGetModelEqOrgID(db, orgid)
+	m, code, err := orgModelGetModelEqOrgID(d, orgid)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No org found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No org found with that id")
 		}
-		return nil, governor.NewError("Failed to get org", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get org")
 	}
 	return m, nil
 }
 
 func (r *repo) GetByName(orgname string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := orgModelGetModelEqName(db, orgname)
+	m, code, err := orgModelGetModelEqName(d, orgname)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No org found with that name", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No org found with that name")
 		}
-		return nil, governor.NewError("Failed to get org", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get org")
 	}
 	return m, nil
 }
 func (r *repo) GetAllOrgs(limit, offset int) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelOrdCreationTime(db, false, limit, offset)
+	m, err := orgModelGetModelOrdCreationTime(d, false, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get orgs", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
 	}
 	return m, nil
 }
 
 func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelHasOrgIDOrdOrgID(db, orgids, true, len(orgids), 0)
+	m, err := orgModelGetModelHasOrgIDOrdOrgID(d, orgids, true, len(orgids), 0)
 	if err != nil {
-		return nil, governor.NewError("Failed to get orgs", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
 	}
 	return m, nil
 }
 
 func (r *repo) Insert(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := orgModelInsert(db, m); err != nil {
+	if code, err := orgModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.NewError("Org name must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Org name must be unique")
 		}
-		return governor.NewError("Failed to insert org", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to insert org")
 	}
 	return nil
 }
 
 func (r *repo) Update(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := orgModelUpdModelEqOrgID(db, m, m.OrgID); err != nil {
+	if code, err := orgModelUpdModelEqOrgID(d, m, m.OrgID); err != nil {
 		if code == 3 {
-			return governor.NewError("Org name must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Org name must be unique")
 		}
-		return governor.NewError("Failed to update org", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to update org")
 	}
 	return nil
 }
 
 func (r *repo) Delete(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := orgModelDelEqOrgID(db, m.OrgID); err != nil {
-		return governor.NewError("Failed to delete org", http.StatusInternalServerError, err)
+	if err := orgModelDelEqOrgID(d, m.OrgID); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete org")
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := orgModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup org model", http.StatusInternalServerError, err)
+	if err := orgModelSetup(d); err != nil {
+		return governor.ErrWithMsg(err, "Failed to setup org model")
 	}
 	return nil
 }

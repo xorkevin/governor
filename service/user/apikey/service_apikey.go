@@ -13,18 +13,12 @@ import (
 type (
 	// ErrNotFound is returned when an apikey is not found
 	ErrNotFound struct{}
-	// ErrUnique is returned when an apikey already exists
-	ErrUnique struct{}
 	// ErrInvalidKey is returned when an apikey is invalid
 	ErrInvalidKey struct{}
 )
 
 func (e ErrNotFound) Error() string {
 	return "Apikey not found"
-}
-
-func (e ErrUnique) Error() string {
-	return "Error apikey uniqueness"
 }
 
 func (e ErrInvalidKey) Error() string {
@@ -140,9 +134,6 @@ func (s *service) Insert(userid string, scope string, name, desc string) (*ResAp
 		return nil, governor.ErrWithMsg(err, "Failed to create apikey keys")
 	}
 	if err := s.apikeys.Insert(m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
-			return nil, governor.ErrWithKind(err, ErrUnique{}, "Failed to create apikey")
-		}
 		return nil, governor.ErrWithMsg(err, "Failed to create apikey")
 	}
 	s.clearCache(m.Keyid)

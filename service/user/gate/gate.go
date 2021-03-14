@@ -240,6 +240,10 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 			if ok {
 				userid, keyscope, err := s.apikeys.CheckKey(keyid, password)
 				if err != nil {
+					if !errors.Is(err, apikey.ErrInvalidKey{}) && !errors.Is(err, apikey.ErrNotFound{}) {
+						c.WriteError(governor.ErrWithMsg(err, "Failed to get apikey"))
+						return
+					}
 					c.SetHeader("WWW-Authenticate", "Basic realm=\""+s.realm+"\"")
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusUnauthorized,
