@@ -51,7 +51,7 @@ func getUserFields(m *model.Model, roles []string) *ResUserGet {
 func (s *service) getRoleSummary(userid string) (rank.Rank, error) {
 	roles, err := s.roles.IntersectRoles(userid, s.rolesummary)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
 	}
 	return roles, nil
 }
@@ -60,10 +60,13 @@ func (s *service) getRoleSummary(userid string) (rank.Rank, error) {
 func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	roles, err := s.getRoleSummary(userid)
 	if err != nil {
@@ -76,10 +79,13 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 func (s *service) GetByID(userid string) (*ResUserGet, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	roles, err := s.getRoleSummary(userid)
 	if err != nil {
@@ -92,10 +98,13 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByUsername(username)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
@@ -108,10 +117,13 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 	m, err := s.users.GetByUsername(username)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
@@ -124,10 +136,13 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 func (s *service) GetByEmail(email string) (*ResUserGet, error) {
 	m, err := s.users.GetByEmail(email)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	roles, err := s.getRoleSummary(m.Userid)
 	if err != nil {
@@ -146,7 +161,7 @@ type (
 func (s *service) GetUserRoles(userid string, prefix string, amount, offset int) (*resUserRoles, error) {
 	roles, err := s.roles.GetRoles(userid, prefix, amount, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
 	}
 	return &resUserRoles{
 		Roles: roles.ToSlice(),
@@ -157,7 +172,7 @@ func (s *service) GetUserRoles(userid string, prefix string, amount, offset int)
 func (s *service) GetUserRolesIntersect(userid string, roleset rank.Rank) (*resUserRoles, error) {
 	roles, err := s.roles.IntersectRoles(userid, roleset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
 	}
 	return &resUserRoles{
 		Roles: roles.ToSlice(),
@@ -180,7 +195,7 @@ type (
 func (s *service) GetInfoAll(amount int, offset int) (*resUserInfoList, error) {
 	infoSlice, err := s.users.GetGroup(amount, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
 	}
 
 	info := make([]resUserInfo, 0, len(infoSlice))
@@ -214,7 +229,7 @@ type (
 func (s *service) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, error) {
 	infoSlice, err := s.users.GetBulk(userids)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
 	}
 
 	info := make([]resUserInfoPublic, 0, len(infoSlice))
@@ -242,7 +257,7 @@ type (
 func (s *service) GetIDsByRole(role string, amount int, offset int) (*resUserList, error) {
 	userids, err := s.roles.GetByRole(role, amount, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
 	}
 	return &resUserList{
 		Users: userids,
@@ -272,7 +287,7 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 	_, err := s.users.GetByID(userid)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return false, err
+			return false, governor.ErrWithMsg(err, "Failed to get user")
 		}
 		exists = false
 	}

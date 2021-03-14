@@ -1,8 +1,6 @@
 package user
 
 import (
-	"net/http"
-
 	"xorkevin.dev/governor"
 )
 
@@ -24,7 +22,7 @@ type (
 func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGetSessions, error) {
 	m, err := s.sessions.GetUserSessions(userid, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get user sessions", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user sessions")
 	}
 	res := make([]resSession, 0, len(m))
 	for _, i := range m {
@@ -54,7 +52,7 @@ func (s *service) killCacheSessions(sessionids []string) {
 // KillSessions terminates user sessions
 func (s *service) KillSessions(sessionids []string) error {
 	if err := s.sessions.DeleteSessions(sessionids); err != nil {
-		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to delete user sessions")
 	}
 	s.killCacheSessions(sessionids)
 	return nil
@@ -63,7 +61,7 @@ func (s *service) KillSessions(sessionids []string) error {
 // KillAllSessions terminates all sessions of a user
 func (s *service) KillAllSessions(userid string) error {
 	if err := s.sessions.DeleteUserSessions(userid); err != nil {
-		return governor.NewError("Failed to delete user sessions", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to delete user sessions")
 	}
 	return nil
 }

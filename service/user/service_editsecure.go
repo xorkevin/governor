@@ -289,7 +289,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 	if ok, err := s.users.ValidatePass(oldPassword, m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to validate password")
 	} else if !ok {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusUnauthorized,
@@ -366,7 +366,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 		}
 	} else {
 		if err := s.resets.Update(mr); err != nil {
-			return err
+			return governor.ErrWithMsg(err, "Failed to update password reset request")
 		}
 	}
 
