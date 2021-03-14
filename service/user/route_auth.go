@@ -169,29 +169,10 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid := ""
-	if isEmail(req.Username) {
-		m, err := m.s.GetByEmail(req.Username)
-		if err != nil {
-			if governor.ErrorStatus(err) == http.StatusNotFound {
-				c.WriteError(governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil))
-				return
-			}
-			c.WriteError(err)
-			return
-		}
-		userid = m.Userid
-	} else {
-		m, err := m.s.GetByUsername(req.Username)
-		if err != nil {
-			if governor.ErrorStatus(err) == http.StatusNotFound {
-				c.WriteError(governor.NewErrorUser("Invalid username or password", http.StatusUnauthorized, nil))
-				return
-			}
-			c.WriteError(err)
-			return
-		}
-		userid = m.Userid
+	userid, err := m.s.GetUseridForLogin(req.Username)
+	if err != nil {
+		c.WriteError(err)
+		return
 	}
 	if t, ok := getSessionCookie(c, userid); ok {
 		req.SessionToken = t

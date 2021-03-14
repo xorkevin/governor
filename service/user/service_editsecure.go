@@ -10,7 +10,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	usermodel "xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/model"
 )
 
 const (
@@ -320,15 +320,13 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 
 // ForgotPassword invokes the forgot password reset procedure
 func (s *service) ForgotPassword(useroremail string) error {
-	var m *usermodel.Model
+	var m *model.Model
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(useroremail)
 		if err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
-				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusNotFound,
-					Message: "User not found",
-				}), governor.ErrOptInner(err))
+				// prevent email scanning
+				return nil
 			}
 			return governor.ErrWithMsg(err, "Failed to get user")
 		}

@@ -48,7 +48,10 @@ func (r *reqUserRmSessions) validUserid() error {
 	for _, i := range r.SessionIDs {
 		j := strings.SplitN(i, "|", 2)
 		if r.Userid != j[0] {
-			return governor.NewErrorUser("Invalid session ids", http.StatusForbidden, nil)
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid session ids",
+			}))
 		}
 	}
 	return nil

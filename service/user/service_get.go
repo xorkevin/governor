@@ -305,3 +305,31 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 
 	return exists, nil
 }
+
+// GetUseridForLogin gets a userid for login
+func (s *service) GetUseridForLogin(useroremail string) (string, error) {
+	if isEmail(useroremail) {
+		m, err := s.users.GetByEmail(useroremail)
+		if err != nil {
+			if errors.Is(err, db.ErrNotFound{}) {
+				return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusUnauthorized,
+					Message: "Invalid username or password",
+				}), governor.ErrOptInner(err))
+			}
+			return "", governor.ErrWithMsg(err, "Failed to get user")
+		}
+		return m.Userid, nil
+	}
+	m, err := s.users.GetByUsername(useroremail)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusUnauthorized,
+				Message: "Invalid username or password",
+			}), governor.ErrOptInner(err))
+		}
+		return "", governor.ErrWithMsg(err, "Failed to get user")
+	}
+	return m.Userid, nil
+}

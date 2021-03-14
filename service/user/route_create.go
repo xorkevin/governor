@@ -87,7 +87,10 @@ func (m *router) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if c.Param("id") != req.Userid {
-		c.WriteError(governor.NewErrorUser("information does not match", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Userid does not match",
+		})))
 		return
 	}
 
