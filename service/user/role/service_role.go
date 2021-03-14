@@ -1,7 +1,7 @@
 package role
 
 import (
-	"net/http"
+	"errors"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
@@ -14,7 +14,11 @@ const (
 )
 
 func (s *service) intersectRolesRepo(userid string, roles rank.Rank) (rank.Rank, error) {
-	return s.roles.IntersectRoles(userid, roles)
+	m, err := s.roles.IntersectRoles(userid, roles)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get roles")
+	}
+	return m, nil
 }
 
 func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
@@ -22,7 +26,7 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 
 	txget, err := userkv.Tx()
 	if err != nil {
-		return nil, governor.NewError("Failed to create kvstore transaction", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to create kvstore transaction")
 	}
 	resget := make(map[string]kvstore.Resulter, roles.Len())
 	for _, i := range roles.ToSlice() {
@@ -41,7 +45,7 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 	for k, v := range resget {
 		r, err := v.Result()
 		if err != nil {
-			if governor.ErrorStatus(err) != http.StatusNotFound {
+			if !errors.Is(err, kvstore.ErrNotFound{}) {
 				s.logger.Error("Failed to get user role result from cache", map[string]string{
 					"error":      err.Error(),
 					"actiontype": "getroleresult",
@@ -64,7 +68,7 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 
 	txset, err := userkv.Tx()
 	if err != nil {
-		return nil, governor.NewError("Failed to create kvstore transaction", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to create kvstore transaction")
 	}
 	for _, i := range uncachedRoles.ToSlice() {
 		if m.Has(i) {
@@ -86,7 +90,7 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 
 func (s *service) InsertRoles(userid string, roles rank.Rank) error {
 	if err := s.roles.InsertRoles(userid, roles); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to create roles")
 	}
 	s.clearCache(userid, roles)
 	return nil
@@ -94,7 +98,7 @@ func (s *service) InsertRoles(userid string, roles rank.Rank) error {
 
 func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 	if err := s.roles.DeleteRoles(userid, roles); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete roles")
 	}
 	s.clearCache(userid, roles)
 	return nil
@@ -103,10 +107,10 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 func (s *service) DeleteAllRoles(userid string) error {
 	roles, err := s.GetRoles(userid, "", 65536, 0)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user roles")
 	}
 	if err := s.roles.DeleteUserRoles(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user roles")
 	}
 	s.clearCache(userid, roles)
 	return nil
@@ -126,10 +130,10 @@ func (s *service) GetByRole(roleName string, amount, offset int) ([]string, erro
 func (s *service) DeleteByRole(roleName string) error {
 	userids, err := s.GetByRole(roleName, 65536, 0)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get role users")
 	}
 	if err := s.roles.DeleteByRole(roleName); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete role users")
 	}
 	s.clearCacheRoles(roleName, userids)
 	return nil

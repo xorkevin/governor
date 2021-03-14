@@ -54,9 +54,9 @@ type (
 		GetJWKS() *jose.JSONWebKeySet
 		Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
 		GenerateExt(kind string, userid string, audience []string, duration int64, id string, claims interface{}) (string, error)
-		Validate(kind string, tokenString string, scope string) (bool, *Claims)
-		GetClaims(kind string, tokenString string, scope string) (bool, *Claims)
-		GetClaimsExt(kind string, tokenString string, audience []string, scope string, claims interface{}) (bool, *Claims)
+		Validate(kind string, tokenString string) (bool, *Claims)
+		GetClaims(kind string, tokenString string) (bool, *Claims)
+		GetClaimsExt(kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims)
 	}
 
 	// Service is a Tokenizer and governor.Service
@@ -291,7 +291,7 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(kind string, tokenString string, scope string) (bool, *Claims) {
+func (s *service) Validate(kind string, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -301,9 +301,6 @@ func (s *service) Validate(kind string, tokenString string, scope string) (bool,
 		return false, nil
 	}
 	if claims.Kind != kind {
-		return false, nil
-	}
-	if !HasScope(claims.Scope, scope) {
 		return false, nil
 	}
 	now := time.Now().Round(0)
@@ -318,7 +315,7 @@ func (s *service) Validate(kind string, tokenString string, scope string) (bool,
 }
 
 // GetClaims returns token claims without validating time
-func (s *service) GetClaims(kind string, tokenString string, scope string) (bool, *Claims) {
+func (s *service) GetClaims(kind string, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -328,9 +325,6 @@ func (s *service) GetClaims(kind string, tokenString string, scope string) (bool
 		return false, nil
 	}
 	if claims.Kind != kind {
-		return false, nil
-	}
-	if !HasScope(claims.Scope, scope) {
 		return false, nil
 	}
 	if err := claims.ValidateWithLeeway(jwt.Expected{
@@ -343,7 +337,7 @@ func (s *service) GetClaims(kind string, tokenString string, scope string) (bool
 }
 
 // GetClaimsExt returns external token claims without validating time
-func (s *service) GetClaimsExt(kind string, tokenString string, audience []string, scope string, claims interface{}) (bool, *Claims) {
+func (s *service) GetClaimsExt(kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -356,9 +350,6 @@ func (s *service) GetClaimsExt(kind string, tokenString string, audience []strin
 		return false, nil
 	}
 	if baseClaims.Kind != kind {
-		return false, nil
-	}
-	if !HasScope(baseClaims.Scope, scope) {
 		return false, nil
 	}
 	if err := baseClaims.ValidateWithLeeway(jwt.Expected{

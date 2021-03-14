@@ -2,7 +2,6 @@ package role
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -87,7 +86,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
-		return governor.NewError("Failed to parse role cache time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse role cache time")
 	} else {
 		s.roleCacheTime = int64(t / time.Second)
 	}

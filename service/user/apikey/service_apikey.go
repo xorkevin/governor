@@ -2,12 +2,34 @@ package apikey
 
 import (
 	"encoding/json"
-	"net/http"
-	"strings"
+	"errors"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
 )
+
+type (
+	// ErrNotFound is returned when an apikey is not found
+	ErrNotFound struct{}
+	// ErrUnique is returned when an apikey already exists
+	ErrUnique struct{}
+	// ErrInvalidKey is returned when an apikey is invalid
+	ErrInvalidKey struct{}
+)
+
+func (e ErrNotFound) Error() string {
+	return "Apikey not found"
+}
+
+func (e ErrUnique) Error() string {
+	return "Error apikey uniqueness"
+}
+
+func (e ErrInvalidKey) Error() string {
+	return "Invalid apikey"
+}
 
 const (
 	cacheValTombstone = "-"
@@ -21,27 +43,23 @@ type (
 )
 
 func (s *service) GetUserKeys(userid string, limit, offset int) ([]model.Model, error) {
-	return s.apikeys.GetUserKeys(userid, limit, offset)
-}
-
-func (s *service) useridFromKeyid(keyid string) (string, error) {
-	k := strings.SplitN(keyid, "|", 2)
-	if len(k) != 2 {
-		return "", governor.NewError("Invalid apikey", http.StatusBadRequest, nil)
+	m, err := s.apikeys.GetUserKeys(userid, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get apikeys")
 	}
-	return k[0], nil
+	return m, nil
 }
 
 func (s *service) getKeyHash(keyid string) (string, string, error) {
 	if result, err := s.kvkey.Get(keyid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
+		if !errors.Is(err, kvstore.ErrNotFound{}) {
 			s.logger.Error("Failed to get apikey key from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcacheapikey",
 			})
 		}
 	} else if result == cacheValTombstone {
-		return "", "", governor.NewError("Apikey not found", http.StatusNotFound, nil)
+		return "", "", governor.ErrWithKind(nil, ErrNotFound{}, "Apikey not found")
 	} else {
 		kvVal := keyhashKVVal{}
 		if err := json.Unmarshal([]byte(result), &kvVal); err != nil {
@@ -56,15 +74,16 @@ func (s *service) getKeyHash(keyid string) (string, string, error) {
 
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
+		if errors.Is(err, db.ErrNotFound{}) {
 			if err := s.kvkey.Set(keyid, cacheValTombstone, s.scopeCacheTime); err != nil {
 				s.logger.Error("Failed to set apikey key in cache", map[string]string{
 					"error":      err.Error(),
 					"actiontype": "setcacheapikey",
 				})
 			}
+			return "", "", governor.ErrWithKind(err, ErrNotFound{}, "Apikey not found")
 		}
-		return "", "", err
+		return "", "", governor.ErrWithMsg(err, "Failed to get apikey")
 	}
 
 	if kvVal, err := json.Marshal(keyhashKVVal{
@@ -86,16 +105,13 @@ func (s *service) getKeyHash(keyid string) (string, string, error) {
 }
 
 func (s *service) CheckKey(keyid, key string) (string, string, error) {
-	userid, err := s.useridFromKeyid(keyid)
+	userid, err := model.ParseIDUserid(keyid)
 	if err != nil {
-		return "", "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+		return "", "", governor.ErrWithKind(err, ErrInvalidKey{}, "Invalid key")
 	}
 
 	keyhash, keyscope, err := s.getKeyHash(keyid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return "", "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
-		}
 		return "", "", err
 	}
 
@@ -103,7 +119,7 @@ func (s *service) CheckKey(keyid, key string) (string, string, error) {
 		KeyHash: keyhash,
 	}
 	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil || !ok {
-		return "", "", governor.NewError("Invalid key", http.StatusUnauthorized, nil)
+		return "", "", governor.ErrWithKind(err, ErrInvalidKey{}, "Invalid key")
 	}
 	return userid, keyscope, nil
 }
@@ -119,10 +135,13 @@ type (
 func (s *service) Insert(userid string, scope string, name, desc string) (*ResApikeyModel, error) {
 	m, key, err := s.apikeys.New(userid, scope, name, desc)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create apikey keys")
 	}
 	if err := s.apikeys.Insert(m); err != nil {
-		return nil, err
+		if errors.Is(err, db.ErrUnique{}) {
+			return nil, governor.ErrWithKind(err, ErrUnique{}, "Failed to create apikey")
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to create apikey")
 	}
 	s.clearCache(m.Keyid)
 	return &ResApikeyModel{
@@ -134,14 +153,17 @@ func (s *service) Insert(userid string, scope string, name, desc string) (*ResAp
 func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.ErrWithKind(err, ErrNotFound{}, "Apikey not found")
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get apikey")
 	}
 	key, err := s.apikeys.RehashKey(m)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to rotate apikey")
 	}
 	if err := s.apikeys.Update(m); err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to update apikey")
 	}
 	s.clearCache(m.Keyid)
 	return &ResApikeyModel{
@@ -153,13 +175,16 @@ func (s *service) RotateKey(keyid string) (*ResApikeyModel, error) {
 func (s *service) UpdateKey(keyid string, scope string, name, desc string) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		return err
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithKind(err, ErrNotFound{}, "Apikey not found")
+		}
+		return governor.ErrWithMsg(err, "Failed to get apikey")
 	}
 	m.Scope = scope
 	m.Name = name
 	m.Desc = desc
 	if err := s.apikeys.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update apikey")
 	}
 	s.clearCache(m.Keyid)
 	return nil
@@ -168,10 +193,13 @@ func (s *service) UpdateKey(keyid string, scope string, name, desc string) error
 func (s *service) DeleteKey(keyid string) error {
 	m, err := s.apikeys.GetByID(keyid)
 	if err != nil {
-		return err
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithKind(err, ErrNotFound{}, "Apikey not found")
+		}
+		return governor.ErrWithMsg(err, "Failed to get apikey")
 	}
 	if err := s.apikeys.Delete(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete apikey")
 	}
 	s.clearCache(m.Keyid)
 	return nil
@@ -180,10 +208,10 @@ func (s *service) DeleteKey(keyid string) error {
 func (s *service) DeleteUserKeys(userid string) error {
 	keys, err := s.GetUserKeys(userid, 65536, 0)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user keys")
 	}
 	if err := s.apikeys.DeleteUserKeys(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user keys")
 	}
 
 	if len(keys) == 0 {

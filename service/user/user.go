@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	htmlTemplate "html/template"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -229,37 +228,37 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
-		return governor.NewError("Failed to parse access time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse access time")
 	} else {
 		s.accessTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
-		return governor.NewError("Failed to parse refresh time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse refresh time")
 	} else {
 		s.refreshTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("refreshcache")); err != nil {
-		return governor.NewError("Failed to parse refresh cache", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse refresh cache")
 	} else {
 		s.refreshCacheTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
-		return governor.NewError("Failed to parse confirm time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse confirm time")
 	} else {
 		s.confirmTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
-		return governor.NewError("Failed to parse password reset time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse password reset time")
 	} else {
 		s.passwordResetTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
-		return governor.NewError("Failed to parse role invitation time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse role invitation time")
 	} else {
 		s.invitationTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("usercachetime")); err != nil {
-		return governor.NewError("Failed to parse user cache time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse user cache time")
 	} else {
 		s.userCacheTime = int64(t / time.Second)
 	}
@@ -270,17 +269,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.emailurlbase = r.GetStr("email.url.base")
 	if t, err := htmlTemplate.New("email.url.emailchange").Parse(r.GetStr("email.url.emailchange")); err != nil {
-		return governor.NewError("Failed to parse email change url template", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse email change url template")
 	} else {
 		s.tplemailchange = t
 	}
 	if t, err := htmlTemplate.New("email.url.forgotpass").Parse(r.GetStr("email.url.forgotpass")); err != nil {
-		return governor.NewError("Failed to parse forgot pass url template", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse forgot pass url template")
 	} else {
 		s.tplforgotpass = t
 	}
 	if t, err := htmlTemplate.New("email.url.newuser").Parse(r.GetStr("email.url.newuser")); err != nil {
-		return governor.NewError("Failed to parse new user url template", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse new user url template")
 	} else {
 		s.tplnewuser = t
 	}
@@ -355,7 +354,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		CreationTime: madmin.CreationTime,
 	})
 	if err != nil {
-		return governor.NewError("Failed to encode admin user props to json", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode admin user props to json")
 	}
 
 	if err := s.users.Insert(madmin); err != nil {

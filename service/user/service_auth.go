@@ -138,7 +138,7 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 
 // ExchangeToken validates a refresh token and returns an auth token
 func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(token.KindRefresh, refreshToken, "")
+	validToken, claims := s.tokenizer.Validate(token.KindRefresh, refreshToken)
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -183,7 +183,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 
 // RefreshToken invalidates the previous refresh token and creates a new one
 func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(token.KindRefresh, refreshToken, "")
+	validToken, claims := s.tokenizer.Validate(token.KindRefresh, refreshToken)
 	if !validToken {
 		return nil, governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}
@@ -238,7 +238,7 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 func (s *service) Logout(refreshToken string) (string, error) {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
-	ok, claims := s.tokenizer.GetClaims(token.KindRefresh, refreshToken, "")
+	ok, claims := s.tokenizer.GetClaims(token.KindRefresh, refreshToken)
 	if !ok {
 		return "", governor.NewErrorUser("Invalid token", http.StatusUnauthorized, nil)
 	}

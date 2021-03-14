@@ -183,7 +183,7 @@ func (s *service) GetProfileImage(userid string) (io.ReadCloser, string, error) 
 func (s *service) GetProfilesBulk(userids []string) (*resProfiles, error) {
 	m, err := s.profiles.GetBulk(userids)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get profiles")
 	}
 
 	res := make([]resProfileModel, 0, len(m))

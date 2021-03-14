@@ -241,15 +241,24 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 				userid, keyscope, err := s.apikeys.CheckKey(keyid, password)
 				if err != nil {
 					c.SetHeader("WWW-Authenticate", "Basic realm=\""+s.realm+"\"")
-					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusUnauthorized,
+						Message: "User is not authorized",
+					})))
 					return
 				}
 				if !token.HasScope(keyscope, scope) {
-					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "User is forbidden",
+					})))
 					return
 				}
 				if !v(s.intersector(userid, keyscope, c)) {
-					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "User is forbidden",
+					})))
 					return
 				}
 				setCtxUserid(c, userid)
@@ -260,27 +269,46 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					if compass != "" {
 						a, err := getAccessCookieUserid(r, compass)
 						if err != nil {
-							c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
+							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+								Status:  http.StatusUnauthorized,
+								Message: "User is not authorized",
+							})))
 							return
 						}
 						accessToken = a
 					} else {
 						a, err := getAccessCookie(r)
 						if err != nil {
-							c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
+							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+								Status:  http.StatusUnauthorized,
+								Message: "User is not authorized",
+							})))
 							return
 						}
 						accessToken = a
 					}
 				}
-				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken, scope)
+				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken)
 				if !validToken {
 					rmAccessCookie(w, s.baseurl)
-					c.WriteError(governor.NewErrorUser("User is not authorized", http.StatusUnauthorized, nil))
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusUnauthorized,
+						Message: "User is not authorized",
+					})))
+					return
+				}
+				if !token.HasScope(claims.Scope, scope) {
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "User is forbidden",
+					})))
 					return
 				}
 				if !v(s.intersector(claims.Subject, claims.Scope, c)) {
-					c.WriteError(governor.NewErrorUser("User is forbidden", http.StatusForbidden, nil))
+					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "User is forbidden",
+					})))
 					return
 				}
 				setCtxUserid(c, claims.Subject)

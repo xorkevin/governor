@@ -2,7 +2,6 @@ package apikey
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -86,7 +85,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
-		return governor.NewError("Failed to parse scope cache time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse scope cache time")
 	} else {
 		s.scopeCacheTime = int64(t / time.Second)
 	}
