@@ -1,8 +1,6 @@
 package model
 
 import (
-	"net/http"
-
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
@@ -71,42 +69,42 @@ func New(database db.Database) Repo {
 }
 
 func (r *repo) GetByID(userid, role string, after int64) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := invModelGetModelEqUseridEqRoleGtCreationTime(db, userid, role, after)
+	m, code, err := invModelGetModelEqUseridEqRoleGtCreationTime(d, userid, role, after)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("Invitation not found", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "Invitation not found")
 		}
-		return nil, governor.NewError("Failed to get invitation", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get invitation")
 	}
 	return m, nil
 }
 
 // GetByUser returns a user's invitations
 func (r *repo) GetByUser(userid string, after int64, limit, offset int) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db, userid, after, false, limit, offset)
+	m, err := invModelGetModelEqUseridGtCreationTimeOrdCreationTime(d, userid, after, false, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get invitations", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get invitations")
 	}
 	return m, nil
 }
 
 // GetByRole returns a role's invitations
 func (r *repo) GetByRole(role string, after int64, limit, offset int) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db, role, after, false, limit, offset)
+	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(d, role, after, false, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get invitations", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get invitations")
 	}
 	return m, nil
 }
@@ -126,24 +124,24 @@ func (r *repo) Insert(userid string, roles rank.Rank, by string, at int64) error
 			CreationTime: at,
 		})
 	}
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := invModelInsertBulk(db, m, true); err != nil {
-		return governor.NewError("Failed to insert invitations", http.StatusInternalServerError, err)
+	if _, err := invModelInsertBulk(d, m, true); err != nil {
+		return governor.ErrWithMsg(err, "Failed to insert invitations")
 	}
 	return nil
 }
 
 // DeleteByID deletes an invitation by userid and role
 func (r *repo) DeleteByID(userid, role string) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridEqRole(db, userid, role); err != nil {
-		return governor.NewError("Failed to delete invitation", http.StatusInternalServerError, err)
+	if err := invModelDelEqUseridEqRole(d, userid, role); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete invitation")
 	}
 	return nil
 }
@@ -154,35 +152,35 @@ func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
 		return nil
 	}
 
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridHasRole(db, userid, roles.ToSlice()); err != nil {
-		return governor.NewError("Failed to delete invitations", http.StatusInternalServerError, err)
+	if err := invModelDelEqUseridHasRole(d, userid, roles.ToSlice()); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete invitations")
 	}
 	return nil
 }
 
 func (r *repo) DeleteBefore(before int64) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := invModelDelLeqCreationTime(db, before); err != nil {
-		return governor.NewError("Failed to delete invitations", http.StatusInternalServerError, err)
+	if err := invModelDelLeqCreationTime(d, before); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete invitations")
 	}
 	return nil
 }
 
 // Setup creates a new role invitation table
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := invModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup role invitation model", http.StatusInternalServerError, err)
+	if err := invModelSetup(d); err != nil {
+		return governor.ErrWithMsg(err, "Failed to setup role invitation model")
 	}
 	return nil
 }

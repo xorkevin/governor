@@ -1,7 +1,6 @@
 package model
 
 import (
-	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -123,7 +122,7 @@ func (r *repo) ToUserModel(m *Model) *usermodel.Model {
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
-		return false, governor.NewError("Failed to verify code", http.StatusInternalServerError, err)
+		return false, governor.ErrWithMsg(err, "Failed to verify code")
 	}
 	return ok, nil
 }
@@ -131,12 +130,12 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 func (r *repo) RehashCode(m *Model) (string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.NewError("Failed to create new user code", http.StatusInternalServerError, err)
+		return "", governor.ErrWithMsg(err, "Failed to create new user code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return "", governor.NewError("Failed to hash new user code", http.StatusInternalServerError, err)
+		return "", governor.ErrWithMsg(err, "Failed to hash new user code")
 	}
 	now := time.Now().Round(0).Unix()
 	m.Approved = true
@@ -146,75 +145,75 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 }
 
 func (r *repo) GetByID(userid string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := approvalModelGetModelEqUserid(db, userid)
+	m, code, err := approvalModelGetModelEqUserid(d, userid)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that id")
 		}
-		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	return m, nil
 }
 
 func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := approvalModelGetModelOrdCreationTime(db, true, limit, offset)
+	m, err := approvalModelGetModelOrdCreationTime(d, true, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get user approvals", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user approvals")
 	}
 	return m, nil
 }
 
 func (r *repo) Insert(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := approvalModelInsert(db, m); err != nil {
+	if code, err := approvalModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.NewError("Userid must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Userid must be unique")
 		}
-		return governor.NewError("Failed to insert user", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to insert user")
 	}
 	return nil
 }
 
 func (r *repo) Update(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := approvalModelUpdModelEqUserid(db, m, m.Userid); err != nil {
-		return governor.NewError("Failed to update user approval", http.StatusInternalServerError, err)
+	if _, err := approvalModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update user approval")
 	}
 	return nil
 }
 
 func (r *repo) Delete(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := approvalModelDelEqUserid(db, m.Userid); err != nil {
-		return governor.NewError("Failed to delete user approval", http.StatusInternalServerError, err)
+	if err := approvalModelDelEqUserid(d, m.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user approval")
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := approvalModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup user approval model", http.StatusInternalServerError, err)
+	if err := approvalModelSetup(d); err != nil {
+		return governor.ErrWithMsg(err, "Failed to setup user approval model")
 	}
 	return nil
 }

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -99,7 +98,7 @@ func (r *repo) New(userid, kind string) *Model {
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
-		return false, governor.NewError("Failed to verify code", http.StatusInternalServerError, err)
+		return false, governor.ErrWithMsg(err, "Failed to verify code")
 	}
 	return ok, nil
 }
@@ -107,12 +106,12 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 func (r *repo) RehashCode(m *Model) (string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.NewError("Failed to create new code", http.StatusInternalServerError, err)
+		return "", governor.ErrWithMsg(err, "Failed to create new code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return "", governor.NewError("Failed to hash new code", http.StatusInternalServerError, err)
+		return "", governor.ErrWithMsg(err, "Failed to hash new code")
 	}
 	now := time.Now().Round(0).Unix()
 	m.CodeHash = codehash
@@ -121,74 +120,74 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 }
 
 func (r *repo) GetByID(userid, kind string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := resetModelGetModelEqUseridEqKind(db, userid, kind)
+	m, code, err := resetModelGetModelEqUseridEqKind(d, userid, kind)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("Code does not exist", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "Code does not exist")
 		}
-		return nil, governor.NewError("Failed to get reset code", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get reset code")
 	}
 	return m, nil
 }
 
 func (r *repo) Insert(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := resetModelInsert(db, m); err != nil {
+	if code, err := resetModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.NewError("Reset code already exists", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Reset code already exists")
 		}
-		return governor.NewError("Failed to insert new reset code", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to insert new reset code")
 	}
 	return nil
 }
 
 func (r *repo) Update(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := resetModelUpdModelEqUseridEqKind(db, m, m.Userid, m.Kind); err != nil {
-		return governor.NewError("Failed to update reset code", http.StatusInternalServerError, err)
+	if _, err := resetModelUpdModelEqUseridEqKind(d, m, m.Userid, m.Kind); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update reset code")
 	}
 	return nil
 }
 
 func (r *repo) Delete(userid, kind string) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUseridEqKind(db, userid, kind); err != nil {
-		return governor.NewError("Failed to delete reset code", http.StatusInternalServerError, err)
+	if err := resetModelDelEqUseridEqKind(d, userid, kind); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete reset code")
 	}
 	return nil
 }
 
 func (r *repo) DeleteByUserid(userid string) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUserid(db, userid); err != nil {
-		return governor.NewError("Failed to delete reset codes", http.StatusInternalServerError, err)
+	if err := resetModelDelEqUserid(d, userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete reset codes")
 	}
 	return nil
 }
 
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := resetModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup user reset code model", http.StatusInternalServerError, err)
+	if err := resetModelSetup(d); err != nil {
+		return governor.ErrWithMsg(err, "Failed to setup user reset code model")
 	}
 	return nil
 }

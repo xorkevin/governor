@@ -1,7 +1,6 @@
 package model
 
 import (
-	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -106,12 +105,12 @@ func New(database db.Database) Repo {
 func (r *repo) New(username, password, email, firstname, lastname string) (*Model, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
-		return nil, governor.NewError("Failed to create new uid", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
 	}
 
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
-		return nil, governor.NewError("Failed to hash password", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to hash password")
 	}
 
 	return &Model{
@@ -129,7 +128,7 @@ func (r *repo) New(username, password, email, firstname, lastname string) (*Mode
 func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(password, m.PassHash)
 	if err != nil {
-		return false, governor.NewError("Failed to verify password", http.StatusInternalServerError, err)
+		return false, governor.ErrWithMsg(err, "Failed to verify password")
 	}
 	return ok, nil
 }
@@ -138,7 +137,7 @@ func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 func (r *repo) RehashPass(m *Model, password string) error {
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
-		return governor.NewError("Failed to rehash password", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to rehash password")
 	}
 	m.PassHash = mHash
 	return nil
@@ -146,128 +145,128 @@ func (r *repo) RehashPass(m *Model, password string) error {
 
 // GetGroup gets information from each user
 func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoOrdUserid(db, true, limit, offset)
+	m, err := userModelGetInfoOrdUserid(d, true, limit, offset)
 	if err != nil {
-		return nil, governor.NewError("Failed to get user info", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user info")
 	}
 	return m, nil
 }
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoHasUseridOrdUserid(db, userids, true, len(userids), 0)
+	m, err := userModelGetInfoHasUseridOrdUserid(d, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, governor.NewError("Failed to get user info of userids", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user info of userids")
 	}
 	return m, nil
 }
 
 // GetByID returns a user model with the given id
 func (r *repo) GetByID(userid string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqUserid(db, userid)
+	m, code, err := userModelGetModelEqUserid(d, userid)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No user found with that id", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that id")
 		}
-		return nil, governor.NewError("Failed to get user", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
 	}
 	return m, nil
 }
 
 // GetByUsername returns a user model with the given username
 func (r *repo) GetByUsername(username string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqUsername(db, username)
+	m, code, err := userModelGetModelEqUsername(d, username)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No user found with that username", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that username")
 		}
-		return nil, governor.NewError("Failed to get user by username", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user by username")
 	}
 	return m, nil
 }
 
 // GetByEmail returns a user model with the given email
 func (r *repo) GetByEmail(email string) (*Model, error) {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqEmail(db, email)
+	m, code, err := userModelGetModelEqEmail(d, email)
 	if err != nil {
 		if code == 2 {
-			return nil, governor.NewError("No user found with that email", http.StatusNotFound, err)
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that email")
 		}
-		return nil, governor.NewError("Failed to get user by email", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get user by email")
 	}
 	return m, nil
 }
 
 // Insert inserts the model into the db
 func (r *repo) Insert(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := userModelInsert(db, m); err != nil {
+	if code, err := userModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.NewError("User id must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Username and email must be unique")
 		}
-		return governor.NewError("Failed to insert user", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to insert user")
 	}
 	return nil
 }
 
 // Update updates the model in the db
 func (r *repo) Update(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := userModelUpdModelEqUserid(db, m, m.Userid); err != nil {
+	if code, err := userModelUpdModelEqUserid(d, m, m.Userid); err != nil {
 		if code == 3 {
-			return governor.NewError("Username and email must be unique", http.StatusBadRequest, err)
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Username and email must be unique")
 		}
-		return governor.NewError("Failed to update user", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to update user")
 	}
 	return nil
 }
 
 // Delete deletes the model in the db
 func (r *repo) Delete(m *Model) error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := userModelDelEqUserid(db, m.Userid); err != nil {
-		return governor.NewError("Failed to delete user", http.StatusInternalServerError, err)
+	if err := userModelDelEqUserid(d, m.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user")
 	}
 	return nil
 }
 
 // Setup creates a new User table
 func (r *repo) Setup() error {
-	db, err := r.db.DB()
+	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := userModelSetup(db); err != nil {
-		return governor.NewError("Failed to setup user model", http.StatusInternalServerError, err)
+	if err := userModelSetup(d); err != nil {
+		return governor.ErrWithMsg(err, "Failed to setup user model")
 	}
 	return nil
 }
