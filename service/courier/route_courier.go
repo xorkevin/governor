@@ -291,7 +291,10 @@ func (m *router) courierOwner(c governor.Context, userid string) (string, error)
 		return "", nil
 	}
 	if !rank.IsValidOrgName(creatorid) {
-		return "", governor.NewErrorUser("Invalid org id", http.StatusBadRequest, nil)
+		return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Invalid org id",
+			Status:  http.StatusBadRequest,
+		}))
 	}
 	return creatorid, nil
 }

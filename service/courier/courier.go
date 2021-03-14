@@ -2,7 +2,6 @@ package courier
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -107,19 +106,19 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.fallbackLink = r.GetStr("fallbacklink")
 	s.linkPrefix = r.GetStr("linkprefix")
 	if t, err := time.ParseDuration(r.GetStr("cachetime")); err != nil {
-		return governor.NewError("Failed to parse cache time", http.StatusBadRequest, nil)
+		return governor.ErrWithMsg(err, "Failed to parse cache time")
 	} else {
 		s.cacheTime = int64(t / time.Second)
 	}
 	if len(s.fallbackLink) == 0 {
 		l.Warn("fallbacklink is not set", nil)
 	} else if err := validURL(s.fallbackLink); err != nil {
-		return governor.NewError("Invalid fallbacklink", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Invalid fallbacklink")
 	}
 	if len(s.linkPrefix) == 0 {
 		l.Warn("linkprefix is not set", nil)
 	} else if err := validURL(s.linkPrefix); err != nil {
-		return governor.NewError("Invalid linkprefix", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Invalid linkprefix")
 	}
 
 	l.Info("loaded config", map[string]string{
@@ -147,7 +146,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 
 func (s *service) Start(ctx context.Context) error {
 	if err := s.linkImgBucket.Init(); err != nil {
-		return governor.NewError("Failed to init courier link image bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to init courier link image bucket")
 	}
 	return nil
 }

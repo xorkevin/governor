@@ -1,13 +1,16 @@
 package courier
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
 	"xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 )
 
@@ -28,10 +31,13 @@ type (
 func (s *service) GetLink(linkid string) (*resGetLink, error) {
 	m, err := s.repo.GetLink(linkid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Link not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get link")
 	}
 	return &resGetLink{
 		LinkID:       m.LinkID,
@@ -43,20 +49,23 @@ func (s *service) GetLink(linkid string) (*resGetLink, error) {
 
 func (s *service) GetLinkFast(linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(linkid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
+		if !errors.Is(err, kvstore.ErrNotFound{}) {
 			s.logger.Error("Failed to get linkid url from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcachelink",
 			})
 		}
 	} else if cachedURL == cacheValTombstone {
-		return "", governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
+		return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "Link not found",
+		}))
 	} else {
 		return cachedURL, nil
 	}
-	res, err := s.GetLink(linkid)
+	res, err := s.repo.GetLink(linkid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
+		if errors.Is(err, db.ErrNotFound{}) {
 			if err := s.kvlinks.Set(linkid, cacheValTombstone, s.cacheTime); err != nil {
 				s.logger.Error("Failed to cache linkid url", map[string]string{
 					"linkid":     linkid,
@@ -64,8 +73,12 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 					"actiontype": "setcachelink",
 				})
 			}
+			return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Link not found",
+			}), governor.ErrOptInner(err))
 		}
-		return "", err
+		return "", governor.ErrWithMsg(err, "Failed to get link")
 	}
 	if err := s.kvlinks.Set(linkid, res.URL, s.cacheTime); err != nil {
 		s.logger.Error("Failed to cache linkid url", map[string]string{
@@ -80,10 +93,13 @@ func (s *service) GetLinkFast(linkid string) (string, error) {
 func (s *service) StatLinkImage(linkid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.linkImgDir.Stat(linkid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Link qr code image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, governor.NewError("Failed to get link qr code image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get link qr code image")
 	}
 	return objinfo, nil
 }
@@ -91,10 +107,13 @@ func (s *service) StatLinkImage(linkid string) (*objstore.ObjectInfo, error) {
 func (s *service) GetLinkImage(linkid string) (io.ReadCloser, string, error) {
 	qrimg, objinfo, err := s.linkImgDir.Get(linkid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, "", governor.NewErrorUser("Link qr code image not found", http.StatusNotFound, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Link qr code image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, "", governor.NewError("Failed to get link qr code image", http.StatusInternalServerError, err)
+		return nil, "", governor.ErrWithMsg(err, "Failed to get link qr code image")
 	}
 	return qrimg, objinfo.ContentType, nil
 }
@@ -109,7 +128,7 @@ type (
 func (s *service) GetLinkGroup(creatorid string, limit, offset int) (*resLinkGroup, error) {
 	links, err := s.repo.GetLinkGroup(creatorid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get links")
 	}
 	res := make([]resGetLink, 0, len(links))
 	for _, i := range links {
@@ -142,7 +161,7 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 		var err error
 		m, err = s.repo.NewLinkAuto(creatorid, url)
 		if err != nil {
-			return nil, err
+			return nil, governor.ErrWithMsg(err, "Failed to generate link id")
 		}
 	} else {
 		m = s.repo.NewLink(creatorid, linkid, url)
@@ -151,31 +170,37 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 	if brandid != "" {
 		objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(brandid)
 		if err != nil {
-			if governor.ErrorStatus(err) == http.StatusNotFound {
-				return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+			if errors.Is(err, objstore.ErrNotFound{}) {
+				return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusNotFound,
+					Message: "Brand image not found",
+				}), governor.ErrOptInner(err))
 			}
-			return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+			return nil, governor.ErrWithMsg(err, "Failed to get brand image")
 		}
 		if objinfo.ContentType != image.MediaTypePng {
-			return nil, governor.NewErrorUser("Invalid brand image media type", http.StatusBadRequest, err)
+			return nil, governor.ErrWithMsg(err, "Invalid brand image media type")
 		}
 	}
 
 	if err := s.repo.InsertLink(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Link id already taken",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create link")
 	}
 	qrimg, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh, qrScale)
 	if err != nil {
-		return nil, governor.NewError("Failed to generate qr code image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to generate qr code image")
 	}
 
 	if brandid != "" {
 		brandimg, _, err := s.brandImgDir.Subdir(creatorid).Get(brandid)
 		if err != nil {
-			return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+			return nil, governor.ErrWithMsg(err, "Failed to get brand image")
 		}
 		defer func() {
 			if err := brandimg.Close(); err != nil {
@@ -187,7 +212,7 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 		}()
 		brand, err := image.FromPng(brandimg)
 		if err != nil {
-			return nil, governor.NewError("Failed to parse brand image", http.StatusInternalServerError, err)
+			return nil, governor.ErrWithMsg(err, "Failed to parse brand image")
 		}
 		size := qrimg.Size()
 		w := size.W / 3
@@ -198,10 +223,10 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 
 	qrpng, err := qrimg.ToPng(image.PngBest)
 	if err != nil {
-		return nil, governor.NewError("Failed to encode qr code image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to encode qr code image")
 	}
 	if err := s.linkImgDir.Put(m.LinkID, image.MediaTypePng, int64(qrpng.Len()), qrpng); err != nil {
-		return nil, governor.NewError("Failed to save qr code image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to save qr code image")
 	}
 
 	return &resCreateLink{
@@ -213,19 +238,25 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 func (s *service) DeleteLink(creatorid, linkid string) error {
 	m, err := s.repo.GetLink(linkid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Link not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get link")
 	}
 	if m.CreatorID != creatorid {
-		return governor.NewErrorUser("No link found with that id", http.StatusNotFound, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "Link not found",
+		}))
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {
-		return governor.NewError("Failed to delete qr code image", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to delete qr code image")
 	}
 	if err := s.repo.DeleteLink(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete link")
 	}
 	if err := s.kvlinks.Del(linkid); err != nil {
 		s.logger.Error("failed to delete linkid url", map[string]string{
@@ -253,7 +284,7 @@ type (
 func (s *service) GetBrandGroup(creatorid string, limit, offset int) (*resBrandGroup, error) {
 	brands, err := s.repo.GetBrandGroup(creatorid, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get links")
 	}
 	res := make([]resGetBrand, 0, len(brands))
 	for _, i := range brands {
@@ -271,10 +302,13 @@ func (s *service) GetBrandGroup(creatorid string, limit, offset int) (*resBrandG
 func (s *service) StatBrandImage(creatorid, brandid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(brandid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Brand image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get brand image")
 	}
 	return objinfo, nil
 }
@@ -282,10 +316,13 @@ func (s *service) StatBrandImage(creatorid, brandid string) (*objstore.ObjectInf
 func (s *service) GetBrandImage(creatorid, brandid string) (io.ReadCloser, string, error) {
 	brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(brandid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, "", governor.NewErrorUser("Brand image not found", http.StatusNotFound, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Brand image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, "", governor.NewError("Failed to get brand image", http.StatusInternalServerError, err)
+		return nil, "", governor.ErrWithMsg(err, "Failed to get brand image")
 	}
 	return brandimg, objinfo.ContentType, nil
 }
@@ -301,18 +338,21 @@ type (
 func (s *service) CreateBrand(creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
 	m := s.repo.NewBrand(creatorid, brandid)
 	if err := s.repo.InsertBrand(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Brand name must be unique",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create brand")
 	}
 	img.ResizeFill(256, 256)
 	imgpng, err := img.ToPng(image.PngBest)
 	if err != nil {
-		return nil, governor.NewError("Failed to encode png image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to encode png image")
 	}
 	if err := s.brandImgDir.Subdir(creatorid).Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
-		return nil, governor.NewError("Failed to save image", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to save image")
 	}
 	return &resCreateBrand{
 		CreatorID: creatorid,
@@ -324,13 +364,16 @@ func (s *service) CreateBrand(creatorid, brandid string, img image.Image) (*resC
 func (s *service) DeleteBrand(creatorid, brandid string) error {
 	m, err := s.repo.GetBrand(creatorid, brandid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Brand image not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete brand")
 	}
 	if err := s.brandImgDir.Del(brandid); err != nil {
-		return governor.NewError("Failed to delete brand image", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to delete brand image")
 	}
 	if err := s.repo.DeleteBrand(m); err != nil {
 		return err
