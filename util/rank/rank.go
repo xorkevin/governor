@@ -140,6 +140,18 @@ func (r Rank) Intersect(other Rank) Rank {
 	return intersect
 }
 
+// Union returns the union between Ranks
+func (r Rank) Union(other Rank) Rank {
+	union := Rank{}
+	for k := range r {
+		union[k] = struct{}{}
+	}
+	for k := range other {
+		union[k] = struct{}{}
+	}
+	return union
+}
+
 var (
 	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9._-]+$`)
 	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9._-]+$`)

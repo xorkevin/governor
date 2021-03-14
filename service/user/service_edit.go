@@ -1,29 +1,37 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
 )
 
 func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
 	if err = s.users.Update(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return governor.NewErrorUser("Username must be unique", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Username must be unique",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to update user")
 	}
 	return nil
 }
@@ -31,7 +39,7 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
 	updaterRank, err := s.roles.IntersectRoles(updaterid, combineModRoles(editAddRank, editRemoveRank))
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get updater roles")
 	}
 
 	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, true); err != nil {
@@ -43,17 +51,20 @@ func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.R
 
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 
 	editAddRank.Remove(editRemoveRank)
 
 	currentRoles, err := s.roles.IntersectRoles(userid, editAddRank)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user roles")
 	}
 
 	editAddRank.Remove(currentRoles)
@@ -77,18 +88,18 @@ func (s *service) UpdateRank(userid string, updaterid string, editAddRank rank.R
 		userRole := rank.Rank{}.AddOne(rank.TagUser)
 		editAddRank.Remove(userRole)
 		if err := s.roles.InsertRoles(m.Userid, userRole); err != nil {
-			return err
+			return governor.ErrWithMsg(err, "Failed to update user roles")
 		}
 	}
 
-	if err := s.invitations.DeleteByRoles(m.Userid, editAddRank); err != nil {
-		return err
+	if err := s.invitations.DeleteByRoles(m.Userid, editAddRank.Union(editRemoveRank)); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove role invitations")
 	}
 	if err := s.invitations.Insert(m.Userid, editAddRank, updaterid, now); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to add role invitations")
 	}
 	if err := s.roles.DeleteRoles(m.Userid, editRemoveRank); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to remove user roles")
 	}
 
 	return nil
@@ -122,55 +133,90 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 		if err != nil {
 			switch key {
 			case rank.TagAdmin:
-				// updater cannot change one's own admin status nor change another's admin status if not an admin
+				// updater cannot change one's own admin status
 				if editid == updaterid {
-					return governor.NewErrorUser("Cannot modify own admin status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Cannot modify own admin status",
+					}))
 				}
+				// updater cannot change another's admin status if not an admin
 				if !updaterIsAdmin {
-					return governor.NewErrorUser("Must be admin to modify admin status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Must be admin to modify admin status",
+					}))
 				}
 			case rank.TagSystem:
 				// no one can change the system status
-				return governor.NewErrorUser("Forbidden rank edit", http.StatusForbidden, nil)
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusForbidden,
+					Message: "Cannot modify system rank",
+				}))
 			case rank.TagUser:
 				// only admins can change the user status
 				if !updaterIsAdmin {
-					return governor.NewErrorUser("Must be admin to modify user status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Must be admin to modify user status",
+					}))
 				}
 			default:
 				// other tags cannot be edited
-				return governor.NewErrorUser("Invalid tag name", http.StatusForbidden, nil)
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid tag name",
+				}))
 			}
 		} else {
 			switch prefix {
 			case rank.TagModPrefix:
-				// updater cannot change one's own mod status nor edit mod rank if not an admin and not a mod of that group
+				// updater cannot change one's own mod status if not an admin
 				if !updaterIsAdmin && editid == updaterid {
-					return governor.NewErrorUser("Cannot modify own mod status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Cannot modify own mod status",
+					}))
 				}
+				// updater cannot change another's mod rank if not an admin and not a mod of that group
 				if !updaterIsAdmin && !updater.HasMod(tag) {
-					return governor.NewErrorUser("Must be moderator of the group to modify mod status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Must be moderator of the group to modify mod status",
+					}))
 				}
 			case rank.TagBanPrefix:
 				// cannot edit ban group rank if not an admin and not a moderator of that group
 				if !updaterIsAdmin && !updater.HasMod(tag) {
-					return governor.NewErrorUser("Must be moderator of the group to modify ban status", http.StatusForbidden, nil)
+					return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+						Status:  http.StatusForbidden,
+						Message: "Must be moderator of the group to modify ban status",
+					}))
 				}
 			case rank.TagUserPrefix:
 				if add {
 					// cannot add user if not admin and not a moderator of that group
 					if !updaterIsAdmin && !updater.HasMod(tag) {
-						return governor.NewErrorUser("Must be a moderator of the group to add user status", http.StatusForbidden, nil)
+						return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+							Status:  http.StatusForbidden,
+							Message: "Must be a moderator of the group to add user status",
+						}))
 					}
 				} else {
 					// cannot remove user if not admin and not a moderator of that group and not self
 					if !updaterIsAdmin && !updater.HasMod(tag) && editid != updaterid {
-						return governor.NewErrorUser("Cannot update other user status", http.StatusForbidden, nil)
+						return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+							Status:  http.StatusForbidden,
+							Message: "Cannot update other user status",
+						}))
 					}
 				}
 			default:
 				// other tags cannot be edited
-				return governor.NewErrorUser("Invalid tag name", http.StatusBadRequest, nil)
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusBadRequest,
+					Message: "Invalid tag name",
+				}))
 			}
 		}
 	}
@@ -180,10 +226,13 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 func (s *service) AcceptRoleInvitation(userid, role string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 
 	now := time.Now().Round(0).Unix()
@@ -191,10 +240,13 @@ func (s *service) AcceptRoleInvitation(userid, role string) error {
 
 	inv, err := s.invitations.GetByID(userid, role, after)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Role invitation not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get role invitation")
 	}
 	if inv.Role == rank.TagAdmin {
 		s.logger.Info("add admin role", map[string]string{
@@ -203,10 +255,10 @@ func (s *service) AcceptRoleInvitation(userid, role string) error {
 		})
 	}
 	if err := s.invitations.DeleteByID(userid, role); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete role invitation")
 	}
 	if err := s.roles.InsertRoles(m.Userid, rank.Rank{}.AddOne(inv.Role)); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update roles")
 	}
 	return nil
 }
@@ -230,7 +282,7 @@ func (s *service) GetUserRoleInvitations(userid string, amount, offset int) (*re
 
 	m, err := s.invitations.GetByUser(userid, after, amount, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get role invitations")
 	}
 	res := make([]resUserRoleInvitation, 0, len(m))
 	for _, i := range m {
@@ -252,7 +304,7 @@ func (s *service) GetRoleInvitations(role string, amount, offset int) (*resUserR
 
 	m, err := s.invitations.GetByRole(role, after, amount, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get role invitations")
 	}
 	res := make([]resUserRoleInvitation, 0, len(m))
 	for _, i := range m {
@@ -270,7 +322,7 @@ func (s *service) GetRoleInvitations(role string, amount, offset int) (*resUserR
 
 func (s *service) DeleteRoleInvitation(userid, role string) error {
 	if err := s.invitations.DeleteByID(userid, role); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete role invitation")
 	}
 	return nil
 }
