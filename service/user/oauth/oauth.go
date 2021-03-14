@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -131,25 +130,25 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
-		return governor.NewError("Failed to parse code time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse code time")
 	} else {
 		s.codeTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
-		return governor.NewError("Failed to parse access time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse access time")
 	} else {
 		s.accessTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
-		return governor.NewError("Failed to parse refresh time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse refresh time")
 	} else {
 		s.refreshTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("keycache")); err != nil {
-		return governor.NewError("Failed to parse key cache time", http.StatusBadRequest, err)
+		return governor.ErrWithMsg(err, "Failed to parse key cache time")
 	} else {
 		s.keyCacheTime = int64(t / time.Second)
 	}
@@ -201,7 +200,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 
 func (s *service) Start(ctx context.Context) error {
 	if err := s.logoBucket.Init(); err != nil {
-		return governor.NewError("Failed to init oauth app logo bucket", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to init oauth app logo bucket")
 	}
 	return nil
 }

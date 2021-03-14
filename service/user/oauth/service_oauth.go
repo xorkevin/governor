@@ -2,14 +2,26 @@ package oauth
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/oauth/model"
 )
+
+type (
+	// ErrNotFound is returned when an apikey is not found
+	ErrNotFound struct{}
+)
+
+func (e ErrNotFound) Error() string {
+	return "OAuth app not found"
+}
 
 const (
 	cacheValTombstone = "-"
@@ -34,7 +46,7 @@ type (
 func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error) {
 	m, err := s.apps.GetApps(limit, offset, creatorid)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth apps")
 	}
 	res := make([]resApp, 0, len(m))
 	for _, i := range m {
@@ -56,7 +68,7 @@ func (s *service) GetApps(limit, offset int, creatorid string) (*resApps, error)
 func (s *service) GetAppsBulk(clientids []string) (*resApps, error) {
 	m, err := s.apps.GetBulk(clientids)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth apps")
 	}
 	res := make([]resApp, 0, len(m))
 	for _, i := range m {
@@ -77,14 +89,14 @@ func (s *service) GetAppsBulk(clientids []string) (*resApps, error) {
 
 func (s *service) getCachedClient(clientid string) (*model.Model, error) {
 	if clientstr, err := s.kvclient.Get(clientid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
+		if !errors.Is(err, kvstore.ErrNotFound{}) {
 			s.logger.Error("Failed to get oauth client from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcacheclient",
 			})
 		}
 	} else if clientstr == cacheValTombstone {
-		return nil, governor.NewError("App not found", http.StatusNotFound, nil)
+		return nil, governor.ErrWithKind(err, ErrNotFound{}, "OAuth app not found")
 	} else {
 		cm := &model.Model{}
 		if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
@@ -99,15 +111,16 @@ func (s *service) getCachedClient(clientid string) (*model.Model, error) {
 
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
+		if errors.Is(err, db.ErrNotFound{}) {
 			if err := s.kvclient.Set(clientid, cacheValTombstone, s.keyCacheTime); err != nil {
 				s.logger.Error("Failed to set oauth client in cache", map[string]string{
 					"error":      err.Error(),
 					"actiontype": "setcacheclient",
 				})
 			}
+			return nil, governor.ErrWithKind(err, ErrNotFound{}, "OAuth app not found")
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 
 	if clientbytes, err := json.Marshal(m); err != nil {
@@ -135,10 +148,10 @@ type (
 func (s *service) CreateApp(name, url, redirectURI, creatorID string) (*resCreate, error) {
 	m, key, err := s.apps.New(name, url, redirectURI, creatorID)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create oauth app")
 	}
 	if err := s.apps.Insert(m); err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to insert oauth app")
 	}
 	return &resCreate{
 		ClientID: m.ClientID,
@@ -149,17 +162,20 @@ func (s *service) CreateApp(name, url, redirectURI, creatorID string) (*resCreat
 func (s *service) RotateAppKey(clientid string) (*resCreate, error) {
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 	key, err := s.apps.RehashKey(m)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to rotate client key")
 	}
 	if err := s.apps.Update(m); err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to update oauth app")
 	}
 	s.clearCache(clientid)
 	return &resCreate{
@@ -171,16 +187,19 @@ func (s *service) RotateAppKey(clientid string) (*resCreate, error) {
 func (s *service) UpdateApp(clientid string, name, url, redirectURI string) error {
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 	m.Name = name
 	m.URL = url
 	m.RedirectURI = redirectURI
 	if err := s.apps.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update oauth app")
 	}
 	s.clearCache(clientid)
 	return nil
@@ -195,10 +214,13 @@ const (
 func (s *service) UpdateLogo(clientid string, img image.Image) error {
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 
 	img.ResizeFill(imgSize, imgSize)
@@ -206,19 +228,19 @@ func (s *service) UpdateLogo(clientid string, img image.Image) error {
 	thumb.ResizeLimit(thumbSize, thumbSize)
 	thumb64, err := thumb.ToBase64(thumbQuality)
 	if err != nil {
-		return governor.NewError("Failed to encode thumbnail to base64", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode thumbnail to base64")
 	}
 	imgpng, err := img.ToPng(image.PngBest)
 	if err != nil {
-		return governor.NewError("Failed to encode image to png", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode image to png")
 	}
 	if err := s.logoImgDir.Put(m.ClientID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
-		return governor.NewError("Failed to save app logo", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to save app logo")
 	}
 
 	m.Logo = thumb64
 	if err := s.apps.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update oauth app")
 	}
 	s.clearCache(clientid)
 	return nil
@@ -227,20 +249,23 @@ func (s *service) UpdateLogo(clientid string, img image.Image) error {
 func (s *service) Delete(clientid string) error {
 	m, err := s.apps.GetByID(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 
 	if err := s.logoImgDir.Del(clientid); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return governor.NewError("Unable to delete app logo", http.StatusInternalServerError, err)
+		if !errors.Is(err, objstore.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Unable to delete app logo")
 		}
 	}
 
 	if err := s.apps.Delete(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete oauth app")
 	}
 	s.clearCache(clientid)
 	return nil
@@ -249,10 +274,13 @@ func (s *service) Delete(clientid string) error {
 func (s *service) GetApp(clientid string) (*resApp, error) {
 	m, err := s.getCachedClient(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth app")
 	}
 	return &resApp{
 		ClientID:     m.ClientID,
@@ -268,10 +296,13 @@ func (s *service) GetApp(clientid string) (*resApp, error) {
 func (s *service) StatLogo(clientid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.logoImgDir.Stat(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("App logo not found", 0, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app logo not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, governor.NewError("Failed to get app logo", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to get oauth app logo")
 	}
 	return objinfo, nil
 }
@@ -279,10 +310,13 @@ func (s *service) StatLogo(clientid string) (*objstore.ObjectInfo, error) {
 func (s *service) GetLogo(clientid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.logoImgDir.Get(clientid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, "", governor.NewErrorUser("App logo not found", 0, err)
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "OAuth app logo not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, "", governor.NewError("Failed to get app logo", http.StatusInternalServerError, err)
+		return nil, "", governor.ErrWithMsg(err, "Failed to get app logo")
 	}
 	return obj, objinfo.ContentType, nil
 }

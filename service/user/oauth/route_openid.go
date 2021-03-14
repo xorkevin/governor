@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -47,7 +48,11 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
-		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "Unauthorized", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Code:    oidErrorInvalidRequest,
+			Message: "Unauthorized",
+		})))
 		return
 	}
 	req := reqOAuthAuthorize{}
@@ -61,11 +66,19 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.CodeChallengeMethod == "" && req.CodeChallenge != "" {
-		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "No code challenge method provided", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Code:    oidErrorInvalidRequest,
+			Message: "No code challenge method provided",
+		})))
 		return
 	}
 	if req.CodeChallengeMethod != "" && req.CodeChallenge == "" {
-		c.WriteError(governor.NewCodeErrorUser(oidErrorInvalidRequest, "No code challenge provided", http.StatusBadRequest, nil))
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Code:    oidErrorInvalidRequest,
+			Message: "No code challenge provided",
+		})))
 		return
 	}
 
@@ -95,12 +108,38 @@ type (
 )
 
 func (m *router) writeOAuthTokenError(c governor.Context, err error) {
-	if governor.ErrorStatus(err) == http.StatusUnauthorized {
-		c.SetHeader("WWW-Authenticate", "Basic realm=\"governor\"")
+	gerr := &governor.Error{}
+	isError := errors.As(err, gerr)
+
+	if !errors.Is(err, governor.ErrorUser{}) {
+		msg := "non governor error"
+		if isError {
+			msg = gerr.Message
+		}
+		m.s.logger.Error(msg, map[string]string{
+			"endpoint": c.Req().URL.EscapedPath(),
+			"error":    err.Error(),
+		})
 	}
-	c.WriteJSON(governor.ErrorStatus(err), resAuthTokenErr{
-		Error: governor.ErrorCode(err),
-		Desc:  governor.ErrorMsg(err),
+
+	if rerr := (&governor.ErrorRes{}); errors.As(err, rerr) {
+		if rerr.Status == http.StatusUnauthorized {
+			c.SetHeader("WWW-Authenticate", "Basic realm=\"governor\"")
+		}
+		c.WriteJSON(rerr.Status, resAuthTokenErr{
+			Error: rerr.Code,
+			Desc:  rerr.Message,
+		})
+		return
+	}
+
+	msg := "Internal Server Error"
+	if isError {
+		msg = gerr.Message
+	}
+	c.WriteJSON(http.StatusInternalServerError, resAuthTokenErr{
+		Error: oidErrorServer,
+		Desc:  msg,
 	})
 }
 
@@ -120,18 +159,30 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if user, pass, ok := r.BasicAuth(); ok {
 			if req.ClientID != "" || req.ClientSecret != "" {
-				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Client secret basic and post used", http.StatusBadRequest, nil))
+				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusBadRequest,
+					Code:    oidErrorInvalidRequest,
+					Message: "Client secret basic and post used",
+				})))
 				return
 			}
 			var err error
 			req.ClientID, err = url.QueryUnescape(user)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid client id encoding", http.StatusBadRequest, err))
+				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusBadRequest,
+					Code:    oidErrorInvalidRequest,
+					Message: "Invalid client id encoding",
+				})))
 				return
 			}
 			req.ClientSecret, err = url.QueryUnescape(pass)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorInvalidRequest, "Invalid client secret encoding", http.StatusBadRequest, err))
+				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusBadRequest,
+					Code:    oidErrorInvalidRequest,
+					Message: "Invalid client secret encoding",
+				})))
 				return
 			}
 		}
@@ -151,7 +202,11 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		c.WriteJSON(http.StatusOK, res)
 		return
 	}
-	m.writeOAuthTokenError(c, governor.NewCodeErrorUser(oidErrorUnsupportedGrant, "Unsupported grant type", http.StatusBadRequest, nil))
+	m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+		Status:  http.StatusBadRequest,
+		Code:    oidErrorUnsupportedGrant,
+		Message: "Unsupported grant type",
+	})))
 	return
 }
 
