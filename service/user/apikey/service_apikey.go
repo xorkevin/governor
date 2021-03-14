@@ -118,7 +118,9 @@ func (s *service) CheckKey(keyid, key string) (string, string, error) {
 	m := model.Model{
 		KeyHash: keyhash,
 	}
-	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil || !ok {
+	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil {
+		return "", "", governor.ErrWithMsg(err, "Failed to validate key")
+	} else if !ok {
 		return "", "", governor.ErrWithKind(err, ErrInvalidKey{}, "Invalid key")
 	}
 	return userid, keyscope, nil

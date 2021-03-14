@@ -2,9 +2,9 @@ package user
 
 import (
 	"net/http"
-	"strings"
 
 	"xorkevin.dev/governor"
+	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -75,9 +75,12 @@ type (
 )
 
 func (r *reqApikeyID) validUserid() error {
-	k := strings.SplitN(r.Keyid, "|", 2)
-	if len(k) != 2 || r.Userid != k[0] {
-		return governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
+	if err != nil || r.Userid != userid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid apikey id",
+		}))
 	}
 	return nil
 }
@@ -114,9 +117,12 @@ type (
 )
 
 func (r *reqApikeyUpdate) validUserid() error {
-	k := strings.SplitN(r.Keyid, "|", 2)
-	if len(k) != 2 || r.Userid != k[0] {
-		return governor.NewErrorUser("Invalid apikey id", http.StatusForbidden, nil)
+	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
+	if err != nil || r.Userid != userid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid apikey id",
+		}))
 	}
 	return nil
 }

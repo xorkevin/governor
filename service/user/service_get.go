@@ -1,9 +1,11 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -269,7 +271,7 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 	exists := true
 	_, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
+		if !errors.Is(err, db.ErrNotFound{}) {
 			return false, err
 		}
 		exists = false

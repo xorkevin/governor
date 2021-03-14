@@ -197,7 +197,9 @@ func (s *service) checkClientKey(clientid, key, redirect string) error {
 		}
 		return governor.NewCodeError(oidErrorServer, "", http.StatusInternalServerError, err)
 	}
-	if ok, err := s.apps.ValidateKey(key, m); err != nil || !ok {
+	if ok, err := s.apps.ValidateKey(key, m); err != nil {
+		return governor.ErrWithMsg(err, "Failed to validate key")
+	} else if !ok {
 		return governor.NewCodeErrorUser(oidErrorInvalidClient, "Invalid client", http.StatusUnauthorized, nil)
 	}
 	if redirect != m.RedirectURI {
@@ -217,7 +219,9 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		}
 		return nil, governor.NewCodeError(oidErrorServer, "", http.StatusInternalServerError, err)
 	}
-	if ok, err := s.connections.ValidateCode(code, m); err != nil || !ok {
+	if ok, err := s.connections.ValidateCode(code, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to validate code")
+	} else if !ok {
 		return nil, governor.NewCodeErrorUser(oidErrorInvalidGrant, "Invalid code", http.StatusBadRequest, nil)
 	}
 	switch m.ChallengeMethod {
