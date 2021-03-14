@@ -2,12 +2,14 @@ package user
 
 import (
 	"bytes"
+	"errors"
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	usermodel "xorkevin.dev/governor/service/user/model"
 )
 
@@ -59,7 +61,7 @@ func (e *emailEmailChange) Query() queryEmailEmailChange {
 func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
 	if err := tpl.Execute(b, e.Query()); err != nil {
-		return governor.NewError("Failed executing email change url template", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed executing email change url template")
 	}
 	e.URL = base + b.String()
 	return nil
@@ -68,53 +70,60 @@ func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) e
 // UpdateEmail creates a pending user email update
 func (s *service) UpdateEmail(userid string, newEmail string, password string) error {
 	if _, err := s.users.GetByEmail(newEmail); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to get user")
 		}
 	} else {
-		return governor.NewErrorUser("Email is already in use", http.StatusBadRequest, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is already in use",
+		}))
 	}
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 	if m.Email == newEmail {
-		return governor.NewErrorUser("Emails cannot be the same", http.StatusBadRequest, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Emails cannot be the same",
+		}), governor.ErrOptInner(err))
 	}
 	if ok, err := s.users.ValidatePass(password, m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to validate password")
 	} else if !ok {
-		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Incorrect password",
+		}))
 	}
 
 	needInsert := false
 	mr, err := s.resets.GetByID(m.Userid, kindResetEmail)
 	if err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to get user")
 		}
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetEmail)
 	}
 	code, err := s.resets.RehashCode(mr)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate email reset code")
 	}
 	mr.Params = newEmail
 	if needInsert {
 		if err := s.resets.Insert(mr); err != nil {
-			if governor.ErrorStatus(err) == http.StatusBadRequest {
-				return governor.NewErrorUser("", 0, err)
-			}
-			return err
+			return governor.ErrWithMsg(err, "Failed to create email reset request")
 		}
-	} else {
-		if err := s.resets.Update(mr); err != nil {
-			return err
-		}
+	} else if err := s.resets.Update(mr); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update email reset request")
 	}
 
 	emdata := emailEmailChange{
@@ -125,10 +134,10 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplemailchange); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate new email verification email")
 	}
 	if err := s.mailer.Send("", "", []string{newEmail}, emailChangeTemplate, emdata); err != nil {
-		return governor.NewError("Failed to send new email verification", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to send new email verification email")
 	}
 	return nil
 }
@@ -137,46 +146,64 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 func (s *service) CommitEmail(userid string, key string, password string) error {
 	mr, err := s.resets.GetByID(userid, kindResetEmail)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("New email verification expired", http.StatusBadRequest, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "New email verification expired",
+			}), governor.ErrOptInner(err))
 		}
-		return governor.NewError("Failed to update email", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to get email reset request")
 	}
 
 	if time.Now().Round(0).Unix() > mr.CodeTime+s.passwordResetTime {
-		return governor.NewErrorUser("New email verification expired", http.StatusBadRequest, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "New email verification expired",
+		}))
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
-		return governor.NewError("Failed to update email", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to validate email reset code")
 	} else if !ok {
-		return governor.NewErrorUser("Invalid code", http.StatusForbidden, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid code",
+		}))
 	}
 
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 
 	if ok, err := s.users.ValidatePass(password, m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to validate password")
 	} else if !ok {
-		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Incorrect password",
+		}))
 	}
 
 	m.Email = mr.Params
 
 	if err := s.resets.Delete(userid, kindResetEmail); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete email reset request")
 	}
 
 	if err = s.users.Update(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return governor.NewErrorUser("Email is already in use by another account", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Email is already in use by another account",
+			}))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to update email")
 	}
 
 	emdatanotify := emailEmailChangeNotify{
@@ -237,7 +264,7 @@ func (e *emailForgotPass) Query() queryEmailForgotPass {
 func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
 	if err := tpl.Execute(b, e.Query()); err != nil {
-		return governor.NewError("Failed executing forgot pass url template", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed executing forgot pass url template")
 	}
 	e.URL = base + b.String()
 	return nil
@@ -253,22 +280,28 @@ const (
 func (s *service) UpdatePassword(userid string, newPassword string, oldPassword string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 	if ok, err := s.users.ValidatePass(oldPassword, m); err != nil {
 		return err
 	} else if !ok {
-		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Incorrect password",
+		}))
 	}
 	if err := s.users.RehashPass(m, newPassword); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed hashing password")
 	}
 
 	if err = s.users.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update user")
 	}
 
 	emdata := emailPassChange{
@@ -291,19 +324,25 @@ func (s *service) ForgotPassword(useroremail string) error {
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(useroremail)
 		if err != nil {
-			if governor.ErrorStatus(err) == http.StatusNotFound {
-				return nil
+			if errors.Is(err, db.ErrNotFound{}) {
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusNotFound,
+					Message: "User not found",
+				}), governor.ErrOptInner(err))
 			}
-			return err
+			return governor.ErrWithMsg(err, "Failed to get user")
 		}
 		m = mu
 	} else {
 		mu, err := s.users.GetByUsername(useroremail)
 		if err != nil {
-			if governor.ErrorStatus(err) == http.StatusNotFound {
-				return nil
+			if errors.Is(err, db.ErrNotFound{}) {
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusNotFound,
+					Message: "User not found",
+				}), governor.ErrOptInner(err))
 			}
-			return err
+			return governor.ErrWithMsg(err, "Failed to get user")
 		}
 		m = mu
 	}
@@ -311,22 +350,19 @@ func (s *service) ForgotPassword(useroremail string) error {
 	needInsert := false
 	mr, err := s.resets.GetByID(m.Userid, kindResetPass)
 	if err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to get user")
 		}
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetPass)
 	}
 	code, err := s.resets.RehashCode(mr)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate password reset code")
 	}
 	if needInsert {
 		if err := s.resets.Insert(mr); err != nil {
-			if governor.ErrorStatus(err) == http.StatusBadRequest {
-				return governor.NewErrorUser("", 0, err)
-			}
-			return err
+			return governor.ErrWithMsg(err, "Failed to create password reset request")
 		}
 	} else {
 		if err := s.resets.Update(mr); err != nil {
@@ -342,10 +378,10 @@ func (s *service) ForgotPassword(useroremail string) error {
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplforgotpass); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate password reset email")
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, forgotPassTemplate, emdata); err != nil {
-		return governor.NewError("Failed to send password reset email", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to send password reset email")
 	}
 	return nil
 }
@@ -354,39 +390,51 @@ func (s *service) ForgotPassword(useroremail string) error {
 func (s *service) ResetPassword(userid string, key string, newPassword string) error {
 	mr, err := s.resets.GetByID(userid, kindResetPass)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("Password reset expired", http.StatusBadRequest, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Password reset expired",
+			}), governor.ErrOptInner(err))
 		}
-		return governor.NewError("Failed to reset password", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to get password reset request")
 	}
 
 	if time.Now().Round(0).Unix() > mr.CodeTime+s.passwordResetTime {
-		return governor.NewErrorUser("Password reset expired", http.StatusBadRequest, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "Password reset expired",
+		}))
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
-		return governor.NewError("Failed to reset password", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to validate password reset code")
 	} else if !ok {
-		return governor.NewErrorUser("Invalid code", http.StatusForbidden, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Invalid code",
+		}))
 	}
 
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 
 	if err := s.users.RehashPass(m, newPassword); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed hashing password")
 	}
 
 	if err := s.resets.Delete(userid, kindResetPass); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete password reset request")
 	}
 
 	if err := s.users.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to update password")
 	}
 
 	emdata := emailPassReset{

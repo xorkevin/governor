@@ -176,7 +176,7 @@ func (s *service) ApproveUser(userid string) error {
 		return governor.ErrWithMsg(err, "Failed to approve user")
 	}
 	if err := s.sendNewUserEmail(code, m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to send new user email")
+		return governor.ErrWithMsg(err, "Failed to send account verification email")
 	}
 	return nil
 }
@@ -207,7 +207,7 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate new user email")
+		return governor.ErrWithMsg(err, "Failed to generate account verification email")
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, newUserTemplate, emdata); err != nil {
 		return governor.ErrWithMsg(err, "Failed to send account verification email")
@@ -243,7 +243,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		return nil, governor.ErrWithMsg(err, "Failed to verify key")
 	} else if !ok {
 		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusForbidden,
+			Status:  http.StatusUnauthorized,
 			Message: "Invalid key",
 		}))
 	}
