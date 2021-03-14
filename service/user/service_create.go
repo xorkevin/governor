@@ -3,12 +3,14 @@ package user
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -49,7 +51,7 @@ func (e *emailNewUser) Query() queryEmailNewUser {
 func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
 	if err := tpl.Execute(b, e.Query()); err != nil {
-		return governor.NewError("Failed executing new user url template", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed executing new user url template")
 	}
 	e.URL = base + b.String()
 	return nil
@@ -65,47 +67,47 @@ type (
 // CreateUser creates a new user and places it into approvals
 func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
 	if _, err := s.users.GetByUsername(ruser.Username); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return nil, err
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.ErrWithMsg(err, "Failed to get user")
 		}
 	} else {
-		return nil, governor.NewErrorUser("Username is already taken", http.StatusBadRequest, nil)
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username is already taken",
+		}))
 	}
 
 	if _, err := s.users.GetByEmail(ruser.Email); err != nil {
-		if governor.ErrorStatus(err) != http.StatusNotFound {
-			return nil, err
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.ErrWithMsg(err, "Failed to get user")
 		}
 	} else {
-		return nil, governor.NewErrorUser("Email is already used by another account", http.StatusBadRequest, nil)
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is already used by another account",
+		}))
 	}
 
 	m, err := s.users.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create new user request")
 	}
 
 	am := s.approvals.New(m)
 	if s.userApproval {
 		if err := s.approvals.Insert(am); err != nil {
-			if governor.ErrorStatus(err) == http.StatusBadRequest {
-				return nil, governor.NewErrorUser("", 0, err)
-			}
-			return nil, err
+			return nil, governor.ErrWithMsg(err, "Failed to create new user request")
 		}
 	} else {
 		code, err := s.approvals.RehashCode(am)
 		if err != nil {
-			return nil, err
+			return nil, governor.ErrWithMsg(err, "Failed to generate email verification code")
 		}
 		if err := s.approvals.Insert(am); err != nil {
-			if governor.ErrorStatus(err) == http.StatusBadRequest {
-				return nil, governor.NewErrorUser("", 0, err)
-			}
-			return nil, err
+			return nil, governor.ErrWithMsg(err, "Failed to create new user request")
 		}
 		if err := s.sendNewUserEmail(code, am); err != nil {
-			return nil, err
+			return nil, governor.ErrWithMsg(err, "Failed to send new user email")
 		}
 	}
 
@@ -135,7 +137,7 @@ type (
 func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
 	m, err := s.approvals.GetGroup(limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user requests")
 	}
 	approvals := make([]resApproval, 0, len(m))
 	for _, i := range m {
@@ -158,20 +160,23 @@ func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
 func (s *service) ApproveUser(userid string) error {
 	m, err := s.approvals.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User request not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user request")
 	}
 	code, err := s.approvals.RehashCode(m)
 	if err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate new email verification code")
 	}
 	if err := s.approvals.Update(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to approve user")
 	}
 	if err := s.sendNewUserEmail(code, m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to send new user email")
 	}
 	return nil
 }
@@ -179,13 +184,16 @@ func (s *service) ApproveUser(userid string) error {
 func (s *service) DeleteUserApproval(userid string) error {
 	m, err := s.approvals.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User request not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user request")
 	}
 	if err := s.approvals.Delete(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user request")
 	}
 	return nil
 }
@@ -199,10 +207,10 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 		Username:  m.Username,
 	}
 	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to generate new user email")
 	}
 	if err := s.mailer.Send("", "", []string{m.Email}, newUserTemplate, emdata); err != nil {
-		return governor.NewError("Failed to send account verification email", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to send account verification email")
 	}
 	return nil
 }
@@ -211,21 +219,33 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) {
 	am, err := s.approvals.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User request not found",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to get user request")
 	}
 	if !am.Approved {
-		return nil, governor.NewErrorUser("Not approved", http.StatusBadRequest, nil)
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Not approved",
+		}))
 	}
 	if time.Now().Round(0).Unix() > am.CodeTime+s.confirmTime {
-		return nil, governor.NewErrorUser("Code expired", http.StatusBadRequest, nil)
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Code expired",
+		}))
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
-		return nil, governor.NewError("Failed to verify key", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to verify key")
 	} else if !ok {
-		return nil, governor.NewErrorUser("Invalid key", http.StatusForbidden, nil)
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusForbidden,
+			Message: "Invalid key",
+		}))
 	}
 	m := s.approvals.ToUserModel(am)
 
@@ -238,17 +258,26 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		CreationTime: m.CreationTime,
 	})
 	if err != nil {
-		return nil, governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to encode user props to json")
 	}
 
 	if err := s.users.Insert(m); err != nil {
-		if governor.ErrorStatus(err) == http.StatusBadRequest {
-			return nil, governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrUnique{}) {
+			if err := s.approvals.Delete(am); err != nil {
+				s.logger.Error("Failed to clean up user approval", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "commitusercleanup",
+				})
+			}
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Username or email already in use by another account",
+			}), governor.ErrOptInner(err))
 		}
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create user")
 	}
 	if err := s.roles.InsertRoles(m.Userid, rank.BaseUser()); err != nil {
-		return nil, err
+		return nil, governor.ErrWithMsg(err, "Failed to create user roles")
 	}
 
 	if err := s.queue.Publish(NewUserQueueID, b); err != nil {
@@ -282,31 +311,43 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 func (s *service) DeleteUser(userid string, username string, password string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
-		if governor.ErrorStatus(err) == http.StatusNotFound {
-			return governor.NewErrorUser("", 0, err)
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
 		}
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user")
 	}
 
 	if m.Username != username {
-		return governor.NewErrorUser("Information does not match", http.StatusBadRequest, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username does not match",
+		}))
 	}
 	if roles, err := s.roles.IntersectRoles(userid, rank.Rank{"admin": struct{}{}}); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to get user roles")
 	} else if roles.Has("admin") {
-		return governor.NewErrorUser("Not allowed to delete admin user", http.StatusForbidden, err)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Not allowed to delete admin user",
+		}))
 	}
 	if ok, err := s.users.ValidatePass(password, m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to validate password")
 	} else if !ok {
-		return governor.NewErrorUser("Incorrect password", http.StatusForbidden, nil)
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Incorrect password",
+		}))
 	}
 
 	b, err := json.Marshal(DeleteUserProps{
 		Userid: m.Userid,
 	})
 	if err != nil {
-		return governor.NewError("Failed to encode user props to json", http.StatusInternalServerError, err)
+		return governor.ErrWithMsg(err, "Failed to encode user props to json")
 	}
 	if err := s.queue.Publish(DeleteUserQueueID, b); err != nil {
 		s.logger.Error("Failed to publish delete user", map[string]string{
@@ -316,23 +357,23 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 	}
 
 	if err := s.resets.DeleteByUserid(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user resets")
 	}
 
 	if err := s.DeleteUserApikeys(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user apikeys")
 	}
 
 	if err := s.KillAllSessions(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user sessions")
 	}
 
 	if err := s.roles.DeleteAllRoles(userid); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user roles")
 	}
 
 	if err := s.users.Delete(m); err != nil {
-		return err
+		return governor.ErrWithMsg(err, "Failed to delete user roles")
 	}
 
 	s.clearUserExists(userid)
@@ -352,7 +393,7 @@ func (s *service) clearUserExists(userid string) {
 func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	m := &NewUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.NewError("Failed to decode new user props", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to decode new user props")
 	}
 	return m, nil
 }
@@ -361,7 +402,7 @@ func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.NewError("Failed to decode delete user props", http.StatusInternalServerError, err)
+		return nil, governor.ErrWithMsg(err, "Failed to decode delete user props")
 	}
 	return m, nil
 }
