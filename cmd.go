@@ -129,6 +129,12 @@ func getPromptReq() (*ReqSetup, error) {
 		return nil, err
 	}
 
+	fmt.Print("Email: ")
+	email, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
 	fmt.Print("Password: ")
 	passwordBytes, err := terminal.ReadPassword(0)
 	if err != nil {
@@ -146,12 +152,6 @@ func getPromptReq() (*ReqSetup, error) {
 	passwordVerify := string(passwordVerifyBytes)
 	if password != passwordVerify {
 		return nil, errors.New("Passwords do not match")
-	}
-
-	fmt.Print("Email: ")
-	email, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
 	}
 
 	return &ReqSetup{
