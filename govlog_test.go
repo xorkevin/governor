@@ -15,6 +15,8 @@ import (
 )
 
 func TestEnvToLevel(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Env   string
 		Level int
@@ -49,6 +51,8 @@ func TestEnvToLevel(t *testing.T) {
 		},
 	} {
 		t.Run(tc.Env, func(t *testing.T) {
+			t.Parallel()
+
 			assert := require.New(t)
 			assert.Equal(tc.Level, envToLevel(tc.Env))
 		})
@@ -56,6 +60,8 @@ func TestEnvToLevel(t *testing.T) {
 }
 
 func TestEnvToLogOutput(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Env    string
 		Writer io.Writer
@@ -69,12 +75,18 @@ func TestEnvToLogOutput(t *testing.T) {
 			Writer: os.Stdout,
 		},
 	} {
-		assert := require.New(t)
-		assert.Equal(tc.Writer, envToLogOutput(tc.Env))
+		t.Run(tc.Env, func(t *testing.T) {
+			t.Parallel()
+
+			assert := require.New(t)
+			assert.Equal(tc.Writer, envToLogOutput(tc.Env))
+		})
 	}
 }
 
 func TestLevelToZerologLevel(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Test  string
 		Level int
@@ -117,6 +129,8 @@ func TestLevelToZerologLevel(t *testing.T) {
 		},
 	} {
 		t.Run(tc.Test, func(t *testing.T) {
+			t.Parallel()
+
 			assert := require.New(t)
 			assert.Equal(tc.Zero, levelToZerologLevel(tc.Level))
 		})
@@ -124,6 +138,8 @@ func TestLevelToZerologLevel(t *testing.T) {
 }
 
 func TestLogger(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Test    string
 		Env     string
@@ -163,6 +179,8 @@ func TestLogger(t *testing.T) {
 		},
 	} {
 		t.Run(tc.Test, func(t *testing.T) {
+			t.Parallel()
+
 			assert := require.New(t)
 
 			logbuf := bytes.Buffer{}

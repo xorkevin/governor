@@ -3,11 +3,13 @@ package uid
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
-	assert := assert.New(t)
+	t.Parallel()
+
+	assert := require.New(t)
 
 	{
 		u, err := New(8)
@@ -18,7 +20,9 @@ func TestNew(t *testing.T) {
 }
 
 func TestUID_FromBase64(t *testing.T) {
-	assert := assert.New(t)
+	t.Parallel()
+
+	assert := require.New(t)
 
 	{
 		u, err := FromBase64("aGVsbG93b3JsZA")

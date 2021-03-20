@@ -3,22 +3,76 @@ package user
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidEmail(t *testing.T) {
-	assert := assert.New(t)
+	t.Parallel()
 
-	assert.Nil(validEmail("gov@xorkevin.com"), "email should be valid")
-	assert.Nil(validEmail("gov@xor-kevin.com"), "hostname may contain dashes")
-	assert.Nil(validEmail("gov@tld"), "top level domain email should be valid")
-	assert.Nil(validEmail("gov+te.st@tld"), "+ and . are valid characters")
-	assert.Nil(validEmail("_gov+test-@tld"), "_ and - may begin and end local part")
-	assert.NotNil(validEmail("+gov@tld"), "+ may not begin local part")
-	assert.NotNil(validEmail("gov..test@tld"), "two . may not be adjacent in local part")
-	assert.NotNil(validEmail(".gov@tld"), ". may not begin local part")
-	assert.NotNil(validEmail("gov.@tld"), ". may not end local part")
-	assert.NotNil(validEmail("gov@-tld"), "- may not begin hostname part")
-	assert.NotNil(validEmail("gov@tld-"), "- may not end hostname part")
-	assert.NotNil(validEmail("gov@xor..kevin.com"), "two . may not be adjacent in hostname part")
+	for _, tc := range []struct {
+		Inp   string
+		Valid bool
+	}{
+		{
+			Inp:   "gov@xorkevin.com",
+			Valid: true,
+		},
+		{
+			Inp:   "gov@xor-kevin.com",
+			Valid: true,
+		},
+		{
+			Inp:   "gov@tld",
+			Valid: true,
+		},
+		{
+			Inp:   "gov+te.st@tld",
+			Valid: true,
+		},
+		{
+			Inp:   "_gov+test-@tld",
+			Valid: true,
+		},
+		{
+			Inp:   "+gov@tld",
+			Valid: false,
+		},
+		{
+			Inp:   "gov..test@tld",
+			Valid: false,
+		},
+		{
+			Inp:   ".gov@tld",
+			Valid: false,
+		},
+		{
+			Inp:   "gov.@tld",
+			Valid: false,
+		},
+		{
+			Inp:   "gov@-tld",
+			Valid: false,
+		},
+		{
+			Inp:   "gov@tld-",
+			Valid: false,
+		},
+		{
+			Inp:   "gov@xor..kevin.com",
+			Valid: false,
+		},
+	} {
+		t.Run(tc.Inp, func(t *testing.T) {
+			t.Parallel()
+
+			assert := require.New(t)
+			err := validEmail(tc.Inp)
+			if tc.Valid {
+				assert.Nil(err)
+			} else {
+				assert.NotNil(err)
+			}
+		})
+	}
+
 }

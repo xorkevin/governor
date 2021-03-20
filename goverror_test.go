@@ -25,6 +25,8 @@ func (e testErr) Error() string {
 
 func TestError(t *testing.T) {
 	t.Run("NewError", func(t *testing.T) {
+		t.Parallel()
+
 		errorsErr := errors.New("test errors err")
 		govErr := NewError(ErrOptRes(ErrorRes{
 			Status:  http.StatusInternalServerError,
@@ -87,6 +89,8 @@ func TestError(t *testing.T) {
 			},
 		} {
 			t.Run(tc.Test, func(t *testing.T) {
+				t.Parallel()
+
 				assert := require.New(t)
 
 				err := NewError(tc.Opts...)
@@ -103,6 +107,8 @@ func TestError(t *testing.T) {
 	})
 
 	t.Run("Context.WriteError", func(t *testing.T) {
+		t.Parallel()
+
 		rootErr := errors.New("test root error")
 		govErr := NewError(ErrOptRes(ErrorRes{
 			Status:  http.StatusBadRequest,
@@ -170,6 +176,8 @@ func TestError(t *testing.T) {
 			},
 		} {
 			t.Run(tc.Test, func(t *testing.T) {
+				t.Parallel()
+
 				assert := require.New(t)
 				logbuf := &bytes.Buffer{}
 				l := newLogger(Config{
