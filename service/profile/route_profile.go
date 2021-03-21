@@ -222,6 +222,6 @@ func (m *router) mountProfileRoutes(r governor.Router) {
 	r.Delete("/id/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite))
 	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead))
 	r.Get("/id/{id}", m.getProfile)
-	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getProfileImageCC))
+	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getProfileImageCC))
 	r.Get("/ids", m.getProfilesBulk)
 }

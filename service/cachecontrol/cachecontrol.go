@@ -8,7 +8,31 @@ import (
 )
 
 const (
-	ccHeader = "Cache-Control"
+	ccHeader          = "Cache-Control"
+	ifNoneMatchHeader = "If-None-Match"
+	etagHeader        = "ETag"
+	pragmaHeader      = "Pragma"
+)
+
+type (
+	// Directive is a cache control directive
+	Directive string
+
+	//Directives are a list of directives
+	Directives []Directive
+)
+
+// Cache control directives
+const (
+	// Cacheability
+	DirPublic  Directive = "public"
+	DirPrivate Directive = "private"
+	DirNoStore Directive = "no-store"
+	// Expiration
+	DirMaxAge Directive = "max-age"
+	// Revalidation
+	DirMustRevalidate Directive = "must-revalidate"
+	DirImmutable      Directive = "immutable"
 )
 
 func etagToValue(etag string) string {
@@ -16,7 +40,7 @@ func etagToValue(etag string) string {
 }
 
 // Control creates a middleware function to cache the response
-func Control(l governor.Logger, public, revalidate bool, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
+func Control(l governor.Logger, public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
 	if maxage < 0 {
 		panic("maxage cannot be negative")
 	}
@@ -35,25 +59,25 @@ func Control(l governor.Logger, public, revalidate bool, maxage int64, etagfunc 
 				etag = etagToValue(tag)
 			}
 
-			if val := c.Header("If-None-Match"); etag != "" && val == etag {
+			if val := c.Header(ifNoneMatchHeader); etag != "" && val == etag {
 				c.WriteStatus(http.StatusNotModified)
 				return
 			}
 
 			if public {
-				c.SetHeader(ccHeader, "public")
+				c.SetHeader(ccHeader, string(DirPublic))
 			} else {
-				c.SetHeader(ccHeader, "private")
+				c.SetHeader(ccHeader, string(DirPrivate))
 			}
 
-			if revalidate {
-				c.AddHeader(ccHeader, "no-cache")
+			for _, i := range directives {
+				c.AddHeader(ccHeader, string(i))
 			}
 
-			c.AddHeader(ccHeader, fmt.Sprintf("maxage=%d", maxage))
+			c.AddHeader(ccHeader, fmt.Sprintf("%s=%d", DirMaxAge, maxage))
 
 			if etag != "" {
-				c.SetHeader("ETag", etag)
+				c.SetHeader(etagHeader, etag)
 			}
 
 			next.ServeHTTP(c.R())
@@ -61,12 +85,13 @@ func Control(l governor.Logger, public, revalidate bool, maxage int64, etagfunc 
 	}
 }
 
-// NoStore creates a middleware function to deny caching responses
-func NoStore(l governor.Logger) governor.Middleware {
+// ControlNoStore creates a middleware function to deny caching responses
+func ControlNoStore(l governor.Logger) governor.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := governor.NewContext(w, r, l)
-			c.SetHeader(ccHeader, "no-store")
+			c.SetHeader(ccHeader, string(DirNoStore))
+			c.SetHeader(pragmaHeader, "no-cache")
 			next.ServeHTTP(c.R())
 		})
 	}

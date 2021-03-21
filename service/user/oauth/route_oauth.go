@@ -253,7 +253,7 @@ const (
 
 func (m *router) mountAppRoutes(r governor.Router) {
 	r.Get("/id/{clientid}", m.getApp)
-	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, false, 60, m.getAppLogoCC))
+	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, nil, 60, m.getAppLogoCC))
 	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "gov.oauth", scopeAppRead))
 	r.Get("/ids", m.getAppBulk)
 	r.Post("", m.createApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))

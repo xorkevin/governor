@@ -308,11 +308,11 @@ const (
 
 func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/link/id/{linkid}", m.getLink)
-	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, false, 60, m.getLinkImageCC))
+	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getLinkImageCC))
 	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead))
 	r.Post("/link/c/{creatorid}", m.createLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
 	r.Delete("/link/c/{creatorid}/id/{linkid}", m.deleteLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
-	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, false, 60, m.getBrandImageCC))
+	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, nil, 60, m.getBrandImageCC))
 	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead))
 	r.Post("/brand/c/{creatorid}", m.createBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
 	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
