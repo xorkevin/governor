@@ -2,12 +2,14 @@ package oauth
 
 import (
 	"context"
+	htmlTemplate "html/template"
 	"strconv"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
 	"xorkevin.dev/governor/service/user/oauth/model"
@@ -45,6 +47,7 @@ type (
 		kvclient     kvstore.KVStore
 		logoBucket   objstore.Bucket
 		logoImgDir   objstore.Dir
+		users        user.Users
 		gate         gate.Gate
 		logger       governor.Logger
 		codeTime     int64
@@ -56,6 +59,8 @@ type (
 		eptoken      string
 		epuserinfo   string
 		epjwks       string
+		tplprofile   *htmlTemplate.Template
+		tplpicture   *htmlTemplate.Template
 	}
 
 	router struct {
@@ -86,12 +91,13 @@ func NewCtx(inj governor.Injector) Service {
 	tokenizer := token.GetCtxTokenizer(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	obj := objstore.GetCtxBucket(inj)
+	users := user.GetCtxUsers(inj)
 	g := gate.GetCtxGate(inj)
-	return New(apps, connections, tokenizer, kv, obj, g)
+	return New(apps, connections, tokenizer, kv, obj, users, g)
 }
 
 // New returns a new Apikey
-func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) Service {
+func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
 		connections:  connections,
@@ -99,6 +105,7 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		kvclient:     kv.Subtree("client"),
 		logoBucket:   obj,
 		logoImgDir:   obj.Subdir("logo"),
+		users:        users,
 		gate:         g,
 		codeTime:     time1m,
 		accessTime:   time5m,
@@ -115,6 +122,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("refreshtime", "168h")
 	r.SetDefault("keycache", "24h")
 	r.SetDefault("ephost", "http://localhost:8080")
+	r.SetDefault("epprofile", "http://localhost:8080/u/{{.Username}}")
+	r.SetDefault("eppicture", "http://localhost:8080/api/profile/id/{{.Userid}}/image")
 }
 
 func (s *service) router() *router {
@@ -160,6 +169,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.epuserinfo = base + userinfoRoute
 	s.epjwks = base + jwksRoute
 
+	if t, err := htmlTemplate.New("epprofile").Parse(r.GetStr("epprofile")); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse profile url template")
+	} else {
+		s.tplprofile = t
+	}
+	if t, err := htmlTemplate.New("eppicture").Parse(r.GetStr("eppicture")); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse profile picture url template")
+	} else {
+		s.tplpicture = t
+	}
+
 	l.Info("loaded config", map[string]string{
 		"codetime (s)":           strconv.FormatInt(s.codeTime, 10),
 		"accesstime (s)":         strconv.FormatInt(s.accessTime, 10),
@@ -170,6 +190,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"token_endpoint":         s.eptoken,
 		"userinfo_endpoint":      s.epuserinfo,
 		"jwks_uri":               s.epjwks,
+		"profile_endpoint":       r.GetStr("epprofile"),
+		"picture_endpoint":       r.GetStr("eppicture"),
 	})
 
 	sr := s.router()

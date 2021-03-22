@@ -140,10 +140,7 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 	if err != nil {
 		return "", governor.ErrWithMsg(err, "Failed to hash OAuth authorization code")
 	}
-	now := time.Now().Round(0).Unix()
 	m.CodeHash = codehash
-	m.CodeTime = now
-	m.AccessTime = now
 	return codestr, nil
 }
 
@@ -165,9 +162,7 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 	if err != nil {
 		return "", governor.ErrWithMsg(err, "Failed to hash OAuth session key")
 	}
-	now := time.Now().Round(0).Unix()
 	m.KeyHash = keyhash
-	m.AccessTime = now
 	return keystr, nil
 }
 

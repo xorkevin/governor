@@ -1,9 +1,11 @@
 package oauth
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -180,11 +182,15 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 		}, nil
 	}
 
+	now := time.Now().Round(0).Unix()
+
 	m.Scope = scope
 	m.Nonce = nonce
 	m.Challenge = challenge
 	m.ChallengeMethod = method
 	m.AuthTime = authTime
+	m.CodeTime = now
+	m.AccessTime = now
 	code, err := s.connections.RehashCode(m)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate auth code")
@@ -202,11 +208,37 @@ type (
 		AccessToken  string `json:"access_token"`
 		TokenType    string `json:"token_type"`
 		ExpiresIn    int64  `json:"expires_in"`
-		RefreshToken string `json:"refresh_token"`
+		RefreshToken string `json:"refresh_token,omitempty"`
 		Scope        string `json:"scope"`
 		IDToken      string `json:"id_token"`
 	}
+
+	idTokenClaims struct {
+		Nonce             string `json:"nonce,omitempty"`
+		Name              string `json:"name,omitempty"`
+		FamilyName        string `json:"family_name,omitempty"`
+		GivenName         string `json:"given_name,omitempty"`
+		PreferredUsername string `json:"preferred_username,omitempty"`
+		Profile           string `json:"profile,omitempty"`
+		Picture           string `json:"picture,omitempty"`
+		Email             string `json:"email,omitempty"`
+		EmailVerified     bool   `json:"email_verified,omitempty"`
+	}
+
+	profileURLData struct {
+		Userid   string
+		Username string
+	}
 )
+
+func ssvSet(s string) map[string]struct{} {
+	k := strings.Fields(s)
+	scopes := make(map[string]struct{}, len(k))
+	for _, i := range k {
+		scopes[i] = struct{}{}
+	}
+	return scopes
+}
 
 func (s *service) checkClientKey(clientid, key, redirect string) error {
 	m, err := s.getCachedClient(clientid)
@@ -296,7 +328,9 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 			Message: "Invalid code challenge method",
 		}))
 	}
-	if now := time.Now().Round(0).Unix(); now > m.CodeTime+s.codeTime {
+
+	now := time.Now().Round(0).Unix()
+	if now > m.CodeTime+s.codeTime {
 		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Code:    oidErrorInvalidRequest,
@@ -304,12 +338,22 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		}))
 	}
 
+	scopes := ssvSet(m.Scope)
+
 	m.CodeHash = ""
 	m.CodeTime = 0
-	key, err := s.connections.RehashKey(m)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to generate oauth session key")
+	m.AccessTime = now
+
+	var key string
+	if _, ok := scopes[oidScopeOffline]; ok {
+		key, err = s.connections.RehashKey(m)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to generate oauth session key")
+		}
+	} else {
+		m.KeyHash = ""
 	}
+
 	if err := s.connections.Update(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to update oauth session")
 	}
@@ -319,11 +363,46 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate access token")
 	}
-	refreshToken, _, err := s.tokenizer.Generate(token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to generate refresh token")
+	var refreshToken string
+	if key != "" {
+		refreshToken, _, err = s.tokenizer.Generate(token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to generate refresh token")
+		}
 	}
-	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, userid, []string{clientid}, s.accessTime, sessionID, nil)
+
+	claims := idTokenClaims{
+		Nonce: m.Nonce,
+	}
+	user, err := s.users.GetByID(userid)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "User not found")
+	}
+	if _, ok := scopes[oidScopeProfile]; ok {
+		claims.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		claims.FamilyName = user.LastName
+		claims.GivenName = user.FirstName
+		claims.PreferredUsername = user.Username
+		data := profileURLData{
+			Userid:   user.Userid,
+			Username: user.Username,
+		}
+		bprofile := &bytes.Buffer{}
+		if err := s.tplprofile.Execute(bprofile, data); err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed executing profile url template")
+		}
+		bpicture := &bytes.Buffer{}
+		if err := s.tplpicture.Execute(bpicture, data); err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed executing profile picture url template")
+		}
+		claims.Profile = bprofile.String()
+		claims.Picture = bpicture.String()
+	}
+	if _, ok := scopes[oidScopeEmail]; ok {
+		claims.Email = user.Email
+		claims.EmailVerified = true
+	}
+	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, m.Scope, claims)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate id token")
 	}
