@@ -9,7 +9,8 @@ maxconnread: 5s
 maxconnheader: 2s
 maxconnwrite: 5s
 maxconnidle: 5s
-alloworigins: []
+alloworigins:
+  - 'http://localhost:3000'
 routerewrite:
   - host: go.governor.dev.localhost:8080
     methods: ['GET']
