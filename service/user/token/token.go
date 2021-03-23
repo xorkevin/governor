@@ -39,6 +39,11 @@ const (
 	pemBlockType = "PRIVATE KEY"
 )
 
+const (
+	jwtHeaderKid = "kid"
+	jwtHeaderJWT = "JWT"
+)
+
 type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
@@ -145,7 +150,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Token secret is not set")
 	}
 	s.secret = []byte(secret)
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType("JWT"))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT))
 	if err != nil {
 		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt signer")
 	}
@@ -174,11 +179,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	key.Precompute()
 	s.privateKey = key
 	s.publicKey = key.Public()
-	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.privateKey}, (&jose.SignerOptions{}).WithType("JWT"))
-	if err != nil {
-		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt RS256 signer")
-	}
-	s.keySigner = keySig
 
 	jwk := &jose.JSONWebKey{
 		Key:       s.publicKey,
@@ -191,6 +191,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	jwk.KeyID = base64.RawURLEncoding.EncodeToString(kid)
 	s.jwk = jwk
+
+	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.privateKey}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, jwk.KeyID))
+	if err != nil {
+		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt RS256 signer")
+	}
+	s.keySigner = keySig
 
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
