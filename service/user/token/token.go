@@ -53,7 +53,7 @@ type (
 	Tokenizer interface {
 		GetJWKS() *jose.JSONWebKeySet
 		Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
-		GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, scope string, claims interface{}) (string, error)
+		GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
 		Validate(kind string, tokenString string) (bool, *Claims)
 		GetClaims(kind string, tokenString string) (bool, *Claims)
 		GetClaimsExt(kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims)
@@ -263,7 +263,7 @@ func (s *service) Generate(kind string, userid string, duration int64, id string
 }
 
 // GenerateExt creates a new id token
-func (s *service) GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, scope string, claims interface{}) (string, error) {
+func (s *service) GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
 	now := time.Now().Round(0)
 	baseClaims := Claims{
 		Claims: jwt.Claims{
@@ -277,7 +277,6 @@ func (s *service) GenerateExt(kind string, issuer string, userid string, audienc
 		},
 		Kind:     kind,
 		AuthTime: authTime,
-		Scope:    scope,
 	}
 	token, err := jwt.Signed(s.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {

@@ -405,7 +405,7 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		claims.Email = user.Email
 		claims.EmailVerified = true
 	}
-	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, m.Scope, claims)
+	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate id token")
 	}
