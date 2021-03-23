@@ -98,6 +98,7 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 			"exp",
 			"auth_time",
 			"nonce",
+			"azp",
 			"name",
 			"given_name",
 			"family_name",
@@ -215,6 +216,7 @@ type (
 
 	idTokenClaims struct {
 		Nonce             string `json:"nonce,omitempty"`
+		Azp               string `json:"azp,omitempty"`
 		Name              string `json:"name,omitempty"`
 		FamilyName        string `json:"family_name,omitempty"`
 		GivenName         string `json:"given_name,omitempty"`
@@ -373,6 +375,7 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 
 	claims := idTokenClaims{
 		Nonce: m.Nonce,
+		Azp:   clientid,
 	}
 	user, err := s.users.GetByID(userid)
 	if err != nil {
