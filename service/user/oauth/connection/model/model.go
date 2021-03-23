@@ -123,6 +123,9 @@ func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod st
 }
 
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
+	if m.CodeHash == "" {
+		return false, nil
+	}
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
 		return false, governor.ErrWithMsg(err, "Failed to verify code")
@@ -145,6 +148,9 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
+	if m.KeyHash == "" {
+		return false, nil
+	}
 	ok, err := r.verifier.Verify(key, m.KeyHash)
 	if err != nil {
 		return false, governor.ErrWithMsg(err, "Failed to verify key")
