@@ -54,6 +54,7 @@ type (
 		accessTime   int64
 		refreshTime  int64
 		keyCacheTime int64
+		realm        string
 		issuer       string
 		epauth       string
 		eptoken      string
@@ -121,6 +122,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "168h")
 	r.SetDefault("keycache", "24h")
+	r.SetDefault("realm", "governor")
 	r.SetDefault("ephost", "http://localhost:8080")
 	r.SetDefault("epprofile", "http://localhost:8080/u/{{.Username}}")
 	r.SetDefault("eppicture", "http://localhost:8080/api/profile/id/{{.Userid}}/image")
@@ -162,6 +164,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.keyCacheTime = int64(t / time.Second)
 	}
 
+	s.realm = r.GetStr("realm")
 	s.issuer = r.GetStr("issuer")
 	s.epauth = r.GetStr("epauthorize")
 	base := r.GetStr("ephost") + c.BaseURL + r.URL()

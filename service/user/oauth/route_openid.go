@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -124,7 +125,7 @@ func (m *router) writeOAuthTokenError(c governor.Context, err error) {
 
 	if rerr := (&governor.ErrorRes{}); errors.As(err, rerr) {
 		if rerr.Status == http.StatusUnauthorized {
-			c.SetHeader("WWW-Authenticate", "Basic realm=\"governor\"")
+			c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, m.s.realm))
 		}
 		c.WriteJSON(rerr.Status, resAuthTokenErr{
 			Error: rerr.Code,

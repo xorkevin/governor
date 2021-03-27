@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -244,7 +245,7 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 						c.WriteError(governor.ErrWithMsg(err, "Failed to get apikey"))
 						return
 					}
-					c.SetHeader("WWW-Authenticate", "Basic realm=\""+s.realm+"\"")
+					c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, s.realm))
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusUnauthorized,
 						Message: "User is not authorized",
