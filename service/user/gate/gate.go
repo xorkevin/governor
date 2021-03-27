@@ -156,13 +156,26 @@ func (s *service) Health() error {
 	return nil
 }
 
+type (
+	errInvalidHeader struct{}
+	errAuthNotFound  struct{}
+)
+
+func (e errInvalidHeader) Error() string {
+	return "Invalid auth header"
+}
+
+func (e errAuthNotFound) Error() string {
+	return "Auth not found"
+}
+
 func getAccessCookie(r *http.Request) (string, error) {
 	cookie, err := r.Cookie("access_token")
 	if err != nil {
 		return "", err
 	}
 	if cookie.Value == "" {
-		return "", errors.New("no cookie value")
+		return "", errAuthNotFound{}
 	}
 	return cookie.Value, nil
 }
@@ -173,7 +186,7 @@ func getAccessCookieUserid(r *http.Request, userid string) (string, error) {
 		return "", err
 	}
 	if cookie.Value == "" {
-		return "", errors.New("no cookie value")
+		return "", errAuthNotFound{}
 	}
 	return cookie.Value, nil
 }
@@ -188,13 +201,17 @@ func rmAccessCookie(w http.ResponseWriter, baseurl string) {
 }
 
 func getAuthHeader(c governor.Context) (string, error) {
-	h := strings.SplitN(c.Header("Authorization"), " ", 2)
+	authHeader := c.Header("Authorization")
+	if authHeader == "" {
+		return "", errAuthNotFound{}
+	}
+	h := strings.SplitN(authHeader, " ", 2)
 	if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
-		return "", errors.New("no header value")
+		return "", errInvalidHeader{}
 	}
 	token := h[1]
 	if token == "" {
-		return "", errors.New("no header value")
+		return "", errInvalidHeader{}
 	}
 	return token, nil
 }
@@ -232,6 +249,11 @@ func (s *service) intersector(userid string, scope string, ctx governor.Context)
 	}
 }
 
+const (
+	oauthErrorInvalidToken      = "invalid_token"
+	oauthErrorInsufficientScope = "insufficient_scope"
+)
+
 // Authenticate builds a middleware function to validate tokens and set claims
 func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 	return func(next http.Handler) http.Handler {
@@ -245,7 +267,15 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 						c.WriteError(governor.ErrWithMsg(err, "Failed to get apikey"))
 						return
 					}
-					c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, s.realm))
+					c.SetHeader(
+						"WWW-Authenticate",
+						fmt.Sprintf(
+							`Basic realm="%s", error="%s", error_description="%s"`,
+							s.realm,
+							oauthErrorInvalidToken,
+							"Api key is invalid",
+						),
+					)
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusUnauthorized,
 						Message: "User is not authorized",
@@ -253,6 +283,16 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					return
 				}
 				if !token.HasScope(keyscope, scope) {
+					c.SetHeader(
+						"WWW-Authenticate",
+						fmt.Sprintf(
+							`Basic realm="%s", scope="%s", error="%s", error_description="%s"`,
+							s.realm,
+							scope,
+							oauthErrorInsufficientScope,
+							"Api key lacks required scope",
+						),
+					)
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusForbidden,
 						Message: "User is forbidden",
@@ -260,6 +300,15 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					return
 				}
 				if !v(s.intersector(userid, keyscope, c)) {
+					c.SetHeader(
+						"WWW-Authenticate",
+						fmt.Sprintf(
+							`Basic realm="%s", error="%s", error_description="%s"`,
+							s.realm,
+							oauthErrorInsufficientScope,
+							"User lacks required permission",
+						),
+					)
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusForbidden,
 						Message: "User is forbidden",
@@ -269,10 +318,29 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 				setCtxUserid(c, userid)
 			} else {
 				accessToken, err := getAuthHeader(c)
+				isBearer := true
 				if err != nil {
+					if !errors.Is(err, errAuthNotFound{}) {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Bearer realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInvalidToken,
+								"Access token is invalid",
+							),
+						)
+						c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+							Status:  http.StatusUnauthorized,
+							Message: "User is not authorized",
+						})))
+						return
+					}
+					isBearer = false
 					compass := c.Header(s.compassHeader)
 					if compass != "" {
-						a, err := getAccessCookieUserid(r, compass)
+						var err error
+						accessToken, err = getAccessCookieUserid(r, compass)
 						if err != nil {
 							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 								Status:  http.StatusUnauthorized,
@@ -280,22 +348,33 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 							})))
 							return
 						}
-						accessToken = a
 					} else {
-						a, err := getAccessCookie(r)
+						var err error
+						accessToken, err = getAccessCookie(r)
 						if err != nil {
+							c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, s.realm))
 							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 								Status:  http.StatusUnauthorized,
 								Message: "User is not authorized",
 							})))
 							return
 						}
-						accessToken = a
 					}
 				}
 				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken)
 				if !validToken {
 					rmAccessCookie(w, s.baseurl)
+					if isBearer {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Bearer realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInvalidToken,
+								"Access token is invalid",
+							),
+						)
+					}
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusUnauthorized,
 						Message: "User is not authorized",
@@ -303,6 +382,18 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					return
 				}
 				if !token.HasScope(claims.Scope, scope) {
+					if isBearer {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Bearer realm="%s", scope="%s", error="%s", error_description="%s"`,
+								s.realm,
+								scope,
+								oauthErrorInsufficientScope,
+								"Access token lacks required scope",
+							),
+						)
+					}
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusForbidden,
 						Message: "User is forbidden",
@@ -310,6 +401,17 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 					return
 				}
 				if !v(s.intersector(claims.Subject, claims.Scope, c)) {
+					if isBearer {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Bearer realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInsufficientScope,
+								"User lacks required permission",
+							),
+						)
+					}
 					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 						Status:  http.StatusForbidden,
 						Message: "User is forbidden",
