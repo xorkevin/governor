@@ -211,6 +211,21 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func (m *router) userinfo(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	claims := gate.GetCtxClaims(c)
+	if claims == nil {
+		c.WriteError(governor.ErrWithMsg(nil, "No access token claims"))
+		return
+	}
+	res, err := m.s.Userinfo(claims.Subject, claims.Scope)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 type (
 	reqGetConnectionGroup struct {
 		Userid string `valid:"userid,has" json:"-"`
@@ -294,6 +309,8 @@ func (m *router) mountOidRoutes(r governor.Router) {
 	r.Get(jwksRoute, m.getJWKS)
 	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize))
 	r.Post(tokenRoute, m.authToken, cachecontrol.ControlNoStore(m.s.logger))
+	r.Get(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid))
+	r.Post(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid))
 	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead))
 	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead))
 	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite))

@@ -214,9 +214,7 @@ type (
 		IDToken      string `json:"id_token"`
 	}
 
-	idTokenClaims struct {
-		Nonce             string `json:"nonce,omitempty"`
-		Azp               string `json:"azp,omitempty"`
+	userinfoClaims struct {
 		Name              string `json:"name,omitempty"`
 		FamilyName        string `json:"family_name,omitempty"`
 		GivenName         string `json:"given_name,omitempty"`
@@ -225,6 +223,12 @@ type (
 		Picture           string `json:"picture,omitempty"`
 		Email             string `json:"email,omitempty"`
 		EmailVerified     bool   `json:"email_verified,omitempty"`
+	}
+
+	idTokenClaims struct {
+		Nonce string `json:"nonce,omitempty"`
+		Azp   string `json:"azp,omitempty"`
+		userinfoClaims
 	}
 
 	profileURLData struct {
@@ -240,6 +244,41 @@ func ssvSet(s string) map[string]struct{} {
 		scopes[i] = struct{}{}
 	}
 	return scopes
+}
+
+func (s *service) Userinfo(userid string, scope string) (*userinfoClaims, error) {
+	scopes := ssvSet(scope)
+
+	claims := &userinfoClaims{}
+	user, err := s.users.GetByID(userid)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "User not found")
+	}
+	if _, ok := scopes[oidScopeProfile]; ok {
+		claims.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		claims.FamilyName = user.LastName
+		claims.GivenName = user.FirstName
+		claims.PreferredUsername = user.Username
+		data := profileURLData{
+			Userid:   user.Userid,
+			Username: user.Username,
+		}
+		bprofile := &bytes.Buffer{}
+		if err := s.tplprofile.Execute(bprofile, data); err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed executing profile url template")
+		}
+		bpicture := &bytes.Buffer{}
+		if err := s.tplpicture.Execute(bpicture, data); err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed executing profile picture url template")
+		}
+		claims.Profile = bprofile.String()
+		claims.Picture = bpicture.String()
+	}
+	if _, ok := scopes[oidScopeEmail]; ok {
+		claims.Email = user.Email
+		claims.EmailVerified = true
+	}
+	return claims, nil
 }
 
 func (s *service) checkClientKey(clientid, key, redirect string) error {
@@ -361,7 +400,7 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	}
 
 	sessionID := "oauth:" + userid + keySeparator + clientid
-	accessToken, _, err := s.tokenizer.Generate(token.KindOAuthAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
+	accessToken, _, err := s.tokenizer.Generate(token.KindAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate access token")
 	}
@@ -373,37 +412,15 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		}
 	}
 
-	claims := idTokenClaims{
-		Nonce: m.Nonce,
-		Azp:   clientid,
-	}
-	user, err := s.users.GetByID(userid)
+	userClaims, err := s.Userinfo(userid, m.Scope)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "User not found")
+		return nil, err
 	}
-	if _, ok := scopes[oidScopeProfile]; ok {
-		claims.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-		claims.FamilyName = user.LastName
-		claims.GivenName = user.FirstName
-		claims.PreferredUsername = user.Username
-		data := profileURLData{
-			Userid:   user.Userid,
-			Username: user.Username,
-		}
-		bprofile := &bytes.Buffer{}
-		if err := s.tplprofile.Execute(bprofile, data); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed executing profile url template")
-		}
-		bpicture := &bytes.Buffer{}
-		if err := s.tplpicture.Execute(bpicture, data); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed executing profile picture url template")
-		}
-		claims.Profile = bprofile.String()
-		claims.Picture = bpicture.String()
-	}
-	if _, ok := scopes[oidScopeEmail]; ok {
-		claims.Email = user.Email
-		claims.EmailVerified = true
+
+	claims := idTokenClaims{
+		Nonce:          m.Nonce,
+		Azp:            clientid,
+		userinfoClaims: *userClaims,
 	}
 	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
 	if err != nil {
