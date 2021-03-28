@@ -62,9 +62,15 @@ type (
 		maxConnWrite   string
 		maxConnIdle    string
 		origins        []string
+		allowpaths     []*corsPathRule
 		rewrite        []*rewriteRule
 		Port           string
 		BaseURL        string
+	}
+
+	corsPathRule struct {
+		pattern string
+		regex   *regexp.Regexp
 	}
 
 	rewriteRule struct {
@@ -76,6 +82,19 @@ type (
 		methodset map[string]struct{}
 	}
 )
+
+func (r *corsPathRule) init() error {
+	k, err := regexp.Compile(r.pattern)
+	if err != nil {
+		return err
+	}
+	r.regex = k
+	return nil
+}
+
+func (r *corsPathRule) match(req *http.Request) bool {
+	return r.regex.MatchString(req.URL.Path)
+}
 
 func (r *rewriteRule) init() error {
 	k, err := regexp.Compile(r.Pattern)
@@ -126,6 +145,7 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("maxconnwrite", "5s")
 	v.SetDefault("maxconnidle", "5s")
 	v.SetDefault("alloworigins", []string{})
+	v.SetDefault("allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -186,6 +206,13 @@ func (c *Config) init() error {
 	c.maxConnWrite = c.config.GetString("maxconnwrite")
 	c.maxConnIdle = c.config.GetString("maxconnidle")
 	c.origins = c.config.GetStringSlice("alloworigins")
+	allowPathPatterns := c.config.GetStringSlice("allowpaths")
+	c.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
+	for _, i := range allowPathPatterns {
+		c.allowpaths = append(c.allowpaths, &corsPathRule{
+			pattern: i,
+		})
+	}
 	rewrite := []*rewriteRule{}
 	if err := c.config.UnmarshalKey("routerewrite", &rewrite); err != nil {
 		return err

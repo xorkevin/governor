@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 )
 
 type (
@@ -379,6 +380,27 @@ func stripSlashesMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func corsPathsAllowAllMiddleware(rules []*corsPathRule) Middleware {
+	allowAll := cors.AllowAll()
+	return func(next http.Handler) http.Handler {
+		corsNext := allowAll.Handler(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isMatch := false
+			for _, i := range rules {
+				if i.match(r) {
+					isMatch = true
+					break
+				}
+			}
+			if isMatch {
+				corsNext.ServeHTTP(w, r)
+			} else {
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 func routeRewriteMiddleware(rules []*rewriteRule) Middleware {

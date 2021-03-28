@@ -110,10 +110,30 @@ func (s *Server) init(ctx context.Context) error {
 		l.Info("init request logger", nil)
 	}
 
+	if len(s.config.allowpaths) > 0 {
+		k := make([]string, 0, len(s.config.allowpaths))
+		for _, i := range s.config.allowpaths {
+			if err := i.init(); err != nil {
+				return err
+			}
+			k = append(k, i.pattern)
+		}
+		i.Use(corsPathsAllowAllMiddleware(s.config.allowpaths))
+		l.Info("init middleware allow all cors", map[string]string{
+			"paths": strings.Join(k, "; "),
+		})
+	}
 	if len(s.config.origins) > 0 {
 		i.Use(cors.Handler(cors.Options{
-			AllowedOrigins:   s.config.origins,
-			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+			AllowedOrigins: s.config.origins,
+			AllowedMethods: []string{
+				http.MethodHead,
+				http.MethodGet,
+				http.MethodPost,
+				http.MethodPut,
+				http.MethodPatch,
+				http.MethodDelete,
+			},
 			AllowedHeaders:   []string{"*"},
 			AllowCredentials: true,
 			MaxAge:           300,
