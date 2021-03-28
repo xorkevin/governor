@@ -191,15 +191,6 @@ func getAccessCookieUserid(r *http.Request, userid string) (string, error) {
 	return cookie.Value, nil
 }
 
-func rmAccessCookie(w http.ResponseWriter, baseurl string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:   "access_token",
-		Value:  "invalid",
-		MaxAge: -1,
-		Path:   baseurl,
-	})
-}
-
 func getAuthHeader(c governor.Context) (string, error) {
 	authHeader := c.Header("Authorization")
 	if authHeader == "" {
@@ -363,7 +354,6 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 				}
 				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken)
 				if !validToken {
-					rmAccessCookie(w, s.baseurl)
 					if isBearer {
 						c.SetHeader(
 							"WWW-Authenticate",
