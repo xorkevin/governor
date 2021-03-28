@@ -214,7 +214,8 @@ type (
 		IDToken      string `json:"id_token"`
 	}
 
-	userinfoClaims struct {
+	// UserinfoClaims are the claims returned for userinfo
+	UserinfoClaims struct {
 		Name              string `json:"name,omitempty"`
 		FamilyName        string `json:"family_name,omitempty"`
 		GivenName         string `json:"given_name,omitempty"`
@@ -228,7 +229,12 @@ type (
 	idTokenClaims struct {
 		Nonce string `json:"nonce,omitempty"`
 		Azp   string `json:"azp,omitempty"`
-		userinfoClaims
+		UserinfoClaims
+	}
+
+	resUserinfo struct {
+		Sub string `json:"sub"`
+		UserinfoClaims
 	}
 
 	profileURLData struct {
@@ -246,10 +252,8 @@ func ssvSet(s string) map[string]struct{} {
 	return scopes
 }
 
-func (s *service) Userinfo(userid string, scope string) (*userinfoClaims, error) {
-	scopes := ssvSet(scope)
-
-	claims := &userinfoClaims{}
+func (s *service) getUserinfoClaims(userid string, scopes map[string]struct{}) (*UserinfoClaims, error) {
+	claims := &UserinfoClaims{}
 	user, err := s.users.GetByID(userid)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "User not found")
@@ -412,7 +416,7 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		}
 	}
 
-	userClaims, err := s.Userinfo(userid, m.Scope)
+	userClaims, err := s.getUserinfoClaims(userid, scopes)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +424,7 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	claims := idTokenClaims{
 		Nonce:          m.Nonce,
 		Azp:            clientid,
-		userinfoClaims: *userClaims,
+		UserinfoClaims: *userClaims,
 	}
 	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
 	if err != nil {
@@ -434,6 +438,18 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		RefreshToken: refreshToken,
 		Scope:        m.Scope,
 		IDToken:      idToken,
+	}, nil
+}
+
+func (s *service) Userinfo(userid string, scope string) (*resUserinfo, error) {
+	userClaims, err := s.getUserinfoClaims(userid, ssvSet(scope))
+	if err != nil {
+		return nil, err
+	}
+
+	return &resUserinfo{
+		Sub:            userid,
+		UserinfoClaims: *userClaims,
 	}, nil
 }
 
