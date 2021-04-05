@@ -179,7 +179,7 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 			return nil, governor.ErrWithMsg(err, "Failed to connect oauth app")
 		}
 		return &resAuthCode{
-			Code: code,
+			Code: userid + keySeparator + code,
 		}, nil
 	}
 
