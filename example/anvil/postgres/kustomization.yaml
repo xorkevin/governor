@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: {{ .Vars.kube.namespace }}
+configMapGenerator:
+  - name: init-scripts
+    files:
+      - init.sh
+      - _init_lib.sh
+  - name: {{ .Vars.kube.service.name }}-opts
+    literals:
+      - vaultaddr={{ .Vars.vault.addr }}
+      - vaultrole={{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
+      - kvpath={{ .Vars.vault.kvprefix }}/{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}
+      - passlen={{ .Vars.vault.passlen }}
+      - curlbackoff={{ .Vars.vault.curlbackoff }}
+      - curlreauth={{ .Vars.vault.curlreauth }}
+{{- with .Vars.initscripts }}
+  - name: initscripts
+    files:
+      {{- range . }}
+      - {{ . }}
+      {{- end }}
+{{- end }}
+resources:
+  - service.yaml

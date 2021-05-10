@@ -1,0 +1,13 @@
+templates:
+  kustomization:
+    path: kustomization.yaml
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}kustomization.yaml
+  service:
+    path: service.yaml
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}service.yaml
+  initlib:
+    path: _init_lib.sh
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}_init_lib.sh
+  init:
+    path: init.sh
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}init.sh

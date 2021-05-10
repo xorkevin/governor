@@ -1,0 +1,28 @@
+version: xorkevin.dev/anvil/v1alpha1
+
+vars:
+  kube:
+    outputdir: ''
+    namespace: postgres
+    service:
+      name: postgres
+      image:
+        name: postgres
+        version: alpine
+      label:
+        component: database
+        partof: postgres
+      storage:
+        amount: 1Gi
+      init:
+        image:
+          name: xorkevin/alpine-utils
+          version: '3'
+  vault:
+    addr: http://vault.vault.svc.cluster.local:8200
+    kvprefix: kv/data/infra
+    passlen: '64'
+    curlbackoff: '5'
+    curlreauth: '6'
+
+configtpl: componenttpl.yaml
