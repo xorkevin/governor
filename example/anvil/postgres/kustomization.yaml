@@ -8,12 +8,13 @@ configMapGenerator:
       - _init_lib.sh
   - name: {{ .Vars.kube.service.name }}-opts
     literals:
-      - vaultaddr={{ .Vars.vault.addr }}
-      - vaultrole={{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
-      - kvpath={{ .Vars.vault.kvprefix }}/{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}
-      - passlen={{ .Vars.vault.passlen }}
       - curlbackoff={{ .Vars.vault.curlbackoff }}
       - curlreauth={{ .Vars.vault.curlreauth }}
+      - vaultaddr={{ .Vars.vault.addr }}
+      - vaultrole={{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
+      - vaultkubemount={{ .Vars.vault.kubemount }}
+      - kvmount={{ .Vars.vault.kvmount }}
+      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}
 {{- with .Vars.initscripts }}
   - name: initscripts
     files:

@@ -46,23 +46,17 @@ spec:
         app.kubernetes.io/name: postgres
         app.kubernetes.io/instance: {{ .Vars.kube.service.name }}
         app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
-        app.kubernetes.io/component: {{ .Vars.kube.service.label.component }}
-        app.kubernetes.io/part-of: {{ .Vars.kube.service.label.partof }}
+        app.kubernetes.io/component: {{ .Vars.kube.label.component }}
+        app.kubernetes.io/part-of: {{ .Vars.kube.label.partof }}
         app.kubernetes.io/managed-by: anvil
     spec:
       serviceAccountName: {{ .Vars.kube.service.name }}
       initContainers:
-        - name: genpass
+        - name: getpass
           image: {{ .Vars.kube.service.init.image.name }}:{{ .Vars.kube.service.init.image.version }}
           command: ['sh']
           args: ['/home/postgres/init.sh']
           env:
-            - name: PASS_LEN
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
-                  key: passlen
-                  optional: true
             - name: CURL_BACKOFF
               valueFrom:
                 configMapKeyRef:
@@ -85,6 +79,16 @@ spec:
                 configMapKeyRef:
                   name: {{ .Vars.kube.service.name }}-opts
                   key: vaultrole
+            - name: VAULT_KUBE_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.service.name }}-opts
+                  key: vaultkubemount
+            - name: KV_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.service.name }}-opts
+                  key: kvmount
             - name: KV_PATH
               valueFrom:
                 configMapKeyRef:

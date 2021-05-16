@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+        app.kubernetes.io/name: register-postgres
+        app.kubernetes.io/instance: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+        app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
+        app.kubernetes.io/component: {{ .Vars.kube.label.component }}
+        app.kubernetes.io/part-of: {{ .Vars.kube.label.partof }}
+        app.kubernetes.io/managed-by: anvil
+    spec:
+      serviceAccountName: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: {{ .Vars.kube.register.image.name }}:{{ .Vars.kube.register.image.version }}
+          command: ['sh']
+          args: ['/home/postgres/register.sh']
+          env:
+            - name: PASS_LEN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: passlen
+                  optional: true
+            - name: CURL_BACKOFF
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: curlbackoff
+                  optional: true
+            - name: CURL_REAUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: curlreauth
+                  optional: true
+            - name: VAULT_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: vaultaddr
+            - name: VAULT_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: vaultrole
+            - name: VAULT_KUBE_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: vaultkubemount
+            - name: DB_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: dbmount
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: dbname
+            - name: DB_CONN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: dbconn
+            - name: DB_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: dbttl
+            - name: DB_MAX_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: dbmaxttl
+            - name: KV_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: kvmount
+            - name: KV_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+                  key: kvpath
+          volumeMounts:
+            - name: register-scripts
+              mountPath: /home/postgres
+      volumes:
+        - name: register-scripts
+          configMap:
+            name: register-scripts

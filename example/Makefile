@@ -14,10 +14,8 @@ all: build ## Default
 
 .PHONY: devinit devup devinit2 devconfig devdown
 
-devinit: ## Init and register k8s resources
-	./plan.sh
-	./register.sh
-	./connect.sh
+devinit: ## Init k8s resources
+	anvil component -i anvil -o anvil_out -c anvil/component.yaml
 
 devup: ## Deploy k8s resources to cluster
 	kubectl apply -k base

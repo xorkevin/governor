@@ -1,0 +1,14 @@
+version: xorkevin.dev/anvil/v1alpha1
+
+vars:
+  label:
+    instance: governor
+  images:
+    postgres:
+      name: postgres
+      version: 13-alpine
+    xorkevinalpine:
+      name: xorkevin/alpine-utils
+      version: '3'
+
+configtpl: componenttpl.yaml

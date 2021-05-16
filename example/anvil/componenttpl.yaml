@@ -1,0 +1,21 @@
+components:
+  postgres:
+    kind: local
+    path: postgres/component.yaml
+    vars:
+      kube:
+        service:
+          name: postgres
+          image:
+            name: {{ .Vars.images.postgres.name }}
+            version: {{ .Vars.images.postgres.version }}
+          label:
+            partof: {{ .Vars.label.instance }}
+          init:
+            image:
+              name: {{ .Vars.images.xorkevinalpine.name }}
+              version: {{ .Vars.images.xorkevinalpine.version }}
+        register:
+          image:
+            name: {{ .Vars.images.xorkevinalpine.name }}
+            version: {{ .Vars.images.xorkevinalpine.version }}

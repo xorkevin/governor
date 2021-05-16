@@ -11,3 +11,24 @@ templates:
   init:
     path: init.sh
     output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}init.sh
+  registerkustomization:
+    path: register/kustomization.yaml
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/kustomization.yaml
+  registerjob:
+    path: register/job.yaml
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/job.yaml
+  registerlib:
+    path: _init_lib.sh
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/_init_lib.sh
+  register:
+    path: register/register.sh
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/register.sh
+  rolecreate:
+    path: register/rolecreate.sql
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/rolecreate.sql
+  rolerocreate:
+    path: register/rolerocreate.sql
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/rolerocreate.sql
+  rolerevoke:
+    path: register/rolerevoke.sql
+    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}register/rolerevoke.sql
