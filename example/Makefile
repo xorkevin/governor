@@ -12,10 +12,15 @@ all: build ## Default
 
 ## DEV ENV
 
+ANVIL_SRC=anvil
+ANVIL_MAIN=$(ANVIL_SRC)/component.yaml
+ANVIL_OUT=anvil_out
+
 .PHONY: devinit devup devinit2 devconfig devdown
 
 devinit: ## Init k8s resources
-	anvil component -i anvil -o anvil_out -c anvil/component.yaml
+	if [ -d $(ANVIL_OUT) ]; then rm -r $(ANVIL_OUT); fi
+	anvil component -i $(ANVIL_SRC) -o $(ANVIL_OUT) -c $(ANVIL_MAIN)
 
 devup: ## Deploy k8s resources to cluster
 	kubectl apply -k base

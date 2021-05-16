@@ -1,6 +1,9 @@
 version: xorkevin.dev/anvil/v1alpha1
 
 vars:
+  outputdir: postgres
+  registerdir: vault/register
+  policydir: vault/policy
   namespace: governor
   label:
     instance: governor
@@ -11,5 +14,13 @@ vars:
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'
+  storage:
+    postgres: 1Gi
+  vault:
+    addr: http://vault.vault.svc.cluster.local:8200
+    kubemount: kubernetes
+    kvmount: kv
+    kvprefix: infra
+    dbmount: database
 
 configtpl: componenttpl.yaml

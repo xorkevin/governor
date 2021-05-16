@@ -2,7 +2,7 @@ version: xorkevin.dev/anvil/v1alpha1
 
 vars:
   kube:
-    outputdir: ''
+    outputdir: postgres
     namespace: postgres
     label:
       component: database
@@ -37,5 +37,8 @@ vars:
     passlen: '64'
 
   initscripts: []
+
+  registerdir: vault/register/postgres
+  policydir: vault/policy/postgres
 
 configtpl: componenttpl.yaml
