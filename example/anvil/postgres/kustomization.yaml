@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{ .Vars.kube.namespace }}
 configMapGenerator:
-  - name: init-scripts
+  - name: {{ .Vars.kube.service.name }}-init-scripts
     files:
       - init.sh
       - _init_lib.sh
@@ -16,7 +16,7 @@ configMapGenerator:
       - kvmount={{ .Vars.vault.kvmount }}
       - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}
 {{- with .Vars.initscripts }}
-  - name: initscripts
+  - name: {{ .Vars.kube.service.name }}-initscripts
     files:
       {{- range . }}
       - {{ . }}

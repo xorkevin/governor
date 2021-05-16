@@ -1,6 +1,7 @@
 version: xorkevin.dev/anvil/v1alpha1
 
 vars:
+  namespace: governor
   label:
     instance: governor
   images:

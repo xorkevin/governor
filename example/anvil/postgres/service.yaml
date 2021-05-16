@@ -130,10 +130,10 @@ spec:
           emptyDir: {}
         - name: init-scripts
           configMap:
-            name: init-scripts
+            name: {{ .Vars.kube.service.name }}-init-scripts
         - name: initscripts
           configMap:
-            name: initscripts
+            name: {{ .Vars.kube.service.name }}-initscripts
             optional: true
   volumeClaimTemplates:
     - metadata:

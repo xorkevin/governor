@@ -20,7 +20,6 @@ vars:
           version: latest
 
     register:
-      name: register
       image:
         name: xorkevin/alpine-utils
         version: latest
@@ -36,5 +35,7 @@ vars:
     curlbackoff: '5'
     curlreauth: '3'
     passlen: '64'
+
+  initscripts: []
 
 configtpl: componenttpl.yaml

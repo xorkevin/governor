@@ -4,6 +4,7 @@ components:
     path: postgres/component.yaml
     vars:
       kube:
+        namespace: {{ .Vars.namespace }}
         service:
           name: postgres
           image:

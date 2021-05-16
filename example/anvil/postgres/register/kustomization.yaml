@@ -2,20 +2,20 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{ .Vars.kube.namespace }}
 configMapGenerator:
-  - name: register-scripts
+  - name: {{ .Vars.kube.service.name }}-register-scripts
     files:
       - register.sh
       - _init_lib.sh
       - rolecreate.sql
       - rolerocreate.sql
       - rolerevoke.sql
-  - name: {{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}-opts
+  - name: register-{{ .Vars.kube.service.name }}-opts
     literals:
       - passlen={{ .Vars.vault.passlen }}
       - curlbackoff={{ .Vars.vault.curlbackoff }}
       - curlreauth={{ .Vars.vault.curlreauth }}
       - vaultaddr={{ .Vars.vault.addr }}
-      - vaultrole={{ .Vars.kube.namespace }}-{{ .Vars.kube.register.name }}-{{ .Vars.kube.service.name }}
+      - vaultrole={{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}
       - vaultkubemount={{ .Vars.vault.kubemount }}
       - dbmount={{ .Vars.vault.dbmount }}
       - dbname={{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
