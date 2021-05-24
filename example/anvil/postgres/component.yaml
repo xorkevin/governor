@@ -38,7 +38,12 @@ vars:
 
   initscripts: []
 
-  registerdir: vault/register/postgres
-  policydir: vault/policy/postgres
+  vaultconsumers:
+    rw: []
+    ro: []
+
+  registerdir: secrets/register
+  policydir: secrets/vault/policy
+  authkubedir: secrets/vault/auth/kube
 
 configtpl: componenttpl.yaml

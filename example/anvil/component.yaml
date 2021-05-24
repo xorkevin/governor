@@ -1,9 +1,10 @@
 version: xorkevin.dev/anvil/v1alpha1
 
 vars:
-  outputdir: postgres
-  registerdir: vault/register
-  policydir: vault/policy
+  outputdir: governor
+  registerdir: secrets/register
+  policydir: secrets/vault/policy
+  authkubedir: secrets/vault/auth/kube
   namespace: governor
   label:
     instance: governor

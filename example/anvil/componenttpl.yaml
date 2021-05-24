@@ -4,7 +4,7 @@ components:
     path: postgres/component.yaml
     vars:
       kube:
-        outputdir: {{ .Vars.outputdir }}
+        outputdir: {{ .Vars.outputdir }}/postgres
         namespace: {{ .Vars.namespace }}
         label:
           partof: {{ .Vars.label.instance }}
@@ -31,5 +31,12 @@ components:
         kvprefix: {{ .Vars.vault.kvprefix }}
         dbmount: {{ .Vars.vault.dbmount }}
 
-      registerdir: {{ .Vars.registerdir }}/postgres
-      policydir: {{ .Vars.policydir }}/postgres
+      vaultconsumers:
+        rw:
+          - governor-governor
+        ro:
+          - governor-governor
+
+      registerdir: {{ .Vars.registerdir }}
+      policydir: {{ .Vars.policydir }}
+      authkubedir: {{ .Vars.authkubedir }}

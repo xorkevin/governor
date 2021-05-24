@@ -57,7 +57,7 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    req=$(vault_pgconfig_req "${DB_NAME},${DB_NAME}-ro" "$DB_CONN" "$pass")
+    req=$(vault_pgconfig_req "${DB_NAME}-rw,${DB_NAME}-ro" "$DB_CONN" "$pass")
     status=$(vault_dbconfigput "$DB_MOUNT" "$DB_NAME" "$req")
     if is_success "$status"; then
       log2 'write password to vault db engine config'
@@ -100,7 +100,7 @@ while true; do
     fi
 
     req=$(vault_pgrole_req "$DB_NAME" "rolecreate.sql" "rolerevoke.sql" "$DB_TTL" "$DB_MAX_TTL")
-    status=$(vault_dbroleput "$DB_MOUNT" "$DB_NAME" "$req")
+    status=$(vault_dbroleput "$DB_MOUNT" "${DB_NAME}-rw" "$req")
     if is_success "$status"; then
       log2 'write rw role to vault db engine'
       break 2

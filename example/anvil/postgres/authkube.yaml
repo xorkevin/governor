@@ -1,0 +1,6 @@
+vault write auth/kubernetes/role/${role} \
+  bound_service_account_names="${name}-postgres" \
+  bound_service_account_namespaces="$ns" \
+  policies="$appname" \
+  ttl="1m" \
+  max_ttl="5m"

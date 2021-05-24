@@ -13,22 +13,38 @@ templates:
     output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}init.sh
   registerkustomization:
     path: register/kustomization.yaml
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}kustomization.yaml
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/kustomization.yaml
   registerjob:
     path: register/job.yaml
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}job.yaml
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/job.yaml
   registerlib:
     path: _init_lib.sh
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}_init_lib.sh
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/_init_lib.sh
   register:
     path: register/register.sh
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}register.sh
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/register.sh
   rolecreate:
     path: register/rolecreate.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}rolecreate.sql
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolecreate.sql
   rolerocreate:
     path: register/rolerocreate.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}rolerocreate.sql
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolerocreate.sql
   rolerevoke:
     path: register/rolerevoke.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}rolerevoke.sql
+    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolerevoke.sql
+  policyregister:
+    path: policy/register.hcl
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}/register.hcl
+  policyservice:
+    path: policy/service.hcl
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}/service.hcl
+{{- range .Vars.vaultconsumers.rw }}
+  policy-rw-{{ . }}:
+    path: policy/consumerrw.hcl
+    output: {{ with $.Vars.policydir }}{{ . }}/{{ end }}{{ . }}/{{ $.Vars.kube.namespace }}-{{ $.Vars.kube.service.name }}-rw-consumer.hcl
+{{- end }}
+{{- range .Vars.vaultconsumers.ro }}
+  policy-ro-{{ . }}:
+    path: policy/consumerro.hcl
+    output: {{ with $.Vars.policydir }}{{ . }}/{{ end }}{{ . }}/{{ $.Vars.kube.namespace }}-{{ $.Vars.kube.service.name }}-ro-consumer.hcl
+{{- end }}
