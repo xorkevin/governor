@@ -34,17 +34,16 @@ templates:
     output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolerevoke.sql
   policyregister:
     path: policy/register.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}/register.hcl
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-register.hcl
   policyservice:
     path: policy/service.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}/service.hcl
-{{- range .Vars.vaultconsumers.rw }}
-  policy-rw-{{ . }}:
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-service.hcl
+  policyrw:
     path: policy/consumerrw.hcl
-    output: {{ with $.Vars.policydir }}{{ . }}/{{ end }}{{ . }}/{{ $.Vars.kube.namespace }}-{{ $.Vars.kube.service.name }}-rw-consumer.hcl
-{{- end }}
-{{- range .Vars.vaultconsumers.ro }}
-  policy-ro-{{ . }}:
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-rw-consumer.hcl
+  policyro:
     path: policy/consumerro.hcl
-    output: {{ with $.Vars.policydir }}{{ . }}/{{ end }}{{ . }}/{{ $.Vars.kube.namespace }}-{{ $.Vars.kube.service.name }}-ro-consumer.hcl
-{{- end }}
+    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-ro-consumer.hcl
+  roles:
+    path: roles.yaml
+    output: {{ with .Vars.rolesdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-roles.yaml

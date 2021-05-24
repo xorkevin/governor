@@ -1,0 +1,19 @@
+roles:
+  - kind: kube
+    kubemount: {{ .Vars.vault.kubemount }}
+    role: {{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}
+    service_account: register-{{ .Vars.kube.service.name }}
+    namespace: {{ .Vars.kube.namespace }}
+    policies:
+      - {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-register
+    ttl: {{ .Vars.vault.policyttl }}
+    maxttl: {{ .Vars.vault.policymaxttl }}
+  - kind: kube
+    kubemount: {{ .Vars.vault.kubemount }}
+    role: {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
+    service_account: {{ .Vars.kube.service.name }}
+    namespace: {{ .Vars.kube.namespace }}
+    policies:
+      - {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-service
+    ttl: {{ .Vars.vault.policyttl }}
+    maxttl: {{ .Vars.vault.policymaxttl }}

@@ -7,7 +7,7 @@ components:
         outputdir: {{ .Vars.outputdir }}/postgres
         namespace: {{ .Vars.namespace }}
         label:
-          partof: {{ .Vars.label.instance }}
+          partof: {{ .Vars.service.name }}
         service:
           image:
             name: {{ .Vars.images.postgres.name }}
@@ -31,12 +31,6 @@ components:
         kvprefix: {{ .Vars.vault.kvprefix }}
         dbmount: {{ .Vars.vault.dbmount }}
 
-      vaultconsumers:
-        rw:
-          - governor-governor
-        ro:
-          - governor-governor
-
       registerdir: {{ .Vars.registerdir }}
       policydir: {{ .Vars.policydir }}
-      authkubedir: {{ .Vars.authkubedir }}
+      rolesdir: {{ .Vars.rolesdir }}

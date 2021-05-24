@@ -4,10 +4,10 @@ vars:
   outputdir: governor
   registerdir: secrets/register
   policydir: secrets/vault/policy
-  authkubedir: secrets/vault/auth/kube
+  rolesdir: secrets/vault/roles
   namespace: governor
-  label:
-    instance: governor
+  service:
+    name: governor
   images:
     postgres:
       name: postgres

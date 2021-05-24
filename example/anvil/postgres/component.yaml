@@ -30,20 +30,18 @@ vars:
     kvmount: kv
     kvprefix: infra
     dbmount: database
-    dbttl: '1h'
-    dbmaxttl: '24h'
+    dbttl: 1h
+    dbmaxttl: 24h
     curlbackoff: '5'
     curlreauth: '3'
     passlen: '64'
+    policyttl: 1m
+    policymaxttl: 5m
 
   initscripts: []
 
-  vaultconsumers:
-    rw: []
-    ro: []
-
   registerdir: secrets/register
   policydir: secrets/vault/policy
-  authkubedir: secrets/vault/auth/kube
+  rolesdir: secrets/vault/roles
 
 configtpl: componenttpl.yaml
