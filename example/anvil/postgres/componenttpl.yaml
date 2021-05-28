@@ -1,49 +1,55 @@
+{{ $outdir := or .Vars.kube.outputdir "." -}}
+{{ $rgbase := or .Vars.registerdir "." -}}
+{{ $rgdir := printf "%s/%s/%s" $rgbase .Vars.kube.namespace .Vars.kube.service.name -}}
+{{ $poldir := or .Vars.policydir "." -}}
+{{ $nssvc := printf "%s-%s" .Vars.kube.namespace .Vars.kube.service.name -}}
+{{ $rolesdir := or .Vars.rolesdir "." -}}
 templates:
   kustomization:
     path: kustomization.yaml
-    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}kustomization.yaml
+    output: {{ $outdir }}/kustomization.yaml
   service:
     path: service.yaml
-    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}service.yaml
+    output: {{ $outdir }}/service.yaml
   initlib:
     path: _init_lib.sh
-    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}_init_lib.sh
+    output: {{ $outdir }}/_init_lib.sh
   init:
     path: init.sh
-    output: {{ with .Vars.kube.outputdir }}{{ . }}/{{ end }}init.sh
+    output: {{ $outdir }}/init.sh
   registerkustomization:
     path: register/kustomization.yaml
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/kustomization.yaml
+    output: {{ $rgdir }}/kustomization.yaml
   registerjob:
     path: register/job.yaml
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/job.yaml
+    output: {{ $rgdir }}/job.yaml
   registerlib:
     path: _init_lib.sh
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/_init_lib.sh
+    output: {{ $rgdir }}/_init_lib.sh
   register:
     path: register/register.sh
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/register.sh
+    output: {{ $rgdir }}/register.sh
   rolecreate:
     path: register/rolecreate.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolecreate.sql
+    output: {{ $rgdir }}/rolecreate.sql
   rolerocreate:
     path: register/rolerocreate.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolerocreate.sql
+    output: {{ $rgdir }}/rolerocreate.sql
   rolerevoke:
     path: register/rolerevoke.sql
-    output: {{ with .Vars.registerdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}/rolerevoke.sql
+    output: {{ $rgdir }}/rolerevoke.sql
   policyregister:
     path: policy/register.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-register.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-register.hcl
   policyservice:
     path: policy/service.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-service.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-service.hcl
   policyrw:
     path: policy/consumerrw.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-rw-consumer.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-rw-consumer.hcl
   policyro:
     path: policy/consumerro.hcl
-    output: {{ with .Vars.policydir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-ro-consumer.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-ro-consumer.hcl
   roles:
     path: roles.yaml
-    output: {{ with .Vars.rolesdir }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-roles.yaml
+    output: {{ $rolesdir }}/{{ $nssvc }}-roles.yaml

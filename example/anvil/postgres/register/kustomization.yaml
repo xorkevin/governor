@@ -1,28 +1,33 @@
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+{{ $rgsvc := printf "register-%s" .Vars.kube.service.name -}}
+{{ $nssvc := printf "%s-%s" $ns $svc -}}
+{{ $nsrgsvc := printf "%s-%s" $ns $rgsvc -}}
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{ .Vars.kube.namespace }}
 configMapGenerator:
-  - name: {{ .Vars.kube.service.name }}-register-scripts
+  - name: {{ $svc }}-register-scripts
     files:
       - register.sh
       - _init_lib.sh
       - rolecreate.sql
       - rolerocreate.sql
       - rolerevoke.sql
-  - name: register-{{ .Vars.kube.service.name }}-opts
+  - name: {{ $rgsvc }}-opts
     literals:
       - passlen={{ .Vars.vault.passlen }}
       - curlbackoff={{ .Vars.vault.curlbackoff }}
       - curlreauth={{ .Vars.vault.curlreauth }}
       - vaultaddr={{ .Vars.vault.addr }}
-      - vaultrole={{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}
+      - vaultrole={{ $nsrgsvc }}
       - vaultkubemount={{ .Vars.vault.kubemount }}
       - dbmount={{ .Vars.vault.dbmount }}
-      - dbname={{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
-      - dbconn="postgresql://{{`{{username}}`}}:{{`{{password}}`}}@{{ .Vars.kube.service.name }}.{{ .Vars.kube.namespace }}.svc.cluster.local:5432/postgres?sslmode=disable"
+      - dbname={{ $nssvc }}
+      - dbconn="postgresql://{{`{{username}}`}}:{{`{{password}}`}}@{{ $svc }}.{{ $ns }}.svc.cluster.local:5432/postgres?sslmode=disable"
       - dbttl={{ .Vars.vault.dbttl }}
       - dbmaxttl={{ .Vars.vault.dbmaxttl }}
       - kvmount={{ .Vars.vault.kvmount }}
-      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ .Vars.kube.namespace }}/{{ .Vars.kube.service.name }}
+      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}
 resources:
   - job.yaml

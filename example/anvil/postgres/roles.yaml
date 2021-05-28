@@ -1,19 +1,26 @@
+{{ $kubemount := .Vars.vault.kubemount -}}
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+{{ $rgsvc := printf "register-%s" $svc -}}
+{{ $policy := printf "%s-%s" $ns $svc -}}
+{{ $ttl := .Vars.vault.policyttl -}}
+{{ $maxttl := .Vars.vault.policymaxttl -}}
 roles:
   - kind: kube
-    kubemount: {{ .Vars.vault.kubemount }}
-    role: {{ .Vars.kube.namespace }}-register-{{ .Vars.kube.service.name }}
-    service_account: register-{{ .Vars.kube.service.name }}
-    namespace: {{ .Vars.kube.namespace }}
+    kubemount: {{ $kubemount }}
+    role: {{ $ns }}-{{ $rgsvc }}
+    service_account: {{ $rgsvc }}
+    namespace: {{ $ns }}
     policies:
-      - {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-register
-    ttl: {{ .Vars.vault.policyttl }}
-    maxttl: {{ .Vars.vault.policymaxttl }}
+      - {{ $policy }}-register
+    ttl: {{ $ttl }}
+    maxttl: {{ $maxttl }}
   - kind: kube
-    kubemount: {{ .Vars.vault.kubemount }}
-    role: {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}
-    service_account: {{ .Vars.kube.service.name }}
-    namespace: {{ .Vars.kube.namespace }}
+    kubemount: {{ $kubemount }}
+    role: {{ $ns }}-{{ $svc }}
+    service_account: {{ $svc }}
+    namespace: {{ $ns }}
     policies:
-      - {{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-service
-    ttl: {{ .Vars.vault.policyttl }}
-    maxttl: {{ .Vars.vault.policymaxttl }}
+      - {{ $policy }}-service
+    ttl: {{ $ttl }}
+    maxttl: {{ $maxttl }}

@@ -1,16 +1,18 @@
+{{ $svc := .Vars.kube.service.name -}}
+{{ $svcopts := printf "%s-opts" $svc -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ .Vars.kube.service.name }}
+  name: {{ $svc }}
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Vars.kube.service.name }}-internal
+  name: {{ $svc }}-internal
 spec:
   selector:
-    app: {{ .Vars.kube.service.name }}
+    app: {{ $svc }}
   ports:
     - name: postgres
       port: 5432
@@ -20,10 +22,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Vars.kube.service.name }}
+  name: {{ $svc }}
 spec:
   selector:
-    app: {{ .Vars.kube.service.name }}
+    app: {{ $svc }}
   ports:
     - name: postgres
       port: 5432
@@ -32,25 +34,25 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Vars.kube.service.name }}
+  name: {{ $svc }}
 spec:
   selector:
     matchLabels:
-      app: {{ .Vars.kube.service.name }}
-  serviceName: {{ .Vars.kube.service.name }}-internal
+      app: {{ $svc }}
+  serviceName: {{ $svc }}-internal
   replicas: 1
   template:
     metadata:
       labels:
-        app: {{ .Vars.kube.service.name }}
+        app: {{ $svc }}
         app.kubernetes.io/name: postgres
-        app.kubernetes.io/instance: {{ .Vars.kube.service.name }}
+        app.kubernetes.io/instance: {{ $svc }}
         app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
         app.kubernetes.io/component: {{ .Vars.kube.label.component }}
         app.kubernetes.io/part-of: {{ .Vars.kube.label.partof }}
         app.kubernetes.io/managed-by: anvil
     spec:
-      serviceAccountName: {{ .Vars.kube.service.name }}
+      serviceAccountName: {{ $svc }}
       initContainers:
         - name: getpass
           image: {{ .Vars.kube.service.init.image.name }}:{{ .Vars.kube.service.init.image.version }}
@@ -60,39 +62,39 @@ spec:
             - name: CURL_BACKOFF
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: curlbackoff
                   optional: true
             - name: CURL_REAUTH
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: curlreauth
                   optional: true
             - name: VAULT_ADDR
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: vaultaddr
             - name: VAULT_ROLE
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: vaultrole
             - name: VAULT_KUBE_MOUNT
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: vaultkubemount
             - name: KV_MOUNT
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: kvmount
             - name: KV_PATH
               valueFrom:
                 configMapKeyRef:
-                  name: {{ .Vars.kube.service.name }}-opts
+                  name: {{ $svcopts }}
                   key: kvpath
           volumeMounts:
             - name: config-pass
@@ -130,10 +132,10 @@ spec:
           emptyDir: {}
         - name: init-scripts
           configMap:
-            name: {{ .Vars.kube.service.name }}-init-scripts
+            name: {{ $svc }}-init-scripts
         - name: initscripts
           configMap:
-            name: {{ .Vars.kube.service.name }}-initscripts
+            name: {{ $svc }}-initscripts
             optional: true
   volumeClaimTemplates:
     - metadata:
