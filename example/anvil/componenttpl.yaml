@@ -1,3 +1,12 @@
+{{ $outdir := or .Vars.outputdir "." -}}
+templates:
+  kustomization:
+    path: kustomization.yaml
+    output: {{ $outdir }}/kustomization.yaml
+  namespace:
+    path: namespace.yaml
+    output: {{ $outdir }}/namespace.yaml
+
 components:
   postgres:
     kind: local

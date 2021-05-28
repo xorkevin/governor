@@ -15,12 +15,32 @@ all: build ## Default
 ANVIL_SRC=anvil
 ANVIL_MAIN=$(ANVIL_SRC)/component.yaml
 ANVIL_OUT=anvil_out
+ANVIL_POLICIES=$(ANVIL_OUT)/secrets/vault/policy
+ANVIL_ROLES=$(ANVIL_OUT)/secrets/vault/roles
+VAULT_ADDR=http://vault.dev.localhost:8080/
+VAULT_TOKEN=$(shell cat ~/.vault-token)
+ANVIL_REGISTER=$(ANVIL_OUT)/secrets/register
+ANVIL_NS=$(ANVIL_OUT)/governor/namespace.yaml
 
-.PHONY: devinit devup devinit2 devconfig devdown
+.PHONY: devgen devsecrets devregister devunregister devinit
 
-devinit: ## Init k8s resources
+devgen: ## Generate k8s resources
 	if [ -d $(ANVIL_OUT) ]; then rm -r $(ANVIL_OUT); fi
 	anvil component -i $(ANVIL_SRC) -o $(ANVIL_OUT) -c $(ANVIL_MAIN)
+
+devsecrets: ## Register vault resources
+	@VAULT_ADDR=$(VAULT_ADDR) VAULT_TOKEN=$(VAULT_TOKEN) anvil secret --vault-policies=$(ANVIL_POLICIES) --vault-roles=$(ANVIL_ROLES)
+
+devregister: ## Register k8s resources
+	kubectl apply -f $(ANVIL_NS)
+	kubectl apply -k $(ANVIL_REGISTER)/governor/postgres
+
+devunregister: ## Unregister k8s resources
+	kubectl delete -k $(ANVIL_REGISTER)/governor/postgres
+
+devinit: devgen devsecrets devregister ## Init resources
+
+.PHONY: devup devinit2 devconfig devdown
 
 devup: ## Deploy k8s resources to cluster
 	kubectl apply -k base
