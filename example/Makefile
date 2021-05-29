@@ -39,6 +39,7 @@ devregister: ## Register k8s resources
 
 devunregister: ## Unregister k8s resources
 	for i in $(ANVIL_REGISTER_SRC); do kubectl delete -k $$i; done
+	kubectl delete -f $(ANVIL_NS)
 
 devinit: devgen devsecrets devregister ## Init resources
 

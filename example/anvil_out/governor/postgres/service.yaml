@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-internal
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+  clusterIP: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres-internal
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/instance: postgres
+        app.kubernetes.io/version: 13-alpine
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: governor
+        app.kubernetes.io/managed-by: anvil
+    spec:
+      serviceAccountName: postgres
+      initContainers:
+        - name: getpass
+          image: xorkevin/alpine-utils:3
+          command: ['sh']
+          args: ['/home/postgres/init.sh']
+          env:
+            - name: CURL_BACKOFF
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: curlbackoff
+                  optional: true
+            - name: CURL_REAUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: curlreauth
+                  optional: true
+            - name: VAULT_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: vaultaddr
+            - name: VAULT_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: vaultrole
+            - name: VAULT_KUBE_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: vaultkubemount
+            - name: KV_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: kvmount
+            - name: KV_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-opts
+                  key: kvpath
+          volumeMounts:
+            - name: config-pass
+              mountPath: /etc/postgrespass
+            - name: init-scripts
+              mountPath: /home/postgres
+      containers:
+        - name: postgres
+          image: postgres:13-alpine
+          env:
+            - name: POSTGRES_PASSWORD_FILE
+              value: /etc/postgrespass/pass.txt
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_INITDB_ARGS
+              value: '--auth-local=trust --auth-host=scram-sha-256'
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: scram-sha-256
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: config-pass
+              mountPath: /etc/postgrespass
+            - name: initscripts
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: config-pass
+          emptyDir: {}
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+        - name: initscripts
+          configMap:
+            name: postgres-initscripts
+            optional: true
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

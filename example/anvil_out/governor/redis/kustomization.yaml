@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: governor
+configMapGenerator:
+  - name: redis-config
+    files:
+      - redis.conf
+  - name: redis-init-scripts
+    files:
+      - init.sh
+      - _init_lib.sh
+  - name: redis-opts
+    literals:
+      - curlbackoff=5
+      - curlreauth=3
+      - vaultaddr=http://vault.vault.svc.cluster.local:8200
+      - vaultrole=governor-redis
+      - vaultkubemount=kubernetes
+      - kvmount=kv
+      - kvpath=infra/governor/redis
+resources:
+  - service.yaml

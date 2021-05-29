@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-internal
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+  clusterIP: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  serviceName: redis-internal
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/instance: redis
+        app.kubernetes.io/version: 6-alpine
+        app.kubernetes.io/component: kvstore
+        app.kubernetes.io/part-of: governor
+        app.kubernetes.io/managed-by: anvil
+    spec:
+      serviceAccountName: redis
+      initContainers:
+        - name: getpass
+          image: xorkevin/alpine-utils:3
+          command: ['sh']
+          args: ['/home/redis/init.sh']
+          env:
+            - name: CURL_BACKOFF
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: curlbackoff
+                  optional: true
+            - name: CURL_REAUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: curlreauth
+                  optional: true
+            - name: VAULT_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: vaultaddr
+            - name: VAULT_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: vaultrole
+            - name: VAULT_KUBE_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: vaultkubemount
+            - name: KV_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: kvmount
+            - name: KV_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-opts
+                  key: kvpath
+          volumeMounts:
+            - name: config-pass
+              mountPath: /etc/redispass
+            - name: init-scripts
+              mountPath: /home/redis
+      containers:
+        - name: redis
+          image: redis:6-alpine
+          command: ['redis-server']
+          args: ['/etc/redis/redis.conf']
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis
+            - name: config-pass
+              mountPath: /etc/redispass
+      volumes:
+        - name: config-pass
+          emptyDir: {}
+        - name: init-scripts
+          configMap:
+            name: redis-init-scripts
+        - name: config
+          configMap:
+            name: redis-config
+  volumeClaimTemplates: []
