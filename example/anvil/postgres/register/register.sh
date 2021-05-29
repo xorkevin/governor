@@ -99,7 +99,7 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    req=$(vault_pgrole_req "$DB_NAME" "/home/postgres/rolecreate.sql" "/home/postgres/rolerevoke.sql" "$DB_TTL" "$DB_MAX_TTL")
+    req=$(vault_pgrole_req "$DB_NAME" "${ROOT_DIR}/rolecreate.sql" "${ROOT_DIR}/rolerevoke.sql" "$DB_TTL" "$DB_MAX_TTL")
     status=$(vault_dbroleput "$DB_MOUNT" "${DB_NAME}-rw" "$req")
     if is_success "$status"; then
       log2 'write rw role to vault db engine'
@@ -121,7 +121,7 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    req=$(vault_pgrole_req "${DB_NAME}" "/home/postgres/rolerocreate.sql" "/home/postgres/rolerevoke.sql" "$DB_TTL" "$DB_MAX_TTL")
+    req=$(vault_pgrole_req "${DB_NAME}" "${ROOT_DIR}/rolerocreate.sql" "${ROOT_DIR}/rolerevoke.sql" "$DB_TTL" "$DB_MAX_TTL")
     status=$(vault_dbroleput "$DB_MOUNT" "${DB_NAME}-ro" "$req")
     if is_success "$status"; then
       log2 'write ro role to vault db engine'

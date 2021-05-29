@@ -6,9 +6,11 @@ export ROOT_DIR=${0%/*}
 
 . "${ROOT_DIR}/_init_lib.sh"
 
-log2 'begin getpass'
+log2 'begin register'
 
-pass=
+pass=$(gen_pass "${PASS_LEN:-64}")
+
+log2 'generate new password'
 
 while true; do
   i=0
@@ -18,21 +20,15 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    status=$(vault_kvget "$KV_MOUNT" "$KV_PATH")
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"password\": \"${pass}\"}")
     if is_success "$status"; then
-      log2 'found existing vault credentials'
-      pass=$(cat /tmp/curlres.txt | jq -r '.data.data.password')
-      log2 'use existing password'
+      log2 'write password to vault kv'
       break 2
-    else
-      log2 'error get vault kv:' "$(cat /tmp/curlres.txt)"
     fi
+    log2 'error write password to vault kv:' "$(cat /tmp/curlres.txt)"
 
     i=$((i + 1))
     sleep "${CURL_BACKOFF:-5}"
   done
   export VAULT_TOKEN=
 done
-
-printf '%s' "${pass}" > /etc/postgrespass/pass.txt
-log2 'write password to postgres conf'

@@ -20,9 +20,11 @@ ANVIL_ROLES=$(ANVIL_OUT)/secrets/vault/roles
 VAULT_ADDR=http://vault.dev.localhost:8080/
 VAULT_TOKEN=$(shell cat ~/.vault-token)
 ANVIL_REGISTER=$(ANVIL_OUT)/secrets/register
-ANVIL_NS=$(ANVIL_OUT)/governor/namespace.yaml
+ANVIL_REGISTER_SRC=$(shell find $(ANVIL_REGISTER)/governor -mindepth 1 -maxdepth 1 -type d)
+ANVIL_BASE=$(ANVIL_OUT)/governor
+ANVIL_NS=$(ANVIL_BASE)/namespace.yaml
 
-.PHONY: devgen devsecrets devregister devunregister devinit
+.PHONY: devgen devsecrets devregister devunregister devinit devconfig
 
 devgen: ## Generate k8s resources
 	if [ -d $(ANVIL_OUT) ]; then rm -r $(ANVIL_OUT); fi
@@ -33,26 +35,23 @@ devsecrets: ## Register vault resources
 
 devregister: ## Register k8s resources
 	kubectl apply -f $(ANVIL_NS)
-	kubectl apply -k $(ANVIL_REGISTER)/governor/postgres
+	for i in $(ANVIL_REGISTER_SRC); do kubectl apply -k $$i; done
 
 devunregister: ## Unregister k8s resources
-	kubectl delete -k $(ANVIL_REGISTER)/governor/postgres
+	for i in $(ANVIL_REGISTER_SRC); do kubectl delete -k $$i; done
 
 devinit: devgen devsecrets devregister ## Init resources
-
-.PHONY: devup devinit2 devconfig devdown
-
-devup: ## Deploy k8s resources to cluster
-	kubectl apply -k base
-
-devinit2: ## Register k8s resources post deploy
-	./register2.sh
 
 devconfig: ## Set app config
 	./setsmtpauth.sh
 
+.PHONY: devup devdown
+
+devup: ## Deploy k8s resources to cluster
+	kubectl apply -k $(ANVIL_OUT)/governor
+
 devdown: ## Destroy k8s resources
-	kubectl delete -k base
+	kubectl delete -k $(ANVIL_OUT)/governor
 
 ## APP BUILD
 

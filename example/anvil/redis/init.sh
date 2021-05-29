@@ -34,5 +34,7 @@ while true; do
   export VAULT_TOKEN=
 done
 
-printf '%s' "${pass}" > /etc/postgrespass/pass.txt
-log2 'write password to postgres conf'
+cat <<EOF > /etc/redispass/pass.conf
+requirepass ${pass}
+EOF
+log2 'write password to redis conf'

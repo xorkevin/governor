@@ -12,6 +12,9 @@ vars:
     postgres:
       name: postgres
       version: 13-alpine
+    redis:
+      name: redis
+      version: 6-alpine
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'

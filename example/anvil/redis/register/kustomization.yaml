@@ -1,0 +1,25 @@
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+{{ $rgsvc := printf "register-%s" .Vars.kube.service.name -}}
+{{ $nssvc := printf "%s-%s" $ns $svc -}}
+{{ $nsrgsvc := printf "%s-%s" $ns $rgsvc -}}
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: {{ .Vars.kube.namespace }}
+configMapGenerator:
+  - name: {{ $svc }}-register-scripts
+    files:
+      - register.sh
+      - _init_lib.sh
+  - name: {{ $rgsvc }}-opts
+    literals:
+      - passlen={{ .Vars.vault.passlen }}
+      - curlbackoff={{ .Vars.vault.curlbackoff }}
+      - curlreauth={{ .Vars.vault.curlreauth }}
+      - vaultaddr={{ .Vars.vault.addr }}
+      - vaultrole={{ $nsrgsvc }}
+      - vaultkubemount={{ .Vars.vault.kubemount }}
+      - kvmount={{ .Vars.vault.kvmount }}
+      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}
+resources:
+  - job.yaml
