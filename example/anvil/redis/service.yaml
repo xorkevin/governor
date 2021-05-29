@@ -48,7 +48,7 @@ spec:
         app.kubernetes.io/name: redis
         app.kubernetes.io/instance: {{ $svc }}
         app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
-        app.kubernetes.io/component: {{ .Vars.kube.labe.component }}
+        app.kubernetes.io/component: {{ .Vars.kube.label.component }}
         app.kubernetes.io/part-of: {{ .Vars.kube.label.partof }}
         app.kubernetes.io/managed-by: anvil
     spec:
