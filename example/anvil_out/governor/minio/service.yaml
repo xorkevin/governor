@@ -45,7 +45,7 @@ spec:
         app: minio
         app.kubernetes.io/name: minio
         app.kubernetes.io/instance: minio
-        app.kubernetes.io/version: ltest
+        app.kubernetes.io/version: latest
         app.kubernetes.io/component: objstore
         app.kubernetes.io/part-of: governor
         app.kubernetes.io/managed-by: anvil
@@ -101,7 +101,7 @@ spec:
               mountPath: /home/minio
       containers:
         - name: minio
-          image: minio/minio:ltest
+          image: minio/minio:latest
           command: ['sh']
           args: ['/home/minio/start.sh']
           ports:

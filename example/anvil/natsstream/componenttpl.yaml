@@ -1,0 +1,46 @@
+{{ $outdir := or .Vars.kube.outputdir "." -}}
+{{ $rgbase := or .Vars.registerdir "." -}}
+{{ $rgdir := printf "%s/%s/%s" $rgbase .Vars.kube.namespace .Vars.kube.service.name -}}
+{{ $poldir := or .Vars.policydir "." -}}
+{{ $nssvc := printf "%s-%s" .Vars.kube.namespace .Vars.kube.service.name -}}
+{{ $rolesdir := or .Vars.rolesdir "." -}}
+templates:
+  kustomization:
+    path: kustomization.yaml
+    output: {{ $outdir }}/kustomization.yaml
+  service:
+    path: service.yaml
+    output: {{ $outdir }}/service.yaml
+  initlib:
+    path: _init_lib.sh
+    output: {{ $outdir }}/_init_lib.sh
+  init:
+    path: init.sh
+    output: {{ $outdir }}/init.sh
+  conf:
+    path: server.conf
+    output: {{ $outdir }}/server.conf
+  registerkustomization:
+    path: register/kustomization.yaml
+    output: {{ $rgdir }}/kustomization.yaml
+  registerjob:
+    path: register/job.yaml
+    output: {{ $rgdir }}/job.yaml
+  registerlib:
+    path: _init_lib.sh
+    output: {{ $rgdir }}/_init_lib.sh
+  register:
+    path: register/register.sh
+    output: {{ $rgdir }}/register.sh
+  policyregister:
+    path: policy/register.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-register.hcl
+  policyservice:
+    path: policy/service.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-service.hcl
+  policyrw:
+    path: policy/consumer.hcl
+    output: {{ $poldir }}/{{ $nssvc }}-consumer.hcl
+  roles:
+    path: roles.yaml
+    output: {{ $rolesdir }}/{{ $nssvc }}-roles.yaml

@@ -1,0 +1,40 @@
+version: xorkevin.dev/anvil/v1alpha1
+
+vars:
+  kube:
+    outputdir: natsstream
+    namespace: natsstream
+    label:
+      component: eventstreaming
+      partof: natsstream
+    service:
+      name: natsstream
+      image:
+        name: natsstream
+        version: alpine
+      init:
+        image:
+          name: xorkevin/alpine-utils
+          version: latest
+
+    register:
+      image:
+        name: xorkevin/alpine-utils
+        version: latest
+
+  vault:
+    addr: http://vault.vault.svc.cluster.local:8200
+    kubemount: kubernetes
+    kvmount: kv
+    kvprefix: infra
+    curlbackoff: '5'
+    curlreauth: '3'
+    passlen: '64'
+    policyttl: 1m
+    policymaxttl: 5m
+
+  registerdir: secrets/register
+  policydir: secrets/vault/policy
+  rolesdir: secrets/vault/roles
+
+configtpl: componenttpl.yaml

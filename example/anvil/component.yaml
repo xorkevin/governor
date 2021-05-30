@@ -17,7 +17,7 @@ vars:
       version: 6-alpine
     minio:
       name: minio/minio
-      version: ltest
+      version: latest
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'
