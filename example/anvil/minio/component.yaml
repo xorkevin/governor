@@ -2,20 +2,27 @@ version: xorkevin.dev/anvil/v1alpha1
 
 vars:
   kube:
-    outputdir: redis
-    namespace: redis
+    outputdir: minio
+    namespace: minio
     label:
-      component: kvstore
-      partof: redis
+      component: objstore
+      partof: minio
     service:
-      name: redis
+      name: minio
       image:
-        name: redis
-        version: alpine
+        name: minio/minio
+        version: latest
       init:
         image:
           name: xorkevin/alpine-utils
           version: latest
+      healthcheck:
+        liveness:
+          period: 15
+          delay: 15
+        readiness:
+          period: 15
+          delay: 15
 
     register:
       image:

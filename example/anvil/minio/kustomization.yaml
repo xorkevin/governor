@@ -1,0 +1,25 @@
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+{{ $nssvc := printf "%s-%s" $ns $svc -}}
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: {{ $ns }}
+configMapGenerator:
+  - name: {{ $svc }}-start-scripts
+    files:
+      - start.sh
+  - name: {{ $svc }}-init-scripts
+    files:
+      - init.sh
+      - _init_lib.sh
+  - name: {{ $svc }}-opts
+    literals:
+      - curlbackoff={{ .Vars.vault.curlbackoff }}
+      - curlreauth={{ .Vars.vault.curlreauth }}
+      - vaultaddr={{ .Vars.vault.addr }}
+      - vaultrole={{ $nssvc }}
+      - vaultkubemount={{ .Vars.vault.kubemount }}
+      - kvmount={{ .Vars.vault.kvmount }}
+      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}
+resources:
+  - service.yaml
