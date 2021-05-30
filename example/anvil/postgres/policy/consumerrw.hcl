@@ -1,3 +1,5 @@
-path "{{ .Vars.vault.dbmount }}/creds/{{ .Vars.kube.namespace }}-{{ .Vars.kube.service.name }}-rw" {
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+path "{{ .Vars.vault.dbmount }}/creds/{{ $ns }}-{{ $svc }}-rw" {
   capabilities = ["read", "list"]
 }

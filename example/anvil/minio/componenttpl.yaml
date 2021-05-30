@@ -17,6 +17,9 @@ templates:
   init:
     path: init.sh
     output: {{ $outdir }}/init.sh
+  start:
+    path: start.sh
+    output: {{ $outdir }}/start.sh
   registerkustomization:
     path: register/kustomization.yaml
     output: {{ $rgdir }}/kustomization.yaml
