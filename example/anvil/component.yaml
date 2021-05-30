@@ -15,6 +15,9 @@ vars:
     redis:
       name: redis
       version: 6-alpine
+    minio:
+      name: minio/minio
+      version: ltest
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'

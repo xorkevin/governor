@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: governor
+configMapGenerator:
+  - name: minio-start-scripts
+    files:
+      - start.sh
+  - name: minio-init-scripts
+    files:
+      - init.sh
+      - _init_lib.sh
+  - name: minio-opts
+    literals:
+      - curlbackoff=5
+      - curlreauth=3
+      - vaultaddr=http://vault.vault.svc.cluster.local:8200
+      - vaultrole=governor-minio
+      - vaultkubemount=kubernetes
+      - kvmount=kv
+      - kvpath=infra/governor/minio
+resources:
+  - service.yaml
