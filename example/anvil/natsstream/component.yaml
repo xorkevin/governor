@@ -12,6 +12,8 @@ vars:
       image:
         name: natsstream
         version: alpine
+      storage:
+        amount: 8Gi
       init:
         image:
           name: xorkevin/alpine-utils
