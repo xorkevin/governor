@@ -45,7 +45,7 @@ spec:
     metadata:
       labels:
         app: {{ $svc }}
-        app.kubernetes.io/name: natsstream
+        app.kubernetes.io/name: nats-streaming
         app.kubernetes.io/instance: {{ $svc }}
         app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
         app.kubernetes.io/component: {{ .Vars.kube.label.component }}
@@ -99,6 +99,8 @@ spec:
           volumeMounts:
             - name: config-pass
               mountPath: /etc/natsstreampass
+            - name: config
+              mountPath: /etc/natsstream
             - name: init-scripts
               mountPath: /home/natsstream
       containers:
@@ -110,17 +112,25 @@ spec:
             - name: natsstream
               containerPort: 4222
           volumeMounts:
-            - name: config
-              mountPath: /etc/natsstream
+            - name: data
+              mountPath: /var/lib/natsstream
             - name: config-pass
-              mountPath: /etc/natsstreampass
+              mountPath: /etc/natsstream
       volumes:
-        - name: config-pass
-          emptyDir: {}
-        - name: init-scripts
-          configMap:
-            name: {{ $svc }}-init-scripts
         - name: config
           configMap:
             name: {{ $svc }}-config
-  volumeClaimTemplates: []
+        - name: init-scripts
+          configMap:
+            name: {{ $svc }}-init-scripts
+        - name: config-pass
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Vars.kube.service.storage.amount }}

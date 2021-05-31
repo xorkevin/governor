@@ -34,8 +34,8 @@ while true; do
   export VAULT_TOKEN=
 done
 
-cp /etc/nats-streaming/server.conf /etc/nats-streaming-pass/server.conf
-cat <<EOF > /etc/nats-streaming-pass/auth.conf
+cp /etc/natsstream/server.conf /etc/natsstreampass/server.conf
+cat <<EOF > /etc/natsstreampass/auth.conf
 TOKEN: "${pass}"
 EOF
 log2 'write password to nats-streaming conf'
