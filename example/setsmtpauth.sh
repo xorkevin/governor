@@ -2,7 +2,7 @@
 
 . ./source.sh
 
-kvpath=kv/external/smtp
+kvpath=kv/app/governor/smtp
 
 read -ep 'username: ' username
 read -sp 'password: ' password; printf '\n'

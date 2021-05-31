@@ -65,7 +65,7 @@ pubsub:
 template:
   dir: templates
 mail:
-  auth: kv/data/external/smtp
+  auth: kv/data/app/governor/smtp
   host: localhost
   port: 587
   fromaddress: no-reply@xorkevin.com
