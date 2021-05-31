@@ -18,11 +18,16 @@ vars:
     minio:
       name: minio/minio
       version: latest
+    natsstream:
+      name: nats-streaming
+      version: 0.21-alpine
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'
   storage:
     postgres: 1Gi
+    minio: 8Gi
+    natsstream: 1Gi
   vault:
     addr: http://vault.vault.svc.cluster.local:8200
     kubemount: kubernetes

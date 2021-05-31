@@ -13,7 +13,7 @@ vars:
         name: natsstream
         version: alpine
       storage:
-        amount: 8Gi
+        amount: 1Gi
       init:
         image:
           name: xorkevin/alpine-utils

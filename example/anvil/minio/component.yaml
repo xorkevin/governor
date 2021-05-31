@@ -12,6 +12,8 @@ vars:
       image:
         name: minio/minio
         version: latest
+      storage:
+        amount: 8Gi
       init:
         image:
           name: xorkevin/alpine-utils
