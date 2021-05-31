@@ -106,7 +106,7 @@ spec:
       containers:
         - name: natsstream
           image: {{ .Vars.kube.service.image.name }}:{{ .Vars.kube.service.image.version }}
-          command: ['/nats-streaming-server']
+          command: ['nats-streaming-server']
           args: ['-sc', '/etc/natsstream/server.conf']
           ports:
             - name: natsstream

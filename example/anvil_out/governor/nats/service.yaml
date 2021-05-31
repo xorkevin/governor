@@ -106,8 +106,8 @@ spec:
       containers:
         - name: nats
           image: nats:2-alpine
-          command: ['/nats-server']
-          args: ['-sc', '/etc/nats/server.conf']
+          command: ['nats-server']
+          args: ['-c', '/etc/nats/server.conf']
           ports:
             - name: nats
               containerPort: 4222

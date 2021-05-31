@@ -4,3 +4,6 @@ namespace: {{ .Vars.namespace }}
 resources:
   - postgres
   - redis
+  - minio
+  - natsstream
+  - nats

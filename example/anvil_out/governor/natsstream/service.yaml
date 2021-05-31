@@ -104,7 +104,7 @@ spec:
       containers:
         - name: natsstream
           image: nats-streaming:0.21-alpine
-          command: ['/nats-streaming-server']
+          command: ['nats-streaming-server']
           args: ['-sc', '/etc/natsstream/server.conf']
           ports:
             - name: natsstream
