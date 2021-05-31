@@ -21,6 +21,9 @@ vars:
     natsstream:
       name: nats-streaming
       version: 0.21-alpine
+    nats:
+      name: nats
+      version: 2-alpine
     xorkevinalpine:
       name: xorkevin/alpine-utils
       version: '3'

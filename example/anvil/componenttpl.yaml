@@ -146,3 +146,36 @@ components:
       registerdir: {{ .Vars.registerdir }}
       policydir: {{ .Vars.policydir }}
       rolesdir: {{ .Vars.rolesdir }}
+
+  nats:
+    kind: local
+    path: nats/component.yaml
+    vars:
+      kube:
+        outputdir: {{ .Vars.outputdir }}/nats
+        namespace: {{ .Vars.namespace }}
+        label:
+          partof: {{ .Vars.service.name }}
+        service:
+          image:
+            name: {{ .Vars.images.nats.name }}
+            version: {{ .Vars.images.nats.version }}
+          init:
+            image:
+              name: {{ .Vars.images.xorkevinalpine.name }}
+              version: {{ .Vars.images.xorkevinalpine.version }}
+
+        register:
+          image:
+            name: {{ .Vars.images.xorkevinalpine.name }}
+            version: {{ .Vars.images.xorkevinalpine.version }}
+
+      vault:
+        addr: {{ .Vars.vault.addr }}
+        kubemount: {{ .Vars.vault.kubemount }}
+        kvmount: {{ .Vars.vault.kvmount }}
+        kvprefix: {{ .Vars.vault.kvprefix }}
+
+      registerdir: {{ .Vars.registerdir }}
+      policydir: {{ .Vars.policydir }}
+      rolesdir: {{ .Vars.rolesdir }}
