@@ -20,6 +20,9 @@ vars:
         readiness:
           period: 15
           delay: 15
+      ingressRoute:
+        entryPoints: []
+        matchRule: ''
       init:
         image:
           name: xorkevin/alpine-utils

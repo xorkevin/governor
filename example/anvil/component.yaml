@@ -9,6 +9,10 @@ vars:
   service:
     name: governor
     replicas: 1
+    ingressRoute:
+      matchRule: Host(`governor.dev.localhost`) || Host(`go.governor.dev.localhost`)
+      entryPoints:
+        - web
   images:
     governor:
       name: docker.pkg.dev.localhost:8080/governor

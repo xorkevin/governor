@@ -19,6 +19,9 @@ templates:
     path: templates/{{ . }}
     output: {{ $outdir }}/templates/{{ . }}
 {{- end }}
+  ingressroute:
+    path: ingressroute.yaml
+    output: {{ $outdir }}/ingressroute.yaml
   registerkustomization:
     path: register/kustomization.yaml
     output: {{ $rgdir }}/kustomization.yaml

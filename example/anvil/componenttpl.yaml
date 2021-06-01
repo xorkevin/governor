@@ -25,6 +25,16 @@ components:
             name: {{ .Vars.images.governor.name }}
             version: {{ .Vars.images.governor.version }}
           replicas: {{ .Vars.service.replicas }}
+          ingressRoute:
+            {{- with .Vars.service.ingressRoute.matchRule }}
+            matchRule: {{ . }}
+            {{- end }}
+            {{- with .Vars.service.ingressRoute.entryPoints }}
+            entryPoints:
+              {{- range . }}
+              - {{ . }}
+              {{- end }}
+            {{- end }}
           init:
             image:
               name: {{ .Vars.images.xorkevinalpine.name }}

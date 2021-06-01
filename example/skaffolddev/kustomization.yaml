@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: governor
 resources:
-  - ../anvil_out/governor/server
+  - ../anvil_out/governor/governor
   - mailhog.yaml
 patchesStrategicMerge:
   - patch.yaml

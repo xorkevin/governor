@@ -1,15 +1,22 @@
+{{ $svc := .Vars.kube.service.name -}}
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
-  name: governor
+  name: {{ $svc }}
 spec:
+{{- with .Vars.kube.service.ingressRoute.entryPoints }}
   entryPoints:
-    - web
+    {{- range . }}
+    - {{ . }}
+    {{- end }}
+{{- end }}
+{{- with .Vars.kube.service.ingressRoute.matchRule }}
   routes:
     - kind: Rule
-      match: Host(`governor.dev.localhost`) || Host(`go.governor.dev.localhost`)
+      match: {{ . }}
       services:
         - kind: Service
           scheme: http
           name: governor
           port: 8080
+{{- end }}

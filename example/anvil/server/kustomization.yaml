@@ -30,4 +30,6 @@ configMapGenerator:
       - templates/passreset.txt
 resources:
   - service.yaml
+  {{- with .Vars.kube.service.ingressRoute.entryPoints }}
   - ingressroute.yaml
+  {{- end }}
