@@ -3,6 +3,9 @@ templates:
   kustomization:
     path: kustomization.yaml
     output: {{ $outdir }}/kustomization.yaml
+  registerkustomization:
+    path: registerkustomization.yaml
+    output: {{ .Vars.registerdir }}/{{ .Vars.namespace }}/kustomization.yaml
   namespace:
     path: namespace.yaml
     output: {{ $outdir }}/namespace.yaml
@@ -13,7 +16,7 @@ components:
     path: server/component.yaml
     vars:
       kube:
-        outputdir: {{ .Vars.outputdir }}/server
+        outputdir: {{ .Vars.outputdir }}/governor
         namespace: {{ .Vars.namespace }}
         label:
           partof: {{ .Vars.service.name }}

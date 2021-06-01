@@ -19,8 +19,7 @@ ANVIL_POLICIES=$(ANVIL_OUT)/secrets/vault/policy
 ANVIL_ROLES=$(ANVIL_OUT)/secrets/vault/roles
 VAULT_ADDR=http://vault.dev.localhost:8080/
 VAULT_TOKEN=$(shell cat ~/.vault-token)
-ANVIL_REGISTER=$(ANVIL_OUT)/secrets/register
-ANVIL_REGISTER_SRC=$(shell find $(ANVIL_REGISTER)/governor -mindepth 1 -maxdepth 1 -type d)
+ANVIL_REGISTER=$(ANVIL_OUT)/secrets/register/governor
 ANVIL_BASE=$(ANVIL_OUT)/governor
 ANVIL_NS=$(ANVIL_BASE)/namespace.yaml
 
@@ -35,11 +34,10 @@ devsecrets: ## Register vault resources
 
 devregister: ## Register k8s resources
 	kubectl apply -f $(ANVIL_NS)
-	for i in $(ANVIL_REGISTER_SRC); do kubectl apply -k $$i; done
+	kubectl apply -k $(ANVIL_REGISTER)
 
 devunregister: ## Unregister k8s resources
-	for i in $(ANVIL_REGISTER_SRC); do kubectl delete -k $$i; done
-	kubectl delete -f $(ANVIL_NS)
+	kubectl delete -k $(ANVIL_REGISTER)
 
 devinit: devgen devsecrets devregister ## Init resources
 

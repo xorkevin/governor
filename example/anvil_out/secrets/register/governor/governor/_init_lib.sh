@@ -30,7 +30,7 @@ auth_vault() {
   local req=$(auth_vault_req "$satoken" "$VAULT_ROLE")
   curl -s \
     -X POST -d "$req" \
-    "${VAULT_ADDR}/v1/auth/kubernetes/login" \
+    "${VAULT_ADDR}/v1/auth/${VAULT_KUBE_MOUNT}/login" \
     | jq -r '.auth.client_token'
 }
 
@@ -43,9 +43,10 @@ EOF
 }
 
 vault_kvput() {
-  local key=$1
-  local val=$2
-  local cas=$3
+  local mount=$1
+  local key=$2
+  local val=$3
+  local cas=$4
 
   opts="{}"
   if [ ! -z "$cas" ]; then
@@ -56,16 +57,39 @@ vault_kvput() {
   curl -s -w '%{http_code}' -o /tmp/curlres.txt \
     -H "X-Vault-Token: ${VAULT_TOKEN}" \
     -X POST -d "$req" \
-    "${VAULT_ADDR}/v1/${key}"
+    "${VAULT_ADDR}/v1/${mount}/data/${key}"
 }
 
 vault_kvget() {
-  local key=$1
+  local mount=$1
+  local key=$2
 
   curl -s -w '%{http_code}' -o /tmp/curlres.txt \
     -H "X-Vault-Token: ${VAULT_TOKEN}" \
     -X GET \
-    "${VAULT_ADDR}/v1/${key}"
+    "${VAULT_ADDR}/v1/${mount}/data/${key}"
+}
+
+vault_dbconfigput() {
+  local mount=$1
+  local key=$2
+  local val=$3
+
+  curl -s -w '%{http_code}' -o /tmp/curlres.txt \
+    -H "X-Vault-Token: ${VAULT_TOKEN}" \
+    -X POST -d "$val" \
+    "${VAULT_ADDR}/v1/${mount}/config/${key}"
+}
+
+vault_dbroleput() {
+  local mount=$1
+  local key=$2
+  local val=$3
+
+  curl -s -w '%{http_code}' -o /tmp/curlres.txt \
+    -H "X-Vault-Token: ${VAULT_TOKEN}" \
+    -X POST -d "$val" \
+    "${VAULT_ADDR}/v1/${mount}/roles/${key}"
 }
 
 gen_pass() {
