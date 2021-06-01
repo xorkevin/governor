@@ -108,7 +108,7 @@ devstop: ## Stop running app
 
 NAMESPACE=governor
 DEVDEPLOY=governor
-DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.creationTimestamp | grep governor | head -n 1)
+DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.creationTimestamp | grep pod/governor | head -n 1)
 DEVCONTAINER=governor
 TAILLINES?=64
 
