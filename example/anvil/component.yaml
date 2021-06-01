@@ -8,7 +8,11 @@ vars:
   namespace: governor
   service:
     name: governor
+    replicas: 1
   images:
+    governor:
+      name: docker.pkg.dev.localhost:8080/governor
+      version: latest
     postgres:
       name: postgres
       version: 13-alpine
@@ -35,6 +39,7 @@ vars:
     addr: http://vault.vault.svc.cluster.local:8200
     kubemount: kubernetes
     kvmount: kv
+    kvappprefix: app
     kvprefix: infra
     dbmount: database
 

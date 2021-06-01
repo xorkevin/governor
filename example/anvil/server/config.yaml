@@ -1,0 +1,123 @@
+mode: DEBUG
+logoutput: STDOUT
+port: 8080
+baseurl: /api
+templatedir: templates
+maxreqsize: 2M
+maxheadersize: 1M
+maxconnread: 5s
+maxconnheader: 2s
+maxconnwrite: 5s
+maxconnidle: 5s
+alloworigins: []
+allowpaths:
+  - '^/api/oauth/(token|userinfo|jwks)$'
+routerewrite:
+  - host: go.governor.dev.localhost:8080
+    methods: ['GET']
+    pattern: '^/([A-Za-z0-9_-]{2,}(?:/image)?)$'
+    replace: /api/courier/link/id/$1
+  - host: governor.dev.localhost:8080
+    methods: ['GET']
+    pattern: '^\/\.well-known\/openid-configuration$'
+    replace: /api/oauth/openid-configuration
+vault:
+  addr: http://vault.vault.svc.cluster.local:8200
+  k8s:
+    auth: true
+    role: governor-governor-role
+database:
+  auth: database/creds/governor-postgres-role
+  dbname: postgres
+  host: postgres-postgres.governor.svc.cluster.local
+  port: 5432
+  sslmode: disable
+  hbinterval: 5
+  hbmaxfail: 5
+kvstore:
+  auth: kv/data/infra/governor/redis
+  dbname: 0
+  host: redis-redis.governor.svc.cluster.local
+  port: 6379
+  hbinterval: 5
+  hbmaxfail: 5
+objstore:
+  auth: kv/data/infra/governor/minio
+  host: minio-minio.governor.svc.cluster.local
+  port: 9000
+  sslmode: false
+  location: us-east-1
+  hbinterval: 5
+  hbmaxfail: 5
+msgqueue:
+  auth: kv/data/infra/governor/natsstream
+  host: natsstream-nats-streaming.governor.svc.cluster.local
+  port: 4222
+  cluster: nats-streaming
+  hbinterval: 5
+  hbmaxfail: 5
+pubsub:
+  auth: kv/data/infra/governor/nats
+  host: nats-nats.governor.svc.cluster.local
+  port: 4222
+  hbinterval: 5
+  hbmaxfail: 5
+template:
+  dir: templates
+mail:
+  auth: kv/data/app/governor/smtp
+  host: localhost
+  port: 587
+  fromaddress: no-reply@xorkevin.com
+  fromname: Governor
+role:
+  rolecache: 24h
+apikey:
+  scopecache: 24h
+token:
+  tokensecret: kv/data/app/governor/token
+  rsakey: kv/data/app/governor/rsakey
+  issuer: http://governor.dev.localhost:8080
+  audience: governor
+gate:
+  realm: governor
+  compassheader: governor-userid-compass
+user:
+  accesstime: 5m
+  refreshtime: 4380h
+  refreshcache: 24h
+  confirmtime: 24h
+  passwordresettime: 24h
+  invitationtime: 24h
+  usercachetime: 24h
+  newloginemail: true
+  passwordminsize: 8
+  userapproval: false
+  rolesummary:
+    - user
+    - admin
+    - usr.gov.user
+    - mod.gov.user
+    - usr.gov.oauth
+    - mod.gov.oauth
+  email:
+    url:
+      base: http://localhost:3000
+      emailchange: /a/confirm/email?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
+      forgotpass: /x/resetpass?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
+      newuser: /x/confirm?userid={{`{{.Userid}}`}}&key={{`{{.Key}}`}}
+oauth:
+  codetime: 1m
+  accesstime: 5m
+  refreshtime: 168h
+  keycache: 24h
+  realm: governor
+  issuer: http://governor.dev.localhost:8080
+  epauthorize: http://localhost:3000/oauth/auth
+  ephost: http://governor.dev.localhost:8080
+  epprofile: http://localhost:3000/u/{{`{{.Username}}`}}
+  eppicture: http://localhost:3000/api/profile/id/{{`{{.Userid}}`}}/image
+courier:
+  fallbacklink: http://governor.dev.localhost:8080
+  linkprefix: http://go.governor.dev.localhost:8080
+  cachetime: 24h

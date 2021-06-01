@@ -2,18 +2,17 @@ version: xorkevin.dev/anvil/v1alpha1
 
 vars:
   kube:
-    outputdir: minio
-    namespace: minio
+    outputdir: governor
+    namespace: governor
     label:
-      component: objstore
-      partof: minio
+      component: governor
+      partof: governor
     service:
-      name: minio
+      name: governor
       image:
-        name: minio/minio
+        name: docker.pkg.dev.localhost:8080/governor
         version: latest
-      storage:
-        amount: 8Gi
+      replicas: 1
       healthcheck:
         liveness:
           period: 15
@@ -35,12 +34,35 @@ vars:
     addr: http://vault.vault.svc.cluster.local:8200
     kubemount: kubernetes
     kvmount: kv
-    kvprefix: infra
+    kvprefix: app
     curlbackoff: '5'
     curlreauth: '3'
     passlen: '64'
     policyttl: 1m
     policymaxttl: 5m
+
+  templates:
+    - emailchange.html
+    - emailchangenotify.html
+    - emailchangenotify_subject.txt
+    - emailchangenotify.txt
+    - emailchange_subject.txt
+    - emailchange.txt
+    - forgotpass.html
+    - forgotpass_subject.txt
+    - forgotpass.txt
+    - newlogin.html
+    - newlogin_subject.txt
+    - newlogin.txt
+    - newuser.html
+    - newuser_subject.txt
+    - newuser.txt
+    - passchange.html
+    - passchange_subject.txt
+    - passchange.txt
+    - passreset.html
+    - passreset_subject.txt
+    - passreset.txt
 
   registerdir: secrets/register
   policydir: secrets/vault/policy

@@ -17,9 +17,10 @@ configMapGenerator:
       - curlbackoff={{ .Vars.vault.curlbackoff }}
       - curlreauth={{ .Vars.vault.curlreauth }}
       - vaultaddr={{ .Vars.vault.addr }}
-      - vaultrole={{ $nsrgsvc }}
+      - vaultrole={{ $nssvc }}
       - vaultkubemount={{ .Vars.vault.kubemount }}
       - kvmount={{ .Vars.vault.kvmount }}
-      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}
+      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/token
+      - kvpathrsa={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/rsakey
 resources:
   - job.yaml

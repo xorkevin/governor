@@ -1,0 +1,3 @@
+A password reset has been triggered for your account {{ .Username }}.
+
+Key: {{ .Userid }}.{{ .Key }}

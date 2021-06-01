@@ -1,0 +1,6 @@
+Welcome {{ .FirstName }},
+
+Finish creating your account
+
+Userid: {{ .Userid }}
+Key: {{ .Key }}

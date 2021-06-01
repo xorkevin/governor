@@ -8,6 +8,40 @@ templates:
     output: {{ $outdir }}/namespace.yaml
 
 components:
+  server:
+    kind: local
+    path: server/component.yaml
+    vars:
+      kube:
+        outputdir: {{ .Vars.outputdir }}/server
+        namespace: {{ .Vars.namespace }}
+        label:
+          partof: {{ .Vars.service.name }}
+        service:
+          image:
+            name: {{ .Vars.images.governor.name }}
+            version: {{ .Vars.images.governor.version }}
+          replicas: {{ .Vars.service.replicas }}
+          init:
+            image:
+              name: {{ .Vars.images.xorkevinalpine.name }}
+              version: {{ .Vars.images.xorkevinalpine.version }}
+
+        register:
+          image:
+            name: {{ .Vars.images.xorkevinalpine.name }}
+            version: {{ .Vars.images.xorkevinalpine.version }}
+
+      vault:
+        addr: {{ .Vars.vault.addr }}
+        kubemount: {{ .Vars.vault.kubemount }}
+        kvmount: {{ .Vars.vault.kvmount }}
+        kvprefix: {{ .Vars.vault.kvappprefix }}
+
+      registerdir: {{ .Vars.registerdir }}
+      policydir: {{ .Vars.policydir }}
+      rolesdir: {{ .Vars.rolesdir }}
+
   postgres:
     kind: local
     path: postgres/component.yaml

@@ -1,18 +1,16 @@
-{{ $svc := .Vars.kube.service.name -}}
-{{ $svcopts := printf "%s-opts" $svc -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ $svc }}
+  name: governor
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $svc }}
+  name: governor
 spec:
   selector:
-    app: {{ $svc }}
+    app: governor
   ports:
     - name: http
       port: 8080
@@ -21,21 +19,21 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $svc }}
+  name: governor
 spec:
-  replicas: {{ .Vars.kube.service.replicas }}
+  replicas: 1
   selector:
     matchLabels:
-      app: {{ $svc }}
+      app: governor
   template:
     metadata:
       labels:
-        app: {{ $svc }}
+        app: governor
     spec:
-      serviceAccountName: {{ $svc }}
+      serviceAccountName: governor
       containers:
         - name: governor
-          image: {{ .Vars.kube.service.image.name }}:{{ .Vars.kube.service.image.version }}
+          image: docker.pkg.dev.localhost:8080/governor:latest
           ports:
             - name: http
               containerPort: 8080
@@ -43,14 +41,14 @@ spec:
             httpGet:
               path: /api/healthz/ready
               port: 8080
-            initialDelaySeconds: {{ .Vars.kube.service.healthcheck.readiness.delay }}
-            periodSeconds: {{ .Vars.kube.service.healthcheck.readiness.period }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
           livenessProbe:
             httpGet:
               path: /api/healthz/live
               port: 8080
-            initialDelaySeconds: {{ .Vars.kube.service.healthcheck.liveness.delay }}
-            periodSeconds: {{ .Vars.kube.service.healthcheck.liveness.period }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
           volumeMounts:
             - name: config
               mountPath: /home/governor/config
@@ -59,7 +57,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ $svc }}-config
+            name: governor-config
         - name: templates
           configMap:
-            name: {{ $svc }}-templates
+            name: governor-templates

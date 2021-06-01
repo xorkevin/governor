@@ -1,0 +1,95 @@
+{{ $svc := .Vars.kube.service.name -}}
+{{ $rgsvc := printf "register-%s" .Vars.kube.service.name -}}
+{{ $rgsvcopts := printf "%s-opts" $rgsvc -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $rgsvc }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $rgsvc }}
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: {{ $rgsvc }}
+        app.kubernetes.io/name: register-governor
+        app.kubernetes.io/instance: {{ $rgsvc }}
+        app.kubernetes.io/version: {{ .Vars.kube.service.image.version }}
+        app.kubernetes.io/component: {{ .Vars.kube.label.component }}
+        app.kubernetes.io/part-of: {{ .Vars.kube.label.partof }}
+        app.kubernetes.io/managed-by: anvil
+    spec:
+      serviceAccountName: {{ $rgsvc }}
+      restartPolicy: OnFailure
+      containers:
+        - name: register
+          image: {{ .Vars.kube.register.image.name }}:{{ .Vars.kube.register.image.version }}
+          command: ['sh']
+          args: ['/home/governor/register.sh']
+          env:
+            - name: PASS_LEN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: passlen
+                  optional: true
+            - name: RSA_BITS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: rsabits
+                  optional: true
+            - name: CURL_BACKOFF
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: curlbackoff
+                  optional: true
+            - name: CURL_REAUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: curlreauth
+                  optional: true
+            - name: VAULT_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: vaultaddr
+            - name: VAULT_ROLE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: vaultrole
+            - name: VAULT_KUBE_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: vaultkubemount
+            - name: KV_MOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvmount
+            - name: KV_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvpath
+            - name: KV_PATH_RSA
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvpathrsa
+          volumeMounts:
+            - name: register-scripts
+              mountPath: /home/governor
+      volumes:
+        - name: register-scripts
+          configMap:
+            name: {{ $svc }}-register-scripts
