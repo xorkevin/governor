@@ -58,13 +58,12 @@ type (
 	}
 
 	service struct {
-		roles         role.Roles
-		apikeys       apikey.Apikeys
-		tokenizer     token.Tokenizer
-		baseurl       string
-		realm         string
-		compassHeader string
-		logger        governor.Logger
+		roles     role.Roles
+		apikeys   apikey.Apikeys
+		tokenizer token.Tokenizer
+		baseurl   string
+		realm     string
+		logger    governor.Logger
 	}
 
 	// Intersector is a function that returns roles needed to validate a user
@@ -123,7 +122,6 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	setCtxGate(inj, s)
 
 	r.SetDefault("realm", "governor")
-	r.SetDefault("compassheader", "governor-userid-compass")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -133,10 +131,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 	s.baseurl = c.BaseURL
 	s.realm = r.GetStr("realm")
-	s.compassHeader = r.GetStr("compassheader")
 	l.Info("loaded config", map[string]string{
-		"realm":         s.realm,
-		"compassheader": s.compassHeader,
+		"realm": s.realm,
 	})
 	return nil
 }
@@ -171,17 +167,6 @@ func (e errAuthNotFound) Error() string {
 
 func getAccessCookie(r *http.Request) (string, error) {
 	cookie, err := r.Cookie("access_token")
-	if err != nil {
-		return "", err
-	}
-	if cookie.Value == "" {
-		return "", errAuthNotFound{}
-	}
-	return cookie.Value, nil
-}
-
-func getAccessCookieUserid(r *http.Request, userid string) (string, error) {
-	cookie, err := r.Cookie("access_token_" + userid)
 	if err != nil {
 		return "", err
 	}
@@ -328,28 +313,15 @@ func (s *service) Authenticate(v Validator, scope string) governor.Middleware {
 						return
 					}
 					isBearer = false
-					compass := c.Header(s.compassHeader)
-					if compass != "" {
-						var err error
-						accessToken, err = getAccessCookieUserid(r, compass)
-						if err != nil {
-							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-								Status:  http.StatusUnauthorized,
-								Message: "User is not authorized",
-							})))
-							return
-						}
-					} else {
-						var err error
-						accessToken, err = getAccessCookie(r)
-						if err != nil {
-							c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, s.realm))
-							c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-								Status:  http.StatusUnauthorized,
-								Message: "User is not authorized",
-							})))
-							return
-						}
+					var err error
+					accessToken, err = getAccessCookie(r)
+					if err != nil {
+						c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, s.realm))
+						c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+							Status:  http.StatusUnauthorized,
+							Message: "User is not authorized",
+						})))
+						return
 					}
 				}
 				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken)

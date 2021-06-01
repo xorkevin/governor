@@ -85,7 +85,6 @@ token:
   audience: governor
 gate:
   realm: governor
-  compassheader: governor-userid-compass
 user:
   accesstime: 5m
   refreshtime: 4380h

@@ -9,17 +9,9 @@ import (
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
-func (m *router) setAccessCookie(c governor.Context, accessToken string, userid string) {
+func (m *router) setAccessCookie(c governor.Context, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
-		Value:    accessToken,
-		Path:     m.s.baseURL,
-		MaxAge:   int(m.s.accessTime) - 5,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
-	})
-	c.SetCookie(&http.Cookie{
-		Name:     "access_token_" + userid,
 		Value:    accessToken,
 		Path:     m.s.baseURL,
 		MaxAge:   int(m.s.accessTime) - 5,
@@ -99,15 +91,9 @@ func getSessionCookie(c governor.Context, userid string) (string, bool) {
 	return cookie.Value, true
 }
 
-func (m *router) rmAccessCookie(c governor.Context, userid string) {
+func (m *router) rmAccessCookie(c governor.Context) {
 	c.SetCookie(&http.Cookie{
 		Name:   "access_token",
-		Value:  "invalid",
-		MaxAge: -1,
-		Path:   m.s.baseURL,
-	})
-	c.SetCookie(&http.Cookie{
-		Name:   "access_token_" + userid,
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   m.s.baseURL,
@@ -189,7 +175,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
+	m.setAccessCookie(c, res.AccessToken)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
@@ -222,7 +208,7 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
+	m.setAccessCookie(c, res.AccessToken)
 	if res.Refresh {
 		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 		m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
@@ -250,7 +236,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken, res.Claims.Subject)
+	m.setAccessCookie(c, res.AccessToken)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
 	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
 
@@ -277,7 +263,7 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.rmAccessCookie(c, userid)
+	m.rmAccessCookie(c)
 	m.rmRefreshCookie(c, userid)
 
 	c.WriteStatus(http.StatusNoContent)
