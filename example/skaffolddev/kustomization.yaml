@@ -4,5 +4,3 @@ namespace: governor
 resources:
   - ../anvil_out/governor/governor
   - mailhog.yaml
-patchesStrategicMerge:
-  - patch.yaml

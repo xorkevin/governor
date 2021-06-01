@@ -49,7 +49,9 @@ components:
         addr: {{ .Vars.vault.addr }}
         kubemount: {{ .Vars.vault.kubemount }}
         kvmount: {{ .Vars.vault.kvmount }}
-        kvprefix: {{ .Vars.vault.kvappprefix }}
+        kvprefix: {{ .Vars.vault.kvprefix }}
+        kvappprefix: {{ .Vars.vault.kvappprefix }}
+        dbmount: {{ .Vars.vault.dbmount }}
 
       registerdir: {{ .Vars.registerdir }}
       policydir: {{ .Vars.policydir }}

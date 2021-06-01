@@ -20,7 +20,7 @@ configMapGenerator:
       - vaultrole={{ $nsrgsvc }}
       - vaultkubemount={{ .Vars.vault.kubemount }}
       - kvmount={{ .Vars.vault.kvmount }}
-      - kvpath={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/token
-      - kvpathrsa={{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/rsakey
+      - kvpath={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/token
+      - kvpathrsa={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/rsakey
 resources:
   - job.yaml

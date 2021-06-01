@@ -1,11 +1,14 @@
+{{ $ns := .Vars.kube.namespace -}}
+{{ $svc := .Vars.kube.service.name -}}
+{{ $nssvc := printf "%s-%s" $ns $svc -}}
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: governor
+namespace: {{ $ns }}
 configMapGenerator:
-  - name: config
+  - name: {{ $svc }}-config
     files:
       - config.yaml
-  - name: templates
+  - name: {{ $svc }}-templates
     files:
       - templates/emailchange.html
       - templates/emailchangenotify.html

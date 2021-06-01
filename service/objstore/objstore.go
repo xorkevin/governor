@@ -225,16 +225,12 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	username, ok := authsecret["username"].(string)
-	if !ok {
-		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
 	password, ok := authsecret["password"].(string)
 	if !ok {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := minioauth{
-		username: username,
+		username: "admin",
 		password: password,
 	}
 	if auth == s.auth {
