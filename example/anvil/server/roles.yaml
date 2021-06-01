@@ -5,6 +5,8 @@
 {{ $policy := printf "%s-%s" $ns $svc -}}
 {{ $ttl := .Vars.vault.policyttl -}}
 {{ $maxttl := .Vars.vault.policymaxttl -}}
+{{ $rttl := .Vars.vault.registerttl -}}
+{{ $rmaxttl := .Vars.vault.registermaxttl -}}
 roles:
   - kind: kube
     kubemount: {{ $kubemount }}
@@ -13,8 +15,8 @@ roles:
     namespace: {{ $ns }}
     policies:
       - {{ $policy }}-register
-    ttl: {{ $ttl }}
-    maxttl: {{ $maxttl }}
+    ttl: {{ $rttl }}
+    maxttl: {{ $rmaxttl }}
   - kind: kube
     kubemount: {{ $kubemount }}
     role: {{ $ns }}-{{ $svc }}

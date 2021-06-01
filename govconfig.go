@@ -443,6 +443,10 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 	var expire int64
 	if s.LeaseDuration > 0 {
 		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
+		k := r.c.vaultExpire
+		if expire > k {
+			expire = k
+		}
 	}
 	r.cache[key] = vaultSecret{
 		key:    key,

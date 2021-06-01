@@ -43,8 +43,10 @@ vars:
     curlbackoff: '5'
     curlreauth: '3'
     passlen: '64'
-    policyttl: 1m
-    policymaxttl: 5m
+    registerttl: 1m
+    registermaxttl: 5m
+    policyttl: 1h
+    policymaxttl: 24h
 
   templates:
     - emailchange.html
