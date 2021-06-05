@@ -1,3 +1,6 @@
+path "kv/data/app/governor/governor/setup" {
+  capabilities = ["read", "list"]
+}
 path "kv/data/app/governor/governor/token" {
   capabilities = ["read", "list"]
 }

@@ -98,7 +98,7 @@ docker: build-docker publish-docker ## Release new image
 skaffoldinit: ## Initialize skaffold
 	skaffold config set -g update-check false
 
-.PHONY: dev devstop tail setup
+.PHONY: dev devstop tail setupfirst setup
 
 dev: build ## Deploy app to cluster
 	skaffold run
@@ -115,5 +115,8 @@ TAILLINES?=64
 tail: ## Tail log lines
 	kubectl -n $(NAMESPACE) logs -f --tail=$(TAILLINES) $(DEVPOD) $(DEVCONTAINER)
 
+setupfirst: build ## Run app first setup
+	$(BIN_PATH) setup --first
+
 setup: build ## Run app setup
-	$(BIN_PATH) setup
+	./setup.sh "$(BIN_PATH)"

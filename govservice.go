@@ -141,17 +141,19 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		})
 	}
 
-	if err := s.state.Setup(state.ReqSetup{
-		Version: s.config.version.Num,
-		VHash:   s.config.version.Hash,
-	}); err != nil {
-		l.Error("Setup state service failed", map[string]string{
-			"error": err.Error(),
-		})
-		return NewError(ErrOptRes(ErrorRes{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to set state",
-		}), ErrOptInner(err))
+	if rsetup.First {
+		if err := s.state.Setup(state.ReqSetup{
+			Version: s.config.version.Num,
+			VHash:   s.config.version.Hash,
+		}); err != nil {
+			l.Error("Setup state service failed", map[string]string{
+				"error": err.Error(),
+			})
+			return NewError(ErrOptRes(ErrorRes{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to set state",
+			}), ErrOptInner(err))
+		}
 	}
 	l.Info("Setup all services complete", nil)
 	return nil

@@ -8,9 +8,7 @@ export ROOT_DIR=${0%/*}
 
 log2 'begin register'
 
-pass=$(gen_pass "${PASS_LEN:-64}")
-
-log2 'generate new password'
+pass=
 
 while true; do
   i=0
@@ -20,12 +18,28 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"username\": \"postgres\", \"password\": \"${pass}\"}")
+    status=$(vault_kvget "$KV_MOUNT" "$KV_PATH")
     if is_success "$status"; then
-      log2 'write password to vault kv'
+      log2 'found existing vault credentials'
+      pass=$(cat /tmp/curlres.txt | jq -r '.data.data.password')
+      log2 'use existing password'
       break 2
+    elif [ "$status" = 404 ]; then
+      log2 'no existing vault credentials'
+      if [ -z "$pass" ]; then
+        pass=$(gen_pass "${PASS_LEN:-64}")
+        log2 'generate new password'
+      fi
+
+      status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"username\": \"postgres\", \"password\": \"${pass}\"}")
+      if is_success "$status"; then
+        log2 'write password to vault kv'
+        break 2
+      fi
+      log2 'error write password to vault kv:' "$(cat /tmp/curlres.txt)"
+    else
+      log2 'error get vault kv:' "$(cat /tmp/curlres.txt)"
     fi
-    log2 'error write password to vault kv:' "$(cat /tmp/curlres.txt)"
 
     i=$((i + 1))
     sleep "${CURL_BACKOFF:-5}"

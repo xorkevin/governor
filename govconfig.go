@@ -167,10 +167,11 @@ func newConfig(opts Opts) *Config {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 
 	return &Config{
-		config:  v,
-		mu:      &sync.RWMutex{},
-		appname: opts.Appname,
-		version: opts.Version,
+		config:     v,
+		mu:         &sync.RWMutex{},
+		appname:    opts.Appname,
+		version:    opts.Version,
+		vaultCache: map[string]vaultSecret{},
 	}
 }
 
@@ -354,6 +355,10 @@ func (c *Config) getSecret(key string) (vaultSecretVal, error) {
 	return data, nil
 }
 
+func (c *Config) invalidateSecret(key string) {
+	delete(c.vaultCache, key)
+}
+
 // IsDebug returns if the configuration is in debug mode
 func (c *Config) IsDebug() bool {
 	return c.logLevel == levelDebug
@@ -412,8 +417,7 @@ type (
 
 	configReader struct {
 		serviceOpt
-		c     *Config
-		cache map[string]vaultSecret
+		c *Config
 	}
 )
 
@@ -463,13 +467,12 @@ func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
 }
 
 func (r *configReader) InvalidateSecret(key string) {
-	delete(r.cache, key)
+	r.c.invalidateSecret(r.name + "." + key)
 }
 
 func (c *Config) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
 		serviceOpt: opt,
 		c:          c,
-		cache:      map[string]vaultSecret{},
 	}
 }

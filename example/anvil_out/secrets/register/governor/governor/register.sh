@@ -8,9 +8,9 @@ export ROOT_DIR=${0%/*}
 
 log2 'begin register'
 
-secret=$(gen_pass "${PASS_LEN:-64}")
+log2 'generate new setup secret'
 
-log2 'generate new token secret'
+setupsecret=$(gen_pass "${PASS_LEN:-64}")
 
 while true; do
   i=0
@@ -20,7 +20,32 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"secret\": \"${secret}\"}")
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH_SETUP" "{\"secret\": \"${setupsecret}\"}")
+    if is_success "$status"; then
+      log2 'write setup secret to vault kv'
+      break 2
+    fi
+    log2 'error write setup secret to vault kv:' "$(cat /tmp/curlres.txt)"
+
+    i=$((i + 1))
+    sleep "${CURL_BACKOFF:-5}"
+  done
+  export VAULT_TOKEN=
+done
+
+log2 'generate new token secret'
+
+tokensecret=$(gen_pass "${PASS_LEN:-64}")
+
+while true; do
+  i=0
+  while [ $i -lt "${CURL_REAUTH:-3}" ]; do
+    if [ -z $VAULT_TOKEN ]; then
+      export VAULT_TOKEN=$(auth_vault)
+      log2 'authenticate with vault'
+    fi
+
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH_TOKEN" "{\"secret\": \"${tokensecret}\"}")
     if is_success "$status"; then
       log2 'write token secret to vault kv'
       break 2

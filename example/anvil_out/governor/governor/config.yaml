@@ -26,6 +26,7 @@ vault:
   k8s:
     auth: true
     role: governor-governor
+setupsecret: kv/data/app/governor/governor/setup
 database:
   auth: database/creds/governor-postgres-rw
   dbname: postgres
