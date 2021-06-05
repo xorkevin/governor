@@ -149,8 +149,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := profileModelSetup(d); err != nil {
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup profile model")
+	if code, err := profileModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup profile model")
+		}
 	}
 	return nil
 }

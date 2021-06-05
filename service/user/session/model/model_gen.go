@@ -14,20 +14,34 @@ const (
 	sessionModelTableName = "usersessions"
 )
 
-func sessionModelSetup(db *sql.DB) error {
+func sessionModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS usersessions (sessionid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, auth_time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023));")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_userid_index ON usersessions (userid);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_time_index ON usersessions (time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func sessionModelInsert(db *sql.DB, m *Model) (int, error) {

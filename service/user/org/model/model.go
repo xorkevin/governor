@@ -190,8 +190,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := orgModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup org model")
+	if code, err := orgModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup org model")
+		}
 	}
 	return nil
 }

@@ -14,12 +14,12 @@ const (
 	stateModelTableName = "govstate"
 )
 
-func stateModelSetup(db *sql.DB) error {
+func stateModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS govstate (config INT PRIMARY KEY, setup BOOLEAN NOT NULL, version VARCHAR(255) NOT NULL, vhash VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return 0, nil
 }
 
 func stateModelInsert(db *sql.DB, m *Model) (int, error) {

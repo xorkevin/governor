@@ -265,8 +265,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := userModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup user model")
+	if code, err := userModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup user model")
+		}
 	}
 	return nil
 }

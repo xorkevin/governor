@@ -14,20 +14,34 @@ const (
 	linkModelTableName = "courierlinks"
 )
 
-func linkModelSetup(db *sql.DB) error {
+func linkModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creatorid_index ON courierlinks (creatorid);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creation_time_index ON courierlinks (creation_time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func linkModelInsert(db *sql.DB, m *LinkModel) (int, error) {

@@ -14,16 +14,23 @@ const (
 	approvalModelTableName = "userapprovals"
 )
 
-func approvalModelSetup(db *sql.DB) error {
+func approvalModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapprovals (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, approved BOOL NOT NULL, code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapprovals_creation_time_index ON userapprovals (creation_time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func approvalModelInsert(db *sql.DB, m *Model) (int, error) {

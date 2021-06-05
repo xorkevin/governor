@@ -14,16 +14,23 @@ const (
 	brandModelTableName = "courierbrands"
 )
 
-func brandModelSetup(db *sql.DB) error {
+func brandModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creation_time_index ON courierbrands (creation_time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func brandModelInsert(db *sql.DB, m *BrandModel) (int, error) {

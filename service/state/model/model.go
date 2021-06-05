@@ -133,8 +133,10 @@ func (r *repo) Setup(req state.ReqSetup) error {
 	if err != nil {
 		return err
 	}
-	if err := stateModelSetup(d); err != nil {
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup state model")
+	if code, err := stateModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup state model")
+		}
 	}
 	k := r.New(req.Version, req.VHash)
 	k.Setup = true

@@ -14,20 +14,34 @@ const (
 	oauthappModelTableName = "oauthapps"
 )
 
-func oauthappModelSetup(db *sql.DB) error {
+func oauthappModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31));")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_time_index ON oauthapps (time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creator_id_index ON oauthapps (creator_id);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func oauthappModelInsert(db *sql.DB, m *Model) (int, error) {

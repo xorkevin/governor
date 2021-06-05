@@ -251,8 +251,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup OAuth connection model")
+	if code, err := connectionModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup OAuth connection model")
+		}
 	}
 	return nil
 }

@@ -212,8 +212,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := approvalModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup user approval model")
+	if code, err := approvalModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup user approval model")
+		}
 	}
 	return nil
 }

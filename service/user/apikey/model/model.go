@@ -232,8 +232,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup user apikeys model")
+	if code, err := apikeyModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup user apikeys model")
+		}
 	}
 	return nil
 }

@@ -14,16 +14,23 @@ const (
 	orgModelTableName = "userorgs"
 )
 
-func orgModelSetup(db *sql.DB) error {
+func orgModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userorgs (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userorgs_creation_time_index ON userorgs (creation_time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func orgModelInsert(db *sql.DB, m *Model) (int, error) {

@@ -186,8 +186,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup user reset code model")
+	if code, err := resetModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup user reset code model")
+		}
 	}
 	return nil
 }

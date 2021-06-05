@@ -270,8 +270,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup user session model")
+	if code, err := sessionModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup user session model")
+		}
 	}
 	return nil
 }

@@ -14,12 +14,12 @@ const (
 	profileModelTableName = "profiles"
 )
 
-func profileModelSetup(db *sql.DB) error {
+func profileModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS profiles (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return 0, nil
 }
 
 func profileModelInsert(db *sql.DB, m *Model) (int, error) {

@@ -14,24 +14,45 @@ const (
 	connectionModelTableName = "oauthconnections"
 )
 
-func connectionModelSetup(db *sql.DB) error {
+func connectionModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthconnections (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, nonce VARCHAR(255), challenge VARCHAR(128), challenge_method VARCHAR(31), codehash VARCHAR(255) NOT NULL, auth_time BIGINT NOT NULL, code_time BIGINT NOT NULL, access_time BIGINT NOT NULL, creation_time BIGINT NOT NULL, keyhash VARCHAR(255) NOT NULL);")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_userid_index ON oauthconnections (userid);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_clientid_index ON oauthconnections (clientid);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_access_time_index ON oauthconnections (access_time);")
 	if err != nil {
-		return err
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
 	}
-	return nil
+	return 0, nil
 }
 
 func connectionModelInsert(db *sql.DB, m *Model) (int, error) {

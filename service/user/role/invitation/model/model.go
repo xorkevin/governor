@@ -179,8 +179,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := invModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup role invitation model")
+	if code, err := invModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup role invitation model")
+		}
 	}
 	return nil
 }

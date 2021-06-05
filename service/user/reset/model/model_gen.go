@@ -14,12 +14,12 @@ const (
 	resetModelTableName = "userresets"
 )
 
-func resetModelSetup(db *sql.DB) error {
+func resetModelSetup(db *sql.DB) (int, error) {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userresets (userid VARCHAR(31), kind VARCHAR(255), PRIMARY KEY (userid, kind), code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL, params VARCHAR(4096));")
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return 0, nil
 }
 
 func resetModelInsert(db *sql.DB, m *Model) (int, error) {

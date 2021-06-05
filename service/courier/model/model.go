@@ -250,11 +250,15 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := linkModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup link model")
+	if code, err := linkModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup link model")
+		}
 	}
-	if err := brandModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup brand model")
+	if code, err := brandModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup brand model")
+		}
 	}
 	return nil
 }

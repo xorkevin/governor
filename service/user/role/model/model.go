@@ -261,8 +261,10 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := roleModelSetup(d); err != nil {
-		return governor.ErrWithMsg(err, "Failed to setup role model")
+	if code, err := roleModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup role model")
+		}
 	}
 	return nil
 }
