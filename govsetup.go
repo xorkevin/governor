@@ -6,13 +6,20 @@ import (
 )
 
 type (
-	// ReqSetup is the option struct that is passed to all services during setup
-	ReqSetup struct {
+	// SetupAdmin is the admin setup option
+	SetupAdmin struct {
 		Username  string `json:"username"`
 		Password  string `json:"password"`
 		Email     string `json:"email"`
 		Firstname string `json:"first_name"`
 		Lastname  string `json:"last_name"`
+	}
+
+	// ReqSetup is the option struct that is passed to all services during setup
+	ReqSetup struct {
+		First  bool        `json:"first"`
+		Secret string      `json:"secret,omitempty"`
+		Admin  *SetupAdmin `json:"admin,omitempty"`
 	}
 )
 
@@ -21,23 +28,25 @@ var (
 )
 
 func (r *ReqSetup) valid() error {
-	if len(r.Username) < 3 {
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Username must be longer than 2 chars",
-		}))
-	}
-	if len(r.Password) < 10 {
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Password must be longer than 9 chars",
-		}))
-	}
-	if !emailRegex.MatchString(r.Email) {
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Email is invalid",
-		}))
+	if a := r.Admin; a != nil {
+		if len(a.Username) < 3 {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Username must be longer than 2 chars",
+			}))
+		}
+		if len(a.Password) < 10 {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Password must be longer than 9 chars",
+			}))
+		}
+		if !emailRegex.MatchString(a.Email) {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Email is invalid",
+			}))
+		}
 	}
 	return nil
 }
@@ -45,10 +54,7 @@ func (r *ReqSetup) valid() error {
 type (
 	// ResponseSetup is the response to a setup request
 	ResponseSetup struct {
-		Username  string `json:"username"`
-		Firstname string `json:"first_name"`
-		Lastname  string `json:"last_name"`
-		Version   string `json:"version"`
+		Version string `json:"version"`
 	}
 )
 
@@ -70,10 +76,7 @@ func (s *Server) initSetup(m Router) {
 		}
 
 		c.WriteJSON(http.StatusCreated, &ResponseSetup{
-			Username:  req.Username,
-			Firstname: req.Firstname,
-			Lastname:  req.Lastname,
-			Version:   s.config.version.Num,
+			Version: s.config.version.Num,
 		})
 	})
 }

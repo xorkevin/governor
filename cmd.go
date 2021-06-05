@@ -61,6 +61,8 @@ The server first runs all init procedures for all services before starting.`,
 		},
 	}
 
+	var setupFirst bool
+	var setupSecret string
 	setupCmd := &cobra.Command{
 		Use:   "setup",
 		Short: "runs the setup procedures for all services",
@@ -68,10 +70,17 @@ The server first runs all init procedures for all services before starting.`,
 
 Calls the server setup endpoint.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			req, err := getPromptReq()
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+			req := ReqSetup{
+				First:  setupFirst,
+				Secret: setupSecret,
+			}
+			if setupFirst {
+				var err error
+				req.Admin, err = getAdminPromptReq()
+				if err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
 			}
 			if err := req.valid(); err != nil {
 				fmt.Println(err)
@@ -84,7 +93,7 @@ Calls the server setup endpoint.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			res, err := c.c.Setup(*req)
+			res, err := c.c.Setup(req)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -92,6 +101,8 @@ Calls the server setup endpoint.`,
 			fmt.Printf("Successfully setup governor:%s\n", res.Version)
 		},
 	}
+	setupCmd.PersistentFlags().BoolVar(&setupFirst, "first", false, "first time setup")
+	setupCmd.PersistentFlags().StringVar(&setupSecret, "secret", "", "setup secret")
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
 
@@ -108,7 +119,7 @@ func (c *Cmd) Execute() {
 	}
 }
 
-func getPromptReq() (*ReqSetup, error) {
+func getAdminPromptReq() (*SetupAdmin, error) {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("First name: ")
@@ -154,7 +165,7 @@ func getPromptReq() (*ReqSetup, error) {
 		return nil, errors.New("Passwords do not match")
 	}
 
-	return &ReqSetup{
+	return &SetupAdmin{
 		Username:  strings.TrimSpace(username),
 		Password:  password,
 		Email:     strings.TrimSpace(email),

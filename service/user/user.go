@@ -315,11 +315,6 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
-	if err != nil {
-		return err
-	}
-
 	if err := s.users.Setup(); err != nil {
 		return err
 	}
@@ -345,36 +340,52 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("created userresets table", nil)
 
-	b, err := json.Marshal(NewUserProps{
-		Userid:       madmin.Userid,
-		Username:     madmin.Username,
-		Email:        madmin.Email,
-		FirstName:    madmin.FirstName,
-		LastName:     madmin.LastName,
-		CreationTime: madmin.CreationTime,
+	return nil
+}
+
+func (s *service) PostSetup(req governor.ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "postsetup",
 	})
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode admin user props to json")
-	}
 
-	if err := s.users.Insert(madmin); err != nil {
-		return err
-	}
-	if err := s.roles.InsertRoles(madmin.Userid, rank.Admin()); err != nil {
-		return err
-	}
+	if a := req.Admin; req.First && a != nil {
+		madmin, err := s.users.New(a.Username, a.Password, a.Email, a.Firstname, a.Lastname)
+		if err != nil {
+			return err
+		}
 
-	if err := s.queue.Publish(NewUserQueueID, b); err != nil {
-		s.logger.Error("Failed to publish new user", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "publishadminuser",
+		b, err := json.Marshal(NewUserProps{
+			Userid:       madmin.Userid,
+			Username:     madmin.Username,
+			Email:        madmin.Email,
+			FirstName:    madmin.FirstName,
+			LastName:     madmin.LastName,
+			CreationTime: madmin.CreationTime,
+		})
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to encode admin user props to json")
+		}
+
+		if err := s.users.Insert(madmin); err != nil {
+			return err
+		}
+		if err := s.roles.InsertRoles(madmin.Userid, rank.Admin()); err != nil {
+			return err
+		}
+
+		if err := s.queue.Publish(NewUserQueueID, b); err != nil {
+			s.logger.Error("Failed to publish new user", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishadminuser",
+			})
+		}
+
+		l.Info("inserted new setup admin", map[string]string{
+			"username": madmin.Username,
+			"userid":   madmin.Userid,
 		})
 	}
 
-	l.Info("inserted new setup admin", map[string]string{
-		"username": madmin.Username,
-		"userid":   madmin.Userid,
-	})
 	return nil
 }
 

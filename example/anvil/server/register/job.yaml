@@ -76,11 +76,16 @@ spec:
                 configMapKeyRef:
                   name: {{ $rgsvcopts }}
                   key: kvmount
-            - name: KV_PATH
+            - name: KV_PATH_SETUP
               valueFrom:
                 configMapKeyRef:
                   name: {{ $rgsvcopts }}
-                  key: kvpath
+                  key: kvpathsetup
+            - name: KV_PATH_TOKEN
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvpathtoken
             - name: KV_PATH_RSA
               valueFrom:
                 configMapKeyRef:

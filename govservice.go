@@ -11,7 +11,7 @@ import (
 type (
 	// Service is an interface for governor services
 	//
-	// A governor service may be in one of 5 stages in its lifecycle.
+	// A governor service may be in one of 6 stages in its lifecycle.
 	//
 	// 1. Register: register the service on the config
 	//
@@ -20,17 +20,21 @@ type (
 	// 3. Setup: sets up the service for the first time such as creating database
 	// tables and mounting routes
 	//
-	// 4. Start: start the service
+	// 4. PostSetup: runs any remaining setup tasks after all other services have
+	// completed Setup.
 	//
-	// 5. Stop: stop the service
+	// 5. Start: start the service
+	//
+	// 6. Stop: stop the service
 	//
 	// Register and Init always occur first when a governor application is
-	// launched. Then Setup and Start may occur in either order, or not at all.
-	// Stop runs when the server begins the shutdown process
+	// launched. Then Setup and PostSetup are run if in setup mode. Otherwise
+	// Start, is run. Stop runs when the server begins the shutdown process.
 	Service interface {
 		Register(inj Injector, r ConfigRegistrar, jr JobRegistrar)
 		Init(ctx context.Context, c Config, r ConfigReader, l Logger, m Router) error
 		Setup(req ReqSetup) error
+		PostSetup(req ReqSetup) error
 		Start(ctx context.Context) error
 		Stop(ctx context.Context)
 		Health() error
@@ -63,31 +67,51 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
-	if s.setupRun {
-		l.Warn("Setup already run", nil)
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusForbidden,
-			Message: "Setup already run",
-		}))
-	}
-	m, err := s.state.Get()
-	if err != nil {
-		return NewError(ErrOptRes(ErrorRes{
-			Status:  http.StatusInternalServerError,
-			Message: "Failed to get state",
-		}), ErrOptInner(err))
-	}
-	if m.Setup {
-		s.setupRun = true
-		l.Warn("Setup already run", nil)
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusForbidden,
-			Message: "Setup already run",
-		}))
+	if !s.firstSetupRun {
+		m, err := s.state.Get()
+		if err != nil {
+			return NewError(ErrOptRes(ErrorRes{
+				Status:  http.StatusInternalServerError,
+				Message: "Failed to get state",
+			}), ErrOptInner(err))
+		}
+		s.firstSetupRun = m.Setup
 	}
 	if err := rsetup.valid(); err != nil {
 		return err
 	}
+	if s.firstSetupRun {
+		if rsetup.First {
+			l.Warn("First setup already run", nil)
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "First setup already run",
+			}))
+		}
+		setupsecret, err := s.config.getSecret("setupsecret")
+		if err != nil {
+			return err
+		}
+		secret, ok := setupsecret["secret"].(string)
+		if !ok {
+			return ErrWithKind(nil, ErrInvalidConfig{}, "Invalid setup secret")
+		}
+		if rsetup.Secret != secret {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusForbidden,
+				Message: "Invalid setup secret",
+			}))
+		}
+	} else {
+		if !rsetup.First {
+			l.Warn("First setup not yet run", nil)
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "First setup not yet run",
+			}))
+		}
+	}
+	rsetup.Secret = ""
 
 	l.Info("Setup all services begin", nil)
 	for _, i := range s.services {
@@ -102,6 +126,21 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 			"service": i.name,
 		})
 	}
+
+	l.Info("Running PostSetup for all services", nil)
+	for _, i := range s.services {
+		if err := i.r.PostSetup(rsetup); err != nil {
+			l.Error(fmt.Sprintf("Post setup service %s failed", i.name), map[string]string{
+				"service": i.name,
+				"error":   err.Error(),
+			})
+			return err
+		}
+		l.Info(fmt.Sprintf("Done post setup service %s", i.name), map[string]string{
+			"service": i.name,
+		})
+	}
+
 	if err := s.state.Setup(state.ReqSetup{
 		Version: s.config.version.Num,
 		VHash:   s.config.version.Hash,
@@ -114,7 +153,6 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 			Message: "Failed to set state",
 		}), ErrOptInner(err))
 	}
-	s.setupRun = true
 	l.Info("Setup all services complete", nil)
 	return nil
 }

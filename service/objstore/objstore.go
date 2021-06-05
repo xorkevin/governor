@@ -265,6 +265,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	return nil
 }
 
+func (s *service) PostSetup(req governor.ReqSetup) error {
+	return nil
+}
+
 func (s *service) Start(ctx context.Context) error {
 	return nil
 }

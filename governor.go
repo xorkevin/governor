@@ -37,14 +37,14 @@ type (
 
 	// Server is a governor server to which services may be registered
 	Server struct {
-		services []serviceDef
-		inj      Injector
-		config   *Config
-		state    state.State
-		logger   Logger
-		i        chi.Router
-		flags    Flags
-		setupRun bool
+		services      []serviceDef
+		inj           Injector
+		config        *Config
+		state         state.State
+		logger        Logger
+		i             chi.Router
+		flags         Flags
+		firstSetupRun bool
 	}
 )
 
@@ -58,7 +58,7 @@ func New(opts Opts, stateService state.State) *Server {
 		flags: Flags{
 			ConfigFile: "",
 		},
-		setupRun: false,
+		firstSetupRun: false,
 	}
 }
 

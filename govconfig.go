@@ -49,6 +49,7 @@ type (
 		vaultJWT       string
 		vaultLoginPath string
 		vaultExpire    int64
+		vaultCache     map[string]vaultSecret
 		mu             *sync.RWMutex
 		appname        string
 		version        Version
@@ -311,6 +312,48 @@ func (c *Config) authVault() error {
 	return nil
 }
 
+func (c *Config) getSecret(key string) (vaultSecretVal, error) {
+	if s, ok := c.vaultCache[key]; ok && s.isValid() {
+		return s.value, nil
+	}
+
+	kvpath := c.config.GetString(key)
+	if kvpath == "" {
+		return nil, ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
+	}
+
+	if err := c.ensureValidAuth(); err != nil {
+		return nil, err
+	}
+
+	vault := c.vault.Logical()
+	s, err := vault.Read(kvpath)
+	if err != nil {
+		return nil, ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
+	}
+
+	data := s.Data
+	if v, ok := data["data"].(map[string]interface{}); ok {
+		data = v
+	}
+
+	var expire int64
+	if s.LeaseDuration > 0 {
+		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
+		k := c.vaultExpire
+		if expire > k {
+			expire = k
+		}
+	}
+	c.vaultCache[key] = vaultSecret{
+		key:    key,
+		value:  data,
+		expire: expire,
+	}
+
+	return data, nil
+}
+
 // IsDebug returns if the configuration is in debug mode
 func (c *Config) IsDebug() bool {
 	return c.logLevel == levelDebug
@@ -416,45 +459,7 @@ func (s *vaultSecret) isValid() bool {
 }
 
 func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
-	if s, ok := r.cache[key]; ok && s.isValid() {
-		return s.value, nil
-	}
-
-	kvpath := r.GetStr(key)
-	if kvpath == "" {
-		return nil, ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
-	}
-
-	if err := r.c.ensureValidAuth(); err != nil {
-		return nil, err
-	}
-
-	vault := r.c.vault.Logical()
-	s, err := vault.Read(kvpath)
-	if err != nil {
-		return nil, ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
-	}
-
-	data := s.Data
-	if v, ok := data["data"].(map[string]interface{}); ok {
-		data = v
-	}
-
-	var expire int64
-	if s.LeaseDuration > 0 {
-		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
-		k := r.c.vaultExpire
-		if expire > k {
-			expire = k
-		}
-	}
-	r.cache[key] = vaultSecret{
-		key:    key,
-		value:  data,
-		expire: expire,
-	}
-
-	return data, nil
+	return r.c.getSecret(r.name + "." + key)
 }
 
 func (r *configReader) InvalidateSecret(key string) {

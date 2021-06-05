@@ -29,6 +29,7 @@ vault:
   k8s:
     auth: true
     role: {{ $nssvc }}
+setupsecret: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/setup
 database:
   auth: {{ .Vars.vault.dbmount }}/creds/{{ $ns }}-postgres-rw
   dbname: postgres
