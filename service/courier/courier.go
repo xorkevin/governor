@@ -30,7 +30,7 @@ type (
 	service struct {
 		repo          model.Repo
 		kvlinks       kvstore.KVStore
-		linkImgBucket objstore.Bucket
+		courierBucket objstore.Bucket
 		linkImgDir    objstore.Dir
 		brandImgDir   objstore.Dir
 		gate          gate.Gate
@@ -75,7 +75,7 @@ func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, g gate.Gate) 
 	return &service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),
-		linkImgBucket: obj,
+		courierBucket: obj,
 		linkImgDir:    obj.Subdir("qr"),
 		brandImgDir:   obj.Subdir("brand"),
 		gate:          g,
@@ -140,7 +140,12 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}
-	l.Info("created courierlinks table", nil)
+	l.Info("Created courierlinks table", nil)
+
+	if err := s.courierBucket.Init(); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init courier bucket")
+	}
+	l.Info("Created courier bucket", nil)
 	return nil
 }
 
@@ -149,9 +154,6 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	if err := s.linkImgBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init courier link image bucket")
-	}
 	return nil
 }
 

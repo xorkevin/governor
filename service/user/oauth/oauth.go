@@ -45,7 +45,7 @@ type (
 		connections  connmodel.Repo
 		tokenizer    token.Tokenizer
 		kvclient     kvstore.KVStore
-		logoBucket   objstore.Bucket
+		oauthBucket  objstore.Bucket
 		logoImgDir   objstore.Dir
 		users        user.Users
 		gate         gate.Gate
@@ -104,7 +104,7 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		connections:  connections,
 		tokenizer:    tokenizer,
 		kvclient:     kv.Subtree("client"),
-		logoBucket:   obj,
+		oauthBucket:  obj,
 		logoImgDir:   obj.Subdir("logo"),
 		users:        users,
 		gate:         g,
@@ -213,13 +213,17 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.apps.Setup(); err != nil {
 		return err
 	}
-	l.Info("created oauthapps table", nil)
+	l.Info("Created oauthapps table", nil)
 
 	if err := s.connections.Setup(); err != nil {
 		return err
 	}
-	l.Info("created oauthconnections table", nil)
+	l.Info("Created oauthconnections table", nil)
 
+	if err := s.oauthBucket.Init(); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init oauth bucket")
+	}
+	l.Info("Created oauth bucket", nil)
 	return nil
 }
 
@@ -228,9 +232,6 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
-	if err := s.logoBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init oauth app logo bucket")
-	}
 	return nil
 }
 

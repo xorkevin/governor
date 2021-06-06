@@ -107,7 +107,12 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.profiles.Setup(); err != nil {
 		return err
 	}
-	l.Info("created profile table", nil)
+	l.Info("Created profile table", nil)
+
+	if err := s.profileBucket.Init(); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init profile image bucket")
+	}
+	l.Info("Created profile bucket", nil)
 	return nil
 }
 
@@ -120,17 +125,13 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if err := s.profileBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init profile image bucket")
-	}
-
 	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, 15*time.Second, 2, s.UserCreateHook); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
 	}
 	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, 15*time.Second, 2, s.UserDeleteHook); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("subscribed to user create/delete queue", nil)
+	l.Info("Subscribed to user create/delete queue", nil)
 	return nil
 }
 
