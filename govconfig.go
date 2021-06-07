@@ -67,6 +67,7 @@ type (
 		rewrite        []*rewriteRule
 		Port           string
 		BaseURL        string
+		Hostname       string
 	}
 
 	corsPathRule struct {
@@ -222,6 +223,11 @@ func (c *Config) init() error {
 	c.rewrite = rewrite
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
+	var err error
+	c.Hostname, err = os.Hostname()
+	if err != nil {
+		return err
+	}
 	if err := c.initvault(); err != nil {
 		return err
 	}

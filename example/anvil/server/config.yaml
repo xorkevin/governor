@@ -66,6 +66,12 @@ pubsub:
   port: 4222
   hbinterval: 5
   hbmaxfail: 5
+events:
+  auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/nats
+  host: nats.{{ $ns }}.svc.cluster.local
+  port: 4222
+  hbinterval: 5
+  hbmaxfail: 3
 template:
   dir: templates
 mail:
