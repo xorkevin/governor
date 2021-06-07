@@ -116,6 +116,8 @@ spec:
             - name: cluster
               containerPort: 6222
           volumeMounts:
+            - name: data
+              mountPath: /var/lib/nats
             - name: config-pass
               mountPath: /etc/nats
       volumes:
@@ -127,4 +129,12 @@ spec:
             name: {{ $svc }}-init-scripts
         - name: config-pass
           emptyDir: {}
-  volumeClaimTemplates: []
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Vars.kube.service.storage.amount }}

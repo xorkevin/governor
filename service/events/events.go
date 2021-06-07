@@ -14,6 +14,9 @@ type (
 	// WorkerFunc is a type alias for a subscriber handler
 	WorkerFunc = func(msgdata []byte)
 
+	// StreamWorkerFunc is a type alias for a stream subscriber handler
+	StreamWorkerFunc = func(msgdata []byte) error
+
 	// Events is a service wrapper around an event stream client
 	Events interface {
 		Subscribe(channel string, worker WorkerFunc) (Subscription, error)
@@ -29,6 +32,7 @@ type (
 
 	getClientRes struct {
 		client *nats.Conn
+		stream nats.JetStreamContext
 		err    error
 	}
 
@@ -37,12 +41,14 @@ type (
 	}
 
 	subOp struct {
-		rm  bool
-		sub *subscription
+		rm     bool
+		sub    *subscription
+		stream *streamSubscription
 	}
 
 	service struct {
 		client     *nats.Conn
+		stream     nats.JetStreamContext
 		clientname string
 		auth       string
 		addr       string
@@ -51,6 +57,7 @@ type (
 		ops        chan getOp
 		subops     chan subOp
 		subs       map[*subscription]struct{}
+		streamSubs map[*streamSubscription]struct{}
 		ready      bool
 		canary     <-chan struct{}
 		hbinterval int
@@ -68,6 +75,20 @@ type (
 		channel string
 		group   string
 		worker  WorkerFunc
+		logger  governor.Logger
+		sub     *nats.Subscription
+	}
+
+	// StreamSubscription manages an active stream subscription
+	StreamSubscription interface {
+		Close() error
+	}
+
+	streamSubscription struct {
+		s       *service
+		channel string
+		group   string
+		worker  StreamWorkerFunc
 		logger  governor.Logger
 		sub     *nats.Subscription
 	}
@@ -92,10 +113,11 @@ func setCtxEvents(inj governor.Injector, p Events) {
 // New creates a new events service
 func New() Service {
 	return &service{
-		ops:    make(chan getOp),
-		subops: make(chan subOp),
-		subs:   map[*subscription]struct{}{},
-		ready:  false,
+		ops:        make(chan getOp),
+		subops:     make(chan subOp),
+		subs:       map[*subscription]struct{}{},
+		streamSubs: map[*streamSubscription]struct{}{},
+		ready:      false,
 	}
 }
 
@@ -147,7 +169,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	go s.execute(ctx, done)
 	s.done = done
 
-	if _, err := s.getClient(); err != nil {
+	if _, _, err := s.getClient(); err != nil {
 		return err
 	}
 	return nil
@@ -171,9 +193,10 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 				s.subs[op.sub] = struct{}{}
 			}
 		case op := <-s.ops:
-			client, err := s.handleGetClient()
+			client, stream, err := s.handleGetClient()
 			op.res <- getClientRes{
 				client: client,
+				stream: stream,
 				err:    err,
 			}
 			close(op.res)
@@ -194,7 +217,7 @@ func (s *service) handlePing() {
 		s.config.InvalidateSecret("auth")
 		s.deinitSubs()
 	}
-	if _, err := s.handleGetClient(); err != nil {
+	if _, _, err := s.handleGetClient(); err != nil {
 		s.logger.Error("Failed to create events client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createeventsclient",
@@ -246,17 +269,17 @@ func (s *service) deinitSubs() {
 	}
 }
 
-func (s *service) handleGetClient() (*nats.Conn, error) {
+func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 	authsecret, err := s.config.GetSecret("auth")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	auth, ok := authsecret["password"].(string)
 	if !ok {
-		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
+		return nil, nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
-		return s.client, nil
+		return s.client, s.stream, nil
 	}
 
 	s.closeClient()
@@ -276,15 +299,20 @@ func (s *service) handleGetClient() (*nats.Conn, error) {
 			close(canary)
 		}))
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to events")
+		return nil, nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to events")
+	}
+	stream, err := conn.JetStream()
+	if err != nil {
+		return nil, nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to events jetstream")
 	}
 
 	s.client = conn
+	s.stream = stream
 	s.auth = auth
 	s.ready = true
 	s.canary = canary
 	s.logger.Info(fmt.Sprintf("Established connection to %s", s.addr), nil)
-	return s.client, nil
+	return s.client, s.stream, nil
 }
 
 func (s *service) closeClient() {
@@ -298,17 +326,17 @@ func (s *service) closeClient() {
 	})
 }
 
-func (s *service) getClient() (*nats.Conn, error) {
+func (s *service) getClient() (*nats.Conn, nats.JetStreamContext, error) {
 	res := make(chan getClientRes)
 	op := getOp{
 		res: res,
 	}
 	select {
 	case <-s.done:
-		return nil, governor.ErrWithKind(nil, ErrConn{}, "Events service shutdown")
+		return nil, nil, governor.ErrWithKind(nil, ErrConn{}, "Events service shutdown")
 	case s.ops <- op:
 		v := <-res
-		return v.client, v.err
+		return v.client, v.stream, v.err
 	}
 }
 
@@ -367,18 +395,7 @@ func (s *service) rmSub(sub *subscription) {
 
 // Subscribe subscribes to a channel
 func (s *service) Subscribe(channel string, worker WorkerFunc) (Subscription, error) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": channel,
-	})
-	sub := &subscription{
-		s:       s,
-		channel: channel,
-		worker:  worker,
-		logger:  l,
-	}
-	s.addSub(sub)
-	return sub, nil
+	return s.SubscribeGroup(channel, "", worker)
 }
 
 // SubscribeGroup subscribes to a queue group
@@ -400,7 +417,7 @@ func (s *service) SubscribeGroup(channel, group string, worker WorkerFunc) (Subs
 }
 
 func (s *service) Publish(channel string, msgdata []byte) error {
-	client, err := s.getClient()
+	client, _, err := s.getClient()
 	if err != nil {
 		return err
 	}

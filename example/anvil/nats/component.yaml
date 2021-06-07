@@ -12,6 +12,8 @@ vars:
       image:
         name: nats
         version: alpine
+      storage:
+        amount: 1Gi
       init:
         image:
           name: xorkevin/alpine-utils

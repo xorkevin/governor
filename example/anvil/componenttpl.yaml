@@ -209,6 +209,8 @@ components:
           image:
             name: {{ .Vars.images.nats.name }}
             version: {{ .Vars.images.nats.version }}
+          storage:
+            amount: {{ .Vars.storage.nats }}
           init:
             image:
               name: {{ .Vars.images.xorkevinalpine.name }}

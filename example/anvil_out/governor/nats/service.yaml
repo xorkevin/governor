@@ -114,6 +114,8 @@ spec:
             - name: cluster
               containerPort: 6222
           volumeMounts:
+            - name: data
+              mountPath: /var/lib/nats
             - name: config-pass
               mountPath: /etc/nats
       volumes:
@@ -125,4 +127,12 @@ spec:
             name: nats-init-scripts
         - name: config-pass
           emptyDir: {}
-  volumeClaimTemplates: []
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
