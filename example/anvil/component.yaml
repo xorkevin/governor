@@ -39,6 +39,7 @@ vars:
     postgres: 1Gi
     minio: 8Gi
     nats: 1Gi
+    natsconf: 1G
     natsstream: 1Gi
   vault:
     addr: http://vault.vault.svc.cluster.local:8200
