@@ -15,13 +15,14 @@ type (
 	WorkerFunc = func(msgdata []byte)
 
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
-	StreamWorkerFunc = func(msgdata []byte) error
+	StreamWorkerFunc = func(pinger Pinger, msgdata []byte) error
 
 	// Events is a service wrapper around an event stream client
 	Events interface {
-		Subscribe(channel string, worker WorkerFunc) (Subscription, error)
-		SubscribeGroup(channel, group string, worker WorkerFunc) (Subscription, error)
 		Publish(channel string, msgdata []byte) error
+		Subscribe(channel, group string, worker WorkerFunc) (Subscription, error)
+		StreamPublish(channel string, msgdata []byte) error
+		StreamSubscribe(channel, group string, worker StreamWorkerFunc) (StreamSubscription, error)
 	}
 
 	// Service is an Events and governor.Service
@@ -82,6 +83,7 @@ type (
 	// StreamSubscription manages an active stream subscription
 	StreamSubscription interface {
 		Close() error
+		Unsubscribe() error
 	}
 
 	streamSubscription struct {
@@ -91,6 +93,15 @@ type (
 		worker  StreamWorkerFunc
 		logger  governor.Logger
 		sub     *nats.Subscription
+	}
+
+	// Pinger pings in progress liveness checks
+	Pinger interface {
+		Ping() error
+	}
+
+	pinger struct {
+		msg *nats.Msg
 	}
 
 	ctxKeyEvents struct{}
@@ -188,9 +199,19 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			s.handlePing()
 		case op := <-s.subops:
 			if op.rm {
-				delete(s.subs, op.sub)
+				if op.sub != nil {
+					delete(s.subs, op.sub)
+				}
+				if op.stream != nil {
+					delete(s.streamSubs, op.stream)
+				}
 			} else {
-				s.subs[op.sub] = struct{}{}
+				if op.sub != nil {
+					s.subs[op.sub] = struct{}{}
+				}
+				if op.stream != nil {
+					s.streamSubs[op.stream] = struct{}{}
+				}
 			}
 		case op := <-s.ops:
 			client, stream, err := s.handleGetClient()
@@ -245,6 +266,25 @@ func (s *service) updateSubs() {
 			})
 		}
 	}
+	for k := range s.streamSubs {
+		if k.ok() {
+			continue
+		}
+		if err := k.init(s.stream); err != nil {
+			s.logger.Error("Failed to subscribe to stream", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "createeventsstreamsuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("Subscribed to stream", map[string]string{
+				"actiontype": "createeventsstreamsubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
+	}
 }
 
 func (s *service) deinitSubs() {
@@ -262,6 +302,25 @@ func (s *service) deinitSubs() {
 		} else {
 			s.logger.Info("Closed subscription", map[string]string{
 				"actiontype": "closeeventssubok",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		}
+	}
+	for k := range s.streamSubs {
+		if !k.ok() {
+			continue
+		}
+		if err := k.deinit(); err != nil {
+			s.logger.Error("Failed to close stream subscription", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "closeeventsstreamsuberr",
+				"channel":    k.channel,
+				"group":      k.group,
+			})
+		} else {
+			s.logger.Info("Closed stream subscription", map[string]string{
+				"actiontype": "closeeventsstreamsubok",
 				"channel":    k.channel,
 				"group":      k.group,
 			})
@@ -371,10 +430,11 @@ func (s *service) Health() error {
 	return nil
 }
 
-func (s *service) addSub(sub *subscription) {
+func (s *service) addSub(sub *subscription, stream *streamSubscription) {
 	op := subOp{
-		rm:  false,
-		sub: sub,
+		rm:     false,
+		sub:    sub,
+		stream: stream,
 	}
 	select {
 	case <-s.done:
@@ -382,24 +442,32 @@ func (s *service) addSub(sub *subscription) {
 	}
 }
 
-func (s *service) rmSub(sub *subscription) {
+func (s *service) rmSub(sub *subscription, stream *streamSubscription) {
 	op := subOp{
-		rm:  true,
-		sub: sub,
+		rm:     true,
+		sub:    sub,
+		stream: stream,
 	}
 	select {
 	case <-s.done:
 	case s.subops <- op:
 	}
+}
+
+// Publish publishes to a channel
+func (s *service) Publish(channel string, msgdata []byte) error {
+	client, _, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Publish(channel, msgdata); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to publish message to channel")
+	}
+	return nil
 }
 
 // Subscribe subscribes to a channel
-func (s *service) Subscribe(channel string, worker WorkerFunc) (Subscription, error) {
-	return s.SubscribeGroup(channel, "", worker)
-}
-
-// SubscribeGroup subscribes to a queue group
-func (s *service) SubscribeGroup(channel, group string, worker WorkerFunc) (Subscription, error) {
+func (s *service) Subscribe(channel, group string, worker WorkerFunc) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": channel,
@@ -412,19 +480,8 @@ func (s *service) SubscribeGroup(channel, group string, worker WorkerFunc) (Subs
 		worker:  worker,
 		logger:  l,
 	}
-	s.addSub(sub)
+	s.addSub(sub, nil)
 	return sub, nil
-}
-
-func (s *service) Publish(channel string, msgdata []byte) error {
-	client, _, err := s.getClient()
-	if err != nil {
-		return err
-	}
-	if err := client.Publish(channel, msgdata); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to publish message")
-	}
-	return nil
 }
 
 func (s *subscription) init(client *nats.Conn) error {
@@ -463,12 +520,114 @@ func (s *subscription) subscriber(msg *nats.Msg) {
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	s.s.rmSub(s)
+	s.s.rmSub(s, nil)
 	if s.sub == nil {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription")
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to channel")
+	}
+	return nil
+}
+
+// StreamPublish publishes to a stream
+func (s *service) StreamPublish(channel string, msgdata []byte) error {
+	_, client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if _, err := client.Publish(channel, msgdata); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to publish message to stream")
+	}
+	return nil
+}
+
+// StreamSubscribe subscribes to a stream
+func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc) (StreamSubscription, error) {
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": channel,
+		"group":   group,
+	})
+	sub := &streamSubscription{
+		s:       s,
+		channel: channel,
+		group:   group,
+		worker:  worker,
+		logger:  l,
+	}
+	s.addSub(nil, sub)
+	return sub, nil
+}
+
+func (s *streamSubscription) init(client nats.JetStream) error {
+	sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber, nats.ManualAck())
+	if err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
+	}
+	s.sub = sub
+	return nil
+}
+
+func (s *streamSubscription) deinit() error {
+	k := s.sub
+	s.sub = nil
+	if err := k.Drain(); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
+	}
+	return nil
+}
+
+func (s *streamSubscription) ok() bool {
+	return s.sub != nil
+}
+
+func (s *streamSubscription) subscriber(msg *nats.Msg) {
+	if err := s.worker(&pinger{msg: msg}, msg.Data); err != nil {
+		s.logger.Error("Failed executing worker", map[string]string{
+			"error": err.Error(),
+		})
+		if err := msg.Nak(); err != nil {
+			s.logger.Error("Failed to nack message", map[string]string{
+				"error": err.Error(),
+			})
+		}
+		return
+	}
+	if err := msg.Ack(); err != nil {
+		s.logger.Error("Failed to ack message", map[string]string{
+			"error": err.Error(),
+		})
+	}
+}
+
+// Close closes the subscription
+func (s *streamSubscription) Close() error {
+	s.s.rmSub(nil, s)
+	if s.sub == nil {
+		return nil
+	}
+	if err := s.sub.Drain(); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
+	}
+	return nil
+}
+
+// Unsubscribe removes the subscription
+func (s *streamSubscription) Unsubscribe() error {
+	s.s.rmSub(nil, s)
+	if s.sub == nil {
+		return nil
+	}
+	if err := s.sub.Unsubscribe(); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to unsubscribe from stream")
+	}
+	return nil
+}
+
+func (p *pinger) Ping() error {
+	if err := p.msg.InProgress(); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to ping in progress")
 	}
 	return nil
 }
