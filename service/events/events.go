@@ -524,12 +524,10 @@ func (s *subscription) Close() error {
 	if s.sub == nil {
 		return nil
 	}
-	k := s.sub
-	s.sub = nil
-	if !k.IsValid() {
+	if !s.sub.IsValid() {
 		return nil
 	}
-	if err := k.Drain(); err != nil {
+	if err := s.sub.Drain(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to channel")
 	}
 	return nil
@@ -625,12 +623,10 @@ func (s *streamSubscription) Close() error {
 	if s.sub == nil {
 		return nil
 	}
-	k := s.sub
-	s.sub = nil
-	if !k.IsValid() {
+	if !s.sub.IsValid() {
 		return nil
 	}
-	if err := k.Drain(); err != nil {
+	if err := s.sub.Drain(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
 	}
 	return nil
