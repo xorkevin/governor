@@ -17,12 +17,18 @@ type (
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
 	StreamWorkerFunc = func(pinger Pinger, msgdata []byte) error
 
+	StreamConsumerOpts struct {
+		AckWait     time.Duration
+		MaxInFlight int
+		MaxDeliver  int
+	}
+
 	// Events is a service wrapper around an event stream client
 	Events interface {
 		Publish(channel string, msgdata []byte) error
 		Subscribe(channel, group string, worker WorkerFunc) (Subscription, error)
 		StreamPublish(channel string, msgdata []byte) error
-		StreamSubscribe(channel, group string, worker StreamWorkerFunc) (StreamSubscription, error)
+		StreamSubscribe(channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
 	}
 
 	// Service is an Events and governor.Service
@@ -80,16 +86,11 @@ type (
 		sub     *nats.Subscription
 	}
 
-	// StreamSubscription manages an active stream subscription
-	StreamSubscription interface {
-		Close() error
-		Unsubscribe() error
-	}
-
 	streamSubscription struct {
 		s       *service
 		channel string
 		group   string
+		opts    StreamConsumerOpts
 		worker  StreamWorkerFunc
 		logger  governor.Logger
 		sub     *nats.Subscription
@@ -547,7 +548,7 @@ func (s *service) StreamPublish(channel string, msgdata []byte) error {
 }
 
 // StreamSubscribe subscribes to a stream
-func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc) (StreamSubscription, error) {
+func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": channel,
@@ -557,6 +558,7 @@ func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc
 		s:       s,
 		channel: channel,
 		group:   group,
+		opts:    opts,
 		worker:  worker,
 		logger:  l,
 	}
@@ -565,7 +567,23 @@ func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc
 }
 
 func (s *streamSubscription) init(client nats.JetStream) error {
-	sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber, nats.Durable(s.group), nats.ManualAck())
+	args := make([]nats.SubOpt, 0, 7)
+	args = append(args, nats.Durable(s.group), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
+	if s.opts.AckWait > 0 {
+		args = append(args, nats.AckWait(s.opts.AckWait))
+	}
+	if s.opts.MaxInFlight > 0 {
+		args = append(args, nats.MaxAckPending(s.opts.MaxInFlight))
+	}
+	if s.opts.MaxDeliver > 0 {
+		args = append(args, nats.MaxDeliver(s.opts.MaxDeliver))
+	}
+	sub, err := client.QueueSubscribe(
+		s.channel,
+		s.group,
+		s.subscriber,
+		args...,
+	)
 	if err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
 	}
@@ -614,23 +632,6 @@ func (s *streamSubscription) Close() error {
 	}
 	if err := k.Drain(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
-	}
-	return nil
-}
-
-// Unsubscribe removes the subscription
-func (s *streamSubscription) Unsubscribe() error {
-	s.s.rmSub(nil, s)
-	if s.sub == nil {
-		return nil
-	}
-	k := s.sub
-	s.sub = nil
-	if !k.IsValid() {
-		return nil
-	}
-	if err := k.Unsubscribe(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to unsubscribe from stream")
 	}
 	return nil
 }
