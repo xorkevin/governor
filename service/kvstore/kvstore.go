@@ -246,7 +246,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 		return nil, err
 	}
 	auth, ok := authsecret["password"].(string)
-	if !ok {
+	if !ok || auth == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {

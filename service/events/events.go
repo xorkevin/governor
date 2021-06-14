@@ -123,12 +123,15 @@ func setCtxEvents(inj governor.Injector, p Events) {
 
 // New creates a new events service
 func New() Service {
+	canary := make(chan struct{})
+	close(canary)
 	return &service{
 		ops:        make(chan getOp),
 		subops:     make(chan subOp),
 		subs:       map[*subscription]struct{}{},
 		streamSubs: map[*streamSubscription]struct{}{},
 		ready:      false,
+		canary:     canary,
 	}
 }
 
@@ -236,7 +239,6 @@ func (s *service) handlePing() {
 		}
 		s.ready = false
 		s.config.InvalidateSecret("auth")
-		s.deinitSubs()
 	}
 	if _, _, err := s.handleGetClient(); err != nil {
 		s.logger.Error("Failed to create events client", map[string]string{
@@ -334,7 +336,7 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 		return nil, nil, err
 	}
 	auth, ok := authsecret["password"].(string)
-	if !ok {
+	if !ok || auth == "" {
 		return nil, nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
@@ -351,11 +353,11 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 		nats.PingInterval(time.Duration(s.hbinterval)*time.Second),
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			close(canary)
 			s.logger.Error("Lost connection to events", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "pingevents",
 			})
-			close(canary)
 		}))
 	if err != nil {
 		return nil, nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to events")
@@ -375,14 +377,14 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 }
 
 func (s *service) closeClient() {
-	if s.client == nil {
-		return
+	if s.client != nil && !s.client.IsClosed() {
+		s.client.Close()
+		s.logger.Info("Closed events connection", map[string]string{
+			"actiontype": "closeeventsok",
+			"address":    s.addr,
+		})
 	}
-	s.client.Close()
-	s.logger.Info("Closed events connection", map[string]string{
-		"actiontype": "closeeventsok",
-		"address":    s.addr,
-	})
+	s.deinitSubs()
 }
 
 func (s *service) getClient() (*nats.Conn, nats.JetStreamContext, error) {
@@ -502,11 +504,7 @@ func (s *subscription) init(client *nats.Conn) error {
 }
 
 func (s *subscription) deinit() error {
-	k := s.sub
 	s.sub = nil
-	if err := k.Unsubscribe(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -524,7 +522,12 @@ func (s *subscription) Close() error {
 	if s.sub == nil {
 		return nil
 	}
-	if err := s.sub.Unsubscribe(); err != nil {
+	k := s.sub
+	s.sub = nil
+	if !k.IsValid() {
+		return nil
+	}
+	if err := k.Drain(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to channel")
 	}
 	return nil
@@ -561,7 +564,7 @@ func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc
 }
 
 func (s *streamSubscription) init(client nats.JetStream) error {
-	sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber, nats.ManualAck())
+	sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber, nats.Durable(s.group), nats.ManualAck())
 	if err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
 	}
@@ -570,11 +573,7 @@ func (s *streamSubscription) init(client nats.JetStream) error {
 }
 
 func (s *streamSubscription) deinit() error {
-	k := s.sub
 	s.sub = nil
-	if err := k.Drain(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
-	}
 	return nil
 }
 
@@ -607,7 +606,12 @@ func (s *streamSubscription) Close() error {
 	if s.sub == nil {
 		return nil
 	}
-	if err := s.sub.Drain(); err != nil {
+	k := s.sub
+	s.sub = nil
+	if !k.IsValid() {
+		return nil
+	}
+	if err := k.Drain(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
 	}
 	return nil
@@ -619,7 +623,12 @@ func (s *streamSubscription) Unsubscribe() error {
 	if s.sub == nil {
 		return nil
 	}
-	if err := s.sub.Unsubscribe(); err != nil {
+	k := s.sub
+	s.sub = nil
+	if !k.IsValid() {
+		return nil
+	}
+	if err := k.Unsubscribe(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to unsubscribe from stream")
 	}
 	return nil

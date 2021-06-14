@@ -210,11 +210,11 @@ func (s *service) handleGetClient() (*sql.DB, error) {
 		return nil, err
 	}
 	username, ok := authsecret["username"].(string)
-	if !ok {
+	if !ok || username == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	password, ok := authsecret["password"].(string)
-	if !ok {
+	if !ok || password == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := pgauth{
