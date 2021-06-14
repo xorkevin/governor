@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -17,6 +18,13 @@ type (
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
 	StreamWorkerFunc = func(pinger Pinger, msgdata []byte) error
 
+	// StreamOpts are opts for streams
+	StreamOpts struct {
+		MaxAge   time.Duration
+		MaxBytes int64
+	}
+
+	// StreamConsumerOpts are opts for stream consumers
 	StreamConsumerOpts struct {
 		AckWait     time.Duration
 		MaxInFlight int
@@ -28,7 +36,9 @@ type (
 		Publish(channel string, msgdata []byte) error
 		Subscribe(channel, group string, worker WorkerFunc) (Subscription, error)
 		StreamPublish(channel string, msgdata []byte) error
-		StreamSubscribe(channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
+		StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
+		InitStream(name string, subjects []string, opts StreamOpts) error
+		DeleteStream(name string) error
 	}
 
 	// Service is an Events and governor.Service
@@ -88,6 +98,7 @@ type (
 
 	streamSubscription struct {
 		s       *service
+		stream  string
 		channel string
 		group   string
 		opts    StreamConsumerOpts
@@ -366,7 +377,7 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 	}
 	stream, err := conn.JetStream()
 	if err != nil {
-		return nil, nil, governor.ErrWithKind(err, ErrConn{}, "Failed to connect to events jetstream")
+		return nil, nil, governor.ErrWithKind(err, ErrClient{}, "Failed to connect to events jetstream")
 	}
 
 	s.client = conn
@@ -546,14 +557,16 @@ func (s *service) StreamPublish(channel string, msgdata []byte) error {
 }
 
 // StreamSubscribe subscribes to a stream
-func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
+func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
+		"stream":  stream,
 		"channel": channel,
 		"group":   group,
 	})
 	sub := &streamSubscription{
 		s:       s,
+		stream:  stream,
 		channel: channel,
 		group:   group,
 		opts:    opts,
@@ -565,8 +578,8 @@ func (s *service) StreamSubscribe(channel, group string, worker StreamWorkerFunc
 }
 
 func (s *streamSubscription) init(client nats.JetStream) error {
-	args := make([]nats.SubOpt, 0, 7)
-	args = append(args, nats.Durable(s.group), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
+	args := make([]nats.SubOpt, 0, 8)
+	args = append(args, nats.BindStream(s.stream), nats.Durable(s.group), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
 	if s.opts.AckWait > 0 {
 		args = append(args, nats.AckWait(s.opts.AckWait))
 	}
@@ -635,6 +648,54 @@ func (s *streamSubscription) Close() error {
 func (p *pinger) Ping() error {
 	if err := p.msg.InProgress(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to ping in progress")
+	}
+	return nil
+}
+
+// InitStream initializes a stream
+func (s *service) InitStream(name string, subjects []string, opts StreamOpts) error {
+	_, client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	cfg := &nats.StreamConfig{
+		Name:      name,
+		Subjects:  subjects,
+		Retention: nats.LimitsPolicy,
+		Discard:   nats.DiscardOld,
+		Storage:   nats.FileStorage,
+		MaxAge:    opts.MaxAge,
+		MaxBytes:  opts.MaxBytes,
+	}
+	if _, err := client.StreamInfo(name); err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to get stream")
+		}
+		if _, err := client.AddStream(cfg); err != nil {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to create stream")
+		}
+	} else {
+		if _, err := client.UpdateStream(cfg); err != nil {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to update stream")
+		}
+	}
+	return nil
+}
+
+// DeleteStream deletes a stream
+func (s *service) DeleteStream(name string) error {
+	_, client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if _, err := client.StreamInfo(name); err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to get stream")
+		}
+	} else {
+		if err := client.DeleteStream(name); err != nil {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to delete stream")
+		}
 	}
 	return nil
 }
