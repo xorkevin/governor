@@ -234,10 +234,11 @@ func (s *service) handlePing() {
 		case <-s.canary:
 		default:
 			s.ready = true
-			s.updateSubs()
+			s.updateSubs(s.client, s.stream)
 			return
 		}
 		s.ready = false
+		s.auth = ""
 		s.config.InvalidateSecret("auth")
 	}
 	if _, _, err := s.handleGetClient(); err != nil {
@@ -248,12 +249,12 @@ func (s *service) handlePing() {
 	}
 }
 
-func (s *service) updateSubs() {
+func (s *service) updateSubs(client *nats.Conn, stream nats.JetStreamContext) {
 	for k := range s.subs {
 		if k.ok() {
 			continue
 		}
-		if err := k.init(s.client); err != nil {
+		if err := k.init(client); err != nil {
 			s.logger.Error("Failed to subscribe to channel", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "createeventssuberr",
@@ -272,7 +273,7 @@ func (s *service) updateSubs() {
 		if k.ok() {
 			continue
 		}
-		if err := k.init(s.stream); err != nil {
+		if err := k.init(stream); err != nil {
 			s.logger.Error("Failed to subscribe to stream", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "createeventsstreamsuberr",

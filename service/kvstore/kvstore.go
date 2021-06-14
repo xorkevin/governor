@@ -230,6 +230,7 @@ func (s *service) handlePing() {
 		})
 		s.ready = false
 		s.hbfailed = 0
+		s.auth = ""
 		s.config.InvalidateSecret("auth")
 	}
 	if _, err := s.handleGetClient(); err != nil {
