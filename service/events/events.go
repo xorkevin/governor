@@ -42,6 +42,7 @@ type (
 		StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
 		InitStream(name string, subjects []string, opts StreamOpts) error
 		DeleteStream(name string) error
+		DeleteConsumer(stream, consumer string) error
 	}
 
 	// Service is an Events and governor.Service
@@ -701,6 +702,24 @@ func (s *service) DeleteStream(name string) error {
 	} else {
 		if err := client.DeleteStream(name); err != nil {
 			return governor.ErrWithKind(err, ErrClient{}, "Failed to delete stream")
+		}
+	}
+	return nil
+}
+
+// DeleteConsumer deletes a consumer
+func (s *service) DeleteConsumer(stream, consumer string) error {
+	_, client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if _, err := client.ConsumerInfo(stream, consumer); err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to get consumer")
+		}
+	} else {
+		if err := client.DeleteConsumer(stream, consumer); err != nil {
+			return governor.ErrWithKind(err, ErrClient{}, "Failed to delete consumer")
 		}
 	}
 	return nil
