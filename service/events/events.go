@@ -724,3 +724,8 @@ func (s *service) DeleteConsumer(stream, consumer string) error {
 	}
 	return nil
 }
+
+// channelMaxDelivery returns the max delivery error channel
+func channelMaxDelivery(stream, consumer string) string {
+	return fmt.Sprintf("$JS.EVENT.ADVISORY.MAX_DELIVERIES.%s.%s", stream, consumer)
+}
