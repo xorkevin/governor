@@ -20,8 +20,11 @@ type (
 
 	// StreamOpts are opts for streams
 	StreamOpts struct {
-		MaxAge   time.Duration
-		MaxBytes int64
+		Replicas   int
+		MaxAge     time.Duration
+		MaxBytes   int64
+		MaxMsgs    int64
+		MaxMsgSize int32
 	}
 
 	// StreamConsumerOpts are opts for stream consumers
@@ -659,13 +662,16 @@ func (s *service) InitStream(name string, subjects []string, opts StreamOpts) er
 		return err
 	}
 	cfg := &nats.StreamConfig{
-		Name:      name,
-		Subjects:  subjects,
-		Retention: nats.LimitsPolicy,
-		Discard:   nats.DiscardOld,
-		Storage:   nats.FileStorage,
-		MaxAge:    opts.MaxAge,
-		MaxBytes:  opts.MaxBytes,
+		Name:       name,
+		Subjects:   subjects,
+		Retention:  nats.LimitsPolicy,
+		Discard:    nats.DiscardOld,
+		Storage:    nats.FileStorage,
+		Replicas:   opts.Replicas,
+		MaxAge:     opts.MaxAge,
+		MaxBytes:   opts.MaxBytes,
+		MaxMsgs:    opts.MaxMsgs,
+		MaxMsgSize: opts.MaxMsgSize,
 	}
 	if _, err := client.StreamInfo(name); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
