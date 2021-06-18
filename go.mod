@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/lib/pq v1.7.0
 	github.com/minio/minio-go/v6 v6.0.57
-	github.com/nats-io/nats-server/v2 v2.1.7 // indirect
+	github.com/nats-io/jsm.go v0.0.23
 	github.com/nats-io/nats-streaming-server v0.17.0 // indirect
 	github.com/nats-io/nats.go v1.11.0
 	github.com/nats-io/stan.go v0.6.0

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	jsmapi "github.com/nats-io/jsm.go/api"
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 )
@@ -727,5 +728,5 @@ func (s *service) DeleteConsumer(stream, consumer string) error {
 
 // channelMaxDelivery returns the max delivery error channel
 func channelMaxDelivery(stream, consumer string) string {
-	return fmt.Sprintf("$JS.EVENT.ADVISORY.MAX_DELIVERIES.%s.%s", stream, consumer)
+	return fmt.Sprintf("%s.%s.%s", jsmapi.JSAdvisoryConsumerMaxDeliveryExceedPre, stream, consumer)
 }
