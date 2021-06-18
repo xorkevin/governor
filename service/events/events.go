@@ -8,6 +8,7 @@ import (
 	"time"
 
 	jsmapi "github.com/nats-io/jsm.go/api"
+	jsadvisory "github.com/nats-io/jsm.go/api/jetstream/advisory"
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 )
@@ -44,6 +45,7 @@ type (
 		InitStream(name string, subjects []string, opts StreamOpts) error
 		DeleteStream(name string) error
 		DeleteConsumer(stream, consumer string) error
+		DLQSubscribe(targetStream, targetConsumer string, stream, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
 	}
 
 	// Service is an Events and governor.Service
@@ -167,6 +169,8 @@ type (
 	ErrConn struct{}
 	// ErrClient is returned for unknown client errors
 	ErrClient struct{}
+	// ErrInvalidStreamMsg is returned for invalid stream messages
+	ErrInvalidStreamMsg struct{}
 )
 
 func (e ErrConn) Error() string {
@@ -175,6 +179,10 @@ func (e ErrConn) Error() string {
 
 func (e ErrClient) Error() string {
 	return "Events client error"
+}
+
+func (e ErrInvalidStreamMsg) Error() string {
+	return "Events invalid stream message"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -729,4 +737,30 @@ func (s *service) DeleteConsumer(stream, consumer string) error {
 // channelMaxDelivery returns the max delivery error channel
 func channelMaxDelivery(stream, consumer string) string {
 	return fmt.Sprintf("%s.%s.%s", jsmapi.JSAdvisoryConsumerMaxDeliveryExceedPre, stream, consumer)
+}
+
+// DLQSubscribe subscribes to the deadletter queue of another stream consumer
+func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
+	return s.StreamSubscribe(stream, channelMaxDelivery(targetStream, targetConsumer), group, func(pinger Pinger, msgdata []byte) error {
+		schemaType, advmsg, err := jsmapi.ParseMessage(msgdata)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrInvalidStreamMsg{}, "Failed to parse dead letter queue message with unknown type")
+		}
+		jse, ok := advmsg.(*jsadvisory.ConsumerDeliveryExceededAdvisoryV1)
+		if !ok {
+			return governor.ErrWithKind(nil, ErrInvalidStreamMsg{}, fmt.Sprintf("Failed to parse dead letter queue message with type: %s", schemaType))
+		}
+		if jse.Stream != targetStream || jse.Consumer != targetConsumer {
+			return governor.ErrWithKind(nil, ErrInvalidStreamMsg{}, fmt.Sprintf("Invalid target stream and consumer: %s, %s", jse.Stream, jse.Consumer))
+		}
+		_, client, err := s.getClient()
+		if err != nil {
+			return err
+		}
+		msg, err := client.GetMsg(targetStream, jse.StreamSeq)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
+		}
+		return worker(pinger, msg.Data)
+	}, opts)
 }
