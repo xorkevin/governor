@@ -32,8 +32,9 @@ type (
 	// StreamConsumerOpts are opts for stream consumers
 	StreamConsumerOpts struct {
 		AckWait     time.Duration
-		MaxInFlight int
 		MaxDeliver  int
+		MaxPending  int
+		MaxRequests int
 	}
 
 	// Events is a service wrapper around an event stream client
@@ -112,6 +113,8 @@ type (
 		worker  StreamWorkerFunc
 		logger  governor.Logger
 		sub     *nats.Subscription
+		cancel  context.CancelFunc
+		done    <-chan struct{}
 	}
 
 	// Pinger pings in progress liveness checks
@@ -320,39 +323,23 @@ func (s *service) deinitSubs() {
 		if !k.ok() {
 			continue
 		}
-		if err := k.deinit(); err != nil {
-			s.logger.Error("Failed to close subscription", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "closeeventssuberr",
-				"channel":    k.channel,
-				"group":      k.group,
-			})
-		} else {
-			s.logger.Info("Closed subscription", map[string]string{
-				"actiontype": "closeeventssubok",
-				"channel":    k.channel,
-				"group":      k.group,
-			})
-		}
+		k.deinit()
+		s.logger.Info("Closed subscription", map[string]string{
+			"actiontype": "closeeventssubok",
+			"channel":    k.channel,
+			"group":      k.group,
+		})
 	}
 	for k := range s.streamSubs {
 		if !k.ok() {
 			continue
 		}
-		if err := k.deinit(); err != nil {
-			s.logger.Error("Failed to close stream subscription", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "closeeventsstreamsuberr",
-				"channel":    k.channel,
-				"group":      k.group,
-			})
-		} else {
-			s.logger.Info("Closed stream subscription", map[string]string{
-				"actiontype": "closeeventsstreamsubok",
-				"channel":    k.channel,
-				"group":      k.group,
-			})
-		}
+		k.deinit()
+		s.logger.Info("Closed stream subscription", map[string]string{
+			"actiontype": "closeeventsstreamsubok",
+			"channel":    k.channel,
+			"group":      k.group,
+		})
 	}
 }
 
@@ -529,9 +516,8 @@ func (s *subscription) init(client *nats.Conn) error {
 	return nil
 }
 
-func (s *subscription) deinit() error {
+func (s *subscription) deinit() {
 	s.sub = nil
-	return nil
 }
 
 func (s *subscription) ok() bool {
@@ -577,6 +563,8 @@ func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWo
 		"channel": channel,
 		"group":   group,
 	})
+	done := make(chan struct{})
+	close(done)
 	sub := &streamSubscription{
 		s:       s,
 		stream:  stream,
@@ -585,6 +573,7 @@ func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWo
 		opts:    opts,
 		worker:  worker,
 		logger:  l,
+		done:    done,
 	}
 	s.addSub(nil, sub)
 	return sub, nil
@@ -592,54 +581,81 @@ func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWo
 
 func (s *streamSubscription) init(client nats.JetStream) error {
 	args := make([]nats.SubOpt, 0, 8)
-	args = append(args, nats.BindStream(s.stream), nats.Durable(s.group), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
+	args = append(args, nats.BindStream(s.stream), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
 	if s.opts.AckWait > 0 {
 		args = append(args, nats.AckWait(s.opts.AckWait))
-	}
-	if s.opts.MaxInFlight > 0 {
-		args = append(args, nats.MaxAckPending(s.opts.MaxInFlight))
 	}
 	if s.opts.MaxDeliver > 0 {
 		args = append(args, nats.MaxDeliver(s.opts.MaxDeliver))
 	}
-	sub, err := client.QueueSubscribe(
+	if s.opts.MaxPending > 0 {
+		args = append(args, nats.MaxAckPending(s.opts.MaxPending))
+	}
+	if s.opts.MaxRequests > 0 {
+		args = append(args, nats.PullMaxWaiting(s.opts.MaxRequests))
+	}
+	sub, err := client.PullSubscribe(
 		s.channel,
 		s.group,
-		s.subscriber,
 		args...,
 	)
 	if err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
 	}
 	s.sub = sub
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go s.subscriber(ctx, done)
+	s.cancel = cancel
+	s.done = done
 	return nil
 }
 
-func (s *streamSubscription) deinit() error {
+func (s *streamSubscription) deinit() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	<-s.done
 	s.sub = nil
-	return nil
 }
 
 func (s *streamSubscription) ok() bool {
-	return s.sub != nil
+	select {
+	case <-s.done:
+		return false
+	default:
+		return true
+	}
 }
 
-func (s *streamSubscription) subscriber(msg *nats.Msg) {
-	if err := s.worker(&pinger{msg: msg}, msg.Data); err != nil {
-		s.logger.Error("Failed executing worker", map[string]string{
-			"error": err.Error(),
-		})
-		if err := msg.Nak(); err != nil {
-			s.logger.Error("Failed to nack message", map[string]string{
+func (s *streamSubscription) subscriber(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		msgs, err := s.sub.Fetch(1, nats.Context(ctx))
+		if err != nil {
+			s.logger.Error("Failed obtaining messages", map[string]string{
 				"error": err.Error(),
 			})
+			return
 		}
-		return
-	}
-	if err := msg.Ack(); err != nil {
-		s.logger.Error("Failed to ack message", map[string]string{
-			"error": err.Error(),
-		})
+		for _, msg := range msgs {
+			if err := s.worker(&pinger{msg: msg}, msg.Data); err != nil {
+				s.logger.Error("Failed executing worker", map[string]string{
+					"error": err.Error(),
+				})
+			} else {
+				if err := msg.Ack(); err != nil {
+					s.logger.Error("Failed to ack message", map[string]string{
+						"error": err.Error(),
+					})
+				}
+			}
+		}
 	}
 }
 
@@ -652,9 +668,10 @@ func (s *streamSubscription) Close() error {
 	if !s.sub.IsValid() {
 		return nil
 	}
-	if err := s.sub.Drain(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to close subscription to stream")
+	if s.cancel != nil {
+		s.cancel()
 	}
+	<-s.done
 	return nil
 }
 
