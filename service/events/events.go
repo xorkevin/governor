@@ -112,7 +112,6 @@ type (
 		opts    StreamConsumerOpts
 		worker  StreamWorkerFunc
 		logger  governor.Logger
-		sub     *nats.Subscription
 		cancel  context.CancelFunc
 		done    <-chan struct{}
 	}
@@ -602,10 +601,9 @@ func (s *streamSubscription) init(client nats.JetStream) error {
 	if err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
 	}
-	s.sub = sub
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go s.subscriber(ctx, done)
+	go s.subscriber(ctx, sub, done)
 	s.cancel = cancel
 	s.done = done
 	return nil
@@ -616,7 +614,6 @@ func (s *streamSubscription) deinit() {
 		s.cancel()
 	}
 	<-s.done
-	s.sub = nil
 }
 
 func (s *streamSubscription) ok() bool {
@@ -628,7 +625,7 @@ func (s *streamSubscription) ok() bool {
 	}
 }
 
-func (s *streamSubscription) subscriber(ctx context.Context, done chan<- struct{}) {
+func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscription, done chan<- struct{}) {
 	defer close(done)
 	for {
 		select {
@@ -636,7 +633,7 @@ func (s *streamSubscription) subscriber(ctx context.Context, done chan<- struct{
 			return
 		default:
 		}
-		msgs, err := s.sub.Fetch(1, nats.Context(ctx))
+		msgs, err := sub.Fetch(1, nats.Context(ctx))
 		if err != nil {
 			s.logger.Error("Failed obtaining messages", map[string]string{
 				"error": err.Error(),
@@ -662,12 +659,6 @@ func (s *streamSubscription) subscriber(ctx context.Context, done chan<- struct{
 // Close closes the subscription
 func (s *streamSubscription) Close() error {
 	s.s.rmSub(nil, s)
-	if s.sub == nil {
-		return nil
-	}
-	if !s.sub.IsValid() {
-		return nil
-	}
 	if s.cancel != nil {
 		s.cancel()
 	}
