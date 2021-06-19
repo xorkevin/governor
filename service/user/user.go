@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
-	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/user/apikey"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
@@ -20,6 +20,7 @@ import (
 	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -28,10 +29,13 @@ const (
 )
 
 const (
-	// NewUserQueueID is emitted when a new user is created
-	NewUserQueueID = "gov.user.new"
-	// DeleteUserQueueID is emitted when a user is deleted
-	DeleteUserQueueID = "gov.user.delete"
+	// EventStream is the backing stream for user events
+	EventStream         = "DEV_XORKEVIN_GOV_USER"
+	eventStreamChannels = EventStream + ".*"
+	// CreateChannel is emitted when a new user is created
+	CreateChannel = EventStream + ".create"
+	// DeleteChannel is emitted when a user is deleted
+	DeleteChannel = EventStream + ".delete"
 )
 
 const (
@@ -63,11 +67,13 @@ type (
 		apikeys           apikey.Apikeys
 		kvusers           kvstore.KVStore
 		kvsessions        kvstore.KVStore
-		queue             msgqueue.Msgqueue
+		events            events.Events
 		mailer            mail.Mailer
 		gate              gate.Gate
 		tokenizer         token.Tokenizer
 		logger            governor.Logger
+		streamsize        int64
+		msgsize           int32
 		baseURL           string
 		authURL           string
 		accessTime        int64
@@ -133,7 +139,7 @@ func NewCtx(inj governor.Injector) Service {
 	roles := role.GetCtxRoles(inj)
 	apikeys := apikey.GetCtxApikeys(inj)
 	kv := kvstore.GetCtxKVStore(inj)
-	queue := msgqueue.GetCtxMsgqueue(inj)
+	ev := events.GetCtxEvents(inj)
 	mailer := mail.GetCtxMailer(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	g := gate.GetCtxGate(inj)
@@ -147,7 +153,7 @@ func NewCtx(inj governor.Injector) Service {
 		roles,
 		apikeys,
 		kv,
-		queue,
+		ev,
 		mailer,
 		tokenizer,
 		g,
@@ -164,7 +170,7 @@ func New(
 	roles role.Roles,
 	apikeys apikey.Apikeys,
 	kv kvstore.KVStore,
-	queue msgqueue.Msgqueue,
+	ev events.Events,
 	mailer mail.Mailer,
 	tokenizer token.Tokenizer,
 	g gate.Gate,
@@ -179,7 +185,7 @@ func New(
 		apikeys:           apikeys,
 		kvusers:           kv.Subtree("users"),
 		kvsessions:        kv.Subtree("sessions"),
-		queue:             queue,
+		events:            ev,
 		mailer:            mailer,
 		gate:              g,
 		tokenizer:         tokenizer,
@@ -196,6 +202,8 @@ func New(
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxUser(inj, s)
 
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("msgsize", "2K")
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")
@@ -225,6 +233,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	var err error
+	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid stream size")
+	}
+	msgsize, err := bytefmt.ToBytes(r.GetStr("msgsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid msg size")
+	}
+	s.msgsize = int32(msgsize)
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
@@ -285,6 +303,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 
 	l.Info("loaded config", map[string]string{
+		"stream size (bytes)":   r.GetStr("streamsize"),
+		"msg size (bytes)":      r.GetStr("msgsize"),
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
 		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
@@ -314,6 +334,16 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
+
+	if err := s.events.InitStream(EventStream, []string{eventStreamChannels}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.msgsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init user stream")
+	}
+	l.Info("Created user stream", nil)
 
 	if err := s.users.Setup(); err != nil {
 		return err
@@ -373,7 +403,7 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 			return err
 		}
 
-		if err := s.queue.Publish(NewUserQueueID, b); err != nil {
+		if err := s.events.StreamPublish(CreateChannel, b); err != nil {
 			s.logger.Error("Failed to publish new user", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "publishadminuser",

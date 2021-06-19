@@ -82,7 +82,7 @@ mail:
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   insecure: true
-  streamsize: 1G
+  streamsize: 200M
   msgsize: 2K
 role:
   rolecache: 24h
@@ -96,6 +96,8 @@ token:
 gate:
   realm: governor
 user:
+  streamsize: 200M
+  msgsize: 2K
   accesstime: 5m
   refreshtime: 4380h
   refreshcache: 24h

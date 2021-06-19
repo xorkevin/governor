@@ -16,13 +16,16 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/msgqueue"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/template"
+	"xorkevin.dev/governor/util/bytefmt"
 )
 
 const (
-	govmailchannelid = "gov.mail"
-	govmailworker    = "gov.mail.worker"
+	eventStream         = "DEV_XORKEVIN_GOV_MAIL"
+	eventStreamChannels = eventStream + ".*"
+	mailChannel         = eventStream + ".mail"
+	mailWorker          = eventStream + "_WORKER"
 )
 
 type (
@@ -35,13 +38,6 @@ type (
 	Service interface {
 		governor.Service
 		Mailer
-	}
-
-	mailOp struct {
-		from string
-		to   []string
-		msg  []byte
-		res  chan<- error
 	}
 
 	mailmsg struct {
@@ -62,7 +58,7 @@ type (
 
 	service struct {
 		tpl         template.Template
-		queue       msgqueue.Msgqueue
+		events      events.Events
 		config      governor.SecretReader
 		logger      governor.Logger
 		host        string
@@ -70,8 +66,8 @@ type (
 		fromAddress string
 		fromName    string
 		insecure    bool
-		outbox      chan mailOp
-		done        <-chan struct{}
+		streamsize  int64
+		msgsize     int32
 	}
 
 	ctxKeyMailer struct{}
@@ -94,16 +90,15 @@ func setCtxMailer(inj governor.Injector, m Mailer) {
 // NewCtx creates a new Mailer service from a context
 func NewCtx(inj governor.Injector) Service {
 	tpl := template.GetCtxTemplate(inj)
-	queue := msgqueue.GetCtxMsgqueue(inj)
-	return New(tpl, queue)
+	ev := events.GetCtxEvents(inj)
+	return New(tpl, ev)
 }
 
 // New creates a new Mailer
-func New(tpl template.Template, queue msgqueue.Msgqueue) Service {
+func New(tpl template.Template, ev events.Events) Service {
 	return &service{
 		tpl:    tpl,
-		queue:  queue,
-		outbox: make(chan mailOp),
+		events: ev,
 	}
 }
 
@@ -116,6 +111,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
 	r.SetDefault("insecure", false)
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("msgsize", "2K")
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -131,20 +128,40 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.fromAddress = r.GetStr("fromaddress")
 	s.fromName = r.GetStr("fromname")
 	s.insecure = r.GetBool("insecure")
-
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	var err error
+	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid stream size")
+	}
+	msgsize, err := bytefmt.ToBytes(r.GetStr("msgsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid msg size")
+	}
+	s.msgsize = int32(msgsize)
 
 	l.Info("initialize mail options", map[string]string{
-		"smtp server addr": s.addr,
-		"sender address":   s.fromAddress,
-		"sender name":      s.fromName,
+		"smtp server addr":    s.addr,
+		"sender address":      s.fromAddress,
+		"sender name":         s.fromName,
+		"stream size (bytes)": r.GetStr("streamsize"),
+		"msg size (bytes)":    r.GetStr("msgsize"),
 	})
 	return nil
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "setup",
+	})
+	if err := s.events.InitStream(eventStream, []string{eventStreamChannels}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.msgsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init mail stream")
+	}
+	l.Info("Created mail stream", nil)
 	return nil
 }
 
@@ -157,40 +174,23 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.queue.Subscribe(govmailchannelid, govmailworker, 15*time.Second, 2, s.mailSubscriber); err != nil {
+	if _, err := s.events.StreamSubscribe(eventStream, mailChannel, mailWorker, s.mailSubscriber, events.StreamConsumerOpts{
+		AckWait:     30 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to mail queue")
 	}
-	l.Info("subscribed to mail queue", nil)
+	l.Info("Subscribed to mail queue", nil)
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		l.Warn("failed to stop", nil)
-	}
 }
 
 func (s *service) Health() error {
 	return nil
-}
-
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case op := <-s.outbox:
-			op.res <- s.handleSendMail(op.from, op.to, op.msg)
-			close(op.res)
-		}
-	}
 }
 
 type plainAuth struct {
@@ -252,8 +252,6 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 }
 
 type (
-	// ErrWorker is returned for mail worker errors
-	ErrWorker struct{}
 	// ErrMailMsg is returned when the msgqueue mail message is malformed
 	ErrMailMsg struct{}
 	// ErrInvalidMail is returned when the mail message is invalid
@@ -261,10 +259,6 @@ type (
 	// ErrBuildMail is returned when failing to build an email message
 	ErrBuildMail struct{}
 )
-
-func (e ErrWorker) Error() string {
-	return "Mail worker error"
-}
 
 func (e ErrMailMsg) Error() string {
 	return "Malformed mail message"
@@ -278,7 +272,7 @@ func (e ErrBuildMail) Error() string {
 	return "Error building email"
 }
 
-func (s *service) mailSubscriber(msgdata []byte) error {
+func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail message")
@@ -311,19 +305,7 @@ func (s *service) mailSubscriber(msgdata []byte) error {
 		return err
 	}
 
-	res := make(chan error)
-	op := mailOp{
-		from: emmsg.From,
-		to:   emmsg.To,
-		msg:  msg,
-		res:  res,
-	}
-	select {
-	case <-s.done:
-		return governor.ErrWithKind(nil, ErrWorker{}, "Mail service shutdown")
-	case s.outbox <- op:
-		return <-res
-	}
+	return s.handleSendMail(emmsg.From, emmsg.To, msg)
 }
 
 func msgToBytes(subject string, from, fromname string, to []string, body []byte, htmlbody []byte) ([]byte, error) {
@@ -490,7 +472,7 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 	if err != nil {
 		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email to json")
 	}
-	if err := s.queue.Publish(govmailchannelid, b); err != nil {
+	if err := s.events.StreamPublish(mailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish new email to message queue")
 	}
 	return nil

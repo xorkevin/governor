@@ -5,13 +5,12 @@ import (
 	"xorkevin.dev/governor/service/courier"
 	couriermodel "xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
-	"xorkevin.dev/governor/service/msgqueue"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
 	profilemodel "xorkevin.dev/governor/service/profile/model"
-	"xorkevin.dev/governor/service/pubsub"
 	statemodel "xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
@@ -60,8 +59,7 @@ func main() {
 	gov.Register("database", "/null/db", dbService)
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
-	gov.Register("msgqueue", "/null/msg", msgqueue.New())
-	gov.Register("pubsub", "/null/pubsub", pubsub.New())
+	gov.Register("events", "/null/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	gov.Register("mail", "/null/mail", mail.NewCtx(gov.Injector()))
 	{

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/msgqueue"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/user"
@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	profilequeueworkercreate = "gov.profile.worker.create"
-	profilequeueworkerdelete = "gov.profile.worker.delete"
+	govworkercreate = "DEV_XORKEVIN_GOV_PROFILE_WORKER_CREATE"
+	govworkerdelete = "DEV_XORKEVIN_GOV_PROFILE_WORKER_DELETE"
 )
 
 type (
@@ -32,7 +32,7 @@ type (
 		profiles      model.Repo
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
-		queue         msgqueue.Msgqueue
+		events        events.Events
 		gate          gate.Gate
 		logger        governor.Logger
 	}
@@ -62,18 +62,18 @@ func setCtxProfiles(inj governor.Injector, p Profiles) {
 func NewCtx(inj governor.Injector) Service {
 	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
-	queue := msgqueue.GetCtxMsgqueue(inj)
+	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(profiles, obj, queue, g)
+	return New(profiles, obj, ev, g)
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, queue msgqueue.Msgqueue, g gate.Gate) Service {
+func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, g gate.Gate) Service {
 	return &service{
 		profiles:      profiles,
 		profileBucket: obj,
 		profileDir:    obj.Subdir("profileimage"),
-		queue:         queue,
+		events:        ev,
 		gate:          g,
 	}
 }
@@ -125,10 +125,20 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.queue.Subscribe(user.NewUserQueueID, profilequeueworkercreate, 15*time.Second, 2, s.UserCreateHook); err != nil {
+	if _, err := s.events.StreamSubscribe(user.EventStream, user.CreateChannel, govworkercreate, s.UserCreateHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
 	}
-	if _, err := s.queue.Subscribe(user.DeleteUserQueueID, profilequeueworkerdelete, 15*time.Second, 2, s.UserDeleteHook); err != nil {
+	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user create/delete queue", nil)
@@ -143,7 +153,7 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(msgdata []byte) error {
+func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
 	props, err := user.DecodeNewUserProps(msgdata)
 	if err != nil {
 		return err
@@ -155,7 +165,7 @@ func (s *service) UserCreateHook(msgdata []byte) error {
 }
 
 // UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(msgdata []byte) error {
+func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
