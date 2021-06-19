@@ -25,8 +25,8 @@ type (
 		Replicas   int
 		MaxAge     time.Duration
 		MaxBytes   int64
-		MaxMsgs    int64
 		MaxMsgSize int32
+		MaxMsgs    int64
 	}
 
 	// StreamConsumerOpts are opts for stream consumers
@@ -72,22 +72,23 @@ type (
 	}
 
 	service struct {
-		client     *nats.Conn
-		stream     nats.JetStreamContext
-		clientname string
-		auth       string
-		addr       string
-		config     governor.SecretReader
-		logger     governor.Logger
-		ops        chan getOp
-		subops     chan subOp
-		subs       map[*subscription]struct{}
-		streamSubs map[*streamSubscription]struct{}
-		ready      bool
-		canary     <-chan struct{}
-		hbinterval int
-		hbmaxfail  int
-		done       <-chan struct{}
+		client          *nats.Conn
+		stream          nats.JetStreamContext
+		clientname      string
+		auth            string
+		addr            string
+		config          governor.SecretReader
+		logger          governor.Logger
+		ops             chan getOp
+		subops          chan subOp
+		subs            map[*subscription]struct{}
+		streamSubs      map[*streamSubscription]struct{}
+		ready           bool
+		canary          <-chan struct{}
+		hbinterval      int
+		hbmaxfail       int
+		minpullduration time.Duration
+		done            <-chan struct{}
 	}
 
 	// Subscription manages an active subscription
@@ -164,6 +165,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("port", "4222")
 	r.SetDefault("hbinterval", 5)
 	r.SetDefault("hbmaxfail", 3)
+	r.SetDefault("minpullduration", "100ms")
 }
 
 type (
@@ -199,11 +201,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
+	var err error
+	s.minpullduration, err = time.ParseDuration(r.GetStr("minpullduration"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse min pull duration")
+	}
 
 	l.Info("loaded config", map[string]string{
-		"addr":       s.addr,
-		"hbinterval": strconv.Itoa(s.hbinterval),
-		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+		"addr":            s.addr,
+		"hbinterval":      strconv.Itoa(s.hbinterval),
+		"hbmaxfail":       strconv.Itoa(s.hbmaxfail),
+		"minpullduration": r.GetStr("minpullduration"),
 	})
 
 	done := make(chan struct{})
@@ -627,6 +635,7 @@ func (s *streamSubscription) ok() bool {
 
 func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscription, done chan<- struct{}) {
 	defer close(done)
+	start := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -652,6 +661,12 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 					})
 				}
 			}
+		}
+		now := time.Now()
+		delta := s.s.minpullduration - now.Sub(start)
+		start = now
+		if delta > 0 {
+			time.Sleep(delta)
 		}
 	}
 }
@@ -688,8 +703,8 @@ func (s *service) InitStream(name string, subjects []string, opts StreamOpts) er
 		Replicas:   opts.Replicas,
 		MaxAge:     opts.MaxAge,
 		MaxBytes:   opts.MaxBytes,
-		MaxMsgs:    opts.MaxMsgs,
 		MaxMsgSize: opts.MaxMsgSize,
+		MaxMsgs:    opts.MaxMsgs,
 	}
 	if _, err := client.StreamInfo(name); err != nil {
 		if !strings.Contains(err.Error(), "not found") {

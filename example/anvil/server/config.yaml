@@ -72,6 +72,7 @@ events:
   port: 4222
   hbinterval: 5
   hbmaxfail: 3
+  minpullduration: 100ms
 template:
   dir: templates
 mail:
@@ -81,6 +82,8 @@ mail:
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   insecure: true
+  streamsize: 1G
+  msgsize: 2K
 role:
   rolecache: 24h
 apikey:
