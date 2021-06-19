@@ -53,19 +53,6 @@ objstore:
   location: us-east-1
   hbinterval: 5
   hbmaxfail: 5
-msgqueue:
-  auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/natsstream
-  host: natsstream.{{ $svc }}.svc.cluster.local
-  port: 4222
-  cluster: nats-streaming
-  hbinterval: 5
-  hbmaxfail: 5
-pubsub:
-  auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/nats
-  host: nats.{{ $ns }}.svc.cluster.local
-  port: 4222
-  hbinterval: 5
-  hbmaxfail: 5
 events:
   auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/nats
   host: nats.{{ $ns }}.svc.cluster.local

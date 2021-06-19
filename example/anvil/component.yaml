@@ -26,9 +26,6 @@ vars:
     minio:
       name: minio/minio
       version: latest
-    natsstream:
-      name: nats-streaming
-      version: 0.21-alpine
     nats:
       name: nats
       version: 2-alpine
@@ -40,7 +37,6 @@ vars:
     minio: 8Gi
     nats: 1Gi
     natsconf: 1G
-    natsstream: 1Gi
   vault:
     addr: http://vault.vault.svc.cluster.local:8200
     kubemount: kubernetes

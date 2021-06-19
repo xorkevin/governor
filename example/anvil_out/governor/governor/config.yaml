@@ -50,25 +50,13 @@ objstore:
   location: us-east-1
   hbinterval: 5
   hbmaxfail: 5
-msgqueue:
-  auth: kv/data/infra/governor/natsstream
-  host: natsstream.governor.svc.cluster.local
-  port: 4222
-  cluster: nats-streaming
-  hbinterval: 5
-  hbmaxfail: 5
-pubsub:
-  auth: kv/data/infra/governor/nats
-  host: nats.governor.svc.cluster.local
-  port: 4222
-  hbinterval: 5
-  hbmaxfail: 5
 events:
   auth: kv/data/infra/governor/nats
   host: nats.governor.svc.cluster.local
   port: 4222
   hbinterval: 5
   hbmaxfail: 3
+  minpullduration: 100ms
 template:
   dir: templates
 mail:
@@ -78,6 +66,8 @@ mail:
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   insecure: true
+  streamsize: 200M
+  msgsize: 2K
 role:
   rolecache: 24h
 apikey:
@@ -90,6 +80,8 @@ token:
 gate:
   realm: governor
 user:
+  streamsize: 200M
+  msgsize: 2K
   accesstime: 5m
   refreshtime: 4380h
   refreshcache: 24h

@@ -28,7 +28,6 @@ roles:
       - {{ $ns }}-postgres-ro-consumer
       - {{ $ns }}-redis-consumer
       - {{ $ns }}-minio-consumer
-      - {{ $ns }}-natsstream-consumer
       - {{ $ns }}-nats-consumer
     ttl: {{ $ttl }}
     maxttl: {{ $maxttl }}

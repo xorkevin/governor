@@ -6,5 +6,4 @@ resources:
   - postgres
   - redis
   - minio
-  - natsstream
   - nats

@@ -161,41 +161,6 @@ components:
       policydir: {{ .Vars.policydir }}
       rolesdir: {{ .Vars.rolesdir }}
 
-  natsstream:
-    kind: local
-    path: natsstream/component.yaml
-    vars:
-      kube:
-        outputdir: {{ .Vars.outputdir }}/natsstream
-        namespace: {{ .Vars.namespace }}
-        label:
-          partof: {{ .Vars.service.name }}
-        service:
-          image:
-            name: {{ .Vars.images.natsstream.name }}
-            version: {{ .Vars.images.natsstream.version }}
-          storage:
-            amount: {{ .Vars.storage.natsstream }}
-          init:
-            image:
-              name: {{ .Vars.images.xorkevinalpine.name }}
-              version: {{ .Vars.images.xorkevinalpine.version }}
-
-        register:
-          image:
-            name: {{ .Vars.images.xorkevinalpine.name }}
-            version: {{ .Vars.images.xorkevinalpine.version }}
-
-      vault:
-        addr: {{ .Vars.vault.addr }}
-        kubemount: {{ .Vars.vault.kubemount }}
-        kvmount: {{ .Vars.vault.kvmount }}
-        kvprefix: {{ .Vars.vault.kvprefix }}
-
-      registerdir: {{ .Vars.registerdir }}
-      policydir: {{ .Vars.policydir }}
-      rolesdir: {{ .Vars.rolesdir }}
-
   nats:
     kind: local
     path: nats/component.yaml
