@@ -50,8 +50,8 @@ func TestEnvToLevel(t *testing.T) {
 			Level: levelInfo,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Env, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)
@@ -76,8 +76,8 @@ func TestEnvToLogOutput(t *testing.T) {
 			Writer: os.Stdout,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Env, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)
@@ -130,8 +130,8 @@ func TestLevelToZerologLevel(t *testing.T) {
 			Zero:  zerolog.InfoLevel,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Test, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)
@@ -181,8 +181,8 @@ func TestLogger(t *testing.T) {
 			Count: 3,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Test, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)

@@ -88,8 +88,8 @@ func TestError(t *testing.T) {
 				ErrMsg: "[test struct err] test_err_code test message 654: test_gov_err_code test gov error: test errors err",
 			},
 		} {
+			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
-				tc := tc
 				t.Parallel()
 
 				assert := require.New(t)
@@ -176,8 +176,8 @@ func TestError(t *testing.T) {
 				NoLog:  true,
 			},
 		} {
+			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
-				tc := tc
 				t.Parallel()
 
 				assert := require.New(t)

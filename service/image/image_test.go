@@ -55,8 +55,8 @@ func TestDimensionsFit(t *testing.T) {
 			ExpH:  9,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Test, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)
@@ -136,8 +136,8 @@ func TestDimensionsFill(t *testing.T) {
 			ExpY:  0,
 		},
 	} {
+		tc := tc
 		t.Run(tc.Test, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)

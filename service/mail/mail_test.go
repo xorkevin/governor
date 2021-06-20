@@ -34,8 +34,8 @@ func TestBuildMail(t *testing.T) {
 			HtmlBody: "<html><body>This is some test html that goes over the line limit of 78 characters.</body></html>",
 		},
 	} {
+		tc := tc
 		t.Run(tc.Test, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 			assert := require.New(t)
 
