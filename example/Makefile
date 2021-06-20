@@ -44,13 +44,16 @@ devinit: devgen devsecrets devregister ## Init resources
 devconfig: ## Set app config
 	./setsmtpauth.sh
 
-.PHONY: devup devdown
+.PHONY: devup devdown devnsdown
 
 devup: ## Deploy k8s resources to cluster
 	kubectl apply -k $(ANVIL_OUT)/governor
 
 devdown: ## Destroy k8s resources
 	kubectl delete -k $(ANVIL_OUT)/governor
+
+devnsdown: ## Destroy k8s namespace
+	kubectl delete -f $(ANVIL_NS)
 
 ## APP BUILD
 
