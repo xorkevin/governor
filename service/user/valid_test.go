@@ -63,6 +63,7 @@ func TestValidEmail(t *testing.T) {
 		},
 	} {
 		t.Run(tc.Inp, func(t *testing.T) {
+			tc := tc
 			t.Parallel()
 
 			assert := require.New(t)

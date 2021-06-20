@@ -35,6 +35,7 @@ func TestBuildMail(t *testing.T) {
 		},
 	} {
 		t.Run(tc.Test, func(t *testing.T) {
+			tc := tc
 			t.Parallel()
 			assert := require.New(t)
 
