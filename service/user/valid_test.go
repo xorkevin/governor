@@ -69,9 +69,9 @@ func TestValidEmail(t *testing.T) {
 			assert := require.New(t)
 			err := validEmail(tc.Inp)
 			if tc.Valid {
-				assert.Nil(err)
+				assert.NoError(err)
 			} else {
-				assert.NotNil(err)
+				assert.Error(err)
 			}
 		})
 	}
