@@ -36,7 +36,7 @@ type (
 
 	repo struct {
 		db       db.Database
-		hasher   *hunter2.ScryptHasher
+		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
 	}
 
@@ -90,7 +90,7 @@ func NewCtx(inj governor.Injector) Repo {
 
 // New creates a new user repository
 func New(database db.Database) Repo {
-	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.NewScryptDefaultConfig())
+	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.DefaultScryptConfig)
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 

@@ -11,16 +11,14 @@ require (
 	github.com/lib/pq v1.7.0
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/nats-io/jsm.go v0.0.23
-	github.com/nats-io/nats-streaming-server v0.17.0 // indirect
 	github.com/nats-io/nats.go v1.11.0
-	github.com/nats-io/stan.go v0.6.0
 	github.com/rs/zerolog v1.19.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/crypto v0.0.0-20210314154223-e6e6c4f2bb5b
+	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
 	golang.org/x/image v0.0.0-20200609002522-3f4726a040e8
 	google.golang.org/protobuf v1.24.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
-	xorkevin.dev/hunter2 v0.1.1
+	xorkevin.dev/hunter2 v0.1.2
 )

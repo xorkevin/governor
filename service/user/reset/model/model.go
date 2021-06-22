@@ -31,7 +31,7 @@ type (
 
 	repo struct {
 		db       db.Database
-		hasher   *hunter2.Blake2bHasher
+		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
 	}
 
