@@ -91,6 +91,11 @@ spec:
                 configMapKeyRef:
                   name: {{ $rgsvcopts }}
                   key: kvpathrsa
+            - name: KV_PATH_OTP
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvpathotp
           volumeMounts:
             - name: register-scripts
               mountPath: /home/governor
