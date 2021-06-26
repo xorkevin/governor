@@ -142,3 +142,5 @@ while true; do
   done
   export VAULT_TOKEN=
 done
+
+log2 'done registering'
