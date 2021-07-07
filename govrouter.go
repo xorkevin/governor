@@ -164,11 +164,7 @@ func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 }
 
 func (c *govcontext) RealIP() net.IP {
-	k := c.r.Context().Value(ctxKeyMiddlewareRealIP{})
-	if k == nil {
-		return nil
-	}
-	return k.(net.IP)
+	return getCtxKeyMiddlewareRealIP(c.r.Context())
 }
 
 func (c *govcontext) Param(key string) string {
@@ -450,6 +446,14 @@ func realIPMiddleware(proxies []net.IPNet) Middleware {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func getCtxKeyMiddlewareRealIP(ctx context.Context) net.IP {
+	k := ctx.Value(ctxKeyMiddlewareRealIP{})
+	if k == nil {
+		return nil
+	}
+	return k.(net.IP)
 }
 
 func getForwardedForIP(r *http.Request, proxies []net.IPNet) net.IP {

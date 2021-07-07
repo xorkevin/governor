@@ -205,6 +205,10 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		method := r.Method
 		path := r.URL.EscapedPath()
 		remote := r.RemoteAddr
+		var forwarded string
+		if ip := getCtxKeyMiddlewareRealIP(r.Context()); ip != nil {
+			forwarded = ip.String()
+		}
 		start := time.Now()
 		w2 := &govResponseWriter{
 			ResponseWriter: w,
@@ -213,12 +217,13 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w2, r)
 		duration := time.Since(start)
 		s.logger.Debug("", map[string]string{
-			"host":    host,
-			"method":  method,
-			"path":    path,
-			"remote":  remote,
-			"status":  strconv.Itoa(w2.status),
-			"latency": duration.String(),
+			"host":      host,
+			"method":    method,
+			"path":      path,
+			"remote":    remote,
+			"forwarded": forwarded,
+			"status":    strconv.Itoa(w2.status),
+			"latency":   duration.String(),
 		})
 	})
 }

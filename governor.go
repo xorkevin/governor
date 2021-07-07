@@ -89,6 +89,13 @@ func (s *Server) init(ctx context.Context) error {
 
 	i.Use(stripSlashesMiddleware)
 	l.Info("init strip slashes middleware", nil)
+
+	i.Use(realIPMiddleware(nil))
+	l.Info("init real ip middleware", nil)
+
+	i.Use(s.reqLoggerMiddleware)
+	l.Info("init request logger", nil)
+
 	if len(s.config.rewrite) > 0 {
 		k := make([]string, 0, len(s.config.rewrite))
 		for _, i := range s.config.rewrite {
@@ -101,13 +108,6 @@ func (s *Server) init(ctx context.Context) error {
 		l.Info("init route rewriter middleware", map[string]string{
 			"rules": strings.Join(k, "; "),
 		})
-	}
-	i.Use(realIPMiddleware(nil))
-	l.Info("init real ip middleware", nil)
-
-	if s.config.IsDebug() {
-		i.Use(s.reqLoggerMiddleware)
-		l.Info("init request logger", nil)
 	}
 
 	if len(s.config.allowpaths) > 0 {
