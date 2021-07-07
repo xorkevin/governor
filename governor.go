@@ -102,8 +102,8 @@ func (s *Server) init(ctx context.Context) error {
 			"rules": strings.Join(k, "; "),
 		})
 	}
-	i.Use(middleware.RealIP)
-	l.Info("init middleware RealIP", nil)
+	i.Use(realIPMiddleware(nil))
+	l.Info("init real ip middleware", nil)
 
 	if s.config.IsDebug() {
 		i.Use(s.reqLoggerMiddleware)

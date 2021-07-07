@@ -7,9 +7,11 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
@@ -116,6 +118,7 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 type (
 	// Context is an http request and writer wrapper
 	Context interface {
+		RealIP() net.IP
 		Param(key string) string
 		Query(key string) string
 		QueryDef(key string, def string) string
@@ -158,6 +161,14 @@ func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 		query: r.URL.Query(),
 		l:     l,
 	}
+}
+
+func (c *govcontext) RealIP() net.IP {
+	k := c.r.Context().Value(ctxKeyMiddlewareRealIP{})
+	if k == nil {
+		return nil
+	}
+	return k.(net.IP)
 }
 
 func (c *govcontext) Param(key string) string {
@@ -418,4 +429,54 @@ func routeRewriteMiddleware(rules []*rewriteRule) Middleware {
 			next.ServeHTTP(w, r2)
 		})
 	}
+}
+
+const (
+	headerXForwardedFor = "X-Forwarded-For"
+)
+
+type (
+	ctxKeyMiddlewareRealIP struct{}
+)
+
+func realIPMiddleware(proxies []net.IPNet) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			ip := getForwardedForIP(r, proxies)
+			if ip != nil {
+				ctx = context.WithValue(ctx, ctxKeyMiddlewareRealIP{}, ip)
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func getForwardedForIP(r *http.Request, proxies []net.IPNet) net.IP {
+	xff := r.Header.Get(headerXForwardedFor)
+	if xff == "" {
+		return nil
+	}
+
+	ipstrs := strings.Split(xff, ",")
+	for i := len(ipstrs) - 1; i >= 0; i-- {
+		ip := net.ParseIP(strings.TrimSpace(ipstrs[i]))
+		if ip == nil {
+			break
+		}
+		if !ipnetsContain(ip, proxies) {
+			return ip
+		}
+	}
+
+	return nil
+}
+
+func ipnetsContain(ip net.IP, ipnet []net.IPNet) bool {
+	for _, i := range ipnet {
+		if i.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
