@@ -164,7 +164,14 @@ func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
 }
 
 func (c *govcontext) RealIP() net.IP {
-	return getCtxKeyMiddlewareRealIP(c.r.Context())
+	if ip := getCtxKeyMiddlewareRealIP(c.r.Context()); ip != nil {
+		return ip
+	}
+	host, _, err := net.SplitHostPort(c.r.RemoteAddr)
+	if err != nil {
+		return nil
+	}
+	return net.ParseIP(host)
 }
 
 func (c *govcontext) Param(key string) string {
