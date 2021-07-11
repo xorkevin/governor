@@ -17,9 +17,14 @@ const (
 )
 
 type (
-	// Resulter returns the result of a command in a multi after it has executed
+	// Resulter returns the result of a string command in a multi after it has executed
 	Resulter interface {
 		Result() (string, error)
+	}
+
+	// IntResulter returns the result of an int command in a multi after it has executed
+	IntResulter interface {
+		Result() (int64, error)
 	}
 
 	// Multi is a kvstore multi
@@ -27,6 +32,8 @@ type (
 		Get(key string) Resulter
 		Set(key, val string, seconds int64)
 		Del(key ...string)
+		Incr(key string, delta int64) IntResulter
+		Expire(key string, seconds int64)
 		Subkey(keypath ...string) string
 		Subtree(prefix string) Multi
 		Exec() error
@@ -37,6 +44,8 @@ type (
 		Get(key string) (string, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
+		Incr(key string, delta int64) (int64, error)
+		Expire(key string, seconds int64) error
 		Subkey(keypath ...string) string
 		Multi() (Multi, error)
 		Tx() (Multi, error)
@@ -384,6 +393,29 @@ func (s *service) Del(key ...string) error {
 	return nil
 }
 
+func (s *service) Incr(key string, delta int64) (int64, error) {
+	client, err := s.getClient()
+	if err != nil {
+		return 0, err
+	}
+	val, err := client.IncrBy(key, delta).Result()
+	if err != nil {
+		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to incr key")
+	}
+	return val, nil
+}
+
+func (s *service) Expire(key string, seconds int64) error {
+	client, err := s.getClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Expire(key, time.Duration(seconds)*time.Second).Err(); err != nil {
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to set expire key")
+	}
+	return nil
+}
+
 func (s *service) Subkey(keypath ...string) string {
 	if len(keypath) == 0 {
 		return ""
@@ -443,6 +475,16 @@ func (t *baseMulti) Del(key ...string) {
 	t.base.Del(key...)
 }
 
+func (t *baseMulti) Incr(key string, delta int64) IntResulter {
+	return &intResulter{
+		res: t.base.IncrBy(key, delta),
+	}
+}
+
+func (t *baseMulti) Expire(key string, seconds int64) {
+	t.base.Expire(key, time.Duration(seconds)*time.Second)
+}
+
 func (t *baseMulti) Subkey(keypath ...string) string {
 	if len(keypath) == 0 {
 		return ""
@@ -480,6 +522,14 @@ func (t *multi) Del(key ...string) {
 		args = append(args, t.prefix+kvpathSeparator+i)
 	}
 	t.base.Del(args...)
+}
+
+func (t *multi) Incr(key string, delta int64) IntResulter {
+	return t.base.Incr(t.prefix+kvpathSeparator+key, delta)
+}
+
+func (t *multi) Expire(key string, seconds int64) {
+	t.base.Expire(key, seconds)
 }
 
 func (t *multi) Exec() error {
@@ -521,6 +571,14 @@ func (t *tree) Del(key ...string) error {
 		args = append(args, t.prefix+kvpathSeparator+i)
 	}
 	return t.base.Del(args...)
+}
+
+func (t *tree) Incr(key string, delta int64) (int64, error) {
+	return t.base.Incr(t.prefix+kvpathSeparator+key, delta)
+}
+
+func (t *tree) Expire(key string, seconds int64) error {
+	return t.base.Expire(t.prefix+kvpathSeparator+key, seconds)
 }
 
 func (t *tree) Subkey(keypath ...string) string {
@@ -566,6 +624,23 @@ func (r *resulter) Result() (string, error) {
 			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
 		}
 		return "", governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	return val, nil
+}
+
+type (
+	intResulter struct {
+		res *redis.IntCmd
+	}
+)
+
+func (r *intResulter) Result() (int64, error) {
+	val, err := r.res.Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
