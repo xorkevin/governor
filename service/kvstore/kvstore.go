@@ -30,6 +30,7 @@ type (
 	// Multi is a kvstore multi
 	Multi interface {
 		Get(key string) Resulter
+		GetInt(key string) IntResulter
 		Set(key, val string, seconds int64)
 		Del(key ...string)
 		Incr(key string, delta int64) IntResulter
@@ -42,6 +43,7 @@ type (
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
 		Get(key string) (string, error)
+		GetInt(key string) (int64, error)
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
 		Incr(key string, delta int64) (int64, error)
@@ -148,6 +150,8 @@ type (
 	ErrClient struct{}
 	// ErrNotFound is returned when a key is not found
 	ErrNotFound struct{}
+	// ErrVal is returned for invalid value errors
+	ErrVal struct{}
 )
 
 func (e ErrConn) Error() string {
@@ -160,6 +164,10 @@ func (e ErrClient) Error() string {
 
 func (e ErrNotFound) Error() string {
 	return "Key not found"
+}
+
+func (e ErrVal) Error() string {
+	return "Invalid value"
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -366,6 +374,25 @@ func (s *service) Get(key string) (string, error) {
 	return val, nil
 }
 
+func (s *service) GetInt(key string) (int64, error) {
+	client, err := s.getClient()
+	if err != nil {
+		return 0, err
+	}
+	val, err := client.Get(key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	num, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return 0, governor.ErrWithKind(err, ErrVal{}, "Invalid int value")
+	}
+	return num, nil
+}
+
 func (s *service) Set(key, val string, seconds int64) error {
 	client, err := s.getClient()
 	if err != nil {
@@ -467,6 +494,12 @@ func (t *baseMulti) Get(key string) Resulter {
 	}
 }
 
+func (t *baseMulti) GetInt(key string) IntResulter {
+	return &intResulter{
+		res: t.base.Get(key),
+	}
+}
+
 func (t *baseMulti) Set(key, val string, seconds int64) {
 	t.base.Set(key, val, time.Duration(seconds)*time.Second)
 }
@@ -476,7 +509,7 @@ func (t *baseMulti) Del(key ...string) {
 }
 
 func (t *baseMulti) Incr(key string, delta int64) IntResulter {
-	return &intResulter{
+	return &intCmdResulter{
 		res: t.base.IncrBy(key, delta),
 	}
 }
@@ -510,6 +543,10 @@ func (t *baseMulti) Exec() error {
 
 func (t *multi) Get(key string) Resulter {
 	return t.base.Get(t.prefix + kvpathSeparator + key)
+}
+
+func (t *multi) GetInt(key string) IntResulter {
+	return t.base.GetInt(t.prefix + kvpathSeparator + key)
 }
 
 func (t *multi) Set(key, val string, seconds int64) {
@@ -559,6 +596,10 @@ type (
 
 func (t *tree) Get(key string) (string, error) {
 	return t.base.Get(t.prefix + kvpathSeparator + key)
+}
+
+func (t *tree) GetInt(key string) (int64, error) {
+	return t.base.GetInt(t.prefix + kvpathSeparator + key)
 }
 
 func (t *tree) Set(key, val string, seconds int64) error {
@@ -629,8 +670,25 @@ func (r *resulter) Result() (string, error) {
 }
 
 type (
-	intResulter struct {
+	intCmdResulter struct {
 		res *redis.IntCmd
+	}
+)
+
+func (r *intCmdResulter) Result() (int64, error) {
+	val, err := r.res.Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	return val, nil
+}
+
+type (
+	intResulter struct {
+		res *redis.StringCmd
 	}
 )
 
@@ -642,5 +700,9 @@ func (r *intResulter) Result() (int64, error) {
 		}
 		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
 	}
-	return val, nil
+	num, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return 0, governor.ErrWithKind(err, ErrVal{}, "Invalid int value")
+	}
+	return num, nil
 }
