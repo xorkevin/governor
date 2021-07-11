@@ -17,18 +17,18 @@ const (
 )
 
 type (
-	// Resulter returns the result of a command in a transaction after it has executed
+	// Resulter returns the result of a command in a multi after it has executed
 	Resulter interface {
 		Result() (string, error)
 	}
 
-	// Tx is a kvstore transaction
-	Tx interface {
+	// Multi is a kvstore multi
+	Multi interface {
 		Get(key string) Resulter
 		Set(key, val string, seconds int64)
 		Del(key ...string)
 		Subkey(keypath ...string) string
-		Subtree(prefix string) Tx
+		Subtree(prefix string) Multi
 		Exec() error
 	}
 
@@ -38,7 +38,8 @@ type (
 		Set(key, val string, seconds int64) error
 		Del(key ...string) error
 		Subkey(keypath ...string) string
-		Tx() (Tx, error)
+		Multi() (Multi, error)
+		Tx() (Multi, error)
 		Subtree(prefix string) KVStore
 	}
 
@@ -390,12 +391,22 @@ func (s *service) Subkey(keypath ...string) string {
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (s *service) Tx() (Tx, error) {
+func (s *service) Multi() (Multi, error) {
 	client, err := s.getClient()
 	if err != nil {
 		return nil, err
 	}
-	return &baseTransaction{
+	return &baseMulti{
+		base: client.Pipeline(),
+	}, nil
+}
+
+func (s *service) Tx() (Multi, error) {
+	client, err := s.getClient()
+	if err != nil {
+		return nil, err
+	}
+	return &baseMulti{
 		base: client.TxPipeline(),
 	}, nil
 }
@@ -408,62 +419,62 @@ func (s *service) Subtree(prefix string) KVStore {
 }
 
 type (
-	baseTransaction struct {
+	baseMulti struct {
 		base redis.Pipeliner
 	}
 
-	transaction struct {
+	multi struct {
 		prefix string
-		base   *baseTransaction
+		base   *baseMulti
 	}
 )
 
-func (t *baseTransaction) Get(key string) Resulter {
+func (t *baseMulti) Get(key string) Resulter {
 	return &resulter{
 		res: t.base.Get(key),
 	}
 }
 
-func (t *baseTransaction) Set(key, val string, seconds int64) {
+func (t *baseMulti) Set(key, val string, seconds int64) {
 	t.base.Set(key, val, time.Duration(seconds)*time.Second)
 }
 
-func (t *baseTransaction) Del(key ...string) {
+func (t *baseMulti) Del(key ...string) {
 	t.base.Del(key...)
 }
 
-func (t *baseTransaction) Subkey(keypath ...string) string {
+func (t *baseMulti) Subkey(keypath ...string) string {
 	if len(keypath) == 0 {
 		return ""
 	}
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (t *baseTransaction) Subtree(prefix string) Tx {
-	return &transaction{
+func (t *baseMulti) Subtree(prefix string) Multi {
+	return &multi{
 		prefix: prefix,
 		base:   t,
 	}
 }
 
-func (t *baseTransaction) Exec() error {
+func (t *baseMulti) Exec() error {
 	if _, err := t.base.Exec(); err != nil {
 		if !errors.Is(err, redis.Nil) {
-			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to execute transaction")
+			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to execute multi")
 		}
 	}
 	return nil
 }
 
-func (t *transaction) Get(key string) Resulter {
+func (t *multi) Get(key string) Resulter {
 	return t.base.Get(t.prefix + kvpathSeparator + key)
 }
 
-func (t *transaction) Set(key, val string, seconds int64) {
+func (t *multi) Set(key, val string, seconds int64) {
 	t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
 }
 
-func (t *transaction) Del(key ...string) {
+func (t *multi) Del(key ...string) {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
 		args = append(args, t.prefix+kvpathSeparator+i)
@@ -471,19 +482,19 @@ func (t *transaction) Del(key ...string) {
 	t.base.Del(args...)
 }
 
-func (t *transaction) Exec() error {
+func (t *multi) Exec() error {
 	return t.base.Exec()
 }
 
-func (t *transaction) Subkey(keypath ...string) string {
+func (t *multi) Subkey(keypath ...string) string {
 	if len(keypath) == 0 {
 		return ""
 	}
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (t *transaction) Subtree(prefix string) Tx {
-	return &transaction{
+func (t *multi) Subtree(prefix string) Multi {
+	return &multi{
 		prefix: t.prefix + kvpathSeparator + prefix,
 		base:   t.base,
 	}
@@ -519,7 +530,15 @@ func (t *tree) Subkey(keypath ...string) string {
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (t *tree) Tx() (Tx, error) {
+func (t *tree) Multi() (Multi, error) {
+	tx, err := t.base.Multi()
+	if err != nil {
+		return nil, err
+	}
+	return tx.Subtree(t.prefix), nil
+}
+
+func (t *tree) Tx() (Multi, error) {
 	tx, err := t.base.Tx()
 	if err != nil {
 		return nil, err
