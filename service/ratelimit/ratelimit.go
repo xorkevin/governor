@@ -9,6 +9,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 type (
@@ -38,7 +39,7 @@ type (
 	}
 
 	// Tagger computes tags for requests
-	Tagger func(ctx governor.Context) []Tag
+	Tagger func(c governor.Context) []Tag
 
 	ctxKeyRatelimiter struct{}
 )
@@ -174,5 +175,86 @@ func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
 		end:
 			next.ServeHTTP(c.R())
 		})
+	}
+}
+
+// Compose composes rate limit taggers
+func Compose(r Ratelimiter, taggers ...Tagger) governor.Middleware {
+	return r.Ratelimit(func(c governor.Context) []Tag {
+		var tags []Tag
+		for _, i := range taggers {
+			tags = append(tags, i(c)...)
+		}
+		return tags
+	})
+}
+
+// IPAddress tags ips
+func IPAddress(key string, expiration, period, limit int64) Tagger {
+	if period <= 0 {
+		panic("period must be positive")
+	}
+	return func(c governor.Context) []Tag {
+		ip := c.RealIP()
+		if ip == nil {
+			return nil
+		}
+		return []Tag{
+			{
+				Key:        key,
+				Value:      ip.String(),
+				Expiration: expiration,
+				Period:     period,
+				Limit:      limit,
+			},
+		}
+	}
+}
+
+// Userid tags userids
+func Userid(key string, expiration, period, limit int64) Tagger {
+	if period <= 0 {
+		panic("period must be positive")
+	}
+	return func(c governor.Context) []Tag {
+		userid := gate.GetCtxUserid(c)
+		if userid == "" {
+			return nil
+		}
+		return []Tag{
+			{
+				Key:        key,
+				Value:      userid,
+				Expiration: expiration,
+				Period:     period,
+				Limit:      limit,
+			},
+		}
+	}
+}
+
+// UseridIPAddress tags userid ip tuples
+func UseridIPAddress(key string, expiration, period, limit int64) Tagger {
+	if period <= 0 {
+		panic("period must be positive")
+	}
+	return func(c governor.Context) []Tag {
+		userid := gate.GetCtxUserid(c)
+		if userid == "" {
+			return nil
+		}
+		ip := c.RealIP()
+		if ip == nil {
+			return nil
+		}
+		return []Tag{
+			{
+				Key:        key,
+				Value:      userid + "_" + ip.String(),
+				Expiration: expiration,
+				Period:     period,
+				Limit:      limit,
+			},
+		}
 	}
 }
