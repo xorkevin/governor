@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/ratelimit"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
@@ -270,10 +271,11 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountAuth(r governor.Router) {
-	r.Post("/login", m.loginUser)
-	r.Post("/exchange", m.exchangeToken)
-	r.Post("/refresh", m.refreshToken)
-	r.Post("/id/{id}/exchange", m.exchangeToken)
-	r.Post("/id/{id}/refresh", m.refreshToken)
-	r.Post("/logout", m.logoutUser)
+	rt := ratelimit.Compose(m.s.ratelimiter, ratelimit.IPAddress("ip", 60, 15, 240))
+	r.Post("/login", m.loginUser, rt)
+	r.Post("/exchange", m.exchangeToken, rt)
+	r.Post("/refresh", m.refreshToken, rt)
+	r.Post("/id/{id}/exchange", m.exchangeToken, rt)
+	r.Post("/id/{id}/refresh", m.refreshToken, rt)
+	r.Post("/logout", m.logoutUser, rt)
 }

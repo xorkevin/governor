@@ -65,7 +65,6 @@ func main() {
 	gov.Register("mail", "/null/mail", mail.NewCtx(gov.Injector()))
 	{
 		inj := gov.Injector()
-		rolemodel.NewInCtx(inj)
 		kvstore.NewSubtreeInCtx(inj, "ratelimit")
 		gov.Register("ratelimit", "/null/ratelimit", ratelimit.NewCtx(inj))
 	}

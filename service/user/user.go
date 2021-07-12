@@ -11,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/apikey"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
@@ -69,6 +70,7 @@ type (
 		kvsessions        kvstore.KVStore
 		events            events.Events
 		mailer            mail.Mailer
+		ratelimiter       ratelimit.Ratelimiter
 		gate              gate.Gate
 		tokenizer         token.Tokenizer
 		logger            governor.Logger
@@ -141,6 +143,7 @@ func NewCtx(inj governor.Injector) Service {
 	kv := kvstore.GetCtxKVStore(inj)
 	ev := events.GetCtxEvents(inj)
 	mailer := mail.GetCtxMailer(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
 	g := gate.GetCtxGate(inj)
 
@@ -155,6 +158,7 @@ func NewCtx(inj governor.Injector) Service {
 		kv,
 		ev,
 		mailer,
+		ratelimiter,
 		tokenizer,
 		g,
 	)
@@ -172,6 +176,7 @@ func New(
 	kv kvstore.KVStore,
 	ev events.Events,
 	mailer mail.Mailer,
+	ratelimiter ratelimit.Ratelimiter,
 	tokenizer token.Tokenizer,
 	g gate.Gate,
 ) Service {
@@ -187,6 +192,7 @@ func New(
 		kvsessions:        kv.Subtree("sessions"),
 		events:            ev,
 		mailer:            mailer,
+		ratelimiter:       ratelimiter,
 		gate:              g,
 		tokenizer:         tokenizer,
 		accessTime:        time5m,
