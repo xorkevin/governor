@@ -11,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
 	profilemodel "xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/ratelimit"
 	statemodel "xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
@@ -62,6 +63,12 @@ func main() {
 	gov.Register("events", "/null/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	gov.Register("mail", "/null/mail", mail.NewCtx(gov.Injector()))
+	{
+		inj := gov.Injector()
+		rolemodel.NewInCtx(inj)
+		kvstore.NewSubtreeInCtx(inj, "ratelimit")
+		gov.Register("ratelimit", "/null/ratelimit", ratelimit.NewCtx(inj))
+	}
 	{
 		inj := gov.Injector()
 		rolemodel.NewInCtx(inj)
