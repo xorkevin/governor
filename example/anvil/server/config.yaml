@@ -95,6 +95,8 @@ user:
   newloginemail: true
   passwordminsize: 8
   userapproval: false
+  otpkey: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/otpkey
+  otpissuer: http://governor.dev.localhost:8080
   rolesummary:
     - user
     - admin

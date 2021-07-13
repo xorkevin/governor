@@ -23,6 +23,7 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/hunter2"
 )
 
 const (
@@ -73,6 +74,8 @@ type (
 		ratelimiter       ratelimit.Ratelimiter
 		gate              gate.Gate
 		tokenizer         token.Tokenizer
+		otpDecrypter      *hunter2.Decrypter
+		otpCipher         hunter2.Cipher
 		logger            governor.Logger
 		streamsize        int64
 		msgsize           int32
@@ -90,6 +93,7 @@ type (
 		userApproval      bool
 		rolesummary       rank.Rank
 		emailurlbase      string
+		otpIssuer         string
 		tplemailchange    *htmlTemplate.Template
 		tplforgotpass     *htmlTemplate.Template
 		tplnewuser        *htmlTemplate.Template
@@ -220,6 +224,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
+	r.SetDefault("otpissuer", "governor")
 	r.SetDefault("rolesummary", []string{rank.TagUser, rank.TagAdmin})
 	r.SetDefault("email.url.base", "http://localhost:8080")
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
@@ -289,6 +294,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
+	s.otpIssuer = r.GetStr("otpissuer")
 	s.rolesummary = rank.FromSlice(r.GetStrSlice("rolesummary"))
 
 	s.emailurlbase = r.GetStr("email.url.base")
@@ -308,6 +314,30 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.tplnewuser = t
 	}
 
+	otpsecrets, err := r.GetSecret("otpkey")
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to read otpkey")
+	}
+	otpkeys, ok := otpsecrets["secrets"].([]string)
+	if !ok {
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid otpkey secrets")
+	}
+	if len(otpkeys) == 0 {
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
+	}
+	otpDecrypter := hunter2.NewDecrypter()
+	for n, i := range otpkeys {
+		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		if err != nil {
+			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
+		}
+		if n == 0 {
+			s.otpCipher = cipher
+		}
+		otpDecrypter.RegisterCipher(cipher)
+	}
+	s.otpDecrypter = otpDecrypter
+
 	l.Info("loaded config", map[string]string{
 		"stream size (bytes)":   r.GetStr("streamsize"),
 		"msg size (bytes)":      r.GetStr("msgsize"),
@@ -320,8 +350,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"usercachetime (s)":     strconv.FormatInt(s.userCacheTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
-		"issuer":                r.GetStr("issuer"),
 		"userapproval":          strconv.FormatBool(s.userApproval),
+		"otpissuer":             s.otpIssuer,
+		"numotpkeys":            strconv.Itoa(len(otpkeys)),
 		"rolesummary":           s.rolesummary.String(),
 		"tplemailchange":        r.GetStr("email.url.emailchange"),
 		"tplforgotpass":         r.GetStr("email.url.forgotpass"),

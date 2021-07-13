@@ -448,3 +448,35 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 	}
 	return nil
 }
+
+type (
+	resAddOTP struct {
+		URI    string `json:"uri"`
+		Backup string `json:"backup"`
+	}
+)
+
+// AddOTP adds or regenerates an otp secret
+func (s *service) AddOTP(userid string, alg string, digits int) (*resAddOTP, error) {
+	m, err := s.users.GetByID(userid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get user")
+	}
+	uri, backup, err := s.users.GenerateOTPSecret(s.otpCipher, m, s.otpIssuer, alg, digits)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to generate otp secret")
+	}
+	if err := s.users.Update(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update otp secret")
+	}
+	return &resAddOTP{
+		URI:    uri,
+		Backup: backup,
+	}, nil
+}

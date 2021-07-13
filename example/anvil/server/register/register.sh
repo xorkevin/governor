@@ -118,7 +118,7 @@ done
 log2 'generate new otp encryption key'
 
 otpsecret=$(gen_pass "${PASS_LEN:-64}")
-nextotpsecrets=$(printf '["%s"] %s' "$otpsecret" "$otpsecrets" | jq -sc 'add')
+nextotpsecrets=$(printf '["$cc20p$%s"] %s' "$otpsecret" "$otpsecrets" | jq -sc 'add')
 
 log2 'uploading' $(print "$nextotpsecrets" | jq 'length') 'otp encryption keys'
 

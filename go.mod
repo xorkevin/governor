@@ -20,5 +20,5 @@ require (
 	golang.org/x/image v0.0.0-20200609002522-3f4726a040e8
 	google.golang.org/protobuf v1.24.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
-	xorkevin.dev/hunter2 v0.1.4
+	xorkevin.dev/hunter2 v0.1.5
 )
