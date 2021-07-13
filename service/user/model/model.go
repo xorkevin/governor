@@ -12,9 +12,11 @@ import (
 //go:generate forge model -m Model -t users -p user -o model_gen.go Model Info
 
 const (
-	uidSize     = 16
-	passSaltLen = 32
-	passHashLen = 32
+	uidSize       = 16
+	passSaltLen   = 32
+	passHashLen   = 32
+	totpSecretLen = 32
+	totpBackupLen = 18
 )
 
 type (
@@ -23,6 +25,8 @@ type (
 		New(username, password, email, firstname, lastname string) (*Model, error)
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
+		ValidateOTPSecret(decrypter hunter2.Decrypter, m *Model, code string) (bool, error)
+		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
 		GetByID(userid string) (*Model, error)
@@ -145,6 +149,51 @@ func (r *repo) RehashPass(m *Model, password string) error {
 	}
 	m.PassHash = mHash
 	return nil
+}
+
+// ValidateOTPSecret validates an otp secret
+func (r *repo) ValidateOTPSecret(decrypter hunter2.Decrypter, m *Model, code string) (bool, error) {
+	params, err := decrypter.Decrypt(m.OTPSecret)
+	if err != nil {
+		return false, governor.ErrWithMsg(err, "Failed to decrypt otp secret")
+	}
+	ok, err := hunter2.TOTPVerify(params, code, hunter2.DefaultOTPHashes)
+	if err != nil {
+		return false, governor.ErrWithMsg(err, "Failed to verify otp")
+	}
+	return ok, nil
+}
+
+// GenerateOTPSecret generates an otp secret
+func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
+	params, uri, err := hunter2.TOTPGenerateSecret(totpSecretLen, hunter2.TOTPURI{
+		TOTPConfig: hunter2.TOTPConfig{
+			Alg:    alg,
+			Digits: digits,
+			Period: 30,
+			Leeway: 1,
+		},
+		Issuer:      issuer,
+		AccountName: m.Username,
+	})
+	if err != nil {
+		return "", "", governor.ErrWithMsg(err, "Failed to generate otp secret")
+	}
+	backup, err := hunter2.GenerateRandomCode(totpBackupLen)
+	if err != nil {
+		return "", "", governor.ErrWithMsg(err, "Failed to generate otp backup")
+	}
+	encryptedParams, err := cipher.Encrypt(params)
+	if err != nil {
+		return "", "", governor.ErrWithMsg(err, "Failed to encrypt otp secret")
+	}
+	encryptedBackup, err := cipher.Encrypt(backup)
+	if err != nil {
+		return "", "", governor.ErrWithMsg(err, "Failed to encrypt otp backup")
+	}
+	m.OTPSecret = encryptedParams
+	m.OTPBackup = encryptedBackup
+	return uri, "", nil
 }
 
 // GetGroup gets information from each user
