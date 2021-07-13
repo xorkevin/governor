@@ -25,7 +25,7 @@ type (
 		New(username, password, email, firstname, lastname string) (*Model, error)
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
-		ValidateOTPSecret(decrypter hunter2.Decrypter, m *Model, code string) (bool, error)
+		ValidateOTPSecret(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
 		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
@@ -49,6 +49,7 @@ type (
 		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
 		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
 		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
+		OTPEnabled       bool   `model:"otp_enabled,BOOLEAN NOT NULL" query:"otp_enabled"`
 		OTPSecret        string `model:"otp_secret,VARCHAR(255) NOT NULL" query:"otp_secret"`
 		OTPBackup        string `model:"otp_backup,VARCHAR(255) NOT NULL" query:"otp_backup"`
 		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
@@ -152,14 +153,14 @@ func (r *repo) RehashPass(m *Model, password string) error {
 }
 
 // ValidateOTPSecret validates an otp secret
-func (r *repo) ValidateOTPSecret(decrypter hunter2.Decrypter, m *Model, code string) (bool, error) {
+func (r *repo) ValidateOTPSecret(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error) {
 	params, err := decrypter.Decrypt(m.OTPSecret)
 	if err != nil {
 		return false, governor.ErrWithMsg(err, "Failed to decrypt otp secret")
 	}
 	ok, err := hunter2.TOTPVerify(params, code, hunter2.DefaultOTPHashes)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify otp")
+		return false, governor.ErrWithMsg(err, "Failed to verify otp code")
 	}
 	return ok, nil
 }
