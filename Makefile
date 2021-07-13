@@ -35,7 +35,7 @@ bench: ## Run benchmarks
 .PHONY: fmt vet prepare
 
 fmt: ## Run go fmt
-	go fmt ./...
+	goimports -w .
 
 vet: ## Lint code
 	go vet ./...

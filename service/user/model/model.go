@@ -42,13 +42,17 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
-		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
-		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
-		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
-		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
+		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
+		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
+		OTPSecret        string `model:"otp_secret,VARCHAR(255) NOT NULL" query:"otp_secret"`
+		OTPBackup        string `model:"otp_backup,VARCHAR(255) NOT NULL" query:"otp_backup"`
+		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
+		FirstName        string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
+		LastName         string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
+		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		FailedLoginTime  int64  `model:"failed_login_time,BIGINT NOT NULL" query:"failed_login_time"`
+		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL" query:"failed_login_count"`
 	}
 
 	// Info is the metadata of a user
