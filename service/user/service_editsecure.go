@@ -505,7 +505,13 @@ func (s *service) CommitOTP(userid string, code string) error {
 			Message: "OTP already enabled",
 		}))
 	}
-	if ok, err := s.users.ValidateOTPSecret(s.otpDecrypter, m, code); err != nil {
+	if m.OTPSecret == "" {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "OTP secret not yet added",
+		}))
+	}
+	if ok, err := s.users.ValidateOTPCode(s.otpDecrypter, m, code); err != nil {
 		return governor.ErrWithMsg(err, "Failed to validate otp code")
 	} else if !ok {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -514,6 +520,59 @@ func (s *service) CommitOTP(userid string, code string) error {
 		}))
 	}
 	m.OTPEnabled = true
+	if err := s.users.Update(m); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update otp secret")
+	}
+	return nil
+}
+
+func (s *service) checkOTPCode(m *model.Model, code string, backup string) error {
+	if code == "" {
+		if ok, err := s.users.ValidateOTPBackup(s.otpDecrypter, m, backup); err != nil {
+			return governor.ErrWithMsg(err, "Failed to validate otp backup code")
+		} else if !ok {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Incorrect otp backup code",
+			}))
+		}
+	} else {
+		if ok, err := s.users.ValidateOTPCode(s.otpDecrypter, m, code); err != nil {
+			return governor.ErrWithMsg(err, "Failed to validate otp code")
+		} else if !ok {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Incorrect otp code",
+			}))
+		}
+	}
+	return nil
+}
+
+// RemoveOTP removes using otp
+func (s *service) RemoveOTP(userid string, code string, backup string) error {
+	m, err := s.users.GetByID(userid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "User not found",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get user")
+	}
+	if !m.OTPEnabled {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "OTP already disabled",
+		}))
+	}
+	if err := s.checkOTPCode(m, code, backup); err != nil {
+		return err
+	}
+	m.OTPEnabled = false
+	m.OTPSecret = ""
+	m.OTPBackup = ""
 	if err := s.users.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update otp secret")
 	}

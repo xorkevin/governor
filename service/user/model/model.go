@@ -1,6 +1,7 @@
 package model
 
 import (
+	"crypto/hmac"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -25,7 +26,8 @@ type (
 		New(username, password, email, firstname, lastname string) (*Model, error)
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(m *Model, password string) error
-		ValidateOTPSecret(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
+		ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
+		ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error)
 		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
@@ -152,8 +154,8 @@ func (r *repo) RehashPass(m *Model, password string) error {
 	return nil
 }
 
-// ValidateOTPSecret validates an otp secret
-func (r *repo) ValidateOTPSecret(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error) {
+// ValidateOTPCode validates an otp code
+func (r *repo) ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error) {
 	params, err := decrypter.Decrypt(m.OTPSecret)
 	if err != nil {
 		return false, governor.ErrWithMsg(err, "Failed to decrypt otp secret")
@@ -163,6 +165,15 @@ func (r *repo) ValidateOTPSecret(decrypter *hunter2.Decrypter, m *Model, code st
 		return false, governor.ErrWithMsg(err, "Failed to verify otp code")
 	}
 	return ok, nil
+}
+
+// ValidateOTPBackup validates an otp backup code
+func (r *repo) ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error) {
+	code, err := decrypter.Decrypt(m.OTPBackup)
+	if err != nil {
+		return false, governor.ErrWithMsg(err, "Failed to decrypt otp backup")
+	}
+	return hmac.Equal([]byte(code), []byte(backup)), nil
 }
 
 // GenerateOTPSecret generates an otp secret
