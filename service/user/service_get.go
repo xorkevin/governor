@@ -37,7 +37,8 @@ type (
 	// ResUserGet holds all the fields of a user
 	ResUserGet struct {
 		ResUserGetPublic
-		Email string `json:"email"`
+		Email      string `json:"email"`
+		OTPEnabled bool   `json:"otp_enabled"`
 	}
 )
 
@@ -45,6 +46,7 @@ func getUserFields(m *model.Model, roles []string) *ResUserGet {
 	return &ResUserGet{
 		ResUserGetPublic: *getUserPublicFields(m, roles),
 		Email:            m.Email,
+		OTPEnabled:       m.OTPEnabled,
 	}
 }
 
