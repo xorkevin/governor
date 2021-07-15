@@ -60,3 +60,39 @@ func (r reqForgotPasswordReset) valid() error {
 	}
 	return nil
 }
+
+func (r reqAddOTP) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validOTPAlg(r.Alg); err != nil {
+		return err
+	}
+	if err := validOTPDigits(r.Digits); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqOTPCode) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validOTPCode(r.Code); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqOTPCodeBackup) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validOTPCode(r.Code); err != nil {
+		return err
+	}
+	if err := validOTPCode(r.Backup); err != nil {
+		return err
+	}
+	return nil
+}

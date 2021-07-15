@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/hunter2"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 	lengthCapEmail    = 255
 	lengthCapLarge    = 4095
 	amountCap         = 1024
+	lengthCapOTPCode  = 31
 )
 
 var (
@@ -372,6 +374,39 @@ func validApikeyDesc(desc string) error {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Description must be shorter than 128 characters",
+		}))
+	}
+	return nil
+}
+
+func validOTPAlg(alg string) error {
+	_, ok := hunter2.DefaultOTPHashes[alg]
+	if !ok {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid otp hash alg",
+		}))
+	}
+	return nil
+}
+
+func validOTPDigits(digits int) error {
+	switch digits {
+	case 6, 8:
+	default:
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid otp digits",
+		}))
+	}
+	return nil
+}
+
+func validOTPCode(code string) error {
+	if len(code) > lengthCapOTPCode {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid otp code",
 		}))
 	}
 	return nil

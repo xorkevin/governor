@@ -7,7 +7,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPassword reqForgotPasswordReset
+//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPassword reqForgotPasswordReset reqAddOTP reqOTPCode reqOTPCodeBackup
 
 type (
 	reqUserPutEmail struct {
@@ -144,10 +144,116 @@ func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	reqAddOTP struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Alg    string `valid:"OTPAlg" json:"alg"`
+		Digits int    `valid:"OTPDigits" json:"digits"`
+	}
+)
+
+func (m *router) addOTP(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAddOTP{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.AddOTP(req.Userid, req.Alg, req.Digits)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqOTPCode struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Code   string `valid:"OTPCode" json:"code"`
+	}
+)
+
+func (m *router) commitOTP(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqOTPCode{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.CommitOTP(req.Userid, req.Code); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+type (
+	reqOTPCodeBackup struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Code   string `valid:"OTPCode" json:"code"`
+		Backup string `valid:"OTPCode" json:"backup"`
+	}
+)
+
+func (r *reqOTPCodeBackup) validCode() error {
+	if err := r.valid(); err != nil {
+		return err
+	}
+	if len(r.Code) == 0 && len(r.Backup) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "OTP code must be provided",
+		}))
+	}
+	if len(r.Code) > 0 && len(r.Backup) > 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not provide both otp code and backup code",
+		}))
+	}
+	return nil
+}
+
+func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqOTPCodeBackup{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	if err := req.validCode(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) mountEditSecure(r governor.Router) {
 	r.Put("/email", m.putEmail, gate.User(m.s.gate, scopeAccountWrite))
 	r.Put("/email/verify", m.putEmailVerify)
 	r.Put("/password", m.putPassword, gate.User(m.s.gate, scopeAccountWrite))
 	r.Put("/password/forgot", m.forgotPassword)
 	r.Put("/password/forgot/reset", m.forgotPasswordReset)
+	r.Put("/otp", m.addOTP, gate.User(m.s.gate, scopeAccountWrite))
+	r.Put("/otp/verify", m.commitOTP, gate.User(m.s.gate, scopeAccountWrite))
+	r.Delete("/otp", m.removeOTP, gate.User(m.s.gate, scopeAccountWrite))
 }
