@@ -478,6 +478,8 @@ func (s *service) AddOTP(userid string, alg string, digits int) (*resAddOTP, err
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate otp secret")
 	}
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
 	if err := s.users.Update(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to update otp secret")
 	}
@@ -520,6 +522,8 @@ func (s *service) CommitOTP(userid string, code string) error {
 		}))
 	}
 	m.OTPEnabled = true
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
 	if err := s.users.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update otp secret")
 	}
@@ -527,6 +531,18 @@ func (s *service) CommitOTP(userid string, code string) error {
 }
 
 func (s *service) checkOTPCode(m *model.Model, code string, backup string) error {
+	var k int64
+	if m.FailedLoginCount > 293 || k < 0 {
+		k = time24h
+	} else {
+		k = int64(m.FailedLoginCount) * int64(m.FailedLoginCount)
+	}
+	if time.Now().Round(0).Unix() < m.FailedLoginTime+k {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Rate limit",
+		}))
+	}
 	if code == "" {
 		if ok, err := s.users.ValidateOTPBackup(s.otpDecrypter, m, backup); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp backup code")
@@ -549,6 +565,28 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 	return nil
 }
 
+func (s *service) incrOTPFailCount(m *model.Model) {
+	m.FailedLoginTime = time.Now().Round(0).Unix()
+	m.FailedLoginCount += 1
+	if err := s.users.Update(m); err != nil {
+		s.logger.Error("Failed to update otp fail count", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "incrotpfailcount",
+		})
+	}
+}
+
+func (s *service) resetOTPFailCount(m *model.Model) {
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
+	if err := s.users.Update(m); err != nil {
+		s.logger.Error("Failed to reset otp fail count", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "resetotpfailcount",
+		})
+	}
+}
+
 // RemoveOTP removes using otp
 func (s *service) RemoveOTP(userid string, code string, backup string) error {
 	m, err := s.users.GetByID(userid)
@@ -568,11 +606,14 @@ func (s *service) RemoveOTP(userid string, code string, backup string) error {
 		}))
 	}
 	if err := s.checkOTPCode(m, code, backup); err != nil {
+		s.incrOTPFailCount(m)
 		return err
 	}
 	m.OTPEnabled = false
 	m.OTPSecret = ""
 	m.OTPBackup = ""
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
 	if err := s.users.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update otp secret")
 	}
