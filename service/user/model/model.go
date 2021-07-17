@@ -205,7 +205,7 @@ func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string,
 	}
 	m.OTPSecret = encryptedParams
 	m.OTPBackup = encryptedBackup
-	return uri, "", nil
+	return uri, backup, nil
 }
 
 // GetGroup gets information from each user
