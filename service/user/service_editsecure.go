@@ -457,7 +457,7 @@ type (
 )
 
 // AddOTP adds an otp secret
-func (s *service) AddOTP(userid string, alg string, digits int) (*resAddOTP, error) {
+func (s *service) AddOTP(userid string, alg string, digits int, password string) (*resAddOTP, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -474,6 +474,15 @@ func (s *service) AddOTP(userid string, alg string, digits int) (*resAddOTP, err
 			Message: "OTP already enabled",
 		}))
 	}
+	if ok, err := s.users.ValidatePass(password, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to validate password")
+	} else if !ok {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Incorrect password",
+		}))
+	}
+
 	uri, backup, err := s.users.GenerateOTPSecret(s.otpCipher, m, s.otpIssuer, alg, digits)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate otp secret")
@@ -588,7 +597,7 @@ func (s *service) resetOTPFailCount(m *model.Model) {
 }
 
 // RemoveOTP removes using otp
-func (s *service) RemoveOTP(userid string, code string, backup string) error {
+func (s *service) RemoveOTP(userid string, code string, backup string, password string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -605,10 +614,19 @@ func (s *service) RemoveOTP(userid string, code string, backup string) error {
 			Message: "OTP already disabled",
 		}))
 	}
+	if ok, err := s.users.ValidatePass(password, m); err != nil {
+		return governor.ErrWithMsg(err, "Failed to validate password")
+	} else if !ok {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusUnauthorized,
+			Message: "Incorrect password",
+		}))
+	}
 	if err := s.checkOTPCode(m, code, backup); err != nil {
 		s.incrOTPFailCount(m)
 		return err
 	}
+
 	m.OTPEnabled = false
 	m.OTPSecret = ""
 	m.OTPBackup = ""

@@ -146,9 +146,10 @@ func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqAddOTP struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Alg    string `valid:"OTPAlg" json:"alg"`
-		Digits int    `valid:"OTPDigits" json:"digits"`
+		Userid   string `valid:"userid,has" json:"-"`
+		Alg      string `valid:"OTPAlg" json:"alg"`
+		Digits   int    `valid:"OTPDigits" json:"digits"`
+		Password string `valid:"password,has" json:"password"`
 	}
 )
 
@@ -165,7 +166,7 @@ func (m *router) addOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.AddOTP(req.Userid, req.Alg, req.Digits)
+	res, err := m.s.AddOTP(req.Userid, req.Alg, req.Digits, req.Password)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -202,9 +203,10 @@ func (m *router) commitOTP(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqOTPCodeBackup struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Code   string `valid:"OTPCode" json:"code"`
-		Backup string `valid:"OTPCode" json:"backup"`
+		Userid   string `valid:"userid,has" json:"-"`
+		Code     string `valid:"OTPCode" json:"code"`
+		Backup   string `valid:"OTPCode" json:"backup"`
+		Password string `valid:"password,has" json:"password"`
 	}
 )
 
@@ -240,7 +242,7 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup); err != nil {
+	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}

@@ -71,6 +71,9 @@ func (r reqAddOTP) valid() error {
 	if err := validOTPDigits(r.Digits); err != nil {
 		return err
 	}
+	if err := validhasPassword(r.Password); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -92,6 +95,9 @@ func (r reqOTPCodeBackup) valid() error {
 		return err
 	}
 	if err := validOTPCode(r.Backup); err != nil {
+		return err
+	}
+	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
