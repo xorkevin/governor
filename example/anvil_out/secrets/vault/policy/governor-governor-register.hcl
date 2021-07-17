@@ -7,3 +7,6 @@ path "kv/data/app/governor/governor/token" {
 path "kv/data/app/governor/governor/rsakey" {
   capabilities = ["create", "update", "delete", "read", "list"]
 }
+path "kv/data/app/governor/governor/otpkey" {
+  capabilities = ["create", "update", "delete", "read", "list"]
+}

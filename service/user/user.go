@@ -318,7 +318,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to read otpkey")
 	}
-	otpkeys, ok := otpsecrets["secrets"].([]string)
+	otpkeys, ok := otpsecrets["secrets"].([]interface{})
 	if !ok {
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid otpkey secrets")
 	}
@@ -327,6 +327,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	otpDecrypter := hunter2.NewDecrypter()
 	for n, i := range otpkeys {
+		i, ok := i.(string)
+		if !ok {
+			return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid otpkey secret string")
+		}
 		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
 			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")

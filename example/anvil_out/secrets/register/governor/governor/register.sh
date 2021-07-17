@@ -99,8 +99,8 @@ while true; do
     if is_success "$status"; then
       log2 'found existing vault kv'
       otpsecrets=$(cat /tmp/curlres.txt | jq -c '.data.data.secrets')
-      print "$otpsecrets" | jq 'if type != "array" then error("secrets is not an array") else "secrets is array" end'
-      log2 'have' $(print "$otpsecrets" | jq 'length') 'otp encryption keys'
+      printf "$otpsecrets" | jq 'if type != "array" then error("secrets is not an array") else "secrets is array" end'
+      log2 'have' $(printf "$otpsecrets" | jq 'length') 'otp encryption keys'
       break 2
     elif [ "$status" = 404 ]; then
       log2 'no existing otp encryption keys'
@@ -117,10 +117,10 @@ done
 
 log2 'generate new otp encryption key'
 
-otpsecret=$(gen_pass "${PASS_LEN:-64}")
+otpsecret=$(gen_pass 32)
 nextotpsecrets=$(printf '["$cc20p$%s"] %s' "$otpsecret" "$otpsecrets" | jq -sc 'add')
 
-log2 'uploading' $(print "$nextotpsecrets" | jq 'length') 'otp encryption keys'
+log2 'uploading' $(printf "$nextotpsecrets" | jq 'length') 'otp encryption keys'
 
 while true; do
   i=0

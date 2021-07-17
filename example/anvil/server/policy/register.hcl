@@ -9,3 +9,6 @@ path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{
 path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/rsakey" {
   capabilities = ["create", "update", "delete", "read", "list"]
 }
+path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/otpkey" {
+  capabilities = ["create", "update", "delete", "read", "list"]
+}

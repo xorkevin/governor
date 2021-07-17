@@ -7,6 +7,9 @@ path "kv/data/app/governor/governor/token" {
 path "kv/data/app/governor/governor/rsakey" {
   capabilities = ["read", "list"]
 }
+path "kv/data/app/governor/governor/otpkey" {
+  capabilities = ["read", "list"]
+}
 path "kv/data/app/governor/governor/smtp" {
   capabilities = ["read", "list"]
 }
