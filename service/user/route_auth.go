@@ -1,7 +1,6 @@
 package user
 
 import (
-	"net"
 	"net/http"
 
 	"xorkevin.dev/governor"
@@ -136,14 +135,6 @@ type (
 	}
 )
 
-func getHost(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
 func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserAuth{}
@@ -170,7 +161,11 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.Login(userid, req.Password, req.SessionToken, getHost(r), c.Header("User-Agent"))
+	var ipaddr string
+	if ip := c.RealIP(); ip != nil {
+		ipaddr = ip.String()
+	}
+	res, err := m.s.Login(userid, req.Password, req.SessionToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -203,7 +198,11 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.ExchangeToken(ruser.RefreshToken, getHost(r), c.Header("User-Agent"))
+	var ipaddr string
+	if ip := c.RealIP(); ip != nil {
+		ipaddr = ip.String()
+	}
+	res, err := m.s.ExchangeToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -231,7 +230,11 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.RefreshToken(ruser.RefreshToken, getHost(r), c.Header("User-Agent"))
+	var ipaddr string
+	if ip := c.RealIP(); ip != nil {
+		ipaddr = ip.String()
+	}
+	res, err := m.s.RefreshToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
