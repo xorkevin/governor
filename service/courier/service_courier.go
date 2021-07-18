@@ -145,7 +145,7 @@ func (s *service) GetLinkGroup(creatorid string, limit, offset int) (*resLinkGro
 }
 
 const (
-	qrScale = 12
+	qrScale = 8
 )
 
 type (
