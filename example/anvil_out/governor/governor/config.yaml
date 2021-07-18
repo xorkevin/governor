@@ -93,7 +93,7 @@ user:
   passwordminsize: 8
   userapproval: false
   otpkey: kv/data/app/governor/governor/otpkey
-  otpissuer: http://governor.dev.localhost:8080
+  otpissuer: Governor
   rolesummary:
     - user
     - admin
