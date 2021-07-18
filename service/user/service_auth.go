@@ -244,6 +244,8 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 		return nil, governor.ErrWithMsg(err, "Failed to generate refresh token")
 	}
 
+	sm.IPAddr = ipaddr
+	sm.UserAgent = useragent
 	if err := s.sessions.Update(sm); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to save user session")
 	}
