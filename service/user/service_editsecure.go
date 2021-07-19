@@ -11,6 +11,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/model"
 )
 
@@ -564,6 +565,19 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 			}))
 		}
 	} else {
+		if _, err := s.kvotpcodes.Get(s.kvotpcodes.Subkey(m.Userid, code)); err != nil {
+			if !errors.Is(err, kvstore.ErrNotFound{}) {
+				s.logger.Error("Failed to get user used otp code", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "getuserotpcode",
+				})
+			}
+		} else {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "OTP code already used",
+			}))
+		}
 		if ok, err := s.users.ValidateOTPCode(s.otpDecrypter, m, code); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp code")
 		} else if !ok {
@@ -574,6 +588,15 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 		}
 	}
 	return nil
+}
+
+func (s *service) markOTPCode(userid string, code string) {
+	if err := s.kvotpcodes.Set(s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
+		s.logger.Error("Failed to mark otp code as used", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "markuserotpcode",
+		})
+	}
 }
 
 func (s *service) incrOTPFailCount(m *model.Model) {

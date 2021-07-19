@@ -69,6 +69,7 @@ type (
 		apikeys           apikey.Apikeys
 		kvusers           kvstore.KVStore
 		kvsessions        kvstore.KVStore
+		kvotpcodes        kvstore.KVStore
 		events            events.Events
 		mailer            mail.Mailer
 		ratelimiter       ratelimit.Ratelimiter
@@ -194,6 +195,7 @@ func New(
 		apikeys:           apikeys,
 		kvusers:           kv.Subtree("users"),
 		kvsessions:        kv.Subtree("sessions"),
+		kvotpcodes:        kv.Subtree("otpcodes"),
 		events:            ev,
 		mailer:            mailer,
 		ratelimiter:       ratelimiter,

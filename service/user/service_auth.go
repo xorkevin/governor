@@ -150,6 +150,8 @@ func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, usera
 		})
 	}
 
+	s.markOTPCode(userid, code)
+
 	return &resUserAuth{
 		Valid:        true,
 		Refresh:      true,
