@@ -39,7 +39,7 @@ type (
 )
 
 // Login authenticates a user and returns auth tokens
-func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
+func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -57,6 +57,21 @@ func (s *service) Login(userid, password, sessionID, ipaddr, useragent string) (
 			Status:  http.StatusUnauthorized,
 			Message: "Invalid username or password",
 		}), governor.ErrOptInner(err))
+	}
+
+	if m.OTPEnabled {
+		if len(code) == 0 && len(backup) == 0 {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Code:    "otp_required",
+				Message: "OTP code required",
+			}))
+		}
+
+		if err := s.checkOTPCode(m, code, backup); err != nil {
+			s.incrOTPFailCount(m)
+			return nil, err
+		}
 	}
 
 	sessionExists := false

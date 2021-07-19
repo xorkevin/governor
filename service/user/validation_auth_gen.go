@@ -9,6 +9,12 @@ func (r reqUserAuth) valid() error {
 	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
+	if err := validOTPCode(r.Code); err != nil {
+		return err
+	}
+	if err := validOTPCode(r.Backup); err != nil {
+		return err
+	}
 	if err := validhasSessionToken(r.SessionToken); err != nil {
 		return err
 	}

@@ -131,9 +131,24 @@ type (
 	reqUserAuth struct {
 		Username     string `valid:"usernameOrEmail,has" json:"username"`
 		Password     string `valid:"password,has" json:"password"`
+		Code         string `valid:"OTPCode" json:"code"`
+		Backup       string `valid:"OTPCode" json:"backup"`
 		SessionToken string `valid:"sessionToken,has" json:"session_token"`
 	}
 )
+
+func (r *reqUserAuth) validCode() error {
+	if err := r.valid(); err != nil {
+		return err
+	}
+	if len(r.Code) > 0 && len(r.Backup) > 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not provide both otp code and backup code",
+		}))
+	}
+	return nil
+}
 
 func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
@@ -142,7 +157,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.valid(); err != nil {
+	if err := req.validCode(); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -165,7 +180,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.Login(userid, req.Password, req.SessionToken, ipaddr, c.Header("User-Agent"))
+	res, err := m.s.Login(userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return

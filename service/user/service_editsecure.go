@@ -3,6 +3,7 @@ package user
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
@@ -546,10 +547,11 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 	} else {
 		k = int64(m.FailedLoginCount) * int64(m.FailedLoginCount)
 	}
-	if time.Now().Round(0).Unix() < m.FailedLoginTime+k {
+	cliff := m.FailedLoginTime + k
+	if time.Now().Round(0).Unix() < cliff {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
-			Message: "Rate limit",
+			Message: fmt.Sprintf("Failed 2fa code too many times. Try again after %s.", time.Unix(cliff, 0).UTC()),
 		}))
 	}
 	if code == "" {
