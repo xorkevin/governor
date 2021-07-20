@@ -1,0 +1,3 @@
+An OTP backup code was used for your account {{ .Username }} from {{ .IP }} with {{ .UserAgent }} at {{ .Time }}.
+
+If this was not you, please change your password and reset your OTP secret immediately.

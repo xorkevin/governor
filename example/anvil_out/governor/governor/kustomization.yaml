@@ -22,6 +22,12 @@ configMapGenerator:
       - templates/newuser.html
       - templates/newuser_subject.txt
       - templates/newuser.txt
+      - templates/otpbackupused.html
+      - templates/otpbackupused_subject.txt
+      - templates/otpbackupused.txt
+      - templates/otpratelimit.html
+      - templates/otpratelimit_subject.txt
+      - templates/otpratelimit.txt
       - templates/passchange.html
       - templates/passchange_subject.txt
       - templates/passchange.txt

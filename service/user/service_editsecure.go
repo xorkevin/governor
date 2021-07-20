@@ -43,11 +43,31 @@ type (
 		LastName  string
 		Username  string
 	}
+
+	emailOTPRatelimit struct {
+		FirstName string
+		LastName  string
+		Username  string
+		IP        string
+		UserAgent string
+		Time      string
+	}
+
+	emailOTPBackupUsed struct {
+		FirstName string
+		LastName  string
+		Username  string
+		IP        string
+		UserAgent string
+		Time      string
+	}
 )
 
 const (
-	emailChangeTemplate       = "emailchange"
-	emailChangeNotifyTemplate = "emailchangenotify"
+	emailChangeTemplate        = "emailchange"
+	emailChangeNotifyTemplate  = "emailchangenotify"
+	emailOTPRatelimitTemplate  = "otpratelimit"
+	emailOTPBackupUsedTemplate = "otpbackupused"
 )
 
 func (e *emailEmailChange) Query() queryEmailEmailChange {
@@ -541,7 +561,7 @@ func (s *service) CommitOTP(userid string, code string) error {
 	return nil
 }
 
-func (s *service) checkOTPCode(m *model.Model, code string, backup string) error {
+func (s *service) checkOTPCode(m *model.Model, code string, backup string, ipaddr, useragent string) error {
 	var k int64
 	if m.FailedLoginCount > 293 || k < 0 {
 		k = time24h
@@ -549,7 +569,8 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 		k = int64(m.FailedLoginCount) * int64(m.FailedLoginCount)
 	}
 	cliff := m.FailedLoginTime + k
-	if time.Now().Round(0).Unix() < cliff {
+	now := time.Now().Round(0).Unix()
+	if now < cliff {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: fmt.Sprintf("Failed 2fa code too many times. Try again after %s.", time.Unix(cliff, 0).UTC()),
@@ -563,6 +584,21 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string) error
 				Status:  http.StatusBadRequest,
 				Message: "Incorrect otp backup code",
 			}))
+		}
+
+		emdata := emailOTPBackupUsed{
+			FirstName: m.FirstName,
+			LastName:  m.LastName,
+			Username:  m.Username,
+			IP:        ipaddr,
+			Time:      time.Unix(now, 0).UTC().Format(time.RFC3339),
+			UserAgent: useragent,
+		}
+		if err := s.mailer.Send("", "", []string{m.Email}, emailOTPBackupUsedTemplate, emdata); err != nil {
+			s.logger.Error("Failed to send otp backup used email", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "otpbackupusedemail",
+			})
 		}
 	} else {
 		if _, err := s.kvotpcodes.Get(s.kvotpcodes.Subkey(m.Userid, code)); err != nil {
@@ -599,7 +635,7 @@ func (s *service) markOTPCode(userid string, code string) {
 	}
 }
 
-func (s *service) incrOTPFailCount(m *model.Model) {
+func (s *service) incrOTPFailCount(m *model.Model, ipaddr, useragent string) {
 	m.FailedLoginTime = time.Now().Round(0).Unix()
 	m.FailedLoginCount += 1
 	if err := s.users.Update(m); err != nil {
@@ -607,6 +643,23 @@ func (s *service) incrOTPFailCount(m *model.Model) {
 			"error":      err.Error(),
 			"actiontype": "incrotpfailcount",
 		})
+	}
+
+	if m.FailedLoginCount%8 == 0 {
+		emdata := emailOTPRatelimit{
+			FirstName: m.FirstName,
+			LastName:  m.LastName,
+			Username:  m.Username,
+			IP:        ipaddr,
+			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC3339),
+			UserAgent: useragent,
+		}
+		if err := s.mailer.Send("", "", []string{m.Email}, emailOTPRatelimitTemplate, emdata); err != nil {
+			s.logger.Error("Failed to send otp ratelimit email", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "otpratelimitemail",
+			})
+		}
 	}
 }
 
@@ -622,7 +675,7 @@ func (s *service) resetOTPFailCount(m *model.Model) {
 }
 
 // RemoveOTP removes using otp
-func (s *service) RemoveOTP(userid string, code string, backup string, password string) error {
+func (s *service) RemoveOTP(userid string, code string, backup string, password string, ipaddr, useragent string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -647,8 +700,8 @@ func (s *service) RemoveOTP(userid string, code string, backup string, password 
 			Message: "Incorrect password",
 		}))
 	}
-	if err := s.checkOTPCode(m, code, backup); err != nil {
-		s.incrOTPFailCount(m)
+	if err := s.checkOTPCode(m, code, backup, ipaddr, useragent); err != nil {
+		s.incrOTPFailCount(m, ipaddr, useragent)
 		return err
 	}
 

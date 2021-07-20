@@ -64,6 +64,12 @@ vars:
     - newuser.html
     - newuser_subject.txt
     - newuser.txt
+    - otpbackupused.html
+    - otpbackupused_subject.txt
+    - otpbackupused.txt
+    - otpratelimit.html
+    - otpratelimit_subject.txt
+    - otpratelimit.txt
     - passchange.html
     - passchange_subject.txt
     - passchange.txt

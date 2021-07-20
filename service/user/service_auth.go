@@ -68,8 +68,8 @@ func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, usera
 			}))
 		}
 
-		if err := s.checkOTPCode(m, code, backup); err != nil {
-			s.incrOTPFailCount(m)
+		if err := s.checkOTPCode(m, code, backup, ipaddr, useragent); err != nil {
+			s.incrOTPFailCount(m, ipaddr, useragent)
 			return nil, err
 		}
 	}
@@ -122,7 +122,7 @@ func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, usera
 			Username:  m.Username,
 			SessionID: sm.SessionID,
 			IP:        sm.IPAddr,
-			Time:      time.Unix(sm.Time, 0).Format(time.RFC3339),
+			Time:      time.Unix(sm.Time, 0).UTC().Format(time.RFC3339),
 			UserAgent: sm.UserAgent,
 		}
 		if err := s.mailer.Send("", "", []string{m.Email}, newLoginTemplate, emdata); err != nil {

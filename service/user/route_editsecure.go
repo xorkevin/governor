@@ -242,7 +242,11 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup, req.Password); err != nil {
+	var ipaddr string
+	if ip := c.RealIP(); ip != nil {
+		ipaddr = ip.String()
+	}
+	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
 		c.WriteError(err)
 		return
 	}
