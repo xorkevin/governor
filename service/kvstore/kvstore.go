@@ -259,16 +259,21 @@ func (s *service) handlePing() {
 	}
 }
 
-func (s *service) handleGetClient() (*redis.Client, error) {
-	authsecret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return nil, err
+type (
+	secretAuth struct {
+		Password string `mapstructure:"password"`
 	}
-	auth, ok := authsecret["password"].(string)
-	if !ok || auth == "" {
+)
+
+func (s *service) handleGetClient() (*redis.Client, error) {
+	var secret secretAuth
+	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
+		return nil, governor.ErrWithMsg(err, "Invalid secret")
+	}
+	if secret.Password == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
-	if auth == s.auth {
+	if secret.Password == s.auth {
 		return s.client, nil
 	}
 
@@ -276,7 +281,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     s.addr,
-		Password: auth,
+		Password: secret.Password,
 		DB:       s.dbname,
 	})
 	if _, err := client.Ping().Result(); err != nil {
@@ -285,7 +290,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 	}
 
 	s.client = client
-	s.auth = auth
+	s.auth = secret.Password
 	s.ready = true
 	s.hbfailed = 0
 	s.logger.Info(fmt.Sprintf("established connection to %s dbname %d", s.addr, s.dbname), nil)

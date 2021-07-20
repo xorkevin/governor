@@ -350,16 +350,21 @@ func (s *service) deinitSubs() {
 	}
 }
 
-func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
-	authsecret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return nil, nil, err
+type (
+	secretAuth struct {
+		Password string `mapstructure:"password"`
 	}
-	auth, ok := authsecret["password"].(string)
-	if !ok || auth == "" {
+)
+
+func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
+	var secret secretAuth
+	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
+		return nil, nil, governor.ErrWithMsg(err, "Invalid secret")
+	}
+	if secret.Password == "" {
 		return nil, nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
-	if auth == s.auth {
+	if secret.Password == s.auth {
 		return s.client, s.stream, nil
 	}
 
@@ -368,7 +373,7 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 	canary := make(chan struct{})
 	conn, err := nats.Connect(fmt.Sprintf("nats://%s", s.addr),
 		nats.Name(s.clientname),
-		nats.Token(auth),
+		nats.Token(secret.Password),
 		nats.NoReconnect(),
 		nats.PingInterval(time.Duration(s.hbinterval)*time.Second),
 		nats.MaxPingsOutstanding(s.hbmaxfail),
@@ -389,7 +394,7 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 
 	s.client = conn
 	s.stream = stream
-	s.auth = auth
+	s.auth = secret.Password
 	s.ready = true
 	s.canary = canary
 	s.logger.Info(fmt.Sprintf("Established connection to %s", s.addr), nil)

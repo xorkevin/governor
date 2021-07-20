@@ -205,22 +205,24 @@ func (s *service) handlePing() {
 	}
 }
 
+type (
+	secretAuth struct {
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+	}
+)
+
 func (s *service) handleGetClient() (*sql.DB, error) {
-	authsecret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return nil, err
+	var secret secretAuth
+	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
+		return nil, governor.ErrWithMsg(err, "Invalid secret")
 	}
-	username, ok := authsecret["username"].(string)
-	if !ok || username == "" {
-		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
-	password, ok := authsecret["password"].(string)
-	if !ok || password == "" {
+	if secret.Username == "" || secret.Password == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := pgauth{
-		username: username,
-		password: password,
+		username: secret.Username,
+		password: secret.Password,
 	}
 	if auth == s.auth {
 		return s.client, nil

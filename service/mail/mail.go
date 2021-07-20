@@ -218,25 +218,24 @@ func (a *plainAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 	return nil, nil
 }
 
+type (
+	secretAuth struct {
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+	}
+)
+
 func (s *service) handleSendMail(from string, to []string, msg []byte) error {
-	authsecret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return err
+	var secret secretAuth
+	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
+		return governor.ErrWithMsg(err, "Invalid secret")
 	}
 
-	username, ok := authsecret["username"].(string)
-	if !ok {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
-	password, ok := authsecret["password"].(string)
-	if !ok {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
 	var smtpauth smtp.Auth
 	if s.insecure {
-		smtpauth = newPlainAuth("", username, password, s.host)
+		smtpauth = newPlainAuth("", secret.Username, secret.Password, s.host)
 	} else {
-		smtpauth = smtp.PlainAuth("", username, password, s.host)
+		smtpauth = smtp.PlainAuth("", secret.Username, secret.Password, s.host)
 	}
 	if err := smtp.SendMail(s.addr, smtpauth, from, to, msg); err != nil {
 		return err
@@ -244,7 +243,7 @@ func (s *service) handleSendMail(from string, to []string, msg []byte) error {
 	s.logger.Debug("mail sent", map[string]string{
 		"actiontype": "sendmail",
 		"addr":       s.addr,
-		"username":   username,
+		"username":   secret.Username,
 		"from":       from,
 		"to":         strings.Join(to, ","),
 	})

@@ -240,6 +240,12 @@ func (s *service) router() *router {
 	}
 }
 
+type (
+	secretOTP struct {
+		Keys []string `mapstructure:"secrets"`
+	}
+)
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -316,23 +322,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.tplnewuser = t
 	}
 
-	otpsecrets, err := r.GetSecret("otpkey")
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to read otpkey")
+	var otpsecrets secretOTP
+	if err := r.GetSecret("otpkey", 0, &otpsecrets); err != nil {
+		return governor.ErrWithMsg(err, "Invalid otpkey secrets")
 	}
-	otpkeys, ok := otpsecrets["secrets"].([]interface{})
-	if !ok {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid otpkey secrets")
-	}
-	if len(otpkeys) == 0 {
+	if len(otpsecrets.Keys) == 0 {
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
 	}
 	otpDecrypter := hunter2.NewDecrypter()
-	for n, i := range otpkeys {
-		i, ok := i.(string)
-		if !ok {
-			return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid otpkey secret string")
-		}
+	for n, i := range otpsecrets.Keys {
 		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
 			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
@@ -358,7 +356,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"userapproval":          strconv.FormatBool(s.userApproval),
 		"otpissuer":             s.otpIssuer,
-		"numotpkeys":            strconv.Itoa(len(otpkeys)),
+		"numotpkeys":            strconv.Itoa(len(otpsecrets.Keys)),
 		"rolesummary":           s.rolesummary.String(),
 		"tplemailchange":        r.GetStr("email.url.emailchange"),
 		"tplforgotpass":         r.GetStr("email.url.forgotpass"),

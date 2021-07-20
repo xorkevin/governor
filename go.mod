@@ -10,6 +10,7 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/lib/pq v1.7.0
 	github.com/minio/minio-go/v6 v6.0.57
+	github.com/mitchellh/mapstructure v1.4.1
 	github.com/nats-io/jsm.go v0.0.23
 	github.com/nats-io/nats.go v1.11.0
 	github.com/rs/zerolog v1.19.0

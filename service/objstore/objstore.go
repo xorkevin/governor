@@ -221,18 +221,23 @@ func (s *service) handlePing() {
 	}
 }
 
-func (s *service) handleGetClient() (*minio.Client, error) {
-	authsecret, err := s.config.GetSecret("auth")
-	if err != nil {
-		return nil, err
+type (
+	secretAuth struct {
+		Password string `mapstructure:"password"`
 	}
-	password, ok := authsecret["password"].(string)
-	if !ok || password == "" {
+)
+
+func (s *service) handleGetClient() (*minio.Client, error) {
+	var secret secretAuth
+	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
+		return nil, governor.ErrWithMsg(err, "Invalid secret")
+	}
+	if secret.Password == "" {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := minioauth{
 		username: "admin",
-		password: password,
+		password: secret.Password,
 	}
 	if auth == s.auth {
 		return s.client, nil

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 )
 
@@ -319,24 +320,27 @@ func (c *Config) authVault() error {
 	return nil
 }
 
-func (c *Config) getSecret(key string) (vaultSecretVal, error) {
+func (c *Config) getSecret(key string, seconds int64, target interface{}) error {
 	if s, ok := c.vaultCache[key]; ok && s.isValid() {
-		return s.value, nil
+		if err := mapstructure.Decode(s.value, target); err != nil {
+			return ErrWithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
+		}
+		return nil
 	}
 
 	kvpath := c.config.GetString(key)
 	if kvpath == "" {
-		return nil, ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
+		return ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
 	}
 
 	if err := c.ensureValidAuth(); err != nil {
-		return nil, err
+		return err
 	}
 
 	vault := c.vault.Logical()
 	s, err := vault.Read(kvpath)
 	if err != nil {
-		return nil, ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
+		return ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
 	}
 
 	data := s.Data
@@ -351,6 +355,8 @@ func (c *Config) getSecret(key string) (vaultSecretVal, error) {
 		if expire > k {
 			expire = k
 		}
+	} else if seconds != 0 {
+		expire = time.Now().Round(0).Unix() + seconds
 	}
 	c.vaultCache[key] = vaultSecret{
 		key:    key,
@@ -358,7 +364,10 @@ func (c *Config) getSecret(key string) (vaultSecretVal, error) {
 		expire: expire,
 	}
 
-	return data, nil
+	if err := mapstructure.Decode(data, target); err != nil {
+		return ErrWithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
+	}
+	return nil
 }
 
 func (c *Config) invalidateSecret(key string) {
@@ -409,7 +418,7 @@ type (
 
 	// SecretReader gets values from a secret engine
 	SecretReader interface {
-		GetSecret(key string) (vaultSecretVal, error)
+		GetSecret(key string, seconds int64, target interface{}) error
 		InvalidateSecret(key string)
 	}
 
@@ -468,8 +477,8 @@ func (s *vaultSecret) isValid() bool {
 	return s.expire == 0 || s.expire-time.Now().Round(0).Unix() > 5
 }
 
-func (r *configReader) GetSecret(key string) (vaultSecretVal, error) {
-	return r.c.getSecret(r.name + "." + key)
+func (r *configReader) GetSecret(key string, seconds int64, target interface{}) error {
+	return r.c.getSecret(r.name+"."+key, seconds, target)
 }
 
 func (r *configReader) InvalidateSecret(key string) {

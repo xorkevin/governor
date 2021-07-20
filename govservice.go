@@ -63,6 +63,12 @@ func (s *Server) Register(name string, url string, r Service) {
 	r.Register(s.inj, s.config.registrar(name), nil)
 }
 
+type (
+	secretSetup struct {
+		Secret string `mapstructure:"secret"`
+	}
+)
+
 func (s *Server) setupServices(rsetup ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
@@ -88,15 +94,11 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 				Message: "First setup already run",
 			}))
 		}
-		setupsecret, err := s.config.getSecret("setupsecret")
-		if err != nil {
-			return err
+		var secret secretSetup
+		if err := s.config.getSecret("setupsecret", 0, &secret); err != nil {
+			return ErrWithMsg(err, "Invalid setup secret")
 		}
-		secret, ok := setupsecret["secret"].(string)
-		if !ok {
-			return ErrWithKind(nil, ErrInvalidConfig{}, "Invalid setup secret")
-		}
-		if rsetup.Secret != secret {
+		if rsetup.Secret != secret.Secret {
 			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
 				Status:  http.StatusForbidden,
 				Message: "Invalid setup secret",

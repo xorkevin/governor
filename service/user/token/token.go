@@ -132,39 +132,41 @@ func (e ErrGenerate) Error() string {
 	return "Error generating token"
 }
 
+type (
+	secretToken struct {
+		Secret string `mapstructure:"secret"`
+	}
+
+	secretRSAKey struct {
+		Secret string `mapstructure:"secret"`
+	}
+)
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
 		"phase": "init",
 	})
 
-	tokensecret, err := r.GetSecret("tokensecret")
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to read token secret")
+	var secret secretToken
+	if err := r.GetSecret("tokensecret", 0, &secret); err != nil {
+		return governor.ErrWithMsg(err, "Invalid token secret")
 	}
-	secret, ok := tokensecret["secret"].(string)
-	if !ok {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
-	if secret == "" {
+	if secret.Secret == "" {
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Token secret is not set")
 	}
-	s.secret = []byte(secret)
+	s.secret = []byte(secret.Secret)
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: s.secret}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT))
 	if err != nil {
 		return governor.ErrWithKind(err, ErrSigner{}, "Failed to create new jwt signer")
 	}
 	s.signer = sig
 
-	rsakeysecret, err := r.GetSecret("rsakey")
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to read rsakey")
+	var rsaSecret secretRSAKey
+	if err := r.GetSecret("rsakey", 0, &rsaSecret); err != nil {
+		return governor.ErrWithMsg(err, "Invalid rsakey secret")
 	}
-	rsakeyPem, ok := rsakeysecret["secret"].(string)
-	if !ok {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid rsakey secret")
-	}
-	pemBlock, _ := pem.Decode([]byte(rsakeyPem))
+	pemBlock, _ := pem.Decode([]byte(rsaSecret.Secret))
 	if pemBlock == nil || pemBlock.Type != pemBlockType {
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid rsakey pem")
 	}
