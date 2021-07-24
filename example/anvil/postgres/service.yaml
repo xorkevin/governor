@@ -114,9 +114,11 @@ spec:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_INITDB_ARGS
-              value: '--auth-local=trust --auth-host=scram-sha-256'
+              value: '--encoding UTF8 --auth-local=trust --auth-host=scram-sha-256'
             - name: POSTGRES_HOST_AUTH_METHOD
               value: scram-sha-256
+            - name: LANG
+              value: C
           ports:
             - name: postgres
               containerPort: 5432
