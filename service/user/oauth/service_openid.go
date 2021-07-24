@@ -116,7 +116,7 @@ func (s *service) GetJWKS() (*jose.JSONWebKeySet, error) {
 }
 
 const (
-	keySeparator = "|"
+	keySeparator = "."
 )
 
 func dedupSSV(s string, allowed map[string]struct{}) string {

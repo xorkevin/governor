@@ -187,7 +187,7 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if j := strings.SplitN(c.FormValue("code"), "|", 2); len(j) == 2 {
+		if j := strings.SplitN(c.FormValue("code"), keySeparator, 2); len(j) == 2 {
 			req.Userid = j[0]
 			req.Code = j[1]
 		}

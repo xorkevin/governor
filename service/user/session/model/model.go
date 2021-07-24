@@ -17,7 +17,7 @@ const (
 )
 
 const (
-	keySeparator = "|"
+	keySeparator = "."
 )
 
 type (

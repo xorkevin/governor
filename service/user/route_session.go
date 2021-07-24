@@ -44,9 +44,13 @@ type (
 	}
 )
 
+const (
+	keySeparator = "."
+)
+
 func (r *reqUserRmSessions) validUserid() error {
 	for _, i := range r.SessionIDs {
-		j := strings.SplitN(i, "|", 2)
+		j := strings.SplitN(i, keySeparator, 2)
 		if r.Userid != j[0] {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 				Status:  http.StatusBadRequest,
