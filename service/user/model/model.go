@@ -48,13 +48,13 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;updeq,userid;deleq,userid"`
-		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username,getoneeq,username"`
+		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;updeq,userid;deleq,userid"`
+		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username;getoneeq,username"`
 		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		OTPEnabled       bool   `model:"otp_enabled,BOOLEAN NOT NULL" query:"otp_enabled"`
 		OTPSecret        string `model:"otp_secret,VARCHAR(255) NOT NULL" query:"otp_secret"`
 		OTPBackup        string `model:"otp_backup,VARCHAR(255) NOT NULL" query:"otp_backup"`
-		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email,getoneeq,email"`
+		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email;getoneeq,email"`
 		FirstName        string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName         string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
 		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
@@ -64,7 +64,7 @@ type (
 
 	// Info is the metadata of a user
 	Info struct {
-		Userid    string `query:"userid,getgroup;getgroupeq,userid|arr"`
+		Userid    string `query:"userid;getgroup;getgroupeq,userid|arr"`
 		Username  string `query:"username"`
 		Email     string `query:"email"`
 		FirstName string `query:"first_name"`

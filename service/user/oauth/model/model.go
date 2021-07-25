@@ -40,15 +40,15 @@ type (
 
 	// Model is the db OAuth app model
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid,getoneeq,clientid;getgroupeq,clientid|arr;updeq,clientid;deleq,clientid"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|arr;updeq,clientid;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
 		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
 		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
-		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroup;getgroupeq,creator_id"`
+		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time;getgroup;getgroupeq,creator_id"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
-		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id,deleq,creator_id"`
+		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id;deleq,creator_id"`
 	}
 
 	ctxKeyRepo struct{}

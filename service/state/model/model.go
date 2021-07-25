@@ -22,7 +22,7 @@ type (
 
 	// Model is the db State model
 	Model struct {
-		config       int    `model:"config,INT PRIMARY KEY" query:"config,getoneeq,config;updeq,config"`
+		config       int    `model:"config,INT PRIMARY KEY" query:"config;getoneeq,config;updeq,config"`
 		Setup        bool   `model:"setup,BOOLEAN NOT NULL" query:"setup"`
 		Version      string `model:"version,VARCHAR(255) NOT NULL" query:"version"`
 		VHash        string `model:"vhash,VARCHAR(255) NOT NULL" query:"vhash"`

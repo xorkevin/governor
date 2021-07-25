@@ -34,11 +34,11 @@ type (
 
 	// Model is the user org model
 	Model struct {
-		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid,getoneeq,orgid;getgroupeq,orgid|arr;updeq,orgid;deleq,orgid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE" query:"name,getoneeq,name"`
+		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid;getoneeq,orgid;getgroupeq,orgid|arr;updeq,orgid;deleq,orgid"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE" query:"name;getoneeq,name"`
 		DisplayName  string `model:"display_name,VARCHAR(255) NOT NULL" query:"display_name"`
 		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time,getgroup"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup"`
 	}
 
 	ctxKeyRepo struct{}

@@ -37,8 +37,8 @@ type (
 
 	// Model is the user reset request model
 	Model struct {
-		Userid   string `model:"userid,VARCHAR(31)" query:"userid,deleq,userid"`
-		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind,getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`
+		Userid   string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
+		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind;getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`
 		CodeHash string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
 		CodeTime int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
 		Params   string `model:"params,VARCHAR(4096)" query:"params"`

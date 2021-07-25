@@ -40,8 +40,8 @@ type (
 
 	// Model is an connected OAuth app to a user account
 	Model struct {
-		Userid          string `model:"userid,VARCHAR(31);index" query:"userid,deleq,userid"`
-		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid,getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
+		Userid          string `model:"userid,VARCHAR(31);index" query:"userid;deleq,userid"`
+		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid;getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
 		Scope           string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		Nonce           string `model:"nonce,VARCHAR(255)" query:"nonce"`
 		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`
@@ -49,7 +49,7 @@ type (
 		CodeHash        string `model:"codehash,VARCHAR(255) NOT NULL" query:"codehash"`
 		AuthTime        int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
 		CodeTime        int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
-		AccessTime      int64  `model:"access_time,BIGINT NOT NULL;index" query:"access_time,getgroupeq,userid"`
+		AccessTime      int64  `model:"access_time,BIGINT NOT NULL;index" query:"access_time;getgroupeq,userid"`
 		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 		KeyHash         string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
 	}

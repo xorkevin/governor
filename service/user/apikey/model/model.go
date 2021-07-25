@@ -44,13 +44,13 @@ type (
 
 	// Model is the db Apikey model
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid,getoneeq,keyid;updeq,keyid;deleq,keyid"`
-		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid,deleq,userid"`
+		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;updeq,keyid;deleq,keyid"`
+		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid;deleq,userid"`
 		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Name    string `model:"name,VARCHAR(255)" query:"name"`
 		Desc    string `model:"description,VARCHAR(255)" query:"description"`
-		Time    int64  `model:"time,BIGINT NOT NULL;index" query:"time,getgroupeq,userid"`
+		Time    int64  `model:"time,BIGINT NOT NULL;index" query:"time;getgroupeq,userid"`
 	}
 
 	ctxKeyRepo struct{}

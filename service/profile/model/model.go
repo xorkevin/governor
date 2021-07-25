@@ -26,7 +26,7 @@ type (
 	// Model is the db profile model
 	// Image should be mostly be under 1024
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid,getoneeq,userid;getgroupeq,userid|arr;updeq,userid;deleq,userid"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;getgroupeq,userid|arr;updeq,userid;deleq,userid"`
 		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
