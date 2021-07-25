@@ -19,7 +19,7 @@ func sessionModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_userid_index ON usersessions (userid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_userid__sessionid_index ON usersessions (userid, sessionid);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -30,7 +30,7 @@ func sessionModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_time_index ON usersessions (time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS usersessions_userid__time_index ON usersessions (userid, time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

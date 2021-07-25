@@ -27,10 +27,10 @@ type (
 
 	// Model is the db role invitation model
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31);index" query:"userid"`
-		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr"`
+		Userid       string `model:"userid,VARCHAR(31)" query:"userid"`
+		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr"`
 		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,role" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
 	}
 
 	ctxKeyRepo struct{}

@@ -46,9 +46,9 @@ type (
 		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
 		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
-		Time         int64  `model:"time,BIGINT NOT NULL;index" query:"time;getgroup;getgroupeq,creator_id"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
-		CreatorID    string `model:"creator_id,VARCHAR(31);index" query:"creator_id;deleq,creator_id"`
+		Time         int64  `model:"time,BIGINT NOT NULL" query:"time"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creator_id" query:"creation_time;getgroup;getgroupeq,creator_id"`
+		CreatorID    string `model:"creator_id,VARCHAR(31)" query:"creator_id;deleq,creator_id"`
 	}
 
 	ctxKeyRepo struct{}
@@ -167,13 +167,13 @@ func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
 		return nil, err
 	}
 	if creatorid == "" {
-		m, err := oauthappModelGetModelOrdTime(d, false, limit, offset)
+		m, err := oauthappModelGetModelOrdCreationTime(d, false, limit, offset)
 		if err != nil {
 			return nil, governor.ErrWithMsg(err, "Failed to get OAuth apps")
 		}
 		return m, nil
 	}
-	m, err := oauthappModelGetModelEqCreatorIDOrdTime(d, creatorid, false, limit, offset)
+	m, err := oauthappModelGetModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get OAuth apps")
 	}

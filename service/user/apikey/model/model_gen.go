@@ -30,7 +30,7 @@ func apikeyModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_time_index ON userapikeys (time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_userid__time_index ON userapikeys (userid, time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

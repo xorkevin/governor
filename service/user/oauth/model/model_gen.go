@@ -19,7 +19,7 @@ func oauthappModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_time_index ON oauthapps (time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creation_time_index ON oauthapps (creation_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -30,7 +30,7 @@ func oauthappModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creator_id_index ON oauthapps (creator_id);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creator_id__creation_time_index ON oauthapps (creator_id, creation_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -164,13 +164,13 @@ func oauthappModelDelEqClientID(db *sql.DB, clientid string) error {
 	return err
 }
 
-func oauthappModelGetModelOrdTime(db *sql.DB, orderasc bool, limit, offset int) ([]Model, error) {
+func oauthappModelGetModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -191,13 +191,13 @@ func oauthappModelGetModelOrdTime(db *sql.DB, orderasc bool, limit, offset int) 
 	return res, nil
 }
 
-func oauthappModelGetModelEqCreatorIDOrdTime(db *sql.DB, creatorid string, orderasc bool, limit, offset int) ([]Model, error) {
+func oauthappModelGetModelEqCreatorIDOrdCreationTime(db *sql.DB, creatorid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps WHERE creator_id = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps WHERE creator_id = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ func linkModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creatorid_index ON courierlinks (creatorid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creation_time_index ON courierlinks (creation_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -30,7 +30,7 @@ func linkModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creation_time_index ON courierlinks (creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creatorid__creation_time_index ON courierlinks (creatorid, creation_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

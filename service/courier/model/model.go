@@ -40,15 +40,15 @@ type (
 	LinkModel struct {
 		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
-		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL;index" query:"creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup;getgroupeq,creatorid"`
+		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroup;getgroupeq,creatorid"`
 	}
 
 	// BrandModel is the db brand model
 	BrandModel struct {
 		CreatorID    string `model:"creatorid,VARCHAR(31)" query:"creatorid"`
 		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup;getgroupeq,creatorid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroup;getgroupeq,creatorid"`
 	}
 
 	ctxKeyRepo struct{}

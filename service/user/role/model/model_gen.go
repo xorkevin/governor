@@ -19,18 +19,7 @@ func roleModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_userid_index ON userroles (userid);")
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
-	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_role_index ON userroles (role);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_role__userid_index ON userroles (role, userid);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

@@ -19,29 +19,29 @@ func invModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_userid_index ON userroleinvitations (userid);")
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
-	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_role_index ON userroleinvitations (role);")
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
-	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_creation_time_index ON userroleinvitations (creation_time);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_userid__creation_time_index ON userroleinvitations (userid, creation_time);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_role__creation_time_index ON userroleinvitations (role, creation_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

@@ -30,6 +30,17 @@ func brandModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creatorid__creation_time_index ON courierbrands (creatorid, creation_time);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
 	return 0, nil
 }
 

@@ -19,17 +19,6 @@ func connectionModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_userid_index ON oauthconnections (userid);")
-	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
-	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_clientid_index ON oauthconnections (clientid);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
@@ -41,7 +30,7 @@ func connectionModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_access_time_index ON oauthconnections (access_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_userid__access_time_index ON oauthconnections (userid, access_time);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

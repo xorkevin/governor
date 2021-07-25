@@ -30,8 +30,8 @@ type (
 
 	// Model is the db User role model
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31);index" query:"userid;getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role);index" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
+		Userid string `model:"userid,VARCHAR(31);index,role" query:"userid;getgroupeq,role;deleq,userid"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
 	}
 
 	ctxKeyRepo struct{}

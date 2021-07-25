@@ -50,7 +50,7 @@ type (
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Name    string `model:"name,VARCHAR(255)" query:"name"`
 		Desc    string `model:"description,VARCHAR(255)" query:"description"`
-		Time    int64  `model:"time,BIGINT NOT NULL;index" query:"time;getgroupeq,userid"`
+		Time    int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
 	}
 
 	ctxKeyRepo struct{}
