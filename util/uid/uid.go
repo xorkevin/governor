@@ -2,7 +2,10 @@ package uid
 
 import (
 	"crypto/rand"
+	"encoding/base32"
 	"encoding/base64"
+	"encoding/binary"
+	"time"
 
 	"xorkevin.dev/governor"
 )
@@ -10,8 +13,7 @@ import (
 type (
 	// UID is an identifier that can be initialized with a custom length composed of a user specified time, hash, and random bits
 	UID struct {
-		size int
-		u    []byte
+		u []byte
 	}
 )
 
@@ -39,16 +41,14 @@ func New(size int) (*UID, error) {
 	}
 
 	return &UID{
-		size: size,
-		u:    u,
+		u: u,
 	}, nil
 }
 
 // FromBytes creates a new UID from an existing byte slice
 func FromBytes(b []byte) *UID {
 	return &UID{
-		size: len(b),
-		u:    b,
+		u: b,
 	}
 }
 
@@ -66,7 +66,46 @@ func (u *UID) Bytes() []byte {
 	return u.u
 }
 
-// Base64 returns the full raw bytes of an UID encoded in standard padded base64
+// Base64 returns the full raw bytes of an UID encoded in unpadded base64url
 func (u *UID) Base64() string {
 	return base64.RawURLEncoding.EncodeToString(u.u)
+}
+
+type (
+	// Snowflake is a uid approximately sortable by time
+	Snowflake struct {
+		u []byte
+	}
+)
+
+const (
+	timeSize = 8
+)
+
+// NewSnowflake creates a new snowflake uid
+func NewSnowflake(randsize int) (*Snowflake, error) {
+	u := make([]byte, timeSize+randsize)
+	now := uint64(time.Now().Round(0).UnixNano()) / uint64(time.Millisecond)
+	binary.BigEndian.PutUint64(u[:timeSize], now)
+	_, err := rand.Read(u[timeSize:])
+	if err != nil {
+		return nil, governor.ErrWithKind(err, ErrRand{}, "Failed reading crypto/rand")
+	}
+	return &Snowflake{
+		u: u,
+	}, nil
+}
+
+// Bytes returns the full raw bytes of a snowflake
+func (s *Snowflake) Bytes() []byte {
+	return s.u
+}
+
+var (
+	base32RawHexEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
+)
+
+// Base32 returns the full raw bytes of a snowflake in unpadded base32hex
+func (s *Snowflake) Base32() string {
+	return base32RawHexEncoding.EncodeToString(s.u)
 }
