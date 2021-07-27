@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -107,5 +108,5 @@ var (
 
 // Base32 returns the full raw bytes of a snowflake in unpadded base32hex
 func (s *Snowflake) Base32() string {
-	return base32RawHexEncoding.EncodeToString(s.u)
+	return strings.ToLower(base32RawHexEncoding.EncodeToString(s.u))
 }
