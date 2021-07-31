@@ -15,7 +15,7 @@ const (
 )
 
 func oauthappModelSetup(db *sql.DB) (int, error) {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31));")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31) NOT NULL);")
 	if err != nil {
 		return 0, err
 	}
