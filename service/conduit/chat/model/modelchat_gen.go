@@ -19,6 +19,28 @@ func chatModelSetup(db *sql.DB) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chats_last_updated__chatid_index ON chats (last_updated, chatid);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chats_chatid__last_updated_index ON chats (chatid, last_updated);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
 	return 0, nil
 }
 

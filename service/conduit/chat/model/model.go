@@ -19,10 +19,10 @@ type (
 
 	// ChatModel is the db chat model
 	ChatModel struct {
-		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;updeq,chatid;deleq,chatid"`
+		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY;index,last_updated" query:"chatid;updeq,chatid;deleq,chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,chatid" query:"last_updated"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
