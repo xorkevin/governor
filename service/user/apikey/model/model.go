@@ -48,7 +48,7 @@ type (
 		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid;deleq,userid"`
 		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
-		Name    string `model:"name,VARCHAR(255)" query:"name"`
+		Name    string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Desc    string `model:"description,VARCHAR(255)" query:"description"`
 		Time    int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
 	}

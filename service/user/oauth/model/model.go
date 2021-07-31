@@ -48,7 +48,7 @@ type (
 		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
 		Time         int64  `model:"time,BIGINT NOT NULL" query:"time"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creator_id" query:"creation_time;getgroup;getgroupeq,creator_id"`
-		CreatorID    string `model:"creator_id,VARCHAR(31)" query:"creator_id;deleq,creator_id"`
+		CreatorID    string `model:"creator_id,VARCHAR(31) NOT NULL" query:"creator_id;deleq,creator_id"`
 	}
 
 	ctxKeyRepo struct{}
