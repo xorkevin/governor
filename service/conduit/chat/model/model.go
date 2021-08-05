@@ -5,7 +5,7 @@ import (
 )
 
 //go:generate forge model -m ChatModel -t chats -p chat -o modelchat_gen.go ChatModel
-//go:generate forge model -m MemberModel -t chatmembers -p member -o modelmember_gen.go MemberModel
+//go:generate forge model -m MemberModel -t chatmembers -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -t chatmessages -p msg -o modelmsg_gen.go MsgModel
 
 type (
@@ -19,17 +19,24 @@ type (
 
 	// ChatModel is the db chat model
 	ChatModel struct {
-		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY;index,last_updated" query:"chatid;updeq,chatid;deleq,chatid"`
+		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;getgroupeq,chatid|arr;updeq,chatid;deleq,chatid"`
+		Kind         string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,chatid" query:"last_updated"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
 	// MemberModel is the db chat member model
 	MemberModel struct {
-		Chatid string `model:"chatid,VARCHAR(31);index,userid" query:"chatid"`
-		Userid string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;deleq,chatid,userid"`
+		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;deleq,chatid,userid|arr"`
+		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind"`
+	}
+
+	chatLastUpdated struct {
+		LastUpdated int64 `query:"last_updated;updeq,chatid"`
 	}
 
 	// MsgModel is the db message model

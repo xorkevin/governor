@@ -15,11 +15,22 @@ const (
 )
 
 func memberModelSetup(db *sql.DB) (int, error) {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmembers (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid));")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmembers (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), kind VARCHAR(31) NOT NULL, last_updated BIGINT NOT NULL);")
 	if err != nil {
 		return 0, err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmembers_userid__chatid_index ON chatmembers (userid, chatid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmembers_userid__last_updated_index ON chatmembers (userid, last_updated);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmembers_userid__kind__last_updated_index ON chatmembers (userid, kind, last_updated);")
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -34,7 +45,7 @@ func memberModelSetup(db *sql.DB) (int, error) {
 }
 
 func memberModelInsert(db *sql.DB, m *MemberModel) (int, error) {
-	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid) VALUES ($1, $2);", m.Chatid, m.Userid)
+	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid, kind, last_updated) VALUES ($1, $2, $3, $4);", m.Chatid, m.Userid, m.Kind, m.LastUpdated)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -54,13 +65,13 @@ func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*2)
+	args := make([]interface{}, 0, len(models)*4)
 	for c, m := range models {
-		n := c * 2
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d)", n+1, n+2))
-		args = append(args, m.Chatid, m.Userid)
+		n := c * 4
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
+		args = append(args, m.Chatid, m.Userid, m.Kind, m.LastUpdated)
 	}
-	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid, kind, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -74,13 +85,18 @@ func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool
 	return 0, nil
 }
 
+func memberModelDelEqChatid(db *sql.DB, chatid string) error {
+	_, err := db.Exec("DELETE FROM chatmembers WHERE chatid = $1;", chatid)
+	return err
+}
+
 func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, chatid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid FROM chatmembers WHERE chatid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM chatmembers WHERE chatid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +106,7 @@ func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, chatid string, order
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -101,7 +117,89 @@ func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, chatid string, order
 	return res, nil
 }
 
-func memberModelDelEqChatidEqUserid(db *sql.DB, chatid string, userid string) error {
-	_, err := db.Exec("DELETE FROM chatmembers WHERE chatid = $1 AND userid = $2;", chatid, userid)
+func memberModelDelEqChatidHasUserid(db *sql.DB, chatid string, userid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(userid))
+	args = append(args, chatid)
+	var placeholdersuserid string
+	{
+		placeholders := make([]string, 0, len(userid))
+		for _, i := range userid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM chatmembers WHERE chatid = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
+}
+
+func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM chatmembers WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(db *sql.DB, userid string, kind string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM chatmembers WHERE userid = $3 AND kind = $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) (int, error) {
+	_, err := db.Exec("UPDATE chatmembers SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }
