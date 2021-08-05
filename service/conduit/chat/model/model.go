@@ -1,15 +1,24 @@
 package model
 
 import (
+	"time"
+
+	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/util/uid"
 )
 
 //go:generate forge model -m ChatModel -t chats -p chat -o modelchat_gen.go ChatModel
 //go:generate forge model -m MemberModel -t chatmembers -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -t chatmessages -p msg -o modelmsg_gen.go MsgModel
 
+const (
+	chatUIDSize = 16
+)
+
 type (
 	Repo interface {
+		NewChat(kind string, name string, theme string) (*ChatModel, error)
 		Setup() error
 	}
 
@@ -48,4 +57,79 @@ type (
 		Kind   int    `model:"kind,INTEGER NOT NULL" query:"kind"`
 		Value  string `model:"value,VARCHAR(4095) NOT NULL" query:"value"`
 	}
+
+	ctxKeyRepo struct{}
 )
+
+// GetCtxRepo returns a Repo from the context
+func GetCtxRepo(inj governor.Injector) Repo {
+	v := inj.Get(ctxKeyRepo{})
+	if v == nil {
+		return nil
+	}
+	return v.(Repo)
+}
+
+// SetCtxRepo sets a Repo in the context
+func SetCtxRepo(inj governor.Injector, r Repo) {
+	inj.Set(ctxKeyRepo{}, r)
+}
+
+// NewInCtx creates a new chat repo from a context and sets it in the context
+func NewInCtx(inj governor.Injector) {
+	SetCtxRepo(inj, NewCtx(inj))
+}
+
+// NewCtx creates a new chat repo from a context
+func NewCtx(inj governor.Injector) Repo {
+	dbService := db.GetCtxDB(inj)
+	return New(dbService)
+}
+
+// New creates a new user repository
+func New(database db.Database) Repo {
+	return &repo{
+		db: database,
+	}
+}
+
+// NewChat creates new chat
+func (r *repo) NewChat(kind string, name string, theme string) (*ChatModel, error) {
+	u, err := uid.New(chatUIDSize)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
+	}
+	now := time.Now().Round(0)
+	return &ChatModel{
+		Chatid:       u.Base64(),
+		Kind:         kind,
+		Name:         name,
+		Theme:        theme,
+		LastUpdated:  now.UnixNano() / int64(time.Millisecond),
+		CreationTime: now.Unix(),
+	}, nil
+}
+
+// Setup creates new chat, member, and msg tables
+func (r *repo) Setup() error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := chatModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup chat model")
+		}
+	}
+	if code, err := memberModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup chat member model")
+		}
+	}
+	if code, err := msgModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup chat message model")
+		}
+	}
+	return nil
+}
