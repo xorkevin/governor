@@ -63,6 +63,25 @@ func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) (i
 	return 0, nil
 }
 
+func chatModelGetChatModelEqChatid(db *sql.DB, chatid string) (*ChatModel, int, error) {
+	m := &ChatModel{}
+	if err := db.QueryRow("SELECT chatid, kind, name, theme, last_updated, creation_time FROM chats WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Kind, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
 func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, orderasc bool, limit, offset int) ([]ChatModel, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))

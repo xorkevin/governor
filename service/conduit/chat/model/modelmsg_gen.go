@@ -182,8 +182,21 @@ func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, chatid string,
 	return res, nil
 }
 
-func msgModelDelEqChatidEqMsgid(db *sql.DB, chatid string, msgid string) error {
-	_, err := db.Exec("DELETE FROM chatmessages WHERE chatid = $1 AND msgid = $2;", chatid, msgid)
+func msgModelDelEqChatidHasMsgid(db *sql.DB, chatid string, msgid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(msgid))
+	args = append(args, chatid)
+	var placeholdersmsgid string
+	{
+		placeholders := make([]string, 0, len(msgid))
+		for _, i := range msgid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersmsgid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM chatmessages WHERE chatid = $1 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
 	return err
 }
 
