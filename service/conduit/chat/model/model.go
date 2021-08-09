@@ -31,12 +31,16 @@ type (
 		UpdateChatLastUpdated(chatid string, t int64) error
 		DeleteChat(m *ChatModel) error
 		InsertMember(m *MemberModel) error
-		DeleteChatMembers(chatid string) error
 		DeleteMembers(chatid string, userids []string) error
+		DeleteChatMembers(chatid string) error
 		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
 		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
+		GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error)
+		GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error)
 		AddMsg(chatid string, userid string, kind string, txt string) (*MsgModel, error)
 		InsertMsg(m *MsgModel) error
+		DeleteMsgs(chatid string, msgids []string) error
+		DeleteChatMsgs(chatid string) error
 		Setup() error
 	}
 
@@ -280,18 +284,6 @@ func (r *repo) InsertMember(m *MemberModel) error {
 	return nil
 }
 
-// DeleteChatMembers deletes all chat members
-func (r *repo) DeleteChatMembers(chatid string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := memberModelDelEqChatid(d, chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat members")
-	}
-	return nil
-}
-
 // DeleteMembers deletes chat members
 func (r *repo) DeleteMembers(chatid string, userids []string) error {
 	d, err := r.db.DB()
@@ -299,6 +291,18 @@ func (r *repo) DeleteMembers(chatid string, userids []string) error {
 		return err
 	}
 	if err := memberModelDelEqChatidHasUserid(d, chatid, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete chat members")
+	}
+	return nil
+}
+
+// DeleteChatMembers deletes all chat members
+func (r *repo) DeleteChatMembers(chatid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelDelEqChatid(d, chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat members")
 	}
 	return nil
@@ -324,6 +328,32 @@ func (r *repo) GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel
 		return nil, err
 	}
 	m, err := msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(d, chatid, msgid, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+	}
+	return m, nil
+}
+
+// GetMsgsByKind returns chat msgs of a kind
+func (r *repo) GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqChatidEqKindOrdMsgid(d, chatid, kind, false, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+	}
+	return m, nil
+}
+
+// GetMsgsByKind returns chat msgs of a kind
+func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(d, chatid, kind, msgid, false, limit, 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
 	}
@@ -357,6 +387,30 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 			return governor.ErrWithKind(err, db.ErrUnique{}, "Message id must be unique")
 		}
 		return governor.ErrWithMsg(err, "Failed to insert chat message")
+	}
+	return nil
+}
+
+// DeleteMsgs deletes chat messages
+func (r *repo) DeleteMsgs(chatid string, msgids []string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := msgModelDelEqChatidHasMsgid(d, chatid, msgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete chat messages")
+	}
+	return nil
+}
+
+// DeleteChatMsgs deletes all chat messages
+func (r *repo) DeleteChatMsgs(chatid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := msgModelDelEqChatid(d, chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete chat messages")
 	}
 	return nil
 }
