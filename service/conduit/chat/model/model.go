@@ -13,7 +13,8 @@ import (
 //go:generate forge model -m MsgModel -t chatmessages -p msg -o modelmsg_gen.go MsgModel
 
 const (
-	chatUIDSize = 16
+	chatUIDSize    = 16
+	msgUIDRandSize = 8
 )
 
 type (
@@ -32,6 +33,10 @@ type (
 		InsertMember(m *MemberModel) error
 		DeleteChatMembers(chatid string) error
 		DeleteMembers(chatid string, userids []string) error
+		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
+		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
+		AddMsg(chatid string, userid string, kind string, txt string) (*MsgModel, error)
+		InsertMsg(m *MsgModel) error
 		Setup() error
 	}
 
@@ -67,7 +72,7 @@ type (
 		Msgid  string `model:"msgid,VARCHAR(31), PRIMARY KEY (chatid, msgid);index,chatid,kind" query:"msgid;getgroupeq,chatid;getgroupeq,chatid,msgid|lt;getgroupeq,chatid,kind;getgroupeq,chatid,kind,msgid|lt;deleq,chatid,msgid|arr;deleq,chatid"`
 		Userid string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		Timems int64  `model:"time_ms,BIGINT NOT NULL" query:"time_ms"`
-		Kind   int    `model:"kind,INTEGER NOT NULL" query:"kind"`
+		Kind   string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		Value  string `model:"value,VARCHAR(4095) NOT NULL" query:"value"`
 	}
 
@@ -295,6 +300,63 @@ func (r *repo) DeleteMembers(chatid string, userids []string) error {
 	}
 	if err := memberModelDelEqChatidHasUserid(d, chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat members")
+	}
+	return nil
+}
+
+// GetMsgs returns chat msgs
+func (r *repo) GetMsgs(chatid string, limit, offset int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqChatidOrdMsgid(d, chatid, false, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+	}
+	return m, nil
+}
+
+// GetMsgsBefore returns chat msgs before a time
+func (r *repo) GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(d, chatid, msgid, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+	}
+	return m, nil
+}
+
+// AddMsg adds a new chat msg
+func (r *repo) AddMsg(chatid string, userid string, kind string, value string) (*MsgModel, error) {
+	u, err := uid.NewSnowflake(msgUIDRandSize)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
+	}
+	return &MsgModel{
+		Chatid: chatid,
+		Msgid:  u.Base32(),
+		Userid: userid,
+		Timems: time.Now().Round(0).UnixNano() / int64(time.Millisecond),
+		Kind:   kind,
+		Value:  value,
+	}, nil
+}
+
+// InsertMsg inserts a new chat msg into the db
+func (r *repo) InsertMsg(m *MsgModel) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := msgModelInsert(d, m); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Message id must be unique")
+		}
+		return governor.ErrWithMsg(err, "Failed to insert chat message")
 	}
 	return nil
 }

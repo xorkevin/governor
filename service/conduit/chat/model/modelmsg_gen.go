@@ -15,7 +15,7 @@ const (
 )
 
 func msgModelSetup(db *sql.DB) (int, error) {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmessages (chatid VARCHAR(31), msgid VARCHAR(31), PRIMARY KEY (chatid, msgid), userid VARCHAR(31) NOT NULL, time_ms BIGINT NOT NULL, kind INTEGER NOT NULL, value VARCHAR(4095) NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmessages (chatid VARCHAR(31), msgid VARCHAR(31), PRIMARY KEY (chatid, msgid), userid VARCHAR(31) NOT NULL, time_ms BIGINT NOT NULL, kind VARCHAR(31) NOT NULL, value VARCHAR(4095) NOT NULL);")
 	if err != nil {
 		return 0, err
 	}
@@ -128,7 +128,7 @@ func msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(db *sql.DB, chatid string, msgid
 	return res, nil
 }
 
-func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, chatid string, kind int, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, chatid string, kind string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
@@ -155,7 +155,7 @@ func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, chatid string, kind i
 	return res, nil
 }
 
-func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, chatid string, kind int, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, chatid string, kind string, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
