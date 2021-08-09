@@ -2,15 +2,10 @@ package conduit
 
 import (
 	"context"
-	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
 	"xorkevin.dev/governor/service/user/gate"
-)
-
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
 )
 
 type (

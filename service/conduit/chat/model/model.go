@@ -25,12 +25,12 @@ type (
 		GetMembers(chatid string, limit, offset int) ([]MemberModel, error)
 		GetRecentChats(userid string, limit, offset int) ([]MemberModel, error)
 		GetRecentChatsByKind(userid string, kind string, limit, offset int) ([]MemberModel, error)
-		AddMember(m *ChatModel, userid string) *MemberModel
+		AddMembers(m *ChatModel, userids []string) []*MemberModel
 		InsertChat(m *ChatModel) error
 		UpdateChat(m *ChatModel) error
 		UpdateChatLastUpdated(chatid string, t int64) error
 		DeleteChat(m *ChatModel) error
-		InsertMember(m *MemberModel) error
+		InsertMembers(m []*MemberModel) error
 		DeleteMembers(chatid string, userids []string) error
 		DeleteChatMembers(chatid string) error
 		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
@@ -200,14 +200,20 @@ func (r *repo) GetRecentChatsByKind(userid string, kind string, limit, offset in
 	return m, nil
 }
 
-// AddMember adds a new chat member
-func (r *repo) AddMember(m *ChatModel, userid string) *MemberModel {
-	return &MemberModel{
-		Chatid:      m.Chatid,
-		Userid:      userid,
-		Kind:        m.Kind,
-		LastUpdated: time.Now().Round(0).UnixNano() / int64(time.Millisecond),
+// AddMembers adds new chat members
+func (r *repo) AddMembers(m *ChatModel, userids []string) []*MemberModel {
+	members := make([]*MemberModel, 0, len(userids))
+	now := time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	m.LastUpdated = now
+	for _, i := range userids {
+		members = append(members, &MemberModel{
+			Chatid:      m.Chatid,
+			Userid:      i,
+			Kind:        m.Kind,
+			LastUpdated: now,
+		})
 	}
+	return members
 }
 
 // InsertChat inserts a new chat into the db
@@ -269,17 +275,17 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 	return nil
 }
 
-// InsertMember inserts a new chat member into the db
-func (r *repo) InsertMember(m *MemberModel) error {
+// InsertMembers inserts a new chat member into the db
+func (r *repo) InsertMembers(m []*MemberModel) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if code, err := memberModelInsert(d, m); err != nil {
+	if code, err := memberModelInsertBulk(d, m, false); err != nil {
 		if code == 3 {
 			return governor.ErrWithKind(err, db.ErrUnique{}, "User already added to chat")
 		}
-		return governor.ErrWithMsg(err, "Failed to insert chat member")
+		return governor.ErrWithMsg(err, "Failed to insert chat members")
 	}
 	return nil
 }
