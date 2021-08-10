@@ -40,35 +40,35 @@ func (v Version) String() string {
 }
 
 type (
+	// SecretsClient is a client that reads secrets
+	SecretsClient interface {
+		Init() error
+		GetSecret(kvpath string) (map[string]interface{}, int64, error)
+	}
+
 	// Config is the server configuration including those from a config file and
 	// environment variables
 	Config struct {
-		config         *viper.Viper
-		vault          *vaultapi.Client
-		vaultK8sAuth   bool
-		vaultRole      string
-		vaultJWT       string
-		vaultLoginPath string
-		vaultExpire    int64
-		vaultCache     map[string]vaultSecret
-		mu             *sync.RWMutex
-		appname        string
-		version        Version
-		showBanner     bool
-		logLevel       int
-		logOutput      io.Writer
-		maxReqSize     string
-		maxHeaderSize  string
-		maxConnRead    string
-		maxConnHeader  string
-		maxConnWrite   string
-		maxConnIdle    string
-		origins        []string
-		allowpaths     []*corsPathRule
-		rewrite        []*rewriteRule
-		Port           string
-		BaseURL        string
-		Hostname       string
+		config        *viper.Viper
+		vault         SecretsClient
+		vaultCache    map[string]vaultSecret
+		appname       string
+		version       Version
+		showBanner    bool
+		logLevel      int
+		logOutput     io.Writer
+		maxReqSize    string
+		maxHeaderSize string
+		maxConnRead   string
+		maxConnHeader string
+		maxConnWrite  string
+		maxConnIdle   string
+		origins       []string
+		allowpaths    []*corsPathRule
+		rewrite       []*rewriteRule
+		Port          string
+		BaseURL       string
+		Hostname      string
 	}
 
 	corsPathRule struct {
@@ -150,6 +150,7 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("alloworigins", []string{})
 	v.SetDefault("allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
+	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
 	v.SetDefault("vault.k8s.role", "")
@@ -170,7 +171,6 @@ func newConfig(opts Opts) *Config {
 
 	return &Config{
 		config:     v,
-		mu:         &sync.RWMutex{},
 		appname:    opts.Appname,
 		version:    opts.Version,
 		vaultCache: map[string]vaultSecret{},
@@ -229,35 +229,158 @@ func (c *Config) init() error {
 	if err != nil {
 		return err
 	}
-	if err := c.initvault(); err != nil {
+	if err := c.initsecrets(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Config) initvault() error {
-	vaultconfig := vaultapi.DefaultConfig()
-	if err := vaultconfig.Error; err != nil {
-		return err
+type (
+	// SecretsFileSource is a SecretsClient reading from a static file
+	SecretsFileSource struct {
+		source string
 	}
-	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
-		vaultconfig.Address = vaddr
-	}
-	vault, err := vaultapi.NewClient(vaultconfig)
-	if err != nil {
-		return ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
-	}
-	c.vault = vault
-	if c.config.GetBool("vault.k8s.auth") {
-		c.vaultK8sAuth = true
+)
 
-		role := c.config.GetString("vault.k8s.role")
-		loginpath := c.config.GetString("vault.k8s.loginpath")
+// NewSecretsFileSource creates a new SecretsFileSource
+func NewSecretsFileSource(s string) (SecretsClient, error) {
+	return &SecretsFileSource{
+		source: s,
+	}, nil
+}
+
+func (s *SecretsFileSource) Init() error {
+	return nil
+}
+
+func (s *SecretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+	return nil, 0, nil
+}
+
+type (
+	SecretsVaultSourceConfig struct {
+		Addr         string
+		K8SAuth      bool
+		K8SRole      string
+		K8SLoginPath string
+		K8SJWT       string
+	}
+
+	// SecretsVaultSource is a SecretsClient reading from vault
+	SecretsVaultSource struct {
+		vault       *vaultapi.Client
+		config      SecretsVaultSourceConfig
+		vaultExpire int64
+		mu          *sync.RWMutex
+	}
+)
+
+// NewSecretsVaultSource creates a new SecretsVaultSource
+func NewSecretsVaultSource(config SecretsVaultSourceConfig) (SecretsClient, error) {
+	vconfig := vaultapi.DefaultConfig()
+	if err := vconfig.Error; err != nil {
+		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault default config")
+	}
+	vconfig.Address = config.Addr
+	vault, err := vaultapi.NewClient(vconfig)
+	if err != nil {
+		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
+	}
+	return &SecretsVaultSource{
+		vault:  vault,
+		config: config,
+		mu:     &sync.RWMutex{},
+	}, nil
+}
+
+func (s *SecretsVaultSource) Init() error {
+	if !s.config.K8SAuth {
+		return nil
+	}
+	if s.authVaultValid() {
+		return nil
+	}
+	return s.authVault()
+}
+
+func (s *SecretsVaultSource) authVaultValidLocked() bool {
+	return s.vaultExpire-time.Now().Round(0).Unix() > 5
+}
+
+func (s *SecretsVaultSource) authVaultValid() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.authVaultValidLocked()
+}
+
+func (s *SecretsVaultSource) authVault() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.authVaultValidLocked() {
+		return nil
+	}
+
+	vault := s.vault.Logical()
+	authsecret, err := vault.Write(s.config.K8SLoginPath, map[string]interface{}{
+		"jwt":  s.config.K8SJWT,
+		"role": s.config.K8SRole,
+	})
+	if err != nil {
+		return ErrWithKind(err, ErrVault{}, "Failed to auth with vault k8s")
+	}
+	s.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
+	s.vault.SetToken(authsecret.Auth.ClientToken)
+	return nil
+}
+
+func (s *SecretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+	if err := s.Init(); err != nil {
+		return nil, 0, err
+	}
+
+	vault := s.vault.Logical()
+	secret, err := vault.Read(kvpath)
+	if err != nil {
+		return nil, 0, ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
+	}
+	data := secret.Data
+	if v, ok := data["data"].(map[string]interface{}); ok {
+		data = v
+	}
+	var expire int64
+	if secret.LeaseDuration > 0 {
+		expire = time.Now().Round(0).Unix() + int64(secret.LeaseDuration)
+		k := s.vaultExpire
+		if expire > k {
+			expire = k
+		}
+	}
+	return data, expire, nil
+}
+
+func (c *Config) initsecrets() error {
+	if vsource := c.config.GetString("vault.filesource"); vsource != "" {
+		client, err := NewSecretsFileSource(vsource)
+		if err != nil {
+			return err
+		}
+		c.vault = client
+	}
+	config := SecretsVaultSourceConfig{}
+	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
+		config.Addr = vaddr
+	}
+	if c.config.GetBool("vault.k8s.auth") {
+		config.K8SAuth = true
+
+		config.K8SRole = c.config.GetString("vault.k8s.role")
+		config.K8SLoginPath = c.config.GetString("vault.k8s.loginpath")
 		jwtpath := c.config.GetString("vault.k8s.jwtpath")
-		if role == "" {
+		if config.K8SRole == "" {
 			return ErrWithKind(nil, ErrInvalidConfig{}, "No vault role set")
 		}
-		if loginpath == "" {
+		if config.K8SLoginPath == "" {
 			return ErrWithKind(nil, ErrInvalidConfig{}, "No vault k8s login path set")
 		}
 		if jwtpath == "" {
@@ -267,56 +390,16 @@ func (c *Config) initvault() error {
 		if err != nil {
 			return ErrWithKind(err, ErrInvalidConfig{}, "Failed to read vault k8s service account jwt")
 		}
-		jwt := string(jwtbytes)
-		c.vaultRole = role
-		c.vaultLoginPath = loginpath
-		c.vaultJWT = jwt
-
-		if err := c.authVault(); err != nil {
-			return err
-		}
+		config.K8SJWT = string(jwtbytes)
 	}
-	return nil
-}
-
-func (c *Config) ensureValidAuth() error {
-	if !c.vaultK8sAuth {
-		return nil
-	}
-	if c.authVaultValid() {
-		return nil
-	}
-	return c.authVault()
-}
-
-func (c *Config) authVaultValidLocked() bool {
-	return c.vaultExpire-time.Now().Round(0).Unix() > 5
-}
-
-func (c *Config) authVaultValid() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.authVaultValidLocked()
-}
-
-func (c *Config) authVault() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.authVaultValidLocked() {
-		return nil
-	}
-
-	vault := c.vault.Logical()
-	authsecret, err := vault.Write(c.vaultLoginPath, map[string]interface{}{
-		"jwt":  c.vaultJWT,
-		"role": c.vaultRole,
-	})
+	vault, err := NewSecretsVaultSource(config)
 	if err != nil {
-		return ErrWithKind(err, ErrVault{}, "Failed to auth with vault k8s")
+		return err
 	}
-	c.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
-	c.vault.SetToken(authsecret.Auth.ClientToken)
+	if err := vault.Init(); err != nil {
+		return err
+	}
+	c.vault = vault
 	return nil
 }
 
@@ -333,29 +416,11 @@ func (c *Config) getSecret(key string, seconds int64, target interface{}) error 
 		return ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
 	}
 
-	if err := c.ensureValidAuth(); err != nil {
+	data, expire, err := c.vault.GetSecret(kvpath)
+	if err != nil {
 		return err
 	}
-
-	vault := c.vault.Logical()
-	s, err := vault.Read(kvpath)
-	if err != nil {
-		return ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
-	}
-
-	data := s.Data
-	if v, ok := data["data"].(map[string]interface{}); ok {
-		data = v
-	}
-
-	var expire int64
-	if s.LeaseDuration > 0 {
-		expire = time.Now().Round(0).Unix() + int64(s.LeaseDuration)
-		k := c.vaultExpire
-		if expire > k {
-			expire = k
-		}
-	} else if seconds != 0 {
+	if expire == 0 && seconds != 0 {
 		expire = time.Now().Round(0).Unix() + seconds
 	}
 	c.vaultCache[key] = vaultSecret{
