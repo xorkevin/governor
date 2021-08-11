@@ -100,9 +100,9 @@ user:
   email:
     url:
       base: http://localhost:3000
-      emailchange: /a/confirm/email?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
-      forgotpass: /x/resetpass?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
-      newuser: /x/confirm?userid={{`{{.Userid}}`}}&key={{`{{.Key}}`}}
+      emailchange: /a/confirm/email?key={{.Userid}}.{{.Key}}
+      forgotpass: /x/resetpass?key={{.Userid}}.{{.Key}}
+      newuser: /x/confirm?userid={{.Userid}}&key={{.Key}}
 oauth:
   codetime: 1m
   accesstime: 5m
@@ -112,8 +112,8 @@ oauth:
   issuer: http://governor.dev.localhost:8080
   epauthorize: http://localhost:3000/oauth/auth
   ephost: http://governor.dev.localhost:8080
-  epprofile: http://localhost:3000/u/{{`{{.Username}}`}}
-  eppicture: http://localhost:3000/api/profile/id/{{`{{.Userid}}`}}/image
+  epprofile: http://localhost:3000/u/{{.Username}}
+  eppicture: http://localhost:3000/api/profile/id/{{.Userid}}/image
 courier:
   fallbacklink: http://governor.dev.localhost:8080
   linkprefix: http://go.governor.dev.localhost:8080

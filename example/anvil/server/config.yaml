@@ -5,7 +5,6 @@ mode: DEBUG
 logoutput: STDOUT
 port: 8080
 baseurl: /api
-templatedir: templates
 maxreqsize: 2M
 maxheadersize: 1M
 maxconnread: 5s

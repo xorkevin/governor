@@ -37,6 +37,8 @@ services:
     image: {{ .Vars.images.nats.name }}:{{ .Vars.images.nats.version }}
     entrypoint: ['nats-server']
     command: ['-c', '/etc/nats/server.conf']
+    ports:
+      - 4222:4222
     volumes:
       - natsdata:/var/lib/nats
       - ./natsetc:/etc/nats:ro

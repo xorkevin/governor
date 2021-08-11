@@ -141,7 +141,6 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("banner", true)
 	v.SetDefault("port", "8080")
 	v.SetDefault("baseurl", "/")
-	v.SetDefault("templatedir", "templates")
 	v.SetDefault("maxreqsize", "2M")
 	v.SetDefault("maxheadersize", "1M")
 	v.SetDefault("maxconnread", "5s")

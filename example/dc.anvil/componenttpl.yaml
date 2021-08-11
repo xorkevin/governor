@@ -6,3 +6,9 @@ templates:
   natsconf:
     path: nats.conf
     output: {{ $outdir }}/natsetc/server.conf
+  config:
+    path: config.yaml
+    output: {{ $outdir }}/config.yaml
+  secrets:
+    path: secrets.yaml
+    output: {{ $outdir }}/secrets.yaml
