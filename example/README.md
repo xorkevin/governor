@@ -1,31 +1,56 @@
-# Example governor kubernetes deployment
-
-### Create kustomization files
+# Example governor project
 
 ```
-./plan.sh
-```
+NAME
+        governor - example project
 
-### Register service authorization policies
+PROLOG
+        help             Print this help
+        all              Default
+            Depends on build
 
-```
-./register.sh
-```
+DEV ENV
+        devgen           Generate k8s resources
+        devsecrets       Register vault resources
+        devregister      Register k8s resources
+        devunregister    Unregister k8s resources
+        devinit          Init resources
+            Depends on devgen devsecrets devregister
+        devconfig        Set app config
+        devup            Deploy k8s resources to cluster
+        devdown          Destroy k8s resources
+        devnsdown        Destroy k8s namespace
 
-### Connect governor with services
+DOCKER COMPOSE DEV ENV
+        dc-devgen        Generate docker compose resources
+        dc-devup         Deploy docker-compose resources
+        dc-devdown       Destroy docker-compose resources
 
-```
-./connect.sh
-```
+APP BUILD
+        clean            Remove build artifacts
+        build            Build app
 
-### Create development deployment
+DOCKER
+        build-docker     Build docker image
+            Depends on build
+        publish-docker   Publish docker image
+        docker           Release new image
+            Depends on build-docker publish-docker
 
-```
-kubectl apply -k base
-```
+APP DEPLOY
+        skaffoldinit     Initialize skaffold
+        dev              Deploy app to cluster
+            Depends on build
+        devstop          Stop running app
+        tail             Tail log lines
+        setupfirst       Run app first setup
+            Depends on build
+        setup            Run app setup
+            Depends on build
 
-### Register vault db engine
-
-```
-./register2.sh
+LOCAL DEV
+        run              Runs app locally
+            Depends on build
+        runsetup         Runs setup locally
+            Depends on build
 ```
