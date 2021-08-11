@@ -1,0 +1,25 @@
+version: xorkevin.dev/anvil/v1alpha1
+
+vars:
+  outputdir: governor
+  images:
+    governor:
+      name: docker.pkg.dev.localhost:8080/governor
+      version: latest
+    postgres:
+      name: postgres
+      version: 13-alpine
+    redis:
+      name: redis
+      version: 6-alpine
+    minio:
+      name: minio/minio
+      version: latest
+    nats:
+      name: nats
+      version: 2-alpine
+    mailhog:
+      name: mailhog/mailhog
+      version: latest
+
+configtpl: componenttpl.yaml

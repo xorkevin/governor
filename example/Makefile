@@ -55,6 +55,25 @@ devdown: ## Destroy k8s resources
 devnsdown: ## Destroy k8s namespace
 	kubectl delete -f $(ANVIL_NS)
 
+## DOCKER COMPOSE DEV ENV
+
+DC_ANVIL_SRC=dc.anvil
+DC_ANVIL_MAIN=$(DC_ANVIL_SRC)/component.yaml
+DC_ANVIL_OUT=dc.anvil_out
+DC_PROJECT=governor
+
+.PHONY: dc-devgen dc-devup dc-devdown
+
+dc-devgen: ## Generate docker compose resources
+	if [ -d $(DC_ANVIL_OUT) ]; then rm -r $(DC_ANVIL_OUT); fi
+	anvil component -i $(DC_ANVIL_SRC) -o $(DC_ANVIL_OUT) -c $(DC_ANVIL_MAIN)
+
+dc-devup: ## Deploy docker-compose resources
+	docker-compose -p $(DC_PROJECT) -f $(DC_ANVIL_OUT)/governor/docker-compose.yaml up -d
+
+dc-devdown: ## Destroy docker-compose resources
+	docker-compose -p $(DC_PROJECT) -f $(DC_ANVIL_OUT)/governor/docker-compose.yaml down
+
 ## APP BUILD
 
 BIN_NAME=governor
