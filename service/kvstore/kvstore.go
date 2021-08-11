@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"xorkevin.dev/governor"
 )
 
@@ -224,7 +224,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 
 func (s *service) handlePing() {
 	if s.client != nil {
-		_, err := s.client.Ping().Result()
+		_, err := s.client.Ping(context.Background()).Result()
 		if err == nil {
 			s.ready = true
 			s.hbfailed = 0
@@ -284,7 +284,7 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 		Password: secret.Password,
 		DB:       s.dbname,
 	})
-	if _, err := client.Ping().Result(); err != nil {
+	if _, err := client.Ping(context.Background()).Result(); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping kvstore")
 	}
@@ -369,7 +369,7 @@ func (s *service) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	val, err := client.Get(key).Result()
+	val, err := client.Get(context.Background(), key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
@@ -384,7 +384,7 @@ func (s *service) GetInt(key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	val, err := client.Get(key).Result()
+	val, err := client.Get(context.Background(), key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
@@ -403,7 +403,7 @@ func (s *service) Set(key, val string, seconds int64) error {
 	if err != nil {
 		return err
 	}
-	if err := client.Set(key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
+	if err := client.Set(context.Background(), key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to set key")
 	}
 	return nil
@@ -419,7 +419,7 @@ func (s *service) Del(key ...string) error {
 		return err
 	}
 
-	if err := client.Del(key...).Err(); err != nil {
+	if err := client.Del(context.Background(), key...).Err(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to delete key")
 	}
 	return nil
@@ -430,7 +430,7 @@ func (s *service) Incr(key string, delta int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	val, err := client.IncrBy(key, delta).Result()
+	val, err := client.IncrBy(context.Background(), key, delta).Result()
 	if err != nil {
 		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to incr key")
 	}
@@ -442,7 +442,7 @@ func (s *service) Expire(key string, seconds int64) error {
 	if err != nil {
 		return err
 	}
-	if err := client.Expire(key, time.Duration(seconds)*time.Second).Err(); err != nil {
+	if err := client.Expire(context.Background(), key, time.Duration(seconds)*time.Second).Err(); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to set expire key")
 	}
 	return nil
@@ -495,32 +495,32 @@ type (
 
 func (t *baseMulti) Get(key string) Resulter {
 	return &resulter{
-		res: t.base.Get(key),
+		res: t.base.Get(context.Background(), key),
 	}
 }
 
 func (t *baseMulti) GetInt(key string) IntResulter {
 	return &intResulter{
-		res: t.base.Get(key),
+		res: t.base.Get(context.Background(), key),
 	}
 }
 
 func (t *baseMulti) Set(key, val string, seconds int64) {
-	t.base.Set(key, val, time.Duration(seconds)*time.Second)
+	t.base.Set(context.Background(), key, val, time.Duration(seconds)*time.Second)
 }
 
 func (t *baseMulti) Del(key ...string) {
-	t.base.Del(key...)
+	t.base.Del(context.Background(), key...)
 }
 
 func (t *baseMulti) Incr(key string, delta int64) IntResulter {
 	return &intCmdResulter{
-		res: t.base.IncrBy(key, delta),
+		res: t.base.IncrBy(context.Background(), key, delta),
 	}
 }
 
 func (t *baseMulti) Expire(key string, seconds int64) {
-	t.base.Expire(key, time.Duration(seconds)*time.Second)
+	t.base.Expire(context.Background(), key, time.Duration(seconds)*time.Second)
 }
 
 func (t *baseMulti) Subkey(keypath ...string) string {
@@ -538,7 +538,7 @@ func (t *baseMulti) Subtree(prefix string) Multi {
 }
 
 func (t *baseMulti) Exec() error {
-	if _, err := t.base.Exec(); err != nil {
+	if _, err := t.base.Exec(context.Background()); err != nil {
 		if !errors.Is(err, redis.Nil) {
 			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to execute multi")
 		}

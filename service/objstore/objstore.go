@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"xorkevin.dev/governor"
 )
 
@@ -192,7 +193,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 
 func (s *service) handlePing() {
 	if s.client != nil {
-		_, err := s.client.ListBuckets()
+		_, err := s.client.ListBuckets(context.Background())
 		if err == nil {
 			s.ready = true
 			s.hbfailed = 0
@@ -245,11 +246,14 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 
 	s.closeClient()
 
-	client, err := minio.New(s.addr, auth.username, auth.password, s.sslmode)
+	client, err := minio.New(s.addr, &minio.Options{
+		Creds:  credentials.NewStaticV4(auth.username, auth.password, ""),
+		Secure: s.sslmode,
+	})
 	if err != nil {
 		return nil, governor.ErrWithKind(err, ErrClient{}, "Failed to create objstore client")
 	}
-	if _, err := client.ListBuckets(); err != nil {
+	if _, err := client.ListBuckets(context.Background()); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping objstore")
 	}
@@ -327,7 +331,7 @@ func (s *service) DelBucket(name string) error {
 	if err != nil {
 		return err
 	}
-	if err := client.RemoveBucket(name); err != nil {
+	if err := client.RemoveBucket(context.Background(), name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to get bucket")
 		}
@@ -378,12 +382,14 @@ func (b *bucket) Init() error {
 	if err != nil {
 		return err
 	}
-	exists, err := client.BucketExists(b.name)
+	exists, err := client.BucketExists(context.Background(), b.name)
 	if err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to get bucket")
 	}
 	if !exists {
-		if err := client.MakeBucket(b.name, b.location); err != nil {
+		if err := client.MakeBucket(context.Background(), b.name, minio.MakeBucketOptions{
+			Region: b.location,
+		}); err != nil {
 			return governor.ErrWithKind(err, ErrClient{}, "Failed to create bucket")
 		}
 	}
@@ -396,7 +402,7 @@ func (b *bucket) Stat(name string) (*ObjectInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	info, err := client.StatObject(b.name, name, minio.StatObjectOptions{})
+	info, err := client.StatObject(context.Background(), b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return nil, governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
@@ -417,7 +423,7 @@ func (b *bucket) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	obj, err := client.GetObject(b.name, name, minio.GetObjectOptions{})
+	obj, err := client.GetObject(context.Background(), b.name, name, minio.GetObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return nil, nil, governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
@@ -442,7 +448,7 @@ func (b *bucket) Put(name string, contentType string, size int64, object io.Read
 	if err != nil {
 		return err
 	}
-	if _, err := client.PutObject(b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+	if _, err := client.PutObject(context.Background(), b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to save object to bucket")
 	}
 	return nil
@@ -454,7 +460,7 @@ func (b *bucket) Del(name string) error {
 	if err != nil {
 		return err
 	}
-	if err := client.RemoveObject(b.name, name); err != nil {
+	if err := client.RemoveObject(context.Background(), b.name, name, minio.RemoveObjectOptions{}); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
 			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to find object")
 		}

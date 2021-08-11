@@ -14,6 +14,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -238,14 +239,26 @@ func (c *Config) init() error {
 type (
 	// secretsFileSource is a secretsClient reading from a static file
 	secretsFileSource struct {
-		source string
+		data secretsFileData
+	}
+
+	secretsFileData struct {
+		Data map[string]map[string]interface{} `yaml:"data"`
 	}
 )
 
 // newSecretsFileSource creates a new secretsFileSource
 func newSecretsFileSource(s string) (secretsClient, error) {
+	b, err := os.ReadFile(s)
+	if err != nil {
+		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to read secrets file source")
+	}
+	data := secretsFileData{}
+	if err := yaml.Unmarshal(b, &data); err != nil {
+		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Invalid secrets file source file")
+	}
 	return &secretsFileSource{
-		source: s,
+		data: data,
 	}, nil
 }
 
@@ -254,7 +267,11 @@ func (s *secretsFileSource) Init() error {
 }
 
 func (s *secretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
-	return nil, 0, nil
+	data, ok := s.data.Data[kvpath]
+	if !ok {
+		return nil, 0, ErrWithKind(nil, ErrVault{}, "Failed to read vault secret")
+	}
+	return data, 0, nil
 }
 
 type (
