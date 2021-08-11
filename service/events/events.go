@@ -379,8 +379,12 @@ func (s *service) handleGetClient() (*nats.Conn, nats.JetStreamContext, error) {
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			close(canary)
+			errmsg := "nil err"
+			if err != nil {
+				errmsg = err.Error()
+			}
 			s.logger.Error("Lost connection to events", map[string]string{
-				"error":      err.Error(),
+				"error":      errmsg,
 				"actiontype": "pingevents",
 			})
 		}))
