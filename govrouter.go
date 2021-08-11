@@ -39,13 +39,13 @@ type (
 
 func (s *Server) router(path string) Router {
 	return &govrouter{
-		r: s.i.Route(path, nil),
+		r: s.i.Route(path, func(r chi.Router) {}),
 	}
 }
 
 func (r *govrouter) Group(path string) Router {
 	return &govrouter{
-		r: r.r.Route(path, nil),
+		r: r.r.Route(path, func(r chi.Router) {}),
 	}
 }
 

@@ -47,7 +47,7 @@ objstore:
   hbinterval: 5
   hbmaxfail: 5
 events:
-  auth: admin
+  auth: eventsauth
   host: localhost
   port: 4222
   hbinterval: 5

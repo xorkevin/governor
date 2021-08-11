@@ -142,3 +142,13 @@ setupfirst: build ## Run app first setup
 
 setup: build ## Run app setup
 	./setup.sh "$(BIN_PATH)"
+
+## LOCAL DEV
+
+.PHONY: run runsetup
+
+run: build ## Runs app locally
+	$(BIN_PATH) serve --config $(DC_ANVIL_OUT)/governor/config.yaml
+
+runsetup: build ## Runs setup locally
+	$(BIN_PATH) setup --secret "setupsecret"

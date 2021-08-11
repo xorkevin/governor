@@ -383,6 +383,7 @@ func (c *Config) initsecrets() error {
 			return err
 		}
 		c.vault = client
+		return nil
 	}
 	config := secretsVaultSourceConfig{}
 	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
