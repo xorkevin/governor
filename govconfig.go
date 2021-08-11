@@ -40,8 +40,8 @@ func (v Version) String() string {
 }
 
 type (
-	// SecretsClient is a client that reads secrets
-	SecretsClient interface {
+	// secretsClient is a client that reads secrets
+	secretsClient interface {
 		Init() error
 		GetSecret(kvpath string) (map[string]interface{}, int64, error)
 	}
@@ -50,7 +50,7 @@ type (
 	// environment variables
 	Config struct {
 		config        *viper.Viper
-		vault         SecretsClient
+		vault         secretsClient
 		vaultCache    map[string]vaultSecret
 		appname       string
 		version       Version
@@ -236,29 +236,30 @@ func (c *Config) init() error {
 }
 
 type (
-	// SecretsFileSource is a SecretsClient reading from a static file
-	SecretsFileSource struct {
+	// secretsFileSource is a secretsClient reading from a static file
+	secretsFileSource struct {
 		source string
 	}
 )
 
-// NewSecretsFileSource creates a new SecretsFileSource
-func NewSecretsFileSource(s string) (SecretsClient, error) {
-	return &SecretsFileSource{
+// newSecretsFileSource creates a new secretsFileSource
+func newSecretsFileSource(s string) (secretsClient, error) {
+	return &secretsFileSource{
 		source: s,
 	}, nil
 }
 
-func (s *SecretsFileSource) Init() error {
+func (s *secretsFileSource) Init() error {
 	return nil
 }
 
-func (s *SecretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
 	return nil, 0, nil
 }
 
 type (
-	SecretsVaultSourceConfig struct {
+	// secretsVaultSourceConfig is a vault secrets client config
+	secretsVaultSourceConfig struct {
 		Addr         string
 		K8SAuth      bool
 		K8SRole      string
@@ -266,17 +267,17 @@ type (
 		K8SJWT       string
 	}
 
-	// SecretsVaultSource is a SecretsClient reading from vault
-	SecretsVaultSource struct {
+	// secretsVaultSource is a secretsClient reading from vault
+	secretsVaultSource struct {
 		vault       *vaultapi.Client
-		config      SecretsVaultSourceConfig
+		config      secretsVaultSourceConfig
 		vaultExpire int64
 		mu          *sync.RWMutex
 	}
 )
 
-// NewSecretsVaultSource creates a new SecretsVaultSource
-func NewSecretsVaultSource(config SecretsVaultSourceConfig) (SecretsClient, error) {
+// NewSecretsVaultSource creates a new secretsVaultSource
+func NewSecretsVaultSource(config secretsVaultSourceConfig) (secretsClient, error) {
 	vconfig := vaultapi.DefaultConfig()
 	if err := vconfig.Error; err != nil {
 		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault default config")
@@ -286,14 +287,14 @@ func NewSecretsVaultSource(config SecretsVaultSourceConfig) (SecretsClient, erro
 	if err != nil {
 		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
 	}
-	return &SecretsVaultSource{
+	return &secretsVaultSource{
 		vault:  vault,
 		config: config,
 		mu:     &sync.RWMutex{},
 	}, nil
 }
 
-func (s *SecretsVaultSource) Init() error {
+func (s *secretsVaultSource) Init() error {
 	if !s.config.K8SAuth {
 		return nil
 	}
@@ -303,17 +304,17 @@ func (s *SecretsVaultSource) Init() error {
 	return s.authVault()
 }
 
-func (s *SecretsVaultSource) authVaultValidLocked() bool {
+func (s *secretsVaultSource) authVaultValidLocked() bool {
 	return s.vaultExpire-time.Now().Round(0).Unix() > 5
 }
 
-func (s *SecretsVaultSource) authVaultValid() bool {
+func (s *secretsVaultSource) authVaultValid() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.authVaultValidLocked()
 }
 
-func (s *SecretsVaultSource) authVault() error {
+func (s *secretsVaultSource) authVault() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -334,7 +335,7 @@ func (s *SecretsVaultSource) authVault() error {
 	return nil
 }
 
-func (s *SecretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
 	if err := s.Init(); err != nil {
 		return nil, 0, err
 	}
@@ -361,13 +362,13 @@ func (s *SecretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, i
 
 func (c *Config) initsecrets() error {
 	if vsource := c.config.GetString("vault.filesource"); vsource != "" {
-		client, err := NewSecretsFileSource(vsource)
+		client, err := newSecretsFileSource(vsource)
 		if err != nil {
 			return err
 		}
 		c.vault = client
 	}
-	config := SecretsVaultSourceConfig{}
+	config := secretsVaultSourceConfig{}
 	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
 		config.Addr = vaddr
 	}
