@@ -6,10 +6,33 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/conduit/chat/model"
 	"xorkevin.dev/governor/service/db"
 )
 
-func (s *service) notifyChatEvent(kind string, chatid string, userids []string) {
+func (s *service) notifyChatEventGetMembers(kind string, m *model.ChatModel, userids []string) {
+	members, err := s.repo.GetMembers(m.Chatid, 65536, 0)
+	if err != nil {
+		if !errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("Failed to get chat members", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getchatmembers",
+			})
+		}
+		members = nil
+	}
+	ids := make([]string, 0, len(members)+len(userids))
+	for _, i := range members {
+		ids = append(ids, i.Userid)
+	}
+	ids = append(ids, userids...)
+	s.notifyChatEvent(kind, m, ids)
+}
+
+func (s *service) notifyChatEvent(kind string, m *model.ChatModel, userids []string) {
+	if len(userids) == 0 {
+		return
+	}
 }
 
 type (
@@ -31,7 +54,6 @@ func (s *service) CreateChat(kind string, name string, theme string) (*resChat, 
 	if err := s.repo.InsertChat(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat")
 	}
-	s.notifyChatEvent("chat.create", m.Chatid, nil)
 	return &resChat{
 		ChatID:       m.Chatid,
 		Kind:         m.Chatid,
@@ -54,7 +76,7 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 	if err := s.repo.InsertMembers(members); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to add chat members")
 	}
-	s.notifyChatEvent("chat.create", m.Chatid, nil)
+	s.notifyChatEvent("chat.create", m, userids)
 	return &resChat{
 		ChatID:       m.Chatid,
 		Kind:         m.Chatid,
@@ -85,7 +107,7 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	s.notifyChatEvent("chat.update", m.Chatid, nil)
+	s.notifyChatEventGetMembers("chat.update.settings", m, nil)
 	return nil
 }
 
@@ -110,7 +132,7 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 	if err := s.repo.InsertMembers(members); err != nil {
 		return governor.ErrWithMsg(err, "Failed to add chat members")
 	}
-	s.notifyChatEvent("chat.update", m.Chatid, nil)
+	s.notifyChatEventGetMembers("chat.update.members.add", m, nil)
 	return nil
 }
 
@@ -135,7 +157,7 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 	if err := s.repo.DeleteMembers(m.Chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove chat members")
 	}
-	s.notifyChatEvent("chat.update", m.Chatid, userids)
+	s.notifyChatEventGetMembers("chat.update.members.remove", m, userids)
 	return nil
 }
 
@@ -153,12 +175,21 @@ func (s *service) DeleteChat(chatid string) error {
 	if err := s.repo.DeleteChatMsgs(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat messages")
 	}
+	members, err := s.repo.GetMembers(chatid, 65536, 0)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get chat members")
+	}
 	if err := s.repo.DeleteChatMembers(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat members")
 	}
+	m.LastUpdated = time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	userids := make([]string, 0, len(members))
+	for _, i := range members {
+		userids = append(userids, i.Userid)
+	}
+	s.notifyChatEvent("chat.delete", m, userids)
 	if err := s.repo.DeleteChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat")
 	}
-	s.notifyChatEvent("chat.delete", m.Chatid, nil)
 	return nil
 }
