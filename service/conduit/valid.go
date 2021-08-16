@@ -1,63 +1,73 @@
-package profile
+package conduit
 
 import (
+	"encoding/json"
 	"net/http"
-	"regexp"
 
 	"xorkevin.dev/governor"
 )
 
 const (
-	lengthCap      = 31
-	lengthCapEmail = 255
-	lengthCapLarge = 4095
-	amountCap      = 255
+	lengthCapKind   = 31
+	lengthCapName   = 127
+	lengthCapTheme  = 4095
+	lengthCapUserid = 31
+	amountCap       = 255
 )
 
-var (
-	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
-)
+func validKind(kind string) error {
+	if len(kind) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat kind must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(kind) > lengthCapKind {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat kind must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validName(name string) error {
+	if len(name) > lengthCapName {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat name must be shorter than 256 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validTheme(theme string) error {
+	if len(theme) > lengthCapTheme {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat theme must be shorter than 4096 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if err := json.Unmarshal([]byte(theme), &struct{}{}); err != nil {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat theme is invalid JSON",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
 
 func validhasUserid(userid string) error {
-	if len(userid) < 1 {
+	if len(userid) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Userid must be provided",
 		}))
 	}
-	if len(userid) > lengthCap {
+	if len(userid) > lengthCapUserid {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Userid must be shorter than 32 characters",
-		}))
-	}
-	return nil
-}
-
-func validEmail(email string) error {
-	if len(email) == 0 {
-		return nil
-	}
-	if !emailRegex.MatchString(email) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Email is invalid",
-		}))
-	}
-	if len(email) > lengthCapEmail {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Email must be shorter than 256 characters",
-		}))
-	}
-	return nil
-}
-
-func validBio(bio string) error {
-	if len(bio) > lengthCapLarge {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Bio must be shorter than 4096 characters",
 		}))
 	}
 	return nil

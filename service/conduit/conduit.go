@@ -73,6 +73,13 @@ func (s *service) router() *router {
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
+
+	sr := s.router()
+	sr.mountRoutes(m)
+	l.Info("mounted http routes", nil)
 	return nil
 }
 

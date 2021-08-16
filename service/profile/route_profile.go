@@ -172,21 +172,21 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqGetProfiles struct {
-		Userids string `valid:"userids,has" json:"-"`
+		Userids []string `valid:"userids,has" json:"-"`
 	}
 )
 
 func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqGetProfiles{
-		Userids: c.Query("ids"),
+		Userids: strings.Split(c.Query("ids"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := m.s.GetProfilesBulk(strings.Split(req.Userids, ","))
+	res, err := m.s.GetProfilesBulk(req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return

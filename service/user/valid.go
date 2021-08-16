@@ -16,7 +16,7 @@ const (
 	lengthCap         = 127
 	lengthCapEmail    = 255
 	lengthCapLarge    = 4095
-	amountCap         = 1024
+	amountCap         = 255
 	lengthCapOTPCode  = 31
 )
 
@@ -131,18 +131,23 @@ func validOffset(offset int) error {
 	return nil
 }
 
-func validhasUserids(userids string) error {
+func validhasUserids(userids []string) error {
 	if len(userids) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "IDs must be provided",
 		}))
 	}
-	if len(userids) > lengthCapLarge {
+	if len(userids) > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Request is too large",
 		}))
+	}
+	for _, i := range userids {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }

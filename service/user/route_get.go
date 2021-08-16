@@ -284,21 +284,21 @@ func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqGetUsers struct {
-		Userids string `valid:"userids,has" json:"-"`
+		Userids []string `valid:"userids,has" json:"-"`
 	}
 )
 
 func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqGetUsers{
-		Userids: c.Query("ids"),
+		Userids: strings.Split(c.Query("ids"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := m.s.GetInfoBulkPublic(strings.Split(req.Userids, ","))
+	res, err := m.s.GetInfoBulkPublic(req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return

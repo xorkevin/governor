@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	rankLengthCap = 128
+	rankLengthCap = 127
 )
 
 // Tags for user rank

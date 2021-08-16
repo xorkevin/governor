@@ -12,7 +12,7 @@ const (
 	lengthCapUserid = 31
 	lengthCap       = 63
 	lengthCapURL    = 2047
-	amountCap       = 1024
+	amountCap       = 255
 )
 
 var (

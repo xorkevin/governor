@@ -21,7 +21,7 @@ type (
 	}
 
 	reqOrgsGet struct {
-		OrgIDs string `valid:"orgids,has" json:"-"`
+		OrgIDs []string `valid:"orgids,has" json:"-"`
 	}
 
 	reqOrgsGetBulk struct {
@@ -69,14 +69,14 @@ func (m *router) getOrgByName(w http.ResponseWriter, r *http.Request) {
 func (m *router) getOrgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqOrgsGet{
-		OrgIDs: c.Query("ids"),
+		OrgIDs: strings.Split(c.Query("ids"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := m.s.GetOrgs(strings.Split(req.OrgIDs, ","))
+	res, err := m.s.GetOrgs(req.OrgIDs)
 	if err != nil {
 		c.WriteError(err)
 		return

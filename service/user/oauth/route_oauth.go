@@ -90,21 +90,21 @@ func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqGetAppBulk struct {
-		ClientIDs string `valid:"clientIDs,has" json:"-"`
+		ClientIDs []string `valid:"clientIDs,has" json:"-"`
 	}
 )
 
 func (m *router) getAppBulk(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqGetAppBulk{
-		ClientIDs: c.Query("ids"),
+		ClientIDs: strings.Split(c.Query("ids"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := m.s.GetAppsBulk(strings.Split(req.ClientIDs, ","))
+	res, err := m.s.GetAppsBulk(req.ClientIDs)
 	if err != nil {
 		c.WriteError(err)
 		return

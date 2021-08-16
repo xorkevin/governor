@@ -11,10 +11,9 @@ const (
 	lengthCapClientID = 31
 	lengthCapUserid   = 31
 	lengthCap         = 127
-	amountCap         = 1024
+	amountCap         = 255
 	lengthCapURL      = 512
 	lengthCapRedirect = 512
-	lengthCapLarge    = 4095
 )
 
 func validhasUserid(userid string) error {
@@ -59,18 +58,23 @@ func validhasClientID(clientid string) error {
 	return nil
 }
 
-func validhasClientIDs(clientids string) error {
+func validhasClientIDs(clientids []string) error {
 	if len(clientids) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "IDs must be provided",
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if len(clientids) > lengthCapLarge {
+	if len(clientids) > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Request is too large",
 			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
 		}))
+	}
+	for _, i := range clientids {
+		if err := validhasClientID(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }

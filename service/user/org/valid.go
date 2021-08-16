@@ -11,8 +11,7 @@ const (
 	lengthCapUserid = 31
 	lengthCapOrgID  = 31
 	lengthCap       = 127
-	lengthCapLarge  = 4095
-	amountCap       = 1024
+	amountCap       = 255
 )
 
 var (
@@ -99,18 +98,23 @@ func validhasName(name string) error {
 	return nil
 }
 
-func validhasOrgids(orgids string) error {
+func validhasOrgids(orgids []string) error {
 	if len(orgids) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "IDs must be provided",
 			Status:  http.StatusBadRequest,
+			Message: "IDs must be provided",
 		}))
 	}
-	if len(orgids) > lengthCapLarge {
+	if len(orgids) > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Request is too large",
 			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
 		}))
+	}
+	for _, i := range orgids {
+		if err := validhasOrgid(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }
