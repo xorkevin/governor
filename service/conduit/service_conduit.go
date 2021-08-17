@@ -111,6 +111,10 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	return nil
 }
 
+const (
+	chatMemberAmountCap = 255
+)
+
 func (s *service) AddChatMembers(chatid string, userids []string) error {
 	m, err := s.repo.GetChat(chatid)
 	if err != nil {
@@ -128,6 +132,14 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Chat member already added",
+		}), governor.ErrOptInner(err))
+	}
+	if count, err := s.repo.GetMembersCount(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get chat members count")
+	} else if count+len(userids) > chatMemberAmountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not have more than 255 chat members",
 		}), governor.ErrOptInner(err))
 	}
 
@@ -162,6 +174,14 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusNotFound,
 			Message: "Chat member does not exist",
+		}), governor.ErrOptInner(err))
+	}
+	if count, err := s.repo.GetMembersCount(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get chat members count")
+	} else if count-len(userids) < 1 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not leave chat as the last member",
 		}), governor.ErrOptInner(err))
 	}
 

@@ -24,6 +24,7 @@ type (
 		GetChats(chatids []string) ([]ChatModel, error)
 		GetMembers(chatid string, limit, offset int) ([]MemberModel, error)
 		GetChatMembers(chatid string, userid []string) ([]MemberModel, error)
+		GetMembersCount(chatid string) (int, error)
 		GetRecentChats(userid string, limit, offset int) ([]MemberModel, error)
 		GetRecentChatsByKind(userid string, kind string, limit, offset int) ([]MemberModel, error)
 		AddMembers(m *ChatModel, userids []string) []*MemberModel
@@ -192,6 +193,23 @@ func (r *repo) GetChatMembers(chatid string, userids []string) ([]MemberModel, e
 		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
 	}
 	return m, nil
+}
+
+const (
+	sqlMemberCount = "SELECT COUNT(*) FROM " + memberModelTableName + " WHERE chatid = $1;"
+)
+
+// GetMembersCount returns the count of chat members
+func (r *repo) GetMembersCount(chatid string) (int, error) {
+	var count int
+	d, err := r.db.DB()
+	if err != nil {
+		return 0, err
+	}
+	if err := d.QueryRow(sqlMemberCount, chatid).Scan(&count); err != nil {
+		return 0, governor.ErrWithMsg(err, "Failed to get chat members count")
+	}
+	return count, nil
 }
 
 // GetRecentChats returns most recent chats for a user
