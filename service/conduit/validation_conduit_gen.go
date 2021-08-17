@@ -2,6 +2,13 @@
 
 package conduit
 
+func (r reqChatID) valid() error {
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqCreateChat) valid() error {
 	if err := validKind(r.Kind); err != nil {
 		return err

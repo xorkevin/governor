@@ -8,12 +8,29 @@ import (
 )
 
 const (
+	lengthCapChatid = 31
 	lengthCapKind   = 31
 	lengthCapName   = 127
 	lengthCapTheme  = 4095
 	lengthCapUserid = 31
 	amountCap       = 255
 )
+
+func validhasChatid(chatid string) error {
+	if len(chatid) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Chat id must be provided",
+		}))
+	}
+	if len(chatid) > lengthCapUserid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Chat id must be shorter than 32 characters",
+		}))
+	}
+	return nil
+}
 
 func validKind(kind string) error {
 	if len(kind) == 0 {

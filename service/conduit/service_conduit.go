@@ -193,3 +193,11 @@ func (s *service) DeleteChat(chatid string) error {
 	}
 	return nil
 }
+
+func (s *service) GetChatMembers(chatid string, userids []string) ([]model.MemberModel, error) {
+	m, err := s.repo.GetChatMembers(chatid, userids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+	}
+	return m, nil
+}
