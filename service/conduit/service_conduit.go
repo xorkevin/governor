@@ -122,6 +122,15 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
 	}
+	if members, err := s.repo.GetChatMembers(chatid, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get chat members")
+	} else if len(members) != 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Chat member already added",
+		}), governor.ErrOptInner(err))
+	}
+
 	members := s.repo.AddMembers(m, userids)
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
@@ -147,15 +156,24 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
 	}
+	if members, err := s.repo.GetChatMembers(chatid, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get chat members")
+	} else if len(members) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "Chat member does not exist",
+		}), governor.ErrOptInner(err))
+	}
+
 	m.LastUpdated = time.Now().Round(0).UnixNano() / int64(time.Millisecond)
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat")
-	}
 	if err := s.repo.DeleteMembers(m.Chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove chat members")
+	}
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
 	s.notifyChatEventGetMembers("chat.update.members.remove", m, userids)
 	return nil

@@ -110,3 +110,18 @@ func validhasUserids(userids []string) error {
 	}
 	return nil
 }
+
+func validMembers(members []string) error {
+	if len(members) > amountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
+		}))
+	}
+	for _, i := range members {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
+	}
+	return nil
+}

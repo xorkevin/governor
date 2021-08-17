@@ -151,6 +151,9 @@ func (r *repo) GetChat(chatid string) (*ChatModel, error) {
 
 // GetChats returns a chat by id
 func (r *repo) GetChats(chatids []string) ([]ChatModel, error) {
+	if len(chatids) == 0 {
+		return nil, nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -177,6 +180,9 @@ func (r *repo) GetMembers(chatid string, limit, offset int) ([]MemberModel, erro
 
 // GetChatMembers returns chat members
 func (r *repo) GetChatMembers(chatid string, userids []string) ([]MemberModel, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -216,6 +222,9 @@ func (r *repo) GetRecentChatsByKind(userid string, kind string, limit, offset in
 
 // AddMembers adds new chat members
 func (r *repo) AddMembers(m *ChatModel, userids []string) []*MemberModel {
+	if len(userids) == 0 {
+		return nil
+	}
 	members := make([]*MemberModel, 0, len(userids))
 	now := time.Now().Round(0).UnixNano() / int64(time.Millisecond)
 	m.LastUpdated = now
@@ -291,6 +300,9 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 
 // InsertMembers inserts a new chat member into the db
 func (r *repo) InsertMembers(m []*MemberModel) error {
+	if len(m) == 0 {
+		return nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err
@@ -306,6 +318,9 @@ func (r *repo) InsertMembers(m []*MemberModel) error {
 
 // DeleteMembers deletes chat members
 func (r *repo) DeleteMembers(chatid string, userids []string) error {
+	if len(userids) == 0 {
+		return nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err
@@ -413,6 +428,9 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 
 // DeleteMsgs deletes chat messages
 func (r *repo) DeleteMsgs(chatid string, msgids []string) error {
+	if len(msgids) == 0 {
+		return nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err

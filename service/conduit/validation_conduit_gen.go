@@ -24,3 +24,29 @@ func (r reqCreateChat) valid() error {
 	}
 	return nil
 }
+
+func (r reqUpdateChat) valid() error {
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqChatMembers) valid() error {
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validMembers(r.Add); err != nil {
+		return err
+	}
+	if err := validMembers(r.Remove); err != nil {
+		return err
+	}
+	return nil
+}
