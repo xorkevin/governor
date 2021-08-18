@@ -42,10 +42,10 @@ func (r reqChatMembers) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err
 	}
-	if err := validMembers(r.Add); err != nil {
+	if err := validoptUserids(r.Add); err != nil {
 		return err
 	}
-	if err := validMembers(r.Remove); err != nil {
+	if err := validoptUserids(r.Remove); err != nil {
 		return err
 	}
 	return nil

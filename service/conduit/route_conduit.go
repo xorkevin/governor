@@ -29,8 +29,8 @@ type (
 
 	reqChatMembers struct {
 		Chatid string   `valid:"chatid,has" json:"-"`
-		Add    []string `valid:"members" json:"add"`
-		Remove []string `valid:"members" json:"remove"`
+		Add    []string `valid:"userids,opt" json:"add"`
+		Remove []string `valid:"userids,opt" json:"remove"`
 	}
 )
 

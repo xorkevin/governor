@@ -111,7 +111,7 @@ func validhasUserids(userids []string) error {
 	return nil
 }
 
-func validMembers(members []string) error {
+func validoptUserids(members []string) error {
 	if len(members) > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
