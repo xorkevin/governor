@@ -32,7 +32,44 @@ func validhasChatid(chatid string) error {
 	return nil
 }
 
+func validhasChatids(chatids []string) error {
+	if len(chatids) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "IDs must be provided",
+		}))
+	}
+	if len(chatids) > amountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
+		}))
+	}
+	for _, i := range chatids {
+		if err := validhasChatid(i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validKind(kind string) error {
+	if len(kind) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat kind must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(kind) > lengthCapKind {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Chat kind must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validhasKind(kind string) error {
 	if len(kind) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Chat kind must be provided",
@@ -122,6 +159,22 @@ func validoptUserids(members []string) error {
 		if err := validhasUserid(i); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validAmount(amt int) error {
+	if amt == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Amount must be positive",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if amt > amountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Amount must be less than 256",
+			Status:  http.StatusBadRequest,
+		}))
 	}
 	return nil
 }

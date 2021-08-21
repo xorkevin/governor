@@ -123,6 +123,7 @@ type (
 		Query(key string) string
 		QueryDef(key string, def string) string
 		QueryInt(key string, def int) int
+		QueryInt64(key string, def int64) int64
 		Header(key string) string
 		SetHeader(key, value string)
 		AddHeader(key, value string)
@@ -196,6 +197,18 @@ func (c *govcontext) QueryInt(key string, def int) int {
 		return def
 	}
 	v, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func (c *govcontext) QueryInt64(key string, def int64) int64 {
+	s := c.query.Get(key)
+	if s == "" {
+		return def
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return def
 	}

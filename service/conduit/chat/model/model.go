@@ -24,9 +24,12 @@ type (
 		GetChats(chatids []string) ([]ChatModel, error)
 		GetMembers(chatid string, limit, offset int) ([]MemberModel, error)
 		GetChatMembers(chatid string, userid []string) ([]MemberModel, error)
+		GetUserChats(userid string, chatids []string) ([]MemberModel, error)
 		GetMembersCount(chatid string) (int, error)
-		GetRecentChats(userid string, limit, offset int) ([]MemberModel, error)
-		GetRecentChatsByKind(userid string, kind string, limit, offset int) ([]MemberModel, error)
+		GetLatestChats(userid string, limit, offset int) ([]MemberModel, error)
+		GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error)
+		GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error)
+		GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ChatModel, userids []string) []*MemberModel
 		InsertChat(m *ChatModel) error
 		UpdateChat(m *ChatModel) error
@@ -38,7 +41,7 @@ type (
 		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
 		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
 		GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error)
-		GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error)
+		GetMsgsBeforeByKind(kind string, chatid string, msgid string, limit int) ([]MsgModel, error)
 		AddMsg(chatid string, userid string, kind string, txt string) (*MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(chatid string, msgids []string) error
@@ -62,10 +65,10 @@ type (
 
 	// MemberModel is the db chat member model
 	MemberModel struct {
-		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
+		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind;getgroupeq,userid,last_updated|lt;getgroupeq,userid,kind,last_updated|lt"`
 	}
 
 	chatLastUpdated struct {
@@ -195,6 +198,22 @@ func (r *repo) GetChatMembers(chatid string, userids []string) ([]MemberModel, e
 	return m, nil
 }
 
+// GetUserChats returns a users chats
+func (r *repo) GetUserChats(userid string, chatids []string) ([]MemberModel, error) {
+	if len(chatids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, userid, chatids, true, len(chatids), 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user chats")
+	}
+	return m, nil
+}
+
 const (
 	sqlMemberCount = "SELECT COUNT(*) FROM " + memberModelTableName + " WHERE chatid = $1;"
 )
@@ -212,28 +231,54 @@ func (r *repo) GetMembersCount(chatid string) (int, error) {
 	return count, nil
 }
 
-// GetRecentChats returns most recent chats for a user
-func (r *repo) GetRecentChats(userid string, limit, offset int) ([]MemberModel, error) {
+// GetLatestChats returns latest chats for a user
+func (r *repo) GetLatestChats(userid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
 	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, userid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get recent chats")
+		return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
 	}
 	return m, nil
 }
 
-// GetRecentChatsByKind returns most recent chats for a user by kind
-func (r *repo) GetRecentChatsByKind(userid string, kind string, limit, offset int) ([]MemberModel, error) {
+// GetLatestChatsByKind returns latest chats for a user by kind
+func (r *repo) GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
 	m, err := memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(d, userid, kind, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get recent chats of kind")
+		return nil, governor.ErrWithMsg(err, "Failed to get latest chats of kind")
+	}
+	return m, nil
+}
+
+// GetLatestChatsBefore returns latest chats for a user before a time
+func (r *repo) GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, userid, before, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
+	}
+	return m, nil
+}
+
+// GetLatestChatsBeforeByKind returns latest chats for a user by kind before a time
+func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(d, userid, kind, before, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest chats of kind")
 	}
 	return m, nil
 }
@@ -401,7 +446,7 @@ func (r *repo) GetMsgsByKind(chatid string, kind string, limit, offset int) ([]M
 }
 
 // GetMsgsByKind returns chat msgs of a kind
-func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error) {
+func (r *repo) GetMsgsBeforeByKind(kind string, chatid string, msgid string, limit int) ([]MsgModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err

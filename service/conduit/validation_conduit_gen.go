@@ -50,3 +50,20 @@ func (r reqChatMembers) valid() error {
 	}
 	return nil
 }
+
+func (r reqLatestChats) valid() error {
+	if err := validhasKind(r.Kind); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqChats) valid() error {
+	if err := validhasChatids(r.Chatids); err != nil {
+		return err
+	}
+	return nil
+}

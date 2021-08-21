@@ -144,7 +144,7 @@ func validAmount(amt int) error {
 	}
 	if amt > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be less than 1024",
+			Message: "Amount must be less than 256",
 			Status:  http.StatusBadRequest,
 		}))
 	}

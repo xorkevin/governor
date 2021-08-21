@@ -232,10 +232,51 @@ func (s *service) DeleteChat(chatid string) error {
 	return nil
 }
 
-func (s *service) GetChatMembers(chatid string, userids []string) ([]model.MemberModel, error) {
-	m, err := s.repo.GetChatMembers(chatid, userids)
+func (s *service) GetUserChats(userid string, chatids []string) ([]model.MemberModel, error) {
+	m, err := s.repo.GetUserChats(userid, chatids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+		return nil, governor.ErrWithMsg(err, "Failed to get user chats")
 	}
 	return m, nil
+}
+
+func (s *service) GetChats(chatids []string) ([]resChat, error) {
+	m, err := s.repo.GetChats(chatids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chats")
+	}
+	chats := make([]resChat, 0, len(m))
+	for _, i := range m {
+		chats = append(chats, resChat{
+			ChatID:       i.Chatid,
+			Kind:         i.Kind,
+			Name:         i.Name,
+			Theme:        i.Theme,
+			LastUpdated:  i.LastUpdated,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return chats, nil
+}
+
+func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) ([]resChat, error) {
+	var members []model.MemberModel
+	if before == 0 {
+		var err error
+		members, err = s.repo.GetLatestChatsByKind(kind, userid, limit, 0)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
+		}
+	} else {
+		var err error
+		members, err = s.repo.GetLatestChatsBeforeByKind(kind, userid, before, limit)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
+		}
+	}
+	chatids := make([]string, 0, len(members))
+	for _, i := range members {
+		chatids = append(chatids, i.Chatid)
+	}
+	return s.GetChats(chatids)
 }
