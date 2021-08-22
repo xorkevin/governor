@@ -199,6 +199,9 @@ func (m *router) roleMod(c governor.Context, _ string) (string, error) {
 	if err := validhasRole(role); err != nil {
 		return "", err
 	}
+	if role == rank.TagAdmin {
+		return "", nil
+	}
 	_, tag, err := rank.SplitTag(role)
 	if err != nil {
 		return "", err

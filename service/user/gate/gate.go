@@ -500,7 +500,11 @@ func ModF(g Gate, idfunc func(governor.Context, string) (string, error), scope s
 		if err != nil {
 			return false
 		}
-		roles, ok := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}).AddMod(modtag))
+		roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
+		if modtag != "" {
+			roleQuery.AddMod(modtag)
+		}
+		roles, ok := r.Intersect(roleQuery)
 		if !ok {
 			return false
 		}
@@ -508,6 +512,9 @@ func ModF(g Gate, idfunc func(governor.Context, string) (string, error), scope s
 			return true
 		}
 		if !roles.Has(rank.TagUser) {
+			return false
+		}
+		if modtag == "" {
 			return false
 		}
 		return roles.HasMod(modtag)
