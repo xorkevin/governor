@@ -6,6 +6,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -274,10 +275,12 @@ const (
 // CheckUserExists is a fast check to determine if a user exists
 func (s *service) CheckUserExists(userid string) (bool, error) {
 	if v, err := s.kvusers.Get(userid); err != nil {
-		s.logger.Error("Failed to get user exists from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "getuserexists",
-		})
+		if !errors.Is(err, kvstore.ErrNotFound{}) {
+			s.logger.Error("Failed to get user exists from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getuserexists",
+			})
+		}
 	} else {
 		if v == cacheValY {
 			return true, nil
