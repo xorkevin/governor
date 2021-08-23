@@ -240,7 +240,13 @@ func (s *service) GetUserChats(userid string, chatids []string) ([]model.MemberM
 	return m, nil
 }
 
-func (s *service) GetChats(chatids []string) ([]resChat, error) {
+type (
+	resChats struct {
+		Chats []resChat `json:"chats"`
+	}
+)
+
+func (s *service) GetChats(chatids []string) (*resChats, error) {
 	m, err := s.repo.GetChats(chatids)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chats")
@@ -256,10 +262,12 @@ func (s *service) GetChats(chatids []string) ([]resChat, error) {
 			CreationTime: i.CreationTime,
 		})
 	}
-	return chats, nil
+	return &resChats{
+		Chats: chats,
+	}, nil
 }
 
-func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) ([]resChat, error) {
+func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) (*resChats, error) {
 	var members []model.MemberModel
 	if before == 0 {
 		var err error
