@@ -267,7 +267,13 @@ func (s *service) GetChats(chatids []string) (*resChats, error) {
 	}, nil
 }
 
-func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) (*resChats, error) {
+type (
+	resChatIDs struct {
+		ChatIDs []string `json:"chatids"`
+	}
+)
+
+func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) (*resChatIDs, error) {
 	var members []model.MemberModel
 	if before == 0 {
 		var err error
@@ -286,5 +292,7 @@ func (s *service) GetLatestChatsByKind(kind string, userid string, before int64,
 	for _, i := range members {
 		chatids = append(chatids, i.Chatid)
 	}
-	return s.GetChats(chatids)
+	return &resChatIDs{
+		ChatIDs: chatids,
+	}, nil
 }
