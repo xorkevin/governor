@@ -2,6 +2,8 @@ package main
 
 import (
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/conduit"
+	conduitchatmodel "xorkevin.dev/governor/service/conduit/chat/model"
 	"xorkevin.dev/governor/service/courier"
 	couriermodel "xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
@@ -117,6 +119,11 @@ func main() {
 		kvstore.NewSubtreeInCtx(inj, "courier")
 		objstore.NewBucketInCtx(inj, "link-qr-image")
 		gov.Register("courier", "/courier", courier.NewCtx(inj))
+	}
+	{
+		inj := gov.Injector()
+		conduitchatmodel.NewInCtx(inj)
+		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 
 	cmd := governor.NewCmd(opts, gov, governor.NewClient(opts))
