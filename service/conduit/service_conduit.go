@@ -79,7 +79,7 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 	s.notifyChatEvent("chat.create", m, userids)
 	return &resChat{
 		ChatID:       m.Chatid,
-		Kind:         m.Chatid,
+		Kind:         m.Kind,
 		Name:         m.Name,
 		Theme:        m.Theme,
 		LastUpdated:  m.LastUpdated,
