@@ -204,6 +204,7 @@ const (
 
 func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/chat", m.getChats, gate.Owner(m.s.gate, m.conduitChatsOwner, scopeChatRead))
 	r.Post("/chat", m.createChat, gate.User(m.s.gate, scopeChatWrite))
 	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
