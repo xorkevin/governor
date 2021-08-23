@@ -52,12 +52,11 @@ func (m *router) createChat(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userids = append(req.Userids, gate.GetCtxUserid(c))
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChatWithUsers(req.Kind, req.Name, req.Theme, req.Userids)
+	res, err := m.s.CreateChatWithUsers(req.Kind, req.Name, req.Theme, append(req.Userids, gate.GetCtxUserid(c)))
 	if err != nil {
 		c.WriteError(err)
 		return
