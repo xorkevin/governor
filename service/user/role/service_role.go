@@ -24,39 +24,45 @@ func (s *service) intersectRolesRepo(userid string, roles rank.Rank) (rank.Rank,
 func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
 	userkv := s.kvroleset.Subtree(userid)
 
-	multiget, err := userkv.Multi()
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create kvstore multi")
-	}
-	resget := make(map[string]kvstore.Resulter, roles.Len())
-	for _, i := range roles.ToSlice() {
-		resget[i] = multiget.Get(i)
-	}
-	if err := multiget.Exec(); err != nil {
-		s.logger.Error("Failed to get user roles from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "getroleset",
-		})
-		return s.intersectRolesRepo(userid, roles)
-	}
-
-	uncachedRoles := rank.Rank{}
 	res := rank.Rank{}
-	for k, v := range resget {
-		r, err := v.Result()
-		if err != nil {
-			if !errors.Is(err, kvstore.ErrNotFound{}) {
-				s.logger.Error("Failed to get user role result from cache", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "getroleresult",
-				})
+	uncachedRoles := roles
+
+	if multiget, err := userkv.Multi(); err != nil {
+		s.logger.Error("Failed to create kvstore multi", map[string]string{
+			"error": err.Error(),
+		})
+	} else {
+		resget := make(map[string]kvstore.Resulter, roles.Len())
+		for _, i := range roles.ToSlice() {
+			resget[i] = multiget.Get(i)
+		}
+		if err := multiget.Exec(); err != nil {
+			s.logger.Error("Failed to get user roles from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getroleset",
+			})
+			goto end
+		}
+		uncachedRoles = rank.Rank{}
+		for k, v := range resget {
+			v, err := v.Result()
+			if err != nil {
+				if !errors.Is(err, kvstore.ErrNotFound{}) {
+					s.logger.Error("Failed to get user role result from cache", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "getroleresult",
+					})
+				}
+				uncachedRoles.AddOne(k)
+			} else {
+				if v == cacheValY {
+					res.AddOne(k)
+				}
 			}
-			uncachedRoles.AddOne(k)
-		} else if r == cacheValY {
-			res.AddOne(k)
 		}
 	}
 
+end:
 	if len(uncachedRoles) == 0 {
 		return res, nil
 	}
@@ -66,13 +72,19 @@ func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, err
 		return nil, err
 	}
 
+	for _, i := range m.ToSlice() {
+		res.AddOne(i)
+	}
+
 	multiset, err := userkv.Multi()
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create kvstore multi")
+		s.logger.Error("Failed to create kvstore multi", map[string]string{
+			"error": err.Error(),
+		})
+		return res, nil
 	}
 	for _, i := range uncachedRoles.ToSlice() {
 		if m.Has(i) {
-			res.AddOne(i)
 			multiset.Set(i, cacheValY, s.roleCacheTime)
 		} else {
 			multiset.Set(i, cacheValN, s.roleCacheTime)
