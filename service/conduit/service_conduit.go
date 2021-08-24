@@ -64,7 +64,25 @@ func (s *service) CreateChat(kind string, name string, theme string) (*resChat, 
 	}, nil
 }
 
+func (s *service) checkUsersExist(userids []string) error {
+	ids, err := s.users.CheckUsersExist(userids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to users exist check")
+	}
+	if len(ids) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "User does not exist",
+		}))
+	}
+	return nil
+}
+
 func (s *service) CreateChatWithUsers(kind string, name string, theme string, userids []string) (*resChat, error) {
+	if err := s.checkUsersExist(userids); err != nil {
+		return nil, err
+	}
+
 	m, err := s.repo.NewChat(kind, name, theme)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
@@ -141,6 +159,10 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 			Status:  http.StatusBadRequest,
 			Message: "May not have more than 255 chat members",
 		}), governor.ErrOptInner(err))
+	}
+
+	if err := s.checkUsersExist(userids); err != nil {
+		return err
 	}
 
 	members := s.repo.AddMembers(m, userids)

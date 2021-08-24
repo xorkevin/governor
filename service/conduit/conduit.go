@@ -5,6 +5,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
+	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -21,6 +22,7 @@ type (
 
 	service struct {
 		repo   model.Repo
+		users  user.Users
 		gate   gate.Gate
 		logger governor.Logger
 	}
@@ -49,15 +51,17 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 // NewCtx creates a new Conduit service from a context
 func NewCtx(inj governor.Injector) Service {
 	repo := model.GetCtxRepo(inj)
+	users := user.GetCtxUsers(inj)
 	g := gate.GetCtxGate(inj)
-	return New(repo, g)
+	return New(repo, users, g)
 }
 
 // New creates a new Conduit service
-func New(repo model.Repo, g gate.Gate) Service {
+func New(repo model.Repo, users user.Users, g gate.Gate) Service {
 	return &service{
-		repo: repo,
-		gate: g,
+		repo:  repo,
+		users: users,
+		gate:  g,
 	}
 }
 
