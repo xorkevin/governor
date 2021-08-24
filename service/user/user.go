@@ -51,6 +51,7 @@ type (
 	Users interface {
 		GetByID(userid string) (*ResUserGet, error)
 		CheckUserExists(userid string) (bool, error)
+		CheckUsersExist(userids []string) ([]string, error)
 	}
 
 	// Service is a Users and governor.Service

@@ -311,6 +311,102 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 	return exists, nil
 }
 
+// CheckUsersExist is a fast check to determine if users exist
+func (s *service) CheckUsersExist(userids []string) ([]string, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
+
+	{
+		m := map[string]struct{}{}
+		l := make([]string, 0, len(userids))
+		for _, i := range userids {
+			if _, ok := m[i]; ok {
+				continue
+			}
+			m[i] = struct{}{}
+			l = append(l, i)
+		}
+		userids = l
+	}
+
+	res := make([]string, 0, len(userids))
+	dneInCache := userids
+
+	if multiget, err := s.kvusers.Multi(); err != nil {
+		s.logger.Error("Failed to create kvstore multi", map[string]string{
+			"error": err.Error(),
+		})
+	} else {
+		results := make([]kvstore.Resulter, 0, len(userids))
+		for _, i := range userids {
+			results = append(results, multiget.Get(i))
+		}
+		if err := multiget.Exec(); err != nil {
+			s.logger.Error("Failed to get userids from cache", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "getusersexist",
+			})
+			goto end
+		}
+		dneInCache = make([]string, 0, len(userids))
+		for n, i := range results {
+			if v, err := i.Result(); err != nil {
+				if !errors.Is(err, kvstore.ErrNotFound{}) {
+					s.logger.Error("Failed to get user exists from cache", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "getusersexistresult",
+					})
+				}
+				dneInCache = append(dneInCache, userids[n])
+			} else {
+				if v == cacheValY {
+					res = append(res, userids[n])
+				}
+			}
+		}
+	}
+
+end:
+	if len(dneInCache) == 0 {
+		return res, nil
+	}
+
+	m, err := s.users.GetBulk(dneInCache)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
+	}
+
+	userExists := map[string]struct{}{}
+	for _, i := range m {
+		res = append(res, i.Userid)
+		userExists[i.Userid] = struct{}{}
+	}
+
+	multiset, err := s.kvusers.Multi()
+	if err != nil {
+		s.logger.Error("Failed to create kvstore multi", map[string]string{
+			"error": err.Error(),
+		})
+		return res, nil
+	}
+	for _, i := range dneInCache {
+		if _, ok := userExists[i]; ok {
+			multiset.Set(i, cacheValY, s.userCacheTime)
+		} else {
+			multiset.Set(i, cacheValN, s.userCacheTime)
+		}
+	}
+	if err := multiset.Exec(); err != nil {
+		s.logger.Error("Failed to set users exist in cache", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "setusersexist",
+		})
+	}
+
+	return res, nil
+}
+
 // GetUseridForLogin gets a userid for login
 func (s *service) GetUseridForLogin(useroremail string) (string, error) {
 	if isEmail(useroremail) {
