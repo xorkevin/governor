@@ -16,6 +16,7 @@ type (
 	// Ratelimiter creates new ratelimiting middleware
 	Ratelimiter interface {
 		Ratelimit(tagger Tagger) governor.Middleware
+		Subtree(prefix string) Ratelimiter
 	}
 
 	// Service is a Gate and governor.Service
@@ -41,8 +42,24 @@ type (
 	// Tagger computes tags for requests
 	Tagger func(c governor.Context) []Tag
 
+	ctxKeyRootRL struct{}
+
 	ctxKeyRatelimiter struct{}
 )
+
+// getCtxRootRL returns a root Ratelimiter from the context
+func getCtxRootRL(inj governor.Injector) Ratelimiter {
+	v := inj.Get(ctxKeyRootRL{})
+	if v == nil {
+		return nil
+	}
+	return v.(Ratelimiter)
+}
+
+// setCtxRootRL sets a root Ratelimiter in the context
+func setCtxRootRL(inj governor.Injector, r Ratelimiter) {
+	inj.Set(ctxKeyRootRL{}, r)
+}
 
 // GetCtxRatelimiter returns a Ratelimiter from the context
 func GetCtxRatelimiter(inj governor.Injector) Ratelimiter {
@@ -56,6 +73,12 @@ func GetCtxRatelimiter(inj governor.Injector) Ratelimiter {
 // setCtxRatelimiter sets a Ratelimiter in the context
 func setCtxRatelimiter(inj governor.Injector, r Ratelimiter) {
 	inj.Set(ctxKeyRatelimiter{}, r)
+}
+
+// NewSubtreeInCtx creates a new ratelimiter subtree with a prefix and sets it in the context
+func NewSubtreeInCtx(inj governor.Injector, prefix string) {
+	rt := getCtxRootRL(inj)
+	setCtxRatelimiter(inj, rt.Subtree(prefix))
 }
 
 // NewCtx creates a new Ratelimiter from a context
@@ -72,7 +95,7 @@ func New(kv kvstore.KVStore) Service {
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
-	setCtxRatelimiter(inj, s)
+	setCtxRootRL(inj, s)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -110,14 +133,14 @@ type (
 	}
 )
 
-func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
+func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := governor.NewContext(w, r, s.logger)
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
-				multiget, err := s.tags.Multi()
+				multiget, err := kv.Multi()
 				if err != nil {
 					s.logger.Error("Failed to create kvstore multi", map[string]string{
 						"error": err.Error(),
@@ -175,6 +198,35 @@ func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
 		end:
 			next.ServeHTTP(c.R())
 		})
+	}
+}
+
+func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
+	return s.rlimit(s.tags, tagger)
+}
+
+func (s *service) Subtree(prefix string) Ratelimiter {
+	return &tree{
+		kv:   s.tags.Subtree(prefix),
+		base: s,
+	}
+}
+
+type (
+	tree struct {
+		kv   kvstore.KVStore
+		base *service
+	}
+)
+
+func (t *tree) Ratelimit(tagger Tagger) governor.Middleware {
+	return t.base.rlimit(t.kv, tagger)
+}
+
+func (t *tree) Subtree(prefix string) Ratelimiter {
+	return &tree{
+		kv:   t.kv.Subtree(prefix),
+		base: t.base,
 	}
 }
 

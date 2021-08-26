@@ -92,6 +92,7 @@ func main() {
 		invitationmodel.NewInCtx(inj)
 		resetmodel.NewInCtx(inj)
 		kvstore.NewSubtreeInCtx(inj, "user")
+		ratelimit.NewSubtreeInCtx(inj, "user")
 		gov.Register("user", "/u", user.NewCtx(inj))
 	}
 	{
