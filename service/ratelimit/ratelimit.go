@@ -160,6 +160,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 					periods := make([]kvstore.IntResulter, 0, l)
 					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
 					periods = append(periods, multiget.Incr(k, 1))
+					multiget.Expire(k, i.Period+1)
 					for j := int64(1); j < l; j++ {
 						periods = append(periods, multiget.GetInt(multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
 					}
