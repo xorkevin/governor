@@ -140,7 +140,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
-				multiget, err := kv.Multi()
+				multiget, err := kv.Tx()
 				if err != nil {
 					s.logger.Error("Failed to create kvstore multi", map[string]string{
 						"error": err.Error(),
@@ -156,10 +156,11 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 						continue
 					}
 					t := now / i.Period
-					k := divroundup(i.Expiration, i.Period)
-					periods := make([]kvstore.IntResulter, 0, k)
-					periods = append(periods, multiget.Incr(multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32)), 1))
-					for j := int64(1); j < k; j++ {
+					l := divroundup(i.Expiration, i.Period)
+					periods := make([]kvstore.IntResulter, 0, l)
+					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
+					periods = append(periods, multiget.Incr(k, 1))
+					for j := int64(1); j < l; j++ {
 						periods = append(periods, multiget.GetInt(multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
 					}
 					sums = append(sums, tagSum{

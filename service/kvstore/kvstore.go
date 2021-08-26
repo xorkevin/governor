@@ -27,14 +27,24 @@ type (
 		Result() (int64, error)
 	}
 
+	// BoolResulter returns the result of a bool command in a multi after it has executed
+	BoolResulter interface {
+		Result() (bool, error)
+	}
+
+	// ErrResulter returns the err of a command in a multi after it has executed
+	ErrResulter interface {
+		Result() error
+	}
+
 	// Multi is a kvstore multi
 	Multi interface {
 		Get(key string) Resulter
 		GetInt(key string) IntResulter
-		Set(key, val string, seconds int64)
-		Del(key ...string)
+		Set(key, val string, seconds int64) ErrResulter
+		Del(key ...string) ErrResulter
 		Incr(key string, delta int64) IntResulter
-		Expire(key string, seconds int64)
+		Expire(key string, seconds int64) BoolResulter
 		Subkey(keypath ...string) string
 		Subtree(prefix string) Multi
 		Exec() error
@@ -505,12 +515,16 @@ func (t *baseMulti) GetInt(key string) IntResulter {
 	}
 }
 
-func (t *baseMulti) Set(key, val string, seconds int64) {
-	t.base.Set(context.Background(), key, val, time.Duration(seconds)*time.Second)
+func (t *baseMulti) Set(key, val string, seconds int64) ErrResulter {
+	return &statusCmdErrResulter{
+		res: t.base.Set(context.Background(), key, val, time.Duration(seconds)*time.Second),
+	}
 }
 
-func (t *baseMulti) Del(key ...string) {
-	t.base.Del(context.Background(), key...)
+func (t *baseMulti) Del(key ...string) ErrResulter {
+	return &intCmdErrResulter{
+		res: t.base.Del(context.Background(), key...),
+	}
 }
 
 func (t *baseMulti) Incr(key string, delta int64) IntResulter {
@@ -519,8 +533,10 @@ func (t *baseMulti) Incr(key string, delta int64) IntResulter {
 	}
 }
 
-func (t *baseMulti) Expire(key string, seconds int64) {
-	t.base.Expire(context.Background(), key, time.Duration(seconds)*time.Second)
+func (t *baseMulti) Expire(key string, seconds int64) BoolResulter {
+	return &boolCmdResulter{
+		res: t.base.Expire(context.Background(), key, time.Duration(seconds)*time.Second),
+	}
 }
 
 func (t *baseMulti) Subkey(keypath ...string) string {
@@ -554,24 +570,24 @@ func (t *multi) GetInt(key string) IntResulter {
 	return t.base.GetInt(t.prefix + kvpathSeparator + key)
 }
 
-func (t *multi) Set(key, val string, seconds int64) {
-	t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
+func (t *multi) Set(key, val string, seconds int64) ErrResulter {
+	return t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
 }
 
-func (t *multi) Del(key ...string) {
+func (t *multi) Del(key ...string) ErrResulter {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
 		args = append(args, t.prefix+kvpathSeparator+i)
 	}
-	t.base.Del(args...)
+	return t.base.Del(args...)
 }
 
 func (t *multi) Incr(key string, delta int64) IntResulter {
 	return t.base.Incr(t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *multi) Expire(key string, seconds int64) {
-	t.base.Expire(key, seconds)
+func (t *multi) Expire(key string, seconds int64) BoolResulter {
+	return t.base.Expire(t.prefix+kvpathSeparator+key, seconds)
 }
 
 func (t *multi) Exec() error {
@@ -710,4 +726,53 @@ func (r *intResulter) Result() (int64, error) {
 		return 0, governor.ErrWithKind(err, ErrVal{}, "Invalid int value")
 	}
 	return num, nil
+}
+
+type (
+	boolCmdResulter struct {
+		res *redis.BoolCmd
+	}
+)
+
+func (r *boolCmdResulter) Result() (bool, error) {
+	val, err := r.res.Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return false, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return false, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	return val, nil
+}
+
+type (
+	statusCmdErrResulter struct {
+		res *redis.StatusCmd
+	}
+)
+
+func (r *statusCmdErrResulter) Result() error {
+	if err := r.res.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			return governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	return nil
+}
+
+type (
+	intCmdErrResulter struct {
+		res *redis.IntCmd
+	}
+)
+
+func (r *intCmdErrResulter) Result() error {
+	if err := r.res.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			return governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+		}
+		return governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+	}
+	return nil
 }
