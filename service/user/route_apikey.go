@@ -226,10 +226,10 @@ const (
 )
 
 func (m *router) mountApikey(r governor.Router) {
-	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead))
-	r.Post("", m.createApikey, gate.User(m.s.gate, scopeApikeyWrite))
-	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, scopeApikeyWrite))
-	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate, scopeApikeyWrite))
-	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate, scopeApikeyWrite))
-	r.Any("/check", m.checkApikey, m.s.gate.Authenticate(m.checkApikeyValidator, ""))
+	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead), m.rt)
+	r.Post("", m.createApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
+	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
+	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
+	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
+	r.Any("/check", m.checkApikey, m.s.gate.Authenticate(m.checkApikeyValidator, ""), m.rt)
 }

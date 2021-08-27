@@ -102,7 +102,8 @@ type (
 	}
 
 	router struct {
-		s service
+		s  service
+		rt governor.Middleware
 	}
 
 	// NewUserProps are properties of a newly created user
@@ -238,6 +239,12 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 func (s *service) router() *router {
 	return &router{
 		s: *s,
+		rt: ratelimit.Compose(
+			s.ratelimiter,
+			ratelimit.IPAddress("ip", 60, 15, 240),
+			ratelimit.Userid("id", 60, 15, 240),
+			ratelimit.UseridIPAddress("id_ip", 60, 15, 120),
+		),
 	}
 }
 

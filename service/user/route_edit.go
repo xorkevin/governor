@@ -215,11 +215,11 @@ const (
 )
 
 func (m *router) mountEdit(r governor.Router) {
-	r.Put("", m.putUser, gate.User(m.s.gate, scopeAccountWrite))
-	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite))
-	r.Get("/roles/invitation", m.getUserRoleInvitations, gate.User(m.s.gate, scopeAccountRead))
-	r.Post("/roles/invitation/{role}/accept", m.postAcceptRoleInvitation, gate.User(m.s.gate, scopeAccountWrite))
-	r.Delete("/roles/invitation/{role}", m.deleteUserRoleInvitation, gate.User(m.s.gate, scopeAccountWrite))
-	r.Get("/role/{role}/invitation", m.getRoleInvitations, gate.ModF(m.s.gate, m.roleMod, scopeAdminRead))
-	r.Delete("/role/{role}/invitation/id/{id}", m.deleteRoleInvitation, gate.ModF(m.s.gate, m.roleMod, scopeAdminWrite))
+	r.Put("", m.putUser, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite), m.rt)
+	r.Get("/roles/invitation", m.getUserRoleInvitations, gate.User(m.s.gate, scopeAccountRead), m.rt)
+	r.Post("/roles/invitation/{role}/accept", m.postAcceptRoleInvitation, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Delete("/roles/invitation/{role}", m.deleteUserRoleInvitation, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Get("/role/{role}/invitation", m.getRoleInvitations, gate.ModF(m.s.gate, m.roleMod, scopeAdminRead), m.rt)
+	r.Delete("/role/{role}/invitation/id/{id}", m.deleteRoleInvitation, gate.ModF(m.s.gate, m.roleMod, scopeAdminWrite), m.rt)
 }

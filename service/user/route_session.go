@@ -91,6 +91,6 @@ const (
 )
 
 func (m *router) mountSession(r governor.Router) {
-	r.Get("/sessions", m.getSessions, gate.User(m.s.gate, scopeSessionRead))
-	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate, scopeSessionWrite))
+	r.Get("/sessions", m.getSessions, gate.User(m.s.gate, scopeSessionRead), m.rt)
+	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate, scopeSessionWrite), m.rt)
 }

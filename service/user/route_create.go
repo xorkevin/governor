@@ -172,11 +172,14 @@ const (
 )
 
 func (m *router) mountCreate(r governor.Router) {
-	rt := ratelimit.Compose(m.s.ratelimiter, ratelimit.IPAddress("ip", 60, 15, 240))
-	r.Post("", m.createUser, rt)
-	r.Post("/confirm", m.commitUser, rt)
-	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "gov.user", scopeApprovalRead))
-	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))
-	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))
-	r.Delete("/id/{id}", m.deleteUser, gate.OwnerParam(m.s.gate, "id", scopeAccountDelete))
+	rc := ratelimit.Compose(
+		m.s.ratelimiter,
+		ratelimit.IPAddress("create.ip", 60, 15, 120),
+	)
+	r.Post("", m.createUser, rc)
+	r.Post("/confirm", m.commitUser, rc)
+	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "gov.user", scopeApprovalRead), m.rt)
+	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite), m.rt)
+	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite), m.rt)
+	r.Delete("/id/{id}", m.deleteUser, gate.OwnerParam(m.s.gate, "id", scopeAccountDelete), m.rt)
 }
