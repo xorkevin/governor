@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -171,8 +172,9 @@ const (
 )
 
 func (m *router) mountCreate(r governor.Router) {
-	r.Post("", m.createUser)
-	r.Post("/confirm", m.commitUser)
+	rt := ratelimit.Compose(m.s.ratelimiter, ratelimit.IPAddress("ip", 60, 15, 240))
+	r.Post("", m.createUser, rt)
+	r.Post("/confirm", m.commitUser, rt)
 	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, "gov.user", scopeApprovalRead))
 	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))
 	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, "gov.user", scopeApprovalWrite))

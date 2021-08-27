@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -312,16 +313,17 @@ const (
 )
 
 func (m *router) mountGet(r governor.Router) {
-	r.Get("/id/{id}", m.getByID)
+	rt := ratelimit.Compose(m.s.ratelimiter, ratelimit.IPAddress("ip", 60, 15, 240))
+	r.Get("/id/{id}", m.getByID, rt)
 	r.Get("", m.getByIDPersonal, gate.User(m.s.gate, scopeAccountRead))
 	r.Get("/roles", m.getUserRolesPersonal, gate.User(m.s.gate, scopeAccountRead))
 	r.Get("/roleint", m.getUserRolesIntersectPersonal, gate.User(m.s.gate, scopeAccountRead))
 	r.Get("/id/{id}/private", m.getByIDPrivate, gate.Admin(m.s.gate, scopeAdminRead))
-	r.Get("/id/{id}/roles", m.getUserRoles)
-	r.Get("/id/{id}/roleint", m.getUserRolesIntersect)
-	r.Get("/name/{username}", m.getByUsername)
+	r.Get("/id/{id}/roles", m.getUserRoles, rt)
+	r.Get("/id/{id}/roleint", m.getUserRolesIntersect, rt)
+	r.Get("/name/{username}", m.getByUsername, rt)
 	r.Get("/name/{username}/private", m.getByUsernamePrivate, gate.Admin(m.s.gate, scopeAdminRead))
-	r.Get("/role/{role}", m.getUsersByRole)
+	r.Get("/role/{role}", m.getUsersByRole, rt)
 	r.Get("/all", m.getAllUserInfo, gate.Admin(m.s.gate, scopeAdminRead))
-	r.Get("/ids", m.getUserInfoBulkPublic)
+	r.Get("/ids", m.getUserInfoBulkPublic, rt)
 }
