@@ -31,6 +31,7 @@ type (
 		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
 		GetGroup(limit, offset int) ([]Info, error)
 		GetBulk(userids []string) ([]Info, error)
+		GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, error)
 		GetByID(userid string) (*Model, error)
 		GetByUsername(username string) (*Model, error)
 		GetByEmail(email string) (*Model, error)
@@ -65,7 +66,7 @@ type (
 	// Info is the metadata of a user
 	Info struct {
 		Userid    string `query:"userid;getgroup;getgroupeq,userid|arr"`
-		Username  string `query:"username"`
+		Username  string `query:"username;getgroupeq,username|like"`
 		Email     string `query:"email"`
 		FirstName string `query:"first_name"`
 		LastName  string `query:"last_name"`
@@ -230,6 +231,19 @@ func (r *repo) GetBulk(userids []string) ([]Info, error) {
 	m, err := userModelGetInfoHasUseridOrdUserid(d, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get user info of userids")
+	}
+	return m, nil
+}
+
+// GetByUsernamePrefix gets users by username prefix
+func (r *repo) GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := userModelGetInfoLikeUsernameOrdUsername(d, prefix, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user info of username prefix")
 	}
 	return m, nil
 }

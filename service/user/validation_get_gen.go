@@ -71,3 +71,13 @@ func (r reqGetUsers) valid() error {
 	}
 	return nil
 }
+
+func (r reqSearchUsers) valid() error {
+	if err := validoptUsername(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}

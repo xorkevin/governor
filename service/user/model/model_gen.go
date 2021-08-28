@@ -206,3 +206,30 @@ func userModelGetInfoHasUseridOrdUserid(db *sql.DB, userid []string, orderasc bo
 	}
 	return res, nil
 }
+
+func userModelGetInfoLikeUsernameOrdUsername(db *sql.DB, username string, orderasc bool, limit, offset int) ([]Info, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Info, 0, limit)
+	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM users WHERE username LIKE $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, username)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Info{}
+		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}

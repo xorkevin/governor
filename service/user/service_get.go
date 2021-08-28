@@ -250,6 +250,33 @@ func (s *service) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, e
 	}, nil
 }
 
+func (s *service) GetInfoUsernamePrefix(prefix string, limit int) (*resUserInfoListPublic, error) {
+	if len(prefix) == 0 {
+		return &resUserInfoListPublic{
+			Users: []resUserInfoPublic{},
+		}, nil
+	}
+
+	infoSlice, err := s.users.GetByUsernamePrefix(prefix, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
+	}
+
+	info := make([]resUserInfoPublic, 0, len(infoSlice))
+	for _, i := range infoSlice {
+		info = append(info, resUserInfoPublic{
+			Userid:    i.Userid,
+			Username:  i.Username,
+			FirstName: i.FirstName,
+			LastName:  i.LastName,
+		})
+	}
+
+	return &resUserInfoListPublic{
+		Users: info,
+	}, nil
+}
+
 type (
 	resUserList struct {
 		Users []string `json:"users"`

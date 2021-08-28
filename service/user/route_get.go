@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetUserRoles reqGetUserRolesIntersect reqGetRoleUser reqGetUserBulk reqGetUsers
+//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetUserRoles reqGetUserRolesIntersect reqGetRoleUser reqGetUserBulk reqGetUsers reqSearchUsers
 
 type (
 	reqUserGetID struct {
@@ -306,12 +307,42 @@ func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+type (
+	reqSearchUsers struct {
+		Prefix string `valid:"username,opt" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchUsers{
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetInfoUsernamePrefix(req.Prefix, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 const (
 	scopeAccountRead = "gov.user.account:read"
 	scopeAdminRead   = "gov.user.admin:read"
 )
 
 func (m *router) mountGet(r governor.Router) {
+	rs := ratelimit.Compose(
+		m.s.ratelimiter,
+		ratelimit.IPAddress("search.ip", 60, 15, 480),
+	)
 	r.Get("/id/{id}", m.getByID, m.rt)
 	r.Get("", m.getByIDPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
 	r.Get("/roles", m.getUserRolesPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
@@ -324,4 +355,5 @@ func (m *router) mountGet(r governor.Router) {
 	r.Get("/role/{role}", m.getUsersByRole, m.rt)
 	r.Get("/all", m.getAllUserInfo, gate.Admin(m.s.gate, scopeAdminRead), m.rt)
 	r.Get("/ids", m.getUserInfoBulkPublic, m.rt)
+	r.Get("/search", m.searchUsers, rs)
 }

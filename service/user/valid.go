@@ -79,6 +79,16 @@ func validhasUsername(username string) error {
 	return nil
 }
 
+func validoptUsername(username string) error {
+	if len(username) > lengthCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username must be shorter than 128 characters",
+		}))
+	}
+	return nil
+}
+
 func validhasRole(role string) error {
 	if len(role) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
