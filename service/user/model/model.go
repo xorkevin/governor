@@ -241,7 +241,7 @@ func (r *repo) GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoLikeUsernameOrdUsername(d, prefix, true, limit, offset)
+	m, err := userModelGetInfoLikeUsernameOrdUsername(d, prefix+"%", true, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get user info of username prefix")
 	}
