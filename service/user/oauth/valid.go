@@ -80,7 +80,7 @@ func validhasClientIDs(clientids []string) error {
 }
 
 func validAmount(amt int) error {
-	if amt == 0 {
+	if amt < 1 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Amount must be positive",
 			Status:  http.StatusBadRequest,
