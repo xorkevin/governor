@@ -130,6 +130,46 @@ func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, userid stri
 	return res, nil
 }
 
+func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, chatid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(chatid))
+	args = append(args, limit, offset)
+	var placeholderschatid string
+	{
+		placeholders := make([]string, 0, len(chatid))
+		for _, i := range chatid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholderschatid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM chatmembers WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, chatid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {

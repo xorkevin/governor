@@ -37,12 +37,13 @@ func (s *service) notifyChatEvent(kind string, m *model.ChatModel, userids []str
 
 type (
 	resChat struct {
-		ChatID       string `json:"chatid"`
-		Kind         string `json:"kind"`
-		Name         string `json:"name"`
-		Theme        string `json:"theme"`
-		LastUpdated  int64  `json:"last_updated"`
-		CreationTime int64  `json:"creation_time"`
+		ChatID       string   `json:"chatid"`
+		Kind         string   `json:"kind"`
+		Name         string   `json:"name"`
+		Theme        string   `json:"theme"`
+		LastUpdated  int64    `json:"last_updated"`
+		CreationTime int64    `json:"creation_time"`
+		Members      []string `json:"members"`
 	}
 )
 
@@ -61,6 +62,7 @@ func (s *service) CreateChat(kind string, name string, theme string) (*resChat, 
 		Theme:        m.Theme,
 		LastUpdated:  m.LastUpdated,
 		CreationTime: m.CreationTime,
+		Members:      []string{},
 	}, nil
 }
 
@@ -102,6 +104,7 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 		Theme:        m.Theme,
 		LastUpdated:  m.LastUpdated,
 		CreationTime: m.CreationTime,
+		Members:      userids,
 	}, nil
 }
 
@@ -273,6 +276,17 @@ func (s *service) GetChats(chatids []string) (*resChats, error) {
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chats")
 	}
+	allMembers, err := s.repo.GetChatsMembers(chatids, len(chatids)*chatMemberAmountCap)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+	}
+	membersByChat := map[string][]string{}
+	for _, i := range chatids {
+		membersByChat[i] = []string{}
+	}
+	for _, i := range allMembers {
+		membersByChat[i.Chatid] = append(membersByChat[i.Chatid], i.Userid)
+	}
 	chats := make([]resChat, 0, len(m))
 	for _, i := range m {
 		chats = append(chats, resChat{
@@ -282,6 +296,7 @@ func (s *service) GetChats(chatids []string) (*resChats, error) {
 			Theme:        i.Theme,
 			LastUpdated:  i.LastUpdated,
 			CreationTime: i.CreationTime,
+			Members:      membersByChat[i.Chatid],
 		})
 	}
 	return &resChats{
@@ -289,13 +304,7 @@ func (s *service) GetChats(chatids []string) (*resChats, error) {
 	}, nil
 }
 
-type (
-	resChatIDs struct {
-		ChatIDs []string `json:"chatids"`
-	}
-)
-
-func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) (*resChatIDs, error) {
+func (s *service) GetLatestChatsByKind(kind string, userid string, before int64, limit int) (*resChats, error) {
 	var members []model.MemberModel
 	if before == 0 {
 		var err error
@@ -314,7 +323,5 @@ func (s *service) GetLatestChatsByKind(kind string, userid string, before int64,
 	for _, i := range members {
 		chatids = append(chatids, i.Chatid)
 	}
-	return &resChatIDs{
-		ChatIDs: chatids,
-	}, nil
+	return s.GetChats(chatids)
 }

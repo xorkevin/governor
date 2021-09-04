@@ -23,6 +23,7 @@ type (
 		GetChat(chatid string) (*ChatModel, error)
 		GetChats(chatids []string) ([]ChatModel, error)
 		GetMembers(chatid string, limit, offset int) ([]MemberModel, error)
+		GetChatsMembers(chatids []string, limit int) ([]MemberModel, error)
 		GetChatMembers(chatid string, userid []string) ([]MemberModel, error)
 		GetUserChats(userid string, chatids []string) ([]MemberModel, error)
 		GetMembersCount(chatid string) (int, error)
@@ -65,7 +66,7 @@ type (
 
 	// MemberModel is the db chat member model
 	MemberModel struct {
-		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr"`
+		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr;getgroupeq,chatid|arr"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind;getgroupeq,userid,last_updated|lt;getgroupeq,userid,kind,last_updated|lt"`
@@ -176,6 +177,22 @@ func (r *repo) GetMembers(chatid string, limit, offset int) ([]MemberModel, erro
 		return nil, err
 	}
 	m, err := memberModelGetMemberModelEqChatidOrdUserid(d, chatid, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+	}
+	return m, nil
+}
+
+// GetChatsMembers returns chat members
+func (r *repo) GetChatsMembers(chatids []string, limit int) ([]MemberModel, error) {
+	if len(chatids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, chatids, true, limit, 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
 	}
