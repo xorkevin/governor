@@ -13,6 +13,8 @@ const (
 	lengthCapName   = 127
 	lengthCapTheme  = 4095
 	lengthCapUserid = 31
+	lengthCapMsgid  = 31
+	lengthCapMsg    = 4095
 	amountCap       = 255
 )
 
@@ -173,6 +175,58 @@ func validAmount(amt int) error {
 	if amt > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Amount must be less than 256",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validoptMsgid(kind string) error {
+	if len(kind) > lengthCapMsgid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msgid must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validMsgkind(kind string) error {
+	if len(kind) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg kind must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(kind) > lengthCapKind {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg kind must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validoptMsgkind(kind string) error {
+	if len(kind) > lengthCapKind {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg kind must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validMsgvalue(value string) error {
+	if len(value) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg value must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(value) > lengthCapMsg {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg value must be shorter than 4096 characters",
 			Status:  http.StatusBadRequest,
 		}))
 	}

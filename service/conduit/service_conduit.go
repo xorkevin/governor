@@ -11,7 +11,7 @@ import (
 )
 
 func (s *service) notifyChatEventGetMembers(kind string, m *model.ChatModel, userids []string) {
-	members, err := s.repo.GetMembers(m.Chatid, 65536, 0)
+	members, err := s.repo.GetMembers(m.Chatid, chatMemberAmountCap*2, 0)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Failed to get chat members", map[string]string{
@@ -238,7 +238,7 @@ func (s *service) DeleteChat(chatid string) error {
 	if err := s.repo.DeleteChatMsgs(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat messages")
 	}
-	members, err := s.repo.GetMembers(chatid, 65536, 0)
+	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap*2, 0)
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to get chat members")
 	}
@@ -324,4 +324,105 @@ func (s *service) GetLatestChatsByKind(kind string, userid string, before int64,
 		chatids = append(chatids, i.Chatid)
 	}
 	return s.GetChats(chatids)
+}
+
+type (
+	resMsg struct {
+		Chatid string `json:"chatid"`
+		Msgid  string `json:"msgid"`
+		Userid string `json:"userid"`
+		Timems int64  `json:"time_ms"`
+		Kind   string `json:"kind"`
+		Value  string `json:"value"`
+	}
+)
+
+func (s *service) CreateMsg(chatid string, userid string, kind string, value string) (*resMsg, error) {
+	m, err := s.repo.GetChat(chatid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Chat not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get chat")
+	}
+
+	msg, err := s.repo.AddMsg(m, userid, kind, value)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create chat msg")
+	}
+	if err := s.repo.UpdateChat(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update chat")
+	}
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update chat")
+	}
+	if err := s.repo.InsertMsg(msg); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to insert chat msg")
+	}
+
+	return &resMsg{
+		Chatid: msg.Chatid,
+		Msgid:  msg.Msgid,
+		Userid: msg.Userid,
+		Timems: msg.Timems,
+		Kind:   msg.Kind,
+		Value:  msg.Value,
+	}, nil
+}
+
+type (
+	resMsgs struct {
+		Msgs []resMsg `json:"msgs"`
+	}
+)
+
+func (s *service) GetLatestChatMsgsByKind(chatid string, kind string, before string, limit int) (*resMsgs, error) {
+	var msgs []model.MsgModel
+	if kind == "" {
+		if before == "" {
+			var err error
+			msgs, err = s.repo.GetMsgs(chatid, limit, 0)
+			if err != nil {
+				return nil, governor.ErrWithMsg(err, "Failed to get latest msgs")
+			}
+		} else {
+			var err error
+			msgs, err = s.repo.GetMsgsBefore(chatid, before, limit)
+			if err != nil {
+				return nil, governor.ErrWithMsg(err, "Failed to get latest msgs")
+			}
+		}
+	} else {
+		if before == "" {
+			var err error
+			msgs, err = s.repo.GetMsgsByKind(chatid, kind, limit, 0)
+			if err != nil {
+				return nil, governor.ErrWithMsg(err, "Failed to get latest msgs")
+			}
+		} else {
+			var err error
+			msgs, err = s.repo.GetMsgsBeforeByKind(chatid, kind, before, limit)
+			if err != nil {
+				return nil, governor.ErrWithMsg(err, "Failed to get latest msgs")
+			}
+		}
+	}
+
+	res := make([]resMsg, 0, len(msgs))
+	for _, i := range msgs {
+		res = append(res, resMsg{
+			Chatid: i.Chatid,
+			Msgid:  i.Msgid,
+			Userid: i.Userid,
+			Timems: i.Timems,
+			Kind:   i.Kind,
+			Value:  i.Value,
+		})
+	}
+	return &resMsgs{
+		Msgs: res,
+	}, nil
 }

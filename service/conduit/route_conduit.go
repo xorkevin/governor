@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqChats
+//go:generate forge validation -o validation_conduit_gen.go reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqChatID struct {
@@ -42,6 +42,19 @@ type (
 
 	reqChats struct {
 		Chatids []string `valid:"chatids,has" json:"-"`
+	}
+
+	reqCreateMsg struct {
+		Chatid string `valid:"chatid,has" json:"-"`
+		Kind   string `valid:"msgkind" json:"kind"`
+		Value  string `valid:"msgvalue" json:"value"`
+	}
+
+	reqLatestMsgs struct {
+		Chatid string `valid:"chatid,has" json:"-"`
+		Kind   string `valid:"msgkind,opt" json:"-"`
+		Before string `valid:"msgid,opt" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
 	}
 )
 
@@ -164,6 +177,46 @@ func (m *router) getChats(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+func (m *router) createMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateMsg{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Chatid = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.CreateMsg(req.Chatid, gate.GetCtxUserid(c), req.Kind, req.Value)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+func (m *router) getLatestMsgs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqLatestMsgs{
+		Chatid: c.Param("id"),
+		Kind:   c.Query("kind"),
+		Before: c.Query("before"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetLatestChatMsgsByKind(req.Chatid, req.Kind, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (m *router) conduitChatOwner(c governor.Context, userid string) bool {
 	chatid := c.Param("id")
 	if err := validhasChatid(chatid); err != nil {
@@ -208,4 +261,6 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Delete("/chat/id/{id}", m.deleteChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
+	r.Post("/chat/id/{id}/msg", m.createMsg, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
+	r.Get("/chat/id/{id}/msg", m.getLatestMsgs, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatRead))
 }

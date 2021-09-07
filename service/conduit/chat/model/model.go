@@ -42,8 +42,8 @@ type (
 		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
 		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
 		GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error)
-		GetMsgsBeforeByKind(kind string, chatid string, msgid string, limit int) ([]MsgModel, error)
-		AddMsg(chatid string, userid string, kind string, txt string) (*MsgModel, error)
+		GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error)
+		AddMsg(m *ChatModel, userid string, kind string, value string) (*MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(chatid string, msgids []string) error
 		DeleteChatMsgs(chatid string) error
@@ -463,7 +463,7 @@ func (r *repo) GetMsgsByKind(chatid string, kind string, limit, offset int) ([]M
 }
 
 // GetMsgsByKind returns chat msgs of a kind
-func (r *repo) GetMsgsBeforeByKind(kind string, chatid string, msgid string, limit int) ([]MsgModel, error) {
+func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -476,16 +476,18 @@ func (r *repo) GetMsgsBeforeByKind(kind string, chatid string, msgid string, lim
 }
 
 // AddMsg adds a new chat msg
-func (r *repo) AddMsg(chatid string, userid string, kind string, value string) (*MsgModel, error) {
+func (r *repo) AddMsg(m *ChatModel, userid string, kind string, value string) (*MsgModel, error) {
 	u, err := uid.NewSnowflake(msgUIDRandSize)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
 	}
+	now := time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	m.LastUpdated = now
 	return &MsgModel{
-		Chatid: chatid,
+		Chatid: m.Chatid,
 		Msgid:  u.Base32(),
 		Userid: userid,
-		Timems: time.Now().Round(0).UnixNano() / int64(time.Millisecond),
+		Timems: now,
 		Kind:   kind,
 		Value:  value,
 	}, nil

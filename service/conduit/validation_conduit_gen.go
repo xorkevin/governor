@@ -67,3 +67,32 @@ func (r reqChats) valid() error {
 	}
 	return nil
 }
+
+func (r reqCreateMsg) valid() error {
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validMsgvalue(r.Value); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqLatestMsgs) valid() error {
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validoptMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validoptMsgid(r.Before); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
