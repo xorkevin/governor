@@ -262,5 +262,5 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Delete("/chat/id/{id}", m.deleteChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Post("/chat/id/{id}/msg", m.createMsg, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
-	r.Get("/chat/id/{id}/msg", m.getLatestMsgs, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatRead))
+	r.Get("/chat/id/{id}/msg/latest", m.getLatestMsgs, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatRead))
 }
