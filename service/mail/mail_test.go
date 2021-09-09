@@ -6,7 +6,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"net/mail"
+	gomail "net/mail"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,18 +18,22 @@ func TestBuildMail(t *testing.T) {
 	for _, tc := range []struct {
 		Test     string
 		Subject  string
-		From     string
-		FromName string
-		To       []string
+		From     Addr
+		To       []Addr
 		Body     string
 		HtmlBody string
 	}{
 		{
-			Test:     "text and html email with multiple recipients",
-			Subject:  "Hello World",
-			From:     "kevin@xorkevin.com",
-			FromName: "Kevin Wang",
-			To:       []string{"other@xorkevin.com", "other2@xorkevin.com"},
+			Test:    "text and html email with multiple recipients",
+			Subject: "Hello World",
+			From: Addr{
+				Address: "kevin@xorkevin.com",
+				Name:    "Kevin Wang",
+			},
+			To: []Addr{
+				{Address: "other@xorkevin.com"},
+				{Address: "other2@xorkevin.com"},
+			},
 			Body:     "This is a test plain text alternate that goes over the line limit of 78 characters.",
 			HtmlBody: "<html><body>This is some test html that goes over the line limit of 78 characters.</body></html>",
 		},
@@ -39,28 +43,27 @@ func TestBuildMail(t *testing.T) {
 			t.Parallel()
 			assert := require.New(t)
 
-			msg, err := msgToBytes(tc.Subject, tc.From, tc.FromName, tc.To, []byte(tc.Body), []byte(tc.HtmlBody))
-			assert.NoError(err)
-			fmt.Print(string(msg))
-			m, err := mail.ReadMessage(bytes.NewBuffer(msg))
+			buf := bytes.Buffer{}
+			assert.NoError(msgToBytes(nil, tc.Subject, tc.From, tc.To, []byte(tc.Body), []byte(tc.HtmlBody), &buf))
+			fmt.Print(buf.String())
+			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)
 			assert.Equal(tc.Subject, m.Header.Get("Subject"))
 			from, err := m.Header.AddressList("From")
 			assert.NoError(err)
 			assert.Len(from, 1)
-			assert.Equal(tc.From, from[0].Address)
-			assert.Equal(tc.FromName, from[0].Name)
+			assert.Equal(tc.From.Address, from[0].Address)
+			assert.Equal(tc.From.Name, from[0].Name)
 			to, err := m.Header.AddressList("To")
 			assert.NoError(err)
 			assert.Len(to, len(tc.To))
 			for n, i := range to {
-				assert.Equal(tc.To[n], i.Address)
+				assert.Equal(tc.To[n].Address, i.Address)
 			}
 			assert.Equal(m.Header.Get("Mime-Version"), "1.0")
 			mixedcontenttype, mixedparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 			assert.NoError(err)
 			assert.Equal("multipart/mixed", mixedcontenttype)
-			assert.Equal("utf-8", mixedparams["charset"])
 			assert.NotEqual("", mixedparams["boundary"])
 			r := multipart.NewReader(m.Body, mixedparams["boundary"])
 			body, err := r.NextPart()

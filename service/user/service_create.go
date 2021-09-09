@@ -11,6 +11,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/mail"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -209,7 +210,7 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
 		return governor.ErrWithMsg(err, "Failed to generate account verification email")
 	}
-	if err := s.mailer.Send("", "", []string{m.Email}, newUserTemplate, emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, newUserTemplate, emdata); err != nil {
 		return governor.ErrWithMsg(err, "Failed to send account verification email")
 	}
 	return nil

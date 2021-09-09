@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/model"
 )
 
@@ -158,7 +159,7 @@ func (s *service) UpdateEmail(userid string, newEmail string, password string) e
 	if err := emdata.computeURL(s.emailurlbase, s.tplemailchange); err != nil {
 		return governor.ErrWithMsg(err, "Failed to generate new email verification email")
 	}
-	if err := s.mailer.Send("", "", []string{newEmail}, emailChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: newEmail, Name: m.FirstName}}, emailChangeTemplate, emdata); err != nil {
 		return governor.ErrWithMsg(err, "Failed to send new email verification email")
 	}
 	return nil
@@ -233,7 +234,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", []string{m.Email}, emailChangeNotifyTemplate, emdatanotify); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, emailChangeNotifyTemplate, emdatanotify); err != nil {
 		s.logger.Error("Failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailoldmail",
@@ -331,7 +332,7 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", []string{m.Email}, passChangeTemplate, emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, passChangeTemplate, emdata); err != nil {
 		s.logger.Error("Failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "updatepasswordmail",
@@ -400,7 +401,7 @@ func (s *service) ForgotPassword(useroremail string) error {
 	if err := emdata.computeURL(s.emailurlbase, s.tplforgotpass); err != nil {
 		return governor.ErrWithMsg(err, "Failed to generate password reset email")
 	}
-	if err := s.mailer.Send("", "", []string{m.Email}, forgotPassTemplate, emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, forgotPassTemplate, emdata); err != nil {
 		return governor.ErrWithMsg(err, "Failed to send password reset email")
 	}
 	return nil
@@ -462,7 +463,7 @@ func (s *service) ResetPassword(userid string, key string, newPassword string) e
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send("", "", []string{m.Email}, passResetTemplate, emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, passResetTemplate, emdata); err != nil {
 		s.logger.Error("Failed to send password change notification email", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "resetpasswordmail",
@@ -594,7 +595,7 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string, ipadd
 			Time:      time.Unix(now, 0).UTC().Format(time.RFC3339),
 			UserAgent: useragent,
 		}
-		if err := s.mailer.Send("", "", []string{m.Email}, emailOTPBackupUsedTemplate, emdata); err != nil {
+		if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, emailOTPBackupUsedTemplate, emdata); err != nil {
 			s.logger.Error("Failed to send otp backup used email", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "otpbackupusedemail",
@@ -654,7 +655,7 @@ func (s *service) incrOTPFailCount(m *model.Model, ipaddr, useragent string) {
 			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC3339),
 			UserAgent: useragent,
 		}
-		if err := s.mailer.Send("", "", []string{m.Email}, emailOTPRatelimitTemplate, emdata); err != nil {
+		if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, emailOTPRatelimitTemplate, emdata); err != nil {
 			s.logger.Error("Failed to send otp ratelimit email", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "otpratelimitemail",

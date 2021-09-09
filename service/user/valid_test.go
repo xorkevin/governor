@@ -35,7 +35,7 @@ func TestValidEmail(t *testing.T) {
 		},
 		{
 			Inp:   "+gov@tld",
-			Valid: false,
+			Valid: true,
 		},
 		{
 			Inp:   "gov..test@tld",
@@ -51,11 +51,11 @@ func TestValidEmail(t *testing.T) {
 		},
 		{
 			Inp:   "gov@-tld",
-			Valid: false,
+			Valid: true,
 		},
 		{
 			Inp:   "gov@tld-",
-			Valid: false,
+			Valid: true,
 		},
 		{
 			Inp:   "gov@xor..kevin.com",

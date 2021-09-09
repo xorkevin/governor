@@ -7,14 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
-	"mime/multipart"
-	"mime/quotedprintable"
 	"net/smtp"
-	"net/textproto"
 	"strings"
 	"time"
 
+	_ "github.com/emersion/go-message/charset"
+	emmail "github.com/emersion/go-message/mail"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/template"
@@ -31,7 +29,7 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		Send(from, fromname string, to []string, tpl string, emdata interface{}) error
+		Send(from Addr, to []Addr, tpl string, emdata interface{}) error
 	}
 
 	// Service is a Mailer and governor.Service
@@ -40,14 +38,18 @@ type (
 		Mailer
 	}
 
+	Addr struct {
+		Address string `json:"address"`
+		Name    string `json:"name"`
+	}
+
 	mailmsg struct {
-		From        string   `json:"from"`
-		FromName    string   `json:"fromname"`
-		To          []string `json:"to"`
-		Subjecttpl  string   `json:"subjecttpl"`
-		Bodytpl     string   `json:"bodytpl"`
-		HTMLBodytpl string   `json:"htmlbodytpl"`
-		Emdata      string   `json:"emdata"`
+		From        Addr   `json:"from"`
+		To          []Addr `json:"to"`
+		Subjecttpl  string `json:"subjecttpl"`
+		Bodytpl     string `json:"bodytpl"`
+		HTMLBodytpl string `json:"htmlbodytpl"`
+		Emdata      string `json:"emdata"`
 	}
 
 	msgbuilder struct {
@@ -291,7 +293,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	}
 	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HTMLBodytpl, emdata)
 	if err != nil {
-		s.logger.Error("failed to execute mail html body template", map[string]string{
+		s.logger.Error("Failed to execute mail html body template", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "executehtmlbody",
 			"bodytpl":    emmsg.HTMLBodytpl,
@@ -299,150 +301,118 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		htmlbody = nil
 	}
 
-	msg, err := msgToBytes(string(subject), emmsg.From, emmsg.FromName, emmsg.To, body, htmlbody)
-	if err != nil {
+	b := bytes.Buffer{}
+
+	if err := msgToBytes(s.logger, string(subject), emmsg.From, emmsg.To, body, htmlbody, &b); err != nil {
 		return err
 	}
 
-	return s.handleSendMail(emmsg.From, emmsg.To, msg)
+	to := make([]string, 0, len(emmsg.To))
+	for _, i := range emmsg.To {
+		to = append(to, i.Address)
+	}
+	return s.handleSendMail(emmsg.From.Address, to, b.Bytes())
 }
 
-func msgToBytes(subject string, from, fromname string, to []string, body []byte, htmlbody []byte) ([]byte, error) {
-	msg := newMsgBuilder()
-	msg.addHeader("Mime-Version", "1.0")
-	msg.addHeader("Date", time.Now().Round(0).Format(time.RFC1123Z))
-	msg.addHeader("Subject", mime.QEncoding.Encode("utf-8", subject))
-	if fromname == "" {
-		msg.addHeader("From", from)
-	} else {
-		msg.addAddrHeader("From", mime.QEncoding.Encode("utf-8", fromname), from)
+func msgToBytes(l governor.Logger, subject string, from Addr, to []Addr, body []byte, htmlbody []byte, dst io.Writer) error {
+	h := emmail.Header{}
+	h.SetDate(time.Now().Round(0))
+	h.SetSubject(subject)
+	h.SetAddressList("From", []*emmail.Address{
+		{
+			Address: from.Address,
+			Name:    from.Name,
+		},
+	})
+	emto := make([]*emmail.Address, 0, len(to))
+	for _, i := range to {
+		emto = append(emto, &emmail.Address{
+			Address: i.Address,
+			Name:    i.Name,
+		})
 	}
-	msg.addHeader("To", strings.Join(to, ",\r\n\t"))
-	if body != nil {
-		msg.addBody(body)
-	}
-	if htmlbody != nil {
-		msg.addHTMLBody(htmlbody)
-	}
-	buf, err := msg.build()
+	h.SetAddressList("To", emto)
+
+	mw, err := emmail.CreateWriter(dst, h)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrBuildMail{}, "Failed to construct email")
+		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail writer")
 	}
-	return buf.Bytes(), nil
-}
+	defer func() {
+		if err := mw.Close(); err != nil {
+			l.Error("Failed closing mail writer", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "closemailwriter",
+			})
+		}
+	}()
 
-func newMsgBuilder() *msgbuilder {
-	return &msgbuilder{
-		headers: []string{},
-		body:    nil,
+	bw, err := mw.CreateInline()
+	if err != nil {
+		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body writer")
 	}
-}
+	defer func() {
+		if err := bw.Close(); err != nil {
+			l.Error("Failed closing mail body writer", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "closemailbodywriter",
+			})
+		}
+	}()
 
-func (b *msgbuilder) addHeader(key, val string) {
-	b.headers = append(b.headers, fmt.Sprintf("%s: %s", key, val))
-}
-
-func (b *msgbuilder) addAddrHeader(key, name, addr string) {
-	b.addHeader(key, fmt.Sprintf("%s <%s>", name, addr))
-}
-
-func (b *msgbuilder) addBody(body []byte) {
-	b.body = body
-}
-
-func (b *msgbuilder) addHTMLBody(body []byte) {
-	b.htmlbody = body
-}
-
-func (b *msgbuilder) writeHeaders(buf io.StringWriter) {
-	for _, h := range b.headers {
-		buf.WriteString(h)
-		buf.WriteString("\r\n")
+	if len(body) > 0 {
+		if err := func() error {
+			hh := emmail.InlineHeader{}
+			hh.SetContentType("text/plain", map[string]string{"charset": "utf-8"})
+			pw, err := bw.CreatePart(hh)
+			if err != nil {
+				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body plaintext writer")
+			}
+			defer func() {
+				if err := pw.Close(); err != nil {
+					l.Error("Failed closing mail body plaintext writer", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "closemailbodyplaintextwriter",
+					})
+				}
+			}()
+			if _, err := io.Copy(pw, bytes.NewReader(body)); err != nil {
+				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
 	}
-}
 
-func (b *msgbuilder) writePart(w io.Writer, data []byte) error {
-	qw := quotedprintable.NewWriter(w)
-	defer qw.Close()
-	if _, err := qw.Write(data); err != nil {
-		return err
+	if len(htmlbody) > 0 {
+		if err := func() error {
+			hh := emmail.InlineHeader{}
+			hh.SetContentType("text/html", map[string]string{"charset": "utf-8"})
+			pw, err := bw.CreatePart(hh)
+			if err != nil {
+				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body html writer")
+			}
+			defer func() {
+				if err := pw.Close(); err != nil {
+					l.Error("Failed closing mail body plaintext writer", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "closemailbodyhtmlwriter",
+					})
+				}
+			}()
+			if _, err := io.Copy(pw, bytes.NewReader(htmlbody)); err != nil {
+				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write html mail body")
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
 	}
 	return nil
-}
-
-func (b *msgbuilder) writeBody(w *multipart.Writer) error {
-	defer w.Close()
-	if len(b.body) != 0 {
-		header := textproto.MIMEHeader{
-			"Content-Type":              {mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"})},
-			"Content-Transfer-Encoding": {"quoted-printable"},
-		}
-		w, err := w.CreatePart(header)
-		if err != nil {
-			return err
-		}
-		if err := b.writePart(w, b.body); err != nil {
-			return err
-		}
-	}
-	if len(b.htmlbody) != 0 {
-		header := textproto.MIMEHeader{
-			"Content-Type":              {mime.FormatMediaType("text/html", map[string]string{"charset": "utf-8"})},
-			"Content-Transfer-Encoding": {"quoted-printable"},
-		}
-		w, err := w.CreatePart(header)
-		if err != nil {
-			return err
-		}
-		if err := b.writePart(w, b.htmlbody); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func genBoundary() string {
-	return multipart.NewWriter(&bytes.Buffer{}).Boundary()
-}
-
-func createPart(m *multipart.Writer, contenttype string) (*multipart.Writer, error) {
-	boundary := genBoundary()
-
-	header := textproto.MIMEHeader{
-		"Content-Type": {mime.FormatMediaType(contenttype, map[string]string{"boundary": boundary})},
-	}
-	part, err := m.CreatePart(header)
-	if err != nil {
-		return nil, err
-	}
-	w := multipart.NewWriter(part)
-	if err := w.SetBoundary(boundary); err != nil {
-		return nil, err
-	}
-	return w, nil
-}
-
-func (b *msgbuilder) build() (*bytes.Buffer, error) {
-	buf := &bytes.Buffer{}
-	b.writeHeaders(buf)
-
-	m := multipart.NewWriter(buf)
-	defer m.Close()
-	fmt.Fprintf(buf, "Content-Type: %s\r\n\r\n", mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": m.Boundary(), "charset": "utf-8"}))
-
-	part, err := createPart(m, "multipart/alternative")
-	if err != nil {
-		return nil, err
-	}
-	if err := b.writeBody(part); err != nil {
-		return nil, err
-	}
-
-	return buf, nil
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from, fromname string, to []string, tpl string, emdata interface{}) error {
+func (s *service) Send(from Addr, to []Addr, tpl string, emdata interface{}) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
@@ -451,20 +421,19 @@ func (s *service) Send(from, fromname string, to []string, tpl string, emdata in
 		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email data to JSON")
 	}
 
+	if from.Address == "" {
+		from.Address = s.fromAddress
+	}
+	if from.Name == "" {
+		from.Name = s.fromName
+	}
 	msg := mailmsg{
 		From:        from,
-		FromName:    fromname,
 		To:          to,
 		Subjecttpl:  tpl + "_subject.txt",
 		Bodytpl:     tpl + ".txt",
 		HTMLBodytpl: tpl + ".html",
 		Emdata:      string(datastring),
-	}
-	if msg.From == "" {
-		msg.From = s.fromAddress
-	}
-	if msg.FromName == "" {
-		msg.FromName = s.fromName
 	}
 
 	b, err := json.Marshal(msg)

@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/mail"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 )
@@ -125,7 +126,7 @@ func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, usera
 			Time:      time.Unix(sm.Time, 0).UTC().Format(time.RFC3339),
 			UserAgent: sm.UserAgent,
 		}
-		if err := s.mailer.Send("", "", []string{m.Email}, newLoginTemplate, emdata); err != nil {
+		if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, newLoginTemplate, emdata); err != nil {
 			s.logger.Error("fail send new login email", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "newloginemail",
