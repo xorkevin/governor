@@ -2,7 +2,7 @@ package governor
 
 import (
 	"net/http"
-	"regexp"
+	"net/mail"
 )
 
 type (
@@ -23,8 +23,8 @@ type (
 	}
 )
 
-var (
-	emailRegex = regexp.MustCompile(`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+$`)
+const (
+	lengthCapEmail = 254
 )
 
 func (r *ReqSetup) valid() error {
@@ -41,7 +41,20 @@ func (r *ReqSetup) valid() error {
 				Message: "Password must be longer than 9 chars",
 			}))
 		}
-		if !emailRegex.MatchString(a.Email) {
+		if len(a.Email) > lengthCapEmail {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Email must be shorter than 255 characters",
+			}))
+		}
+		addr, err := mail.ParseAddress(a.Email)
+		if err != nil {
+			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Email is invalid",
+			}), ErrOptInner(err))
+		}
+		if addr.Address != a.Email {
 			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
 				Status:  http.StatusBadRequest,
 				Message: "Email is invalid",

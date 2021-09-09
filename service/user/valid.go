@@ -2,6 +2,7 @@ package user
 
 import (
 	"net/http"
+	"net/mail"
 	"regexp"
 	"strings"
 
@@ -14,15 +15,14 @@ const (
 	lengthCapUserid   = 31
 	lengthCapApikeyid = 63
 	lengthCap         = 127
-	lengthCapEmail    = 255
+	lengthCapEmail    = 254
 	lengthCapLarge    = 4095
 	amountCap         = 255
 	lengthCapOTPCode  = 31
 )
 
 var (
-	userRegex  = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
-	emailRegex = regexp.MustCompile(`^[a-z0-9_-][a-z0-9_+-]*(\.[a-z0-9_+-]+)*@[a-z0-9]+(-+[a-z0-9]+)*(\.[a-z0-9]+(-+[a-z0-9]+)*)*$`)
+	userRegex = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
 )
 
 func validhasUserid(userid string) error {
@@ -195,16 +195,23 @@ func validhasPassword(password string) error {
 }
 
 func validEmail(email string) error {
-	if !emailRegex.MatchString(email) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Email is invalid",
-		}))
-	}
 	if len(email) > lengthCapEmail {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
-			Message: "Email must be shorter than 256 characters",
+			Message: "Email must be shorter than 255 characters",
+		}))
+	}
+	a, err := mail.ParseAddress(email)
+	if err != nil {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is invalid",
+		}), governor.ErrOptInner(err))
+	}
+	if a.Address != email {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Email is invalid",
 		}))
 	}
 	return nil
