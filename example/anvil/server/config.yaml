@@ -65,9 +65,9 @@ mail:
   auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/smtp
   host: mailhog.{{ $ns }}.svc.cluster.local
   port: 1025
+  senderdomain: mail.xorkevin.com
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
-  insecure: true
   streamsize: 200M
   msgsize: 2K
 role:

@@ -2,11 +2,11 @@ package mail
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	gomail "net/mail"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +18,7 @@ func TestBuildMail(t *testing.T) {
 	for _, tc := range []struct {
 		Test     string
 		Subject  string
+		Sender   string
 		From     Addr
 		To       []Addr
 		Body     string
@@ -26,6 +27,7 @@ func TestBuildMail(t *testing.T) {
 		{
 			Test:    "text and html email with multiple recipients",
 			Subject: "Hello World",
+			Sender:  "example.com",
 			From: Addr{
 				Address: "kevin@xorkevin.com",
 				Name:    "Kevin Wang",
@@ -44,8 +46,8 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.Subject, tc.From, tc.To, []byte(tc.Body), []byte(tc.HtmlBody), &buf))
-			fmt.Print(buf.String())
+			assert.NoError(msgToBytes(nil, tc.Sender, tc.Subject, tc.From, tc.To, []byte(tc.Body), []byte(tc.HtmlBody), &buf))
+			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)
 			assert.Equal(tc.Subject, m.Header.Get("Subject"))
@@ -60,7 +62,19 @@ func TestBuildMail(t *testing.T) {
 			for n, i := range to {
 				assert.Equal(tc.To[n].Address, i.Address)
 			}
-			assert.Equal(m.Header.Get("Mime-Version"), "1.0")
+			assert.Equal("1.0", m.Header.Get("Mime-Version"))
+			date, err := m.Header.Date()
+			assert.NoError(err)
+			assert.False(date.IsZero())
+			{
+				id := m.Header.Get("Message-Id")
+				assert.True(strings.HasPrefix(id, "<"))
+				assert.True(strings.HasSuffix(id, ">"))
+				id = strings.TrimSuffix(strings.TrimPrefix(id, "<"), ">")
+				parts := strings.Split(id, "@")
+				assert.Len(parts, 2)
+				assert.Equal(tc.Sender, parts[1])
+			}
 			mixedcontenttype, mixedparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 			assert.NoError(err)
 			assert.Equal("multipart/mixed", mixedcontenttype)

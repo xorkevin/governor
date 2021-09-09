@@ -5,6 +5,8 @@ go 1.17
 require (
 	github.com/boombuler/barcode v1.0.1
 	github.com/emersion/go-message v0.15.0
+	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
+	github.com/emersion/go-smtp v0.15.0
 	github.com/go-chi/chi/v5 v5.0.3
 	github.com/go-chi/cors v1.2.0
 	github.com/go-redis/redis/v8 v8.11.2

@@ -12,7 +12,7 @@ all: test ## Default
 
 ## TESTS
 
-TEST_ARGS=
+TEST_ARGS?=
 COVERAGE=cover.out
 COVERAGE_ARGS=-covermode count -coverprofile $(COVERAGE)
 BENCHMARK_ARGS=-benchtime 5s -benchmem

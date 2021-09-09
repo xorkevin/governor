@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net/smtp"
 	"strings"
 	"time"
 
 	_ "github.com/emersion/go-message/charset"
 	emmail "github.com/emersion/go-message/mail"
+	"github.com/emersion/go-sasl"
+	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/uid"
 )
 
 const (
@@ -24,6 +25,10 @@ const (
 	eventStreamChannels = eventStream + ".*"
 	mailChannel         = eventStream + ".mail"
 	mailWorker          = eventStream + "_WORKER"
+)
+
+const (
+	mailUIDRandSize = 16
 )
 
 type (
@@ -59,17 +64,17 @@ type (
 	}
 
 	service struct {
-		tpl         template.Template
-		events      events.Events
-		config      governor.SecretReader
-		logger      governor.Logger
-		host        string
-		addr        string
-		fromAddress string
-		fromName    string
-		insecure    bool
-		streamsize  int64
-		msgsize     int32
+		tpl          template.Template
+		events       events.Events
+		config       governor.SecretReader
+		logger       governor.Logger
+		host         string
+		addr         string
+		senderdomain string
+		fromAddress  string
+		fromName     string
+		streamsize   int64
+		msgsize      int32
 	}
 
 	ctxKeyMailer struct{}
@@ -110,9 +115,9 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "587")
+	r.SetDefault("senderdomain", "")
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
-	r.SetDefault("insecure", false)
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("msgsize", "2K")
 }
@@ -127,9 +132,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
+	s.senderdomain = r.GetStr("senderdomain")
 	s.fromAddress = r.GetStr("fromaddress")
 	s.fromName = r.GetStr("fromname")
-	s.insecure = r.GetBool("insecure")
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
@@ -143,6 +148,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	l.Info("initialize mail options", map[string]string{
 		"smtp server addr":    s.addr,
+		"sender domain":       s.senderdomain,
 		"sender address":      s.fromAddress,
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
@@ -195,31 +201,6 @@ func (s *service) Health() error {
 	return nil
 }
 
-type plainAuth struct {
-	identity, username, password string
-	host                         string
-}
-
-func newPlainAuth(identity, username, password, host string) smtp.Auth {
-	return &plainAuth{identity, username, password, host}
-
-}
-
-func (a *plainAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
-	if server.Name != a.host {
-		return "", nil, fmt.Errorf("Wrong host name: expected %s, have %s", a.host, server.Name)
-	}
-	resp := []byte(a.identity + "\x00" + a.username + "\x00" + a.password)
-	return "PLAIN", resp, nil
-}
-
-func (a *plainAuth) Next(fromServer []byte, more bool) ([]byte, error) {
-	if more {
-		return nil, errors.New("Unexpected server challenge")
-	}
-	return nil, nil
-}
-
 type (
 	secretAuth struct {
 		Username string `mapstructure:"username"`
@@ -227,19 +208,14 @@ type (
 	}
 )
 
-func (s *service) handleSendMail(from string, to []string, msg []byte) error {
+func (s *service) handleSendMail(from string, to []string, msg io.Reader) error {
 	var secret secretAuth
 	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
 		return governor.ErrWithMsg(err, "Invalid secret")
 	}
 
-	var smtpauth smtp.Auth
-	if s.insecure {
-		smtpauth = newPlainAuth("", secret.Username, secret.Password, s.host)
-	} else {
-		smtpauth = smtp.PlainAuth("", secret.Username, secret.Password, s.host)
-	}
-	if err := smtp.SendMail(s.addr, smtpauth, from, to, msg); err != nil {
+	auth := sasl.NewPlainClient("", secret.Username, secret.Password)
+	if err := smtp.SendMail(s.addr, auth, from, to, msg); err != nil {
 		return err
 	}
 	s.logger.Debug("mail sent", map[string]string{
@@ -302,8 +278,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	}
 
 	b := bytes.Buffer{}
-
-	if err := msgToBytes(s.logger, string(subject), emmsg.From, emmsg.To, body, htmlbody, &b); err != nil {
+	if err := msgToBytes(s.logger, s.senderdomain, string(subject), emmsg.From, emmsg.To, body, htmlbody, &b); err != nil {
 		return err
 	}
 
@@ -311,12 +286,17 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	return s.handleSendMail(emmsg.From.Address, to, b.Bytes())
+	return s.handleSendMail(emmsg.From.Address, to, &b)
 }
 
-func msgToBytes(l governor.Logger, subject string, from Addr, to []Addr, body []byte, htmlbody []byte, dst io.Writer) error {
+func msgToBytes(l governor.Logger, senderdomain string, subject string, from Addr, to []Addr, body []byte, htmlbody []byte, dst io.Writer) error {
 	h := emmail.Header{}
-	h.SetDate(time.Now().Round(0))
+	u, err := uid.NewSnowflake(mailUIDRandSize)
+	if err != nil {
+		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to generate mail msg id")
+	}
+	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), senderdomain))
+	h.SetDate(time.Now().Round(0).In(time.UTC))
 	h.SetSubject(subject)
 	h.SetAddressList("From", []*emmail.Address{
 		{

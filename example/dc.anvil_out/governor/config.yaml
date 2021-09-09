@@ -59,9 +59,9 @@ mail:
   auth: mailauth
   host: localhost
   port: 1025
+  senderdomain: mail.xorkevin.com
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
-  insecure: true
   streamsize: 200M
   msgsize: 2K
 role:
