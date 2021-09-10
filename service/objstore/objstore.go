@@ -347,13 +347,14 @@ type (
 		ContentType  string
 		ETag         string
 		LastModified int64
+		UserMeta     map[string]string
 	}
 
 	// Dir is a collection of objects in the store at a specified directory
 	Dir interface {
 		Stat(name string) (*ObjectInfo, error)
 		Get(name string) (io.ReadCloser, *ObjectInfo, error)
-		Put(name string, contentType string, size int64, object io.Reader) error
+		Put(name string, contentType string, size int64, userMeta map[string]string, object io.Reader) error
 		Del(name string) error
 		Subdir(name string) Dir
 	}
@@ -414,6 +415,7 @@ func (b *bucket) Stat(name string) (*ObjectInfo, error) {
 		ContentType:  info.ContentType,
 		ETag:         info.ETag,
 		LastModified: info.LastModified.Unix(),
+		UserMeta:     info.UserMetadata,
 	}, nil
 }
 
@@ -439,16 +441,17 @@ func (b *bucket) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
 		ContentType:  info.ContentType,
 		ETag:         info.ETag,
 		LastModified: info.LastModified.Unix(),
+		UserMeta:     info.UserMetadata,
 	}, nil
 }
 
 // Put puts a new object into the bucket
-func (b *bucket) Put(name string, contentType string, size int64, object io.Reader) error {
+func (b *bucket) Put(name string, contentType string, size int64, userMeta map[string]string, object io.Reader) error {
 	client, err := b.s.getClient()
 	if err != nil {
 		return err
 	}
-	if _, err := client.PutObject(context.Background(), b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+	if _, err := client.PutObject(context.Background(), b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType, UserMetadata: userMeta}); err != nil {
 		return governor.ErrWithKind(err, ErrClient{}, "Failed to save object to bucket")
 	}
 	return nil
@@ -477,8 +480,8 @@ func (d *dir) Get(name string) (io.ReadCloser, *ObjectInfo, error) {
 	return d.parent.Get(d.name + "/" + name)
 }
 
-func (d *dir) Put(name string, contentType string, size int64, object io.Reader) error {
-	return d.parent.Put(d.name+"/"+name, contentType, size, object)
+func (d *dir) Put(name string, contentType string, size int64, userMeta map[string]string, object io.Reader) error {
+	return d.parent.Put(d.name+"/"+name, contentType, size, userMeta, object)
 }
 
 func (d *dir) Del(name string) error {

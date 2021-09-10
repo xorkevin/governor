@@ -234,7 +234,7 @@ func (s *service) UpdateLogo(clientid string, img image.Image) error {
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode image to png")
 	}
-	if err := s.logoImgDir.Put(m.ClientID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
+	if err := s.logoImgDir.Put(m.ClientID, image.MediaTypePng, int64(imgpng.Len()), nil, imgpng); err != nil {
 		return governor.ErrWithMsg(err, "Failed to save app logo")
 	}
 

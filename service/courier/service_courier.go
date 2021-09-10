@@ -225,7 +225,7 @@ func (s *service) CreateLink(creatorid, linkid, url, brandid string) (*resCreate
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to encode qr code image")
 	}
-	if err := s.linkImgDir.Put(m.LinkID, image.MediaTypePng, int64(qrpng.Len()), qrpng); err != nil {
+	if err := s.linkImgDir.Put(m.LinkID, image.MediaTypePng, int64(qrpng.Len()), nil, qrpng); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to save qr code image")
 	}
 
@@ -351,7 +351,7 @@ func (s *service) CreateBrand(creatorid, brandid string, img image.Image) (*resC
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to encode png image")
 	}
-	if err := s.brandImgDir.Subdir(creatorid).Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), imgpng); err != nil {
+	if err := s.brandImgDir.Subdir(creatorid).Put(m.BrandID, image.MediaTypePng, int64(imgpng.Len()), nil, imgpng); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to save image")
 	}
 	return &resCreateBrand{

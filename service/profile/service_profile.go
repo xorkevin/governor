@@ -98,7 +98,7 @@ func (s *service) UpdateImage(userid string, img image.Image) error {
 		return governor.ErrWithMsg(err, "Failed to encode image")
 	}
 
-	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), imgJpeg); err != nil {
+	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), nil, imgJpeg); err != nil {
 		return governor.ErrWithMsg(err, "Failed to save profile picture")
 	}
 
