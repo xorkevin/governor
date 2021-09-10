@@ -143,4 +143,64 @@ while true; do
   export VAULT_TOKEN=
 done
 
+log2 'find maildata encryption keys'
+
+maildatasecrets='[]'
+
+while true; do
+  i=0
+  while [ $i -lt "${CURL_REAUTH:-3}" ]; do
+    if [ -z $VAULT_TOKEN ]; then
+      export VAULT_TOKEN=$(auth_vault)
+      log2 'authenticate with vault'
+    fi
+
+    status=$(vault_kvget "$KV_MOUNT" "$KV_PATH_MAIL")
+    if is_success "$status"; then
+      log2 'found existing vault kv'
+      maildatasecrets=$(cat /tmp/curlres.txt | jq -c '.data.data.secrets')
+      printf "$maildatasecrets" | jq 'if type != "array" then error("secrets is not an array") else "secrets is array" end'
+      log2 'have' $(printf "$maildatasecrets" | jq 'length') 'maildata encryption keys'
+      break 2
+    elif [ "$status" = 404 ]; then
+      log2 'no existing maildata encryption keys'
+      break 2
+    else
+      log2 'error get vault kv:' "$(cat /tmp/curlres.txt)"
+    fi
+
+    i=$((i + 1))
+    sleep "${CURL_BACKOFF:-5}"
+  done
+  export VAULT_TOKEN=
+done
+
+log2 'generate new maildata encryption key'
+
+maildatasecret=$(gen_pass 32)
+nextmaildatasecrets=$(printf '["$cc20p$%s"] %s' "$maildatasecret" "$maildatasecrets" | jq -sc 'add')
+
+log2 'uploading' $(printf "$nextmaildatasecrets" | jq 'length') 'maildata encryption keys'
+
+while true; do
+  i=0
+  while [ $i -lt "${CURL_REAUTH:-3}" ]; do
+    if [ -z $VAULT_TOKEN ]; then
+      export VAULT_TOKEN=$(auth_vault)
+      log2 'authenticate with vault'
+    fi
+
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH_MAIL" "{\"secrets\": ${nextmaildatasecrets}}")
+    if is_success "$status"; then
+      log2 'write maildata encryption keys to vault kv'
+      break 2
+    fi
+    log2 'error write maildata encryption keys to vault kv:' "$(cat /tmp/curlres.txt)"
+
+    i=$((i + 1))
+    sleep "${CURL_BACKOFF:-5}"
+  done
+  export VAULT_TOKEN=
+done
+
 log2 'done registering'

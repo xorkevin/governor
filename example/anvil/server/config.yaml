@@ -70,6 +70,7 @@ mail:
   fromname: Governor
   streamsize: 200M
   msgsize: 2K
+  mailkey: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/mailkey
 role:
   rolecache: 24h
 apikey:

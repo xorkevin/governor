@@ -210,7 +210,7 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
 		return governor.ErrWithMsg(err, "Failed to generate account verification email")
 	}
-	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newUserTemplate), emdata); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newUserTemplate), emdata, true); err != nil {
 		return governor.ErrWithMsg(err, "Failed to send account verification email")
 	}
 	return nil

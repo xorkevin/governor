@@ -337,7 +337,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if len(otpsecrets.Keys) == 0 {
 		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
 	}
-	otpDecrypter := hunter2.NewDecrypter()
+	s.otpDecrypter = hunter2.NewDecrypter()
 	for n, i := range otpsecrets.Keys {
 		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
@@ -346,9 +346,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		if n == 0 {
 			s.otpCipher = cipher
 		}
-		otpDecrypter.RegisterCipher(cipher)
+		s.otpDecrypter.RegisterCipher(cipher)
 	}
-	s.otpDecrypter = otpDecrypter
 
 	l.Info("loaded config", map[string]string{
 		"stream size (bytes)":   r.GetStr("streamsize"),

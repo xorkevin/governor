@@ -10,3 +10,6 @@ path "kv/data/app/governor/governor/rsakey" {
 path "kv/data/app/governor/governor/otpkey" {
   capabilities = ["create", "update", "delete", "read", "list"]
 }
+path "kv/data/app/governor/governor/mailkey" {
+  capabilities = ["create", "update", "delete", "read", "list"]
+}

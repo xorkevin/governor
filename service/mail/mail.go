@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/uid"
+	"xorkevin.dev/hunter2"
 )
 
 const (
@@ -34,7 +36,7 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		Send(from Addr, to []Addr, tpl Tpl, emdata interface{}) error
+		Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
 	}
 
 	// Service is a Mailer and governor.Service
@@ -56,10 +58,11 @@ type (
 	}
 
 	mailmsg struct {
-		From   Addr   `json:"from"`
-		To     []Addr `json:"to"`
-		Tpl    Tpl    `json:"tpl"`
-		Emdata string `json:"emdata"`
+		From      Addr   `json:"from"`
+		To        []Addr `json:"to"`
+		Tpl       Tpl    `json:"tpl"`
+		Emdata    string `json:"emdata"`
+		Encrypted bool   `json:"encrypted"`
 	}
 
 	msgbuilder struct {
@@ -69,17 +72,19 @@ type (
 	}
 
 	service struct {
-		tpl          template.Template
-		events       events.Events
-		config       governor.SecretReader
-		logger       governor.Logger
-		host         string
-		addr         string
-		senderdomain string
-		fromAddress  string
-		fromName     string
-		streamsize   int64
-		msgsize      int32
+		tpl               template.Template
+		events            events.Events
+		config            governor.SecretReader
+		maildataDecrypter *hunter2.Decrypter
+		maildataCipher    hunter2.Cipher
+		logger            governor.Logger
+		host              string
+		addr              string
+		senderdomain      string
+		fromAddress       string
+		fromName          string
+		streamsize        int64
+		msgsize           int32
 	}
 
 	ctxKeyMailer struct{}
@@ -134,6 +139,12 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("msgsize", "2K")
 }
 
+type (
+	secretMaildata struct {
+		Keys []string `mapstructure:"secrets"`
+	}
+)
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -158,6 +169,25 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.msgsize = int32(msgsize)
 
+	maildataSecrets := secretMaildata{}
+	if err := r.GetSecret("mailkey", 0, &maildataSecrets); err != nil {
+		return governor.ErrWithMsg(err, "Invalid mailkey secrets")
+	}
+	if len(maildataSecrets.Keys) == 0 {
+		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
+	}
+	s.maildataDecrypter = hunter2.NewDecrypter()
+	for n, i := range maildataSecrets.Keys {
+		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		if err != nil {
+			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
+		}
+		if n == 0 {
+			s.maildataCipher = cipher
+		}
+		s.maildataDecrypter.RegisterCipher(cipher)
+	}
+
 	l.Info("initialize mail options", map[string]string{
 		"smtp server addr":    s.addr,
 		"sender domain":       s.senderdomain,
@@ -165,6 +195,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
 		"msg size (bytes)":    r.GetStr("msgsize"),
+		"nummaildatakeys":     strconv.Itoa(len(maildataSecrets.Keys)),
 	})
 	return nil
 }
@@ -265,6 +296,13 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail message")
+	}
+	if emmsg.Encrypted {
+		var err error
+		emmsg.Emdata, err = s.maildataDecrypter.Decrypt(emmsg.Emdata)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decrypt mail data")
+		}
 	}
 	emdata := map[string]string{}
 	if err := json.Unmarshal([]byte(emmsg.Emdata), &emdata); err != nil {
@@ -408,13 +446,21 @@ func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, su
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}) error {
+func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
-	datastring, err := json.Marshal(emdata)
+	databytes, err := json.Marshal(emdata)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email data to JSON")
+		return governor.ErrWithKind(err, ErrInvalidMail{}, "Failed to encode email data to JSON")
+	}
+	datastring := string(databytes)
+	if encrypt {
+		var err error
+		datastring, err = s.maildataCipher.Encrypt(datastring)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to encrypt mail data")
+		}
 	}
 
 	if from.Address == "" {
@@ -424,10 +470,11 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}) error 
 		from.Name = s.fromName
 	}
 	msg := mailmsg{
-		From:   from,
-		To:     to,
-		Tpl:    tpl,
-		Emdata: string(datastring),
+		From:      from,
+		To:        to,
+		Tpl:       tpl,
+		Emdata:    datastring,
+		Encrypted: encrypt,
 	}
 
 	b, err := json.Marshal(msg)

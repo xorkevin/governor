@@ -67,6 +67,7 @@ mail:
   fromname: Governor
   streamsize: 200M
   msgsize: 2K
+  mailkey: kv/data/app/governor/governor/mailkey
 role:
   rolecache: 24h
 apikey:
