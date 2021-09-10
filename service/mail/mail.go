@@ -34,7 +34,7 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		Send(from Addr, to []Addr, tpl string, emdata interface{}) error
+		Send(from Addr, to []Addr, tpl Tpl, emdata interface{}) error
 	}
 
 	// Service is a Mailer and governor.Service
@@ -43,18 +43,23 @@ type (
 		Mailer
 	}
 
+	// Tpl points to a mail template
+	Tpl struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}
+
+	// Addr is a mail address
 	Addr struct {
 		Address string `json:"address"`
 		Name    string `json:"name"`
 	}
 
 	mailmsg struct {
-		From        Addr   `json:"from"`
-		To          []Addr `json:"to"`
-		Subjecttpl  string `json:"subjecttpl"`
-		Bodytpl     string `json:"bodytpl"`
-		HTMLBodytpl string `json:"htmlbodytpl"`
-		Emdata      string `json:"emdata"`
+		From   Addr   `json:"from"`
+		To     []Addr `json:"to"`
+		Tpl    Tpl    `json:"tpl"`
+		Emdata string `json:"emdata"`
 	}
 
 	msgbuilder struct {
@@ -79,6 +84,17 @@ type (
 
 	ctxKeyMailer struct{}
 )
+
+const (
+	TplKindLocal = "local"
+)
+
+func TplLocal(name string) Tpl {
+	return Tpl{
+		Kind: TplKindLocal,
+		Name: name,
+	}
+}
 
 // GetCtxMailer returns a Mailer service from the context
 func GetCtxMailer(inj governor.Injector) Mailer {
@@ -259,26 +275,31 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail data")
 	}
 
-	subject, err := s.tpl.Execute(emmsg.Subjecttpl, emdata)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to execute mail subject template")
-	}
-	body, err := s.tpl.Execute(emmsg.Bodytpl, emdata)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to execute mail body template")
-	}
-	htmlbody, err := s.tpl.ExecuteHTML(emmsg.HTMLBodytpl, emdata)
-	if err != nil {
-		s.logger.Error("Failed to execute mail html body template", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "executehtmlbody",
-			"bodytpl":    emmsg.HTMLBodytpl,
-		})
-		htmlbody = nil
+	subject := &bytes.Buffer{}
+	body := &bytes.Buffer{}
+	htmlbody := &bytes.Buffer{}
+	switch emmsg.Tpl.Kind {
+	case TplKindLocal:
+		if err := s.tpl.Execute(subject, emmsg.Tpl.Name+"_subject.txt", emdata); err != nil {
+			return governor.ErrWithMsg(err, "Failed to execute mail subject template")
+		}
+		if err := s.tpl.Execute(body, emmsg.Tpl.Name+".txt", emdata); err != nil {
+			return governor.ErrWithMsg(err, "Failed to execute mail body template")
+		}
+		if err := s.tpl.ExecuteHTML(htmlbody, emmsg.Tpl.Name+".html", emdata); err != nil {
+			s.logger.Error("Failed to execute mail html body template", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "executehtmlbody",
+				"bodytpl":    emmsg.Tpl.Name + ".html",
+			})
+			htmlbody = nil
+		}
+	default:
+		return governor.ErrWithKind(nil, ErrMailMsg{}, "Invalid mail message kind")
 	}
 
-	b := bytes.Buffer{}
-	if err := msgToBytes(s.logger, s.senderdomain, string(subject), emmsg.From, emmsg.To, body, htmlbody, &b); err != nil {
+	b := &bytes.Buffer{}
+	if err := msgToBytes(s.logger, s.senderdomain, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
 		return err
 	}
 
@@ -286,10 +307,10 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	return s.handleSendMail(emmsg.From.Address, to, &b)
+	return s.handleSendMail(emmsg.From.Address, to, b)
 }
 
-func msgToBytes(l governor.Logger, senderdomain string, subject string, from Addr, to []Addr, body []byte, htmlbody []byte, dst io.Writer) error {
+func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
 	h := emmail.Header{}
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
@@ -297,7 +318,11 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 	}
 	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), senderdomain))
 	h.SetDate(time.Now().Round(0).In(time.UTC))
-	h.SetSubject(subject)
+	subj := strings.Builder{}
+	if _, err := io.Copy(&subj, subject); err != nil {
+		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write mail subject")
+	}
+	h.SetSubject(subj.String())
 	h.SetAddressList("From", []*emmail.Address{
 		{
 			Address: from.Address,
@@ -339,7 +364,7 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 		}
 	}()
 
-	if len(body) > 0 {
+	if body != nil {
 		if err := func() error {
 			hh := emmail.InlineHeader{}
 			hh.SetContentType("text/plain", map[string]string{"charset": "utf-8"})
@@ -355,7 +380,7 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 					})
 				}
 			}()
-			if _, err := io.Copy(pw, bytes.NewReader(body)); err != nil {
+			if _, err := io.Copy(pw, body); err != nil {
 				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
 			}
 			return nil
@@ -364,7 +389,7 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 		}
 	}
 
-	if len(htmlbody) > 0 {
+	if htmlbody != nil {
 		if err := func() error {
 			hh := emmail.InlineHeader{}
 			hh.SetContentType("text/html", map[string]string{"charset": "utf-8"})
@@ -380,7 +405,7 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 					})
 				}
 			}()
-			if _, err := io.Copy(pw, bytes.NewReader(htmlbody)); err != nil {
+			if _, err := io.Copy(pw, htmlbody); err != nil {
 				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write html mail body")
 			}
 			return nil
@@ -392,7 +417,7 @@ func msgToBytes(l governor.Logger, senderdomain string, subject string, from Add
 }
 
 // Send creates and enqueues a new message to be sent
-func (s *service) Send(from Addr, to []Addr, tpl string, emdata interface{}) error {
+func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
@@ -408,12 +433,10 @@ func (s *service) Send(from Addr, to []Addr, tpl string, emdata interface{}) err
 		from.Name = s.fromName
 	}
 	msg := mailmsg{
-		From:        from,
-		To:          to,
-		Subjecttpl:  tpl + "_subject.txt",
-		Bodytpl:     tpl + ".txt",
-		HTMLBodytpl: tpl + ".html",
-		Emdata:      string(datastring),
+		From:   from,
+		To:     to,
+		Tpl:    tpl,
+		Emdata: string(datastring),
 	}
 
 	b, err := json.Marshal(msg)

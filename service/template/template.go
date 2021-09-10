@@ -1,10 +1,10 @@
 package template
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	htmlTemplate "html/template"
+	"io"
 	"os"
 	"strings"
 	textTemplate "text/template"
@@ -15,8 +15,8 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
-		Execute(templateName string, data interface{}) ([]byte, error)
-		ExecuteHTML(filename string, data interface{}) ([]byte, error)
+		Execute(dst io.Writer, templateName string, data interface{}) error
+		ExecuteHTML(dst io.Writer, templateName string, data interface{}) error
 	}
 
 	// Service is a Template and governor.Service
@@ -130,19 +130,17 @@ func (e ErrExecute) Error() string {
 }
 
 // Execute executes a template and returns the templated string
-func (s *service) Execute(templateName string, data interface{}) ([]byte, error) {
-	b := &bytes.Buffer{}
-	if err := s.tt.ExecuteTemplate(b, templateName, data); err != nil {
-		return nil, governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
+func (s *service) Execute(dst io.Writer, templateName string, data interface{}) error {
+	if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
+		return governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
 	}
-	return b.Bytes(), nil
+	return nil
 }
 
 // ExecuteHTML executes an html template and returns the templated string
-func (s *service) ExecuteHTML(templateName string, data interface{}) ([]byte, error) {
-	b := &bytes.Buffer{}
-	if err := s.ht.ExecuteTemplate(b, templateName, data); err != nil {
-		return nil, governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
+func (s *service) ExecuteHTML(dst io.Writer, templateName string, data interface{}) error {
+	if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
+		return governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
 	}
-	return b.Bytes(), nil
+	return nil
 }

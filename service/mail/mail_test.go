@@ -46,7 +46,7 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.Sender, tc.Subject, tc.From, tc.To, []byte(tc.Body), []byte(tc.HtmlBody), &buf))
+			assert.NoError(msgToBytes(nil, tc.Sender, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), strings.NewReader(tc.HtmlBody), &buf))
 			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)

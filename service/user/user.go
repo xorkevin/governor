@@ -330,7 +330,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.tplnewuser = t
 	}
 
-	var otpsecrets secretOTP
+	otpsecrets := secretOTP{}
 	if err := r.GetSecret("otpkey", 0, &otpsecrets); err != nil {
 		return governor.ErrWithMsg(err, "Invalid otpkey secrets")
 	}
