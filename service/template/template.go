@@ -15,8 +15,8 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
-		Execute(dst io.Writer, templateName string, data interface{}) error
-		ExecuteHTML(dst io.Writer, templateName string, data interface{}) error
+		Execute(dst io.Writer, kind string, templateName string, data interface{}) error
+		ExecuteHTML(dst io.Writer, kind string, templateName string, data interface{}) error
 	}
 
 	// Service is a Template and governor.Service
@@ -32,6 +32,11 @@ type (
 	}
 
 	ctxKeyTemplate struct{}
+)
+
+const (
+	// KindLocal indicates a local template
+	KindLocal = "local"
 )
 
 // GetCtxTemplate returns a Template service from the context
@@ -130,17 +135,27 @@ func (e ErrExecute) Error() string {
 }
 
 // Execute executes a template and returns the templated string
-func (s *service) Execute(dst io.Writer, templateName string, data interface{}) error {
-	if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
-		return governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
+func (s *service) Execute(dst io.Writer, kind string, templateName string, data interface{}) error {
+	switch kind {
+	case KindLocal:
+		if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
+			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
+		}
+	default:
+		return governor.ErrWithKind(nil, ErrExecute{}, "Invalid text template kind")
 	}
 	return nil
 }
 
 // ExecuteHTML executes an html template and returns the templated string
-func (s *service) ExecuteHTML(dst io.Writer, templateName string, data interface{}) error {
-	if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
-		return governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
+func (s *service) ExecuteHTML(dst io.Writer, kind string, templateName string, data interface{}) error {
+	switch kind {
+	case KindLocal:
+		if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
+			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
+		}
+	default:
+		return governor.ErrWithKind(nil, ErrExecute{}, "Invalid html template kind")
 	}
 	return nil
 }

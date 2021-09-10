@@ -85,13 +85,9 @@ type (
 	ctxKeyMailer struct{}
 )
 
-const (
-	TplKindLocal = "local"
-)
-
 func TplLocal(name string) Tpl {
 	return Tpl{
-		Kind: TplKindLocal,
+		Kind: template.KindLocal,
 		Name: name,
 	}
 }
@@ -278,24 +274,19 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	subject := &bytes.Buffer{}
 	body := &bytes.Buffer{}
 	htmlbody := &bytes.Buffer{}
-	switch emmsg.Tpl.Kind {
-	case TplKindLocal:
-		if err := s.tpl.Execute(subject, emmsg.Tpl.Name+"_subject.txt", emdata); err != nil {
-			return governor.ErrWithMsg(err, "Failed to execute mail subject template")
-		}
-		if err := s.tpl.Execute(body, emmsg.Tpl.Name+".txt", emdata); err != nil {
-			return governor.ErrWithMsg(err, "Failed to execute mail body template")
-		}
-		if err := s.tpl.ExecuteHTML(htmlbody, emmsg.Tpl.Name+".html", emdata); err != nil {
-			s.logger.Error("Failed to execute mail html body template", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "executehtmlbody",
-				"bodytpl":    emmsg.Tpl.Name + ".html",
-			})
-			htmlbody = nil
-		}
-	default:
-		return governor.ErrWithKind(nil, ErrMailMsg{}, "Invalid mail message kind")
+	if err := s.tpl.Execute(subject, emmsg.Tpl.Kind, emmsg.Tpl.Name+"_subject.txt", emdata); err != nil {
+		return governor.ErrWithMsg(err, "Failed to execute mail subject template")
+	}
+	if err := s.tpl.Execute(body, emmsg.Tpl.Kind, emmsg.Tpl.Name+".txt", emdata); err != nil {
+		return governor.ErrWithMsg(err, "Failed to execute mail body template")
+	}
+	if err := s.tpl.ExecuteHTML(htmlbody, emmsg.Tpl.Kind, emmsg.Tpl.Name+".html", emdata); err != nil {
+		s.logger.Error("Failed to execute mail html body template", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "executehtmlbody",
+			"bodytpl":    emmsg.Tpl.Name + ".html",
+		})
+		htmlbody = nil
 	}
 
 	b := &bytes.Buffer{}
