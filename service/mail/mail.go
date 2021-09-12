@@ -303,15 +303,15 @@ func (s *service) handleSendMail(from string, to []string, msg io.Reader) error 
 }
 
 type (
-	// ErrMailMsg is returned when the msgqueue mail message is malformed
-	ErrMailMsg struct{}
+	// ErrMailEvent is returned when the msgqueue mail message is malformed
+	ErrMailEvent struct{}
 	// ErrInvalidMail is returned when the mail message is invalid
 	ErrInvalidMail struct{}
 	// ErrBuildMail is returned when failing to build an email message
 	ErrBuildMail struct{}
 )
 
-func (e ErrMailMsg) Error() string {
+func (e ErrMailEvent) Error() string {
 	return "Malformed mail message"
 }
 
@@ -328,7 +328,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
-		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail message")
+		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
 	}
 
 	var tag string
@@ -337,7 +337,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		data := emmsg.RawData
 		b1, _, err := s.mailDir.Get(data.Path)
 		if err != nil {
-			return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to get mail body")
+			return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
 		}
 		defer func() {
 			if err := b1.Close(); err != nil {
@@ -352,15 +352,15 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			var err error
 			data.Subject, err = s.maildataDecrypter.Decrypt(data.Subject)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decrypt mail subject")
+				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail subject")
 			}
 			data.Key, err = s.maildataDecrypter.Decrypt(data.Key)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decrypt mail data key")
+				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
 			}
 			config, err := hunter2.ParseChaCha20Config(data.Key)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to parse mail data key")
+				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to parse mail data key")
 			}
 			stream, err := hunter2.NewChaCha20Stream(*config)
 			if err != nil {
@@ -380,12 +380,12 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			var err error
 			data.Emdata, err = s.maildataDecrypter.Decrypt(data.Emdata)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decrypt mail data")
+				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail data")
 			}
 		}
 		emdata := map[string]string{}
 		if err := json.Unmarshal([]byte(data.Emdata), &emdata); err != nil {
-			return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to decode mail data")
+			return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail data")
 		}
 
 		s1 := &bytes.Buffer{}
@@ -421,7 +421,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			return governor.ErrWithMsg(err, "Failed to write auth content length")
 		}
 		if err := auth.Auth(tag); err != nil {
-			return governor.ErrWithKind(err, ErrMailMsg{}, "Mail body failed authentication")
+			return governor.ErrWithKind(err, ErrMailEvent{}, "Mail body failed authentication")
 		}
 	}
 
@@ -436,7 +436,7 @@ func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, su
 	h := emmail.Header{}
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to generate mail msg id")
+		return governor.ErrWithMsg(err, "Failed to generate mail msg id")
 	}
 	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), senderdomain))
 	h.SetDate(time.Now().Round(0).In(time.UTC))
@@ -575,7 +575,7 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email to json")
+		return governor.ErrWithMsg(err, "Failed to encode email to json")
 	}
 	if err := s.events.StreamPublish(mailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish new email to message queue")
@@ -591,7 +591,7 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to generate mail body obj id")
+		return governor.ErrWithMsg(err, "Failed to generate mail body obj id")
 	}
 	path := u.Base32()
 
@@ -658,7 +658,7 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrMailMsg{}, "Failed to encode email to json")
+		return governor.ErrWithMsg(err, "Failed to encode email to json")
 	}
 	if err := s.events.StreamPublish(mailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish new email to message queue")
