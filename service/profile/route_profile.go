@@ -161,7 +161,7 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := image.Close(); err != nil {
-			m.s.logger.Error("failed to close profile image", map[string]string{
+			m.s.logger.Error("Failed to close profile image", map[string]string{
 				"actiontype": "getprofileimage",
 				"error":      err.Error(),
 			})
