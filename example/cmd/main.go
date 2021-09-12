@@ -64,7 +64,11 @@ func main() {
 	gov.Register("objstore", "/null/obj", objstore.New())
 	gov.Register("events", "/null/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
-	gov.Register("mail", "/null/mail", mail.NewCtx(gov.Injector()))
+	{
+		inj := gov.Injector()
+		objstore.NewBucketInCtx(inj, "mail")
+		gov.Register("mail", "/null/mail", mail.NewCtx(inj))
+	}
 	{
 		inj := gov.Injector()
 		kvstore.NewSubtreeInCtx(inj, "ratelimit")
