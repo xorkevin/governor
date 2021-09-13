@@ -80,7 +80,7 @@ type (
 		otpCipher         hunter2.Cipher
 		logger            governor.Logger
 		streamsize        int64
-		msgsize           int32
+		eventsize         int32
 		baseURL           string
 		authURL           string
 		accessTime        int64
@@ -217,7 +217,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	setCtxUser(inj, s)
 
 	r.SetDefault("streamsize", "200M")
-	r.SetDefault("msgsize", "2K")
+	r.SetDefault("eventsize", "2K")
 	r.SetDefault("accesstime", "5m")
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")
@@ -265,11 +265,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err != nil {
 		return governor.ErrWithMsg(err, "Invalid stream size")
 	}
-	msgsize, err := bytefmt.ToBytes(r.GetStr("msgsize"))
+	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
 		return governor.ErrWithMsg(err, "Invalid msg size")
 	}
-	s.msgsize = int32(msgsize)
+	s.eventsize = int32(eventsize)
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
@@ -351,7 +351,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	l.Info("loaded config", map[string]string{
 		"stream size (bytes)":   r.GetStr("streamsize"),
-		"msg size (bytes)":      r.GetStr("msgsize"),
+		"event size (bytes)":    r.GetStr("eventsize"),
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
 		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
@@ -387,7 +387,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.msgsize,
+		MaxMsgSize: s.eventsize,
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to init user stream")
 	}

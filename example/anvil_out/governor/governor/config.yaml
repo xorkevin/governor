@@ -66,7 +66,12 @@ mail:
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   streamsize: 200M
-  msgsize: 2K
+  eventsize: 2K
+  rcvport: 2525
+  rcvdomain: mail.governor.dev.localhost
+  maxmsgsize: 2M
+  readtimeout: 5s
+  writetimeout: 5s
   mailkey: kv/data/app/governor/governor/mailkey
 role:
   rolecache: 24h
@@ -81,7 +86,7 @@ gate:
   realm: governor
 user:
   streamsize: 200M
-  msgsize: 2K
+  eventsize: 2K
   accesstime: 5m
   refreshtime: 4380h
   refreshcache: 24h

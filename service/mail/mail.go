@@ -97,7 +97,8 @@ type (
 		tpl               template.Template
 		events            events.Events
 		mailBucket        objstore.Bucket
-		mailDir           objstore.Dir
+		sendMailDir       objstore.Dir
+		rcvMailDir        objstore.Dir
 		config            governor.SecretReader
 		maildataDecrypter *hunter2.Decrypter
 		maildataCipher    hunter2.Cipher
@@ -108,7 +109,12 @@ type (
 		fromAddress       string
 		fromName          string
 		streamsize        int64
-		msgsize           int32
+		eventsize         int32
+		rcvport           string
+		rcvdomain         string
+		maxmsgsize        int
+		readtimeout       time.Duration
+		writetimeout      time.Duration
 	}
 
 	ctxKeyMailer struct{}
@@ -146,10 +152,11 @@ func NewCtx(inj governor.Injector) Service {
 // New creates a new Mailer
 func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 	return &service{
-		tpl:        tpl,
-		events:     ev,
-		mailBucket: obj,
-		mailDir:    obj.Subdir("mail"),
+		tpl:         tpl,
+		events:      ev,
+		mailBucket:  obj,
+		sendMailDir: obj.Subdir("sendmail"),
+		rcvMailDir:  obj.Subdir("rcvmail"),
 	}
 }
 
@@ -163,7 +170,12 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
-	r.SetDefault("msgsize", "2K")
+	r.SetDefault("eventsize", "2K")
+	r.SetDefault("rcvport", "2525")
+	r.SetDefault("rcvdomain", "localhost")
+	r.SetDefault("maxmsgsize", "2M")
+	r.SetDefault("readtimeout", "5s")
+	r.SetDefault("writetimeout", "5s")
 }
 
 type (
@@ -190,11 +202,28 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err != nil {
 		return governor.ErrWithMsg(err, "Invalid stream size")
 	}
-	msgsize, err := bytefmt.ToBytes(r.GetStr("msgsize"))
+	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
 		return governor.ErrWithMsg(err, "Invalid msg size")
 	}
-	s.msgsize = int32(msgsize)
+	s.eventsize = int32(eventsize)
+	s.rcvport = r.GetStr("rcvport")
+	s.rcvdomain = r.GetStr("rcvdomain")
+	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
+		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid mail max message size")
+	} else {
+		s.maxmsgsize = int(limit)
+	}
+	if t, err := time.ParseDuration(r.GetStr("readtimeout")); err != nil {
+		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid read timeout for mail server")
+	} else {
+		s.readtimeout = t
+	}
+	if t, err := time.ParseDuration(r.GetStr("writetimeout")); err != nil {
+		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid write timeout for mail server")
+	} else {
+		s.writetimeout = t
+	}
 
 	maildataSecrets := secretMaildata{}
 	if err := r.GetSecret("mailkey", 0, &maildataSecrets); err != nil {
@@ -221,8 +250,13 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"sender address":      s.fromAddress,
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
-		"msg size (bytes)":    r.GetStr("msgsize"),
+		"event size (bytes)":  r.GetStr("eventsize"),
 		"nummaildatakeys":     strconv.Itoa(len(maildataSecrets.Keys)),
+		"rcvport":             s.rcvport,
+		"rcvdomain":           s.rcvdomain,
+		"maxmsgsize (bytes)":  r.GetStr("maxmsgsize"),
+		"read timeout":        r.GetStr("readtimeout"),
+		"write timeout":       r.GetStr("writetimeout"),
 	})
 	return nil
 }
@@ -239,7 +273,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.msgsize,
+		MaxMsgSize: s.eventsize,
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to init mail stream")
 	}
@@ -335,7 +369,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	var auth *hunter2.Poly1305Auth
 	if emmsg.Raw {
 		data := emmsg.RawData
-		b1, _, err := s.mailDir.Get(data.Path)
+		b1, _, err := s.sendMailDir.Get(data.Path)
 		if err != nil {
 			return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
 		}
@@ -627,7 +661,7 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 		body = hunter2.NewEncStreamReader(stream, auth, body)
 	}
 
-	if err := s.mailDir.Put(path, contentType, size, nil, body); err != nil {
+	if err := s.sendMailDir.Put(path, contentType, size, nil, body); err != nil {
 		return governor.ErrWithMsg(err, "Failed to save mail body")
 	}
 	if auth != nil {
