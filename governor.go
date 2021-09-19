@@ -171,10 +171,10 @@ func (s *Server) init(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) waitForInterrupt() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+func (s *Server) waitForInterrupt(ctx context.Context) {
+	notifyCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
-	<-ctx.Done()
+	<-notifyCtx.Done()
 }
 
 // Start starts the registered services and the server
@@ -263,19 +263,20 @@ func (s *Server) Start() error {
 			":"+s.config.Port)
 	}
 	go func() {
+		defer cancel()
 		if err := srv.ListenAndServe(); err != nil {
 			l.Info("Shutting down server", map[string]string{
 				"error": err.Error(),
 			})
 		}
 	}()
-	s.waitForInterrupt()
-	l.Info("shutdown process begin", nil)
+	s.waitForInterrupt(ctx)
+	l.Info("Shutdown process begin", nil)
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 16*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		l.Error("shutdown server error", map[string]string{
+		l.Error("Shutdown server error", map[string]string{
 			"error": err.Error(),
 		})
 	}
