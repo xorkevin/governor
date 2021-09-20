@@ -35,7 +35,7 @@ type (
 )
 
 // GetCtxMailingList returns a MailingList service from the context
-func GetCtxMailer(inj governor.Injector) MailingList {
+func GetCtxMailingList(inj governor.Injector) MailingList {
 	v := inj.Get(ctxKeyMailingList{})
 	if v == nil {
 		return nil
