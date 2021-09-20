@@ -64,12 +64,13 @@ mail:
   fromname: Governor
   streamsize: 200M
   eventsize: 2K
-  rcvport: 2525
-  rcvdomain: mail.governor.dev.localhost
+  mailkey: mailkey
+mailinglist:
+  port: 2525
+  domain: mail.governor.dev.localhost
   maxmsgsize: 2M
   readtimeout: 5s
   writetimeout: 5s
-  mailkey: mailkey
 role:
   rolecache: 24h
 apikey:

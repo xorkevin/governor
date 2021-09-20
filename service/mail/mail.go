@@ -98,7 +98,6 @@ type (
 		events            events.Events
 		mailBucket        objstore.Bucket
 		sendMailDir       objstore.Dir
-		rcvMailDir        objstore.Dir
 		config            governor.SecretReader
 		maildataDecrypter *hunter2.Decrypter
 		maildataCipher    hunter2.Cipher
@@ -110,11 +109,6 @@ type (
 		fromName          string
 		streamsize        int64
 		eventsize         int32
-		rcvport           string
-		rcvdomain         string
-		maxmsgsize        int
-		readtimeout       time.Duration
-		writetimeout      time.Duration
 	}
 
 	ctxKeyMailer struct{}
@@ -156,7 +150,6 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 		events:      ev,
 		mailBucket:  obj,
 		sendMailDir: obj.Subdir("sendmail"),
-		rcvMailDir:  obj.Subdir("rcvmail"),
 	}
 }
 
@@ -171,11 +164,6 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
-	r.SetDefault("rcvport", "2525")
-	r.SetDefault("rcvdomain", "localhost")
-	r.SetDefault("maxmsgsize", "2M")
-	r.SetDefault("readtimeout", "5s")
-	r.SetDefault("writetimeout", "5s")
 }
 
 type (
@@ -207,23 +195,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.ErrWithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	s.rcvport = r.GetStr("rcvport")
-	s.rcvdomain = r.GetStr("rcvdomain")
-	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
-		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid mail max message size")
-	} else {
-		s.maxmsgsize = int(limit)
-	}
-	if t, err := time.ParseDuration(r.GetStr("readtimeout")); err != nil {
-		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid read timeout for mail server")
-	} else {
-		s.readtimeout = t
-	}
-	if t, err := time.ParseDuration(r.GetStr("writetimeout")); err != nil {
-		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid write timeout for mail server")
-	} else {
-		s.writetimeout = t
-	}
 
 	maildataSecrets := secretMaildata{}
 	if err := r.GetSecret("mailkey", 0, &maildataSecrets); err != nil {
@@ -244,7 +215,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.maildataDecrypter.RegisterCipher(cipher)
 	}
 
-	l.Info("initialize mail options", map[string]string{
+	l.Info("Initialize mail service", map[string]string{
 		"smtp server addr":    s.addr,
 		"sender domain":       s.senderdomain,
 		"sender address":      s.fromAddress,
@@ -252,11 +223,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"stream size (bytes)": r.GetStr("streamsize"),
 		"event size (bytes)":  r.GetStr("eventsize"),
 		"nummaildatakeys":     strconv.Itoa(len(maildataSecrets.Keys)),
-		"rcvport":             s.rcvport,
-		"rcvdomain":           s.rcvdomain,
-		"maxmsgsize (bytes)":  r.GetStr("maxmsgsize"),
-		"read timeout":        r.GetStr("readtimeout"),
-		"write timeout":       r.GetStr("writetimeout"),
 	})
 	return nil
 }
