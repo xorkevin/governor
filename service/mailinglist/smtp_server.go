@@ -12,15 +12,6 @@ import (
 	"xorkevin.dev/governor/util/dns"
 )
 
-type (
-	// ErrSMTPNetwork is returned when receiving an unexpected smtp network conn
-	ErrSMTPNetwork struct{}
-)
-
-func (e ErrSMTPNetwork) Error() string {
-	return "Error SMTP network"
-}
-
 var (
 	errSMTPConn = &smtp.SMTPError{
 		Code:         451,
@@ -31,6 +22,36 @@ var (
 		Code:         501,
 		EnhancedCode: smtp.EnhancedCode{5, 1, 7},
 		Message:      "Invalid mail from address",
+	}
+	errSMTPRcptAddr = &smtp.SMTPError{
+		Code:         501,
+		EnhancedCode: smtp.EnhancedCode{5, 1, 3},
+		Message:      "Invalid recipient address",
+	}
+	errSMTPMailbox = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 1, 1},
+		Message:      "Invalid recipient mailbox",
+	}
+	errSMTPSystem = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 1, 2},
+		Message:      "Invalid recipient system",
+	}
+	errSMTPRcptCount = &smtp.SMTPError{
+		Code:         451,
+		EnhancedCode: smtp.EnhancedCode{4, 5, 3},
+		Message:      "Too many recipients",
+	}
+	errSMTPAuthSend = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 2},
+		Message:      "Unauthorized to send to this mailing list",
+	}
+	errSMTPSeq = &smtp.SMTPError{
+		Code:         503,
+		EnhancedCode: smtp.EnhancedCode{5, 5, 1},
+		Message:      "Invalid command sequence",
 	}
 	errSPFFail = &smtp.SMTPError{
 		Code:         550,
@@ -50,6 +71,7 @@ var (
 )
 
 type smtpBackend struct {
+	domain   string
 	resolver dns.Resolver
 }
 
@@ -67,15 +89,18 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 		return nil, errSMTPConn
 	}
 	return &smtpSession{
+		domain:   s.domain,
 		resolver: s.resolver,
 		srcip:    hostip,
 	}, nil
 }
 
 type smtpSession struct {
+	domain   string
 	resolver dns.Resolver
 	srcip    net.IP
 	from     string
+	rcptList string
 	rcpts    []string
 }
 
@@ -104,14 +129,36 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 }
 
 func (s *smtpSession) Rcpt(to string) error {
-	// TODO: verify recipient mailing address as target of from
+	if s.from == "" {
+		return errSMTPSeq
+	}
+	if s.rcptList == "" {
+		return errSMTPRcptCount
+	}
+	addr, err := mail.ParseAddress(to)
+	if err != nil {
+		return errSMTPRcptAddr
+	}
+	addrParts := strings.Split(addr.Address, "@")
+	if len(addrParts) != 2 {
+		return errSMTPRcptAddr
+	}
+	mailbox := addrParts[0]
+	domain := addrParts[1]
+	if domain != s.domain {
+		return errSMTPSystem
+	}
+	// TODO: verify recipient mailing address as target of from, and set rcpts
 	log.Println("Rcpt to:", to)
-	s.rcpts = append(s.rcpts, to)
+	s.rcptList = mailbox
 	return nil
 }
 
 func (s *smtpSession) Data(r io.Reader) error {
-	// TODO: check that recipients present and unique message id per recipient
+	if s.from == "" || s.rcptList == "" {
+		return errSMTPSeq
+	}
+	// TODO: check that recipients present, message id not sent yet for list, and from alignment
 	if b, err := io.ReadAll(r); err != nil {
 		return err
 	} else {
@@ -122,6 +169,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 func (s *smtpSession) Reset() {
 	s.from = ""
+	s.rcptList = ""
 	s.rcpts = nil
 }
 
