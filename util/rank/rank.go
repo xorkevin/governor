@@ -153,9 +153,9 @@ func (r Rank) Union(other Rank) Rank {
 }
 
 var (
-	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9_-]+$`)
-	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9_-]+$`)
-	rankRegexBan = regexp.MustCompile(`^ban.[A-Za-z0-9_-]+$`)
+	rankRegexMod = regexp.MustCompile(`^mod.[A-Za-z0-9._-]+$`)
+	rankRegexUsr = regexp.MustCompile(`^usr.[A-Za-z0-9._-]+$`)
+	rankRegexBan = regexp.MustCompile(`^ban.[A-Za-z0-9._-]+$`)
 	rankRegexOrg = regexp.MustCompile(`^org.[A-Za-z0-9_-]+$`)
 )
 
