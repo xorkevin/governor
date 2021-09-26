@@ -70,7 +70,8 @@ mail:
   mailkey: kv/data/app/governor/governor/mailkey
 mailinglist:
   port: 2525
-  domain: mail.governor.dev.localhost
+  usrdomain: lists.governor.dev.localhost
+  orgdomain: org.lists.governor.dev.localhost
   maxmsgsize: 2M
   readtimeout: 5s
   writetimeout: 5s

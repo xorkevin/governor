@@ -72,8 +72,9 @@ var (
 )
 
 type smtpBackend struct {
-	domain   string
-	resolver dns.Resolver
+	usrdomain string
+	orgdomain string
+	resolver  dns.Resolver
 }
 
 func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {
@@ -90,19 +91,22 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 		return nil, errSMTPConn
 	}
 	return &smtpSession{
-		domain:   s.domain,
-		resolver: s.resolver,
-		srcip:    hostip,
+		usrdomain: s.usrdomain,
+		orgdomain: s.orgdomain,
+		resolver:  s.resolver,
+		srcip:     hostip,
 	}, nil
 }
 
 type smtpSession struct {
-	domain   string
-	resolver dns.Resolver
-	srcip    net.IP
-	from     string
-	rcptList string
-	rcpts    []string
+	usrdomain string
+	orgdomain string
+	resolver  dns.Resolver
+	srcip     net.IP
+	from      string
+	rcptList  string
+	org       bool
+	rcpts     []string
 }
 
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
@@ -146,12 +150,13 @@ func (s *smtpSession) Rcpt(to string) error {
 	}
 	mailbox := addrParts[0]
 	domain := addrParts[1]
-	if domain != s.domain {
+	if domain != s.usrdomain && domain != s.orgdomain {
 		return errSMTPSystem
 	}
 	// TODO: verify recipient mailing address as target of from, and set rcpts
 	log.Println("Rcpt to:", to)
 	s.rcptList = mailbox
+	s.org = domain == s.orgdomain
 	return nil
 }
 
@@ -171,6 +176,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 func (s *smtpSession) Reset() {
 	s.from = ""
 	s.rcptList = ""
+	s.org = false
 	s.rcpts = nil
 }
 

@@ -28,7 +28,8 @@ type (
 		logger       governor.Logger
 		resolver     dns.Resolver
 		port         string
-		domain       string
+		usrdomain    string
+		orgdomain    string
 		maxmsgsize   int
 		readtimeout  time.Duration
 		writetimeout time.Duration
@@ -66,7 +67,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	setCtxMailingList(inj, s)
 
 	r.SetDefault("port", "2525")
-	r.SetDefault("domain", "localhost")
+	r.SetDefault("usrdomain", "localhost")
+	r.SetDefault("orgdomain", "localhost")
 	r.SetDefault("maxmsgsize", "2M")
 	r.SetDefault("readtimeout", "5s")
 	r.SetDefault("writetimeout", "5s")
@@ -79,7 +81,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	s.port = r.GetStr("port")
-	s.domain = r.GetStr("domain")
+	s.usrdomain = r.GetStr("usrdomain")
+	s.orgdomain = r.GetStr("orgdomain")
 	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
 		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid mail max message size")
 	} else {
@@ -98,7 +101,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	l.Info("Initialize mailing list", map[string]string{
 		"port":               s.port,
-		"domain":             s.domain,
+		"usrdomain":          r.GetStr("usrdomain"),
+		"orgdomain":          r.GetStr("orgdomain"),
 		"maxmsgsize (bytes)": r.GetStr("maxmsgsize"),
 		"read timeout":       r.GetStr("readtimeout"),
 		"write timeout":      r.GetStr("writetimeout"),
