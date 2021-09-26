@@ -1,6 +1,7 @@
 package mailinglist
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
@@ -114,7 +115,7 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		return errSMTPFromAddr
 	}
 	domain := addrParts[1]
-	result, _ := spf.CheckHostWithSender(s.srcip, domain, from)
+	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.resolver))
 	switch result {
 	case spf.Pass, spf.Neutral, spf.None:
 	case spf.Fail, spf.SoftFail:
