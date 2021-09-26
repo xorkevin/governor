@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	userRegex = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
+	userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 )
 
 func validhasUserid(userid string) error {

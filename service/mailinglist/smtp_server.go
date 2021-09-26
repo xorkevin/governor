@@ -133,7 +133,7 @@ func (s *smtpSession) Rcpt(to string) error {
 	if s.from == "" {
 		return errSMTPSeq
 	}
-	if s.rcptList == "" {
+	if s.rcptList != "" {
 		return errSMTPRcptCount
 	}
 	addr, err := mail.ParseAddress(to)

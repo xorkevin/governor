@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	userRegex = regexp.MustCompile(`^[a-z][a-z0-9._-]+$`)
+	orgRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 )
 
 func validhasOrgid(orgid string) error {
@@ -47,7 +47,7 @@ func validName(name string) error {
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if !userRegex.MatchString(name) {
+	if !orgRegex.MatchString(name) {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Org name contains invalid characters",
 			Status:  http.StatusBadRequest,
