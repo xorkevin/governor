@@ -3,6 +3,7 @@ module xorkevin.dev/governor
 go 1.17
 
 require (
+	blitiri.com.ar/go/spf v1.2.0
 	github.com/boombuler/barcode v1.0.1
 	github.com/emersion/go-message v0.15.0
 	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21

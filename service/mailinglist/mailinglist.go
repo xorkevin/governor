@@ -2,11 +2,13 @@ package mailinglist
 
 import (
 	"context"
+	"net"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/dns"
 )
 
 type (
@@ -24,6 +26,7 @@ type (
 		mailBucket   objstore.Bucket
 		rcvMailDir   objstore.Dir
 		logger       governor.Logger
+		resolver     dns.Resolver
 		port         string
 		domain       string
 		maxmsgsize   int
@@ -48,10 +51,14 @@ func setCtxMailingList(inj governor.Injector, m MailingList) {
 	inj.Set(ctxKeyMailingList{}, m)
 }
 
+// New creates a new MailingList service
 func New(obj objstore.Bucket) Service {
 	return &service{
 		mailBucket: obj,
 		rcvMailDir: obj.Subdir("rcvmail"),
+		resolver: dns.NewCachingResolver(&net.Resolver{
+			PreferGo: true,
+		}, time.Minute),
 	}
 }
 
