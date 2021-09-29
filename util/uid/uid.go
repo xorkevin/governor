@@ -86,7 +86,7 @@ const (
 // NewSnowflake creates a new snowflake uid
 func NewSnowflake(randsize int) (*Snowflake, error) {
 	u := make([]byte, timeSize+randsize)
-	now := uint64(time.Now().Round(0).UnixNano()) / uint64(time.Millisecond)
+	now := uint64(time.Now().Round(0).UnixMilli())
 	binary.BigEndian.PutUint64(u[:timeSize], now)
 	_, err := rand.Read(u[timeSize:])
 	if err != nil {

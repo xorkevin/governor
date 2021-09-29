@@ -133,7 +133,7 @@ func (r *repo) NewChat(kind string, name string, theme string) (*ChatModel, erro
 		Kind:         kind,
 		Name:         name,
 		Theme:        theme,
-		LastUpdated:  now.UnixNano() / int64(time.Millisecond),
+		LastUpdated:  now.UnixMilli(),
 		CreationTime: now.Unix(),
 	}, nil
 }
@@ -306,7 +306,7 @@ func (r *repo) AddMembers(m *ChatModel, userids []string) []*MemberModel {
 		return nil
 	}
 	members := make([]*MemberModel, 0, len(userids))
-	now := time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	now := time.Now().Round(0).UnixMilli()
 	m.LastUpdated = now
 	for _, i := range userids {
 		members = append(members, &MemberModel{
@@ -481,7 +481,7 @@ func (r *repo) AddMsg(m *ChatModel, userid string, kind string, value string) (*
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
 	}
-	now := time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	now := time.Now().Round(0).UnixMilli()
 	m.LastUpdated = now
 	return &MsgModel{
 		Chatid: m.Chatid,

@@ -121,7 +121,7 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	}
 	m.Name = name
 	m.Theme = theme
-	m.LastUpdated = time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
@@ -210,7 +210,7 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 		}), governor.ErrOptInner(err))
 	}
 
-	m.LastUpdated = time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
@@ -245,7 +245,7 @@ func (s *service) DeleteChat(chatid string) error {
 	if err := s.repo.DeleteChatMembers(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat members")
 	}
-	m.LastUpdated = time.Now().Round(0).UnixNano() / int64(time.Millisecond)
+	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	userids := make([]string, 0, len(members))
 	for _, i := range members {
 		userids = append(userids, i.Userid)
