@@ -22,6 +22,14 @@ type (
 		UpdateList(m *ListModel) error
 		DeleteList(m *ListModel) error
 		DeleteCreatorLists(creatorid string) error
+		GetListMembers(listid string, limit, offset int) ([]MemberModel, error)
+		GetUserLists(userid string, limit, offset int) ([]MemberModel, error)
+		GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
+		AddMembers(m *ListModel, userids []string) []*MemberModel
+		InsertMembers(m []*MemberModel) error
+		DeleteMembers(listid string, userids []string) error
+		DeleteListMembers(listid string) error
+		DeleteUserMembers(userid string) error
 	}
 
 	repo struct {
@@ -200,6 +208,109 @@ func (r *repo) DeleteCreatorLists(creatorid string) error {
 	}
 	if err := listModelDelEqCreatorID(d, creatorid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete lists")
+	}
+	return nil
+}
+
+func (r *repo) GetListMembers(listid string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, listid, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	return m, nil
+}
+
+func (r *repo) GetUserLists(userid string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, userid, false, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest user lists")
+	}
+	return m, nil
+}
+
+func (r *repo) GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, userid, before, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest user lists")
+	}
+	return m, nil
+}
+
+func (r *repo) AddMembers(m *ListModel, userids []string) []*MemberModel {
+	if len(userids) == 0 {
+		return nil
+	}
+	members := make([]*MemberModel, 0, len(userids))
+	now := time.Now().Round(0).UnixMilli()
+	m.LastUpdated = now
+	for _, i := range userids {
+		members = append(members, &MemberModel{
+			ListID:      m.ListID,
+			Userid:      i,
+			LastUpdated: now,
+		})
+	}
+	return members
+}
+
+func (r *repo) InsertMembers(m []*MemberModel) error {
+	if len(m) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := memberModelInsertBulk(d, m, false); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "User already added to list")
+		}
+		return governor.ErrWithMsg(err, "Failed to insert list members")
+	}
+	return nil
+}
+
+func (r *repo) DeleteMembers(listid string, userids []string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelDelEqListIDHasUserid(d, listid, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list members")
+	}
+	return nil
+}
+
+func (r *repo) DeleteListMembers(listid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelDelEqListID(d, listid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list members")
+	}
+	return nil
+}
+
+func (r *repo) DeleteUserMembers(userid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelDelEqUserid(d, userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user list memberships")
 	}
 	return nil
 }
