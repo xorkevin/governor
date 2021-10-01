@@ -37,6 +37,7 @@ type (
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
+		Setup() error
 	}
 
 	repo struct {
@@ -405,6 +406,29 @@ func (r *repo) DeleteListMsgs(listid string) error {
 	}
 	if err := msgModelDelEqListID(d, listid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete list messages")
+	}
+	return nil
+}
+
+func (r *repo) Setup() error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := listModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup list model")
+		}
+	}
+	if code, err := memberModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup list member model")
+		}
+	}
+	if code, err := msgModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup list message model")
+		}
 	}
 	return nil
 }
