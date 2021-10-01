@@ -79,6 +79,25 @@ func msgModelDelEqListID(db *sql.DB, listid string) error {
 	return err
 }
 
+func msgModelGetMsgModelEqListIDEqMsgid(db *sql.DB, listid string, msgid string) (*MsgModel, int, error) {
+	m := &MsgModel{}
+	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
 func msgModelDelEqListIDHasMsgid(db *sql.DB, listid string, msgid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(msgid))

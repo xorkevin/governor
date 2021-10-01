@@ -30,6 +30,13 @@ type (
 		DeleteMembers(listid string, userids []string) error
 		DeleteListMembers(listid string) error
 		DeleteUserMembers(userid string) error
+		NewMsg(listid, msgid, userid string) *MsgModel
+		GetMsg(listid, msgid string) (*MsgModel, error)
+		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
+		GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error)
+		InsertMsg(m *MsgModel) error
+		DeleteMsgs(listid string, msgids []string) error
+		DeleteListMsgs(listid string) error
 	}
 
 	repo struct {
@@ -56,7 +63,7 @@ type (
 	// MsgModel is the db mailing list message model
 	MsgModel struct {
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
-		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;deleq,listid,msgid|arr"`
+		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid;deleq,listid,msgid|arr"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid;getgroupeq,listid,creation_time|lt"`
 	}
@@ -311,6 +318,93 @@ func (r *repo) DeleteUserMembers(userid string) error {
 	}
 	if err := memberModelDelEqUserid(d, userid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user list memberships")
+	}
+	return nil
+}
+
+func (r *repo) NewMsg(listid, msgid, userid string) *MsgModel {
+	now := time.Now().Round(0).UnixMilli()
+	return &MsgModel{
+		ListID:       listid,
+		Msgid:        msgid,
+		Userid:       userid,
+		CreationTime: now,
+	}
+}
+func (r *repo) GetMsg(listid, msgid string) (*MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := msgModelGetMsgModelEqListIDEqMsgid(d, listid, msgid)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No list found with that id")
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListMsgs(listid string, limit, offset int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, listid, false, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqListIDLtCreationTimeOrdCreationTime(d, listid, before, false, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
+	}
+	return m, nil
+}
+
+func (r *repo) InsertMsg(m *MsgModel) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := msgModelInsert(d, m); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Msg id must be unique for list")
+		}
+		return governor.ErrWithMsg(err, "Failed to insert list message")
+	}
+	return nil
+}
+
+func (r *repo) DeleteMsgs(listid string, msgids []string) error {
+	if len(msgids) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := msgModelDelEqListIDHasMsgid(d, listid, msgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list messages")
+	}
+	return nil
+}
+
+func (r *repo) DeleteListMsgs(listid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := msgModelDelEqListID(d, listid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list messages")
 	}
 	return nil
 }
