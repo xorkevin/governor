@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	resOrg struct {
+	ResOrg struct {
 		OrgID        string `json:"orgid"`
 		Name         string `json:"name"`
 		DisplayName  string `json:"display_name"`
@@ -19,11 +19,11 @@ type (
 	}
 
 	resOrgs struct {
-		Orgs []resOrg `json:"orgs"`
+		Orgs []ResOrg `json:"orgs"`
 	}
 )
 
-func (s *service) GetByID(orgid string) (*resOrg, error) {
+func (s *service) GetByID(orgid string) (*ResOrg, error) {
 	m, err := s.orgs.GetByID(orgid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -34,7 +34,7 @@ func (s *service) GetByID(orgid string) (*resOrg, error) {
 		}
 		return nil, governor.ErrWithMsg(err, "Failed to get org")
 	}
-	return &resOrg{
+	return &ResOrg{
 		OrgID:        m.OrgID,
 		Name:         m.Name,
 		DisplayName:  m.DisplayName,
@@ -43,7 +43,7 @@ func (s *service) GetByID(orgid string) (*resOrg, error) {
 	}, nil
 }
 
-func (s *service) GetByName(name string) (*resOrg, error) {
+func (s *service) GetByName(name string) (*ResOrg, error) {
 	m, err := s.orgs.GetByName(name)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -54,7 +54,7 @@ func (s *service) GetByName(name string) (*resOrg, error) {
 		}
 		return nil, governor.ErrWithMsg(err, "Failed to get org")
 	}
-	return &resOrg{
+	return &ResOrg{
 		OrgID:        m.OrgID,
 		Name:         m.Name,
 		DisplayName:  m.DisplayName,
@@ -68,9 +68,9 @@ func (s *service) GetOrgs(orgids []string) (*resOrgs, error) {
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
 	}
-	orgs := make([]resOrg, 0, len(m))
+	orgs := make([]ResOrg, 0, len(m))
 	for _, i := range m {
-		orgs = append(orgs, resOrg{
+		orgs = append(orgs, ResOrg{
 			OrgID:        i.OrgID,
 			Name:         i.Name,
 			DisplayName:  i.DisplayName,
@@ -88,9 +88,9 @@ func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
 	}
-	orgs := make([]resOrg, 0, len(m))
+	orgs := make([]ResOrg, 0, len(m))
 	for _, i := range m {
-		orgs = append(orgs, resOrg{
+		orgs = append(orgs, ResOrg{
 			OrgID:        i.OrgID,
 			Name:         i.Name,
 			DisplayName:  i.DisplayName,
@@ -103,7 +103,7 @@ func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
 	}, nil
 }
 
-func (s *service) CreateOrg(userid, displayName, desc string) (*resOrg, error) {
+func (s *service) CreateOrg(userid, displayName, desc string) (*ResOrg, error) {
 	m, err := s.orgs.New(displayName, desc)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create org")
@@ -121,7 +121,7 @@ func (s *service) CreateOrg(userid, displayName, desc string) (*resOrg, error) {
 	if err := s.roles.InsertRoles(userid, rank.Rank{}.AddMod(orgrole).AddUsr(orgrole)); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to add mod roles to user")
 	}
-	return &resOrg{
+	return &ResOrg{
 		OrgID:        m.OrgID,
 		Name:         m.Name,
 		DisplayName:  m.DisplayName,

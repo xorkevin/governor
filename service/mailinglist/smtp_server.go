@@ -2,6 +2,7 @@ package mailinglist
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -10,10 +11,21 @@ import (
 
 	"blitiri.com.ar/go/spf"
 	"github.com/emersion/go-smtp"
-	"xorkevin.dev/governor/util/dns"
+	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/util/rank"
 )
 
 var (
+	errSMTPBase = &smtp.SMTPError{
+		Code:         451,
+		EnhancedCode: smtp.EnhancedCode{4, 0, 0},
+		Message:      "Temporary error",
+	}
+	errSMTPBaseExists = &smtp.SMTPError{
+		Code:         451,
+		EnhancedCode: smtp.EnhancedCode{4, 2, 4},
+		Message:      "Temporary error",
+	}
 	errSMTPConn = &smtp.SMTPError{
 		Code:         451,
 		EnhancedCode: smtp.EnhancedCode{4, 0, 0},
@@ -72,9 +84,7 @@ var (
 )
 
 type smtpBackend struct {
-	usrdomain string
-	orgdomain string
-	resolver  dns.Resolver
+	service *service
 }
 
 func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {
@@ -91,22 +101,18 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 		return nil, errSMTPConn
 	}
 	return &smtpSession{
-		usrdomain: s.usrdomain,
-		orgdomain: s.orgdomain,
-		resolver:  s.resolver,
-		srcip:     hostip,
+		service: s.service,
+		srcip:   hostip,
 	}, nil
 }
 
 type smtpSession struct {
-	usrdomain string
-	orgdomain string
-	resolver  dns.Resolver
-	srcip     net.IP
-	from      string
-	rcptList  string
-	org       bool
-	rcpts     []string
+	service  *service
+	srcip    net.IP
+	from     string
+	rcptList string
+	org      bool
+	rcpts    []string
 }
 
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
@@ -119,7 +125,7 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		return errSMTPFromAddr
 	}
 	domain := addrParts[1]
-	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.resolver))
+	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
 	switch result {
 	case spf.Pass, spf.Neutral, spf.None:
 	case spf.Fail, spf.SoftFail:
@@ -132,6 +138,10 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	s.from = from
 	return nil
 }
+
+const (
+	mailboxKeySeparator = "."
+)
 
 func (s *smtpSession) Rcpt(to string) error {
 	if s.from == "" {
@@ -148,15 +158,73 @@ func (s *smtpSession) Rcpt(to string) error {
 	if len(addrParts) != 2 {
 		return errSMTPRcptAddr
 	}
-	mailbox := addrParts[0]
+	mailboxParts := strings.Split(addrParts[0], mailboxKeySeparator)
 	domain := addrParts[1]
-	if domain != s.usrdomain && domain != s.orgdomain {
+	if len(mailboxParts) != 2 {
+		return errSMTPMailbox
+	}
+	listCreator := mailboxParts[0]
+	listname := mailboxParts[1]
+	if domain != s.service.usrdomain && domain != s.service.orgdomain {
 		return errSMTPSystem
 	}
-	// TODO: verify recipient mailing address as target of from, and set rcpts
-	log.Println("Rcpt to:", to)
-	s.rcptList = mailbox
-	s.org = domain == s.orgdomain
+	isOrg := domain == s.service.orgdomain
+
+	var listCreatorID string
+	if isOrg {
+		creator, err := s.service.orgs.GetByName(listCreator)
+		if err != nil {
+			if errors.Is(err, db.ErrNotFound{}) {
+				return errSMTPMailbox
+			}
+			return errSMTPBase
+		}
+		listCreatorID = rank.ToOrgName(creator.OrgID)
+	} else {
+		creator, err := s.service.users.GetByUsername(listCreator)
+		if err != nil {
+			if errors.Is(err, db.ErrNotFound{}) {
+				return errSMTPMailbox
+			}
+			return errSMTPBase
+		}
+		listCreatorID = creator.Userid
+	}
+	sender, err := s.service.users.GetByEmail(s.from)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return errSMTPAuthSend
+		}
+		return errSMTPBase
+	}
+
+	listMember, err := s.service.lists.GetMember(listCreatorID, listname, sender.Userid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return errSMTPAuthSend
+		}
+		return errSMTPBase
+	}
+
+	members, err := s.service.lists.GetListMembers(listCreatorID, listname, mailingListMemberAmountCap, 0)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+	userids := make([]string, 0, len(members))
+	for _, i := range members {
+		userids = append(userids, i.Userid)
+	}
+	rcpts, err := s.service.users.GetInfoBulk(userids)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+
+	s.rcptList = listMember.ListID
+	s.org = isOrg
+	s.rcpts = make([]string, 0, len(rcpts.Users))
+	for _, i := range rcpts.Users {
+		s.rcpts = append(s.rcpts, i.Email)
+	}
 	return nil
 }
 

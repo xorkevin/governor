@@ -108,7 +108,6 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created profile table", nil)
-
 	if err := s.profileBucket.Init(); err != nil {
 		return governor.ErrWithMsg(err, "Failed to init profile image bucket")
 	}

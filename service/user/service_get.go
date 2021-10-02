@@ -183,34 +183,61 @@ func (s *service) GetUserRolesIntersect(userid string, roleset rank.Rank) (*resU
 }
 
 type (
-	resUserInfo struct {
-		Userid   string `json:"userid"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
+	ResUserInfo struct {
+		Userid    string `json:"userid"`
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
 	}
 
-	resUserInfoList struct {
-		Users []resUserInfo `json:"users"`
+	ResUserInfoList struct {
+		Users []ResUserInfo `json:"users"`
 	}
 )
 
 // GetInfoAll gets and returns info for all users
-func (s *service) GetInfoAll(amount int, offset int) (*resUserInfoList, error) {
+func (s *service) GetInfoAll(amount int, offset int) (*ResUserInfoList, error) {
 	infoSlice, err := s.users.GetGroup(amount, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get users")
 	}
 
-	info := make([]resUserInfo, 0, len(infoSlice))
+	info := make([]ResUserInfo, 0, len(infoSlice))
 	for _, i := range infoSlice {
-		info = append(info, resUserInfo{
-			Userid:   i.Userid,
-			Username: i.Username,
-			Email:    i.Email,
+		info = append(info, ResUserInfo{
+			Userid:    i.Userid,
+			Username:  i.Username,
+			Email:     i.Email,
+			FirstName: i.FirstName,
+			LastName:  i.LastName,
 		})
 	}
 
-	return &resUserInfoList{
+	return &ResUserInfoList{
+		Users: info,
+	}, nil
+}
+
+// GetInfoBulk gets and returns info for users
+func (s *service) GetInfoBulk(userids []string) (*ResUserInfoList, error) {
+	infoSlice, err := s.users.GetBulk(userids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get users")
+	}
+
+	info := make([]ResUserInfo, 0, len(infoSlice))
+	for _, i := range infoSlice {
+		info = append(info, ResUserInfo{
+			Userid:    i.Userid,
+			Username:  i.Username,
+			Email:     i.Email,
+			FirstName: i.FirstName,
+			LastName:  i.LastName,
+		})
+	}
+
+	return &ResUserInfoList{
 		Users: info,
 	}, nil
 }

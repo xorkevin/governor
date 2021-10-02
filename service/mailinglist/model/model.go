@@ -11,9 +11,13 @@ import (
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel
 //go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel
 
+const (
+	keySeparator = "."
+)
+
 type (
 	Repo interface {
-		NewList(listid string, creatorid string, name, desc string) *ListModel
+		NewList(creatorid, listname string, name, desc string) *ListModel
 		GetList(listid string) (*ListModel, error)
 		GetLists(listids []string) ([]ListModel, error)
 		GetCreatorLists(creatorid string, limit, offset int) ([]ListModel, error)
@@ -22,7 +26,8 @@ type (
 		UpdateList(m *ListModel) error
 		DeleteList(m *ListModel) error
 		DeleteCreatorLists(creatorid string) error
-		GetListMembers(listid string, limit, offset int) ([]MemberModel, error)
+		GetMember(creatorid, listname, userid string) (*MemberModel, error)
+		GetListMembers(creatorid, listname string, limit, offset int) ([]MemberModel, error)
 		GetUserLists(userid string, limit, offset int) ([]MemberModel, error)
 		GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
@@ -57,7 +62,7 @@ type (
 	// MemberModel is the db mailing list member model
 	MemberModel struct {
 		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getgroupeq,listid;deleq,listid,userid|arr;deleq,userid"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;deleq,listid,userid|arr;deleq,userid"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
 	}
 
@@ -104,10 +109,14 @@ func New(database db.Database) Repo {
 	}
 }
 
-func (r *repo) NewList(listid string, creatorid string, name, desc string) *ListModel {
+func toListID(creatorid, listname string) string {
+	return creatorid + keySeparator + listname
+}
+
+func (r *repo) NewList(creatorid, listname string, name, desc string) *ListModel {
 	now := time.Now().Round(0)
 	return &ListModel{
-		ListID:       listid,
+		ListID:       toListID(creatorid, listname),
 		CreatorID:    creatorid,
 		Name:         name,
 		Description:  desc,
@@ -220,12 +229,27 @@ func (r *repo) DeleteCreatorLists(creatorid string) error {
 	return nil
 }
 
-func (r *repo) GetListMembers(listid string, limit, offset int) ([]MemberModel, error) {
+func (r *repo) GetMember(creatorid, listname, userid string) (*MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, listid, true, limit, offset)
+	m, code, err := memberModelGetMemberModelEqListIDEqUserid(d, toListID(creatorid, listname), userid)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "User is not list member")
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list member")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListMembers(creatorid, listname string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, toListID(creatorid, listname), true, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get list members")
 	}

@@ -224,6 +224,9 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 
 // GetBulk gets information from users
 func (r *repo) GetBulk(userids []string) ([]Info, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err

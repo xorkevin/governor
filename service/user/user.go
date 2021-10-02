@@ -50,6 +50,9 @@ type (
 	// Users is a user management service
 	Users interface {
 		GetByID(userid string) (*ResUserGet, error)
+		GetByUsername(username string) (*ResUserGet, error)
+		GetByEmail(email string) (*ResUserGet, error)
+		GetInfoBulk(userids []string) (*ResUserInfoList, error)
 		CheckUserExists(userid string) (bool, error)
 		CheckUsersExist(userids []string) ([]string, error)
 	}

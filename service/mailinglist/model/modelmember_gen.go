@@ -79,6 +79,25 @@ func memberModelDelEqListID(db *sql.DB, listid string) error {
 	return err
 }
 
+func memberModelGetMemberModelEqListIDEqUserid(db *sql.DB, listid string, userid string) (*MemberModel, int, error) {
+	m := &MemberModel{}
+	if err := db.QueryRow("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid = $1 AND userid = $2;", listid, userid).Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 2, err
+		}
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42P01": // undefined_table
+				return nil, 4, err
+			default:
+				return nil, 0, err
+			}
+		}
+		return nil, 0, err
+	}
+	return m, 0, nil
+}
+
 func memberModelGetMemberModelEqListIDOrdUserid(db *sql.DB, listid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {

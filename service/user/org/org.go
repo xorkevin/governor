@@ -12,6 +12,8 @@ import (
 type (
 	// Orgs is an organization management service
 	Orgs interface {
+		GetByID(orgid string) (*ResOrg, error)
+		GetByName(name string) (*ResOrg, error)
 	}
 
 	// Service is an Orgs and governor.Service

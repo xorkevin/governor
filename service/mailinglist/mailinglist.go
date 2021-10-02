@@ -6,9 +6,17 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/mailinglist/model"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/user"
+	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/dns"
+)
+
+const (
+	mailingListMemberAmountCap = 255
 )
 
 type (
@@ -23,8 +31,12 @@ type (
 	}
 
 	service struct {
+		lists        model.Repo
 		mailBucket   objstore.Bucket
 		rcvMailDir   objstore.Dir
+		users        user.Users
+		orgs         org.Orgs
+		gate         gate.Gate
 		logger       governor.Logger
 		resolver     dns.Resolver
 		port         string
@@ -52,11 +64,25 @@ func setCtxMailingList(inj governor.Injector, m MailingList) {
 	inj.Set(ctxKeyMailingList{}, m)
 }
 
+// NewCtx creates a new MailingList service from a context
+func NewCtx(inj governor.Injector) Service {
+	lists := model.GetCtxRepo(inj)
+	obj := objstore.GetCtxBucket(inj)
+	users := user.GetCtxUsers(inj)
+	orgs := org.GetCtxOrgs(inj)
+	g := gate.GetCtxGate(inj)
+	return New(lists, obj, users, orgs, g)
+}
+
 // New creates a new MailingList service
-func New(obj objstore.Bucket) Service {
+func New(lists model.Repo, obj objstore.Bucket, users user.Users, orgs org.Orgs, g gate.Gate) Service {
 	return &service{
+		lists:      lists,
 		mailBucket: obj,
 		rcvMailDir: obj.Subdir("rcvmail"),
+		users:      users,
+		orgs:       orgs,
+		gate:       g,
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,
 		}, time.Minute),
@@ -114,6 +140,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
+	if err := s.lists.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created mailing list tables", nil)
 	if err := s.mailBucket.Init(); err != nil {
 		return governor.ErrWithMsg(err, "Failed to init mail bucket")
 	}
