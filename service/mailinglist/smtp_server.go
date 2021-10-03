@@ -1,10 +1,10 @@
 package mailinglist
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/mail"
 	"strings"
@@ -113,13 +113,20 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 }
 
 type smtpSession struct {
-	service  *service
-	srcip    net.IP
-	from     string
-	rcptList string
-	org      bool
-	rcpts    []string
+	service    *service
+	srcip      net.IP
+	from       string
+	spfResult  string
+	rcptList   string
+	org        bool
+	dkimResult string
 }
+
+const (
+	spfResultPass    = "pass"
+	spfResultNeutral = "neutral"
+	spfResultNone    = "none"
+)
 
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	addr, err := mail.ParseAddress(from)
@@ -132,8 +139,14 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	}
 	domain := addrParts[1]
 	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
+	spfResult := spfResultNone
 	switch result {
-	case spf.Pass, spf.Neutral, spf.None:
+	case spf.Pass:
+		spfResult = spfResultPass
+	case spf.Neutral:
+		spfResult = spfResultNeutral
+	case spf.None:
+		spfResult = spfResultNone
 	case spf.Fail, spf.SoftFail:
 		return errSPFFail
 	case spf.TempError:
@@ -142,6 +155,7 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		return errSPFPerm
 	}
 	s.from = from
+	s.spfResult = spfResult
 	return nil
 }
 
@@ -269,13 +283,13 @@ func (s *smtpSession) Rcpt(to string) error {
 	for _, i := range members {
 		userids = append(userids, i.Userid)
 	}
-	rcpts, err := s.service.users.GetInfoBulk(userids)
+	recipients, err := s.service.users.GetInfoBulk(userids)
 	if err != nil {
 		return errSMTPBaseExists
 	}
-	s.rcpts = make([]string, 0, len(rcpts.Users))
-	for _, i := range rcpts.Users {
-		s.rcpts = append(s.rcpts, i.Email)
+	rcpts := make([]string, 0, len(recipients.Users))
+	for _, i := range recipients.Users {
+		rcpts = append(rcpts, i.Email)
 	}
 	return nil
 }
@@ -284,20 +298,20 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptList == "" {
 		return errSMTPSeq
 	}
-	// TODO: check that recipients present, message id not sent yet for list, and from alignment
-	if b, err := io.ReadAll(r); err != nil {
-		return err
-	} else {
-		log.Println("Data:", string(b))
+	b := &bytes.Buffer{}
+	if _, err := io.Copy(b, r); err != nil {
+		return errSMTPBaseExists
 	}
+	// TODO: check message id not sent yet for list, dkim, and dmarc from alignment
 	return nil
 }
 
 func (s *smtpSession) Reset() {
 	s.from = ""
+	s.spfResult = ""
 	s.rcptList = ""
 	s.org = false
-	s.rcpts = nil
+	s.dkimResult = ""
 }
 
 func (s *smtpSession) Logout() error {
