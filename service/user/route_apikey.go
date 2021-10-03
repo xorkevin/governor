@@ -180,25 +180,24 @@ type (
 	}
 )
 
-func (m *router) checkApikeyValidator(t gate.Intersector) bool {
-	c := t.Ctx()
+func (m *router) checkApikeyValidator(c gate.Context) bool {
 	req := reqApikeyCheck{
-		Roles: c.Query("roles"),
-		Scope: c.Query("scope"),
+		Roles: c.Ctx().Query("roles"),
+		Scope: c.Ctx().Query("scope"),
 	}
 	if err := req.valid(); err != nil {
 		return false
 	}
 
-	if !t.HasScope(req.Scope) {
+	if !c.HasScope(req.Scope) {
 		return false
 	}
 	expected, err := rank.FromString(req.Roles)
 	if err != nil {
 		return false
 	}
-	roles, ok := t.Intersect(expected)
-	if !ok {
+	roles, err := c.Intersect(expected)
+	if err != nil {
 		return false
 	}
 	if roles.Len() != expected.Len() {

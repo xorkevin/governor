@@ -178,12 +178,12 @@ func (m *router) deleteOrg(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) orgMember(c governor.Context, _ string) (string, error) {
+func (m *router) orgMember(c governor.Context, _ string) (string, bool, bool) {
 	orgid := c.Param("id")
 	if err := validhasOrgid(orgid); err != nil {
-		return "", err
+		return "", false, false
 	}
-	return rank.ToOrgName(orgid), nil
+	return rank.ToOrgName(orgid), false, true
 }
 
 const (

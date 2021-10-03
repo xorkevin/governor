@@ -194,19 +194,19 @@ func (m *router) deleteUserRoleInvitation(w http.ResponseWriter, r *http.Request
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) roleMod(c governor.Context, _ string) (string, error) {
+func (m *router) roleMod(c governor.Context, _ string) (string, bool, bool) {
 	role := c.Param("role")
 	if err := validhasRole(role); err != nil {
-		return "", err
+		return "", false, false
 	}
 	if role == rank.TagAdmin {
-		return "", nil
+		return "", false, true
 	}
 	_, tag, err := rank.SplitTag(role)
 	if err != nil {
-		return "", err
+		return "", false, false
 	}
-	return tag, nil
+	return tag, false, true
 }
 
 const (

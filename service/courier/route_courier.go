@@ -282,21 +282,18 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) courierOwner(c governor.Context, userid string) (string, error) {
+func (m *router) courierOwner(c governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
-		return "", err
+		return "", false, false
 	}
 	if creatorid == userid {
-		return "", nil
+		return "", true, true
 	}
 	if !rank.IsValidOrgName(creatorid) {
-		return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Invalid org id",
-			Status:  http.StatusBadRequest,
-		}))
+		return "", false, false
 	}
-	return creatorid, nil
+	return creatorid, false, true
 }
 
 const (
