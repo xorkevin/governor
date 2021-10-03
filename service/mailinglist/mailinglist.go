@@ -15,10 +15,6 @@ import (
 	"xorkevin.dev/governor/util/dns"
 )
 
-const (
-	mailingListMemberAmountCap = 255
-)
-
 type (
 	// MailingList is a mailing list service
 	MailingList interface {

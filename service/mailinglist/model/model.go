@@ -17,8 +17,8 @@ const (
 
 type (
 	Repo interface {
-		NewList(creatorid, listname string, name, desc string) *ListModel
-		GetList(listid string) (*ListModel, error)
+		NewList(creatorid, listname string, name, desc string, senderPolicy, memberPolicy string) *ListModel
+		GetList(creatorid, listname string) (*ListModel, error)
 		GetLists(listids []string) ([]ListModel, error)
 		GetCreatorLists(creatorid string, limit, offset int) ([]ListModel, error)
 		GetCreatorListsBefore(creatorid string, before int64, limit int) ([]ListModel, error)
@@ -55,6 +55,8 @@ type (
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid;deleq,creatorid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Description  string `model:"description,VARCHAR(255)" query:"description"`
+		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL" query:"sender_policy"`
+		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL" query:"member_policy"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid;getgroupeq,creatorid,last_updated|lt"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
@@ -113,24 +115,26 @@ func toListID(creatorid, listname string) string {
 	return creatorid + keySeparator + listname
 }
 
-func (r *repo) NewList(creatorid, listname string, name, desc string) *ListModel {
+func (r *repo) NewList(creatorid, listname string, name, desc string, senderPolicy, memberPolicy string) *ListModel {
 	now := time.Now().Round(0)
 	return &ListModel{
 		ListID:       toListID(creatorid, listname),
 		CreatorID:    creatorid,
 		Name:         name,
 		Description:  desc,
+		SenderPolicy: senderPolicy,
+		MemberPolicy: memberPolicy,
 		LastUpdated:  now.UnixMilli(),
 		CreationTime: now.Unix(),
 	}
 }
 
-func (r *repo) GetList(listid string) (*ListModel, error) {
+func (r *repo) GetList(creatorid, listname string) (*ListModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := listModelGetListModelEqListID(d, listid)
+	m, code, err := listModelGetListModelEqListID(d, toListID(creatorid, listname))
 	if err != nil {
 		if code == 2 {
 			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No list found with that id")

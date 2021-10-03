@@ -12,6 +12,7 @@ import (
 	"blitiri.com.ar/go/spf"
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -45,6 +46,11 @@ var (
 		Code:         550,
 		EnhancedCode: smtp.EnhancedCode{5, 1, 1},
 		Message:      "Invalid recipient mailbox",
+	}
+	errSMTPMailboxConfig = &smtp.SMTPError{
+		Code:         451,
+		EnhancedCode: smtp.EnhancedCode{4, 3, 0},
+		Message:      "Invalid recipient mailbox config",
 	}
 	errSMTPSystem = &smtp.SMTPError{
 		Code:         550,
@@ -140,7 +146,13 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 }
 
 const (
-	mailboxKeySeparator = "."
+	mailingListMemberAmountCap = 255
+	mailboxKeySeparator        = "."
+	listSenderPolicyOwner      = "owner"
+	listSenderPolicyMember     = "member"
+	listSenderPolicyUser       = "user"
+	listMemberPolicyOwner      = "owner"
+	listMemberPolicyUser       = "user"
 )
 
 func (s *smtpSession) Rcpt(to string) error {
@@ -198,13 +210,56 @@ func (s *smtpSession) Rcpt(to string) error {
 		return errSMTPBase
 	}
 
-	listMember, err := s.service.lists.GetMember(listCreatorID, listname, sender.Userid)
+	list, err := s.service.lists.GetList(listCreatorID, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return errSMTPAuthSend
+			return errSMTPMailbox
 		}
 		return errSMTPBase
 	}
+
+	switch list.SenderPolicy {
+	case listSenderPolicyOwner:
+		if isOrg {
+			if ok, err := gate.AuthMember(s.service.gate, sender.Userid, list.CreatorID); err != nil {
+				return errSMTPBase
+			} else if !ok {
+				return errSMTPAuthSend
+			}
+		} else {
+			if sender.Userid != list.CreatorID {
+				return errSMTPAuthSend
+			}
+			if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
+				return errSMTPBase
+			} else if !ok {
+				return errSMTPAuthSend
+			}
+		}
+	case listSenderPolicyMember:
+		if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
+			return errSMTPBase
+		} else if !ok {
+			return errSMTPAuthSend
+		}
+		if _, err := s.service.lists.GetMember(listCreatorID, listname, sender.Userid); err != nil {
+			if errors.Is(err, db.ErrNotFound{}) {
+				return errSMTPAuthSend
+			}
+			return errSMTPBase
+		}
+	case listSenderPolicyUser:
+		if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
+			return errSMTPBase
+		} else if !ok {
+			return errSMTPAuthSend
+		}
+	default:
+		return errSMTPMailboxConfig
+	}
+
+	s.rcptList = list.ListID
+	s.org = isOrg
 
 	members, err := s.service.lists.GetListMembers(listCreatorID, listname, mailingListMemberAmountCap, 0)
 	if err != nil {
@@ -218,9 +273,6 @@ func (s *smtpSession) Rcpt(to string) error {
 	if err != nil {
 		return errSMTPBaseExists
 	}
-
-	s.rcptList = listMember.ListID
-	s.org = isOrg
 	s.rcpts = make([]string, 0, len(rcpts.Users))
 	for _, i := range rcpts.Users {
 		s.rcpts = append(s.rcpts, i.Email)
