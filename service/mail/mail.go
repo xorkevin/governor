@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -104,7 +105,7 @@ type (
 		logger            governor.Logger
 		host              string
 		addr              string
-		senderdomain      string
+		msgiddomain       string
 		fromAddress       string
 		fromName          string
 		streamsize        int64
@@ -159,7 +160,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "587")
-	r.SetDefault("senderdomain", "")
+	r.SetDefault("msgiddomain", "")
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
@@ -182,7 +183,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
-	s.senderdomain = r.GetStr("senderdomain")
+	s.msgiddomain = r.GetStr("msgiddomain")
 	s.fromAddress = r.GetStr("fromaddress")
 	s.fromName = r.GetStr("fromname")
 	var err error
@@ -217,7 +218,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	l.Info("Initialize mail service", map[string]string{
 		"smtp server addr":    s.addr,
-		"sender domain":       s.senderdomain,
+		"msgid domain":        s.msgiddomain,
 		"sender address":      s.fromAddress,
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
@@ -400,11 +401,13 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 		body = b1
 		if err := s.tpl.ExecuteHTML(b2, data.Tpl.Kind, data.Tpl.Name+".html", emdata); err != nil {
-			s.logger.Error("Failed to execute mail html body template", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "executehtmlbody",
-				"bodytpl":    data.Tpl.Name + ".html",
-			})
+			if !errors.Is(err, template.ErrTemplateDNE{}) {
+				s.logger.Error("Failed to execute mail html body template", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "executehtmlbody",
+					"bodytpl":    data.Tpl.Name + ".html",
+				})
+			}
 			htmlbody = nil
 		} else {
 			htmlbody = b2
@@ -412,7 +415,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	}
 
 	b := &bytes.Buffer{}
-	if err := msgToBytes(s.logger, s.senderdomain, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
+	if err := msgToBytes(s.logger, s.msgiddomain, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
 		return err
 	}
 
@@ -432,13 +435,13 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	return s.handleSendMail(emmsg.From.Address, to, b)
 }
 
-func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
+func msgToBytes(l governor.Logger, msgiddomain string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
 	h := emmail.Header{}
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to generate mail msg id")
 	}
-	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), senderdomain))
+	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), msgiddomain))
 	h.SetDate(time.Now().Round(0).In(time.UTC))
 	subj := strings.Builder{}
 	if _, err := io.Copy(&subj, subject); err != nil {
@@ -459,6 +462,26 @@ func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, su
 		})
 	}
 	h.SetAddressList("To", emto)
+
+	if htmlbody == nil {
+		h.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
+		mw, err := emmail.CreateSingleInlineWriter(dst, h)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create plain mail writer")
+		}
+		defer func() {
+			if err := mw.Close(); err != nil {
+				l.Error("Failed closing plain mail writer", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "closeplainmailwriter",
+				})
+			}
+		}()
+		if _, err := io.Copy(mw, body); err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
+		}
+		return nil
+	}
 
 	mw, err := emmail.CreateWriter(dst, h)
 	if err != nil {
@@ -486,54 +509,50 @@ func msgToBytes(l governor.Logger, senderdomain string, from Addr, to []Addr, su
 		}
 	}()
 
-	if body != nil {
-		if err := func() error {
-			hh := emmail.InlineHeader{}
-			hh.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
-			pw, err := bw.CreatePart(hh)
-			if err != nil {
-				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body plaintext writer")
-			}
-			defer func() {
-				if err := pw.Close(); err != nil {
-					l.Error("Failed closing mail body plaintext writer", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "closemailbodyplaintextwriter",
-					})
-				}
-			}()
-			if _, err := io.Copy(pw, body); err != nil {
-				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
-			}
-			return nil
-		}(); err != nil {
-			return err
+	if err := func() error {
+		hh := emmail.InlineHeader{}
+		hh.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
+		pw, err := bw.CreatePart(hh)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body plaintext writer")
 		}
+		defer func() {
+			if err := pw.Close(); err != nil {
+				l.Error("Failed closing mail body plaintext writer", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "closemailbodyplaintextwriter",
+				})
+			}
+		}()
+		if _, err := io.Copy(pw, body); err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 
-	if htmlbody != nil {
-		if err := func() error {
-			hh := emmail.InlineHeader{}
-			hh.SetContentType(mediaTypeTextHTML, map[string]string{"charset": "utf-8"})
-			pw, err := bw.CreatePart(hh)
-			if err != nil {
-				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body html writer")
-			}
-			defer func() {
-				if err := pw.Close(); err != nil {
-					l.Error("Failed closing mail body plaintext writer", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "closemailbodyhtmlwriter",
-					})
-				}
-			}()
-			if _, err := io.Copy(pw, htmlbody); err != nil {
-				return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write html mail body")
-			}
-			return nil
-		}(); err != nil {
-			return err
+	if err := func() error {
+		hh := emmail.InlineHeader{}
+		hh.SetContentType(mediaTypeTextHTML, map[string]string{"charset": "utf-8"})
+		pw, err := bw.CreatePart(hh)
+		if err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body html writer")
 		}
+		defer func() {
+			if err := pw.Close(); err != nil {
+				l.Error("Failed closing mail body plaintext writer", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "closemailbodyhtmlwriter",
+				})
+			}
+		}()
+		if _, err := io.Copy(pw, htmlbody); err != nil {
+			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write html mail body")
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	return nil
 }

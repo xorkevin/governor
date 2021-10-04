@@ -126,9 +126,15 @@ func (s *service) Health() error {
 }
 
 type (
+	// ErrTemplateDNE is returned when a template does not exist
+	ErrTemplateDNE struct{}
 	// ErrExecute is returned when failing to execute a template
 	ErrExecute struct{}
 )
+
+func (e ErrTemplateDNE) Error() string {
+	return "Template does not exist"
+}
 
 func (e ErrExecute) Error() string {
 	return "Error executing template"
@@ -138,6 +144,9 @@ func (e ErrExecute) Error() string {
 func (s *service) Execute(dst io.Writer, kind string, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
+		if s.tt.Lookup(templateName) == nil {
+			return governor.ErrWithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+		}
 		if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
 			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
 		}
@@ -151,6 +160,9 @@ func (s *service) Execute(dst io.Writer, kind string, templateName string, data 
 func (s *service) ExecuteHTML(dst io.Writer, kind string, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
+		if s.ht.Lookup(templateName) == nil {
+			return governor.ErrWithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+		}
 		if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
 			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
 		}

@@ -62,7 +62,7 @@ mail:
   auth: kv/data/app/governor/governor/smtp
   host: mailhog.governor.svc.cluster.local
   port: 1025
-  senderdomain: mail.xorkevin.com
+  msgiddomain: xorkevin.com
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   streamsize: 200M

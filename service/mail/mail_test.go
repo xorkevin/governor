@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"mime/quotedprintable"
 	gomail "net/mail"
 	"strings"
 	"testing"
@@ -14,6 +15,75 @@ import (
 
 func TestBuildMail(t *testing.T) {
 	t.Parallel()
+
+	for _, tc := range []struct {
+		Test    string
+		Subject string
+		Sender  string
+		From    Addr
+		To      []Addr
+		Body    string
+	}{
+		{
+			Test:    "text email with multiple recipients",
+			Subject: "Hello World",
+			Sender:  "example.com",
+			From: Addr{
+				Address: "kevin@xorkevin.com",
+				Name:    "Kevin Wang",
+			},
+			To: []Addr{
+				{Address: "other@xorkevin.com"},
+				{Address: "other2@xorkevin.com"},
+			},
+			Body: "This is a test plain text alternate that goes over the line limit of 78 characters.",
+		},
+	} {
+		tc := tc
+		t.Run(tc.Test, func(t *testing.T) {
+			t.Parallel()
+			assert := require.New(t)
+
+			buf := bytes.Buffer{}
+			assert.NoError(msgToBytes(nil, tc.Sender, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), nil, &buf))
+			t.Log(buf.String())
+			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
+			assert.NoError(err)
+			assert.Equal(tc.Subject, m.Header.Get("Subject"))
+			from, err := m.Header.AddressList("From")
+			assert.NoError(err)
+			assert.Len(from, 1)
+			assert.Equal(tc.From.Address, from[0].Address)
+			assert.Equal(tc.From.Name, from[0].Name)
+			to, err := m.Header.AddressList("To")
+			assert.NoError(err)
+			assert.Len(to, len(tc.To))
+			for n, i := range to {
+				assert.Equal(tc.To[n].Address, i.Address)
+			}
+			assert.Equal("1.0", m.Header.Get("Mime-Version"))
+			date, err := m.Header.Date()
+			assert.NoError(err)
+			assert.False(date.IsZero())
+			{
+				id := m.Header.Get("Message-Id")
+				assert.True(strings.HasPrefix(id, "<"))
+				assert.True(strings.HasSuffix(id, ">"))
+				id = strings.TrimSuffix(strings.TrimPrefix(id, "<"), ">")
+				parts := strings.Split(id, "@")
+				assert.Len(parts, 2)
+				assert.Equal(tc.Sender, parts[1])
+			}
+			assert.Equal("quoted-printable", m.Header.Get("Content-Transfer-Encoding"))
+			plaincontenttype, plainparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
+			assert.NoError(err)
+			assert.Equal("text/plain", plaincontenttype)
+			assert.Equal("utf-8", plainparams["charset"])
+			plainbytes, err := io.ReadAll(quotedprintable.NewReader(m.Body))
+			assert.NoError(err)
+			assert.Equal(tc.Body, string(plainbytes))
+		})
+	}
 
 	for _, tc := range []struct {
 		Test     string
