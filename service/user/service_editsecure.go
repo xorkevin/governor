@@ -213,6 +213,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		}))
 	}
 
+	oldEmail := m.Email
 	m.Email = mr.Params
 
 	if err := s.resets.Delete(userid, kindResetEmail); err != nil {
@@ -234,7 +235,7 @@ func (s *service) CommitEmail(userid string, key string, password string) error 
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(emailChangeNotifyTemplate), emdatanotify, false); err != nil {
+	if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: oldEmail, Name: m.FirstName}}, mail.TplLocal(emailChangeNotifyTemplate), emdatanotify, false); err != nil {
 		s.logger.Error("Failed to send old email change notification", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "commitemailoldmail",
