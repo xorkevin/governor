@@ -112,10 +112,11 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 	}
 	domain := state.Hostname
 	result, err := sess.checkSPF(domain, domain)
-	if err == nil {
-		sess.spfResult = result
-		sess.spfIsHelo = true
+	if err != nil {
+		return nil, err
 	}
+	sess.heloSPF = result
+	sess.helo = domain
 	return sess, nil
 }
 
@@ -123,9 +124,9 @@ type smtpSession struct {
 	service    *service
 	srcip      net.IP
 	helo       string
+	heloSPF    string
 	from       string
-	spfResult  string
-	spfIsHelo  bool
+	fromSPF    string
 	rcptList   string
 	org        bool
 	dkimResult string
@@ -167,13 +168,11 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		return errSMTPFromAddr
 	}
 	domain := addrParts[1]
-	if !s.spfIsHelo {
-		result, err := s.checkSPF(domain, from)
-		if err != nil {
-			return err
-		}
-		s.spfResult = result
+	result, err := s.checkSPF(domain, from)
+	if err != nil {
+		return err
 	}
+	s.fromSPF = result
 	s.from = from
 	return nil
 }
@@ -327,8 +326,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 func (s *smtpSession) Reset() {
 	s.from = ""
-	s.spfResult = ""
-	s.spfIsHelo = false
+	s.fromSPF = ""
 	s.rcptList = ""
 	s.org = false
 	s.dkimResult = ""
