@@ -110,13 +110,7 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 		service: s.service,
 		srcip:   hostip,
 	}
-	domain := state.Hostname
-	result, err := sess.checkSPF(domain, domain)
-	if err != nil {
-		return nil, err
-	}
-	sess.heloSPF = result
-	sess.helo = domain
+	sess.helo = state.Hostname
 	return sess, nil
 }
 
@@ -124,7 +118,6 @@ type smtpSession struct {
 	service    *service
 	srcip      net.IP
 	helo       string
-	heloSPF    string
 	from       string
 	fromSPF    string
 	rcptList   string
