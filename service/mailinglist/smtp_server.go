@@ -106,17 +106,26 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 	if hostip == nil {
 		return nil, errSMTPConn
 	}
-	return &smtpSession{
+	sess := &smtpSession{
 		service: s.service,
 		srcip:   hostip,
-	}, nil
+	}
+	domain := state.Hostname
+	result, err := sess.checkSPF(domain, domain)
+	if err == nil {
+		sess.spfResult = result
+		sess.spfIsHelo = true
+	}
+	return sess, nil
 }
 
 type smtpSession struct {
 	service    *service
 	srcip      net.IP
+	helo       string
 	from       string
 	spfResult  string
+	spfIsHelo  bool
 	rcptList   string
 	org        bool
 	dkimResult string
@@ -128,6 +137,26 @@ const (
 	spfResultNone    = "none"
 )
 
+func (s *smtpSession) checkSPF(domain, from string) (string, error) {
+	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
+	switch result {
+	case spf.Pass:
+		return spfResultPass, nil
+	case spf.Neutral:
+		return spfResultNeutral, nil
+	case spf.None:
+		return spfResultNone, nil
+	case spf.Fail, spf.SoftFail:
+		return "", errSPFFail
+	case spf.TempError:
+		return "", errSPFTemp
+	case spf.PermError:
+		return "", errSPFPerm
+	default:
+		return spfResultNone, nil
+	}
+}
+
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	addr, err := mail.ParseAddress(from)
 	if err != nil {
@@ -138,24 +167,14 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		return errSMTPFromAddr
 	}
 	domain := addrParts[1]
-	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
-	spfResult := spfResultNone
-	switch result {
-	case spf.Pass:
-		spfResult = spfResultPass
-	case spf.Neutral:
-		spfResult = spfResultNeutral
-	case spf.None:
-		spfResult = spfResultNone
-	case spf.Fail, spf.SoftFail:
-		return errSPFFail
-	case spf.TempError:
-		return errSPFTemp
-	case spf.PermError:
-		return errSPFPerm
+	if !s.spfIsHelo {
+		result, err := s.checkSPF(domain, from)
+		if err != nil {
+			return err
+		}
+		s.spfResult = result
 	}
 	s.from = from
-	s.spfResult = spfResult
 	return nil
 }
 
@@ -309,6 +328,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 func (s *smtpSession) Reset() {
 	s.from = ""
 	s.spfResult = ""
+	s.spfIsHelo = false
 	s.rcptList = ""
 	s.org = false
 	s.dkimResult = ""
