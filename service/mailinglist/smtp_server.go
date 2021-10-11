@@ -106,12 +106,11 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 	if hostip == nil {
 		return nil, errSMTPConn
 	}
-	sess := &smtpSession{
+	return &smtpSession{
 		service: s.service,
 		srcip:   hostip,
-	}
-	sess.helo = state.Hostname
-	return sess, nil
+		helo:    state.Hostname,
+	}, nil
 }
 
 type smtpSession struct {
@@ -160,7 +159,13 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	if len(addrParts) != 2 {
 		return errSMTPFromAddr
 	}
+	if localPart := addrParts[0]; localPart == "" {
+		return errSMTPFromAddr
+	}
 	domain := addrParts[1]
+	if domain == "" {
+		return errSMTPFromAddr
+	}
 	result, err := s.checkSPF(domain, from)
 	if err != nil {
 		return err
