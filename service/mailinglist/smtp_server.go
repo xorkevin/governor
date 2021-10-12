@@ -6,10 +6,11 @@ import (
 	"errors"
 	"io"
 	"net"
-	"net/mail"
+	gomail "net/mail"
 	"strings"
 
 	"blitiri.com.ar/go/spf"
+	"github.com/emersion/go-msgauth/dkim"
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/gate"
@@ -87,6 +88,16 @@ var (
 		EnhancedCode: smtp.EnhancedCode{5, 5, 2},
 		Message:      "Invalid spf dns record",
 	}
+	errDKIMFail = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 7},
+		Message:      "Failed DKIM verification",
+	}
+	errMailBody = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 7},
+		Message:      "Malformed mail body",
+	}
 )
 
 type smtpBackend struct {
@@ -114,14 +125,18 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 }
 
 type smtpSession struct {
-	service    *service
-	srcip      net.IP
-	helo       string
-	from       string
-	fromSPF    string
-	rcptList   string
-	org        bool
-	dkimResult string
+	service          *service
+	srcip            net.IP
+	helo             string
+	from             string
+	fromDomain       string
+	fromSPF          string
+	rcptList         string
+	org              bool
+	headerFrom       string
+	headerFromDomain string
+	dkimResults      []*dkim.Verification
+	dkimAligned      bool
 }
 
 const (
@@ -151,7 +166,7 @@ func (s *smtpSession) checkSPF(domain, from string) (string, error) {
 }
 
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
-	addr, err := mail.ParseAddress(from)
+	addr, err := gomail.ParseAddress(from)
 	if err != nil {
 		return errSMTPFromAddr
 	}
@@ -172,6 +187,7 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	}
 	s.fromSPF = result
 	s.from = from
+	s.fromDomain = domain
 	return nil
 }
 
@@ -192,7 +208,7 @@ func (s *smtpSession) Rcpt(to string) error {
 	if s.rcptList != "" {
 		return errSMTPRcptCount
 	}
-	addr, err := mail.ParseAddress(to)
+	addr, err := gomail.ParseAddress(to)
 	if err != nil {
 		return errSMTPRcptAddr
 	}
@@ -314,20 +330,66 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptList == "" {
 		return errSMTPSeq
 	}
-	b := &bytes.Buffer{}
-	if _, err := io.Copy(b, r); err != nil {
+	b := bytes.Buffer{}
+	if _, err := io.Copy(&b, r); err != nil {
 		return errSMTPBaseExists
 	}
-	// TODO: check message id not sent yet for list, dkim, and dmarc from alignment
+	m, err := gomail.ReadMessage(bytes.NewReader(b.Bytes()))
+	if err != nil {
+		return errMailBody
+	}
+	headerFrom := m.Header.Get("From")
+	if headerFrom == "" {
+		return errMailBody
+	}
+	addr, err := gomail.ParseAddress(headerFrom)
+	if err != nil {
+		return errMailBody
+	}
+	addrParts := strings.Split(addr.Address, "@")
+	if len(addrParts) != 2 {
+		return errMailBody
+	}
+	if localPart := addrParts[0]; localPart == "" {
+		return errMailBody
+	}
+	headerFromDomain := addrParts[1]
+	if headerFromDomain == "" || !strings.HasSuffix(s.fromDomain, headerFromDomain) {
+		return errMailBody
+	}
+	dkimResults := dkim.VerifyWithOptions(bytes.NewReader(b.Bytes()), &dkim.VerifyOptions{
+		LookupTXT: func(domain string) ([]string, error) {
+			return s.service.resolver.LookupTXT(context.Background(), domain)
+		},
+		MaxVerifications: 0, // unlimited
+	})
+	dkimAligned := false
+	for _, i := range dkimResults {
+		if i.Err != nil {
+			return errDKIMFail
+		}
+		if strings.HasSuffix(i.Domain, headerFromDomain) {
+			dkimAligned = true
+		}
+	}
+	s.dkimResults = dkimResults
+	s.dkimAligned = dkimAligned
+	s.headerFrom = headerFrom
+	s.headerFromDomain = headerFromDomain
+	// TODO: check message id not sent yet for list and dmarc alignment policy
 	return nil
 }
 
 func (s *smtpSession) Reset() {
 	s.from = ""
+	s.fromDomain = ""
 	s.fromSPF = ""
 	s.rcptList = ""
 	s.org = false
-	s.dkimResult = ""
+	s.headerFrom = ""
+	s.headerFromDomain = ""
+	s.dkimResults = nil
+	s.dkimAligned = false
 }
 
 func (s *smtpSession) Logout() error {
