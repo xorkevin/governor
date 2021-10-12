@@ -326,6 +326,10 @@ func (s *smtpSession) Rcpt(to string) error {
 	return nil
 }
 
+func (s *smtpSession) isAligned(a, b string) bool {
+	return strings.HasSuffix(a, b) || strings.HasSuffix(b, a)
+}
+
 func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptList == "" {
 		return errSMTPSeq
@@ -334,9 +338,13 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if _, err := io.Copy(&b, r); err != nil {
 		return errSMTPBaseExists
 	}
-	m, err := gomail.ReadMessage(bytes.NewReader(b.Bytes()))
+	br := bytes.NewReader(b.Bytes())
+	m, err := gomail.ReadMessage(br)
 	if err != nil {
 		return errMailBody
+	}
+	if _, err := br.Seek(0, 0); err != nil {
+		return errSMTPBaseExists
 	}
 	headerFrom := m.Header.Get("From")
 	if headerFrom == "" {
@@ -354,21 +362,27 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errMailBody
 	}
 	headerFromDomain := addrParts[1]
-	if headerFromDomain == "" || !strings.HasSuffix(s.fromDomain, headerFromDomain) {
+	if headerFromDomain == "" || !s.isAligned(s.fromDomain, headerFromDomain) {
 		return errMailBody
 	}
-	dkimResults := dkim.VerifyWithOptions(bytes.NewReader(b.Bytes()), &dkim.VerifyOptions{
+	dkimResults, err := dkim.VerifyWithOptions(br, &dkim.VerifyOptions{
 		LookupTXT: func(domain string) ([]string, error) {
 			return s.service.resolver.LookupTXT(context.Background(), domain)
 		},
 		MaxVerifications: 0, // unlimited
 	})
+	if err != nil {
+		return errDKIMFail
+	}
+	if _, err := br.Seek(0, 0); err != nil {
+		return errSMTPBaseExists
+	}
 	dkimAligned := false
 	for _, i := range dkimResults {
 		if i.Err != nil {
 			return errDKIMFail
 		}
-		if strings.HasSuffix(i.Domain, headerFromDomain) {
+		if s.isAligned(i.Domain, headerFromDomain) {
 			dkimAligned = true
 		}
 	}
