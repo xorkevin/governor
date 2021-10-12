@@ -98,6 +98,16 @@ var (
 		EnhancedCode: smtp.EnhancedCode{5, 7, 7},
 		Message:      "Malformed mail body",
 	}
+	errSPFAlignment = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 1},
+		Message:      "Failed SPF from header alignment",
+	}
+	errDKIMAlignment = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 1},
+		Message:      "Failed DKIM from header alignment",
+	}
 )
 
 type smtpBackend struct {
@@ -348,7 +358,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 	headerFrom := m.Header.Get("From")
 	if headerFrom == "" {
-		return errMailBody
+		return errSPFAlignment
 	}
 	addr, err := gomail.ParseAddress(headerFrom)
 	if err != nil {
@@ -362,8 +372,11 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errMailBody
 	}
 	headerFromDomain := addrParts[1]
-	if headerFromDomain == "" || !s.isAligned(s.fromDomain, headerFromDomain) {
+	if headerFromDomain == "" {
 		return errMailBody
+	}
+	if !s.isAligned(s.fromDomain, headerFromDomain) {
+		return errSPFAlignment
 	}
 	dkimResults, err := dkim.VerifyWithOptions(br, &dkim.VerifyOptions{
 		LookupTXT: func(domain string) ([]string, error) {
