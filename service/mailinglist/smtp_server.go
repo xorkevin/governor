@@ -353,7 +353,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if err != nil {
 		return errMailBody
 	}
-	if _, err := br.Seek(0, 0); err != nil {
+	if _, err := br.Seek(0, io.SeekStart); err != nil {
 		return errSMTPBaseExists
 	}
 	headerFrom := m.Header.Get("From")
@@ -387,7 +387,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if err != nil {
 		return errDKIMFail
 	}
-	if _, err := br.Seek(0, 0); err != nil {
+	if _, err := br.Seek(0, io.SeekStart); err != nil {
 		return errSMTPBaseExists
 	}
 	dkimAligned := false
