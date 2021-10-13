@@ -6,6 +6,7 @@ require (
 	blitiri.com.ar/go/spf v1.2.0
 	github.com/boombuler/barcode v1.0.1
 	github.com/emersion/go-message v0.15.0
+	github.com/emersion/go-msgauth v0.6.5
 	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
 	github.com/emersion/go-smtp v0.15.0
 	github.com/go-chi/chi/v5 v5.0.3
@@ -34,7 +35,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
-	github.com/emersion/go-msgauth v0.6.5 // indirect
 	github.com/emersion/go-textwrapper v0.0.0-20200911093747-65d896831594 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
