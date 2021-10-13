@@ -36,6 +36,7 @@ type (
 		logger       governor.Logger
 		resolver     dns.Resolver
 		port         string
+		authdomain   string
 		usrdomain    string
 		orgdomain    string
 		maxmsgsize   int
@@ -89,8 +90,9 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	setCtxMailingList(inj, s)
 
 	r.SetDefault("port", "2525")
-	r.SetDefault("usrdomain", "localhost")
-	r.SetDefault("orgdomain", "localhost")
+	r.SetDefault("authdomain", "lists.mail.localhost")
+	r.SetDefault("usrdomain", "lists.mail.localhost")
+	r.SetDefault("orgdomain", "org.lists.mail.localhost")
 	r.SetDefault("maxmsgsize", "2M")
 	r.SetDefault("readtimeout", "5s")
 	r.SetDefault("writetimeout", "5s")
@@ -103,6 +105,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	s.port = r.GetStr("port")
+	s.authdomain = r.GetStr("authdomain")
 	s.usrdomain = r.GetStr("usrdomain")
 	s.orgdomain = r.GetStr("orgdomain")
 	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
@@ -123,6 +126,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	l.Info("Initialize mailing list", map[string]string{
 		"port":               s.port,
+		"authdomain":         r.GetStr("authdomain"),
 		"usrdomain":          r.GetStr("usrdomain"),
 		"orgdomain":          r.GetStr("orgdomain"),
 		"maxmsgsize (bytes)": r.GetStr("maxmsgsize"),

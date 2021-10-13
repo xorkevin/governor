@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"blitiri.com.ar/go/spf"
+	"github.com/emersion/go-message"
+	"github.com/emersion/go-msgauth/authres"
 	"github.com/emersion/go-msgauth/dkim"
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor/service/db"
@@ -140,38 +142,32 @@ type smtpSession struct {
 	helo             string
 	from             string
 	fromDomain       string
-	fromSPF          string
+	fromSPF          authres.ResultValue
 	rcptList         string
 	org              bool
 	headerFrom       string
 	headerFromDomain string
-	dkimResults      []*dkim.Verification
-	dkimAligned      bool
 }
 
-const (
-	spfResultPass    = "pass"
-	spfResultNeutral = "neutral"
-	spfResultNone    = "none"
-)
-
-func (s *smtpSession) checkSPF(domain, from string) (string, error) {
+func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error) {
 	result, _ := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
 	switch result {
 	case spf.Pass:
-		return spfResultPass, nil
+		return authres.ResultPass, nil
 	case spf.Neutral:
-		return spfResultNeutral, nil
+		return authres.ResultNeutral, nil
 	case spf.None:
-		return spfResultNone, nil
-	case spf.Fail, spf.SoftFail:
-		return "", errSPFFail
+		return authres.ResultNone, nil
+	case spf.Fail:
+		return authres.ResultFail, errSPFFail
+	case spf.SoftFail:
+		return authres.ResultSoftFail, errSPFFail
 	case spf.TempError:
-		return "", errSPFTemp
+		return authres.ResultTempError, errSPFTemp
 	case spf.PermError:
-		return "", errSPFPerm
+		return authres.ResultPermError, errSPFPerm
 	default:
-		return spfResultNone, nil
+		return authres.ResultNone, nil
 	}
 }
 
@@ -336,25 +332,36 @@ func (s *smtpSession) Rcpt(to string) error {
 	return nil
 }
 
+const (
+	headerAuthenticationResults = "Authentication-Results"
+)
+
 func (s *smtpSession) isAligned(a, b string) bool {
 	return strings.HasSuffix(a, b) || strings.HasSuffix(b, a)
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptList == "" {
 		return errSMTPSeq
 	}
+
 	b := bytes.Buffer{}
 	if _, err := io.Copy(&b, r); err != nil {
 		return errSMTPBaseExists
 	}
-	br := bytes.NewReader(b.Bytes())
-	m, err := gomail.ReadMessage(br)
+	m, err := message.Read(bytes.NewReader(b.Bytes()))
 	if err != nil {
 		return errMailBody
 	}
-	if _, err := br.Seek(0, io.SeekStart); err != nil {
-		return errSMTPBaseExists
+	if m.Header.FieldsByKey("From").Len() != 1 {
+		return errSPFAlignment
 	}
 	headerFrom := m.Header.Get("From")
 	if headerFrom == "" {
@@ -378,29 +385,48 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if !s.isAligned(s.fromDomain, headerFromDomain) {
 		return errSPFAlignment
 	}
-	dkimResults, err := dkim.VerifyWithOptions(br, &dkim.VerifyOptions{
+	dkimResults, dkimErr := dkim.VerifyWithOptions(bytes.NewReader(b.Bytes()), &dkim.VerifyOptions{
 		LookupTXT: func(domain string) ([]string, error) {
 			return s.service.resolver.LookupTXT(context.Background(), domain)
 		},
 		MaxVerifications: 0, // unlimited
 	})
-	if err != nil {
-		return errDKIMFail
+	if dkimErr != nil {
+		dkimResults = nil
 	}
-	if _, err := br.Seek(0, io.SeekStart); err != nil {
-		return errSMTPBaseExists
+
+	authResults := make([]authres.Result, 0, max(1+len(dkimResults), 2))
+	authResults = append(authResults, &authres.SPFResult{
+		Value: s.fromSPF,
+		From:  s.from,
+	})
+	if dkimErr != nil {
+		authResults = append(authResults, &authres.DKIMResult{
+			Value:  authres.ResultNeutral,
+			Reason: "failed processing dkim signature",
+		})
+	} else if len(dkimResults) == 0 {
+		authResults = append(authResults, &authres.DKIMResult{
+			Value: authres.ResultNone,
+		})
 	}
-	dkimAligned := false
 	for _, i := range dkimResults {
+		var res authres.ResultValue = authres.ResultPass
 		if i.Err != nil {
-			return errDKIMFail
+			if dkim.IsTempFail(i.Err) {
+				res = authres.ResultTempError
+			} else if dkim.IsPermFail(i.Err) {
+				res = authres.ResultPermError
+			} else {
+				res = authres.ResultFail
+			}
 		}
-		if s.isAligned(i.Domain, headerFromDomain) {
-			dkimAligned = true
-		}
+		authResults = append(authResults, &authres.DKIMResult{
+			Value: res,
+		})
 	}
-	s.dkimResults = dkimResults
-	s.dkimAligned = dkimAligned
+	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
+
 	s.headerFrom = headerFrom
 	s.headerFromDomain = headerFromDomain
 	// TODO: check message id not sent yet for list and dmarc alignment policy
@@ -415,8 +441,6 @@ func (s *smtpSession) Reset() {
 	s.org = false
 	s.headerFrom = ""
 	s.headerFromDomain = ""
-	s.dkimResults = nil
-	s.dkimAligned = false
 }
 
 func (s *smtpSession) Logout() error {

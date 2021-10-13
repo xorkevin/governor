@@ -73,6 +73,7 @@ mail:
   mailkey: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/mailkey
 mailinglist:
   port: 2525
+  authdomain: lists.governor.dev.localhost
   usrdomain: lists.governor.dev.localhost
   orgdomain: org.lists.governor.dev.localhost
   maxmsgsize: 2M
