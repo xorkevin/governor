@@ -147,6 +147,7 @@ type smtpSession struct {
 	org              bool
 	headerFrom       string
 	headerFromDomain string
+	alignedDKIM      *dkim.Verification
 }
 
 func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error) {
@@ -410,6 +411,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 			Value: authres.ResultNone,
 		})
 	}
+	var alignedDKIM *dkim.Verification
 	for _, i := range dkimResults {
 		var res authres.ResultValue = authres.ResultPass
 		if i.Err != nil {
@@ -420,15 +422,20 @@ func (s *smtpSession) Data(r io.Reader) error {
 			} else {
 				res = authres.ResultFail
 			}
+		} else if s.isAligned(i.Domain, headerFromDomain) {
+			alignedDKIM = i
 		}
 		authResults = append(authResults, &authres.DKIMResult{
-			Value: res,
+			Value:      res,
+			Domain:     i.Domain,
+			Identifier: i.Identifier,
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
 
 	s.headerFrom = headerFrom
 	s.headerFromDomain = headerFromDomain
+	s.alignedDKIM = alignedDKIM
 	// TODO: check message id not sent yet for list and dmarc alignment policy
 	return nil
 }
@@ -441,6 +448,7 @@ func (s *smtpSession) Reset() {
 	s.org = false
 	s.headerFrom = ""
 	s.headerFromDomain = ""
+	s.alignedDKIM = nil
 }
 
 func (s *smtpSession) Logout() error {
