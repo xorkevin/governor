@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	gomail "net/mail"
@@ -13,6 +14,7 @@ import (
 	"github.com/emersion/go-message"
 	"github.com/emersion/go-msgauth/authres"
 	"github.com/emersion/go-msgauth/dkim"
+	"github.com/emersion/go-msgauth/dmarc"
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/gate"
@@ -110,6 +112,11 @@ var (
 		EnhancedCode: smtp.EnhancedCode{5, 7, 1},
 		Message:      "Failed DKIM from header alignment",
 	}
+	errDMARCPolicy = &smtp.SMTPError{
+		Code:         550,
+		EnhancedCode: smtp.EnhancedCode{5, 7, 1},
+		Message:      "Rejecting based on DMARC policy",
+	}
 )
 
 type smtpBackend struct {
@@ -147,7 +154,6 @@ type smtpSession struct {
 	org              bool
 	headerFrom       string
 	headerFromDomain string
-	alignedDKIM      *dkim.Verification
 }
 
 func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error) {
@@ -341,13 +347,6 @@ func (s *smtpSession) isAligned(a, b string) bool {
 	return strings.HasSuffix(a, b) || strings.HasSuffix(b, a)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptList == "" {
 		return errSMTPSeq
@@ -386,6 +385,20 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if !s.isAligned(s.fromDomain, headerFromDomain) {
 		return errSPFAlignment
 	}
+
+	dmarcRec, dmarcErr := dmarc.LookupWithOptions(headerFromDomain, &dmarc.LookupOptions{
+		LookupTXT: func(domain string) ([]string, error) {
+			return s.service.resolver.LookupTXT(context.Background(), domain)
+		},
+	})
+
+	dmarcPassSPF := s.fromSPF == authres.ResultPass
+	if dmarcErr == nil && dmarcRec.SPFAlignment == dmarc.AlignmentStrict {
+		if s.fromDomain != headerFromDomain {
+			dmarcPassSPF = false
+		}
+	}
+
 	dkimResults, dkimErr := dkim.VerifyWithOptions(bytes.NewReader(b.Bytes()), &dkim.VerifyOptions{
 		LookupTXT: func(domain string) ([]string, error) {
 			return s.service.resolver.LookupTXT(context.Background(), domain)
@@ -396,10 +409,11 @@ func (s *smtpSession) Data(r io.Reader) error {
 		dkimResults = nil
 	}
 
-	authResults := make([]authres.Result, 0, max(1+len(dkimResults), 2))
+	authResults := make([]authres.Result, 0, 3+len(dkimResults))
 	authResults = append(authResults, &authres.SPFResult{
-		Value: s.fromSPF,
-		From:  s.from,
+		Value:  s.fromSPF,
+		Reason: fmt.Sprintf("%s designates %s as a permitted sender", s.from, s.srcip.String()),
+		From:   s.from,
 	})
 	if dkimErr != nil {
 		authResults = append(authResults, &authres.DKIMResult{
@@ -410,6 +424,10 @@ func (s *smtpSession) Data(r io.Reader) error {
 		authResults = append(authResults, &authres.DKIMResult{
 			Value: authres.ResultNone,
 		})
+	}
+	strictDKIMAlignment := false
+	if dmarcErr == nil {
+		strictDKIMAlignment = dmarcRec.DKIMAlignment == dmarc.AlignmentStrict
 	}
 	var alignedDKIM *dkim.Verification
 	for _, i := range dkimResults {
@@ -422,8 +440,16 @@ func (s *smtpSession) Data(r io.Reader) error {
 			} else {
 				res = authres.ResultFail
 			}
-		} else if s.isAligned(i.Domain, headerFromDomain) {
-			alignedDKIM = i
+		} else {
+			if strictDKIMAlignment {
+				if i.Domain == headerFromDomain {
+					alignedDKIM = i
+				}
+			} else {
+				if s.isAligned(i.Domain, headerFromDomain) {
+					alignedDKIM = i
+				}
+			}
 		}
 		authResults = append(authResults, &authres.DKIMResult{
 			Value:      res,
@@ -431,11 +457,35 @@ func (s *smtpSession) Data(r io.Reader) error {
 			Identifier: i.Identifier,
 		})
 	}
+	if dmarcErr != nil {
+		var res authres.ResultValue = authres.ResultPermError
+		if errors.Is(dmarcErr, dmarc.ErrNoPolicy) {
+			res = authres.ResultNone
+		} else if dmarc.IsTempFail(dmarcErr) {
+			res = authres.ResultTempError
+		}
+		authResults = append(authResults, &authres.DMARCResult{
+			Value: res,
+			From:  headerFromDomain,
+		})
+	} else {
+		var res authres.ResultValue = authres.ResultPass
+		if !dmarcPassSPF && alignedDKIM == nil {
+			if dmarcRec.Policy != dmarc.PolicyNone {
+				return errDMARCPolicy
+			}
+			res = authres.ResultFail
+		}
+		authResults = append(authResults, &authres.DMARCResult{
+			Value:  res,
+			Reason: fmt.Sprintf("p=%s", dmarcRec.Policy),
+			From:   headerFromDomain,
+		})
+	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
 
 	s.headerFrom = headerFrom
 	s.headerFromDomain = headerFromDomain
-	s.alignedDKIM = alignedDKIM
 	// TODO: check message id not sent yet for list and dmarc alignment policy
 	return nil
 }
@@ -448,7 +498,6 @@ func (s *smtpSession) Reset() {
 	s.org = false
 	s.headerFrom = ""
 	s.headerFromDomain = ""
-	s.alignedDKIM = nil
 }
 
 func (s *smtpSession) Logout() error {
