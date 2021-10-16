@@ -26,8 +26,8 @@ type (
 		UpdateList(m *ListModel) error
 		DeleteList(m *ListModel) error
 		DeleteCreatorLists(creatorid string) error
-		GetMember(creatorid, listname, userid string) (*MemberModel, error)
-		GetListMembers(creatorid, listname string, limit, offset int) ([]MemberModel, error)
+		GetMember(listid, userid string) (*MemberModel, error)
+		GetListMembers(listid string, limit, offset int) ([]MemberModel, error)
 		GetUserLists(userid string, limit, offset int) ([]MemberModel, error)
 		GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
@@ -233,12 +233,12 @@ func (r *repo) DeleteCreatorLists(creatorid string) error {
 	return nil
 }
 
-func (r *repo) GetMember(creatorid, listname, userid string) (*MemberModel, error) {
+func (r *repo) GetMember(listid, userid string) (*MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := memberModelGetMemberModelEqListIDEqUserid(d, toListID(creatorid, listname), userid)
+	m, code, err := memberModelGetMemberModelEqListIDEqUserid(d, listid, userid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "User is not list member")
@@ -248,12 +248,12 @@ func (r *repo) GetMember(creatorid, listname, userid string) (*MemberModel, erro
 	return m, nil
 }
 
-func (r *repo) GetListMembers(creatorid, listname string, limit, offset int) ([]MemberModel, error) {
+func (r *repo) GetListMembers(listid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, toListID(creatorid, listname), true, limit, offset)
+	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, listid, true, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get list members")
 	}

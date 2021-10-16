@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net"
-	gomail "net/mail"
+	"net/url"
 	"strings"
 	"time"
 
 	"blitiri.com.ar/go/spf"
 	"github.com/emersion/go-message"
+	emmail "github.com/emersion/go-message/mail"
 	"github.com/emersion/go-msgauth/authres"
 	"github.com/emersion/go-msgauth/dkim"
 	"github.com/emersion/go-msgauth/dmarc"
@@ -20,6 +21,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/util/uid"
 )
 
 var (
@@ -145,17 +147,17 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 }
 
 type smtpSession struct {
-	service          *service
-	srcip            net.IP
-	helo             string
-	from             string
-	fromDomain       string
-	fromSPF          authres.ResultValue
-	rcptTo           string
-	rcptList         string
-	org              bool
-	headerFrom       string
-	headerFromDomain string
+	service    *service
+	srcip      net.IP
+	helo       string
+	id         string
+	from       string
+	fromDomain string
+	fromSPF    authres.ResultValue
+	fromUserid string
+	rcptTo     string
+	rcptList   string
+	org        bool
 }
 
 func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error) {
@@ -180,8 +182,12 @@ func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error)
 	}
 }
 
+const (
+	smtpIDRandSize = 16
+)
+
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
-	addr, err := gomail.ParseAddress(from)
+	addr, err := emmail.ParseAddress(from)
 	if err != nil {
 		return errSMTPFromAddr
 	}
@@ -200,9 +206,14 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	if err != nil {
 		return err
 	}
-	s.fromSPF = result
+	u, err := uid.NewSnowflake(smtpIDRandSize)
+	if err != nil {
+		return errSMTPBase
+	}
+	s.id = u.Base32()
 	s.from = from
 	s.fromDomain = domain
+	s.fromSPF = result
 	return nil
 }
 
@@ -223,7 +234,7 @@ func (s *smtpSession) Rcpt(to string) error {
 	if s.rcptTo != "" {
 		return errSMTPRcptCount
 	}
-	addr, err := gomail.ParseAddress(to)
+	addr, err := emmail.ParseAddress(to)
 	if err != nil {
 		return errSMTPRcptAddr
 	}
@@ -303,7 +314,7 @@ func (s *smtpSession) Rcpt(to string) error {
 		} else if !ok {
 			return errSMTPAuthSend
 		}
-		if _, err := s.service.lists.GetMember(listCreatorID, listname, sender.Userid); err != nil {
+		if _, err := s.service.lists.GetMember(list.ListID, sender.Userid); err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
 				return errSMTPAuthSend
 			}
@@ -319,30 +330,16 @@ func (s *smtpSession) Rcpt(to string) error {
 		return errSMTPMailboxConfig
 	}
 
+	s.fromUserid = sender.Userid
 	s.rcptTo = to
 	s.rcptList = list.ListID
 	s.org = isOrg
-
-	members, err := s.service.lists.GetListMembers(listCreatorID, listname, mailingListMemberAmountCap, 0)
-	if err != nil {
-		return errSMTPBaseExists
-	}
-	userids := make([]string, 0, len(members))
-	for _, i := range members {
-		userids = append(userids, i.Userid)
-	}
-	recipients, err := s.service.users.GetInfoBulk(userids)
-	if err != nil {
-		return errSMTPBaseExists
-	}
-	rcpts := make([]string, 0, len(recipients.Users))
-	for _, i := range recipients.Users {
-		rcpts = append(rcpts, i.Email)
-	}
 	return nil
 }
 
 const (
+	headerMessageID             = "Message-ID"
+	headerFrom                  = "From"
 	headerAuthenticationResults = "Authentication-Results"
 	headerReceived              = "Received"
 	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
@@ -365,33 +362,42 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if err != nil {
 		return errMailBody
 	}
-	if m.Header.FieldsByKey("From").Len() != 1 {
-		return errSPFAlignment
+	headers := emmail.Header{
+		Header: m.Header,
 	}
-	headerFrom := m.Header.Get("From")
-	if headerFrom == "" {
-		return errSPFAlignment
+
+	msgid, err := headers.MessageID()
+	if err != nil || msgid == "" {
+		return errMailBody
 	}
-	addr, err := gomail.ParseAddress(headerFrom)
+	contentType, _, err := headers.ContentType()
 	if err != nil {
 		return errMailBody
 	}
-	addrParts := strings.Split(addr.Address, "@")
-	if len(addrParts) != 2 {
+
+	fromAddrs, err := headers.AddressList(headerFrom)
+	if err != nil || len(fromAddrs) == 0 {
 		return errMailBody
 	}
-	if localPart := addrParts[0]; localPart == "" {
+	if len(fromAddrs) != 1 {
+		return errSPFAlignment
+	}
+	fromAddrParts := strings.Split(fromAddrs[0].Address, "@")
+	if len(fromAddrParts) != 2 {
 		return errMailBody
 	}
-	headerFromDomain := addrParts[1]
-	if headerFromDomain == "" {
+	if localPart := fromAddrParts[0]; localPart == "" {
 		return errMailBody
 	}
-	if !s.isAligned(s.fromDomain, headerFromDomain) {
+	fromAddrDomain := fromAddrParts[1]
+	if fromAddrDomain == "" {
+		return errMailBody
+	}
+	if !s.isAligned(s.fromDomain, fromAddrDomain) {
 		return errSPFAlignment
 	}
 
-	dmarcRec, dmarcErr := dmarc.LookupWithOptions(headerFromDomain, &dmarc.LookupOptions{
+	dmarcRec, dmarcErr := dmarc.LookupWithOptions(fromAddrDomain, &dmarc.LookupOptions{
 		LookupTXT: func(domain string) ([]string, error) {
 			return s.service.resolver.LookupTXT(context.Background(), domain)
 		},
@@ -399,7 +405,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 	dmarcPassSPF := s.fromSPF == authres.ResultPass
 	if dmarcErr == nil && dmarcRec.SPFAlignment == dmarc.AlignmentStrict {
-		if s.fromDomain != headerFromDomain {
+		if s.fromDomain != fromAddrDomain {
 			dmarcPassSPF = false
 		}
 	}
@@ -447,11 +453,11 @@ func (s *smtpSession) Data(r io.Reader) error {
 			}
 		} else {
 			if strictDKIMAlignment {
-				if i.Domain == headerFromDomain {
+				if i.Domain == fromAddrDomain {
 					alignedDKIM = i
 				}
 			} else {
-				if s.isAligned(i.Domain, headerFromDomain) {
+				if s.isAligned(i.Domain, fromAddrDomain) {
 					alignedDKIM = i
 				}
 			}
@@ -471,7 +477,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 		authResults = append(authResults, &authres.DMARCResult{
 			Value: res,
-			From:  headerFromDomain,
+			From:  fromAddrDomain,
 		})
 	} else {
 		var res authres.ResultValue = authres.ResultPass
@@ -484,27 +490,66 @@ func (s *smtpSession) Data(r io.Reader) error {
 		authResults = append(authResults, &authres.DMARCResult{
 			Value:  res,
 			Reason: fmt.Sprintf("p=%s", dmarcRec.Policy),
-			From:   headerFromDomain,
+			From:   fromAddrDomain,
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
-	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", "", s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
+	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", s.id, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
 
-	s.headerFrom = headerFrom
-	s.headerFromDomain = headerFromDomain
-	// TODO: check message id not sent yet for list and dmarc alignment policy
+	mb := bytes.Buffer{}
+	if err := m.WriteTo(&mb); err != nil {
+		return errSMTPBaseExists
+	}
+
+	if _, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
+		if !errors.Is(err, &db.ErrNotFound{}) {
+			return errSMTPBaseExists
+		}
+	} else {
+		// mail already exists for this list
+		return nil
+	}
+
+	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(url.QueryEscape(msgid), contentType, int64(mb.Len()), nil, &mb); err != nil {
+		return errSMTPBaseExists
+	}
+	if err := s.service.lists.InsertMsg(s.service.lists.NewMsg(s.rcptList, msgid, s.fromUserid)); err != nil {
+		if errors.Is(err, db.ErrUnique{}) {
+			// message has already been sent for this list
+			return nil
+		}
+		return errSMTPBaseExists
+	}
+
+	members, err := s.service.lists.GetListMembers(s.rcptList, mailingListMemberAmountCap, 0)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+	userids := make([]string, 0, len(members))
+	for _, i := range members {
+		userids = append(userids, i.Userid)
+	}
+	recipients, err := s.service.users.GetInfoBulk(userids)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+	rcpts := make([]string, 0, len(recipients.Users))
+	for _, i := range recipients.Users {
+		rcpts = append(rcpts, i.Email)
+	}
+	// TODO: send message to recipients and track threads
 	return nil
 }
 
 func (s *smtpSession) Reset() {
+	s.id = ""
 	s.from = ""
 	s.fromDomain = ""
 	s.fromSPF = ""
+	s.fromUserid = ""
 	s.rcptTo = ""
 	s.rcptList = ""
 	s.org = false
-	s.headerFrom = ""
-	s.headerFromDomain = ""
 }
 
 func (s *smtpSession) Logout() error {
