@@ -9,6 +9,7 @@ import (
 	"net"
 	gomail "net/mail"
 	"strings"
+	"time"
 
 	"blitiri.com.ar/go/spf"
 	"github.com/emersion/go-message"
@@ -150,6 +151,7 @@ type smtpSession struct {
 	from             string
 	fromDomain       string
 	fromSPF          authres.ResultValue
+	rcptTo           string
 	rcptList         string
 	org              bool
 	headerFrom       string
@@ -218,7 +220,7 @@ func (s *smtpSession) Rcpt(to string) error {
 	if s.from == "" {
 		return errSMTPSeq
 	}
-	if s.rcptList != "" {
+	if s.rcptTo != "" {
 		return errSMTPRcptCount
 	}
 	addr, err := gomail.ParseAddress(to)
@@ -317,6 +319,7 @@ func (s *smtpSession) Rcpt(to string) error {
 		return errSMTPMailboxConfig
 	}
 
+	s.rcptTo = to
 	s.rcptList = list.ListID
 	s.org = isOrg
 
@@ -341,6 +344,8 @@ func (s *smtpSession) Rcpt(to string) error {
 
 const (
 	headerAuthenticationResults = "Authentication-Results"
+	headerReceived              = "Received"
+	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
 )
 
 func (s *smtpSession) isAligned(a, b string) bool {
@@ -348,7 +353,7 @@ func (s *smtpSession) isAligned(a, b string) bool {
 }
 
 func (s *smtpSession) Data(r io.Reader) error {
-	if s.from == "" || s.rcptList == "" {
+	if s.from == "" || s.rcptTo == "" {
 		return errSMTPSeq
 	}
 
@@ -483,6 +488,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
+	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", "", s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
 
 	s.headerFrom = headerFrom
 	s.headerFromDomain = headerFromDomain
@@ -494,6 +500,7 @@ func (s *smtpSession) Reset() {
 	s.from = ""
 	s.fromDomain = ""
 	s.fromSPF = ""
+	s.rcptTo = ""
 	s.rcptList = ""
 	s.org = false
 	s.headerFrom = ""
