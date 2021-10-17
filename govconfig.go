@@ -43,6 +43,7 @@ func (v Version) String() string {
 type (
 	// secretsClient is a client that reads secrets
 	secretsClient interface {
+		Info() string
 		Init() error
 		GetSecret(kvpath string) (map[string]interface{}, int64, error)
 	}
@@ -238,6 +239,7 @@ func (c *Config) init() error {
 type (
 	// secretsFileSource is a secretsClient reading from a static file
 	secretsFileSource struct {
+		path string
 		data secretsFileData
 	}
 
@@ -257,8 +259,13 @@ func newSecretsFileSource(s string) (secretsClient, error) {
 		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Invalid secrets file source file")
 	}
 	return &secretsFileSource{
+		path: s,
 		data: data,
 	}, nil
+}
+
+func (s *secretsFileSource) Info() string {
+	return fmt.Sprintf("file source; path: %s", s.path)
 }
 
 func (s *secretsFileSource) Init() error {
@@ -285,6 +292,7 @@ type (
 
 	// secretsVaultSource is a secretsClient reading from vault
 	secretsVaultSource struct {
+		address     string
 		vault       *vaultapi.Client
 		config      secretsVaultSourceConfig
 		vaultExpire int64
@@ -304,10 +312,15 @@ func NewSecretsVaultSource(config secretsVaultSourceConfig) (secretsClient, erro
 		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
 	}
 	return &secretsVaultSource{
-		vault:  vault,
-		config: config,
-		mu:     &sync.RWMutex{},
+		address: config.Addr,
+		vault:   vault,
+		config:  config,
+		mu:      &sync.RWMutex{},
 	}, nil
+}
+
+func (s *secretsVaultSource) Info() string {
+	return fmt.Sprintf("vault source; addr: %s", s.address)
 }
 
 func (s *secretsVaultSource) Init() error {

@@ -256,11 +256,14 @@ func (s *Server) Start() error {
 		MaxHeaderBytes:    maxHeaderSize,
 	}
 	if s.config.showBanner {
-		fmt.Printf("%s\n%s: %s\nhttp server listening on %s\n",
+		fmt.Printf("%s\n%s: %s\nhostname: %s\nhttp server listening on :%s\nsecrets loaded from %s\n",
 			fmt.Sprintf(banner, s.config.version.Num),
 			s.config.appname,
 			s.config.version.String(),
-			":"+s.config.Port)
+			s.config.Hostname,
+			s.config.Port,
+			s.config.vault.Info(),
+		)
 	}
 	go func() {
 		defer cancel()
