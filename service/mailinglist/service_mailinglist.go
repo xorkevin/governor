@@ -305,3 +305,20 @@ func (s *service) GetLatestLists(userid string, before int64, limit int) (*resLi
 	}
 	return s.GetLists(listids)
 }
+
+func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string) error {
+	m, err := s.lists.GetList(creatorid, listname)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+	if err := s.lists.DeleteMsgs(m.ListID, msgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete messages")
+	}
+	return nil
+}
