@@ -15,7 +15,7 @@ const (
 )
 
 func listModelSetup(db *sql.DB) (int, error) {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglists (listid VARCHAR(255) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglists (listid VARCHAR(255) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), sender_policy VARCHAR(255) NOT NULL, member_policy VARCHAR(255) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return 0, err
 	}
@@ -34,7 +34,7 @@ func listModelSetup(db *sql.DB) (int, error) {
 }
 
 func listModelInsert(db *sql.DB, m *ListModel) (int, error) {
-	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, name, description, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.ListID, m.CreatorID, m.Name, m.Description, m.LastUpdated, m.CreationTime)
+	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);", m.ListID, m.CreatorID, m.Name, m.Description, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -54,13 +54,13 @@ func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) (i
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*6)
+	args := make([]interface{}, 0, len(models)*8)
 	for c, m := range models {
-		n := c * 6
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
-		args = append(args, m.ListID, m.CreatorID, m.Name, m.Description, m.LastUpdated, m.CreationTime)
+		n := c * 8
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8))
+		args = append(args, m.ListID, m.CreatorID, m.Name, m.Description, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, name, description, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -76,7 +76,7 @@ func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) (i
 
 func listModelGetListModelEqListID(db *sql.DB, listid string) (*ListModel, int, error) {
 	m := &ListModel{}
-	if err := db.QueryRow("SELECT listid, creatorid, name, description, last_updated, creation_time FROM mailinglists WHERE listid = $1;", listid).Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE listid = $1;", listid).Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -112,7 +112,7 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 		order = "ASC"
 	}
 	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, name, description, last_updated, creation_time FROM mailinglists WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 	}()
 	for rows.Next() {
 		m := ListModel{}
-		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.LastUpdated, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -134,7 +134,7 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 }
 
 func listModelUpdListModelEqListID(db *sql.DB, m *ListModel, listid string) (int, error) {
-	_, err := db.Exec("UPDATE mailinglists SET (listid, creatorid, name, description, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE listid = $7;", m.ListID, m.CreatorID, m.Name, m.Description, m.LastUpdated, m.CreationTime, listid)
+	_, err := db.Exec("UPDATE mailinglists SET (listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8) WHERE listid = $9;", m.ListID, m.CreatorID, m.Name, m.Description, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime, listid)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -164,7 +164,7 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 		order = "ASC"
 	}
 	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, name, description, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := db.Query("SELECT listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 	}()
 	for rows.Next() {
 		m := ListModel{}
-		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.LastUpdated, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -191,7 +191,7 @@ func listModelGetListModelEqCreatorIDLtLastUpdatedOrdLastUpdated(db *sql.DB, cre
 		order = "ASC"
 	}
 	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, name, description, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid, lastupdated)
+	rows, err := db.Query("SELECT listid, creatorid, name, description, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid, lastupdated)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func listModelGetListModelEqCreatorIDLtLastUpdatedOrdLastUpdated(db *sql.DB, cre
 	}()
 	for rows.Next() {
 		m := ListModel{}
-		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.LastUpdated, &m.CreationTime); err != nil {
+		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Name, &m.Description, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

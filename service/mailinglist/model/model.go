@@ -8,7 +8,7 @@ import (
 )
 
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel
-//go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel
+//go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
 //go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel
 
 const (
@@ -24,6 +24,7 @@ type (
 		GetCreatorListsBefore(creatorid string, before int64, limit int) ([]ListModel, error)
 		InsertList(m *ListModel) error
 		UpdateList(m *ListModel) error
+		UpdateListLastUpdated(listid string, t int64) error
 		DeleteList(m *ListModel) error
 		DeleteCreatorLists(creatorid string) error
 		GetMember(listid, userid string) (*MemberModel, error)
@@ -66,6 +67,10 @@ type (
 		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;deleq,listid,userid|arr;deleq,userid"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
+	}
+
+	listLastUpdated struct {
+		LastUpdated int64 `query:"last_updated;updeq,listid"`
 	}
 
 	// MsgModel is the db mailing list message model
@@ -207,6 +212,22 @@ func (r *repo) UpdateList(m *ListModel) error {
 			return governor.ErrWithKind(err, db.ErrUnique{}, "List id must be unique")
 		}
 		return governor.ErrWithMsg(err, "Failed to update list")
+	}
+	return nil
+}
+
+func (r *repo) UpdateListLastUpdated(listid string, t int64) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := memberModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
+		LastUpdated: t,
+	}, listid); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "List id must be unique")
+		}
+		return governor.ErrWithMsg(err, "Failed to update list last updated")
 	}
 	return nil
 }
