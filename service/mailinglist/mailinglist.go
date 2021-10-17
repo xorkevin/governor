@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist/model"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user"
@@ -32,6 +33,7 @@ type (
 		rcvMailDir   objstore.Dir
 		users        user.Users
 		orgs         org.Orgs
+		mailer       mail.Mailer
 		gate         gate.Gate
 		logger       governor.Logger
 		resolver     dns.Resolver
@@ -68,17 +70,19 @@ func NewCtx(inj governor.Injector) Service {
 	users := user.GetCtxUsers(inj)
 	orgs := org.GetCtxOrgs(inj)
 	g := gate.GetCtxGate(inj)
-	return New(lists, obj, users, orgs, g)
+	mailer := mail.GetCtxMailer(inj)
+	return New(lists, obj, users, orgs, mailer, g)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, users user.Users, orgs org.Orgs, g gate.Gate) Service {
+func New(lists model.Repo, obj objstore.Bucket, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
 	return &service{
 		lists:      lists,
 		mailBucket: obj,
 		rcvMailDir: obj.Subdir("rcvmail"),
 		users:      users,
 		orgs:       orgs,
+		mailer:     mailer,
 		gate:       g,
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,

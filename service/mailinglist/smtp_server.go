@@ -501,6 +501,23 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 
+	members, err := s.service.lists.GetListMembers(s.rcptList, mailingListMemberAmountCap, 0)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+	memberUserids := make([]string, 0, len(members))
+	for _, i := range members {
+		memberUserids = append(memberUserids, i.Userid)
+	}
+	recipients, err := s.service.users.GetInfoBulk(memberUserids)
+	if err != nil {
+		return errSMTPBaseExists
+	}
+	rcpts := make([]string, 0, len(recipients.Users))
+	for _, i := range recipients.Users {
+		rcpts = append(rcpts, i.Email)
+	}
+
 	if _, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
 		if !errors.Is(err, &db.ErrNotFound{}) {
 			return errSMTPBaseExists
@@ -510,8 +527,13 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return nil
 	}
 
-	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(url.QueryEscape(msgid), contentType, int64(mb.Len()), nil, &mb); err != nil {
+	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(url.QueryEscape(msgid), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
 		return errSMTPBaseExists
+	}
+	if len(rcpts) > 0 {
+		if err := s.service.mailer.FwdStream("", rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+			return errSMTPBaseExists
+		}
 	}
 	if err := s.service.lists.InsertMsg(s.service.lists.NewMsg(s.rcptList, msgid, s.fromUserid)); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
@@ -520,24 +542,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 		return errSMTPBaseExists
 	}
-
-	members, err := s.service.lists.GetListMembers(s.rcptList, mailingListMemberAmountCap, 0)
-	if err != nil {
-		return errSMTPBaseExists
-	}
-	userids := make([]string, 0, len(members))
-	for _, i := range members {
-		userids = append(userids, i.Userid)
-	}
-	recipients, err := s.service.users.GetInfoBulk(userids)
-	if err != nil {
-		return errSMTPBaseExists
-	}
-	rcpts := make([]string, 0, len(recipients.Users))
-	for _, i := range recipients.Users {
-		rcpts = append(rcpts, i.Email)
-	}
-	// TODO: send message to recipients and track threads
+	// TODO: track threads
 	return nil
 }
 
