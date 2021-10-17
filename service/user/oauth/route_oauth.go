@@ -51,7 +51,7 @@ func (m *router) getAppLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("failed to close app logo", map[string]string{
+			m.s.logger.Error("Failed to close app logo", map[string]string{
 				"actiontype": "getapplogo",
 				"error":      err.Error(),
 			})

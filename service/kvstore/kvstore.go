@@ -242,7 +242,7 @@ func (s *service) handlePing() {
 		}
 		s.hbfailed++
 		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("failed to ping kvstore", map[string]string{
+			s.logger.Warn("Failed to ping kvstore", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "pingkv",
 				"address":    s.addr,
@@ -262,7 +262,7 @@ func (s *service) handlePing() {
 		s.config.InvalidateSecret("auth")
 	}
 	if _, err := s.handleGetClient(); err != nil {
-		s.logger.Error("failed to create kvstore client", map[string]string{
+		s.logger.Error("Failed to create kvstore client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createkvclient",
 		})
@@ -312,14 +312,14 @@ func (s *service) closeClient() {
 		return
 	}
 	if err := s.client.Close(); err != nil {
-		s.logger.Error("failed to close kvstore connection", map[string]string{
+		s.logger.Error("Failed to close kvstore connection", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "closekverr",
 			"address":    s.addr,
 			"dbname":     strconv.Itoa(s.dbname),
 		})
 	} else {
-		s.logger.Info("closed kvstore connection", map[string]string{
+		s.logger.Info("Closed kvstore connection", map[string]string{
 			"actiontype": "closekvok",
 			"address":    s.addr,
 			"dbname":     strconv.Itoa(s.dbname),
@@ -349,7 +349,7 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("failed to stop", nil)
+		l.Warn("Failed to stop", nil)
 	}
 }
 

@@ -55,7 +55,7 @@ func (m *router) getLinkImage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("failed to close link image", map[string]string{
+			m.s.logger.Error("Failed to close link image", map[string]string{
 				"actiontype": "getlinkimage",
 				"error":      err.Error(),
 			})
@@ -170,7 +170,7 @@ func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("failed to close brand image", map[string]string{
+			m.s.logger.Error("Failed to close brand image", map[string]string{
 				"actiontype": "getbrandimage",
 				"error":      err.Error(),
 			})

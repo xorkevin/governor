@@ -178,7 +178,7 @@ func (s *service) handlePing() {
 		}
 		s.hbfailed++
 		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("failed to ping db", map[string]string{
+			s.logger.Warn("Failed to ping db", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "pingdb",
 				"connection": s.connopts,
@@ -198,7 +198,7 @@ func (s *service) handlePing() {
 		s.config.InvalidateSecret("auth")
 	}
 	if _, err := s.handleGetClient(); err != nil {
-		s.logger.Error("failed to create db client", map[string]string{
+		s.logger.Error("Failed to create db client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createdbclient",
 		})
@@ -253,7 +253,7 @@ func (s *service) closeClient() {
 		return
 	}
 	if err := s.client.Close(); err != nil {
-		s.logger.Error("failed to close db connection", map[string]string{
+		s.logger.Error("Failed to close db connection", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "closedberr",
 			"connection": s.connopts,
@@ -290,7 +290,7 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("failed to stop", nil)
+		l.Warn("Failed to stop", nil)
 	}
 }
 

@@ -259,7 +259,7 @@ func (s *service) DeleteLink(creatorid, linkid string) error {
 		return governor.ErrWithMsg(err, "Failed to delete link")
 	}
 	if err := s.kvlinks.Del(linkid); err != nil {
-		s.logger.Error("failed to delete linkid url", map[string]string{
+		s.logger.Error("Failed to delete linkid url", map[string]string{
 			"linkid":     linkid,
 			"error":      err.Error(),
 			"actiontype": "linkcache",

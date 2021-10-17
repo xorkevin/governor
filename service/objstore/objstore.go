@@ -201,7 +201,7 @@ func (s *service) handlePing() {
 		}
 		s.hbfailed++
 		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("failed to ping objstore", map[string]string{
+			s.logger.Warn("Failed to ping objstore", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "pingobj",
 				"address":    s.addr,
@@ -215,7 +215,7 @@ func (s *service) handlePing() {
 		s.config.InvalidateSecret("auth")
 	}
 	if _, err := s.handleGetClient(); err != nil {
-		s.logger.Error("failed to create objstore client", map[string]string{
+		s.logger.Error("Failed to create objstore client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "createobjclient",
 		})
@@ -291,7 +291,7 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("failed to stop", nil)
+		l.Warn("Failed to stop", nil)
 	}
 }
 

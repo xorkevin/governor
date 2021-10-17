@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist/model"
@@ -37,6 +38,7 @@ type (
 		gate         gate.Gate
 		logger       governor.Logger
 		resolver     dns.Resolver
+		server       *smtp.Server
 		port         string
 		authdomain   string
 		usrdomain    string
@@ -128,6 +130,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.writetimeout = t
 	}
 
+	s.server = s.createSMTPServer()
+	go func() {
+		if err := s.server.ListenAndServe(); err != nil {
+			s.logger.Info("Shutting down mailing list SMTP server", map[string]string{
+				"error": err.Error(),
+			})
+		}
+	}()
+
 	l.Info("Initialize mailing list", map[string]string{
 		"port":               s.port,
 		"authdomain":         r.GetStr("authdomain"),
@@ -138,6 +149,21 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"write timeout":      r.GetStr("writetimeout"),
 	})
 	return nil
+}
+
+func (s *service) createSMTPServer() *smtp.Server {
+	be := &smtpBackend{
+		service: s,
+	}
+	server := smtp.NewServer(be)
+	server.Addr = ":" + s.port
+	server.Domain = s.authdomain
+	server.MaxRecipients = 1
+	server.MaxMessageBytes = s.maxmsgsize
+	server.ReadTimeout = s.readtimeout
+	server.WriteTimeout = s.writetimeout
+	server.AuthDisabled = true
+	return server
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -164,6 +190,23 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := s.server.Close(); err != nil {
+			l.Error("Shutdown mailing list SMTP server error", map[string]string{
+				"error": err.Error(),
+			})
+		}
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		l.Warn("Failed to stop", nil)
+	}
 }
 
 func (s *service) Health() error {
