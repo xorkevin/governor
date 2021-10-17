@@ -501,7 +501,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 
-	members, err := s.service.lists.GetListMembers(s.rcptList, mailingListMemberAmountCap, 0)
+	members, err := s.service.lists.GetMembers(s.rcptList, mailingListMemberAmountCap, 0)
 	if err != nil {
 		return errSMTPBaseExists
 	}

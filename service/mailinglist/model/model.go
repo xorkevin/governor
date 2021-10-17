@@ -28,9 +28,12 @@ type (
 		DeleteList(m *ListModel) error
 		DeleteCreatorLists(creatorid string) error
 		GetMember(listid, userid string) (*MemberModel, error)
-		GetListMembers(listid string, limit, offset int) ([]MemberModel, error)
-		GetUserLists(userid string, limit, offset int) ([]MemberModel, error)
-		GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
+		GetMembers(listid string, limit, offset int) ([]MemberModel, error)
+		GetListsMembers(listids []string, limit int) ([]MemberModel, error)
+		GetListMembers(listid string, userids []string) ([]MemberModel, error)
+		GetMembersCount(listid string) (int, error)
+		GetLatestLists(userid string, limit, offset int) ([]MemberModel, error)
+		GetLatestListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
 		InsertMembers(m []*MemberModel) error
 		DeleteMembers(listid string, userids []string) error
@@ -64,8 +67,8 @@ type (
 
 	// MemberModel is the db mailing list member model
 	MemberModel struct {
-		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;deleq,listid,userid|arr;deleq,userid"`
+		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid;getgroupeq,listid|arr"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;getgroupeq,listid,userid|arr;deleq,listid,userid|arr;deleq,userid"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
 	}
 
@@ -269,7 +272,7 @@ func (r *repo) GetMember(listid, userid string) (*MemberModel, error) {
 	return m, nil
 }
 
-func (r *repo) GetListMembers(listid string, limit, offset int) ([]MemberModel, error) {
+func (r *repo) GetMembers(listid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -281,7 +284,53 @@ func (r *repo) GetListMembers(listid string, limit, offset int) ([]MemberModel, 
 	return m, nil
 }
 
-func (r *repo) GetUserLists(userid string, limit, offset int) ([]MemberModel, error) {
+func (r *repo) GetListsMembers(listids []string, limit int) ([]MemberModel, error) {
+	if len(listids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelHasListIDOrdListID(d, listids, true, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListMembers(listid string, userids []string) ([]MemberModel, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqListIDHasUseridOrdUserid(d, listid, userids, true, len(userids), 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	return m, nil
+}
+
+const (
+	sqlMemberCount = "SELECT COUNT(*) FROM " + memberModelTableName + " WHERE listid = $1;"
+)
+
+func (r *repo) GetMembersCount(listid string) (int, error) {
+	var count int
+	d, err := r.db.DB()
+	if err != nil {
+		return 0, err
+	}
+	if err := d.QueryRow(sqlMemberCount, listid).Scan(&count); err != nil {
+		return 0, governor.ErrWithMsg(err, "Failed to get list members count")
+	}
+	return count, nil
+}
+
+func (r *repo) GetLatestLists(userid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -293,7 +342,7 @@ func (r *repo) GetUserLists(userid string, limit, offset int) ([]MemberModel, er
 	return m, nil
 }
 
-func (r *repo) GetUserListsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
+func (r *repo) GetLatestListsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err

@@ -276,12 +276,16 @@ func (s *service) GetChats(chatids []string) (*resChats, error) {
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chats")
 	}
-	allMembers, err := s.repo.GetChatsMembers(chatids, len(chatids)*chatMemberAmountCap)
+	vchatids := make([]string, 0, len(m))
+	for _, i := range m {
+		vchatids = append(vchatids, i.Chatid)
+	}
+	allMembers, err := s.repo.GetChatsMembers(vchatids, len(vchatids)*chatMemberAmountCap)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
 	}
 	membersByChat := map[string][]string{}
-	for _, i := range chatids {
+	for _, i := range vchatids {
 		membersByChat[i] = []string{}
 	}
 	for _, i := range allMembers {

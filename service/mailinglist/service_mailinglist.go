@@ -12,14 +12,15 @@ import (
 
 type (
 	resList struct {
-		ListID       string `json:"listid"`
-		CreatorID    string `json:"creatorid"`
-		Name         string `json:"name"`
-		Description  string `json:"description"`
-		SenderPolicy string `json:"sender_policy"`
-		MemberPolicy string `json:"member_policy"`
-		LastUpdated  int64  `json:"last_updated"`
-		CreationTime int64  `json:"creation_time"`
+		ListID       string   `json:"listid"`
+		CreatorID    string   `json:"creatorid"`
+		Name         string   `json:"name"`
+		Description  string   `json:"description"`
+		SenderPolicy string   `json:"sender_policy"`
+		MemberPolicy string   `json:"member_policy"`
+		LastUpdated  int64    `json:"last_updated"`
+		CreationTime int64    `json:"creation_time"`
+		Members      []string `json:"members"`
 	}
 )
 
@@ -43,6 +44,7 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 		MemberPolicy: list.MemberPolicy,
 		LastUpdated:  list.LastUpdated,
 		CreationTime: list.CreationTime,
+		Members:      []string{},
 	}, nil
 }
 
@@ -71,13 +73,176 @@ func (s *service) UpdateList(creatorid string, listname string, name, desc strin
 	return nil
 }
 
+func (s *service) checkUsersExist(userids []string) error {
+	ids, err := s.users.CheckUsersExist(userids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to users exist check")
+	}
+	if len(ids) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "User does not exist",
+		}))
+	}
+	return nil
+}
+
+func (s *service) AddListMembers(creatorid string, listname string, userids []string) error {
+	m, err := s.lists.GetList(creatorid, listname)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+	if members, err := s.lists.GetListMembers(m.ListID, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get list members")
+	} else if len(members) != 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "List member already added",
+		}), governor.ErrOptInner(err))
+	}
+	if count, err := s.lists.GetMembersCount(m.ListID); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get list members count")
+	} else if count+len(userids) > mailingListMemberAmountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not have more than 255 list members",
+		}), governor.ErrOptInner(err))
+	}
+
+	if err := s.checkUsersExist(userids); err != nil {
+		return err
+	}
+
+	members := s.lists.AddMembers(m, userids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list")
+	}
+	if err := s.lists.UpdateListLastUpdated(m.ListID, m.LastUpdated); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list")
+	}
+	if err := s.lists.InsertMembers(members); err != nil {
+		return governor.ErrWithMsg(err, "Failed to add list members")
+	}
+	return nil
+}
+
+func (s *service) RemoveListMembers(creatorid string, listname string, userids []string) error {
+	m, err := s.lists.GetList(creatorid, listname)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+	if members, err := s.lists.GetListMembers(m.ListID, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to get list members")
+	} else if len(members) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "List member does not exist",
+		}), governor.ErrOptInner(err))
+	}
+
+	m.LastUpdated = time.Now().Round(0).UnixMilli()
+	if err := s.lists.UpdateList(m); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list")
+	}
+	if err := s.lists.DeleteMembers(m.ListID, userids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove list members")
+	}
+	if err := s.lists.UpdateListLastUpdated(m.ListID, m.LastUpdated); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list")
+	}
+	return nil
+}
+
+func (s *service) DeleteList(creatorid string, listname string) error {
+	m, err := s.lists.GetList(creatorid, listname)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+	// TODO: remove objects
+	if err := s.lists.DeleteListMsgs(m.ListID); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list messages")
+	}
+	if err := s.lists.DeleteListMembers(m.ListID); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list members")
+	}
+	if err := s.lists.DeleteList(m); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list")
+	}
+	return nil
+}
+
 type (
 	resLists struct {
 		Lists []resList `json:"lists"`
 	}
 )
 
-func (s *service) GetLatestLists(creatorid string, before int64, limit int) (*resLists, error) {
+func (s *service) getListMembers(listids []string) (map[string][]string, error) {
+	allMembers, err := s.lists.GetListsMembers(listids, len(listids)*mailingListMemberAmountCap)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	membersByList := map[string][]string{}
+	for _, i := range listids {
+		membersByList[i] = []string{}
+	}
+	for _, i := range allMembers {
+		membersByList[i.ListID] = append(membersByList[i.ListID], i.Userid)
+	}
+	return membersByList, nil
+}
+
+func (s *service) GetLists(listids []string) (*resLists, error) {
+	m, err := s.lists.GetLists(listids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get lists")
+	}
+	vlistids := make([]string, 0, len(m))
+	for _, i := range m {
+		vlistids = append(vlistids, i.ListID)
+	}
+	membersByList, err := s.getListMembers(vlistids)
+	if err != nil {
+		return nil, err
+	}
+	lists := make([]resList, 0, len(m))
+	for _, i := range m {
+		lists = append(lists, resList{
+			ListID:       i.ListID,
+			CreatorID:    i.CreatorID,
+			Name:         i.Name,
+			Description:  i.Description,
+			SenderPolicy: i.SenderPolicy,
+			MemberPolicy: i.MemberPolicy,
+			LastUpdated:  i.LastUpdated,
+			CreationTime: i.CreationTime,
+			Members:      membersByList[i.ListID],
+		})
+	}
+	return &resLists{
+		Lists: lists,
+	}, nil
+}
+
+func (s *service) GetCreatorLists(creatorid string, before int64, limit int) (*resLists, error) {
 	var m []model.ListModel
 	if before == 0 {
 		var err error
@@ -92,6 +257,14 @@ func (s *service) GetLatestLists(creatorid string, before int64, limit int) (*re
 			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
 		}
 	}
+	listids := make([]string, 0, len(m))
+	for _, i := range m {
+		listids = append(listids, i.ListID)
+	}
+	membersByList, err := s.getListMembers(listids)
+	if err != nil {
+		return nil, err
+	}
 	lists := make([]resList, 0, len(m))
 	for _, i := range m {
 		lists = append(lists, resList{
@@ -103,9 +276,32 @@ func (s *service) GetLatestLists(creatorid string, before int64, limit int) (*re
 			MemberPolicy: i.MemberPolicy,
 			LastUpdated:  i.LastUpdated,
 			CreationTime: i.CreationTime,
+			Members:      membersByList[i.ListID],
 		})
 	}
 	return &resLists{
 		Lists: lists,
 	}, nil
+}
+
+func (s *service) GetLatestLists(userid string, before int64, limit int) (*resLists, error) {
+	var m []model.MemberModel
+	if before == 0 {
+		var err error
+		m, err = s.lists.GetLatestLists(userid, limit, 0)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
+		}
+	} else {
+		var err error
+		m, err = s.lists.GetLatestListsBefore(userid, before, limit)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
+		}
+	}
+	listids := make([]string, 0, len(m))
+	for _, i := range m {
+		listids = append(listids, i.ListID)
+	}
+	return s.GetLists(listids)
 }

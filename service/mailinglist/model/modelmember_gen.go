@@ -79,6 +79,46 @@ func memberModelDelEqListID(db *sql.DB, listid string) error {
 	return err
 }
 
+func memberModelGetMemberModelHasListIDOrdListID(db *sql.DB, listid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	paramCount := 2
+	args := make([]interface{}, 0, paramCount+len(listid))
+	args = append(args, limit, offset)
+	var placeholderslistid string
+	{
+		placeholders := make([]string, 0, len(listid))
+		for _, i := range listid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholderslistid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func memberModelGetMemberModelEqListIDEqUserid(db *sql.DB, listid string, userid string) (*MemberModel, int, error) {
 	m := &MemberModel{}
 	if err := db.QueryRow("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid = $1 AND userid = $2;", listid, userid).Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
@@ -105,6 +145,46 @@ func memberModelGetMemberModelEqListIDOrdUserid(db *sql.DB, listid string, order
 	}
 	res := make([]MemberModel, 0, limit)
 	rows, err := db.Query("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelGetMemberModelEqListIDHasUseridOrdUserid(db *sql.DB, listid string, userid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	paramCount := 3
+	args := make([]interface{}, 0, paramCount+len(userid))
+	args = append(args, limit, offset, listid)
+	var placeholdersuserid string
+	{
+		placeholders := make([]string, 0, len(userid))
+		for _, i := range userid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
