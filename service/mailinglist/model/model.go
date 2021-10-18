@@ -41,8 +41,8 @@ type (
 		DeleteUserMembers(userid string) error
 		NewMsg(listid, msgid, userid string) *MsgModel
 		GetMsg(listid, msgid string) (*MsgModel, error)
-		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
-		GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error)
+		GetListMsgs(creatorid, listname string, limit, offset int) ([]MsgModel, error)
+		GetListMsgsBefore(creatorid, listname string, before int64, limit int) ([]MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
@@ -445,24 +445,24 @@ func (r *repo) GetMsg(listid, msgid string) (*MsgModel, error) {
 	return m, nil
 }
 
-func (r *repo) GetListMsgs(listid string, limit, offset int) ([]MsgModel, error) {
+func (r *repo) GetListMsgs(creatorid, listname string, limit, offset int) ([]MsgModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, listid, false, limit, offset)
+	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, toListID(creatorid, listname), false, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
 	}
 	return m, nil
 }
 
-func (r *repo) GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error) {
+func (r *repo) GetListMsgsBefore(creatorid, listname string, before int64, limit int) ([]MsgModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDLtCreationTimeOrdCreationTime(d, listid, before, false, limit, 0)
+	m, err := msgModelGetMsgModelEqListIDLtCreationTimeOrdCreationTime(d, toListID(creatorid, listname), before, false, limit, 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
 	}

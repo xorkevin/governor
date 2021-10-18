@@ -322,3 +322,45 @@ func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string)
 	}
 	return nil
 }
+
+type (
+	resMsg struct {
+		ListID       string `json:"listid"`
+		Msgid        string `json:"msgid"`
+		Userid       string `json:"userid"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	resMsgs struct {
+		Msgs []resMsg `json:"msgs"`
+	}
+)
+
+func (s *service) GetLatestMsgs(creatorid string, listname string, before int64, limit int) (*resMsgs, error) {
+	var m []model.MsgModel
+	if before == 0 {
+		var err error
+		m, err = s.lists.GetListMsgs(creatorid, listname, limit, 0)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
+		}
+	} else {
+		var err error
+		m, err = s.lists.GetListMsgsBefore(creatorid, listname, before, limit)
+		if err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
+		}
+	}
+	msgs := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		msgs = append(msgs, resMsg{
+			ListID:       i.ListID,
+			Msgid:        i.Msgid,
+			Userid:       i.Userid,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resMsgs{
+		Msgs: msgs,
+	}, nil
+}
