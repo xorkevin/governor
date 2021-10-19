@@ -14,6 +14,7 @@ type (
 	resList struct {
 		ListID       string   `json:"listid"`
 		CreatorID    string   `json:"creatorid"`
+		Listname     string   `json:"listname"`
 		Name         string   `json:"name"`
 		Description  string   `json:"description"`
 		SenderPolicy string   `json:"sender_policy"`
@@ -38,6 +39,7 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 	return &resList{
 		ListID:       list.ListID,
 		CreatorID:    list.CreatorID,
+		Listname:     list.Listname,
 		Name:         list.Name,
 		Description:  list.Description,
 		SenderPolicy: list.SenderPolicy,

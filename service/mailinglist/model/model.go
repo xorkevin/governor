@@ -57,6 +57,7 @@ type (
 	ListModel struct {
 		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|arr;updeq,listid;deleq,listid"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid;deleq,creatorid"`
+		Listname     string `model:"listname,VARCHAR(127) NOT NULL" query:"listname"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Description  string `model:"description,VARCHAR(255)" query:"description"`
 		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL" query:"sender_policy"`
@@ -128,6 +129,7 @@ func (r *repo) NewList(creatorid, listname string, name, desc string, senderPoli
 	return &ListModel{
 		ListID:       toListID(creatorid, listname),
 		CreatorID:    creatorid,
+		Listname:     listname,
 		Name:         name,
 		Description:  desc,
 		SenderPolicy: senderPolicy,

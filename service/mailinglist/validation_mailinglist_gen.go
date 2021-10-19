@@ -31,3 +31,25 @@ func (r reqListMsgs) valid() error {
 	}
 	return nil
 }
+
+func (r reqCreateList) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validListname(r.Listname); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validSenderPolicy(r.SenderPolicy); err != nil {
+		return err
+	}
+	if err := validMemberPolicy(r.MemberPolicy); err != nil {
+		return err
+	}
+	return nil
+}
