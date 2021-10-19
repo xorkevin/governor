@@ -336,17 +336,17 @@ type (
 	}
 )
 
-func (s *service) GetLatestMsgs(creatorid string, listname string, before int64, limit int) (*resMsgs, error) {
+func (s *service) GetLatestMsgs(listid string, before int64, limit int) (*resMsgs, error) {
 	var m []model.MsgModel
 	if before == 0 {
 		var err error
-		m, err = s.lists.GetListMsgs(creatorid, listname, limit, 0)
+		m, err = s.lists.GetListMsgs(listid, limit, 0)
 		if err != nil {
 			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
 		}
 	} else {
 		var err error
-		m, err = s.lists.GetListMsgsBefore(creatorid, listname, before, limit)
+		m, err = s.lists.GetListMsgsBefore(listid, before, limit)
 		if err != nil {
 			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
 		}

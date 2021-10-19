@@ -25,7 +25,7 @@ func validhasChatid(chatid string) error {
 			Message: "Chat id must be provided",
 		}))
 	}
-	if len(chatid) > lengthCapUserid {
+	if len(chatid) > lengthCapChatid {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Chat id must be shorter than 32 characters",

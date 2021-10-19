@@ -48,6 +48,10 @@ type (
 		writetimeout time.Duration
 	}
 
+	router struct {
+		s service
+	}
+
 	ctxKeyMailingList struct{}
 )
 
@@ -104,6 +108,12 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("writetimeout", "5s")
 }
 
+func (s *service) router() *router {
+	return &router{
+		s: *s,
+	}
+}
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -148,6 +158,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"read timeout":       r.GetStr("readtimeout"),
 		"write timeout":      r.GetStr("writetimeout"),
 	})
+
+	sr := s.router()
+	sr.mountRoutes(m)
+	l.Info("Mounted http routes", nil)
+
 	return nil
 }
 

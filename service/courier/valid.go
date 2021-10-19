@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	lengthCapUserid = 31
-	lengthCap       = 63
-	lengthCapURL    = 2047
-	amountCap       = 255
+	lengthCapCreatorID = 31
+	lengthCap          = 63
+	lengthCapURL       = 2047
+	amountCap          = 255
 )
 
 var (
@@ -127,7 +127,7 @@ func validhasCreatorID(creatorid string) error {
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if len(creatorid) > lengthCapUserid {
+	if len(creatorid) > lengthCapCreatorID {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Creator id must be shorter than 32 characters",
 			Status:  http.StatusBadRequest,
