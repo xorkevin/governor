@@ -60,6 +60,7 @@ type (
 		Listname     string `model:"listname,VARCHAR(127) NOT NULL" query:"listname"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Description  string `model:"description,VARCHAR(255)" query:"description"`
+		Archive      bool   `model:"archive,BOOLEAN NOT NULL" query:"archive"`
 		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL" query:"sender_policy"`
 		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL" query:"member_policy"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid;getgroupeq,creatorid,last_updated|lt"`

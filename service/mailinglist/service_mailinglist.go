@@ -17,6 +17,7 @@ type (
 		Listname     string   `json:"listname"`
 		Name         string   `json:"name"`
 		Description  string   `json:"description"`
+		Archive      bool     `json:"archive"`
 		SenderPolicy string   `json:"sender_policy"`
 		MemberPolicy string   `json:"member_policy"`
 		LastUpdated  int64    `json:"last_updated"`
@@ -42,6 +43,7 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 		Listname:     list.Listname,
 		Name:         list.Name,
 		Description:  list.Description,
+		Archive:      list.Archive,
 		SenderPolicy: list.SenderPolicy,
 		MemberPolicy: list.MemberPolicy,
 		LastUpdated:  list.LastUpdated,
@@ -50,7 +52,7 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 	}, nil
 }
 
-func (s *service) UpdateList(creatorid string, listname string, name, desc string, senderPolicy, memberPolicy string) error {
+func (s *service) UpdateList(creatorid string, listname string, name, desc string, archive bool, senderPolicy, memberPolicy string) error {
 	m, err := s.lists.GetList(creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -63,6 +65,7 @@ func (s *service) UpdateList(creatorid string, listname string, name, desc strin
 	}
 	m.Name = name
 	m.Description = desc
+	m.Archive = archive
 	m.SenderPolicy = senderPolicy
 	m.MemberPolicy = memberPolicy
 	m.LastUpdated = time.Now().Round(0).UnixMilli()
@@ -232,6 +235,7 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 			CreatorID:    i.CreatorID,
 			Name:         i.Name,
 			Description:  i.Description,
+			Archive:      i.Archive,
 			SenderPolicy: i.SenderPolicy,
 			MemberPolicy: i.MemberPolicy,
 			LastUpdated:  i.LastUpdated,
@@ -274,6 +278,7 @@ func (s *service) GetCreatorLists(creatorid string, before int64, limit int) (*r
 			CreatorID:    i.CreatorID,
 			Name:         i.Name,
 			Description:  i.Description,
+			Archive:      i.Archive,
 			SenderPolicy: i.SenderPolicy,
 			MemberPolicy: i.MemberPolicy,
 			LastUpdated:  i.LastUpdated,
@@ -319,6 +324,7 @@ func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string)
 		}
 		return governor.ErrWithMsg(err, "Failed to get list")
 	}
+	// TODO: delete objects
 	if err := s.lists.DeleteMsgs(m.ListID, msgids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete messages")
 	}

@@ -53,3 +53,64 @@ func (r reqCreateList) valid() error {
 	}
 	return nil
 }
+
+func (r reqUpdateList) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validhasListname(r.Listname); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validSenderPolicy(r.SenderPolicy); err != nil {
+		return err
+	}
+	if err := validMemberPolicy(r.MemberPolicy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqListMembers) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validhasListname(r.Listname); err != nil {
+		return err
+	}
+	if err := validoptUserids(r.Add); err != nil {
+		return err
+	}
+	if err := validoptUserids(r.Remove); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqListID) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validhasListname(r.Listname); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqMsgIDs) valid() error {
+	if err := validhasCreatorID(r.CreatorID); err != nil {
+		return err
+	}
+	if err := validhasListname(r.Listname); err != nil {
+		return err
+	}
+	if err := validhasMsgids(r.Msgids); err != nil {
+		return err
+	}
+	return nil
+}

@@ -2,13 +2,14 @@ package mailinglist
 
 import (
 	"net/http"
+	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqListMsgs reqCreateList
+//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqListMsgs reqCreateList reqUpdateList reqListMembers reqListID reqMsgIDs
 
 type (
 	reqCreatorLists struct {
@@ -36,6 +37,34 @@ type (
 		Desc         string `valid:"desc" json:"desc"`
 		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
 		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
+	}
+
+	reqUpdateList struct {
+		CreatorID    string `valid:"creatorID,has" json:"-"`
+		Listname     string `valid:"listname,has" json:"-"`
+		Name         string `valid:"name" json:"name"`
+		Desc         string `valid:"desc" json:"desc"`
+		Archive      bool   `json:"archive"`
+		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
+		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
+	}
+
+	reqListMembers struct {
+		CreatorID string   `valid:"creatorID,has" json:"-"`
+		Listname  string   `valid:"listname,has" json:"-"`
+		Add       []string `valid:"userids,opt" json:"add"`
+		Remove    []string `valid:"userids,opt" json:"remove"`
+	}
+
+	reqListID struct {
+		CreatorID string `valid:"creatorID,has" json:"-"`
+		Listname  string `valid:"listname,has" json:"-"`
+	}
+
+	reqMsgIDs struct {
+		CreatorID string   `valid:"creatorID,has" json:"-"`
+		Listname  string   `valid:"listname,has" json:"-"`
+		Msgids    []string `valid:"msgids,has" json:"-"`
 	}
 )
 
@@ -116,6 +145,89 @@ func (m *router) createList(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
+func (m *router) updateList(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqUpdateList{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.CreatorID = c.Param("creatorid")
+	req.Listname = c.Param("listname")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.UpdateList(req.CreatorID, req.Listname, req.Name, req.Desc, req.Archive, req.SenderPolicy, req.MemberPolicy); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) updateListMembers(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqListMembers{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.CreatorID = c.Param("creatorid")
+	req.Listname = c.Param("listname")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if len(req.Add) > 0 {
+		if err := m.s.AddListMembers(req.CreatorID, req.Listname, req.Add); err != nil {
+			c.WriteError(err)
+			return
+		}
+	}
+	if len(req.Remove) > 0 {
+		if err := m.s.RemoveListMembers(req.CreatorID, req.Listname, req.Remove); err != nil {
+			c.WriteError(err)
+			return
+		}
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) deleteList(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqListID{
+		CreatorID: c.Param("creatorid"),
+		Listname:  c.Param("listname"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteList(req.CreatorID, req.Listname); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) deleteMsgs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqMsgIDs{
+		CreatorID: c.Param("creatorid"),
+		Listname:  c.Param("listname"),
+		Msgids:    strings.Split(c.Query("ids"), ","),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteMsgs(req.CreatorID, req.Listname, req.Msgids); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) listOwner(c governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
@@ -139,5 +251,9 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Post("/c/{creatorid}", m.createList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/c/{creatorid}/latest", m.getCreatorLists, gate.User(m.s.gate, scopeMailinglistRead))
 	r.Get("/latest", m.getPersonalLists, gate.User(m.s.gate, scopeMailinglistRead))
+	r.Put("/c/{creatorid}/list/{listname}", m.updateList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
+	r.Patch("/c/{creatorid}/list/{listname}/member", m.updateListMembers, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
+	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/l/{listid}/msgs", m.getListMsgs, gate.User(m.s.gate, scopeMailinglistRead))
+	r.Delete("/c/{creatorid}/l/{listname}/msgs", m.deleteMsgs, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 }

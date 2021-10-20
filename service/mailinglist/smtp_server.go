@@ -60,6 +60,11 @@ var (
 		EnhancedCode: smtp.EnhancedCode{4, 3, 0},
 		Message:      "Invalid recipient mailbox config",
 	}
+	errSMTPMailboxDisabled = &smtp.SMTPError{
+		Code:         450,
+		EnhancedCode: smtp.EnhancedCode{4, 2, 1},
+		Message:      "Mailbox is archived",
+	}
 	errSMTPSystem = &smtp.SMTPError{
 		Code:         550,
 		EnhancedCode: smtp.EnhancedCode{5, 1, 2},
@@ -288,6 +293,10 @@ func (s *smtpSession) Rcpt(to string) error {
 			return errSMTPMailbox
 		}
 		return errSMTPBase
+	}
+
+	if list.Archive {
+		return errSMTPMailboxDisabled
 	}
 
 	switch list.SenderPolicy {

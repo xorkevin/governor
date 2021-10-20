@@ -11,6 +11,7 @@ const (
 	lengthCapUserid    = 31
 	lengthCapListid    = 255
 	lengthCapListname  = 127
+	lengthCapMsgid     = 1023
 	lengthCap          = 127
 	amountCap          = 255
 )
@@ -47,6 +48,21 @@ func validhasUserid(userid string) error {
 	return nil
 }
 
+func validoptUserids(members []string) error {
+	if len(members) > amountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
+		}))
+	}
+	for _, i := range members {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validhasListid(listid string) error {
 	if len(listid) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -64,6 +80,22 @@ func validhasListid(listid string) error {
 }
 
 func validListname(listname string) error {
+	if len(listname) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "List name must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(listname) > lengthCapListname {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "List name must be shorter than 128 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validhasListname(listname string) error {
 	if len(listname) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "List name must be provided",
@@ -147,6 +179,37 @@ func validAmount(amt int) error {
 			Message: "Amount must be less than 256",
 			Status:  http.StatusBadRequest,
 		}))
+	}
+	return nil
+}
+
+func validhasMsgid(msgid string) error {
+	if len(msgid) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg id must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(msgid) > lengthCapMsgid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msg id must be shorter than 1024 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validhasMsgids(msgids []string) error {
+	if len(msgids) > amountCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Request is too large",
+		}))
+	}
+	for _, i := range msgids {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }
