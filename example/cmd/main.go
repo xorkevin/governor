@@ -10,6 +10,8 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
+	"xorkevin.dev/governor/service/mailinglist"
+	mailinglistmodel "xorkevin.dev/governor/service/mailinglist/model"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
 	profilemodel "xorkevin.dev/governor/service/profile/model"
@@ -129,6 +131,12 @@ func main() {
 		inj := gov.Injector()
 		conduitchatmodel.NewInCtx(inj)
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
+	}
+	{
+		inj := gov.Injector()
+		mailinglistmodel.NewInCtx(inj)
+		objstore.NewBucketInCtx(inj, "mailinglist")
+		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}
 
 	cmd := governor.NewCmd(opts, gov, governor.NewClient(opts))
