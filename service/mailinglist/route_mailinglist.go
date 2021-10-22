@@ -2,7 +2,6 @@ package mailinglist
 
 import (
 	"net/http"
-	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
@@ -64,7 +63,7 @@ type (
 	reqMsgIDs struct {
 		CreatorID string   `valid:"creatorID,has" json:"-"`
 		Listname  string   `valid:"listname,has" json:"-"`
-		Msgids    []string `valid:"msgids,has" json:"-"`
+		Msgids    []string `valid:"msgids,has" json:"msgids"`
 	}
 )
 
@@ -212,11 +211,13 @@ func (m *router) deleteList(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) deleteMsgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqMsgIDs{
-		CreatorID: c.Param("creatorid"),
-		Listname:  c.Param("listname"),
-		Msgids:    strings.Split(c.Query("ids"), ","),
+	req := reqMsgIDs{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
 	}
+	req.CreatorID = c.Param("creatorid")
+	req.Listname = c.Param("listname")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
