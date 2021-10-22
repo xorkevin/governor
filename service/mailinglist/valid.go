@@ -128,12 +128,6 @@ func validName(name string) error {
 }
 
 func validDesc(desc string) error {
-	if len(desc) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Description must be provided",
-			Status:  http.StatusBadRequest,
-		}))
-	}
 	if len(desc) > lengthCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Description must be shorter than 128 characters",
