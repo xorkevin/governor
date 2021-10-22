@@ -13,20 +13,20 @@ import (
 type (
 	reqCreatorLists struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
-		Before    int64  `json:"-"`
 		Amount    int    `valid:"amount" json:"-"`
+		Offset    int    `valid:"offset" json:"-"`
 	}
 
 	reqUserLists struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Before int64  `json:"-"`
 		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
 	}
 
 	reqListMsgs struct {
 		Listid string `valid:"listid,has" json:"-"`
-		Before int64  `json:"-"`
 		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
 	}
 
 	reqCreateList struct {
@@ -71,14 +71,14 @@ func (m *router) getCreatorLists(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqCreatorLists{
 		CreatorID: c.Param("creatorid"),
-		Before:    c.QueryInt64("before", 0),
 		Amount:    c.QueryInt("amount", -1),
+		Offset:    c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetCreatorLists(req.CreatorID, req.Before, req.Amount)
+	res, err := m.s.GetCreatorLists(req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -90,14 +90,14 @@ func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqUserLists{
 		Userid: gate.GetCtxUserid(c),
-		Before: c.QueryInt64("before", 0),
 		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestLists(req.Userid, req.Before, req.Amount)
+	res, err := m.s.GetLatestLists(req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -109,14 +109,14 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
-		Before: c.QueryInt64("before", 0),
 		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestMsgs(req.Listid, req.Before, req.Amount)
+	res, err := m.s.GetLatestMsgs(req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return

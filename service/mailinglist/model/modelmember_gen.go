@@ -255,33 +255,6 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, userid string, 
 	return res, nil
 }
 
-func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, userid string, lastupdated int64, orderasc bool, limit, offset int) ([]MemberModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := MemberModel{}
-		if err := rows.Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 func memberModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) (int, error) {
 	_, err := db.Exec("UPDATE mailinglistmembers SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
 	if err != nil {

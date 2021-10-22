@@ -184,30 +184,3 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 	}
 	return res, nil
 }
-
-func listModelGetListModelEqCreatorIDLtLastUpdatedOrdLastUpdated(db *sql.DB, creatorid string, lastupdated int64, orderasc bool, limit, offset int) ([]ListModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid, lastupdated)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := ListModel{}
-		if err := rows.Scan(&m.ListID, &m.CreatorID, &m.Listname, &m.Name, &m.Description, &m.Archive, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}

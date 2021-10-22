@@ -7,7 +7,6 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/mailinglist/model"
 )
 
 type (
@@ -248,20 +247,10 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 	}, nil
 }
 
-func (s *service) GetCreatorLists(creatorid string, before int64, limit int) (*resLists, error) {
-	var m []model.ListModel
-	if before == 0 {
-		var err error
-		m, err = s.lists.GetCreatorLists(creatorid, limit, 0)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-		}
-	} else {
-		var err error
-		m, err = s.lists.GetCreatorListsBefore(creatorid, before, limit)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-		}
+func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLists, error) {
+	m, err := s.lists.GetCreatorLists(creatorid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
 	}
 	listids := make([]string, 0, len(m))
 	for _, i := range m {
@@ -291,20 +280,10 @@ func (s *service) GetCreatorLists(creatorid string, before int64, limit int) (*r
 	}, nil
 }
 
-func (s *service) GetLatestLists(userid string, before int64, limit int) (*resLists, error) {
-	var m []model.MemberModel
-	if before == 0 {
-		var err error
-		m, err = s.lists.GetLatestLists(userid, limit, 0)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-		}
-	} else {
-		var err error
-		m, err = s.lists.GetLatestListsBefore(userid, before, limit)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-		}
+func (s *service) GetLatestLists(userid string, amount, offset int) (*resLists, error) {
+	m, err := s.lists.GetLatestLists(userid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
 	}
 	listids := make([]string, 0, len(m))
 	for _, i := range m {
@@ -344,20 +323,10 @@ type (
 	}
 )
 
-func (s *service) GetLatestMsgs(listid string, before int64, limit int) (*resMsgs, error) {
-	var m []model.MsgModel
-	if before == 0 {
-		var err error
-		m, err = s.lists.GetListMsgs(listid, limit, 0)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
-		}
-	} else {
-		var err error
-		m, err = s.lists.GetListMsgsBefore(listid, before, limit)
-		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to delete messages")
-		}
+func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, error) {
+	m, err := s.lists.GetListMsgs(listid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to delete messages")
 	}
 	msgs := make([]resMsg, 0, len(m))
 	for _, i := range m {

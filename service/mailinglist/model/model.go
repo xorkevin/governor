@@ -21,7 +21,6 @@ type (
 		GetList(creatorid, listname string) (*ListModel, error)
 		GetLists(listids []string) ([]ListModel, error)
 		GetCreatorLists(creatorid string, limit, offset int) ([]ListModel, error)
-		GetCreatorListsBefore(creatorid string, before int64, limit int) ([]ListModel, error)
 		InsertList(m *ListModel) error
 		UpdateList(m *ListModel) error
 		UpdateListLastUpdated(listid string, t int64) error
@@ -33,7 +32,6 @@ type (
 		GetListMembers(listid string, userids []string) ([]MemberModel, error)
 		GetMembersCount(listid string) (int, error)
 		GetLatestLists(userid string, limit, offset int) ([]MemberModel, error)
-		GetLatestListsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
 		InsertMembers(m []*MemberModel) error
 		DeleteMembers(listid string, userids []string) error
@@ -42,7 +40,6 @@ type (
 		NewMsg(listid, msgid, userid string) *MsgModel
 		GetMsg(listid, msgid string) (*MsgModel, error)
 		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
-		GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
@@ -63,7 +60,7 @@ type (
 		Archive      bool   `model:"archive,BOOLEAN NOT NULL" query:"archive"`
 		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL" query:"sender_policy"`
 		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL" query:"member_policy"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid;getgroupeq,creatorid,last_updated|lt"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
@@ -71,7 +68,7 @@ type (
 	MemberModel struct {
 		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid;getgroupeq,listid|arr"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;getgroupeq,listid,userid|arr;deleq,listid,userid|arr;deleq,userid"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid"`
 	}
 
 	listLastUpdated struct {
@@ -83,7 +80,7 @@ type (
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid;deleq,listid,msgid|arr"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid;getgroupeq,listid,creation_time|lt"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid"`
 	}
 
 	ctxKeyRepo struct{}
@@ -176,18 +173,6 @@ func (r *repo) GetCreatorLists(creatorid string, limit, offset int) ([]ListModel
 		return nil, err
 	}
 	m, err := listModelGetListModelEqCreatorIDOrdLastUpdated(d, creatorid, false, limit, offset)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-	}
-	return m, nil
-}
-
-func (r *repo) GetCreatorListsBefore(creatorid string, before int64, limit int) ([]ListModel, error) {
-	d, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := listModelGetListModelEqCreatorIDLtLastUpdatedOrdLastUpdated(d, creatorid, before, false, limit, 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
 	}
@@ -345,18 +330,6 @@ func (r *repo) GetLatestLists(userid string, limit, offset int) ([]MemberModel, 
 	return m, nil
 }
 
-func (r *repo) GetLatestListsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
-	d, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, userid, before, false, limit, 0)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest user lists")
-	}
-	return m, nil
-}
-
 func (r *repo) AddMembers(m *ListModel, userids []string) []*MemberModel {
 	if len(userids) == 0 {
 		return nil
@@ -454,18 +427,6 @@ func (r *repo) GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
 		return nil, err
 	}
 	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, listid, false, limit, offset)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
-	}
-	return m, nil
-}
-
-func (r *repo) GetListMsgsBefore(listid string, before int64, limit int) ([]MsgModel, error) {
-	d, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := msgModelGetMsgModelEqListIDLtCreationTimeOrdCreationTime(d, listid, before, false, limit, 0)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
 	}

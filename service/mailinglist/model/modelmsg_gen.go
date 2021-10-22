@@ -142,30 +142,3 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 	}
 	return res, nil
 }
-
-func msgModelGetMsgModelEqListIDLtCreationTimeOrdCreationTime(db *sql.DB, listid string, creationtime int64, orderasc bool, limit, offset int) ([]MsgModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time FROM mailinglistmsgs WHERE listid = $3 AND creation_time < $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, creationtime)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := MsgModel{}
-		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
