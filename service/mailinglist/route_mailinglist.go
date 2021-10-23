@@ -235,7 +235,7 @@ func (m *router) listOwner(c governor.Context, userid string) (string, bool, boo
 		return "", false, false
 	}
 	if creatorid == userid {
-		return "", false, false
+		return "", true, true
 	}
 	if !rank.IsValidOrgName(creatorid) {
 		return "", false, false
