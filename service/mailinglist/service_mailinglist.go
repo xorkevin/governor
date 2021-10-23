@@ -11,17 +11,16 @@ import (
 
 type (
 	resList struct {
-		ListID       string   `json:"listid"`
-		CreatorID    string   `json:"creatorid"`
-		Listname     string   `json:"listname"`
-		Name         string   `json:"name"`
-		Description  string   `json:"description"`
-		Archive      bool     `json:"archive"`
-		SenderPolicy string   `json:"sender_policy"`
-		MemberPolicy string   `json:"member_policy"`
-		LastUpdated  int64    `json:"last_updated"`
-		CreationTime int64    `json:"creation_time"`
-		Members      []string `json:"members"`
+		ListID       string `json:"listid"`
+		CreatorID    string `json:"creatorid"`
+		Listname     string `json:"listname"`
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		Archive      bool   `json:"archive"`
+		SenderPolicy string `json:"sender_policy"`
+		MemberPolicy string `json:"member_policy"`
+		LastUpdated  int64  `json:"last_updated"`
+		CreationTime int64  `json:"creation_time"`
 	}
 )
 
@@ -47,7 +46,6 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 		MemberPolicy: list.MemberPolicy,
 		LastUpdated:  list.LastUpdated,
 		CreationTime: list.CreationTime,
-		Members:      []string{},
 	}, nil
 }
 
@@ -223,10 +221,6 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 	for _, i := range m {
 		vlistids = append(vlistids, i.ListID)
 	}
-	membersByList, err := s.getListMembers(vlistids)
-	if err != nil {
-		return nil, err
-	}
 	lists := make([]resList, 0, len(m))
 	for _, i := range m {
 		lists = append(lists, resList{
@@ -240,7 +234,6 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 			MemberPolicy: i.MemberPolicy,
 			LastUpdated:  i.LastUpdated,
 			CreationTime: i.CreationTime,
-			Members:      membersByList[i.ListID],
 		})
 	}
 	return &resLists{
@@ -257,10 +250,6 @@ func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLis
 	for _, i := range m {
 		listids = append(listids, i.ListID)
 	}
-	membersByList, err := s.getListMembers(listids)
-	if err != nil {
-		return nil, err
-	}
 	lists := make([]resList, 0, len(m))
 	for _, i := range m {
 		lists = append(lists, resList{
@@ -274,7 +263,6 @@ func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLis
 			MemberPolicy: i.MemberPolicy,
 			LastUpdated:  i.LastUpdated,
 			CreationTime: i.CreationTime,
-			Members:      membersByList[i.ListID],
 		})
 	}
 	return &resLists{
