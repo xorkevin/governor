@@ -232,6 +232,7 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 		lists = append(lists, resList{
 			ListID:       i.ListID,
 			CreatorID:    i.CreatorID,
+			Listname:     i.Listname,
 			Name:         i.Name,
 			Description:  i.Description,
 			Archive:      i.Archive,
@@ -265,6 +266,7 @@ func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLis
 		lists = append(lists, resList{
 			ListID:       i.ListID,
 			CreatorID:    i.CreatorID,
+			Listname:     i.Listname,
 			Name:         i.Name,
 			Description:  i.Description,
 			Archive:      i.Archive,
