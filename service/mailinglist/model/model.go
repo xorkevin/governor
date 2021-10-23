@@ -19,6 +19,7 @@ type (
 	Repo interface {
 		NewList(creatorid, listname string, name, desc string, senderPolicy, memberPolicy string) *ListModel
 		GetList(creatorid, listname string) (*ListModel, error)
+		GetListByID(listid string) (*ListModel, error)
 		GetLists(listids []string) ([]ListModel, error)
 		GetCreatorLists(creatorid string, limit, offset int) ([]ListModel, error)
 		InsertList(m *ListModel) error
@@ -138,11 +139,15 @@ func (r *repo) NewList(creatorid, listname string, name, desc string, senderPoli
 }
 
 func (r *repo) GetList(creatorid, listname string) (*ListModel, error) {
+	return r.GetListByID(toListID(creatorid, listname))
+}
+
+func (r *repo) GetListByID(listid string) (*ListModel, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := listModelGetListModelEqListID(d, toListID(creatorid, listname))
+	m, code, err := listModelGetListModelEqListID(d, listid)
 	if err != nil {
 		if code == 2 {
 			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No list found with that id")

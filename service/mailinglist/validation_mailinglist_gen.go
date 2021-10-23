@@ -9,6 +9,9 @@ func (r reqCreatorLists) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -19,6 +22,16 @@ func (r reqUserLists) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqList) valid() error {
+	if err := validhasListid(r.Listid); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -27,6 +40,9 @@ func (r reqListMsgs) valid() error {
 		return err
 	}
 	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
 		return err
 	}
 	return nil

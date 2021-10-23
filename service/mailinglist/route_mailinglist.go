@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqListMsgs reqCreateList reqUpdateList reqListMembers reqListID reqMsgIDs
+//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqCreateList reqUpdateList reqListMembers reqListID reqMsgIDs
 
 type (
 	reqCreatorLists struct {
@@ -21,6 +21,10 @@ type (
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
+	}
+
+	reqList struct {
+		Listid string `valid:"listid,has" json:"-"`
 	}
 
 	reqListMsgs struct {
@@ -98,6 +102,23 @@ func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := m.s.GetLatestLists(req.Userid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getList(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqList{
+		Listid: c.Param("listid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetList(req.Listid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -250,11 +271,12 @@ const (
 
 func (m *router) mountRoutes(r governor.Router) {
 	r.Post("/c/{creatorid}", m.createList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Get("/c/{creatorid}/latest", m.getCreatorLists, gate.User(m.s.gate, scopeMailinglistRead))
+	r.Get("/c/{creatorid}/latest", m.getCreatorLists)
 	r.Get("/latest", m.getPersonalLists, gate.User(m.s.gate, scopeMailinglistRead))
 	r.Put("/c/{creatorid}/list/{listname}", m.updateList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Patch("/c/{creatorid}/list/{listname}/member", m.updateListMembers, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Get("/l/{listid}/msgs", m.getListMsgs, gate.User(m.s.gate, scopeMailinglistRead))
+	r.Get("/l/{listid}", m.getList)
+	r.Get("/l/{listid}/msgs", m.getListMsgs)
 	r.Delete("/c/{creatorid}/l/{listname}/msgs", m.deleteMsgs, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 }

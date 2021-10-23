@@ -191,6 +191,31 @@ func (s *service) DeleteList(creatorid string, listname string) error {
 	return nil
 }
 
+func (s *service) GetList(listid string) (*resList, error) {
+	m, err := s.lists.GetListByID(listid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
+	return &resList{
+		ListID:       m.ListID,
+		CreatorID:    m.CreatorID,
+		Listname:     m.Listname,
+		Name:         m.Name,
+		Description:  m.Description,
+		Archive:      m.Archive,
+		SenderPolicy: m.SenderPolicy,
+		MemberPolicy: m.MemberPolicy,
+		LastUpdated:  m.LastUpdated,
+		CreationTime: m.CreationTime,
+	}, nil
+}
+
 type (
 	resLists struct {
 		Lists []resList `json:"lists"`
