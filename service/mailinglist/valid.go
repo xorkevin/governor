@@ -48,14 +48,20 @@ func validhasUserid(userid string) error {
 	return nil
 }
 
-func validoptUserids(members []string) error {
-	if len(members) > amountCap {
+func validhasUserids(userids []string) error {
+	if len(userids) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Userids must be provided",
+		}))
+	}
+	if len(userids) > amountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Request is too large",
 		}))
 	}
-	for _, i := range members {
+	for _, i := range userids {
 		if err := validhasUserid(i); err != nil {
 			return err
 		}

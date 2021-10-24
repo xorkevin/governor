@@ -15,7 +15,7 @@ type (
 		CreatorID    string `json:"creatorid"`
 		Listname     string `json:"listname"`
 		Name         string `json:"name"`
-		Description  string `json:"description"`
+		Description  string `json:"desc"`
 		Archive      bool   `json:"archive"`
 		SenderPolicy string `json:"sender_policy"`
 		MemberPolicy string `json:"member_policy"`
@@ -213,6 +213,35 @@ func (s *service) GetList(listid string) (*resList, error) {
 		MemberPolicy: m.MemberPolicy,
 		LastUpdated:  m.LastUpdated,
 		CreationTime: m.CreationTime,
+	}, nil
+}
+
+type (
+	resListMemberIDs struct {
+		Members []string `json:"members"`
+	}
+)
+
+func (s *service) GetListMemberIDs(listid string, userids []string) (*resListMemberIDs, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
+	members, err := s.lists.GetListMembers(listid, userids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	ids := make([]string, 0, len(members))
+	for _, i := range members {
+		ids = append(ids, i.Userid)
+	}
+	return &resListMemberIDs{
+		Members: ids,
 	}, nil
 }
 

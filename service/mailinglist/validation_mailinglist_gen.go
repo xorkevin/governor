@@ -48,6 +48,16 @@ func (r reqListMsgs) valid() error {
 	return nil
 }
 
+func (r reqListMembers) valid() error {
+	if err := validhasListid(r.Listid); err != nil {
+		return err
+	}
+	if err := validhasUserids(r.Userids); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqCreateList) valid() error {
 	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err
@@ -92,17 +102,14 @@ func (r reqUpdateList) valid() error {
 	return nil
 }
 
-func (r reqListMembers) valid() error {
+func (r reqUpdListMembers) valid() error {
 	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err
 	}
 	if err := validhasListname(r.Listname); err != nil {
 		return err
 	}
-	if err := validoptUserids(r.Add); err != nil {
-		return err
-	}
-	if err := validoptUserids(r.Remove); err != nil {
+	if err := validhasUserids(r.Remove); err != nil {
 		return err
 	}
 	return nil
