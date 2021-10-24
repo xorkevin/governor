@@ -222,6 +222,29 @@ type (
 	}
 )
 
+func (s *service) GetListMembers(listid string, amount, offset int) (*resListMemberIDs, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
+	members, err := s.lists.GetMembers(listid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	ids := make([]string, 0, len(members))
+	for _, i := range members {
+		ids = append(ids, i.Userid)
+	}
+	return &resListMemberIDs{
+		Members: ids,
+	}, nil
+}
+
 func (s *service) GetListMemberIDs(listid string, userids []string) (*resListMemberIDs, error) {
 	if _, err := s.lists.GetListByID(listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {

@@ -150,6 +150,25 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqListMsgs{
+		Listid: c.Param("listid"),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetListMembers(req.Listid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (m *router) getListMemberIDs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqListMembers{
@@ -294,5 +313,6 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/l/{listid}", m.getList)
 	r.Get("/l/{listid}/msgs", m.getListMsgs)
+	r.Get("/l/{listid}/member", m.getListMembers)
 	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)
 }
