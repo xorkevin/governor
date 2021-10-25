@@ -3,7 +3,6 @@ package mailinglist
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
@@ -65,11 +64,7 @@ func (s *service) UpdateList(creatorid string, listname string, name, desc strin
 	m.Archive = archive
 	m.SenderPolicy = senderPolicy
 	m.MemberPolicy = memberPolicy
-	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	if err := s.lists.UpdateList(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
-	}
-	if err := s.lists.UpdateListLastUpdated(m.ListID, m.LastUpdated); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update list")
 	}
 	return nil
@@ -125,9 +120,6 @@ func (s *service) AddListMembers(creatorid string, listname string, userids []st
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to update list")
 	}
-	if err := s.lists.UpdateListLastUpdated(m.ListID, m.LastUpdated); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
-	}
 	if err := s.lists.InsertMembers(members); err != nil {
 		return governor.ErrWithMsg(err, "Failed to add list members")
 	}
@@ -153,16 +145,8 @@ func (s *service) RemoveListMembers(creatorid string, listname string, userids [
 			Message: "List member does not exist",
 		}), governor.ErrOptInner(err))
 	}
-
-	m.LastUpdated = time.Now().Round(0).UnixMilli()
-	if err := s.lists.UpdateList(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
-	}
 	if err := s.lists.DeleteMembers(m.ListID, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove list members")
-	}
-	if err := s.lists.UpdateListLastUpdated(m.ListID, m.LastUpdated); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
 	}
 	return nil
 }

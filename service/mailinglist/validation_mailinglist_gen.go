@@ -102,6 +102,13 @@ func (r reqUpdateList) valid() error {
 	return nil
 }
 
+func (r reqSub) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqUpdListMembers) valid() error {
 	if err := validhasCreatorID(r.CreatorID); err != nil {
 		return err

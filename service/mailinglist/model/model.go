@@ -7,7 +7,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-//go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel
+//go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
 //go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel
 
@@ -217,12 +217,14 @@ func (r *repo) UpdateListLastUpdated(listid string, t int64) error {
 	if err != nil {
 		return err
 	}
-	if code, err := memberModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
+	if _, err := listModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
 		LastUpdated: t,
 	}, listid); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "List id must be unique")
-		}
+		return governor.ErrWithMsg(err, "Failed to update list last updated")
+	}
+	if _, err := memberModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
+		LastUpdated: t,
+	}, listid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update list last updated")
 	}
 	return nil
@@ -340,13 +342,11 @@ func (r *repo) AddMembers(m *ListModel, userids []string) []*MemberModel {
 		return nil
 	}
 	members := make([]*MemberModel, 0, len(userids))
-	now := time.Now().Round(0).UnixMilli()
-	m.LastUpdated = now
 	for _, i := range userids {
 		members = append(members, &MemberModel{
 			ListID:      m.ListID,
 			Userid:      i,
-			LastUpdated: now,
+			LastUpdated: m.LastUpdated,
 		})
 	}
 	return members

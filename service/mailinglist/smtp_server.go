@@ -544,11 +544,15 @@ func (s *smtpSession) Data(r io.Reader) error {
 			return errSMTPBaseExists
 		}
 	}
-	if err := s.service.lists.InsertMsg(s.service.lists.NewMsg(s.rcptList, msgid, s.fromUserid)); err != nil {
+	msg := s.service.lists.NewMsg(s.rcptList, msgid, s.fromUserid)
+	if err := s.service.lists.InsertMsg(msg); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
 			// message has already been sent for this list
 			return nil
 		}
+		return errSMTPBaseExists
+	}
+	if err := s.service.lists.UpdateListLastUpdated(msg.ListID, msg.CreationTime); err != nil {
 		return errSMTPBaseExists
 	}
 	// TODO: track threads

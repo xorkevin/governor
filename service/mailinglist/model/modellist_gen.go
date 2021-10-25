@@ -184,3 +184,18 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 	}
 	return res, nil
 }
+
+func listModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) (int, error) {
+	_, err := db.Exec("UPDATE mailinglists SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
