@@ -6,6 +6,8 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/rank"
 )
 
 type (
@@ -84,7 +86,7 @@ func (s *service) checkUsersExist(userids []string) error {
 	return nil
 }
 
-func (s *service) AddListMembers(creatorid string, listname string, userids []string) error {
+func (s *service) Subscribe(creatorid string, listname string, userid string) error {
 	m, err := s.lists.GetList(creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -95,7 +97,34 @@ func (s *service) AddListMembers(creatorid string, listname string, userids []st
 		}
 		return governor.ErrWithMsg(err, "Failed to get list")
 	}
-	if members, err := s.lists.GetListMembers(m.ListID, userids); err != nil {
+	isOrg := rank.IsValidOrgName(creatorid)
+	switch m.MemberPolicy {
+	case listMemberPolicyOwner:
+		if isOrg {
+			if ok, err := gate.AuthMember(s.gate, userid, creatorid); err != nil {
+				return governor.ErrWithMsg(err, "Failed to get user membership")
+			} else if !ok {
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusForbidden,
+					Message: "Not a member of the org",
+				}))
+			}
+		} else {
+			if userid != creatorid {
+				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusForbidden,
+					Message: "Not the list owner",
+				}))
+			}
+		}
+	case listMemberPolicyUser:
+	default:
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusConflict,
+			Message: "Invalid list member policy",
+		}))
+	}
+	if members, err := s.lists.GetListMembers(m.ListID, []string{userid}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to get list members")
 	} else if len(members) != 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -105,18 +134,18 @@ func (s *service) AddListMembers(creatorid string, listname string, userids []st
 	}
 	if count, err := s.lists.GetMembersCount(m.ListID); err != nil {
 		return governor.ErrWithMsg(err, "Failed to get list members count")
-	} else if count+len(userids) > mailingListMemberAmountCap {
+	} else if count+1 > mailingListMemberAmountCap {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "May not have more than 255 list members",
 		}), governor.ErrOptInner(err))
 	}
 
-	if err := s.checkUsersExist(userids); err != nil {
+	if err := s.checkUsersExist([]string{userid}); err != nil {
 		return err
 	}
 
-	members := s.lists.AddMembers(m, userids)
+	members := s.lists.AddMembers(m, []string{userid})
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to update list")
 	}
