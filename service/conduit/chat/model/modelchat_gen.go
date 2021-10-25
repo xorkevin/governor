@@ -141,3 +141,18 @@ func chatModelDelEqChatid(db *sql.DB, chatid string) error {
 	_, err := db.Exec("DELETE FROM chats WHERE chatid = $1;", chatid)
 	return err
 }
+
+func chatModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) (int, error) {
+	_, err := db.Exec("UPDATE chats SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}

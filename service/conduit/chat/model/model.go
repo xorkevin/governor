@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-//go:generate forge model -m ChatModel -t chats -p chat -o modelchat_gen.go ChatModel
+//go:generate forge model -m ChatModel -t chats -p chat -o modelchat_gen.go ChatModel chatLastUpdated
 //go:generate forge model -m MemberModel -t chatmembers -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -t chatmessages -p msg -o modelmsg_gen.go MsgModel
 
@@ -31,7 +31,7 @@ type (
 		GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error)
 		GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error)
-		AddMembers(m *ChatModel, userids []string) []*MemberModel
+		AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64)
 		InsertChat(m *ChatModel) error
 		UpdateChat(m *ChatModel) error
 		UpdateChatLastUpdated(chatid string, t int64) error
@@ -43,7 +43,7 @@ type (
 		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
 		GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error)
 		GetMsgsBeforeByKind(chatid string, kind string, msgid string, limit int) ([]MsgModel, error)
-		AddMsg(m *ChatModel, userid string, kind string, value string) (*MsgModel, error)
+		AddMsg(chatid string, userid string, kind string, value string) (*MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(chatid string, msgids []string) error
 		DeleteChatMsgs(chatid string) error
@@ -301,13 +301,12 @@ func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int
 }
 
 // AddMembers adds new chat members
-func (r *repo) AddMembers(m *ChatModel, userids []string) []*MemberModel {
+func (r *repo) AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64) {
 	if len(userids) == 0 {
-		return nil
+		return nil, m.LastUpdated
 	}
 	members := make([]*MemberModel, 0, len(userids))
 	now := time.Now().Round(0).UnixMilli()
-	m.LastUpdated = now
 	for _, i := range userids {
 		members = append(members, &MemberModel{
 			Chatid:      m.Chatid,
@@ -316,7 +315,7 @@ func (r *repo) AddMembers(m *ChatModel, userids []string) []*MemberModel {
 			LastUpdated: now,
 		})
 	}
-	return members
+	return members, now
 }
 
 // InsertChat inserts a new chat into the db
@@ -355,12 +354,14 @@ func (r *repo) UpdateChatLastUpdated(chatid string, t int64) error {
 	if err != nil {
 		return err
 	}
-	if code, err := memberModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+	if _, err := chatModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Chat id must be unique")
-		}
+		return governor.ErrWithMsg(err, "Failed to update chat last updated")
+	}
+	if _, err := memberModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+		LastUpdated: t,
+	}, chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat last updated")
 	}
 	return nil
@@ -476,15 +477,14 @@ func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, lim
 }
 
 // AddMsg adds a new chat msg
-func (r *repo) AddMsg(m *ChatModel, userid string, kind string, value string) (*MsgModel, error) {
+func (r *repo) AddMsg(chatid string, userid string, kind string, value string) (*MsgModel, error) {
 	u, err := uid.NewSnowflake(msgUIDRandSize)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
 	}
 	now := time.Now().Round(0).UnixMilli()
-	m.LastUpdated = now
 	return &MsgModel{
-		Chatid: m.Chatid,
+		Chatid: chatid,
 		Msgid:  u.Base32(),
 		Userid: userid,
 		Timems: now,

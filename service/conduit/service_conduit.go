@@ -10,8 +10,8 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-func (s *service) notifyChatEventGetMembers(kind string, m *model.ChatModel, userids []string) {
-	members, err := s.repo.GetMembers(m.Chatid, chatMemberAmountCap*2, 0)
+func (s *service) notifyChatEventGetMembers(kind string, chatid string, userids []string) {
+	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap*2, 0)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Failed to get chat members", map[string]string{
@@ -26,10 +26,10 @@ func (s *service) notifyChatEventGetMembers(kind string, m *model.ChatModel, use
 		ids = append(ids, i.Userid)
 	}
 	ids = append(ids, userids...)
-	s.notifyChatEvent(kind, m, ids)
+	s.notifyChatEvent(kind, chatid, ids)
 }
 
-func (s *service) notifyChatEvent(kind string, m *model.ChatModel, userids []string) {
+func (s *service) notifyChatEvent(kind string, chatid string, userids []string) {
 	if len(userids) == 0 {
 		return
 	}
@@ -89,14 +89,14 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
 	}
-	members := s.repo.AddMembers(m, userids)
+	members, _ := s.repo.AddMembers(m, userids)
 	if err := s.repo.InsertChat(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat")
 	}
 	if err := s.repo.InsertMembers(members); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to add chat members")
 	}
-	s.notifyChatEvent("chat.create", m, userids)
+	s.notifyChatEvent("chat.create", m.Chatid, userids)
 	return &resChat{
 		ChatID:       m.Chatid,
 		Kind:         m.Kind,
@@ -121,14 +121,13 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	}
 	m.Name = name
 	m.Theme = theme
-	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, time.Now().Round(0).UnixMilli()); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	s.notifyChatEventGetMembers("chat.update.settings", m, nil)
+	s.notifyChatEventGetMembers("chat.update.settings", chatid, nil)
 	return nil
 }
 
@@ -168,17 +167,14 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 		return err
 	}
 
-	members := s.repo.AddMembers(m, userids)
-	if err := s.repo.UpdateChat(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat")
-	}
-	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat")
-	}
+	members, now := s.repo.AddMembers(m, userids)
 	if err := s.repo.InsertMembers(members); err != nil {
 		return governor.ErrWithMsg(err, "Failed to add chat members")
 	}
-	s.notifyChatEventGetMembers("chat.update.members.add", m, nil)
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, now); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update chat")
+	}
+	s.notifyChatEventGetMembers("chat.update.members.add", chatid, nil)
 	return nil
 }
 
@@ -210,17 +206,13 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 		}), governor.ErrOptInner(err))
 	}
 
-	m.LastUpdated = time.Now().Round(0).UnixMilli()
-	if err := s.repo.UpdateChat(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat")
-	}
 	if err := s.repo.DeleteMembers(m.Chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove chat members")
 	}
-	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, time.Now().Round(0).UnixMilli()); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	s.notifyChatEventGetMembers("chat.update.members.remove", m, userids)
+	s.notifyChatEventGetMembers("chat.update.members.remove", chatid, userids)
 	return nil
 }
 
@@ -245,12 +237,11 @@ func (s *service) DeleteChat(chatid string) error {
 	if err := s.repo.DeleteChatMembers(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat members")
 	}
-	m.LastUpdated = time.Now().Round(0).UnixMilli()
 	userids := make([]string, 0, len(members))
 	for _, i := range members {
 		userids = append(userids, i.Userid)
 	}
-	s.notifyChatEvent("chat.delete", m, userids)
+	s.notifyChatEvent("chat.delete", chatid, userids)
 	if err := s.repo.DeleteChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat")
 	}
@@ -353,19 +344,17 @@ func (s *service) CreateMsg(chatid string, userid string, kind string, value str
 		return nil, governor.ErrWithMsg(err, "Failed to get chat")
 	}
 
-	msg, err := s.repo.AddMsg(m, userid, kind, value)
+	msg, err := s.repo.AddMsg(m.Chatid, userid, kind, value)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create chat msg")
-	}
-	if err := s.repo.UpdateChat(m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to update chat")
-	}
-	if err := s.repo.UpdateChatLastUpdated(m.Chatid, m.LastUpdated); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to update chat")
 	}
 	if err := s.repo.InsertMsg(msg); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to insert chat msg")
 	}
+	if err := s.repo.UpdateChatLastUpdated(m.Chatid, msg.Timems); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update chat")
+	}
+	s.notifyChatEventGetMembers("chat.msg.send", chatid, nil)
 
 	return &resMsg{
 		Chatid: msg.Chatid,
