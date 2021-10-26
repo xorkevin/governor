@@ -82,6 +82,9 @@ type (
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid;deleq,listid,msgid|arr"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid"`
+		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
+		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL" query:"dkim_pass"`
+		Subject      string `model:"subject,VARCHAR(255) NOT NULL" query:"subject"`
 	}
 
 	ctxKeyRepo struct{}

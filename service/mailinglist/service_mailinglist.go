@@ -396,6 +396,9 @@ type (
 		Msgid        string `json:"msgid"`
 		Userid       string `json:"userid"`
 		CreationTime int64  `json:"creation_time"`
+		SPFPass      string `json:"spf_pass"`
+		DKIMPass     string `json:"dkim_pass"`
+		Subject      string `json:"subject"`
 	}
 
 	resMsgs struct {
@@ -415,6 +418,9 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 			Msgid:        i.Msgid,
 			Userid:       i.Userid,
 			CreationTime: i.CreationTime,
+			SPFPass:      i.SPFPass,
+			DKIMPass:     i.DKIMPass,
+			Subject:      i.Subject,
 		})
 	}
 	return &resMsgs{

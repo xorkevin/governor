@@ -354,6 +354,10 @@ const (
 	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
 )
 
+const (
+	maxSubjectLength = 127
+)
+
 func (s *smtpSession) isAligned(a, b string) bool {
 	return strings.HasSuffix(a, b) || strings.HasSuffix(b, a)
 }
@@ -545,6 +549,18 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 	}
 	msg := s.service.lists.NewMsg(s.rcptList, msgid, s.fromUserid)
+	if subject, err := headers.Subject(); err == nil {
+		if len(subject) > maxSubjectLength {
+			subject = subject[:maxSubjectLength]
+		}
+		msg.Subject = subject
+	}
+	if dmarcPassSPF {
+		msg.SPFPass = s.from
+	}
+	if alignedDKIM != nil {
+		msg.DKIMPass = alignedDKIM.Domain
+	}
 	if err := s.service.lists.InsertMsg(msg); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
 			// message has already been sent for this list
