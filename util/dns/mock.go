@@ -4,20 +4,27 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type (
 	MockZone struct {
-		A     []string
-		AAAA  []string
-		TXT   []string
-		CNAME string
-		MX    []net.MX
+		A     []string `yaml:"A"`
+		AAAA  []string `yaml:"AAAA"`
+		MX    []net.MX `yaml:"MX"`
+		TXT   []string `yaml:"TXT"`
+		CNAME string   `yaml:"CNAME"`
 	}
 
 	MockResolver struct {
 		Zones map[string]MockZone
+	}
+
+	zoneData struct {
+		Data map[string]MockZone `yaml:"data"`
 	}
 )
 
@@ -51,6 +58,20 @@ func NewMockResolver(zones map[string]MockZone) Resolver {
 	return &MockResolver{
 		Zones: zones,
 	}
+}
+
+func NewMockResolverFromFile(s string) (Resolver, error) {
+	b, err := os.ReadFile(s)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read mockdns file %s: %w", s, err)
+	}
+	data := zoneData{}
+	if err := yaml.Unmarshal(b, &data); err != nil {
+		return nil, fmt.Errorf("Invalid mockdns file %s: %w", s, err)
+	}
+	return &MockResolver{
+		Zones: data.Data,
+	}, nil
 }
 
 func (r *MockResolver) LookupAddr(ctx context.Context, addr string) ([]string, error) {

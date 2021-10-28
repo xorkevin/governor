@@ -106,6 +106,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("maxmsgsize", "2M")
 	r.SetDefault("readtimeout", "5s")
 	r.SetDefault("writetimeout", "5s")
+	r.SetDefault("mockdnssource", "")
 }
 
 func (s *service) router() *router {
@@ -138,6 +139,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid write timeout for mail server")
 	} else {
 		s.writetimeout = t
+	}
+
+	if src := r.GetStr("mockdnssource"); src != "" {
+		var err error
+		s.resolver, err = dns.NewMockResolverFromFile(src)
+		if err != nil {
+			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid mockdns source")
+		}
+		l.Info("Use mockdns", map[string]string{
+			"source": src,
+		})
 	}
 
 	s.server = s.createSMTPServer()

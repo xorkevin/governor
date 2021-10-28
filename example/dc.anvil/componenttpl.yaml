@@ -12,3 +12,6 @@ templates:
   secrets:
     path: secrets.yaml
     output: {{ $outdir }}/secrets.yaml
+  mockdns:
+    path: mockdns.yaml
+    output: {{ $outdir }}/mockdns.yaml

@@ -73,6 +73,7 @@ mailinglist:
   maxmsgsize: 2M
   readtimeout: 5s
   writetimeout: 5s
+  mockdnssource: dc.anvil_out/governor/mockdns.yaml
 role:
   rolecache: 24h
 apikey:
