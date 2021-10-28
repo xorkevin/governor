@@ -1,4 +1,4 @@
 data:
-  mail.governor.dev.localhost:
+  mail.governor.dev.localhost.:
     TXT:
       - 'v=spf1 ip4:127.0.0.1 ~all'
