@@ -21,7 +21,6 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
-	"xorkevin.dev/governor/util/uid"
 )
 
 var (
@@ -155,7 +154,6 @@ type smtpSession struct {
 	service    *service
 	srcip      net.IP
 	helo       string
-	id         string
 	from       string
 	fromDomain string
 	fromSPF    authres.ResultValue
@@ -211,11 +209,6 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 	if err != nil {
 		return err
 	}
-	u, err := uid.NewSnowflake(smtpIDRandSize)
-	if err != nil {
-		return errSMTPBase
-	}
-	s.id = u.Base32()
 	s.from = from
 	s.fromDomain = domain
 	s.fromSPF = result
@@ -507,7 +500,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
-	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", s.id, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
+	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", msgid, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
 
 	mb := bytes.Buffer{}
 	if err := m.WriteTo(&mb); err != nil {
@@ -576,7 +569,6 @@ func (s *smtpSession) Data(r io.Reader) error {
 }
 
 func (s *smtpSession) Reset() {
-	s.id = ""
 	s.from = ""
 	s.fromDomain = ""
 	s.fromSPF = ""
