@@ -181,6 +181,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 func (s *service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service: s,
+		logger: s.logger.WithData(map[string]string{
+			"agent": "smtp_server",
+		}),
 	}
 	server := smtp.NewServer(be)
 	server.Addr = ":" + s.port
