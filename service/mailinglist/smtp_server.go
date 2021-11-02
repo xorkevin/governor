@@ -3,11 +3,11 @@ package mailinglist
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -897,7 +897,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 
 	if _, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
-		if !errors.Is(err, &db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Failed to get list msg", map[string]string{
 				"cmd":    "data",
 				"error":  err.Error(),
@@ -914,7 +914,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return nil
 	}
 
-	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(url.QueryEscape(msgid), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
+	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(base64.RawURLEncoding.EncodeToString([]byte(msgid)), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
 		s.logger.Error("Failed to store mail msg", map[string]string{
 			"cmd":    "data",
 			"error":  err.Error(),
