@@ -763,9 +763,13 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 
 	authResults := make([]authres.Result, 0, 3+len(dkimResults))
+	spfReason := ""
+	if s.fromSPF != authres.ResultNone {
+		spfReason = fmt.Sprintf("%s designates %s as a permitted sender", s.from, s.srcip.String())
+	}
 	authResults = append(authResults, &authres.SPFResult{
 		Value:  s.fromSPF,
-		Reason: fmt.Sprintf("%s designates %s as a permitted sender", s.from, s.srcip.String()),
+		Reason: spfReason,
 		From:   s.from,
 	})
 	if dkimErr != nil {
@@ -927,7 +931,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 	if len(rcpts) > 0 {
-		if err := s.service.mailer.FwdStream("", rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+		if err := s.service.mailer.FwdStream(s.from, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
 			s.logger.Error("Failed to send mail msg", map[string]string{
 				"cmd":    "data",
 				"error":  err.Error(),
@@ -981,6 +985,14 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 		return errSMTPBaseExists
 	}
+	s.logger.Debug("Received mail", map[string]string{
+		"cmd":    "data",
+		"from":   s.from,
+		"to":     s.rcptTo,
+		"sender": s.fromUserid,
+		"list":   s.rcptList,
+		"msgid":  msgid,
+	})
 	// TODO: track threads
 	return nil
 }

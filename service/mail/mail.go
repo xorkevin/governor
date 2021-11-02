@@ -97,7 +97,7 @@ type (
 	mailmsg struct {
 		From    Addr    `json:"from"`
 		To      []Addr  `json:"to"`
-		Kind    string  `json:"raw"`
+		Kind    string  `json:"kind"`
 		TplData tplData `json:"tpl_data"`
 		RawData rawData `json:"raw_data"`
 		FwdData fwdData `json:"fwd_data"`
@@ -308,7 +308,7 @@ func (s *service) handleSendMail(from string, to []string, msg io.Reader) error 
 	if err := smtp.SendMail(s.addr, auth, from, to, msg); err != nil {
 		return err
 	}
-	s.logger.Debug("mail sent", map[string]string{
+	s.logger.Debug("Mail sent", map[string]string{
 		"actiontype": "sendmail",
 		"addr":       s.addr,
 		"username":   secret.Username,
@@ -805,7 +805,7 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 			Address: from,
 		},
 		To:   toAddrs,
-		Kind: mailMsgKindRaw,
+		Kind: mailMsgKindFwd,
 		FwdData: fwdData{
 			Path:      path,
 			Key:       key,
