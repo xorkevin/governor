@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -642,6 +643,12 @@ func (s *streamSubscription) ok() bool {
 	}
 }
 
+func (s *streamSubscription) fetch(ctx context.Context, sub *nats.Subscription) ([]*nats.Msg, error) {
+	reqctx, reqcancel := context.WithTimeout(ctx, 5*time.Second)
+	defer reqcancel()
+	return sub.Fetch(1, nats.Context(reqctx))
+}
+
 func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscription, done chan<- struct{}) {
 	defer close(done)
 	start := time.Now()
@@ -651,12 +658,15 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 			return
 		default:
 		}
-		msgs, err := sub.Fetch(1, nats.Context(ctx))
+		msgs, err := s.fetch(ctx, sub)
 		if err != nil {
-			s.logger.Error("Failed obtaining messages", map[string]string{
-				"error": err.Error(),
-			})
-			return
+			if !errors.Is(err, context.DeadlineExceeded) {
+				s.logger.Error("Failed obtaining messages", map[string]string{
+					"error": err.Error(),
+				})
+				return
+			}
+			continue
 		}
 		for _, msg := range msgs {
 			if err := s.worker(&pinger{msg: msg}, msg.Data); err != nil {
