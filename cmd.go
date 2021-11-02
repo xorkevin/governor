@@ -41,7 +41,8 @@ func (c *Cmd) initCmd(opts Opts) {
 It is built on the governor microservice framework which handles config
 management, logging, health checks, setup procedures, jobs, authentication, db,
 caching, object storage, emailing, message queues and more.`,
-		Version: opts.Version.String(),
+		Version:           opts.Version.String(),
+		DisableAutoGenTag: true,
 	}
 
 	serveCmd := &cobra.Command{
@@ -59,6 +60,7 @@ The server first runs all init procedures for all services before starting.`,
 				os.Exit(1)
 			}
 		},
+		DisableAutoGenTag: true,
 	}
 
 	var setupFirst bool
@@ -100,6 +102,7 @@ Calls the server setup endpoint.`,
 			}
 			fmt.Printf("Successfully setup governor:%s\n", res.Version)
 		},
+		DisableAutoGenTag: true,
 	}
 	setupCmd.PersistentFlags().BoolVar(&setupFirst, "first", false, "first time setup")
 	setupCmd.PersistentFlags().StringVar(&setupSecret, "secret", "", "setup secret")
