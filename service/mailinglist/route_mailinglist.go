@@ -2,6 +2,7 @@ package mailinglist
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"xorkevin.dev/governor"
@@ -9,7 +10,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
+//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListMsg reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
 
 type (
 	reqCreatorLists struct {
@@ -32,6 +33,11 @@ type (
 		Listid string `valid:"listid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
+	}
+
+	reqListMsg struct {
+		Listid string `valid:"listid,has" json:"-"`
+		Msgid  string `valid:"msgid,has" json:"-"`
 	}
 
 	reqListMembers struct {
@@ -154,6 +160,27 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	msgid, err := url.QueryUnescape(c.Param("msgid"))
+	if err != nil {
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid msg id",
+		})))
+		return
+	}
+	req := reqListMsg{
+		Listid: c.Param("listid"),
+		Msgid:  msgid,
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteString(http.StatusOK, req.Msgid)
 }
 
 func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
@@ -371,6 +398,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/l/{listid}", m.getList)
 	r.Get("/l/{listid}/msgs", m.getListMsgs)
+	r.Get("/l/{listid}/msgs/{msgid}", m.getListMsg)
 	r.Get("/l/{listid}/member", m.getListMembers)
 	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)
 }
