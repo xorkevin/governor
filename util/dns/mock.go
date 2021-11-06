@@ -44,12 +44,12 @@ func (e ErrInvalid) Error() string {
 }
 
 func IsFQDN(s string) bool {
-	return s == strings.TrimSuffix(s, ".")
+	return s != strings.TrimSuffix(s, ".")
 }
 
 func FQDN(s string) string {
 	if IsFQDN(s) {
-		return s
+		return strings.ToLower(s)
 	}
 	return strings.ToLower(s) + "."
 }
