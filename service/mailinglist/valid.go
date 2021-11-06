@@ -217,7 +217,7 @@ func validhasMsgids(msgids []string) error {
 		}))
 	}
 	for _, i := range msgids {
-		if err := validhasUserid(i); err != nil {
+		if err := validhasMsgid(i); err != nil {
 			return err
 		}
 	}
