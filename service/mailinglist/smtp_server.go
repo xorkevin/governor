@@ -422,6 +422,151 @@ func (s *smtpSession) isAligned(a, b string) bool {
 	return strings.HasSuffix(a, b) || strings.HasSuffix(b, a)
 }
 
+func (s *smtpSession) checkListPolicy(senderid string, msgid string) error {
+	switch s.senderPolicy {
+	case listSenderPolicyOwner:
+		if s.isOrg {
+			if ok, err := gate.AuthMember(s.service.gate, senderid, s.rcptOwner); err != nil {
+				s.logger.Error("Failed to auth org member", map[string]string{
+					"cmd":    "to",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPBase
+			} else if !ok {
+				s.logger.Warn("Not allowed to send", map[string]string{
+					"cmd":    "to",
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPAuthSend
+			}
+		} else {
+			if senderid != s.rcptOwner {
+				s.logger.Warn("Not allowed to send", map[string]string{
+					"cmd":    "to",
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPAuthSend
+			}
+			if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
+				s.logger.Error("Failed to auth user", map[string]string{
+					"cmd":    "to",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPBase
+			} else if !ok {
+				s.logger.Warn("Not allowed to send", map[string]string{
+					"cmd":    "to",
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPAuthSend
+			}
+		}
+	case listSenderPolicyMember:
+		if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
+			s.logger.Error("Failed to auth user", map[string]string{
+				"cmd":    "to",
+				"error":  err.Error(),
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": senderid,
+				"policy": s.senderPolicy,
+			})
+			return errSMTPBase
+		} else if !ok {
+			s.logger.Warn("Not allowed to send", map[string]string{
+				"cmd":    "to",
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": senderid,
+				"policy": s.senderPolicy,
+			})
+			return errSMTPAuthSend
+		}
+		if _, err := s.service.lists.GetMember(s.rcptList, senderid); err != nil {
+			if errors.Is(err, db.ErrNotFound{}) {
+				s.logger.Warn("List member not found", map[string]string{
+					"cmd":    "to",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": senderid,
+					"policy": s.senderPolicy,
+				})
+				return errSMTPAuthSend
+			}
+			s.logger.Error("Failed to get list member", map[string]string{
+				"cmd":    "to",
+				"error":  err.Error(),
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": senderid,
+				"policy": s.senderPolicy,
+			})
+			return errSMTPBase
+		}
+	case listSenderPolicyUser:
+		if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
+			s.logger.Error("Failed to auth user", map[string]string{
+				"cmd":    "to",
+				"error":  err.Error(),
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": senderid,
+				"policy": s.senderPolicy,
+			})
+			return errSMTPBase
+		} else if !ok {
+			s.logger.Warn("Not allowed to send", map[string]string{
+				"cmd":    "to",
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": senderid,
+				"policy": s.senderPolicy,
+			})
+			return errSMTPAuthSend
+		}
+	default:
+		s.logger.Warn("Invalid mailbox sender policy", map[string]string{
+			"cmd":    "to",
+			"from":   s.from,
+			"list":   s.rcptList,
+			"msgid":  msgid,
+			"sender": senderid,
+			"policy": s.senderPolicy,
+		})
+		return errSMTPMailboxConfig
+	}
+	return nil
+}
+
 func (s *smtpSession) Data(r io.Reader) error {
 	if s.from == "" || s.rcptTo == "" {
 		s.logger.Warn("Failed smtp command sequence", map[string]string{
@@ -564,146 +709,8 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBase
 	}
 
-	switch s.senderPolicy {
-	case listSenderPolicyOwner:
-		if s.isOrg {
-			if ok, err := gate.AuthMember(s.service.gate, sender.Userid, s.rcptOwner); err != nil {
-				s.logger.Error("Failed to auth org member", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPBase
-			} else if !ok {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPAuthSend
-			}
-		} else {
-			if sender.Userid != s.rcptOwner {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPAuthSend
-			}
-			if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
-				s.logger.Error("Failed to auth user", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPBase
-			} else if !ok {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPAuthSend
-			}
-		}
-	case listSenderPolicyMember:
-		if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
-			s.logger.Error("Failed to auth user", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-				"policy": s.senderPolicy,
-			})
-			return errSMTPBase
-		} else if !ok {
-			s.logger.Warn("Not allowed to send", map[string]string{
-				"cmd":    "to",
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-				"policy": s.senderPolicy,
-			})
-			return errSMTPAuthSend
-		}
-		if _, err := s.service.lists.GetMember(s.rcptList, sender.Userid); err != nil {
-			if errors.Is(err, db.ErrNotFound{}) {
-				s.logger.Warn("List member not found", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-					"policy": s.senderPolicy,
-				})
-				return errSMTPAuthSend
-			}
-			s.logger.Error("Failed to get list member", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-				"policy": s.senderPolicy,
-			})
-			return errSMTPBase
-		}
-	case listSenderPolicyUser:
-		if ok, err := gate.AuthUser(s.service.gate, sender.Userid); err != nil {
-			s.logger.Error("Failed to auth user", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-				"policy": s.senderPolicy,
-			})
-			return errSMTPBase
-		} else if !ok {
-			s.logger.Warn("Not allowed to send", map[string]string{
-				"cmd":    "to",
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-				"policy": s.senderPolicy,
-			})
-			return errSMTPAuthSend
-		}
-	default:
-		s.logger.Warn("Invalid mailbox sender policy", map[string]string{
-			"cmd":    "to",
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
-			"policy": s.senderPolicy,
-		})
-		return errSMTPMailboxConfig
+	if err := s.checkListPolicy(sender.Userid, msgid); err != nil {
+		return err
 	}
 
 	dmarcRec, dmarcErr := dmarc.LookupWithOptions(fromAddrDomain, &dmarc.LookupOptions{
