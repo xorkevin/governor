@@ -1,11 +1,14 @@
 package mailinglist
 
 import (
+	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -383,7 +386,13 @@ func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string)
 		}
 		return governor.ErrWithMsg(err, "Failed to get list")
 	}
-	// TODO: delete objects
+	for _, i := range msgids {
+		if err := s.rcvMailDir.Subdir(m.ListID).Del(base64.RawURLEncoding.EncodeToString([]byte(i))); err != nil {
+			if !errors.Is(err, objstore.ErrNotFound{}) {
+				return governor.ErrWithMsg(err, "Failed to delete msg content")
+			}
+		}
+	}
 	if err := s.lists.DeleteMsgs(m.ListID, msgids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete messages")
 	}
@@ -426,4 +435,52 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 	return &resMsgs{
 		Msgs: msgs,
 	}, nil
+}
+
+func (s *service) StatMsg(listid, msgid string) (*objstore.ObjectInfo, error) {
+	m, err := s.lists.GetListByID(listid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
+	objinfo, err := s.rcvMailDir.Subdir(m.ListID).Stat(base64.RawURLEncoding.EncodeToString([]byte(msgid)))
+	if err != nil {
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Msg content not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get msg content")
+	}
+	return objinfo, nil
+}
+
+func (s *service) GetMsg(listid, msgid string) (io.ReadCloser, string, error) {
+	m, err := s.lists.GetListByID(listid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, "", governor.ErrWithMsg(err, "Failed to get list")
+	}
+	obj, objinfo, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(msgid)))
+	if err != nil {
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Msg content not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, "", governor.ErrWithMsg(err, "Failed to get msg content")
+	}
+	return obj, objinfo.ContentType, nil
 }

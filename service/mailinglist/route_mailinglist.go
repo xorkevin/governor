@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -180,7 +181,45 @@ func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	c.WriteString(http.StatusOK, req.Msgid)
+
+	msg, contentType, err := m.s.GetMsg(req.Listid, req.Msgid)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	defer func() {
+		if err := msg.Close(); err != nil {
+			m.s.logger.Error("Failed to close msg content", map[string]string{
+				"actiontype": "getlistmsg",
+				"error":      err.Error(),
+			})
+		}
+	}()
+	c.WriteFile(http.StatusOK, contentType, msg)
+}
+
+func (m *router) getListMsgCC(c governor.Context) (string, error) {
+	msgid, err := url.QueryUnescape(c.Param("msgid"))
+	if err != nil {
+		return "", (governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid msg id",
+		})))
+	}
+	req := reqListMsg{
+		Listid: c.Param("listid"),
+		Msgid:  msgid,
+	}
+	if err := req.valid(); err != nil {
+		return "", err
+	}
+
+	objinfo, err := m.s.StatMsg(req.Listid, req.Msgid)
+	if err != nil {
+		return "", err
+	}
+
+	return objinfo.ETag, nil
 }
 
 func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
@@ -398,7 +437,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/l/{listid}", m.getList)
 	r.Get("/l/{listid}/msgs", m.getListMsgs)
-	r.Get("/l/{listid}/msgs/{msgid}", m.getListMsg)
+	r.Get("/l/{listid}/msgs/{msgid}", m.getListMsg, cachecontrol.Control(m.s.logger, true, nil, 60, m.getListMsgCC))
 	r.Get("/l/{listid}/member", m.getListMembers)
 	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)
 }
