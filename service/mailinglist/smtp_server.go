@@ -181,7 +181,6 @@ type smtpSession struct {
 
 func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error, error) {
 	result, spfErr := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(context.Background()), spf.WithResolver(s.service.resolver))
-	fmt.Println("checking spf", domain, from, s.srcip, spfErr)
 	switch result {
 	case spf.Pass:
 		return authres.ResultPass, spfErr, nil
