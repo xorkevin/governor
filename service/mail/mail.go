@@ -179,7 +179,7 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
-	r.SetDefault("eventsize", "2K")
+	r.SetDefault("eventsize", "16K")
 }
 
 type (
