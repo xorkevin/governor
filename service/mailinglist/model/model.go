@@ -85,6 +85,9 @@ type (
 		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
 		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL" query:"dkim_pass"`
 		Subject      string `model:"subject,VARCHAR(255) NOT NULL" query:"subject"`
+		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL" query:"in_reply_to"`
+		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
+		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
 	}
 
 	ctxKeyRepo struct{}

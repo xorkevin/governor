@@ -409,6 +409,7 @@ func (s *smtpSession) Rcpt(to string) error {
 const (
 	headerMessageID             = "Message-ID"
 	headerFrom                  = "From"
+	headerInReplyTo             = "In-Reply-To"
 	headerAuthenticationResults = "Authentication-Results"
 	headerReceived              = "Received"
 	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
@@ -923,6 +924,9 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 	if alignedDKIM != nil {
 		msg.DKIMPass = alignedDKIM.Domain
+	}
+	if inReplyTo, err := headers.MsgIDList(headerInReplyTo); err == nil && len(inReplyTo) == 1 {
+		msg.InReplyTo = inReplyTo[0]
 	}
 	if err := s.service.lists.InsertMsg(msg); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {

@@ -408,6 +408,9 @@ type (
 		SPFPass      string `json:"spf_pass"`
 		DKIMPass     string `json:"dkim_pass"`
 		Subject      string `json:"subject"`
+		InReplyTo    string `json:"in_reply_to"`
+		ParentID     string `json:"parent_id"`
+		ThreadID     string `json:"thread_id"`
 	}
 
 	resMsgs struct {
@@ -430,6 +433,9 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 			SPFPass:      i.SPFPass,
 			DKIMPass:     i.DKIMPass,
 			Subject:      i.Subject,
+			InReplyTo:    i.InReplyTo,
+			ParentID:     i.ParentID,
+			ThreadID:     i.ThreadID,
 		})
 	}
 	return &resMsgs{
