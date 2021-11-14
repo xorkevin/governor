@@ -45,6 +45,12 @@ type (
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
+		NewTree(listid, msgid string, t int64) *TreeModel
+		GetTreeEdge(listid, msgid, parentid string) (*TreeModel, error)
+		GetTreeChildren(listid, parentid string, depth int, limit, offset int) ([]TreeModel, error)
+		GetTreeParents(listid, msgid string, limit, offset int) ([]TreeModel, error)
+		InsertTree(m *TreeModel) error
+		DeleteListTree(listid string) error
 		Setup() error
 	}
 
@@ -493,6 +499,80 @@ func (r *repo) DeleteListMsgs(listid string) error {
 	return nil
 }
 
+func (r *repo) NewTree(listid, msgid string, t int64) *TreeModel {
+	return &TreeModel{
+		ListID:       listid,
+		Msgid:        msgid,
+		ParentID:     msgid,
+		Depth:        0,
+		CreationTime: t,
+	}
+}
+
+func (r *repo) GetTreeEdge(listid, msgid, parentid string) (*TreeModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, code, err := treeModelGetTreeModelEqListIDEqMsgidEqParentID(d, listid, msgid, parentid)
+	if err != nil {
+		if code == 2 {
+			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No tree edge found")
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get tree edge")
+	}
+	return m, nil
+}
+
+func (r *repo) GetTreeChildren(listid, parentid string, depth int, limit, offset int) ([]TreeModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := treeModelGetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(d, listid, parentid, depth, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get tree children")
+	}
+	return m, nil
+}
+
+func (r *repo) GetTreeParents(listid, msgid string, limit, offset int) ([]TreeModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := treeModelGetTreeModelEqListIDEqMsgidOrdDepth(d, listid, msgid, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get tree parents")
+	}
+	return m, nil
+}
+
+func (r *repo) InsertTree(m *TreeModel) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if code, err := treeModelInsert(d, m); err != nil {
+		if code == 3 {
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Parent and msg id already added")
+		}
+		return governor.ErrWithMsg(err, "Failed to insert tree edge")
+	}
+	return nil
+}
+
+func (r *repo) DeleteListTree(listid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := treeModelDelEqListID(d, listid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list trees")
+	}
+	return nil
+}
+
 func (r *repo) Setup() error {
 	d, err := r.db.DB()
 	if err != nil {
@@ -509,6 +589,11 @@ func (r *repo) Setup() error {
 		}
 	}
 	if code, err := msgModelSetup(d); err != nil {
+		if code != 5 {
+			return governor.ErrWithMsg(err, "Failed to setup list message model")
+		}
+	}
+	if code, err := treeModelSetup(d); err != nil {
 		if code != 5 {
 			return governor.ErrWithMsg(err, "Failed to setup list message model")
 		}
