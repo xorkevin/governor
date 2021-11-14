@@ -10,6 +10,7 @@ import (
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
 //go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel
+//go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
 	keySeparator = "."
@@ -88,6 +89,15 @@ type (
 		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL" query:"in_reply_to"`
 		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
 		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
+	}
+
+	// TreeModel is the db mailing list message tree model
+	TreeModel struct {
+		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
+		Msgid        string `model:"msgid,VARCHAR(1023)" query:"msgid"`
+		ParentID     string `model:"parent_id,VARCHAR(1023), PRIMARY KEY (listid, msgid, parent_id)" query:"parent_id;getoneeq,listid,msgid,parent_id"`
+		Depth        int    `model:"depth,INT NOT NULL;index,listid,msgid" query:"depth;getgroupeq,listid,msgid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid,parent_id,depth" query:"creation_time;getgroupeq,listid,parent_id,depth"`
 	}
 
 	ctxKeyRepo struct{}
