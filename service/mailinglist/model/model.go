@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	"github.com/lib/pq"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 )
@@ -50,6 +51,7 @@ type (
 		GetTreeChildren(listid, parentid string, depth int, limit, offset int) ([]TreeModel, error)
 		GetTreeParents(listid, msgid string, limit, offset int) ([]TreeModel, error)
 		InsertTree(m *TreeModel) error
+		InsertTreeEdge(listid, msgid, parentid string) error
 		DeleteListTree(listid string) error
 		Setup() error
 	}
@@ -555,7 +557,28 @@ func (r *repo) InsertTree(m *TreeModel) error {
 	}
 	if code, err := treeModelInsert(d, m); err != nil {
 		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Parent and msg id already added")
+			return governor.ErrWithKind(err, db.ErrUnique{}, "Tree node already added")
+		}
+		return governor.ErrWithMsg(err, "Failed to insert tree node")
+	}
+	return nil
+}
+
+const (
+	sqlTreeEdgeInsert = "INSERT INTO " + treeModelTableName + " (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM " + treeModelTableName + " p INNER JOIN " + treeModelTableName + " c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;"
+)
+
+func (r *repo) InsertTreeEdge(listid, msgid, parentid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := d.Exec(sqlTreeEdgeInsert, listid, parentid, msgid); err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return governor.ErrWithKind(err, db.ErrUnique{}, "Tree edge already added")
+			}
 		}
 		return governor.ErrWithMsg(err, "Failed to insert tree edge")
 	}
