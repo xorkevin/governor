@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -838,9 +839,13 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 
-	members, err := s.service.lists.GetMembers(s.rcptList, mailingListMemberAmountCap, 0)
+	j, err := json.Marshal(mailmsg{
+		ListID: s.rcptList,
+		MsgID:  msgid,
+		From:   s.from,
+	})
 	if err != nil {
-		s.logger.Error("Failed to get list members", map[string]string{
+		s.logger.Error("Failed to encode list event to json", map[string]string{
 			"cmd":    "data",
 			"error":  err.Error(),
 			"from":   s.from,
@@ -849,26 +854,6 @@ func (s *smtpSession) Data(r io.Reader) error {
 			"sender": sender.Userid,
 		})
 		return errSMTPBaseExists
-	}
-	memberUserids := make([]string, 0, len(members))
-	for _, i := range members {
-		memberUserids = append(memberUserids, i.Userid)
-	}
-	recipients, err := s.service.users.GetInfoBulk(memberUserids)
-	if err != nil {
-		s.logger.Error("Failed to get list member users", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
-		})
-		return errSMTPBaseExists
-	}
-	rcpts := make([]string, 0, len(recipients.Users))
-	for _, i := range recipients.Users {
-		rcpts = append(rcpts, i.Email)
 	}
 
 	if _, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
@@ -885,6 +870,17 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 	} else {
 		// mail already exists for this list
+		if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+			s.logger.Error("Failed to publish list event", map[string]string{
+				"cmd":    "data",
+				"error":  err.Error(),
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": sender.Userid,
+			})
+			return errSMTPBaseExists
+		}
 		return nil
 	}
 
@@ -898,19 +894,6 @@ func (s *smtpSession) Data(r io.Reader) error {
 			"sender": sender.Userid,
 		})
 		return errSMTPBaseExists
-	}
-	if len(rcpts) > 0 {
-		if err := s.service.mailer.FwdStream(s.from, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
-			s.logger.Error("Failed to send mail msg", map[string]string{
-				"cmd":    "data",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-			})
-			return errSMTPBaseExists
-		}
 	}
 	msg := s.service.lists.NewMsg(s.rcptList, msgid, sender.Userid)
 	if subject, err := headers.Subject(); err == nil {
@@ -931,6 +914,17 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if err := s.service.lists.InsertMsg(msg); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
 			// message has already been sent for this list
+			if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+				s.logger.Error("Failed to publish list event", map[string]string{
+					"cmd":    "data",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": sender.Userid,
+				})
+				return errSMTPBaseExists
+			}
 			return nil
 		}
 		s.logger.Error("Failed to add list msg", map[string]string{
@@ -943,8 +937,8 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 		return errSMTPBaseExists
 	}
-	if err := s.service.lists.UpdateListLastUpdated(msg.ListID, msg.CreationTime); err != nil {
-		s.logger.Error("Failed to update list last updated", map[string]string{
+	if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+		s.logger.Error("Failed to publish list event", map[string]string{
 			"cmd":    "data",
 			"error":  err.Error(),
 			"from":   s.from,
@@ -961,7 +955,6 @@ func (s *smtpSession) Data(r io.Reader) error {
 		"msgid":  msgid,
 		"sender": sender.Userid,
 	})
-	// TODO: track threads
 	return nil
 }
 

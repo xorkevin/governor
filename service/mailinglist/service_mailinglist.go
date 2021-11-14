@@ -1,13 +1,16 @@
 package mailinglist
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
@@ -489,4 +492,111 @@ func (s *service) GetMsg(listid, msgid string) (io.ReadCloser, string, error) {
 		return nil, "", governor.ErrWithMsg(err, "Failed to get msg content")
 	}
 	return obj, objinfo.ContentType, nil
+}
+
+type (
+	mailmsg struct {
+		ListID string `json:"listid"`
+		MsgID  string `json:"msgid"`
+		From   string `json:"from"`
+	}
+
+	// ErrMailEvent is returned when the msgqueue mail message is malformed
+	ErrMailEvent struct{}
+)
+
+func (e ErrMailEvent) Error() string {
+	return "Malformed mail message"
+}
+
+func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
+	emmsg := &mailmsg{}
+	if err := json.Unmarshal(msgdata, emmsg); err != nil {
+		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
+	}
+
+	ml, err := s.lists.GetListByID(emmsg.ListID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("List not found", map[string]string{
+				"actiontype": "getmaillist",
+				"error":      err.Error(),
+			})
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+
+	m, err := s.lists.GetMsg(emmsg.ListID, emmsg.MsgID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("Msg not found", map[string]string{
+				"actiontype": "getmailmsg",
+				"error":      err.Error(),
+			})
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get list msg")
+	}
+
+	if m.CreationTime > ml.CreationTime {
+		if err := s.lists.UpdateListLastUpdated(m.ListID, m.CreationTime); err != nil {
+			return governor.ErrWithMsg(err, "Failed to update list last updated")
+		}
+	}
+
+	mb := bytes.Buffer{}
+	if err := func() error {
+		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(m.Msgid)))
+		if err != nil {
+			if errors.Is(err, objstore.ErrNotFound{}) {
+				s.logger.Error("Msg content not found", map[string]string{
+					"actiontype": "getmailmsgcontent",
+					"error":      err.Error(),
+				})
+				return nil
+			}
+			return governor.ErrWithMsg(err, "Failed to get msg content")
+		}
+		defer func() {
+			if err := obj.Close(); err != nil {
+				s.logger.Error("Failed to close msg content", map[string]string{
+					"actiontype": "getlistmsg",
+					"error":      err.Error(),
+				})
+			}
+		}()
+		if _, err := io.Copy(&mb, obj); err != nil {
+			return governor.ErrWithMsg(err, "Failed to read msg content")
+		}
+		return nil
+	}(); err != nil {
+		return err
+	}
+
+	members, err := s.lists.GetMembers(emmsg.ListID, mailingListMemberAmountCap, 0)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get list members")
+	}
+	memberUserids := make([]string, 0, len(members))
+	for _, i := range members {
+		memberUserids = append(memberUserids, i.Userid)
+	}
+	recipients, err := s.users.GetInfoBulk(memberUserids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get list member users")
+	}
+	rcpts := make([]string, 0, len(recipients.Users))
+	for _, i := range recipients.Users {
+		rcpts = append(rcpts, i.Email)
+	}
+	if len(rcpts) > 0 {
+		if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+			return governor.ErrWithMsg(err, "Failed to send mail msg")
+		}
+	}
+
+	// TODO: track threads
+
+	return nil
 }

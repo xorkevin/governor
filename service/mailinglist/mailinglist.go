@@ -7,6 +7,7 @@ import (
 
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist/model"
 	"xorkevin.dev/governor/service/objstore"
@@ -15,6 +16,13 @@ import (
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/dns"
+)
+
+const (
+	eventStream         = "DEV_XORKEVIN_GOV_MAILINGLIST"
+	eventStreamChannels = eventStream + ".*"
+	mailChannel         = eventStream + ".mail"
+	mailWorker          = eventStream + "_WORKER"
 )
 
 type (
@@ -32,6 +40,7 @@ type (
 		lists        model.Repo
 		mailBucket   objstore.Bucket
 		rcvMailDir   objstore.Dir
+		events       events.Events
 		users        user.Users
 		orgs         org.Orgs
 		mailer       mail.Mailer
@@ -46,6 +55,8 @@ type (
 		maxmsgsize   int
 		readtimeout  time.Duration
 		writetimeout time.Duration
+		streamsize   int64
+		eventsize    int32
 	}
 
 	router struct {
@@ -73,19 +84,21 @@ func setCtxMailingList(inj governor.Injector, m MailingList) {
 func NewCtx(inj governor.Injector) Service {
 	lists := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
+	ev := events.GetCtxEvents(inj)
 	users := user.GetCtxUsers(inj)
 	orgs := org.GetCtxOrgs(inj)
 	g := gate.GetCtxGate(inj)
 	mailer := mail.GetCtxMailer(inj)
-	return New(lists, obj, users, orgs, mailer, g)
+	return New(lists, obj, ev, users, orgs, mailer, g)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
 	return &service{
 		lists:      lists,
 		mailBucket: obj,
 		rcvMailDir: obj.Subdir("rcvmail"),
+		events:     ev,
 		users:      users,
 		orgs:       orgs,
 		mailer:     mailer,
@@ -107,6 +120,8 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("readtimeout", "5s")
 	r.SetDefault("writetimeout", "5s")
 	r.SetDefault("mockdnssource", "")
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("eventsize", "16K")
 }
 
 func (s *service) router() *router {
@@ -152,6 +167,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		})
 	}
 
+	var err error
+	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid stream size")
+	}
+	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid msg size")
+	}
+	s.eventsize = int32(eventsize)
+
 	s.server = s.createSMTPServer()
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil {
@@ -162,13 +188,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}()
 
 	l.Info("Initialize mailing list", map[string]string{
-		"port":               s.port,
-		"authdomain":         r.GetStr("authdomain"),
-		"usrdomain":          r.GetStr("usrdomain"),
-		"orgdomain":          r.GetStr("orgdomain"),
-		"maxmsgsize (bytes)": r.GetStr("maxmsgsize"),
-		"read timeout":       r.GetStr("readtimeout"),
-		"write timeout":      r.GetStr("writetimeout"),
+		"port":                s.port,
+		"authdomain":          r.GetStr("authdomain"),
+		"usrdomain":           r.GetStr("usrdomain"),
+		"orgdomain":           r.GetStr("orgdomain"),
+		"maxmsgsize (bytes)":  r.GetStr("maxmsgsize"),
+		"read timeout":        r.GetStr("readtimeout"),
+		"write timeout":       r.GetStr("writetimeout"),
+		"stream size (bytes)": r.GetStr("streamsize"),
+		"event size (bytes)":  r.GetStr("eventsize"),
 	})
 
 	sr := s.router()
@@ -208,6 +236,15 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return governor.ErrWithMsg(err, "Failed to init mail bucket")
 	}
 	l.Info("Created mail bucket", nil)
+	if err := s.events.InitStream(eventStream, []string{eventStreamChannels}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init mail stream")
+	}
+	l.Info("Created mail stream", nil)
 	return nil
 }
 
@@ -216,6 +253,19 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.events.StreamSubscribe(eventStream, mailChannel, mailWorker, s.mailSubscriber, events.StreamConsumerOpts{
+		AckWait:     30 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to mail queue")
+	}
+	l.Info("Subscribed to mail queue", nil)
 	return nil
 }
 

@@ -74,6 +74,8 @@ mailinglist:
   readtimeout: 5s
   writetimeout: 5s
   mockdnssource: dc.anvil_out/governor/mockdns.yaml
+  streamsize: 200M
+  eventsize: 2K
 role:
   rolecache: 24h
 apikey:
