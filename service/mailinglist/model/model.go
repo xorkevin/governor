@@ -10,7 +10,7 @@ import (
 
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed
+//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgDeleted
 //go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
@@ -89,7 +89,7 @@ type (
 	// MsgModel is the db mailing list message model
 	MsgModel struct {
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
-		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid;deleq,listid,msgid|arr"`
+		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid"`
 		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
@@ -99,10 +99,19 @@ type (
 		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
 		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
 		Processed    bool   `model:"processed,BOOL NOT NULL" query:"processed"`
+		Deleted      bool   `model:"deleted,BOOL NOT NULL" query:"deleted"`
 	}
 
 	msgProcessed struct {
 		Processed bool `query:"processed;updeq,listid,msgid"`
+	}
+
+	msgDeleted struct {
+		Userid   string `query:"userid"`
+		SPFPass  string `query:"spf_pass"`
+		DKIMPass string `query:"dkim_pass"`
+		Subject  string `query:"subject"`
+		Deleted  bool   `query:"deleted;updeq,listid,msgid|arr"`
 	}
 
 	// TreeModel is the db mailing list message tree model
@@ -503,8 +512,14 @@ func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelDelEqListIDHasMsgid(d, listid, msgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete list messages")
+	if _, err := msgModelUpdmsgDeletedEqListIDHasMsgid(d, &msgDeleted{
+		Userid:   "",
+		SPFPass:  "",
+		DKIMPass: "",
+		Subject:  "",
+		Deleted:  true,
+	}, listid, msgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to mark list messages as deleted")
 	}
 	return nil
 }

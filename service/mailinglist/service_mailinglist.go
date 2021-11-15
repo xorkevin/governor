@@ -414,6 +414,7 @@ type (
 		InReplyTo    string `json:"in_reply_to"`
 		ParentID     string `json:"parent_id"`
 		ThreadID     string `json:"thread_id"`
+		Deleted      bool   `json:"deleted"`
 	}
 
 	resMsgs struct {
@@ -439,6 +440,7 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 			InReplyTo:    i.InReplyTo,
 			ParentID:     i.ParentID,
 			ThreadID:     i.ThreadID,
+			Deleted:      i.Deleted,
 		})
 	}
 	return &resMsgs{
