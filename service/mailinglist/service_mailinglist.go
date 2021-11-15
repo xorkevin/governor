@@ -571,11 +571,11 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			}
 		}
 	}
-
-	// TODO: impl tree edge children
-
 	// thread updates must occur before children updates since thread updates are
 	// culled by non thread children
+	if err := s.lists.InsertTreeChildren(m.ListID, m.Msgid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to insert list thread children")
+	}
 	if err := s.lists.UpdateMsgThread(m.ListID, m.Msgid, threadid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update list msg thread")
 	}

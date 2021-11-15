@@ -56,6 +56,7 @@ type (
 		GetTreeParents(listid, msgid string, limit, offset int) ([]TreeModel, error)
 		InsertTree(m *TreeModel) error
 		InsertTreeEdge(listid, msgid, parentid string) error
+		InsertTreeChildren(listid, msgid string) error
 		DeleteListTree(listid string) error
 		Setup() error
 	}
@@ -671,6 +672,27 @@ func (r *repo) InsertTreeEdge(listid, msgid, parentid string) error {
 			}
 		}
 		return governor.ErrWithMsg(err, "Failed to insert tree edge")
+	}
+	return nil
+}
+
+const (
+	sqlTreeChildrenInsert = "INSERT INTO " + treeModelTableName + " (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM " + treeModelTableName + " p INNER JOIN " + treeModelTableName + " c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id IN (SELECT msgid FROM " + msgModelTableName + " WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2) ON CONFLICT DO NOTHING;"
+)
+
+func (r *repo) InsertTreeChildren(listid, msgid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := d.Exec(sqlTreeChildrenInsert, listid, msgid); err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return governor.ErrWithKind(err, db.ErrUnique{}, "Tree children edges already added")
+			}
+		}
+		return governor.ErrWithMsg(err, "Failed to insert tree children edges")
 	}
 	return nil
 }
