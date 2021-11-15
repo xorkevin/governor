@@ -30,6 +30,39 @@ func msgModelSetup(db *sql.DB) (int, error) {
 			}
 		}
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistmsgs_listid__thread_id__creation_time_index ON mailinglistmsgs (listid, thread_id, creation_time);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistmsgs_listid__in_reply_to_index ON mailinglistmsgs (listid, in_reply_to);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistmsgs_listid__thread_id__in_reply_to_index ON mailinglistmsgs (listid, thread_id, in_reply_to);")
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "42501": // insufficient_privilege
+				return 5, err
+			default:
+				return 0, err
+			}
+		}
+	}
 	return 0, nil
 }
 
@@ -155,6 +188,36 @@ func msgModelUpdmsgDeletedEqListIDHasMsgid(db *sql.DB, m *msgDeleted, listid str
 		placeholdersmsgid = strings.Join(placeholders, ", ")
 	}
 	_, err := db.Exec("UPDATE mailinglistmsgs SET (userid, spf_pass, dkim_pass, subject, deleted) = ROW($1, $2, $3, $4, $5) WHERE listid = $6 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+func msgModelUpdmsgParentEqListIDEqMsgidEqThreadID(db *sql.DB, m *msgParent, listid string, msgid string, threadid string) (int, error) {
+	_, err := db.Exec("UPDATE mailinglistmsgs SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND msgid = $4 AND thread_id = $5;", m.ParentID, m.ThreadID, listid, msgid, threadid)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
+}
+
+func msgModelUpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(db *sql.DB, m *msgChildren, listid string, threadid string, inreplyto string) (int, error) {
+	_, err := db.Exec("UPDATE mailinglistmsgs SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND thread_id = $4 AND in_reply_to = $5;", m.ParentID, m.ThreadID, listid, threadid, inreplyto)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {

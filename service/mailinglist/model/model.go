@@ -10,7 +10,7 @@ import (
 
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgDeleted
+//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgDeleted msgParent msgChildren
 //go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
@@ -44,6 +44,9 @@ type (
 		GetMsg(listid, msgid string) (*MsgModel, error)
 		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
 		InsertMsg(m *MsgModel) error
+		UpdateMsgParent(listid, msgid string, parentid, threadid string) error
+		UpdateMsgChildren(listid, parentid, threadid string) error
+		UpdateMsgThread(listid, parentid, threadid string) error
 		MarkMsgProcessed(listid, msgid string) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
@@ -91,11 +94,11 @@ type (
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid" query:"creation_time;getgroupeq,listid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid;index,listid,thread_id" query:"creation_time;getgroupeq,listid"`
 		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
 		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL" query:"dkim_pass"`
 		Subject      string `model:"subject,VARCHAR(255) NOT NULL" query:"subject"`
-		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL" query:"in_reply_to"`
+		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL;index,listid;index,listid,thread_id" query:"in_reply_to"`
 		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
 		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
 		Processed    bool   `model:"processed,BOOL NOT NULL" query:"processed"`
@@ -112,6 +115,16 @@ type (
 		DKIMPass string `query:"dkim_pass"`
 		Subject  string `query:"subject"`
 		Deleted  bool   `query:"deleted;updeq,listid,msgid|arr"`
+	}
+
+	msgParent struct {
+		ParentID string `query:"parent_id"`
+		ThreadID string `query:"thread_id;updeq,listid,msgid,thread_id"`
+	}
+
+	msgChildren struct {
+		ParentID string `query:"parent_id"`
+		ThreadID string `query:"thread_id;updeq,listid,thread_id,in_reply_to"`
 	}
 
 	// TreeModel is the db mailing list message tree model
@@ -487,6 +500,49 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 			return governor.ErrWithKind(err, db.ErrUnique{}, "Msg id must be unique for list")
 		}
 		return governor.ErrWithMsg(err, "Failed to insert list message")
+	}
+	return nil
+}
+
+func (r *repo) UpdateMsgParent(listid, msgid string, parentid, threadid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := msgModelUpdmsgParentEqListIDEqMsgidEqThreadID(d, &msgParent{
+		ParentID: parentid,
+		ThreadID: threadid,
+	}, listid, msgid, ""); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list message parent")
+	}
+	return nil
+}
+
+func (r *repo) UpdateMsgChildren(listid, parentid, threadid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := msgModelUpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(d, &msgChildren{
+		ParentID: parentid,
+		ThreadID: threadid,
+	}, listid, "", parentid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list message children")
+	}
+	return nil
+}
+
+const (
+	sqlMsgUpdateThread = "UPDATE " + msgModelTableName + " SET (thread_id) = ROW($3) WHERE listid = $1 AND thread_id IN (SELECT msgid FROM " + msgModelTableName + " WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2);"
+)
+
+func (r *repo) UpdateMsgThread(listid, parentid, threadid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := d.Exec(sqlMsgUpdateThread, listid, parentid, threadid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list message thread")
 	}
 	return nil
 }
