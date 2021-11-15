@@ -15,7 +15,7 @@ const (
 )
 
 func msgModelSetup(db *sql.DB) (int, error) {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistmsgs (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistmsgs (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL, processed BOOL NOT NULL);")
 	if err != nil {
 		return 0, err
 	}
@@ -34,7 +34,7 @@ func msgModelSetup(db *sql.DB) (int, error) {
 }
 
 func msgModelInsert(db *sql.DB, m *MsgModel) (int, error) {
-	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID)
+	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -54,13 +54,13 @@ func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) (int
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*10)
+	args := make([]interface{}, 0, len(models)*11)
 	for c, m := range models {
-		n := c * 10
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10))
-		args = append(args, m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID)
+		n := c * 11
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11))
+		args = append(args, m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed)
 	}
-	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		if postgresErr, ok := err.(*pq.Error); ok {
 			switch postgresErr.Code {
@@ -81,7 +81,7 @@ func msgModelDelEqListID(db *sql.DB, listid string) error {
 
 func msgModelGetMsgModelEqListIDEqMsgid(db *sql.DB, listid string, msgid string) (*MsgModel, int, error) {
 	m := &MsgModel{}
-	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID); err != nil {
+	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 2, err
 		}
@@ -122,7 +122,7 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id FROM mailinglistmsgs WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
+	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed FROM mailinglistmsgs WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 	}()
 	for rows.Next() {
 		m := MsgModel{}
-		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID); err != nil {
+		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -141,4 +141,19 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 		return nil, err
 	}
 	return res, nil
+}
+
+func msgModelUpdmsgProcessedEqListIDEqMsgid(db *sql.DB, m *msgProcessed, listid string, msgid string) (int, error) {
+	_, err := db.Exec("UPDATE mailinglistmsgs SET (processed) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Processed, listid, msgid)
+	if err != nil {
+		if postgresErr, ok := err.(*pq.Error); ok {
+			switch postgresErr.Code {
+			case "23505": // unique_violation
+				return 3, err
+			default:
+				return 0, err
+			}
+		}
+	}
+	return 0, nil
 }

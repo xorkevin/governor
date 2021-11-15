@@ -10,7 +10,7 @@ import (
 
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel
+//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed
 //go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
@@ -44,6 +44,7 @@ type (
 		GetMsg(listid, msgid string) (*MsgModel, error)
 		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
 		InsertMsg(m *MsgModel) error
+		MarkMsgProcessed(listid, msgid string) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
 		NewTree(listid, msgid string, t int64) *TreeModel
@@ -97,6 +98,11 @@ type (
 		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL" query:"in_reply_to"`
 		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
 		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
+		Processed    bool   `model:"processed,BOOL NOT NULL" query:"processed"`
+	}
+
+	msgProcessed struct {
+		Processed bool `query:"processed;updeq,listid,msgid"`
 	}
 
 	// TreeModel is the db mailing list message tree model
@@ -472,6 +478,19 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 			return governor.ErrWithKind(err, db.ErrUnique{}, "Msg id must be unique for list")
 		}
 		return governor.ErrWithMsg(err, "Failed to insert list message")
+	}
+	return nil
+}
+
+func (r *repo) MarkMsgProcessed(listid, msgid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := msgModelUpdmsgProcessedEqListIDEqMsgid(d, &msgProcessed{
+		Processed: true,
+	}, listid, msgid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list message")
 	}
 	return nil
 }

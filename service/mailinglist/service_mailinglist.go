@@ -526,7 +526,6 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get list")
 	}
-
 	m, err := s.lists.GetMsg(emmsg.ListID, emmsg.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -538,7 +537,11 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get list msg")
 	}
-
+	if !m.Processed {
+		if err := s.lists.MarkMsgProcessed(m.ListID, m.Msgid); err != nil {
+			return governor.ErrWithMsg(err, "Failed to mark list msg")
+		}
+	}
 	if m.CreationTime > ml.CreationTime {
 		if err := s.lists.UpdateListLastUpdated(m.ListID, m.CreationTime); err != nil {
 			return governor.ErrWithMsg(err, "Failed to update list last updated")

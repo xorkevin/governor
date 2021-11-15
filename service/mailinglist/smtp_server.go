@@ -856,7 +856,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 
-	if _, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
+	if msg, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Failed to get list msg", map[string]string{
 				"cmd":    "data",
@@ -870,16 +870,28 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 	} else {
 		// mail already exists for this list
-		if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
-			s.logger.Error("Failed to publish list event", map[string]string{
-				"cmd":    "data",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
-			})
-			return errSMTPBaseExists
+		if !msg.Processed {
+			if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+				s.logger.Error("Failed to publish list event", map[string]string{
+					"cmd":    "data",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": sender.Userid,
+				})
+				return errSMTPBaseExists
+			}
+			if err := s.service.lists.MarkMsgProcessed(s.rcptList, msgid); err != nil {
+				s.logger.Error("Failed to mark list message processed", map[string]string{
+					"cmd":    "data",
+					"error":  err.Error(),
+					"from":   s.from,
+					"list":   s.rcptList,
+					"msgid":  msgid,
+					"sender": sender.Userid,
+				})
+			}
 		}
 		return nil
 	}
@@ -912,30 +924,18 @@ func (s *smtpSession) Data(r io.Reader) error {
 		msg.InReplyTo = inReplyTo[0]
 	}
 	if err := s.service.lists.InsertMsg(msg); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
-			// message has already been sent for this list
-			if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
-				s.logger.Error("Failed to publish list event", map[string]string{
-					"cmd":    "data",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
-				})
-				return errSMTPBaseExists
-			}
-			return nil
+		if !errors.Is(err, db.ErrUnique{}) {
+			s.logger.Error("Failed to add list msg", map[string]string{
+				"cmd":    "data",
+				"error":  err.Error(),
+				"from":   s.from,
+				"list":   s.rcptList,
+				"msgid":  msgid,
+				"sender": sender.Userid,
+			})
+			return errSMTPBaseExists
 		}
-		s.logger.Error("Failed to add list msg", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
-		})
-		return errSMTPBaseExists
+		// message has already been sent for this list
 	}
 	if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
 		s.logger.Error("Failed to publish list event", map[string]string{
@@ -947,6 +947,16 @@ func (s *smtpSession) Data(r io.Reader) error {
 			"sender": sender.Userid,
 		})
 		return errSMTPBaseExists
+	}
+	if err := s.service.lists.MarkMsgProcessed(s.rcptList, msgid); err != nil {
+		s.logger.Error("Failed to mark list message processed", map[string]string{
+			"cmd":    "data",
+			"error":  err.Error(),
+			"from":   s.from,
+			"list":   s.rcptList,
+			"msgid":  msgid,
+			"sender": sender.Userid,
+		})
 	}
 	s.logger.Debug("Received mail", map[string]string{
 		"cmd":    "data",
