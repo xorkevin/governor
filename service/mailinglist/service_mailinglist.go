@@ -549,7 +549,8 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			return governor.ErrWithMsg(err, "Failed to insert list thread tree")
 		}
 	}
-	if m.InReplyTo != "" && m.ParentID == "" {
+	threadid := m.Msgid
+	if m.InReplyTo != "" {
 		if p, err := s.lists.GetMsg(m.ListID, m.InReplyTo); err != nil {
 			if !errors.Is(err, db.ErrNotFound{}) {
 				return governor.ErrWithMsg(err, "Failed to get list msg parent")
@@ -561,20 +562,25 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 				return governor.ErrWithMsg(err, "Failed to insert list thread edge")
 			}
 
-			threadid := p.ThreadID
-			if threadid == "" {
-				threadid = p.Msgid
-			}
-			if err := s.lists.UpdateMsgThread(m.ListID, m.Msgid, threadid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to update list msg thread")
-			}
-			if err := s.lists.UpdateMsgChildren(m.ListID, m.Msgid, threadid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to update list msg thread")
+			threadid = p.Msgid
+			if k := p.ThreadID; k != "" {
+				threadid = k
 			}
 			if err := s.lists.UpdateMsgParent(m.ListID, m.Msgid, p.Msgid, threadid); err != nil {
 				return governor.ErrWithMsg(err, "Failed to update list msg parent")
 			}
 		}
+	}
+
+	// TODO: impl tree edge children
+
+	// thread updates must occur before children updates since thread updates are
+	// culled by non thread children
+	if err := s.lists.UpdateMsgThread(m.ListID, m.Msgid, threadid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list msg thread")
+	}
+	if err := s.lists.UpdateMsgChildren(m.ListID, m.Msgid, threadid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update list msg children")
 	}
 	if m.CreationTime > ml.CreationTime {
 		if err := s.lists.UpdateListLastUpdated(m.ListID, m.CreationTime); err != nil {
