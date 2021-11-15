@@ -566,8 +566,10 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			if k := p.ThreadID; k != "" {
 				threadid = k
 			}
-			if err := s.lists.UpdateMsgParent(m.ListID, m.Msgid, p.Msgid, threadid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to update list msg parent")
+			if m.ParentID != "" {
+				if err := s.lists.UpdateMsgParent(m.ListID, m.Msgid, p.Msgid, threadid); err != nil {
+					return governor.ErrWithMsg(err, "Failed to update list msg parent")
+				}
 			}
 		}
 	}
