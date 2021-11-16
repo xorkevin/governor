@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListMsg reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
+//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListMsg reqListThread reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
 
 type (
 	reqCreatorLists struct {
@@ -39,6 +39,13 @@ type (
 	reqListMsg struct {
 		Listid string `valid:"listid,has" json:"-"`
 		Msgid  string `valid:"msgid,has" json:"-"`
+	}
+
+	reqListThread struct {
+		Listid   string `valid:"listid,has" json:"-"`
+		Threadid string `valid:"msgid,has" json:"-"`
+		Amount   int    `valid:"amount" json:"-"`
+		Offset   int    `valid:"offset" json:"-"`
 	}
 
 	reqListMembers struct {
@@ -156,6 +163,53 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := m.s.GetLatestMsgs(req.Listid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getListThreads(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqListMsgs{
+		Listid: c.Param("listid"),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetLatestThreads(req.Listid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	threadid, err := url.QueryUnescape(c.Param("threadid"))
+	if err != nil {
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid msg id",
+		})))
+		return
+	}
+	req := reqListThread{
+		Listid:   c.Param("listid"),
+		Threadid: threadid,
+		Amount:   c.QueryInt("amount", -1),
+		Offset:   c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetThread(req.Listid, req.Threadid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -437,6 +491,8 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/l/{listid}", m.getList)
 	r.Get("/l/{listid}/msgs", m.getListMsgs)
+	r.Get("/l/{listid}/threads", m.getListThreads)
+	r.Get("/l/{listid}/threads/{threadid}", m.getListThread)
 	r.Get("/l/{listid}/msgs/{msgid}", m.getListMsg, cachecontrol.Control(m.s.logger, true, nil, 60, m.getListMsgCC))
 	r.Get("/l/{listid}/member", m.getListMembers)
 	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)

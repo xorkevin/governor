@@ -43,6 +43,8 @@ type (
 		NewMsg(listid, msgid, userid string) *MsgModel
 		GetMsg(listid, msgid string) (*MsgModel, error)
 		GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
+		GetListThreads(listid string, limit, offset int) ([]MsgModel, error)
+		GetListThread(listid, threadid string, limit, offset int) ([]MsgModel, error)
 		InsertMsg(m *MsgModel) error
 		UpdateMsgParent(listid, msgid string, parentid, threadid string) error
 		UpdateMsgChildren(listid, parentid, threadid string) error
@@ -95,7 +97,7 @@ type (
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid;index,listid,thread_id" query:"creation_time;getgroupeq,listid"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid;index,listid,thread_id" query:"creation_time;getgroupeq,listid;getgroupeq,listid,thread_id"`
 		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
 		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL" query:"dkim_pass"`
 		Subject      string `model:"subject,VARCHAR(255) NOT NULL" query:"subject"`
@@ -487,6 +489,30 @@ func (r *repo) GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
 	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, listid, false, limit, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get latest list messages")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListThreads(listid string, limit, offset int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, listid, "", false, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get latest list threads")
+	}
+	return m, nil
+}
+
+func (r *repo) GetListThread(listid, threadid string, limit, offset int) ([]MsgModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, listid, threadid, true, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get list thread")
 	}
 	return m, nil
 }

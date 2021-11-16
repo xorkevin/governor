@@ -158,6 +158,33 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 	return res, nil
 }
 
+func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, listid string, threadid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MsgModel, 0, limit)
+	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted FROM mailinglistmsgs WHERE listid = $3 AND thread_id = $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, threadid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MsgModel{}
+		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Deleted); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func msgModelUpdmsgProcessedEqListIDEqMsgid(db *sql.DB, m *msgProcessed, listid string, msgid string) (int, error) {
 	_, err := db.Exec("UPDATE mailinglistmsgs SET (processed) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Processed, listid, msgid)
 	if err != nil {

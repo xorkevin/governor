@@ -425,7 +425,59 @@ type (
 func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, error) {
 	m, err := s.lists.GetListMsgs(listid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to delete messages")
+		return nil, governor.ErrWithMsg(err, "Failed to get messages")
+	}
+	msgs := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		msgs = append(msgs, resMsg{
+			ListID:       i.ListID,
+			Msgid:        i.Msgid,
+			Userid:       i.Userid,
+			CreationTime: i.CreationTime,
+			SPFPass:      i.SPFPass,
+			DKIMPass:     i.DKIMPass,
+			Subject:      i.Subject,
+			InReplyTo:    i.InReplyTo,
+			ParentID:     i.ParentID,
+			ThreadID:     i.ThreadID,
+			Deleted:      i.Deleted,
+		})
+	}
+	return &resMsgs{
+		Msgs: msgs,
+	}, nil
+}
+
+func (s *service) GetLatestThreads(listid string, amount, offset int) (*resMsgs, error) {
+	m, err := s.lists.GetListThreads(listid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get threads")
+	}
+	msgs := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		msgs = append(msgs, resMsg{
+			ListID:       i.ListID,
+			Msgid:        i.Msgid,
+			Userid:       i.Userid,
+			CreationTime: i.CreationTime,
+			SPFPass:      i.SPFPass,
+			DKIMPass:     i.DKIMPass,
+			Subject:      i.Subject,
+			InReplyTo:    i.InReplyTo,
+			ParentID:     i.ParentID,
+			ThreadID:     i.ThreadID,
+			Deleted:      i.Deleted,
+		})
+	}
+	return &resMsgs{
+		Msgs: msgs,
+	}, nil
+}
+
+func (s *service) GetThread(listid, threadid string, amount, offset int) (*resMsgs, error) {
+	m, err := s.lists.GetListThread(listid, threadid, amount, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get thread")
 	}
 	msgs := make([]resMsg, 0, len(m))
 	for _, i := range m {
