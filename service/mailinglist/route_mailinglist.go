@@ -209,7 +209,7 @@ func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetThread(req.Listid, req.Threadid, req.Amount, req.Offset)
+	res, err := m.s.GetThreadMsgs(req.Listid, req.Threadid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return

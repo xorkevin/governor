@@ -423,6 +423,15 @@ type (
 )
 
 func (s *service) GetMsg(listid, msgid string) (*resMsg, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
 	m, err := s.lists.GetMsg(listid, msgid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -449,6 +458,15 @@ func (s *service) GetMsg(listid, msgid string) (*resMsg, error) {
 }
 
 func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
 	m, err := s.lists.GetListMsgs(listid, amount, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get messages")
@@ -475,6 +493,15 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 }
 
 func (s *service) GetLatestThreads(listid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
 	m, err := s.lists.GetListThreads(listid, amount, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get threads")
@@ -500,7 +527,16 @@ func (s *service) GetLatestThreads(listid string, amount, offset int) (*resMsgs,
 	}, nil
 }
 
-func (s *service) GetThread(listid, threadid string, amount, offset int) (*resMsgs, error) {
+func (s *service) GetThreadMsgs(listid, threadid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(listid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "List not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get list")
+	}
 	m, err := s.lists.GetListThread(listid, threadid, amount, offset)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get thread")
