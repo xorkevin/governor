@@ -422,6 +422,32 @@ type (
 	}
 )
 
+func (s *service) GetMsg(listid, msgid string) (*resMsg, error) {
+	m, err := s.lists.GetMsg(listid, msgid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusNotFound,
+				Message: "Message not found",
+			}), governor.ErrOptInner(err))
+		}
+		return nil, governor.ErrWithMsg(err, "Failed to get message")
+	}
+	return &resMsg{
+		ListID:       m.ListID,
+		Msgid:        m.Msgid,
+		Userid:       m.Userid,
+		CreationTime: m.CreationTime,
+		SPFPass:      m.SPFPass,
+		DKIMPass:     m.DKIMPass,
+		Subject:      m.Subject,
+		InReplyTo:    m.InReplyTo,
+		ParentID:     m.ParentID,
+		ThreadID:     m.ThreadID,
+		Deleted:      m.Deleted,
+	}, nil
+}
+
 func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, error) {
 	m, err := s.lists.GetListMsgs(listid, amount, offset)
 	if err != nil {
@@ -524,7 +550,7 @@ func (s *service) StatMsg(listid, msgid string) (*objstore.ObjectInfo, error) {
 	return objinfo, nil
 }
 
-func (s *service) GetMsg(listid, msgid string) (io.ReadCloser, string, error) {
+func (s *service) GetMsgContent(listid, msgid string) (io.ReadCloser, string, error) {
 	m, err := s.lists.GetListByID(listid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {

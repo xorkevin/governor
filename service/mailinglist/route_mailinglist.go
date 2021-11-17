@@ -236,7 +236,34 @@ func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, contentType, err := m.s.GetMsg(req.Listid, req.Msgid)
+	res, err := m.s.GetMsg(req.Listid, req.Msgid)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	msgid, err := url.QueryUnescape(c.Param("msgid"))
+	if err != nil {
+		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid msg id",
+		})))
+		return
+	}
+	req := reqListMsg{
+		Listid: c.Param("listid"),
+		Msgid:  msgid,
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	msg, contentType, err := m.s.GetMsgContent(req.Listid, req.Msgid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -492,8 +519,9 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/l/{listid}", m.getList)
 	r.Get("/l/{listid}/msgs", m.getListMsgs)
 	r.Get("/l/{listid}/threads", m.getListThreads)
-	r.Get("/l/{listid}/threads/{threadid}", m.getListThread)
-	r.Get("/l/{listid}/msgs/{msgid}", m.getListMsg, cachecontrol.Control(m.s.logger, true, nil, 60, m.getListMsgCC))
+	r.Get("/l/{listid}/threads/id/{threadid}/msgs", m.getListThread)
+	r.Get("/l/{listid}/msgs/id/{msgid}", m.getListMsg)
+	r.Get("/l/{listid}/msgs/id/{msgid}/content", m.getListMsgContent, cachecontrol.Control(m.s.logger, true, nil, 60, m.getListMsgCC))
 	r.Get("/l/{listid}/member", m.getListMembers)
 	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)
 }
