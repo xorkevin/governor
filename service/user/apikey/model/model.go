@@ -228,8 +228,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := apikeyModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup user apikeys model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup user apikeys model")
+			return err
 		}
 	}
 	return nil

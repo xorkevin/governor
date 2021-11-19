@@ -258,8 +258,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := roleModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup role model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup role model")
+			return err
 		}
 	}
 	return nil

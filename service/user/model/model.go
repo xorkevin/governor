@@ -334,8 +334,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := userModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup user model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup user model")
+			return err
 		}
 	}
 	return nil

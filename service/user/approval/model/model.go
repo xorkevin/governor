@@ -208,8 +208,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := approvalModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup user approval model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup user approval model")
+			return err
 		}
 	}
 	return nil

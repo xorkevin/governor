@@ -146,8 +146,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := profileModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup profile model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup profile model")
+			return err
 		}
 	}
 	return nil

@@ -528,18 +528,21 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := chatModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup chat model")
+			return err
 		}
 	}
 	if err := memberModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat member model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup chat member model")
+			return err
 		}
 	}
 	if err := msgModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup chat message model")
+			return err
 		}
 	}
 	return nil

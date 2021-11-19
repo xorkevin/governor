@@ -179,8 +179,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := invModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup role invitation model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup role invitation model")
+			return err
 		}
 	}
 	return nil

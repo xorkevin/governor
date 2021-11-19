@@ -182,8 +182,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := resetModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup user reset code model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup user reset code model")
+			return err
 		}
 	}
 	return nil

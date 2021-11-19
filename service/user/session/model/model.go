@@ -266,8 +266,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := sessionModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup user session model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup user session model")
+			return err
 		}
 	}
 	return nil

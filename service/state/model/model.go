@@ -123,8 +123,9 @@ func (r *repo) Setup(req state.ReqSetup) error {
 		return err
 	}
 	if err := stateModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup state model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup state model")
+			return err
 		}
 	}
 	k := r.New(req.Version, req.VHash)

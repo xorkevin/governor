@@ -701,23 +701,27 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := listModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup list model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup list model")
+			return err
 		}
 	}
 	if err := memberModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup list member model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup list member model")
+			return err
 		}
 	}
 	if err := msgModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup list message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup list message model")
+			return err
 		}
 	}
 	if err := treeModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup list message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup list message model")
+			return err
 		}
 	}
 	return nil

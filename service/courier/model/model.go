@@ -240,13 +240,15 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := linkModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup link model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup link model")
+			return err
 		}
 	}
 	if err := brandModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup brand model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup brand model")
+			return err
 		}
 	}
 	return nil

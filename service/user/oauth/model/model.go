@@ -240,8 +240,9 @@ func (r *repo) Setup() error {
 		return err
 	}
 	if err := oauthappModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup OAuth app model")
 		if !errors.Is(err, db.ErrAuthz{}) {
-			return db.WrapErr(err, "Failed to setup OAuth app model")
+			return err
 		}
 	}
 	return nil
