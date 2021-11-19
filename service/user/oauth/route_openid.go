@@ -109,8 +109,8 @@ type (
 )
 
 func (m *router) writeOAuthTokenError(c governor.Context, err error) {
-	gerr := &governor.Error{}
-	isError := errors.As(err, gerr)
+	var gerr *governor.Error
+	isError := errors.As(err, &gerr)
 
 	if !errors.Is(err, governor.ErrorUser{}) {
 		msg := "non governor error"
@@ -123,7 +123,8 @@ func (m *router) writeOAuthTokenError(c governor.Context, err error) {
 		})
 	}
 
-	if rerr := (&governor.ErrorRes{}); errors.As(err, rerr) {
+	var rerr *governor.ErrorRes
+	if errors.As(err, &rerr) {
 		if rerr.Status == http.StatusUnauthorized {
 			c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, m.s.realm))
 		}

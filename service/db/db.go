@@ -3,11 +3,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	_ "github.com/lib/pq" // depends upon postgres
+	// depends upon postgres
+	"github.com/lib/pq"
 	"xorkevin.dev/governor"
 )
 
@@ -100,6 +102,10 @@ type (
 	ErrNotFound struct{}
 	// ErrUnique is returned when a unique constraint is violated
 	ErrUnique struct{}
+	// ErrUndefinedTable is returned when a table does not exist yet
+	ErrUndefinedTable struct{}
+	// ErrAuthz is returned when not authorized
+	ErrAuthz struct{}
 )
 
 func (e ErrConn) Error() string {
@@ -115,7 +121,33 @@ func (e ErrNotFound) Error() string {
 }
 
 func (e ErrUnique) Error() string {
-	return "Uniqueness constraint violated"
+	return "Unique constraint violated"
+}
+
+func (e ErrUndefinedTable) Error() string {
+	return "Undefined table"
+}
+
+func (e ErrAuthz) Error() string {
+	return "Insufficient privilege"
+}
+
+func WrapErr(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return governor.ErrWithKind(err, ErrNotFound{}, "Row not found")
+	}
+	perr := &pq.Error{}
+	if errors.As(err, &perr) {
+		switch perr.Code {
+		case "23505": // unique_violation
+			return governor.ErrWithKind(err, ErrUnique{}, "Unique constraint violated")
+		case "42P01": // undefined_table
+			return governor.ErrWithKind(err, ErrUndefinedTable{}, "Undefined table")
+		case "42501": // insufficient_privilege
+			return governor.ErrWithKind(err, ErrAuthz{}, "Insufficient privilege")
+		}
+	}
+	return err
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {

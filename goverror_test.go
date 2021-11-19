@@ -96,11 +96,18 @@ func TestError(t *testing.T) {
 
 				err := NewError(tc.Opts...)
 				assert.Error(err)
-				k := &Error{}
-				assert.ErrorAs(err, k)
+				var k *Error
+				assert.ErrorAs(err, &k)
 				assert.Equal(tc.Status, k.Status)
 				assert.Equal(tc.Code, k.Code)
 				assert.Equal(tc.Msg, k.Message)
+				if tc.Status != 0 {
+					var r *ErrorRes
+					assert.ErrorAs(err, &r)
+					assert.Equal(tc.Status, r.Status)
+					assert.Equal(tc.Code, r.Code)
+					assert.Equal(tc.Msg, r.Message)
+				}
 				assert.ErrorIs(err, tc.Kind)
 				assert.Equal(tc.ErrMsg, err.Error())
 			})

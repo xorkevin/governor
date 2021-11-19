@@ -60,7 +60,7 @@ func ErrOptRes(res ErrorRes) ErrorOpt {
 }
 
 // Error formats the messages of all wrapped errors
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	b := strings.Builder{}
 	if e.Kind != nil {
 		b.WriteString("[")
@@ -95,17 +95,26 @@ func (e *Error) Is(target error) bool {
 
 // As sets the top *Error or *ErrorRes
 func (e *Error) As(target interface{}) bool {
-	if err, ok := target.(*Error); ok {
-		*err = *e
+	if k, ok := target.(**Error); ok {
+		if k == nil {
+			return false
+		}
+		err := *e
+		*k = &err
 		return true
 	}
 	if e.Status == 0 {
 		return false
 	}
-	if err, ok := target.(*ErrorRes); ok {
-		err.Status = e.Status
-		err.Code = e.Code
-		err.Message = e.Message
+	if k, ok := target.(**ErrorRes); ok {
+		if k == nil {
+			return false
+		}
+		*k = &ErrorRes{
+			Status:  e.Status,
+			Code:    e.Code,
+			Message: e.Message,
+		}
 		return true
 	}
 	return false
@@ -145,13 +154,13 @@ type (
 	}
 )
 
-func (e ErrorRes) Error() string {
+func (e *ErrorRes) Error() string {
 	return e.Message
 }
 
 func (c *govcontext) WriteError(err error) {
-	gerr := &Error{}
-	isError := errors.As(err, gerr)
+	var gerr *Error
+	isError := errors.As(err, &gerr)
 
 	if c.l != nil && !errors.Is(err, ErrorUser{}) {
 		msg := "non governor error"
@@ -164,9 +173,11 @@ func (c *govcontext) WriteError(err error) {
 		})
 	}
 
-	rerr := &ErrorRes{}
-	if !errors.As(err, rerr) {
-		rerr.Status = http.StatusInternalServerError
+	var rerr *ErrorRes
+	if !errors.As(err, &rerr) {
+		rerr = &ErrorRes{
+			Status: http.StatusInternalServerError,
+		}
 		if isError {
 			rerr.Code = gerr.Code
 			rerr.Message = gerr.Message
