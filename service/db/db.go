@@ -132,22 +132,22 @@ func (e ErrAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
-func WrapErr(err error) error {
+func WrapErr(err error, message string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return governor.ErrWithKind(err, ErrNotFound{}, "Row not found")
+		return governor.ErrWithKind(err, ErrNotFound{}, message)
 	}
 	perr := &pq.Error{}
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return governor.ErrWithKind(err, ErrUnique{}, "Unique constraint violated")
+			return governor.ErrWithKind(err, ErrUnique{}, message)
 		case "42P01": // undefined_table
-			return governor.ErrWithKind(err, ErrUndefinedTable{}, "Undefined table")
+			return governor.ErrWithKind(err, ErrUndefinedTable{}, message)
 		case "42501": // insufficient_privilege
-			return governor.ErrWithKind(err, ErrAuthz{}, "Insufficient privilege")
+			return governor.ErrWithKind(err, ErrAuthz{}, message)
 		}
 	}
-	return err
+	return governor.ErrWithMsg(err, message)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {

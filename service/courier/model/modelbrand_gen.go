@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	brandModelTableName = "courierbrands"
 )
 
-func brandModelSetup(db *sql.DB) (int, error) {
+func brandModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creation_time_index ON courierbrands (creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creatorid__creation_time_index ON courierbrands (creatorid, creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func brandModelInsert(db *sql.DB, m *BrandModel) (int, error) {
+func brandModelInsert(db *sql.DB, m *BrandModel) error {
 	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) (int, error) {
+func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,35 +50,17 @@ func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) 
 	}
 	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) (*BrandModel, int, error) {
+func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) (*BrandModel, error) {
 	m := &BrandModel{}
 	if err := db.QueryRow("SELECT creatorid, brandid, creation_time FROM courierbrands WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) error {

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -115,14 +116,14 @@ func (r *repo) GetLinkGroup(creatorid string, limit, offset int) ([]LinkModel, e
 	if creatorid != "" {
 		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get links")
+			return nil, db.WrapErr(err, "Failed to get links")
 		}
 		return m, nil
 	}
 
 	m, err := linkModelGetLinkModelOrdCreationTime(d, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get links")
+		return nil, db.WrapErr(err, "Failed to get links")
 	}
 	return m, nil
 }
@@ -133,12 +134,9 @@ func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := linkModelGetLinkModelEqLinkID(d, linkid)
+	m, err := linkModelGetLinkModelEqLinkID(d, linkid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No link found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get link")
+		return nil, db.WrapErr(err, "Failed to get link")
 	}
 	return m, nil
 }
@@ -149,11 +147,8 @@ func (r *repo) InsertLink(m *LinkModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := linkModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Link id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert link")
+	if err := linkModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert link")
 	}
 	return nil
 }
@@ -165,7 +160,7 @@ func (r *repo) DeleteLink(m *LinkModel) error {
 		return err
 	}
 	if err := linkModelDelEqLinkID(d, m.LinkID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete link")
+		return db.WrapErr(err, "Failed to delete link")
 	}
 	return nil
 }
@@ -189,14 +184,14 @@ func (r *repo) GetBrandGroup(creatorid string, limit, offset int) ([]BrandModel,
 	if creatorid != "" {
 		m, err := brandModelGetBrandModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get brands")
+			return nil, db.WrapErr(err, "Failed to get brands")
 		}
 		return m, nil
 	}
 
 	m, err := brandModelGetBrandModelOrdCreationTime(d, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get brands")
+		return nil, db.WrapErr(err, "Failed to get brands")
 	}
 	return m, nil
 }
@@ -207,12 +202,9 @@ func (r *repo) GetBrand(creatorid, brandid string) (*BrandModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := brandModelGetBrandModelEqCreatorIDEqBrandID(d, creatorid, brandid)
+	m, err := brandModelGetBrandModelEqCreatorIDEqBrandID(d, creatorid, brandid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No brand found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get brand")
+		return nil, db.WrapErr(err, "Failed to get brand")
 	}
 	return m, nil
 }
@@ -223,11 +215,8 @@ func (r *repo) InsertBrand(m *BrandModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := brandModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Brand id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert brand")
+	if err := brandModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert brand")
 	}
 	return nil
 }
@@ -239,7 +228,7 @@ func (r *repo) DeleteBrand(m *BrandModel) error {
 		return err
 	}
 	if err := brandModelDelEqCreatorIDEqBrandID(d, m.CreatorID, m.BrandID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete brand")
+		return db.WrapErr(err, "Failed to delete brand")
 	}
 	return nil
 }
@@ -250,14 +239,14 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := linkModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup link model")
+	if err := linkModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup link model")
 		}
 	}
-	if code, err := brandModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup brand model")
+	if err := brandModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup brand model")
 		}
 	}
 	return nil

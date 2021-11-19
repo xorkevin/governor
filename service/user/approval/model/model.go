@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -149,12 +150,9 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := approvalModelGetModelEqUserid(d, userid)
+	m, err := approvalModelGetModelEqUserid(d, userid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, db.WrapErr(err, "Failed to get user")
 	}
 	return m, nil
 }
@@ -166,7 +164,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
 	}
 	m, err := approvalModelGetModelOrdCreationTime(d, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user approvals")
+		return nil, db.WrapErr(err, "Failed to get user approvals")
 	}
 	return m, nil
 }
@@ -176,11 +174,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := approvalModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Userid must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert user")
+	if err := approvalModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert user")
 	}
 	return nil
 }
@@ -190,8 +185,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := approvalModelUpdModelEqUserid(d, m, m.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update user approval")
+	if err := approvalModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+		return db.WrapErr(err, "Failed to update user approval")
 	}
 	return nil
 }
@@ -202,7 +197,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := approvalModelDelEqUserid(d, m.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user approval")
+		return db.WrapErr(err, "Failed to delete user approval")
 	}
 	return nil
 }
@@ -212,9 +207,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := approvalModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup user approval model")
+	if err := approvalModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup user approval model")
 		}
 	}
 	return nil

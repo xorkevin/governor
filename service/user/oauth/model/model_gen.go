@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	oauthappModelTableName = "oauthapps"
 )
 
-func oauthappModelSetup(db *sql.DB) (int, error) {
+func oauthappModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthapps (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31) NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creation_time_index ON oauthapps (creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthapps_creator_id__creation_time_index ON oauthapps (creator_id, creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func oauthappModelInsert(db *sql.DB, m *Model) (int, error) {
+func oauthappModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO oauthapps (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func oauthappModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func oauthappModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,35 +50,17 @@ func oauthappModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (i
 	}
 	_, err := db.Exec("INSERT INTO oauthapps (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func oauthappModelGetModelEqClientID(db *sql.DB, clientid string) (*Model, int, error) {
+func oauthappModelGetModelEqClientID(db *sql.DB, clientid string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM oauthapps WHERE clientid = $1;", clientid).Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, clientid []string, orderasc bool, limit, offset int) ([]Model, error) {
@@ -144,19 +103,12 @@ func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, clientid []string, 
 	return res, nil
 }
 
-func oauthappModelUpdModelEqClientID(db *sql.DB, m *Model, clientid string) (int, error) {
+func oauthappModelUpdModelEqClientID(db *sql.DB, m *Model, clientid string) error {
 	_, err := db.Exec("UPDATE oauthapps SET (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE clientid = $10;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID, clientid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func oauthappModelDelEqClientID(db *sql.DB, clientid string) error {

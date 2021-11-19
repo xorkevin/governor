@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	apikeyModelTableName = "userapikeys"
 )
 
-func apikeyModelSetup(db *sql.DB) (int, error) {
+func apikeyModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapikeys (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_userid_index ON userapikeys (userid);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_userid__time_index ON userapikeys (userid, time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func apikeyModelInsert(db *sql.DB, m *Model) (int, error) {
+func apikeyModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,50 +50,25 @@ func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int
 	}
 	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, int, error) {
+func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT keyid, userid, scope, keyhash, name, description, time FROM userapikeys WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) (int, error) {
+func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) error {
 	_, err := db.Exec("UPDATE userapikeys SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func apikeyModelDelEqKeyid(db *sql.DB, keyid string) error {

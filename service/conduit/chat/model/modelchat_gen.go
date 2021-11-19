@@ -6,38 +6,29 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	chatModelTableName = "chats"
 )
 
-func chatModelSetup(db *sql.DB) (int, error) {
+func chatModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chats (chatid VARCHAR(31) PRIMARY KEY, kind VARCHAR(31) NOT NULL, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func chatModelInsert(db *sql.DB, m *ChatModel) (int, error) {
+func chatModelInsert(db *sql.DB, m *ChatModel) error {
 	_, err := db.Exec("INSERT INTO chats (chatid, kind, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) (int, error) {
+func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -51,35 +42,17 @@ func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) (i
 	}
 	_, err := db.Exec("INSERT INTO chats (chatid, kind, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func chatModelGetChatModelEqChatid(db *sql.DB, chatid string) (*ChatModel, int, error) {
+func chatModelGetChatModelEqChatid(db *sql.DB, chatid string) (*ChatModel, error) {
 	m := &ChatModel{}
 	if err := db.QueryRow("SELECT chatid, kind, name, theme, last_updated, creation_time FROM chats WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Kind, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, orderasc bool, limit, offset int) ([]ChatModel, error) {
@@ -122,19 +95,12 @@ func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, ordera
 	return res, nil
 }
 
-func chatModelUpdChatModelEqChatid(db *sql.DB, m *ChatModel, chatid string) (int, error) {
+func chatModelUpdChatModelEqChatid(db *sql.DB, m *ChatModel, chatid string) error {
 	_, err := db.Exec("UPDATE chats SET (chatid, kind, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE chatid = $7;", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime, chatid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func chatModelDelEqChatid(db *sql.DB, chatid string) error {
@@ -142,17 +108,10 @@ func chatModelDelEqChatid(db *sql.DB, chatid string) error {
 	return err
 }
 
-func chatModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) (int, error) {
+func chatModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) error {
 	_, err := db.Exec("UPDATE chats SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }

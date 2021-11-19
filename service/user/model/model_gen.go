@@ -6,38 +6,29 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	userModelTableName = "users"
 )
 
-func userModelSetup(db *sql.DB) (int, error) {
+func userModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS users (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash VARCHAR(255) NOT NULL, otp_enabled BOOLEAN NOT NULL, otp_secret VARCHAR(255) NOT NULL, otp_backup VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, failed_login_time BIGINT NOT NULL, failed_login_count INT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func userModelInsert(db *sql.DB, m *Model) (int, error) {
+func userModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO users (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func userModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func userModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -51,50 +42,25 @@ func userModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, 
 	}
 	_, err := db.Exec("INSERT INTO users (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func userModelGetModelEqUserid(db *sql.DB, userid string) (*Model, int, error) {
+func userModelGetModelEqUserid(db *sql.DB, userid string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM users WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func userModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) (int, error) {
+func userModelUpdModelEqUserid(db *sql.DB, m *Model, userid string) error {
 	_, err := db.Exec("UPDATE users SET (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13;", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount, userid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func userModelDelEqUserid(db *sql.DB, userid string) error {
@@ -102,42 +68,20 @@ func userModelDelEqUserid(db *sql.DB, userid string) error {
 	return err
 }
 
-func userModelGetModelEqUsername(db *sql.DB, username string) (*Model, int, error) {
+func userModelGetModelEqUsername(db *sql.DB, username string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM users WHERE username = $1;", username).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func userModelGetModelEqEmail(db *sql.DB, email string) (*Model, int, error) {
+func userModelGetModelEqEmail(db *sql.DB, email string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM users WHERE email = $1;", email).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func userModelGetInfoOrdUserid(db *sql.DB, orderasc bool, limit, offset int) ([]Info, error) {

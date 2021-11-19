@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	memberModelTableName = "chatmembers"
 )
 
-func memberModelSetup(db *sql.DB) (int, error) {
+func memberModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmembers (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), kind VARCHAR(31) NOT NULL, last_updated BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmembers_userid__last_updated_index ON chatmembers (userid, last_updated);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmembers_userid__kind__last_updated_index ON chatmembers (userid, kind, last_updated);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func memberModelInsert(db *sql.DB, m *MemberModel) (int, error) {
+func memberModelInsert(db *sql.DB, m *MemberModel) error {
 	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid, kind, last_updated) VALUES ($1, $2, $3, $4);", m.Chatid, m.Userid, m.Kind, m.LastUpdated)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool) (int, error) {
+func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,16 +50,9 @@ func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool
 	}
 	_, err := db.Exec("INSERT INTO chatmembers (chatid, userid, kind, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func memberModelDelEqChatid(db *sql.DB, chatid string) error {
@@ -363,17 +333,10 @@ func memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(db *sql.
 	return res, nil
 }
 
-func memberModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) (int, error) {
+func memberModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) error {
 	_, err := db.Exec("UPDATE chatmembers SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }

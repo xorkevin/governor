@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/state"
 )
@@ -54,16 +53,9 @@ func (r *repo) GetModel() (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := stateModelGetModelEqconfig(d, configID)
+	m, err := stateModelGetModelEqconfig(d, configID)
 	if err != nil {
-		switch code {
-		case 2:
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No state found with that id")
-		case 4:
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No state found with that id")
-		default:
-			return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get state")
-		}
+		return nil, db.WrapErr(err, "Failed to get state")
 	}
 	return m, nil
 }
@@ -75,11 +67,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := stateModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Failed to insert state")
-		}
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to insert state")
+	if err := stateModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert state")
 	}
 	return nil
 }
@@ -91,8 +80,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := stateModelUpdModelEqconfig(d, m, configID); err != nil {
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to update state")
+	if err := stateModelUpdModelEqconfig(d, m, configID); err != nil {
+		return db.WrapErr(err, "Failed to update state")
 	}
 	return nil
 }
@@ -133,9 +122,9 @@ func (r *repo) Setup(req state.ReqSetup) error {
 	if err != nil {
 		return err
 	}
-	if code, err := stateModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup state model")
+	if err := stateModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup state model")
 		}
 	}
 	k := r.New(req.Version, req.VHash)

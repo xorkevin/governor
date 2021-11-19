@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -98,12 +99,9 @@ func (r *repo) GetByID(orgid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := orgModelGetModelEqOrgID(d, orgid)
+	m, err := orgModelGetModelEqOrgID(d, orgid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No org found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get org")
+		return nil, db.WrapErr(err, "Failed to get org")
 	}
 	return m, nil
 }
@@ -113,12 +111,9 @@ func (r *repo) GetByName(orgname string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := orgModelGetModelEqName(d, orgname)
+	m, err := orgModelGetModelEqName(d, orgname)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No org found with that name")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get org")
+		return nil, db.WrapErr(err, "Failed to get org")
 	}
 	return m, nil
 }
@@ -129,7 +124,7 @@ func (r *repo) GetAllOrgs(limit, offset int) ([]Model, error) {
 	}
 	m, err := orgModelGetModelOrdCreationTime(d, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
+		return nil, db.WrapErr(err, "Failed to get orgs")
 	}
 	return m, nil
 }
@@ -141,7 +136,7 @@ func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
 	}
 	m, err := orgModelGetModelHasOrgIDOrdOrgID(d, orgids, true, len(orgids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get orgs")
+		return nil, db.WrapErr(err, "Failed to get orgs")
 	}
 	return m, nil
 }
@@ -151,11 +146,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := orgModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Org name must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert org")
+	if err := orgModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert org")
 	}
 	return nil
 }
@@ -165,11 +157,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := orgModelUpdModelEqOrgID(d, m, m.OrgID); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Org name must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to update org")
+	if err := orgModelUpdModelEqOrgID(d, m, m.OrgID); err != nil {
+		return db.WrapErr(err, "Failed to update org")
 	}
 	return nil
 }
@@ -180,7 +169,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := orgModelDelEqOrgID(d, m.OrgID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete org")
+		return db.WrapErr(err, "Failed to delete org")
 	}
 	return nil
 }
@@ -190,9 +179,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := orgModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup org model")
+	if err := orgModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup org model")
 		}
 	}
 	return nil

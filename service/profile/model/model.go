@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 )
@@ -82,12 +84,9 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := profileModelGetModelEqUserid(d, userid)
+	m, err := profileModelGetModelEqUserid(d, userid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No profile found with that id")
-		}
-		return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get profile")
+		return nil, governor.ErrWithMsg(err, "Failed to get profile")
 	}
 	return m, nil
 }
@@ -99,7 +98,7 @@ func (r *repo) GetBulk(userids []string) ([]Model, error) {
 	}
 	m, err := profileModelGetModelHasUseridOrdUserid(d, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, db.ErrClient{}, "Failed to get profiles of userids")
+		return nil, db.WrapErr(err, "Failed to get profiles of userids")
 	}
 	return m, nil
 }
@@ -110,11 +109,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := profileModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Profile id must be unique")
-		}
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to insert profile")
+	if err := profileModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert profile")
 	}
 	return nil
 }
@@ -125,8 +121,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := profileModelUpdModelEqUserid(d, m, m.Userid); err != nil {
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to update profile")
+	if err := profileModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+		return db.WrapErr(err, "Failed to update profile")
 	}
 	return nil
 }
@@ -138,7 +134,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := profileModelDelEqUserid(d, m.Userid); err != nil {
-		return governor.ErrWithKind(err, db.ErrClient{}, "Failed to delete profile")
+		return db.WrapErr(err, "Failed to delete profile")
 	}
 	return nil
 }
@@ -149,9 +145,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := profileModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithKind(err, db.ErrClient{}, "Failed to setup profile model")
+	if err := profileModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup profile model")
 		}
 	}
 	return nil

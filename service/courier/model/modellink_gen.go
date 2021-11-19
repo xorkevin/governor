@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	linkModelTableName = "courierlinks"
 )
 
-func linkModelSetup(db *sql.DB) (int, error) {
+func linkModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierlinks (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creation_time_index ON courierlinks (creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierlinks_creatorid__creation_time_index ON courierlinks (creatorid, creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func linkModelInsert(db *sql.DB, m *LinkModel) (int, error) {
+func linkModelInsert(db *sql.DB, m *LinkModel) error {
 	_, err := db.Exec("INSERT INTO courierlinks (linkid, url, creatorid, creation_time) VALUES ($1, $2, $3, $4);", m.LinkID, m.URL, m.CreatorID, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func linkModelInsertBulk(db *sql.DB, models []*LinkModel, allowConflict bool) (int, error) {
+func linkModelInsertBulk(db *sql.DB, models []*LinkModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,35 +50,17 @@ func linkModelInsertBulk(db *sql.DB, models []*LinkModel, allowConflict bool) (i
 	}
 	_, err := db.Exec("INSERT INTO courierlinks (linkid, url, creatorid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func linkModelGetLinkModelEqLinkID(db *sql.DB, linkid string) (*LinkModel, int, error) {
+func linkModelGetLinkModelEqLinkID(db *sql.DB, linkid string) (*LinkModel, error) {
 	m := &LinkModel{}
 	if err := db.QueryRow("SELECT linkid, url, creatorid, creation_time FROM courierlinks WHERE linkid = $1;", linkid).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func linkModelDelEqLinkID(db *sql.DB, linkid string) error {

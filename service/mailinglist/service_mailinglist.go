@@ -201,6 +201,9 @@ func (s *service) DeleteList(creatorid string, listname string) error {
 	if err := s.lists.DeleteListMsgs(m.ListID); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete list messages")
 	}
+	if err := s.lists.DeleteListTrees(m.ListID); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete list trees")
+	}
 	if err := s.lists.DeleteListMembers(m.ListID); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete list members")
 	}

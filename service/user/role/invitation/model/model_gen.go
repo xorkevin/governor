@@ -6,71 +6,41 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	invModelTableName = "userroleinvitations"
 )
 
-func invModelSetup(db *sql.DB) (int, error) {
+func invModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userroleinvitations (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role), invited_by VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_creation_time_index ON userroleinvitations (creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_userid__creation_time_index ON userroleinvitations (userid, creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_role__creation_time_index ON userroleinvitations (role, creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func invModelInsert(db *sql.DB, m *Model) (int, error) {
+func invModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO userroleinvitations (userid, role, invited_by, creation_time) VALUES ($1, $2, $3, $4);", m.Userid, m.Role, m.InvitedBy, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func invModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func invModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -84,35 +54,17 @@ func invModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, e
 	}
 	_, err := db.Exec("INSERT INTO userroleinvitations (userid, role, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func invModelGetModelEqUseridEqRoleGtCreationTime(db *sql.DB, userid string, role string, creationtime int64) (*Model, int, error) {
+func invModelGetModelEqUseridEqRoleGtCreationTime(db *sql.DB, userid string, role string, creationtime int64) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, role, invited_by, creation_time FROM userroleinvitations WHERE userid = $1 AND role = $2 AND creation_time > $3;", userid, role, creationtime).Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func invModelDelEqUseridEqRole(db *sql.DB, userid string, role string) error {

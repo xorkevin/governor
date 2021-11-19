@@ -6,38 +6,29 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	stateModelTableName = "govstate"
 )
 
-func stateModelSetup(db *sql.DB) (int, error) {
+func stateModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS govstate (config INT PRIMARY KEY, setup BOOLEAN NOT NULL, version VARCHAR(255) NOT NULL, vhash VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func stateModelInsert(db *sql.DB, m *Model) (int, error) {
+func stateModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO govstate (config, setup, version, vhash, creation_time) VALUES ($1, $2, $3, $4, $5);", m.config, m.Setup, m.Version, m.VHash, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func stateModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func stateModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -51,48 +42,23 @@ func stateModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int,
 	}
 	_, err := db.Exec("INSERT INTO govstate (config, setup, version, vhash, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func stateModelGetModelEqconfig(db *sql.DB, config int) (*Model, int, error) {
+func stateModelGetModelEqconfig(db *sql.DB, config int) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT config, setup, version, vhash, creation_time FROM govstate WHERE config = $1;", config).Scan(&m.config, &m.Setup, &m.Version, &m.VHash, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func stateModelUpdModelEqconfig(db *sql.DB, m *Model, config int) (int, error) {
+func stateModelUpdModelEqconfig(db *sql.DB, m *Model, config int) error {
 	_, err := db.Exec("UPDATE govstate SET (config, setup, version, vhash, creation_time) = ROW($1, $2, $3, $4, $5) WHERE config = $6;", m.config, m.Setup, m.Version, m.VHash, m.CreationTime, config)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }

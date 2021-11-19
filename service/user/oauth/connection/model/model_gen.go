@@ -6,60 +6,37 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	connectionModelTableName = "oauthconnections"
 )
 
-func connectionModelSetup(db *sql.DB) (int, error) {
+func connectionModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS oauthconnections (userid VARCHAR(31), clientid VARCHAR(31), PRIMARY KEY (userid, clientid), scope VARCHAR(4095) NOT NULL, nonce VARCHAR(255), challenge VARCHAR(128), challenge_method VARCHAR(31), codehash VARCHAR(255) NOT NULL, auth_time BIGINT NOT NULL, code_time BIGINT NOT NULL, access_time BIGINT NOT NULL, creation_time BIGINT NOT NULL, keyhash VARCHAR(255) NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_clientid_index ON oauthconnections (clientid);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS oauthconnections_userid__access_time_index ON oauthconnections (userid, access_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func connectionModelInsert(db *sql.DB, m *Model) (int, error) {
+func connectionModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.AuthTime, m.CodeTime, m.AccessTime, m.CreationTime, m.KeyHash)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func connectionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func connectionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -73,16 +50,9 @@ func connectionModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) 
 	}
 	_, err := db.Exec("INSERT INTO oauthconnections (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func connectionModelDelEqUserid(db *sql.DB, userid string) error {
@@ -90,38 +60,20 @@ func connectionModelDelEqUserid(db *sql.DB, userid string) error {
 	return err
 }
 
-func connectionModelGetModelEqUseridEqClientID(db *sql.DB, userid string, clientid string) (*Model, int, error) {
+func connectionModelGetModelEqUseridEqClientID(db *sql.DB, userid string, clientid string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash FROM oauthconnections WHERE userid = $1 AND clientid = $2;", userid, clientid).Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.AuthTime, &m.CodeTime, &m.AccessTime, &m.CreationTime, &m.KeyHash); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func connectionModelUpdModelEqUseridEqClientID(db *sql.DB, m *Model, userid string, clientid string) (int, error) {
+func connectionModelUpdModelEqUseridEqClientID(db *sql.DB, m *Model, userid string, clientid string) error {
 	_, err := db.Exec("UPDATE oauthconnections SET (userid, clientid, scope, nonce, challenge, challenge_method, codehash, auth_time, code_time, access_time, creation_time, keyhash) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13 AND clientid = $14;", m.Userid, m.ClientID, m.Scope, m.Nonce, m.Challenge, m.ChallengeMethod, m.CodeHash, m.AuthTime, m.CodeTime, m.AccessTime, m.CreationTime, m.KeyHash, userid, clientid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func connectionModelDelEqUseridHasClientID(db *sql.DB, userid string, clientid []string) error {

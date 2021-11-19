@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -151,12 +152,9 @@ func (r *repo) GetByID(clientid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := oauthappModelGetModelEqClientID(d, clientid)
+	m, err := oauthappModelGetModelEqClientID(d, clientid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No OAuth app found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get OAuth app")
+		return nil, db.WrapErr(err, "Failed to get OAuth app")
 	}
 	return m, nil
 }
@@ -169,13 +167,13 @@ func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
 	if creatorid == "" {
 		m, err := oauthappModelGetModelOrdCreationTime(d, false, limit, offset)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to get OAuth apps")
+			return nil, db.WrapErr(err, "Failed to get OAuth apps")
 		}
 		return m, nil
 	}
 	m, err := oauthappModelGetModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get OAuth apps")
+		return nil, db.WrapErr(err, "Failed to get OAuth apps")
 	}
 	return m, nil
 }
@@ -187,7 +185,7 @@ func (r *repo) GetBulk(clientids []string) ([]Model, error) {
 	}
 	m, err := oauthappModelGetModelHasClientIDOrdClientID(d, clientids, true, len(clientids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get OAuth apps")
+		return nil, db.WrapErr(err, "Failed to get OAuth apps")
 	}
 	return m, nil
 }
@@ -197,11 +195,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := oauthappModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Clientid must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert OAuth app config")
+	if err := oauthappModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert OAuth app config")
 	}
 	return nil
 }
@@ -211,8 +206,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := oauthappModelUpdModelEqClientID(d, m, m.ClientID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update OAuth app config")
+	if err := oauthappModelUpdModelEqClientID(d, m, m.ClientID); err != nil {
+		return db.WrapErr(err, "Failed to update OAuth app config")
 	}
 	return nil
 }
@@ -223,7 +218,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := oauthappModelDelEqClientID(d, m.ClientID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete OAuth app")
+		return db.WrapErr(err, "Failed to delete OAuth app")
 	}
 	return nil
 }
@@ -234,7 +229,7 @@ func (r *repo) DeleteCreatorApps(creatorid string) error {
 		return err
 	}
 	if err := oauthappModelDelEqCreatorID(d, creatorid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete OAuth apps")
+		return db.WrapErr(err, "Failed to delete OAuth apps")
 	}
 	return nil
 }
@@ -244,9 +239,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := oauthappModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup OAuth app model")
+	if err := oauthappModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup OAuth app model")
 		}
 	}
 	return nil

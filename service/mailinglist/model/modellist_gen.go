@@ -6,49 +6,33 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	listModelTableName = "mailinglists"
 )
 
-func listModelSetup(db *sql.DB) (int, error) {
+func listModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglists (listid VARCHAR(255) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, listname VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), archive BOOLEAN NOT NULL, sender_policy VARCHAR(255) NOT NULL, member_policy VARCHAR(255) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglists_creatorid__last_updated_index ON mailinglists (creatorid, last_updated);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func listModelInsert(db *sql.DB, m *ListModel) (int, error) {
+func listModelInsert(db *sql.DB, m *ListModel) error {
 	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) (int, error) {
+func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -62,35 +46,17 @@ func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) (i
 	}
 	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func listModelGetListModelEqListID(db *sql.DB, listid string) (*ListModel, int, error) {
+func listModelGetListModelEqListID(db *sql.DB, listid string) (*ListModel, error) {
 	m := &ListModel{}
 	if err := db.QueryRow("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE listid = $1;", listid).Scan(&m.ListID, &m.CreatorID, &m.Listname, &m.Name, &m.Description, &m.Archive, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, orderasc bool, limit, offset int) ([]ListModel, error) {
@@ -133,19 +99,12 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 	return res, nil
 }
 
-func listModelUpdListModelEqListID(db *sql.DB, m *ListModel, listid string) (int, error) {
+func listModelUpdListModelEqListID(db *sql.DB, m *ListModel, listid string) error {
 	_, err := db.Exec("UPDATE mailinglists SET (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE listid = $11;", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime, listid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func listModelDelEqListID(db *sql.DB, listid string) error {
@@ -185,17 +144,10 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 	return res, nil
 }
 
-func listModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) (int, error) {
+func listModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) error {
 	_, err := db.Exec("UPDATE mailinglists SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }

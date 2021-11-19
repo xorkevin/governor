@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -158,12 +159,9 @@ func (r *repo) GetByID(keyid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := apikeyModelGetModelEqKeyid(d, keyid)
+	m, err := apikeyModelGetModelEqKeyid(d, keyid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No apikey found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get apikey")
+		return nil, db.WrapErr(err, "Failed to get apikey")
 	}
 	return m, nil
 }
@@ -175,7 +173,7 @@ func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
 	}
 	m, err := apikeyModelGetModelEqUseridOrdTime(d, userid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user apikeys")
+		return nil, db.WrapErr(err, "Failed to get user apikeys")
 	}
 	return m, nil
 }
@@ -185,11 +183,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := apikeyModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Keyid must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert apikey")
+	if err := apikeyModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert apikey")
 	}
 	return nil
 }
@@ -199,8 +194,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := apikeyModelUpdModelEqKeyid(d, m, m.Keyid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update apikey")
+	if err := apikeyModelUpdModelEqKeyid(d, m, m.Keyid); err != nil {
+		return db.WrapErr(err, "Failed to update apikey")
 	}
 	return nil
 }
@@ -211,7 +206,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := apikeyModelDelEqKeyid(d, m.Keyid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete apikey")
+		return db.WrapErr(err, "Failed to delete apikey")
 	}
 	return nil
 }
@@ -222,7 +217,7 @@ func (r *repo) DeleteUserKeys(userid string) error {
 		return err
 	}
 	if err := apikeyModelDelEqUserid(d, userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user apikeys")
+		return db.WrapErr(err, "Failed to delete user apikeys")
 	}
 	return nil
 }
@@ -232,9 +227,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := apikeyModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup user apikeys model")
+	if err := apikeyModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup user apikeys model")
 		}
 	}
 	return nil

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -124,12 +125,9 @@ func (r *repo) GetByID(userid, kind string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := resetModelGetModelEqUseridEqKind(d, userid, kind)
+	m, err := resetModelGetModelEqUseridEqKind(d, userid, kind)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "Code does not exist")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get reset code")
+		return nil, db.WrapErr(err, "Failed to get reset code")
 	}
 	return m, nil
 }
@@ -139,11 +137,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := resetModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Reset code already exists")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert new reset code")
+	if err := resetModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert new reset code")
 	}
 	return nil
 }
@@ -153,8 +148,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := resetModelUpdModelEqUseridEqKind(d, m, m.Userid, m.Kind); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update reset code")
+	if err := resetModelUpdModelEqUseridEqKind(d, m, m.Userid, m.Kind); err != nil {
+		return db.WrapErr(err, "Failed to update reset code")
 	}
 	return nil
 }
@@ -165,7 +160,7 @@ func (r *repo) Delete(userid, kind string) error {
 		return err
 	}
 	if err := resetModelDelEqUseridEqKind(d, userid, kind); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete reset code")
+		return db.WrapErr(err, "Failed to delete reset code")
 	}
 	return nil
 }
@@ -176,7 +171,7 @@ func (r *repo) DeleteByUserid(userid string) error {
 		return err
 	}
 	if err := resetModelDelEqUserid(d, userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete reset codes")
+		return db.WrapErr(err, "Failed to delete reset codes")
 	}
 	return nil
 }
@@ -186,9 +181,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := resetModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup user reset code model")
+	if err := resetModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup user reset code model")
 		}
 	}
 	return nil

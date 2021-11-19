@@ -6,49 +6,33 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	memberModelTableName = "mailinglistmembers"
 )
 
-func memberModelSetup(db *sql.DB) (int, error) {
+func memberModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistmembers (listid VARCHAR(255), userid VARCHAR(31), PRIMARY KEY (listid, userid), last_updated BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistmembers_userid__last_updated_index ON mailinglistmembers (userid, last_updated);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func memberModelInsert(db *sql.DB, m *MemberModel) (int, error) {
+func memberModelInsert(db *sql.DB, m *MemberModel) error {
 	_, err := db.Exec("INSERT INTO mailinglistmembers (listid, userid, last_updated) VALUES ($1, $2, $3);", m.ListID, m.Userid, m.LastUpdated)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool) (int, error) {
+func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -62,16 +46,9 @@ func memberModelInsertBulk(db *sql.DB, models []*MemberModel, allowConflict bool
 	}
 	_, err := db.Exec("INSERT INTO mailinglistmembers (listid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func memberModelDelEqListID(db *sql.DB, listid string) error {
@@ -119,23 +96,12 @@ func memberModelGetMemberModelHasListIDOrdListID(db *sql.DB, listid []string, or
 	return res, nil
 }
 
-func memberModelGetMemberModelEqListIDEqUserid(db *sql.DB, listid string, userid string) (*MemberModel, int, error) {
+func memberModelGetMemberModelEqListIDEqUserid(db *sql.DB, listid string, userid string) (*MemberModel, error) {
 	m := &MemberModel{}
 	if err := db.QueryRow("SELECT listid, userid, last_updated FROM mailinglistmembers WHERE listid = $1 AND userid = $2;", listid, userid).Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func memberModelGetMemberModelEqListIDOrdUserid(db *sql.DB, listid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
@@ -255,17 +221,10 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, userid string, 
 	return res, nil
 }
 
-func memberModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) (int, error) {
+func memberModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) error {
 	_, err := db.Exec("UPDATE mailinglistmembers SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }

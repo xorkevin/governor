@@ -2,6 +2,7 @@ package model
 
 import (
 	"crypto/hmac"
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -217,7 +218,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 	}
 	m, err := userModelGetInfoOrdUserid(d, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user info")
+		return nil, db.WrapErr(err, "Failed to get user info")
 	}
 	return m, nil
 }
@@ -233,7 +234,7 @@ func (r *repo) GetBulk(userids []string) ([]Info, error) {
 	}
 	m, err := userModelGetInfoHasUseridOrdUserid(d, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user info of userids")
+		return nil, db.WrapErr(err, "Failed to get user info of userids")
 	}
 	return m, nil
 }
@@ -246,7 +247,7 @@ func (r *repo) GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, er
 	}
 	m, err := userModelGetInfoLikeUsernameOrdUsername(d, prefix+"%", true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user info of username prefix")
+		return nil, db.WrapErr(err, "Failed to get user info of username prefix")
 	}
 	return m, nil
 }
@@ -257,12 +258,9 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqUserid(d, userid)
+	m, err := userModelGetModelEqUserid(d, userid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, db.WrapErr(err, "Failed to get user")
 	}
 	return m, nil
 }
@@ -273,12 +271,9 @@ func (r *repo) GetByUsername(username string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqUsername(d, username)
+	m, err := userModelGetModelEqUsername(d, username)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that username")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user by username")
+		return nil, db.WrapErr(err, "Failed to get user by username")
 	}
 	return m, nil
 }
@@ -289,12 +284,9 @@ func (r *repo) GetByEmail(email string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := userModelGetModelEqEmail(d, email)
+	m, err := userModelGetModelEqEmail(d, email)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No user found with that email")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user by email")
+		return nil, db.WrapErr(err, "Failed to get user by email")
 	}
 	return m, nil
 }
@@ -305,11 +297,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := userModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Username and email must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert user")
+	if err := userModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert user")
 	}
 	return nil
 }
@@ -320,11 +309,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := userModelUpdModelEqUserid(d, m, m.Userid); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Username and email must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to update user")
+	if err := userModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+		return db.WrapErr(err, "Failed to update user")
 	}
 	return nil
 }
@@ -336,7 +322,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := userModelDelEqUserid(d, m.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user")
+		return db.WrapErr(err, "Failed to delete user")
 	}
 	return nil
 }
@@ -347,9 +333,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := userModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup user model")
+	if err := userModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup user model")
 		}
 	}
 	return nil

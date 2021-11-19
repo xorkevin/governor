@@ -6,49 +6,33 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	msgModelTableName = "chatmessages"
 )
 
-func msgModelSetup(db *sql.DB) (int, error) {
+func msgModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmessages (chatid VARCHAR(31), msgid VARCHAR(31), PRIMARY KEY (chatid, msgid), userid VARCHAR(31) NOT NULL, time_ms BIGINT NOT NULL, kind VARCHAR(31) NOT NULL, value VARCHAR(4095) NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmessages_chatid__kind__msgid_index ON chatmessages (chatid, kind, msgid);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func msgModelInsert(db *sql.DB, m *MsgModel) (int, error) {
+func msgModelInsert(db *sql.DB, m *MsgModel) error {
 	_, err := db.Exec("INSERT INTO chatmessages (chatid, msgid, userid, time_ms, kind, value) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Msgid, m.Userid, m.Timems, m.Kind, m.Value)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) (int, error) {
+func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -62,16 +46,9 @@ func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) (int
 	}
 	_, err := db.Exec("INSERT INTO chatmessages (chatid, msgid, userid, time_ms, kind, value) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func msgModelGetMsgModelEqChatidOrdMsgid(db *sql.DB, chatid string, orderasc bool, limit, offset int) ([]MsgModel, error) {

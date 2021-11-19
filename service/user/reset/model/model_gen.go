@@ -6,38 +6,29 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	resetModelTableName = "userresets"
 )
 
-func resetModelSetup(db *sql.DB) (int, error) {
+func resetModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userresets (userid VARCHAR(31), kind VARCHAR(255), PRIMARY KEY (userid, kind), code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL, params VARCHAR(4096));")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func resetModelInsert(db *sql.DB, m *Model) (int, error) {
+func resetModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO userresets (userid, kind, code_hash, code_time, params) VALUES ($1, $2, $3, $4, $5);", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func resetModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func resetModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -51,16 +42,9 @@ func resetModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int,
 	}
 	_, err := db.Exec("INSERT INTO userresets (userid, kind, code_hash, code_time, params) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func resetModelDelEqUserid(db *sql.DB, userid string) error {
@@ -68,38 +52,20 @@ func resetModelDelEqUserid(db *sql.DB, userid string) error {
 	return err
 }
 
-func resetModelGetModelEqUseridEqKind(db *sql.DB, userid string, kind string) (*Model, int, error) {
+func resetModelGetModelEqUseridEqKind(db *sql.DB, userid string, kind string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, kind, code_hash, code_time, params FROM userresets WHERE userid = $1 AND kind = $2;", userid, kind).Scan(&m.Userid, &m.Kind, &m.CodeHash, &m.CodeTime, &m.Params); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
-func resetModelUpdModelEqUseridEqKind(db *sql.DB, m *Model, userid string, kind string) (int, error) {
+func resetModelUpdModelEqUseridEqKind(db *sql.DB, m *Model, userid string, kind string) error {
 	_, err := db.Exec("UPDATE userresets SET (userid, kind, code_hash, code_time, params) = ROW($1, $2, $3, $4, $5) WHERE userid = $6 AND kind = $7;", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params, userid, kind)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func resetModelDelEqUseridEqKind(db *sql.DB, userid string, kind string) error {

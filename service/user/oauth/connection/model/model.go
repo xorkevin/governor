@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -177,12 +178,9 @@ func (r *repo) GetByID(userid, clientid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := connectionModelGetModelEqUseridEqClientID(d, userid, clientid)
+	m, err := connectionModelGetModelEqUseridEqClientID(d, userid, clientid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No connected OAuth app found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get connected OAuth app")
+		return nil, db.WrapErr(err, "Failed to get connected OAuth app")
 	}
 	return m, nil
 }
@@ -194,7 +192,7 @@ func (r *repo) GetUserConnections(userid string, limit, offset int) ([]Model, er
 	}
 	m, err := connectionModelGetModelEqUseridOrdAccessTime(d, userid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get connected OAuth apps")
+		return nil, db.WrapErr(err, "Failed to get connected OAuth apps")
 	}
 	return m, nil
 }
@@ -204,11 +202,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := connectionModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "OAuth app already connected")
-		}
-		return governor.ErrWithMsg(err, "Failed to add connected OAuth app")
+	if err := connectionModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to add connected OAuth app")
 	}
 	return nil
 }
@@ -218,8 +213,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := connectionModelUpdModelEqUseridEqClientID(d, m, m.Userid, m.ClientID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update connected OAuth app")
+	if err := connectionModelUpdModelEqUseridEqClientID(d, m, m.Userid, m.ClientID); err != nil {
+		return db.WrapErr(err, "Failed to update connected OAuth app")
 	}
 	return nil
 }
@@ -230,7 +225,7 @@ func (r *repo) Delete(userid string, clientids []string) error {
 		return err
 	}
 	if err := connectionModelDelEqUseridHasClientID(d, userid, clientids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete connected OAuth app")
+		return db.WrapErr(err, "Failed to delete connected OAuth app")
 	}
 	return nil
 }
@@ -241,7 +236,7 @@ func (r *repo) DeleteUserConnections(userid string) error {
 		return err
 	}
 	if err := connectionModelDelEqUserid(d, userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete connected OAuth apps")
+		return db.WrapErr(err, "Failed to delete connected OAuth apps")
 	}
 	return nil
 }
@@ -251,9 +246,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := connectionModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup OAuth connection model")
+	if err := connectionModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup OAuth connection model")
 		}
 	}
 	return nil

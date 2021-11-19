@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -144,12 +145,9 @@ func (r *repo) GetChat(chatid string) (*ChatModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := chatModelGetChatModelEqChatid(d, chatid)
+	m, err := chatModelGetChatModelEqChatid(d, chatid)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No chat found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get chat")
+		return nil, db.WrapErr(err, "Failed to get chat")
 	}
 	return m, nil
 }
@@ -165,7 +163,7 @@ func (r *repo) GetChats(chatids []string) ([]ChatModel, error) {
 	}
 	m, err := chatModelGetChatModelHasChatidOrdChatid(d, chatids, true, len(chatids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chats")
+		return nil, db.WrapErr(err, "Failed to get chats")
 	}
 	return m, nil
 }
@@ -178,7 +176,7 @@ func (r *repo) GetMembers(chatid string, limit, offset int) ([]MemberModel, erro
 	}
 	m, err := memberModelGetMemberModelEqChatidOrdUserid(d, chatid, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
 	return m, nil
 }
@@ -194,7 +192,7 @@ func (r *repo) GetChatsMembers(chatids []string, limit int) ([]MemberModel, erro
 	}
 	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, chatids, true, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
 	return m, nil
 }
@@ -210,7 +208,7 @@ func (r *repo) GetChatMembers(chatid string, userids []string) ([]MemberModel, e
 	}
 	m, err := memberModelGetMemberModelEqChatidHasUseridOrdUserid(d, chatid, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat members")
+		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
 	return m, nil
 }
@@ -226,7 +224,7 @@ func (r *repo) GetUserChats(userid string, chatids []string) ([]MemberModel, err
 	}
 	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, userid, chatids, true, len(chatids), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user chats")
+		return nil, db.WrapErr(err, "Failed to get user chats")
 	}
 	return m, nil
 }
@@ -243,7 +241,7 @@ func (r *repo) GetMembersCount(chatid string) (int, error) {
 		return 0, err
 	}
 	if err := d.QueryRow(sqlMemberCount, chatid).Scan(&count); err != nil {
-		return 0, governor.ErrWithMsg(err, "Failed to get chat members count")
+		return 0, db.WrapErr(err, "Failed to get chat members count")
 	}
 	return count, nil
 }
@@ -256,7 +254,7 @@ func (r *repo) GetLatestChats(userid string, limit, offset int) ([]MemberModel, 
 	}
 	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, userid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
+		return nil, db.WrapErr(err, "Failed to get latest chats")
 	}
 	return m, nil
 }
@@ -269,7 +267,7 @@ func (r *repo) GetLatestChatsByKind(kind string, userid string, limit, offset in
 	}
 	m, err := memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(d, userid, kind, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest chats of kind")
+		return nil, db.WrapErr(err, "Failed to get latest chats of kind")
 	}
 	return m, nil
 }
@@ -282,7 +280,7 @@ func (r *repo) GetLatestChatsBefore(userid string, before int64, limit int) ([]M
 	}
 	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, userid, before, false, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest chats")
+		return nil, db.WrapErr(err, "Failed to get latest chats")
 	}
 	return m, nil
 }
@@ -295,7 +293,7 @@ func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int
 	}
 	m, err := memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(d, userid, kind, before, false, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest chats of kind")
+		return nil, db.WrapErr(err, "Failed to get latest chats of kind")
 	}
 	return m, nil
 }
@@ -324,11 +322,8 @@ func (r *repo) InsertChat(m *ChatModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := chatModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Chat id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert chat")
+	if err := chatModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert chat")
 	}
 	return nil
 }
@@ -339,11 +334,8 @@ func (r *repo) UpdateChat(m *ChatModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := chatModelUpdChatModelEqChatid(d, m, m.Chatid); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Chat id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to update chat")
+	if err := chatModelUpdChatModelEqChatid(d, m, m.Chatid); err != nil {
+		return db.WrapErr(err, "Failed to update chat")
 	}
 	return nil
 }
@@ -354,15 +346,15 @@ func (r *repo) UpdateChatLastUpdated(chatid string, t int64) error {
 	if err != nil {
 		return err
 	}
-	if _, err := chatModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+	if err := chatModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat last updated")
+		return db.WrapErr(err, "Failed to update chat last updated")
 	}
-	if _, err := memberModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+	if err := memberModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat last updated")
+		return db.WrapErr(err, "Failed to update chat last updated")
 	}
 	return nil
 }
@@ -374,7 +366,7 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 		return err
 	}
 	if err := chatModelDelEqChatid(d, m.Chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat")
+		return db.WrapErr(err, "Failed to delete chat")
 	}
 	return nil
 }
@@ -388,11 +380,8 @@ func (r *repo) InsertMembers(m []*MemberModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := memberModelInsertBulk(d, m, false); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "User already added to chat")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert chat members")
+	if err := memberModelInsertBulk(d, m, false); err != nil {
+		return db.WrapErr(err, "Failed to insert chat members")
 	}
 	return nil
 }
@@ -407,7 +396,7 @@ func (r *repo) DeleteMembers(chatid string, userids []string) error {
 		return err
 	}
 	if err := memberModelDelEqChatidHasUserid(d, chatid, userids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat members")
+		return db.WrapErr(err, "Failed to delete chat members")
 	}
 	return nil
 }
@@ -419,7 +408,7 @@ func (r *repo) DeleteChatMembers(chatid string) error {
 		return err
 	}
 	if err := memberModelDelEqChatid(d, chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat members")
+		return db.WrapErr(err, "Failed to delete chat members")
 	}
 	return nil
 }
@@ -432,7 +421,7 @@ func (r *repo) GetMsgs(chatid string, limit, offset int) ([]MsgModel, error) {
 	}
 	m, err := msgModelGetMsgModelEqChatidOrdMsgid(d, chatid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
 	return m, nil
 }
@@ -445,7 +434,7 @@ func (r *repo) GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel
 	}
 	m, err := msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(d, chatid, msgid, false, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
 	return m, nil
 }
@@ -458,7 +447,7 @@ func (r *repo) GetMsgsByKind(chatid string, kind string, limit, offset int) ([]M
 	}
 	m, err := msgModelGetMsgModelEqChatidEqKindOrdMsgid(d, chatid, kind, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
 	return m, nil
 }
@@ -471,7 +460,7 @@ func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, lim
 	}
 	m, err := msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(d, chatid, kind, msgid, false, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get chat messages")
+		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
 	return m, nil
 }
@@ -499,11 +488,8 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 	if err != nil {
 		return err
 	}
-	if code, err := msgModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Message id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert chat message")
+	if err := msgModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert chat message")
 	}
 	return nil
 }
@@ -518,7 +504,7 @@ func (r *repo) DeleteMsgs(chatid string, msgids []string) error {
 		return err
 	}
 	if err := msgModelDelEqChatidHasMsgid(d, chatid, msgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat messages")
+		return db.WrapErr(err, "Failed to delete chat messages")
 	}
 	return nil
 }
@@ -530,7 +516,7 @@ func (r *repo) DeleteChatMsgs(chatid string) error {
 		return err
 	}
 	if err := msgModelDelEqChatid(d, chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete chat messages")
+		return db.WrapErr(err, "Failed to delete chat messages")
 	}
 	return nil
 }
@@ -541,19 +527,19 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := chatModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup chat model")
+	if err := chatModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup chat model")
 		}
 	}
-	if code, err := memberModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup chat member model")
+	if err := memberModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup chat member model")
 		}
 	}
-	if code, err := msgModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup chat message model")
+	if err := msgModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup chat message model")
 		}
 	}
 	return nil

@@ -6,49 +6,33 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	roleModelTableName = "userroles"
 )
 
-func roleModelSetup(db *sql.DB) (int, error) {
+func roleModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userroles (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_role__userid_index ON userroles (role, userid);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func roleModelInsert(db *sql.DB, m *Model) (int, error) {
+func roleModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO userroles (userid, role) VALUES ($1, $2);", m.Userid, m.Role)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -62,16 +46,9 @@ func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, 
 	}
 	_, err := db.Exec("INSERT INTO userroles (userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func roleModelGetModelEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, limit, offset int) ([]Model, error) {
@@ -106,23 +83,12 @@ func roleModelDelEqUserid(db *sql.DB, userid string) error {
 	return err
 }
 
-func roleModelGetModelEqUseridEqRole(db *sql.DB, userid string, role string) (*Model, int, error) {
+func roleModelGetModelEqUseridEqRole(db *sql.DB, userid string, role string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, role FROM userroles WHERE userid = $1 AND role = $2;", userid, role).Scan(&m.Userid, &m.Role); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func roleModelGetModelEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {

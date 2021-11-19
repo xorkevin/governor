@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
@@ -83,12 +85,9 @@ func (r *repo) GetByID(userid, role string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := roleModelGetModelEqUseridEqRole(d, userid, role)
+	m, err := roleModelGetModelEqUseridEqRole(d, userid, role)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "Role not found for user")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get role")
+		return nil, db.WrapErr(err, "Failed to get role")
 	}
 	return m, nil
 }
@@ -105,7 +104,7 @@ func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 	}
 	m, err := roleModelGetModelEqUseridHasRoleOrdRole(d, userid, roles.ToSlice(), true, len(roles), 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
+		return nil, db.WrapErr(err, "Failed to get user roles")
 	}
 	res := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -122,7 +121,7 @@ func (r *repo) GetByRole(role string, limit, offset int) ([]string, error) {
 	}
 	m, err := roleModelGetModelEqRoleOrdUserid(d, role, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get userids of role")
+		return nil, db.WrapErr(err, "Failed to get userids of role")
 	}
 	userids := make([]string, 0, len(m))
 	for _, i := range m {
@@ -139,7 +138,7 @@ func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
 	}
 	m, err := roleModelGetModelEqUseridOrdRole(d, userid, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get roles of userid")
+		return nil, db.WrapErr(err, "Failed to get roles of userid")
 	}
 	roles := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -156,7 +155,7 @@ func (r *repo) GetRolesPrefix(userid string, prefix string, limit, offset int) (
 	}
 	m, err := roleModelGetModelEqUseridLikeRoleOrdRole(d, userid, prefix+"%", true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get roles of userid")
+		return nil, db.WrapErr(err, "Failed to get roles of userid")
 	}
 	roles := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -171,11 +170,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := roleModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Role id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert role")
+	if err := roleModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert role")
 	}
 	return nil
 }
@@ -197,8 +193,8 @@ func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
 	if err != nil {
 		return err
 	}
-	if _, err := roleModelInsertBulk(d, m, true); err != nil {
-		return governor.ErrWithMsg(err, "Failed to insert roles")
+	if err := roleModelInsertBulk(d, m, true); err != nil {
+		return db.WrapErr(err, "Failed to insert roles")
 	}
 	return nil
 }
@@ -210,7 +206,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := roleModelDelEqUseridEqRole(d, m.Userid, m.Role); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete role")
+		return db.WrapErr(err, "Failed to delete role")
 	}
 	return nil
 }
@@ -226,7 +222,7 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 		return err
 	}
 	if err := roleModelDelEqUseridHasRole(d, userid, roles.ToSlice()); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete roles")
+		return db.WrapErr(err, "Failed to delete roles")
 	}
 	return nil
 }
@@ -238,7 +234,7 @@ func (r *repo) DeleteByRole(role string) error {
 		return err
 	}
 	if err := roleModelDelEqRole(d, role); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete roles")
+		return db.WrapErr(err, "Failed to delete roles")
 	}
 	return nil
 }
@@ -250,7 +246,7 @@ func (r *repo) DeleteUserRoles(userid string) error {
 		return err
 	}
 	if err := roleModelDelEqUserid(d, userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user roles")
+		return db.WrapErr(err, "Failed to delete user roles")
 	}
 	return nil
 }
@@ -261,9 +257,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := roleModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup role model")
+	if err := roleModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup role model")
 		}
 	}
 	return nil

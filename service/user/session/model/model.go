@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -158,12 +159,9 @@ func (r *repo) GetByID(sessionID string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, code, err := sessionModelGetModelEqSessionID(d, sessionID)
+	m, err := sessionModelGetModelEqSessionID(d, sessionID)
 	if err != nil {
-		if code == 2 {
-			return nil, governor.ErrWithKind(err, db.ErrNotFound{}, "No session found with that id")
-		}
-		return nil, governor.ErrWithMsg(err, "Failed to get session")
+		return nil, db.WrapErr(err, "Failed to get session")
 	}
 	return m, nil
 }
@@ -176,7 +174,7 @@ func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error
 	}
 	m, err := sessionModelGetModelEqUseridOrdTime(d, userid, false, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user sessions")
+		return nil, db.WrapErr(err, "Failed to get user sessions")
 	}
 	return m, nil
 }
@@ -189,7 +187,7 @@ func (r *repo) GetUserSessionIDs(userid string, limit, offset int) ([]string, er
 	}
 	m, err := sessionModelGetqIDEqUseridOrdSessionID(d, userid, true, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user session ids")
+		return nil, db.WrapErr(err, "Failed to get user session ids")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -204,11 +202,8 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if code, err := sessionModelInsert(d, m); err != nil {
-		if code == 3 {
-			return governor.ErrWithKind(err, db.ErrUnique{}, "Session id must be unique")
-		}
-		return governor.ErrWithMsg(err, "Failed to insert session")
+	if err := sessionModelInsert(d, m); err != nil {
+		return db.WrapErr(err, "Failed to insert session")
 	}
 	return nil
 }
@@ -219,8 +214,8 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if _, err := sessionModelUpdModelEqSessionID(d, m, m.SessionID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update session")
+	if err := sessionModelUpdModelEqSessionID(d, m, m.SessionID); err != nil {
+		return db.WrapErr(err, "Failed to update session")
 	}
 	return nil
 }
@@ -232,7 +227,7 @@ func (r *repo) Delete(m *Model) error {
 		return err
 	}
 	if err := sessionModelDelEqSessionID(d, m.SessionID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete session")
+		return db.WrapErr(err, "Failed to delete session")
 	}
 	return nil
 }
@@ -247,7 +242,7 @@ func (r *repo) DeleteSessions(sessionids []string) error {
 		return err
 	}
 	if err := sessionModelDelHasSessionID(d, sessionids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete sessions")
+		return db.WrapErr(err, "Failed to delete sessions")
 	}
 	return nil
 }
@@ -259,7 +254,7 @@ func (r *repo) DeleteUserSessions(userid string) error {
 		return err
 	}
 	if err := sessionModelDelEqUserid(d, userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete sessions")
+		return db.WrapErr(err, "Failed to delete sessions")
 	}
 	return nil
 }
@@ -270,9 +265,9 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if code, err := sessionModelSetup(d); err != nil {
-		if code != 5 {
-			return governor.ErrWithMsg(err, "Failed to setup user session model")
+	if err := sessionModelSetup(d); err != nil {
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return db.WrapErr(err, "Failed to setup user session model")
 		}
 	}
 	return nil

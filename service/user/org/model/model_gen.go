@@ -6,49 +6,33 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 const (
 	orgModelTableName = "userorgs"
 )
 
-func orgModelSetup(db *sql.DB) (int, error) {
+func orgModelSetup(db *sql.DB) error {
 	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userorgs (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userorgs_creation_time_index ON userorgs (creation_time);")
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42501": // insufficient_privilege
-				return 5, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func orgModelInsert(db *sql.DB, m *Model) (int, error) {
+func orgModelInsert(db *sql.DB, m *Model) error {
 	_, err := db.Exec("INSERT INTO userorgs (orgid, name, display_name, description, creation_time) VALUES ($1, $2, $3, $4, $5);", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func orgModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, error) {
+func orgModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -62,35 +46,17 @@ func orgModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) (int, e
 	}
 	_, err := db.Exec("INSERT INTO userorgs (orgid, name, display_name, description, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
-func orgModelGetModelEqOrgID(db *sql.DB, orgid string) (*Model, int, error) {
+func orgModelGetModelEqOrgID(db *sql.DB, orgid string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE orgid = $1;", orgid).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
@@ -133,19 +99,12 @@ func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool,
 	return res, nil
 }
 
-func orgModelUpdModelEqOrgID(db *sql.DB, m *Model, orgid string) (int, error) {
+func orgModelUpdModelEqOrgID(db *sql.DB, m *Model, orgid string) error {
 	_, err := db.Exec("UPDATE userorgs SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
 	if err != nil {
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "23505": // unique_violation
-				return 3, err
-			default:
-				return 0, err
-			}
-		}
+		return err
 	}
-	return 0, nil
+	return nil
 }
 
 func orgModelDelEqOrgID(db *sql.DB, orgid string) error {
@@ -153,23 +112,12 @@ func orgModelDelEqOrgID(db *sql.DB, orgid string) error {
 	return err
 }
 
-func orgModelGetModelEqName(db *sql.DB, name string) (*Model, int, error) {
+func orgModelGetModelEqName(db *sql.DB, name string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE name = $1;", name).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, 2, err
-		}
-		if postgresErr, ok := err.(*pq.Error); ok {
-			switch postgresErr.Code {
-			case "42P01": // undefined_table
-				return nil, 4, err
-			default:
-				return nil, 0, err
-			}
-		}
-		return nil, 0, err
+		return nil, err
 	}
-	return m, 0, nil
+	return m, nil
 }
 
 func orgModelGetModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]Model, error) {
