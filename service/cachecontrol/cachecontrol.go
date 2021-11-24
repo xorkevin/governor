@@ -11,7 +11,6 @@ const (
 	ccHeader          = "Cache-Control"
 	ifNoneMatchHeader = "If-None-Match"
 	etagHeader        = "ETag"
-	pragmaHeader      = "Pragma"
 )
 
 type (
@@ -31,6 +30,7 @@ const (
 	// Expiration
 	DirMaxAge Directive = "max-age"
 	// Revalidation
+	DirNoCache        Directive = "no-cache"
 	DirMustRevalidate Directive = "must-revalidate"
 	DirImmutable      Directive = "immutable"
 )
@@ -91,7 +91,6 @@ func ControlNoStore(l governor.Logger) governor.Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := governor.NewContext(w, r, l)
 			c.SetHeader(ccHeader, string(DirNoStore))
-			c.SetHeader(pragmaHeader, "no-cache")
 			next.ServeHTTP(c.R())
 		})
 	}
