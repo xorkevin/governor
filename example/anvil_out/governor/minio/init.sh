@@ -21,6 +21,7 @@ while true; do
     status=$(vault_kvget "$KV_MOUNT" "$KV_PATH")
     if is_success "$status"; then
       log2 'found existing vault credentials'
+      username=$(cat /tmp/curlres.txt | jq -r '.data.data.username')
       pass=$(cat /tmp/curlres.txt | jq -r '.data.data.password')
       log2 'use existing password'
       break 2
@@ -34,5 +35,6 @@ while true; do
   export VAULT_TOKEN=
 done
 
+printf '%s' "${username}" > /etc/miniopass/username.txt
 printf '%s' "${pass}" > /etc/miniopass/pass.txt
 log2 'write password to minio conf'

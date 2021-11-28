@@ -224,6 +224,7 @@ func (s *service) handlePing() {
 
 type (
 	secretAuth struct {
+		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
@@ -237,7 +238,7 @@ func (s *service) handleGetClient() (*minio.Client, error) {
 		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	auth := minioauth{
-		username: "admin",
+		username: secret.Username,
 		password: secret.Password,
 	}
 	if auth == s.auth {

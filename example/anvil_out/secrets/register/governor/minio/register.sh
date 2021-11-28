@@ -20,7 +20,7 @@ while true; do
       log2 'authenticate with vault'
     fi
 
-    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"password\": \"${pass}\"}")
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH" "{\"username\": \"admin\", \"password\": \"${pass}\"}")
     if is_success "$status"; then
       log2 'write password to vault kv'
       break 2
