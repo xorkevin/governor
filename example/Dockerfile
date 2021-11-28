@@ -9,7 +9,6 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/
 COPY --from=builder /etc/mime.types /etc/
 COPY bin/governor .
 VOLUME /home/governor/config
-VOLUME /home/governor/public
 VOLUME /home/governor/templates
 EXPOSE 8080
 ENTRYPOINT ["/home/governor/governor"]
