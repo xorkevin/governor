@@ -90,7 +90,7 @@ func (r *repo) Update(m *Model) error {
 func (r *repo) Get() (*state.Model, error) {
 	m, err := r.GetModel()
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrNotFound{}) || errors.Is(err, db.ErrUndefinedTable{}) {
 			return &state.Model{
 				Setup: false,
 			}, nil
