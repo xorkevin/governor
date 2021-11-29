@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/mail"
@@ -38,6 +39,15 @@ type (
 		Claims       *token.Claims `json:"claims,omitempty"`
 	}
 )
+
+type (
+	// ErrNoSession is returned when the login session does not exist
+	ErrNoSession struct{}
+)
+
+func (e ErrNoSession) Error() string {
+	return "No session"
+}
 
 // Login authenticates a user and returns auth tokens
 func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
@@ -232,10 +242,17 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 	sm, err := s.sessions.GetByID(claims.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusUnauthorized,
-				Message: "Invalid token",
-			}))
+			return &resUserAuth{
+					Valid: false,
+					Claims: &token.Claims{
+						Claims: jwt.Claims{
+							Subject: claims.Subject,
+						},
+					},
+				}, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+					Status:  http.StatusUnauthorized,
+					Message: "Invalid token",
+				}), governor.ErrOptInner(governor.ErrWithKind(err, ErrNoSession{}, "No session")))
 		}
 		return nil, governor.ErrWithMsg(err, "Failed to get session")
 	}

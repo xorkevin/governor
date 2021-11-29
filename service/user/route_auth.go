@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
@@ -251,6 +252,10 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := m.s.RefreshToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
+		if errors.Is(err, ErrNoSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
+			m.rmAccessCookie(c)
+			m.rmRefreshCookie(c, res.Claims.Subject)
+		}
 		c.WriteError(err)
 		return
 	}
