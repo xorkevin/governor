@@ -10,7 +10,8 @@ import (
 
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgDeleted msgParent msgChildren
+//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
+//go:generate forge model -m SentMsgModel -t mailinglistsentmsgs -p sentmsg -o modelsentmsg_gen.go
 //go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
@@ -50,8 +51,11 @@ type (
 		UpdateMsgChildren(listid, parentid, threadid string) error
 		UpdateMsgThread(listid, parentid, threadid string) error
 		MarkMsgProcessed(listid, msgid string) error
+		MarkMsgSent(listid, msgid string) error
 		DeleteMsgs(listid string, msgids []string) error
 		DeleteListMsgs(listid string) error
+		GetUnsentMsgs(listid, msgid string, limit int) ([]string, error)
+		LogSentMsg(msgid string, userids []string) error
 		NewTree(listid, msgid string, t int64) *TreeModel
 		GetTreeEdge(listid, msgid, parentid string) (*TreeModel, error)
 		GetTreeChildren(listid, parentid string, depth int, limit, offset int) ([]TreeModel, error)
@@ -105,11 +109,16 @@ type (
 		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
 		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
 		Processed    bool   `model:"processed,BOOL NOT NULL" query:"processed"`
+		Sent         bool   `model:"sent,BOOL NOT NULL" query:"sent"`
 		Deleted      bool   `model:"deleted,BOOL NOT NULL" query:"deleted"`
 	}
 
 	msgProcessed struct {
 		Processed bool `query:"processed;updeq,listid,msgid"`
+	}
+
+	msgSent struct {
+		Sent bool `query:"sent;updeq,listid,msgid"`
 	}
 
 	msgDeleted struct {
@@ -128,6 +137,13 @@ type (
 	msgChildren struct {
 		ParentID string `query:"parent_id"`
 		ThreadID string `query:"thread_id;updeq,listid,thread_id,in_reply_to"`
+	}
+
+	// SentMsgModel is the db mailing list sent message log
+	SentMsgModel struct {
+		Msgid    string `model:"msgid,VARCHAR(1023);index,userid"`
+		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (msgid, userid)"`
+		SentTime int64  `model:"sent_time,BIGINT NOT NULL"`
 	}
 
 	// TreeModel is the db mailing list message tree model
@@ -566,6 +582,19 @@ func (r *repo) MarkMsgProcessed(listid, msgid string) error {
 	return nil
 }
 
+func (r *repo) MarkMsgSent(listid, msgid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := msgModelUpdmsgSentEqListIDEqMsgid(d, &msgSent{
+		Sent: true,
+	}, listid, msgid); err != nil {
+		return db.WrapErr(err, "Failed to update list message")
+	}
+	return nil
+}
+
 func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 	if len(msgids) == 0 {
 		return nil
@@ -593,6 +622,63 @@ func (r *repo) DeleteListMsgs(listid string) error {
 	}
 	if err := msgModelDelEqListID(d, listid); err != nil {
 		return db.WrapErr(err, "Failed to delete list messages")
+	}
+	return nil
+}
+
+const (
+	sqlUnsentMsgs = "SELECT m.userid FROM " + memberModelTableName + " m LEFT JOIN " + sentmsgModelTableName + " s ON m.userid = s.userid AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;"
+)
+
+func (r *repo) GetUnsentMsgs(listid, msgid string, limit int) ([]string, error) {
+	if limit == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	res := make([]string, 0, limit)
+	rows, err := d.Query(sqlUnsentMsgs, limit, listid, msgid)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get unsent list messages")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, db.WrapErr(err, "Failed to get unsent list messages")
+		}
+		res = append(res, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, db.WrapErr(err, "Failed to get unsent list messages")
+	}
+	return res, nil
+}
+
+func (r *repo) LogSentMsg(msgid string, userids []string) error {
+	if len(userids) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	now := time.Now().Round(0).Unix()
+	m := make([]*SentMsgModel, 0, len(userids))
+	for _, i := range userids {
+		m = append(m, &SentMsgModel{
+			Msgid:    msgid,
+			Userid:   i,
+			SentTime: now,
+		})
+	}
+	if err := sentmsgModelInsertBulk(d, m, true); err != nil {
+		return db.WrapErr(err, "Failed to log sent messages")
 	}
 	return nil
 }
@@ -714,6 +800,12 @@ func (r *repo) Setup() error {
 	}
 	if err := msgModelSetup(d); err != nil {
 		err = db.WrapErr(err, "Failed to setup list message model")
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return err
+		}
+	}
+	if err := sentmsgModelSetup(d); err != nil {
+		err = db.WrapErr(err, "Failed to setup list sent message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

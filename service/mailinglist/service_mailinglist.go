@@ -296,21 +296,6 @@ type (
 	}
 )
 
-func (s *service) getListMembers(listids []string) (map[string][]string, error) {
-	allMembers, err := s.lists.GetListsMembers(listids, len(listids)*mailingListMemberAmountCap)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get list members")
-	}
-	membersByList := map[string][]string{}
-	for _, i := range listids {
-		membersByList[i] = []string{}
-	}
-	for _, i := range allMembers {
-		membersByList[i.ListID] = append(membersByList[i.ListID], i.Userid)
-	}
-	return membersByList, nil
-}
-
 func (s *service) GetLists(listids []string) (*resLists, error) {
 	m, err := s.lists.GetLists(listids)
 	if err != nil {
@@ -620,6 +605,12 @@ type (
 		From   string `json:"from"`
 	}
 
+	sendmsg struct {
+		ListID string `json:"listid"`
+		MsgID  string `json:"msgid"`
+		From   string `json:"from"`
+	}
+
 	// ErrMailEvent is returned when the msgqueue mail message is malformed
 	ErrMailEvent struct{}
 )
@@ -707,6 +698,55 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 	}
 
+	j, err := json.Marshal(sendmsg{
+		ListID: emmsg.ListID,
+		MsgID:  emmsg.MsgID,
+		From:   emmsg.From,
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode mail send message")
+	}
+	if err := s.events.StreamPublish(sendChannel, j); err != nil {
+		return governor.ErrWithMsg(err, "Failed to publish mail send event")
+	}
+	return nil
+}
+
+const (
+	mailingListSendBatchSize = 256
+)
+
+func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
+	emmsg := &sendmsg{}
+	if err := json.Unmarshal(msgdata, emmsg); err != nil {
+		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
+	}
+
+	if _, err := s.lists.GetListByID(emmsg.ListID); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("List not found", map[string]string{
+				"actiontype": "getmaillist",
+				"error":      err.Error(),
+			})
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get list")
+	}
+	m, err := s.lists.GetMsg(emmsg.ListID, emmsg.MsgID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("Msg not found", map[string]string{
+				"actiontype": "getmailmsg",
+				"error":      err.Error(),
+			})
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get list msg")
+	}
+	if m.Sent {
+		return nil
+	}
+
 	mb := bytes.Buffer{}
 	if err := func() error {
 		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(m.Msgid)))
@@ -736,26 +776,41 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		return err
 	}
 
-	members, err := s.lists.GetMembers(emmsg.ListID, mailingListMemberAmountCap, 0)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get list members")
-	}
-	memberUserids := make([]string, 0, len(members))
-	for _, i := range members {
-		memberUserids = append(memberUserids, i.Userid)
-	}
-	recipients, err := s.users.GetInfoBulk(memberUserids)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get list member users")
-	}
-	rcpts := make([]string, 0, len(recipients.Users))
-	for _, i := range recipients.Users {
-		rcpts = append(rcpts, i.Email)
-	}
-	if len(rcpts) > 0 {
-		if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
-			return governor.ErrWithMsg(err, "Failed to send mail msg")
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
 		}
+		userids, err := s.lists.GetUnsentMsgs(emmsg.ListID, emmsg.MsgID, mailingListSendBatchSize)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get unsent messages")
+		}
+		if len(userids) == 0 {
+			break
+		}
+		recipients, err := s.users.GetInfoBulk(userids)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get list member users")
+		}
+		if len(recipients.Users) == 0 {
+			break
+		}
+		rcpts := make([]string, 0, len(recipients.Users))
+		for _, i := range recipients.Users {
+			rcpts = append(rcpts, i.Email)
+		}
+		if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+			return governor.ErrWithMsg(err, "Failed to send mail message")
+		}
+		if err := s.lists.LogSentMsg(emmsg.MsgID, userids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to log sent mail messages")
+		}
+		if len(userids) < mailingListSendBatchSize {
+			break
+		}
+	}
+
+	if err := s.lists.MarkMsgSent(m.ListID, m.Msgid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to mark list message sent")
 	}
 	return nil
 }

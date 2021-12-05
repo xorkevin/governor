@@ -13,7 +13,7 @@ const (
 )
 
 func msgModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistmsgs (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL, processed BOOL NOT NULL, deleted BOOL NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistmsgs (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL, processed BOOL NOT NULL, sent BOOL NOT NULL, deleted BOOL NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func msgModelSetup(db *sql.DB) error {
 }
 
 func msgModelInsert(db *sql.DB, m *MsgModel) error {
-	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Deleted)
+	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Sent, m.Deleted)
 	if err != nil {
 		return err
 	}
@@ -50,13 +50,13 @@ func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) erro
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*12)
+	args := make([]interface{}, 0, len(models)*13)
 	for c, m := range models {
-		n := c * 12
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12))
-		args = append(args, m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Deleted)
+		n := c * 13
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12, n+13))
+		args = append(args, m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Sent, m.Deleted)
 	}
-	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO mailinglistmsgs (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func msgModelDelEqListID(db *sql.DB, listid string) error {
 
 func msgModelGetMsgModelEqListIDEqMsgid(db *sql.DB, listid string, msgid string) (*MsgModel, error) {
 	m := &MsgModel{}
-	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Deleted); err != nil {
+	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -82,7 +82,7 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted FROM mailinglistmsgs WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
+	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM mailinglistmsgs WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, listid string, order
 	}()
 	for rows.Next() {
 		m := MsgModel{}
-		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Deleted); err != nil {
+		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -109,7 +109,7 @@ func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, listid str
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, deleted FROM mailinglistmsgs WHERE listid = $3 AND thread_id = $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, threadid)
+	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM mailinglistmsgs WHERE listid = $3 AND thread_id = $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, threadid)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, listid str
 	}()
 	for rows.Next() {
 		m := MsgModel{}
-		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Deleted); err != nil {
+		if err := rows.Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -132,6 +132,14 @@ func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, listid str
 
 func msgModelUpdmsgProcessedEqListIDEqMsgid(db *sql.DB, m *msgProcessed, listid string, msgid string) error {
 	_, err := db.Exec("UPDATE mailinglistmsgs SET (processed) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Processed, listid, msgid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func msgModelUpdmsgSentEqListIDEqMsgid(db *sql.DB, m *msgSent, listid string, msgid string) error {
+	_, err := db.Exec("UPDATE mailinglistmsgs SET (sent) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Sent, listid, msgid)
 	if err != nil {
 		return err
 	}

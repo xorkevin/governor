@@ -22,7 +22,9 @@ const (
 	eventStream         = "DEV_XORKEVIN_GOV_MAILINGLIST"
 	eventStreamChannels = eventStream + ".*"
 	mailChannel         = eventStream + ".mail"
+	sendChannel         = eventStream + ".send"
 	mailWorker          = eventStream + "_WORKER"
+	sendWorker          = eventStream + "_SEND_WORKER"
 )
 
 type (
@@ -266,6 +268,17 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to mail queue")
 	}
 	l.Info("Subscribed to mail queue", nil)
+
+	if _, err := s.events.StreamSubscribe(eventStream, sendChannel, sendWorker, s.sendSubscriber, events.StreamConsumerOpts{
+		AckWait:     30 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to mail send queue")
+	}
+	l.Info("Subscribed to send queue", nil)
+
 	return nil
 }
 
