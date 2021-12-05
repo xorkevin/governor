@@ -791,15 +791,14 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 		if err != nil {
 			return governor.ErrWithMsg(err, "Failed to get list member users")
 		}
-		if len(recipients.Users) == 0 {
-			break
-		}
-		rcpts := make([]string, 0, len(recipients.Users))
-		for _, i := range recipients.Users {
-			rcpts = append(rcpts, i.Email)
-		}
-		if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
-			return governor.ErrWithMsg(err, "Failed to send mail message")
+		if len(recipients.Users) > 0 {
+			rcpts := make([]string, 0, len(recipients.Users))
+			for _, i := range recipients.Users {
+				rcpts = append(rcpts, i.Email)
+			}
+			if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+				return governor.ErrWithMsg(err, "Failed to send mail message")
+			}
 		}
 		if err := s.lists.LogSentMsg(emmsg.MsgID, userids); err != nil {
 			return governor.ErrWithMsg(err, "Failed to log sent mail messages")
