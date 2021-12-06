@@ -344,6 +344,13 @@ func (s *service) UpdatePassword(userid string, newPassword string, oldPassword 
 
 // ForgotPassword invokes the forgot password reset procedure
 func (s *service) ForgotPassword(useroremail string) error {
+	if !s.passwordReset {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusConflict,
+			Message: "Password reset not enabled",
+		}))
+	}
+
 	var m *model.Model
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(useroremail)
@@ -377,6 +384,14 @@ func (s *service) ForgotPassword(useroremail string) error {
 		}
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetPass)
+	} else {
+		if time.Now().Round(0).Unix() < mr.CodeTime+s.passResetDelay {
+			s.logger.Warn("Forgot password called prior to delay end", map[string]string{
+				"actiontype": "resetpassworddelay",
+				"userid":     m.Userid,
+			})
+			return nil
+		}
 	}
 	code, err := s.resets.RehashCode(mr)
 	if err != nil {

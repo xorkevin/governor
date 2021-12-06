@@ -90,7 +90,9 @@ type (
 		refreshTime       int64
 		refreshCacheTime  int64
 		confirmTime       int64
+		passwordReset     bool
 		passwordResetTime int64
+		passResetDelay    int64
 		invitationTime    int64
 		userCacheTime     int64
 		newLoginEmail     bool
@@ -210,7 +212,9 @@ func New(
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
 		confirmTime:       time24h,
+		passwordReset:     true,
 		passwordResetTime: time24h,
+		passResetDelay:    0,
 		invitationTime:    time24h,
 		userCacheTime:     time24h,
 	}
@@ -225,7 +229,9 @@ func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr
 	r.SetDefault("refreshtime", "4380h")
 	r.SetDefault("refreshcache", "24h")
 	r.SetDefault("confirmtime", "24h")
+	r.SetDefault("passwordreset", true)
 	r.SetDefault("passwordresettime", "24h")
+	r.SetDefault("passresetdelay", 0)
 	r.SetDefault("invitationtime", "24h")
 	r.SetDefault("usercachetime", "24h")
 	r.SetDefault("newloginemail", true)
@@ -295,10 +301,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	} else {
 		s.confirmTime = int64(t / time.Second)
 	}
+	s.passwordReset = r.GetBool("passwordreset")
 	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
 		return governor.ErrWithMsg(err, "Failed to parse password reset time")
 	} else {
 		s.passwordResetTime = int64(t / time.Second)
+	}
+	if t, err := time.ParseDuration(r.GetStr("passresetdelay")); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse password reset delay")
+	} else {
+		s.passResetDelay = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
 		return governor.ErrWithMsg(err, "Failed to parse role invitation time")
@@ -359,7 +371,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
 		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
 		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
+		"passwordreset":         strconv.FormatBool(s.passwordReset),
 		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
+		"passresetdelay (s)":    strconv.FormatInt(s.passResetDelay, 10),
 		"invitationtime (s)":    strconv.FormatInt(s.invitationTime, 10),
 		"usercachetime (s)":     strconv.FormatInt(s.userCacheTime, 10),
 		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
