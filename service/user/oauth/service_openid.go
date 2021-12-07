@@ -522,3 +522,10 @@ func (s *service) DelConnection(userid string, clientid string) error {
 	}
 	return nil
 }
+
+func (s *service) DeleteUserConnections(userid string) error {
+	if err := s.connections.DeleteUserConnections(userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user oauth app connections")
+	}
+	return nil
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user"
@@ -20,6 +21,10 @@ const (
 	tokenRoute    = "/token"
 	userinfoRoute = "/userinfo"
 	jwksRoute     = "/jwks"
+)
+
+const (
+	govworkerdelete = "DEV_XORKEVIN_GOV_OAUTH_WORKER_DELETE"
 )
 
 const (
@@ -48,6 +53,7 @@ type (
 		oauthBucket  objstore.Bucket
 		logoImgDir   objstore.Dir
 		users        user.Users
+		events       events.Events
 		gate         gate.Gate
 		logger       governor.Logger
 		codeTime     int64
@@ -93,12 +99,13 @@ func NewCtx(inj governor.Injector) Service {
 	kv := kvstore.GetCtxKVStore(inj)
 	obj := objstore.GetCtxBucket(inj)
 	users := user.GetCtxUsers(inj)
+	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(apps, connections, tokenizer, kv, obj, users, g)
+	return New(apps, connections, tokenizer, kv, obj, users, ev, g)
 }
 
 // New returns a new Apikey
-func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, g gate.Gate) Service {
+func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, ev events.Events, g gate.Gate) Service {
 	return &service{
 		apps:         apps,
 		connections:  connections,
@@ -107,6 +114,7 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		oauthBucket:  obj,
 		logoImgDir:   obj.Subdir("logo"),
 		users:        users,
+		events:       ev,
 		gate:         g,
 		codeTime:     time1m,
 		accessTime:   time5m,
@@ -232,6 +240,19 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
+	l.Info("Subscribed to userr delete queue", nil)
 	return nil
 }
 
@@ -239,5 +260,17 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	return nil
+}
+
+// UserDeleteHook deletes the oauth connections of a deleted user
+func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := user.DecodeDeleteUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.DeleteUserConnections(props.Userid); err != nil {
+		return err
+	}
 	return nil
 }
