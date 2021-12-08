@@ -25,11 +25,13 @@ type (
 		GetLink(linkid string) (*LinkModel, error)
 		InsertLink(m *LinkModel) error
 		DeleteLink(m *LinkModel) error
+		DeleteLinks(linkids []string) error
 		NewBrand(creatorid, brandid string) *BrandModel
 		GetBrandGroup(creatorid string, limit, offset int) ([]BrandModel, error)
 		GetBrand(creatorid, brandid string) (*BrandModel, error)
 		InsertBrand(m *BrandModel) error
 		DeleteBrand(m *BrandModel) error
+		DeleteBrands(creatorid string, brandids []string) error
 		Setup() error
 	}
 
@@ -39,7 +41,7 @@ type (
 
 	// LinkModel is the db link model
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid"`
+		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid;deleq,linkid|arr"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroup;getgroupeq,creatorid"`
@@ -48,7 +50,7 @@ type (
 	// BrandModel is the db brand model
 	BrandModel struct {
 		CreatorID    string `model:"creatorid,VARCHAR(31)" query:"creatorid"`
-		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid"`
+		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid;deleq,creatorid,brandid|arr"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroup;getgroupeq,creatorid"`
 	}
 
@@ -165,6 +167,21 @@ func (r *repo) DeleteLink(m *LinkModel) error {
 	return nil
 }
 
+// DeleteLinks deletes the links in the db
+func (r *repo) DeleteLinks(linkids []string) error {
+	if len(linkids) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := linkModelDelHasLinkID(d, linkids); err != nil {
+		return db.WrapErr(err, "Failed to delete links")
+	}
+	return nil
+}
+
 // NewBrand creates a new brand model
 func (r *repo) NewBrand(creatorid, brandid string) *BrandModel {
 	return &BrandModel{
@@ -229,6 +246,21 @@ func (r *repo) DeleteBrand(m *BrandModel) error {
 	}
 	if err := brandModelDelEqCreatorIDEqBrandID(d, m.CreatorID, m.BrandID); err != nil {
 		return db.WrapErr(err, "Failed to delete brand")
+	}
+	return nil
+}
+
+// DeleteBrands removes brands from the db
+func (r *repo) DeleteBrands(creatorid string, brandids []string) error {
+	if len(brandids) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := brandModelDelEqCreatorIDHasBrandID(d, creatorid, brandids); err != nil {
+		return db.WrapErr(err, "Failed to delete brands")
 	}
 	return nil
 }

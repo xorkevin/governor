@@ -253,7 +253,9 @@ func (s *service) DeleteLink(creatorid, linkid string) error {
 		}))
 	}
 	if err := s.linkImgDir.Del(linkid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete qr code image")
+		if !errors.Is(err, objstore.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to delete qr code image")
+		}
 	}
 	if err := s.repo.DeleteLink(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete link")
@@ -373,7 +375,9 @@ func (s *service) DeleteBrand(creatorid, brandid string) error {
 		return governor.ErrWithMsg(err, "Failed to delete brand")
 	}
 	if err := s.brandImgDir.Del(brandid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete brand image")
+		if !errors.Is(err, objstore.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to delete brand image")
+		}
 	}
 	if err := s.repo.DeleteBrand(m); err != nil {
 		return err

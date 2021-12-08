@@ -252,7 +252,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to userr delete queue", nil)
+	l.Info("Subscribed to user delete queue", nil)
 	return nil
 }
 

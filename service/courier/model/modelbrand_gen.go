@@ -68,6 +68,24 @@ func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid str
 	return err
 }
 
+func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, creatorid string, brandid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(brandid))
+	args = append(args, creatorid)
+	var placeholdersbrandid string
+	{
+		placeholders := make([]string, 0, len(brandid))
+		for _, i := range brandid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersbrandid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM courierbrands WHERE creatorid = $1 AND brandid IN (VALUES "+placeholdersbrandid+");", args...)
+	return err
+}
+
 func brandModelGetBrandModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {

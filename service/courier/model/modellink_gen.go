@@ -68,6 +68,23 @@ func linkModelDelEqLinkID(db *sql.DB, linkid string) error {
 	return err
 }
 
+func linkModelDelHasLinkID(db *sql.DB, linkid []string) error {
+	paramCount := 0
+	args := make([]interface{}, 0, paramCount+len(linkid))
+	var placeholderslinkid string
+	{
+		placeholders := make([]string, 0, len(linkid))
+		for _, i := range linkid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholderslinkid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM courierlinks WHERE linkid IN (VALUES "+placeholderslinkid+");", args...)
+	return err
+}
+
 func linkModelGetLinkModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]LinkModel, error) {
 	order := "DESC"
 	if orderasc {
