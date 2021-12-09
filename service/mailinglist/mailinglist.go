@@ -23,8 +23,14 @@ const (
 	eventStreamChannels = eventStream + ".*"
 	mailChannel         = eventStream + ".mail"
 	sendChannel         = eventStream + ".send"
+	delChannel          = eventStream + ".del"
 	mailWorker          = eventStream + "_WORKER"
 	sendWorker          = eventStream + "_SEND_WORKER"
+	delWorker           = eventStream + "_DEL_WORKER"
+)
+
+const (
+	govworkerdelete = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_DELETE"
 )
 
 type (
@@ -279,6 +285,26 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to send queue", nil)
 
+	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
+	l.Info("Subscribed to user delete queue", nil)
+
+	if _, err := s.events.StreamSubscribe(eventStream, delChannel, delWorker, s.deleteSubscriber, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  8192,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to list delete queue")
+	}
+	l.Info("Subscribed to user delete queue", nil)
+
 	return nil
 }
 
@@ -303,5 +329,38 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	return nil
+}
+
+const (
+	listDeleteBatchSize = 256
+)
+
+// UserDeleteHook deletes the roles of a deleted user
+func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := user.DecodeDeleteUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		lists, err := s.GetCreatorLists(props.Userid, listDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get user roles")
+		}
+		if len(lists.Lists) == 0 {
+			break
+		}
+		for _, i := range lists.Lists {
+			if err := s.DeleteList(i.CreatorID, i.Listname); err != nil {
+				return governor.ErrWithMsg(err, "Failed to delete list")
+			}
+		}
+		if len(lists.Lists) < listDeleteBatchSize {
+			break
+		}
+	}
 	return nil
 }

@@ -197,9 +197,14 @@ func (s *service) DeleteList(creatorid string, listname string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get list")
 	}
-	// TODO: remove objects
-	if err := s.lists.DeleteListMsgs(m.ListID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete list messages")
+	j, err := json.Marshal(delmsg{
+		ListID: m.ListID,
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode list delete message")
+	}
+	if err := s.events.StreamPublish(delChannel, j); err != nil {
+		return governor.ErrWithMsg(err, "Failed to publish list delete event")
 	}
 	if err := s.lists.DeleteListTrees(m.ListID); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete list trees")
@@ -596,6 +601,52 @@ func (s *service) GetMsgContent(listid, msgid string) (io.ReadCloser, string, er
 		return nil, "", governor.ErrWithMsg(err, "Failed to get msg content")
 	}
 	return obj, objinfo.ContentType, nil
+}
+
+type (
+	delmsg struct {
+		ListID string `json:"listid"`
+	}
+)
+
+const (
+	msgDeleteBatchSize = 256
+)
+
+func (s *service) deleteSubscriber(pinger events.Pinger, msgdata []byte) error {
+	msg := &delmsg{}
+	if err := json.Unmarshal(msgdata, msg); err != nil {
+		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode list delete message")
+	}
+
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		msgs, err := s.lists.GetListMsgs(msg.ListID, msgDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get list messages")
+		}
+		if len(msgs) == 0 {
+			break
+		}
+		msgids := make([]string, 0, len(msgs))
+		for _, i := range msgs {
+			if err := s.rcvMailDir.Subdir(i.ListID).Del(base64.RawURLEncoding.EncodeToString([]byte(i.Msgid))); err != nil {
+				if !errors.Is(err, objstore.ErrNotFound{}) {
+					return governor.ErrWithMsg(err, "Failed to delete msg content")
+				}
+			}
+			msgids = append(msgids, i.Msgid)
+		}
+		if err := s.lists.DeleteMsgs(msg.ListID, msgids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete list messages")
+		}
+		if len(msgs) < msgDeleteBatchSize {
+			break
+		}
+	}
+	return nil
 }
 
 type (

@@ -63,11 +63,6 @@ func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) erro
 	return nil
 }
 
-func msgModelDelEqListID(db *sql.DB, listid string) error {
-	_, err := db.Exec("DELETE FROM mailinglistmsgs WHERE listid = $1;", listid)
-	return err
-}
-
 func msgModelGetMsgModelEqListIDEqMsgid(db *sql.DB, listid string, msgid string) (*MsgModel, error) {
 	m := &MsgModel{}
 	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM mailinglistmsgs WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {

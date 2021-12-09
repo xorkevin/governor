@@ -53,7 +53,6 @@ type (
 		MarkMsgProcessed(listid, msgid string) error
 		MarkMsgSent(listid, msgid string) error
 		DeleteMsgs(listid string, msgids []string) error
-		DeleteListMsgs(listid string) error
 		GetUnsentMsgs(listid, msgid string, limit int) ([]string, error)
 		LogSentMsg(msgid string, userids []string) error
 		NewTree(listid, msgid string, t int64) *TreeModel
@@ -98,7 +97,7 @@ type (
 
 	// MsgModel is the db mailing list message model
 	MsgModel struct {
-		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
+		ListID       string `model:"listid,VARCHAR(255)" query:"listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
 		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid;index,listid,thread_id" query:"creation_time;getgroupeq,listid;getgroupeq,listid,thread_id"`
@@ -611,17 +610,6 @@ func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 		Deleted:  true,
 	}, listid, msgids); err != nil {
 		return db.WrapErr(err, "Failed to mark list messages as deleted")
-	}
-	return nil
-}
-
-func (r *repo) DeleteListMsgs(listid string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := msgModelDelEqListID(d, listid); err != nil {
-		return db.WrapErr(err, "Failed to delete list messages")
 	}
 	return nil
 }
