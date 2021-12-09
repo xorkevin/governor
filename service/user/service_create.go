@@ -369,10 +369,6 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return governor.ErrWithMsg(err, "Failed to delete user sessions")
 	}
 
-	if err := s.roles.DeleteAllRoles(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user roles")
-	}
-
 	if err := s.users.Delete(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user roles")
 	}

@@ -116,18 +116,6 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 	return nil
 }
 
-func (s *service) DeleteAllRoles(userid string) error {
-	roles, err := s.GetRoles(userid, "", 65536, 0)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get user roles")
-	}
-	if err := s.roles.DeleteUserRoles(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user roles")
-	}
-	s.clearCache(userid, roles)
-	return nil
-}
-
 func (s *service) GetRoles(userid string, prefix string, amount, offset int) (rank.Rank, error) {
 	if len(prefix) == 0 {
 		return s.roles.GetRoles(userid, amount, offset)

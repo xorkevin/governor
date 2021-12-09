@@ -41,6 +41,10 @@ const (
 )
 
 const (
+	govworkerroledelete = "DEV_XORKEVIN_GOV_USER_WORKER_ROLE_DELETE"
+)
+
+const (
 	time5m     int64 = int64(5 * time.Minute / time.Second)
 	time24h    int64 = int64(24 * time.Hour / time.Second)
 	time6month int64 = time24h * 365 / 2
@@ -485,6 +489,19 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerroledelete, s.UserRoleDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
+	l.Info("Subscribed to user delete queue", nil)
 	return nil
 }
 
@@ -492,5 +509,36 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	return nil
+}
+
+const (
+	roleDeleteBatchSize = 256
+)
+
+// UserRoleDeleteHook deletes the roles of a deleted user
+func (s *service) UserRoleDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := DecodeDeleteUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		r, err := s.roles.GetRoles(props.Userid, "", roleDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get user roles")
+		}
+		if len(r) == 0 {
+			break
+		}
+		if err := s.roles.DeleteRoles(props.Userid, r); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete user roles")
+		}
+		if len(r) < roleDeleteBatchSize {
+			break
+		}
+	}
 	return nil
 }
