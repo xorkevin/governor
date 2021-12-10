@@ -23,7 +23,7 @@ type (
 		RotateKey(keyid string) (*ResApikeyModel, error)
 		UpdateKey(keyid string, scope string, name, desc string) error
 		DeleteKey(keyid string) error
-		DeleteUserKeys(userid string) error
+		DeleteKeys(keyids []string) error
 	}
 
 	// Service is an Apikeys and governor.Service

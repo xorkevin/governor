@@ -358,10 +358,6 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		return governor.ErrWithMsg(err, "Failed to delete user resets")
 	}
 
-	if err := s.DeleteUserApikeys(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user apikeys")
-	}
-
 	if err := s.KillAllSessions(userid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user sessions")
 	}

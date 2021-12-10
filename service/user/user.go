@@ -41,7 +41,8 @@ const (
 )
 
 const (
-	govworkerroledelete = "DEV_XORKEVIN_GOV_USER_WORKER_ROLE_DELETE"
+	govworkerroledelete   = "DEV_XORKEVIN_GOV_USER_WORKER_ROLE_DELETE"
+	govworkerapikeydelete = "DEV_XORKEVIN_GOV_USER_WORKER_APIKEY_DELETE"
 )
 
 const (
@@ -501,6 +502,14 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
+	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerapikeydelete, s.UserApikeyDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
 	l.Info("Subscribed to user delete queue", nil)
 	return nil
 }
@@ -537,6 +546,41 @@ func (s *service) UserRoleDeleteHook(pinger events.Pinger, msgdata []byte) error
 			return governor.ErrWithMsg(err, "Failed to delete user roles")
 		}
 		if len(r) < roleDeleteBatchSize {
+			break
+		}
+	}
+	return nil
+}
+
+const (
+	apikeyDeleteBatchSize = 256
+)
+
+// UserApikeyDeleteHook deletes the apikeys of a deleted user
+func (s *service) UserApikeyDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := DecodeDeleteUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		keys, err := s.apikeys.GetUserKeys(props.Userid, apikeyDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get user apikeys")
+		}
+		if len(keys) == 0 {
+			break
+		}
+		keyids := make([]string, 0, len(keys))
+		for _, i := range keys {
+			keyids = append(keyids, i.Keyid)
+		}
+		if err := s.apikeys.DeleteKeys(keyids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete user apikeys")
+		}
+		if len(keys) < apikeyDeleteBatchSize {
 			break
 		}
 	}

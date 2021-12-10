@@ -102,10 +102,3 @@ func (s *service) DeleteApikey(keyid string) error {
 	}
 	return nil
 }
-
-func (s *service) DeleteUserApikeys(userid string) error {
-	if err := s.apikeys.DeleteUserKeys(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user apikeys")
-	}
-	return nil
-}

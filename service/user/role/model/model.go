@@ -229,6 +229,9 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 
 // DeleteByRole deletes by role name
 func (r *repo) DeleteByRole(role string, userids []string) error {
+	if len(userids) == 0 {
+		return nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err

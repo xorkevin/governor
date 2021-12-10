@@ -33,7 +33,7 @@ type (
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
-		DeleteUserKeys(userid string) error
+		DeleteKeys(keyids []string) error
 		Setup() error
 	}
 
@@ -45,8 +45,8 @@ type (
 
 	// Model is the db Apikey model
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;updeq,keyid;deleq,keyid"`
-		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid;deleq,userid"`
+		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;updeq,keyid;deleq,keyid;deleq,keyid|arr"`
+		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid"`
 		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Name    string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
@@ -211,13 +211,16 @@ func (r *repo) Delete(m *Model) error {
 	return nil
 }
 
-func (r *repo) DeleteUserKeys(userid string) error {
+func (r *repo) DeleteKeys(keyids []string) error {
+	if len(keyids) == 0 {
+		return nil
+	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelDelEqUserid(d, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user apikeys")
+	if err := apikeyModelDelHasKeyid(d, keyids); err != nil {
+		return db.WrapErr(err, "Failed to delete apikeys")
 	}
 	return nil
 }

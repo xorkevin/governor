@@ -76,8 +76,20 @@ func apikeyModelDelEqKeyid(db *sql.DB, keyid string) error {
 	return err
 }
 
-func apikeyModelDelEqUserid(db *sql.DB, userid string) error {
-	_, err := db.Exec("DELETE FROM userapikeys WHERE userid = $1;", userid)
+func apikeyModelDelHasKeyid(db *sql.DB, keyid []string) error {
+	paramCount := 0
+	args := make([]interface{}, 0, paramCount+len(keyid))
+	var placeholderskeyid string
+	{
+		placeholders := make([]string, 0, len(keyid))
+		for _, i := range keyid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholderskeyid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM userapikeys WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
 	return err
 }
 

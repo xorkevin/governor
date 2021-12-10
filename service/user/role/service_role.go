@@ -117,6 +117,9 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 }
 
 func (s *service) DeleteByRole(roleName string, userids []string) error {
+	if len(userids) == 0 {
+		return nil
+	}
 	if err := s.roles.DeleteByRole(roleName, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete role users")
 	}

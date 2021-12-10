@@ -198,22 +198,12 @@ func (s *service) DeleteKey(keyid string) error {
 	return nil
 }
 
-func (s *service) DeleteUserKeys(userid string) error {
-	keys, err := s.GetUserKeys(userid, 65536, 0)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get user keys")
-	}
-	if err := s.apikeys.DeleteUserKeys(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user keys")
-	}
-
-	if len(keys) == 0 {
+func (s *service) DeleteKeys(keyids []string) error {
+	if len(keyids) == 0 {
 		return nil
 	}
-
-	keyids := make([]string, 0, len(keys))
-	for _, i := range keys {
-		keyids = append(keyids, i.Keyid)
+	if err := s.apikeys.DeleteKeys(keyids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete apikeys")
 	}
 	s.clearCache(keyids...)
 	return nil
