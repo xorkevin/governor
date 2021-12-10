@@ -26,7 +26,7 @@ import (
 
 const (
 	eventStream         = "DEV_XORKEVIN_GOV_MAIL"
-	eventStreamChannels = eventStream + ".*"
+	eventStreamChannels = eventStream + ".>"
 	mailChannel         = eventStream + ".mail"
 	mailWorker          = eventStream + "_WORKER"
 )

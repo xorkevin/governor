@@ -33,7 +33,7 @@ const (
 const (
 	// EventStream is the backing stream for user events
 	EventStream         = "DEV_XORKEVIN_GOV_USER"
-	eventStreamChannels = EventStream + ".*"
+	eventStreamChannels = EventStream + ".>"
 	// CreateChannel is emitted when a new user is created
 	CreateChannel = EventStream + ".create"
 	// DeleteChannel is emitted when a user is deleted
@@ -368,7 +368,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.otpDecrypter.RegisterCipher(cipher)
 	}
 
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"stream size (bytes)":   r.GetStr("streamsize"),
 		"event size (bytes)":    r.GetStr("eventsize"),
 		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
@@ -417,27 +417,27 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	if err := s.users.Setup(); err != nil {
 		return err
 	}
-	l.Info("created user table", nil)
+	l.Info("Created user table", nil)
 
 	if err := s.sessions.Setup(); err != nil {
 		return err
 	}
-	l.Info("created usersessions table", nil)
+	l.Info("Created usersessions table", nil)
 
 	if err := s.approvals.Setup(); err != nil {
 		return err
 	}
-	l.Info("created userapprovals table", nil)
+	l.Info("Created userapprovals table", nil)
 
 	if err := s.invitations.Setup(); err != nil {
 		return err
 	}
-	l.Info("created userroleinvitations table", nil)
+	l.Info("Created userroleinvitations table", nil)
 
 	if err := s.resets.Setup(); err != nil {
 		return err
 	}
-	l.Info("created userresets table", nil)
+	l.Info("Created userresets table", nil)
 
 	return nil
 }

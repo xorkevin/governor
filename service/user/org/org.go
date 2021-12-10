@@ -2,11 +2,22 @@ package org
 
 import (
 	"context"
+	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
+	"xorkevin.dev/governor/util/bytefmt"
+)
+
+const (
+	// EventStream is the backing stream for org events
+	EventStream         = "DEV_XORKEVIN_GOV_ORG"
+	eventStreamChannels = EventStream + ".>"
+	// DeleteChannel is emitted when an org is deleted
+	DeleteChannel = EventStream + ".delete"
 )
 
 type (
@@ -23,14 +34,22 @@ type (
 	}
 
 	service struct {
-		orgs   model.Repo
-		roles  role.Roles
-		gate   gate.Gate
-		logger governor.Logger
+		orgs       model.Repo
+		roles      role.Roles
+		events     events.Events
+		gate       gate.Gate
+		logger     governor.Logger
+		streamsize int64
+		eventsize  int32
 	}
 
 	router struct {
 		s service
+	}
+
+	// DeleteOrgProps are properties of a deleted org
+	DeleteOrgProps struct {
+		OrgID string `json:"orgid"`
 	}
 
 	ctxKeyOrgs struct{}
@@ -54,21 +73,26 @@ func setCtxOrgs(inj governor.Injector, o Orgs) {
 func NewCtx(inj governor.Injector) Service {
 	orgs := model.GetCtxRepo(inj)
 	roles := role.GetCtxRoles(inj)
+	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(orgs, roles, g)
+	return New(orgs, roles, ev, g)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, g gate.Gate) Service {
+func New(orgs model.Repo, roles role.Roles, ev events.Events, g gate.Gate) Service {
 	return &service{
-		orgs:  orgs,
-		roles: roles,
-		gate:  g,
+		orgs:   orgs,
+		roles:  roles,
+		events: ev,
+		gate:   g,
 	}
 }
 
 func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOrgs(inj, s)
+
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("eventsize", "2K")
 }
 
 func (s *service) router() *router {
@@ -83,6 +107,22 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	var err error
+	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid stream size")
+	}
+	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid msg size")
+	}
+	s.eventsize = int32(eventsize)
+
+	l.Info("Loaded config", map[string]string{
+		"stream size (bytes)": r.GetStr("streamsize"),
+		"event size (bytes)":  r.GetStr("eventsize"),
+	})
+
 	sr := s.router()
 	sr.mountRoute(m)
 	l.Info("mounted http routes", nil)
@@ -95,10 +135,20 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
+	if err := s.events.InitStream(EventStream, []string{eventStreamChannels}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init org stream")
+	}
+	l.Info("Created org stream", nil)
+
 	if err := s.orgs.Setup(); err != nil {
 		return err
 	}
-	l.Info("created userorgs table", nil)
+	l.Info("Created userorgs table", nil)
 
 	return nil
 }

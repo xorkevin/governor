@@ -128,6 +128,9 @@ oauth:
   ephost: http://governor.dev.localhost:8080
   epprofile: http://localhost:3000/u/{{.Username}}
   eppicture: http://localhost:3000/api/profile/id/{{.Userid}}/image
+org:
+  streamsize: 200M
+  eventsize: 2K
 courier:
   fallbacklink: http://governor.dev.localhost:8080
   linkprefix: http://go.governor.dev.localhost:8080

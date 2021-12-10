@@ -1,6 +1,7 @@
 package org
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -167,6 +168,15 @@ func (s *service) DeleteOrg(orgid string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get org")
 	}
+	j, err := json.Marshal(DeleteOrgProps{
+		OrgID: m.OrgID,
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode org props to json")
+	}
+	if err := s.events.StreamPublish(DeleteChannel, j); err != nil {
+		return governor.ErrWithMsg(err, "Failed to publish delete org event")
+	}
 	orgrole := rank.ToOrgName(orgid)
 	if err := s.roles.DeleteByRole(rank.ToUsrName(orgrole)); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove org users")
@@ -178,4 +188,13 @@ func (s *service) DeleteOrg(orgid string) error {
 		return governor.ErrWithMsg(err, "Failed to delete org")
 	}
 	return nil
+}
+
+// DecodeDeleteOrgProps unmarshals json encoded delete user props into a struct
+func DecodeDeleteOrgProps(msgdata []byte) (*DeleteOrgProps, error) {
+	m := &DeleteOrgProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to decode delete org props")
+	}
+	return m, nil
 }

@@ -282,7 +282,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 	}
 
 	if err := s.events.StreamPublish(CreateChannel, b); err != nil {
-		s.logger.Error("Failed to publish new user", map[string]string{
+		s.logger.Error("Failed to publish new user event", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishnewuser",
 		})
@@ -344,17 +344,14 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 		}))
 	}
 
-	b, err := json.Marshal(DeleteUserProps{
+	j, err := json.Marshal(DeleteUserProps{
 		Userid: m.Userid,
 	})
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode user props to json")
 	}
-	if err := s.events.StreamPublish(DeleteChannel, b); err != nil {
-		s.logger.Error("Failed to publish delete user", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "publishdeleteuser",
-		})
+	if err := s.events.StreamPublish(DeleteChannel, j); err != nil {
+		return governor.ErrWithMsg(err, "Failed to publish delete user event")
 	}
 
 	if err := s.resets.DeleteByUserid(userid); err != nil {
@@ -386,7 +383,7 @@ func (s *service) clearUserExists(userid string) {
 	}
 }
 
-// DecodeNewUserProps marshals json encoded new user props into a struct
+// DecodeNewUserProps unmarshals json encoded new user props into a struct
 func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	m := &NewUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
@@ -395,7 +392,7 @@ func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	return m, nil
 }
 
-// DecodeDeleteUserProps marshals json encoded delete user props into a struct
+// DecodeDeleteUserProps unmarshals json encoded delete user props into a struct
 func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
