@@ -21,9 +21,9 @@ type (
 		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 		InsertRoles(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles rank.Rank) error
+		DeleteByRole(roleName string, userids []string) error
 		GetRoles(userid string, prefix string, amount, offset int) (rank.Rank, error)
 		GetByRole(roleName string, amount, offset int) ([]string, error)
-		DeleteByRole(roleName string) error
 	}
 
 	// Service is a Roles and governor.Service

@@ -10,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (
@@ -18,6 +19,10 @@ const (
 	eventStreamChannels = EventStream + ".>"
 	// DeleteChannel is emitted when an org is deleted
 	DeleteChannel = EventStream + ".delete"
+)
+
+const (
+	govworkerroledelete = "DEV_XORKEVIN_GOV_ORG_WORKER_ROLE_DELETE"
 )
 
 type (
@@ -158,6 +163,19 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerroledelete, s.OrgRoleDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
+	}
+	l.Info("Subscribed to org delete queue", nil)
 	return nil
 }
 
@@ -165,5 +183,57 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	return nil
+}
+
+const (
+	roleDeleteBatchSize = 256
+)
+
+// OrgRoleDeleteHook deletes the roles of a deleted org
+func (s *service) OrgRoleDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := DecodeDeleteOrgProps(msgdata)
+	if err != nil {
+		return err
+	}
+	orgrole := rank.ToOrgName(props.OrgID)
+	usrOrgrole := rank.ToUsrName(orgrole)
+	modOrgrole := rank.ToModName(orgrole)
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		userids, err := s.roles.GetByRole(usrOrgrole, roleDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get role users")
+		}
+		if len(userids) == 0 {
+			break
+		}
+		if err := s.roles.DeleteByRole(usrOrgrole, userids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete role users")
+		}
+		if len(userids) < roleDeleteBatchSize {
+			break
+		}
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		userids, err := s.roles.GetByRole(modOrgrole, roleDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get role mods")
+		}
+		if len(userids) == 0 {
+			break
+		}
+		if err := s.roles.DeleteByRole(modOrgrole, userids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete role mods")
+		}
+		if len(userids) < roleDeleteBatchSize {
+			break
+		}
+	}
 	return nil
 }

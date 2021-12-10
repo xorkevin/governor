@@ -177,13 +177,6 @@ func (s *service) DeleteOrg(orgid string) error {
 	if err := s.events.StreamPublish(DeleteChannel, j); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish delete org event")
 	}
-	orgrole := rank.ToOrgName(orgid)
-	if err := s.roles.DeleteByRole(rank.ToUsrName(orgrole)); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove org users")
-	}
-	if err := s.roles.DeleteByRole(rank.ToModName(orgrole)); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove org mods")
-	}
 	if err := s.orgs.Delete(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete org")
 	}

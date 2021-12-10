@@ -21,7 +21,7 @@ type (
 		GetRolesPrefix(userid string, prefix string, limit, offset int) (rank.Rank, error)
 		InsertRoles(userid string, roles rank.Rank) error
 		DeleteRoles(userid string, roles rank.Rank) error
-		DeleteByRole(role string) error
+		DeleteByRole(role string, userids []string) error
 		DeleteUserRoles(userid string) error
 		Setup() error
 	}
@@ -33,7 +33,7 @@ type (
 	// Model is the db User role model
 	Model struct {
 		Userid string `model:"userid,VARCHAR(31);index,role" query:"userid;getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role;deleq,userid,role;deleq,userid,role|arr"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role,userid|arr;deleq,userid,role;deleq,userid,role|arr"`
 	}
 
 	ctxKeyRepo struct{}
@@ -228,12 +228,12 @@ func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
 }
 
 // DeleteByRole deletes by role name
-func (r *repo) DeleteByRole(role string) error {
+func (r *repo) DeleteByRole(role string, userids []string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := roleModelDelEqRole(d, role); err != nil {
+	if err := roleModelDelEqRoleHasUserid(d, role, userids); err != nil {
 		return db.WrapErr(err, "Failed to delete roles")
 	}
 	return nil

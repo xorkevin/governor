@@ -185,8 +185,21 @@ func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, userid string, role st
 	return res, nil
 }
 
-func roleModelDelEqRole(db *sql.DB, role string) error {
-	_, err := db.Exec("DELETE FROM userroles WHERE role = $1;", role)
+func roleModelDelEqRoleHasUserid(db *sql.DB, role string, userid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(userid))
+	args = append(args, role)
+	var placeholdersuserid string
+	{
+		placeholders := make([]string, 0, len(userid))
+		for _, i := range userid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM userroles WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
 }
 
