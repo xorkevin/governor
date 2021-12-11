@@ -13,10 +13,13 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/org"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (
-	govworkerdelete = "DEV_XORKEVIN_GOV_COURIER_WORKER_DELETE"
+	govworkerdelete    = "DEV_XORKEVIN_GOV_COURIER_WORKER_DELETE"
+	govworkerorgdelete = "DEV_XORKEVIN_GOV_COURIER_WORKER_ORG_DELETE"
 )
 
 const (
@@ -177,6 +180,17 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
+
+	if _, err := s.events.StreamSubscribe(org.EventStream, org.DeleteChannel, govworkerorgdelete, s.OrgDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
+	}
+	l.Info("Subscribed to org delete queue", nil)
+
 	return nil
 }
 
@@ -197,13 +211,27 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 	if err != nil {
 		return err
 	}
+	return s.creatorDeleteHook(pinger, props.Userid)
+}
+
+// OrgDeleteHook deletes the courier links and brands of a deleted org
+func (s *service) OrgDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := org.DecodeDeleteOrgProps(msgdata)
+	if err != nil {
+		return err
+	}
+	return s.creatorDeleteHook(pinger, rank.ToOrgName(props.OrgID))
+}
+
+// creatorDeleteHook deletes the courier links and brands of a deleted creator
+func (s *service) creatorDeleteHook(pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(); err != nil {
 			return err
 		}
-		links, err := s.GetLinkGroup(props.Userid, 256, 0)
+		links, err := s.GetLinkGroup(creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user links")
+			return governor.ErrWithMsg(err, "Failed to get creator links")
 		}
 		if len(links.Links) == 0 {
 			break
@@ -222,7 +250,7 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 		}
 		if err := s.kvlinks.Del(linkids...); err != nil {
 			s.logger.Error("Failed to delete linkid urls", map[string]string{
-				"userid":     props.Userid,
+				"creatorid":  creatorid,
 				"error":      err.Error(),
 				"actiontype": "linkcache",
 			})
@@ -235,9 +263,9 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 		if err := pinger.Ping(); err != nil {
 			return err
 		}
-		brands, err := s.GetBrandGroup(props.Userid, 256, 0)
+		brands, err := s.GetBrandGroup(creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user brands")
+			return governor.ErrWithMsg(err, "Failed to get creator brands")
 		}
 		if len(brands.Brands) == 0 {
 			break
@@ -251,7 +279,7 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 			}
 			brandids = append(brandids, i.BrandID)
 		}
-		if err := s.repo.DeleteBrands(props.Userid, brandids); err != nil {
+		if err := s.repo.DeleteBrands(creatorid, brandids); err != nil {
 			return governor.ErrWithMsg(err, "Failed to delete brands")
 		}
 		if len(brandids) < linkDeleteBatchSize {

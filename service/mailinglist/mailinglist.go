@@ -16,6 +16,7 @@ import (
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/dns"
+	"xorkevin.dev/governor/util/rank"
 )
 
 const (
@@ -30,7 +31,8 @@ const (
 )
 
 const (
-	govworkerdelete = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_DELETE"
+	govworkerdelete    = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_DELETE"
+	govworkerorgdelete = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_ORG_DELETE"
 )
 
 type (
@@ -295,6 +297,16 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
+	if _, err := s.events.StreamSubscribe(org.EventStream, org.DeleteChannel, govworkerorgdelete, s.OrgDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
+	}
+	l.Info("Subscribed to org delete queue", nil)
+
 	if _, err := s.events.StreamSubscribe(eventStream, delChannel, delWorker, s.deleteSubscriber, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -303,7 +315,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to list delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	l.Info("Subscribed to list delete queue", nil)
 
 	return nil
 }
@@ -342,11 +354,25 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 	if err != nil {
 		return err
 	}
+	return s.creatorDeleteHook(pinger, props.Userid)
+}
+
+// OrgDeleteHook deletes the roles of a deleted org
+func (s *service) OrgDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := org.DecodeDeleteOrgProps(msgdata)
+	if err != nil {
+		return err
+	}
+	return s.creatorDeleteHook(pinger, rank.ToOrgName(props.OrgID))
+}
+
+// creatorDeleteHook deletes the roles of a deleted creator
+func (s *service) creatorDeleteHook(pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(); err != nil {
 			return err
 		}
-		lists, err := s.GetCreatorLists(props.Userid, listDeleteBatchSize, 0)
+		lists, err := s.GetCreatorLists(creatorid, listDeleteBatchSize, 0)
 		if err != nil {
 			return governor.ErrWithMsg(err, "Failed to get user roles")
 		}
