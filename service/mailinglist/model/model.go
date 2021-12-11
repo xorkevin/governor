@@ -11,7 +11,7 @@ import (
 //go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
 //go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
 //go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
-//go:generate forge model -m SentMsgModel -t mailinglistsentmsgs -p sentmsg -o modelsentmsg_gen.go
+//go:generate forge model -m SentMsgModel -t mailinglistsentmsgs -p sentmsg -o modelsentmsg_gen.go SentMsgModel
 //go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
 
 const (
@@ -54,7 +54,8 @@ type (
 		MarkMsgSent(listid, msgid string) error
 		DeleteMsgs(listid string, msgids []string) error
 		GetUnsentMsgs(listid, msgid string, limit int) ([]string, error)
-		LogSentMsg(msgid string, userids []string) error
+		LogSentMsg(listid, msgid string, userids []string) error
+		DeleteSentMsgLogs(listid string, msgid []string) error
 		NewTree(listid, msgid string, t int64) *TreeModel
 		GetTreeEdge(listid, msgid, parentid string) (*TreeModel, error)
 		GetTreeChildren(listid, parentid string, depth int, limit, offset int) ([]TreeModel, error)
@@ -140,9 +141,10 @@ type (
 
 	// SentMsgModel is the db mailing list sent message log
 	SentMsgModel struct {
-		Msgid    string `model:"msgid,VARCHAR(1023);index,userid"`
-		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (msgid, userid)"`
-		SentTime int64  `model:"sent_time,BIGINT NOT NULL"`
+		ListID   string `model:"listid,VARCHAR(255)" query:"listid"`
+		Msgid    string `model:"msgid,VARCHAR(1023);index,listid,userid" query:"msgid;deleq,listid,msgid|arr"`
+		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, msgid, userid)" query:"userid"`
+		SentTime int64  `model:"sent_time,BIGINT NOT NULL" query:"sent_time"`
 	}
 
 	// TreeModel is the db mailing list message tree model
@@ -615,7 +617,7 @@ func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 }
 
 const (
-	sqlUnsentMsgs = "SELECT m.userid FROM " + memberModelTableName + " m LEFT JOIN " + sentmsgModelTableName + " s ON m.userid = s.userid AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;"
+	sqlUnsentMsgs = "SELECT m.userid FROM " + memberModelTableName + " m LEFT JOIN " + sentmsgModelTableName + " s ON m.userid = s.userid AND s.listid = $2 AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;"
 )
 
 func (r *repo) GetUnsentMsgs(listid, msgid string, limit int) ([]string, error) {
@@ -648,7 +650,7 @@ func (r *repo) GetUnsentMsgs(listid, msgid string, limit int) ([]string, error) 
 	return res, nil
 }
 
-func (r *repo) LogSentMsg(msgid string, userids []string) error {
+func (r *repo) LogSentMsg(listid, msgid string, userids []string) error {
 	if len(userids) == 0 {
 		return nil
 	}
@@ -660,6 +662,7 @@ func (r *repo) LogSentMsg(msgid string, userids []string) error {
 	m := make([]*SentMsgModel, 0, len(userids))
 	for _, i := range userids {
 		m = append(m, &SentMsgModel{
+			ListID:   listid,
 			Msgid:    msgid,
 			Userid:   i,
 			SentTime: now,
@@ -667,6 +670,20 @@ func (r *repo) LogSentMsg(msgid string, userids []string) error {
 	}
 	if err := sentmsgModelInsertBulk(d, m, true); err != nil {
 		return db.WrapErr(err, "Failed to log sent messages")
+	}
+	return nil
+}
+
+func (r *repo) DeleteSentMsgLogs(listid string, msgids []string) error {
+	if len(msgids) == 0 {
+		return nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := sentmsgModelDelEqListIDHasMsgid(d, listid, msgids); err != nil {
+		return db.WrapErr(err, "Failed to delete sent message logs")
 	}
 	return nil
 }

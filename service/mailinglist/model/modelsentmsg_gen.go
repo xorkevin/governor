@@ -13,11 +13,11 @@ const (
 )
 
 func sentmsgModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistsentmsgs (msgid VARCHAR(1023), userid VARCHAR(31), PRIMARY KEY (msgid, userid), sent_time BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglistsentmsgs (listid VARCHAR(255), msgid VARCHAR(1023), userid VARCHAR(31), PRIMARY KEY (listid, msgid, userid), sent_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistsentmsgs_userid__msgid_index ON mailinglistsentmsgs (userid, msgid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglistsentmsgs_listid__userid__msgid_index ON mailinglistsentmsgs (listid, userid, msgid);")
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func sentmsgModelSetup(db *sql.DB) error {
 }
 
 func sentmsgModelInsert(db *sql.DB, m *SentMsgModel) error {
-	_, err := db.Exec("INSERT INTO mailinglistsentmsgs (msgid, userid, sent_time) VALUES ($1, $2, $3);", m.Msgid, m.Userid, m.SentTime)
+	_, err := db.Exec("INSERT INTO mailinglistsentmsgs (listid, msgid, userid, sent_time) VALUES ($1, $2, $3, $4);", m.ListID, m.Msgid, m.Userid, m.SentTime)
 	if err != nil {
 		return err
 	}
@@ -38,15 +38,33 @@ func sentmsgModelInsertBulk(db *sql.DB, models []*SentMsgModel, allowConflict bo
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*3)
+	args := make([]interface{}, 0, len(models)*4)
 	for c, m := range models {
-		n := c * 3
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
-		args = append(args, m.Msgid, m.Userid, m.SentTime)
+		n := c * 4
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
+		args = append(args, m.ListID, m.Msgid, m.Userid, m.SentTime)
 	}
-	_, err := db.Exec("INSERT INTO mailinglistsentmsgs (msgid, userid, sent_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO mailinglistsentmsgs (listid, msgid, userid, sent_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func sentmsgModelDelEqListIDHasMsgid(db *sql.DB, listid string, msgid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(msgid))
+	args = append(args, listid)
+	var placeholdersmsgid string
+	{
+		placeholders := make([]string, 0, len(msgid))
+		for _, i := range msgid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersmsgid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM mailinglistsentmsgs WHERE listid = $1 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
+	return err
 }

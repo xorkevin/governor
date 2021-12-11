@@ -389,6 +389,9 @@ func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string)
 			}
 		}
 	}
+	if err := s.lists.DeleteSentMsgLogs(m.ListID, msgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+	}
 	if err := s.lists.DeleteMsgs(m.ListID, msgids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete messages")
 	}
@@ -639,6 +642,9 @@ func (s *service) deleteSubscriber(pinger events.Pinger, msgdata []byte) error {
 			}
 			msgids = append(msgids, i.Msgid)
 		}
+		if err := s.lists.DeleteSentMsgLogs(msg.ListID, msgids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+		}
 		if err := s.lists.DeleteMsgs(msg.ListID, msgids); err != nil {
 			return governor.ErrWithMsg(err, "Failed to delete list messages")
 		}
@@ -795,6 +801,9 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 		return governor.ErrWithMsg(err, "Failed to get list msg")
 	}
 	if m.Sent {
+		if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+		}
 		return nil
 	}
 
@@ -802,13 +811,6 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 	if err := func() error {
 		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(m.Msgid)))
 		if err != nil {
-			if errors.Is(err, objstore.ErrNotFound{}) {
-				s.logger.Error("Msg content not found", map[string]string{
-					"actiontype": "getmailmsgcontent",
-					"error":      err.Error(),
-				})
-				return nil
-			}
 			return governor.ErrWithMsg(err, "Failed to get msg content")
 		}
 		defer func() {
@@ -824,6 +826,19 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 		return nil
 	}(); err != nil {
+		if errors.Is(err, objstore.ErrNotFound{}) {
+			s.logger.Error("Msg content not found", map[string]string{
+				"actiontype": "getlistmsgcontent",
+				"error":      err.Error(),
+			})
+			if err := s.lists.MarkMsgSent(m.ListID, m.Msgid); err != nil {
+				return governor.ErrWithMsg(err, "Failed to mark list message sent")
+			}
+			if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
+				return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+			}
+			return nil
+		}
 		return err
 	}
 
@@ -851,7 +866,7 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 				return governor.ErrWithMsg(err, "Failed to send mail message")
 			}
 		}
-		if err := s.lists.LogSentMsg(emmsg.MsgID, userids); err != nil {
+		if err := s.lists.LogSentMsg(emmsg.ListID, emmsg.MsgID, userids); err != nil {
 			return governor.ErrWithMsg(err, "Failed to log sent mail messages")
 		}
 		if len(userids) < mailingListSendBatchSize {
@@ -861,6 +876,9 @@ func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
 
 	if err := s.lists.MarkMsgSent(m.ListID, m.Msgid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to mark list message sent")
+	}
+	if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete sent message logs")
 	}
 	return nil
 }
