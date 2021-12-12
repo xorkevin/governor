@@ -25,13 +25,6 @@ import (
 )
 
 const (
-	eventStream         = "DEV_XORKEVIN_GOV_MAIL"
-	eventStreamChannels = eventStream + ".>"
-	mailChannel         = eventStream + ".mail"
-	mailWorker          = eventStream + "_WORKER"
-)
-
-const (
 	mailUIDRandSize = 16
 )
 
@@ -118,6 +111,8 @@ type (
 		maildataDecrypter *hunter2.Decrypter
 		maildataCipher    hunter2.Cipher
 		logger            governor.Logger
+		streamns          string
+		opts              Opts
 		host              string
 		addr              string
 		msgiddomain       string
@@ -128,7 +123,28 @@ type (
 	}
 
 	ctxKeyMailer struct{}
+
+	Opts struct {
+		StreamName  string
+		MailChannel string
+	}
+
+	ctxKeyOpts struct{}
 )
+
+// GetCtxOpts returns mail Opts from the context
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+// SetCtxOpts sets mail Opts in the context
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
+}
 
 func TplLocal(name string) Tpl {
 	return Tpl{
@@ -171,6 +187,13 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxMailer(inj, s)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:  streamname,
+		MailChannel: streamname + ".mail",
+	}
+	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
@@ -251,7 +274,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return governor.ErrWithMsg(err, "Failed to init mail bucket")
 	}
 	l.Info("Created mail bucket", nil)
-	if err := s.events.InitStream(eventStream, []string{eventStreamChannels}, events.StreamOpts{
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
@@ -272,7 +295,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(eventStream, mailChannel, mailWorker, s.mailSubscriber, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -654,7 +677,7 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(mailChannel, b); err != nil {
+	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish mail event")
 	}
 	return nil
@@ -737,7 +760,7 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(mailChannel, b); err != nil {
+	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish mail event")
 	}
 	return nil
@@ -818,7 +841,7 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(mailChannel, b); err != nil {
+	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish mail event")
 	}
 	return nil
