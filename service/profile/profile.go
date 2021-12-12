@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -10,11 +11,6 @@ import (
 	"xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
-)
-
-const (
-	govworkercreate = "DEV_XORKEVIN_GOV_PROFILE_WORKER_CREATE"
-	govworkerdelete = "DEV_XORKEVIN_GOV_PROFILE_WORKER_DELETE"
 )
 
 type (
@@ -35,6 +31,8 @@ type (
 		events        events.Events
 		gate          gate.Gate
 		logger        governor.Logger
+		streamns      string
+		useropts      user.Opts
 	}
 
 	router struct {
@@ -64,22 +62,25 @@ func NewCtx(inj governor.Injector) Service {
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(profiles, obj, ev, g)
+	useropts := user.GetCtxOpts(inj)
+	return New(profiles, obj, ev, g, useropts)
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, g gate.Gate) Service {
+func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		profiles:      profiles,
 		profileBucket: obj,
 		profileDir:    obj.Subdir("profileimage"),
 		events:        ev,
 		gate:          g,
+		useropts:      useropts,
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxProfiles(inj, s)
+	s.streamns = strings.ToUpper(name)
 }
 
 func (s *service) router() *router {
@@ -124,7 +125,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(user.EventStream, user.CreateChannel, govworkercreate, s.UserCreateHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.CreateChannel, s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -132,7 +133,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
 	}
-	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+	l.Info("Subscribed to user create queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -140,7 +143,8 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user create/delete queue", nil)
+	l.Info("Subscribed to user delete queue", nil)
+
 	return nil
 }
 

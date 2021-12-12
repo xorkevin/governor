@@ -124,7 +124,7 @@ func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) Se
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxGate(inj, s)
 
 	r.SetDefault("realm", "governor")

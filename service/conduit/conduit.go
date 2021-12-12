@@ -65,7 +65,7 @@ func New(repo model.Repo, users user.Users, g gate.Gate) Service {
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
 }
 

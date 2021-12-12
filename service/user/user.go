@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	htmlTemplate "html/template"
 	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -28,21 +29,6 @@ import (
 
 const (
 	authRoutePrefix = "/auth"
-)
-
-const (
-	// EventStream is the backing stream for user events
-	EventStream         = "DEV_XORKEVIN_GOV_USER"
-	eventStreamChannels = EventStream + ".>"
-	// CreateChannel is emitted when a new user is created
-	CreateChannel = EventStream + ".create"
-	// DeleteChannel is emitted when a user is deleted
-	DeleteChannel = EventStream + ".delete"
-)
-
-const (
-	govworkerroledelete   = "DEV_XORKEVIN_GOV_USER_WORKER_ROLE_DELETE"
-	govworkerapikeydelete = "DEV_XORKEVIN_GOV_USER_WORKER_APIKEY_DELETE"
 )
 
 const (
@@ -87,6 +73,8 @@ type (
 		otpDecrypter      *hunter2.Decrypter
 		otpCipher         hunter2.Cipher
 		logger            governor.Logger
+		streamns          string
+		opts              Opts
 		streamsize        int64
 		eventsize         int32
 		baseURL           string
@@ -132,6 +120,14 @@ type (
 	}
 
 	ctxKeyUsers struct{}
+
+	Opts struct {
+		StreamName    string
+		CreateChannel string
+		DeleteChannel string
+	}
+
+	ctxKeyOpts struct{}
 )
 
 // GetCtxUsers returns a Users service from the context
@@ -146,6 +142,20 @@ func GetCtxUsers(inj governor.Injector) Users {
 // setCtxUser sets a Users service in the context
 func setCtxUser(inj governor.Injector, u Users) {
 	inj.Set(ctxKeyUsers{}, u)
+}
+
+// GetCtxOpts returns user Opts from the context
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+// SetCtxOpts sets user Opts in the context
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new Users service from a context
@@ -225,8 +235,16 @@ func New(
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxUser(inj, s)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:    streamname,
+		CreateChannel: streamname + ".create",
+		DeleteChannel: streamname + ".delete",
+	}
+	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -405,7 +423,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.events.InitStream(EventStream, []string{eventStreamChannels}, events.StreamOpts{
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
@@ -473,7 +491,7 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 			return err
 		}
 
-		if err := s.events.StreamPublish(CreateChannel, b); err != nil {
+		if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
 			s.logger.Error("Failed to publish new user", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "publishadminuser",
@@ -494,7 +512,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerroledelete, s.UserRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_ROLE_DELETE", s.UserRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -502,7 +520,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerapikeydelete, s.UserApikeyDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

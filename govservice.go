@@ -31,7 +31,7 @@ type (
 	// launched. Then Setup and PostSetup are run if in setup mode. Otherwise
 	// Start, is run. Stop runs when the server begins the shutdown process.
 	Service interface {
-		Register(inj Injector, r ConfigRegistrar, jr JobRegistrar)
+		Register(name string, inj Injector, r ConfigRegistrar, jr JobRegistrar)
 		Init(ctx context.Context, c Config, r ConfigReader, l Logger, m Router) error
 		Setup(req ReqSetup) error
 		PostSetup(req ReqSetup) error
@@ -60,7 +60,7 @@ func (s *Server) Register(name string, url string, r Service) {
 		},
 		r: r,
 	})
-	r.Register(s.inj, s.config.registrar(name), nil)
+	r.Register(name, s.inj, s.config.registrar(name), nil)
 }
 
 type (

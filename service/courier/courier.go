@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -18,7 +19,6 @@ import (
 )
 
 const (
-	govworkerdelete    = "DEV_XORKEVIN_GOV_COURIER_WORKER_DELETE"
 	govworkerorgdelete = "DEV_XORKEVIN_GOV_COURIER_WORKER_ORG_DELETE"
 )
 
@@ -46,9 +46,11 @@ type (
 		events        events.Events
 		gate          gate.Gate
 		logger        governor.Logger
+		streamns      string
 		fallbackLink  string
 		linkPrefix    string
 		cacheTime     int64
+		useropts      user.Opts
 	}
 
 	router struct {
@@ -79,11 +81,12 @@ func NewCtx(inj governor.Injector) Service {
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(repo, kv, obj, ev, g)
+	useropts := user.GetCtxOpts(inj)
+	return New(repo, kv, obj, ev, g, useropts)
 }
 
 // New creates a new Courier service
-func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Events, g gate.Gate) Service {
+func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),
@@ -93,11 +96,13 @@ func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Eve
 		events:        ev,
 		gate:          g,
 		cacheTime:     time24h,
+		useropts:      useropts,
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxCourier(inj, s)
+	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
@@ -171,7 +176,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

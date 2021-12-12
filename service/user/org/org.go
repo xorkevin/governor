@@ -93,7 +93,7 @@ func New(orgs model.Repo, roles role.Roles, ev events.Events, g gate.Gate) Servi
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOrgs(inj, s)
 
 	r.SetDefault("streamsize", "200M")

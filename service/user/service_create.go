@@ -281,7 +281,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		return nil, governor.ErrWithMsg(err, "Failed to create user roles")
 	}
 
-	if err := s.events.StreamPublish(CreateChannel, b); err != nil {
+	if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
 		s.logger.Error("Failed to publish new user event", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishnewuser",
@@ -350,7 +350,7 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode user props to json")
 	}
-	if err := s.events.StreamPublish(DeleteChannel, j); err != nil {
+	if err := s.events.StreamPublish(s.opts.DeleteChannel, j); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish delete user event")
 	}
 

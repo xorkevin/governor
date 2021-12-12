@@ -3,6 +3,7 @@ package mailinglist
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-smtp"
@@ -31,7 +32,6 @@ const (
 )
 
 const (
-	govworkerdelete    = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_DELETE"
 	govworkerorgdelete = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_ORG_DELETE"
 )
 
@@ -56,6 +56,7 @@ type (
 		mailer       mail.Mailer
 		gate         gate.Gate
 		logger       governor.Logger
+		streamns     string
 		resolver     dns.Resolver
 		server       *smtp.Server
 		port         string
@@ -67,6 +68,7 @@ type (
 		writetimeout time.Duration
 		streamsize   int64
 		eventsize    int32
+		useropts     user.Opts
 	}
 
 	router struct {
@@ -99,11 +101,12 @@ func NewCtx(inj governor.Injector) Service {
 	orgs := org.GetCtxOrgs(inj)
 	g := gate.GetCtxGate(inj)
 	mailer := mail.GetCtxMailer(inj)
-	return New(lists, obj, ev, users, orgs, mailer, g)
+	useropts := user.GetCtxOpts(inj)
+	return New(lists, obj, ev, users, orgs, mailer, g, useropts)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		lists:      lists,
 		mailBucket: obj,
@@ -116,11 +119,13 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,
 		}, time.Minute),
+		useropts: useropts,
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxMailingList(inj, s)
+	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("port", "2525")
 	r.SetDefault("authdomain", "lists.mail.localhost")
@@ -287,7 +292,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to send queue", nil)
 
-	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

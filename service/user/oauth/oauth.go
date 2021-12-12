@@ -4,6 +4,7 @@ import (
 	"context"
 	htmlTemplate "html/template"
 	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -21,10 +22,6 @@ const (
 	tokenRoute    = "/token"
 	userinfoRoute = "/userinfo"
 	jwksRoute     = "/jwks"
-)
-
-const (
-	govworkerdelete = "DEV_XORKEVIN_GOV_OAUTH_WORKER_DELETE"
 )
 
 const (
@@ -56,6 +53,7 @@ type (
 		events       events.Events
 		gate         gate.Gate
 		logger       governor.Logger
+		streamns     string
 		codeTime     int64
 		accessTime   int64
 		refreshTime  int64
@@ -68,6 +66,7 @@ type (
 		epjwks       string
 		tplprofile   *htmlTemplate.Template
 		tplpicture   *htmlTemplate.Template
+		useropts     user.Opts
 	}
 
 	router struct {
@@ -101,11 +100,12 @@ func NewCtx(inj governor.Injector) Service {
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(apps, connections, tokenizer, kv, obj, users, ev, g)
+	useropts := user.GetCtxOpts(inj)
+	return New(apps, connections, tokenizer, kv, obj, users, ev, g, useropts)
 }
 
 // New returns a new Apikey
-func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, ev events.Events, g gate.Gate) Service {
+func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		apps:         apps,
 		connections:  connections,
@@ -120,11 +120,13 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		accessTime:   time5m,
 		refreshTime:  time7d,
 		keyCacheTime: time24h,
+		useropts:     useropts,
 	}
 }
 
-func (s *service) Register(inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOAuth(inj, s)
+	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("codetime", "1m")
 	r.SetDefault("accesstime", "5m")
@@ -244,7 +246,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(user.EventStream, user.DeleteChannel, govworkerdelete, s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

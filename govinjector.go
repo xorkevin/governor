@@ -41,3 +41,8 @@ func (g *govinjector) Clone() Injector {
 func (s *Server) Injector() Injector {
 	return s.inj.Clone()
 }
+
+// BaseInjector returns the base injector
+func (s *Server) BaseInjector() Injector {
+	return s.inj
+}
