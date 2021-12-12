@@ -871,7 +871,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	} else {
 		// mail already exists for this list
 		if !msg.Processed {
-			if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+			if err := s.service.events.StreamPublish(s.service.opts.MailChannel, j); err != nil {
 				s.logger.Error("Failed to publish list event", map[string]string{
 					"cmd":    "data",
 					"error":  err.Error(),
@@ -937,7 +937,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		}
 		// message has already been sent for this list
 	}
-	if err := s.service.events.StreamPublish(mailChannel, j); err != nil {
+	if err := s.service.events.StreamPublish(s.service.opts.MailChannel, j); err != nil {
 		s.logger.Error("Failed to publish list event", map[string]string{
 			"cmd":    "data",
 			"error":  err.Error(),

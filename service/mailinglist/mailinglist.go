@@ -20,17 +20,6 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-const (
-	eventStream         = "DEV_XORKEVIN_GOV_MAILINGLIST"
-	eventStreamChannels = eventStream + ".>"
-	mailChannel         = eventStream + ".mail"
-	sendChannel         = eventStream + ".send"
-	delChannel          = eventStream + ".del"
-	mailWorker          = eventStream + "_WORKER"
-	sendWorker          = eventStream + "_SEND_WORKER"
-	delWorker           = eventStream + "_DEL_WORKER"
-)
-
 type (
 	// MailingList is a mailing list service
 	MailingList interface {
@@ -53,6 +42,7 @@ type (
 		gate         gate.Gate
 		logger       governor.Logger
 		streamns     string
+		opts         Opts
 		resolver     dns.Resolver
 		server       *smtp.Server
 		port         string
@@ -73,7 +63,30 @@ type (
 	}
 
 	ctxKeyMailingList struct{}
+
+	Opts struct {
+		StreamName  string
+		MailChannel string
+		SendChannel string
+		DelChannel  string
+	}
+
+	ctxKeyOpts struct{}
 )
+
+// GetCtxOpts returns mailinglist Opts from the context
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+// SetCtxOpts sets mailinglist Opts in the context
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
+}
 
 // GetCtxMailingList returns a MailingList service from the context
 func GetCtxMailingList(inj governor.Injector) MailingList {
@@ -124,7 +137,15 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxMailingList(inj, s)
-	s.streamns = strings.ToUpper(name)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:  streamname,
+		MailChannel: streamname + ".mail",
+		SendChannel: streamname + ".send",
+		DelChannel:  streamname + ".del",
+	}
+	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("port", "2525")
 	r.SetDefault("authdomain", "lists.mail.localhost")
@@ -250,7 +271,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return governor.ErrWithMsg(err, "Failed to init mail bucket")
 	}
 	l.Info("Created mail bucket", nil)
-	if err := s.events.InitStream(eventStream, []string{eventStreamChannels}, events.StreamOpts{
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
@@ -271,7 +292,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(eventStream, mailChannel, mailWorker, s.mailSubscriber, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -281,7 +302,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to mail queue", nil)
 
-	if _, err := s.events.StreamSubscribe(eventStream, sendChannel, sendWorker, s.sendSubscriber, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.SendChannel, s.streamns+"SEND_WORKER", s.sendSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -290,6 +311,16 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to mail send queue")
 	}
 	l.Info("Subscribed to send queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DelChannel, s.streamns+"_DEL_WORKER", s.deleteSubscriber, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  8192,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to list delete queue")
+	}
+	l.Info("Subscribed to list delete queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -310,16 +341,6 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
 	}
 	l.Info("Subscribed to org delete queue", nil)
-
-	if _, err := s.events.StreamSubscribe(eventStream, delChannel, delWorker, s.deleteSubscriber, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  8192,
-		MaxRequests: 32,
-	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to list delete queue")
-	}
-	l.Info("Subscribed to list delete queue", nil)
 
 	return nil
 }

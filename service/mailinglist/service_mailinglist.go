@@ -203,7 +203,7 @@ func (s *service) DeleteList(creatorid string, listname string) error {
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode list delete message")
 	}
-	if err := s.events.StreamPublish(delChannel, j); err != nil {
+	if err := s.events.StreamPublish(s.opts.DelChannel, j); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish list delete event")
 	}
 	if err := s.lists.DeleteListTrees(m.ListID); err != nil {
@@ -763,7 +763,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode mail send message")
 	}
-	if err := s.events.StreamPublish(sendChannel, j); err != nil {
+	if err := s.events.StreamPublish(s.opts.SendChannel, j); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish mail send event")
 	}
 	return nil
