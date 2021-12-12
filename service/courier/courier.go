@@ -19,10 +19,6 @@ import (
 )
 
 const (
-	govworkerorgdelete = "DEV_XORKEVIN_GOV_COURIER_WORKER_ORG_DELETE"
-)
-
-const (
 	time24h int64 = int64(24 * time.Hour / time.Second)
 )
 
@@ -51,6 +47,7 @@ type (
 		linkPrefix    string
 		cacheTime     int64
 		useropts      user.Opts
+		orgopts       org.Opts
 	}
 
 	router struct {
@@ -82,11 +79,12 @@ func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(repo, kv, obj, ev, g, useropts)
+	orgopts := org.GetCtxOpts(inj)
+	return New(repo, kv, obj, ev, g, useropts, orgopts)
 }
 
 // New creates a new Courier service
-func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts, orgopts org.Opts) Service {
 	return &service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),
@@ -97,6 +95,7 @@ func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Eve
 		gate:          g,
 		cacheTime:     time24h,
 		useropts:      useropts,
+		orgopts:       orgopts,
 	}
 }
 
@@ -186,7 +185,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(org.EventStream, org.DeleteChannel, govworkerorgdelete, s.OrgDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.orgopts.StreamName, s.orgopts.DeleteChannel, s.streamns+"_WORKER_ORG_DELETE", s.OrgDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

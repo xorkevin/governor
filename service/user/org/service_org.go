@@ -174,7 +174,7 @@ func (s *service) DeleteOrg(orgid string) error {
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode org props to json")
 	}
-	if err := s.events.StreamPublish(DeleteChannel, j); err != nil {
+	if err := s.events.StreamPublish(s.opts.DeleteChannel, j); err != nil {
 		return governor.ErrWithMsg(err, "Failed to publish delete org event")
 	}
 	if err := s.orgs.Delete(m); err != nil {

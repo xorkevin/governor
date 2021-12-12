@@ -31,10 +31,6 @@ const (
 	delWorker           = eventStream + "_DEL_WORKER"
 )
 
-const (
-	govworkerorgdelete = "DEV_XORKEVIN_GOV_MAILINGLIST_WORKER_ORG_DELETE"
-)
-
 type (
 	// MailingList is a mailing list service
 	MailingList interface {
@@ -69,6 +65,7 @@ type (
 		streamsize   int64
 		eventsize    int32
 		useropts     user.Opts
+		orgopts      org.Opts
 	}
 
 	router struct {
@@ -102,11 +99,12 @@ func NewCtx(inj governor.Injector) Service {
 	g := gate.GetCtxGate(inj)
 	mailer := mail.GetCtxMailer(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(lists, obj, ev, users, orgs, mailer, g, useropts)
+	orgopts := org.GetCtxOpts(inj)
+	return New(lists, obj, ev, users, orgs, mailer, g, useropts, orgopts)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate, useropts user.Opts) Service {
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate, useropts user.Opts, orgopts org.Opts) Service {
 	return &service{
 		lists:      lists,
 		mailBucket: obj,
@@ -120,6 +118,7 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 			PreferGo: true,
 		}, time.Minute),
 		useropts: useropts,
+		orgopts:  orgopts,
 	}
 }
 
@@ -302,7 +301,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(org.EventStream, org.DeleteChannel, govworkerorgdelete, s.OrgDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.orgopts.StreamName, s.orgopts.DeleteChannel, s.streamns+"_WORKER_ORG_DELETE", s.OrgDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,

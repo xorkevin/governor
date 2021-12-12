@@ -2,6 +2,7 @@ package org
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -11,18 +12,6 @@ import (
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
-)
-
-const (
-	// EventStream is the backing stream for org events
-	EventStream         = "DEV_XORKEVIN_GOV_ORG"
-	eventStreamChannels = EventStream + ".>"
-	// DeleteChannel is emitted when an org is deleted
-	DeleteChannel = EventStream + ".delete"
-)
-
-const (
-	govworkerroledelete = "DEV_XORKEVIN_GOV_ORG_WORKER_ROLE_DELETE"
 )
 
 type (
@@ -44,6 +33,8 @@ type (
 		events     events.Events
 		gate       gate.Gate
 		logger     governor.Logger
+		streamns   string
+		opts       Opts
 		streamsize int64
 		eventsize  int32
 	}
@@ -58,6 +49,13 @@ type (
 	}
 
 	ctxKeyOrgs struct{}
+
+	Opts struct {
+		StreamName    string
+		DeleteChannel string
+	}
+
+	ctxKeyOpts struct{}
 )
 
 // GetCtxOrgs returns an Orgs service from the context
@@ -72,6 +70,20 @@ func GetCtxOrgs(inj governor.Injector) Orgs {
 // setCtxOrgs sets an Orgs service in the context
 func setCtxOrgs(inj governor.Injector, o Orgs) {
 	inj.Set(ctxKeyOrgs{}, o)
+}
+
+// GetCtxOpts returns org Opts from the context
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+// SetCtxOpts sets org Opts in the context
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new Orgs service from a context
@@ -95,6 +107,13 @@ func New(orgs model.Repo, roles role.Roles, ev events.Events, g gate.Gate) Servi
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOrgs(inj, s)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:    streamname,
+		DeleteChannel: streamname + ".delete",
+	}
+	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -140,7 +159,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.events.InitStream(EventStream, []string{eventStreamChannels}, events.StreamOpts{
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
@@ -167,7 +186,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(EventStream, DeleteChannel, govworkerroledelete, s.OrgRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_ROLE_DELETE", s.OrgRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
