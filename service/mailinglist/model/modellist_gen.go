@@ -8,31 +8,27 @@ import (
 	"strings"
 )
 
-const (
-	listModelTableName = "mailinglists"
-)
-
-func listModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS mailinglists (listid VARCHAR(255) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, listname VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), archive BOOLEAN NOT NULL, sender_policy VARCHAR(255) NOT NULL, member_policy VARCHAR(255) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+func listModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (listid VARCHAR(255) PRIMARY KEY, creatorid VARCHAR(31) NOT NULL, listname VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), archive BOOLEAN NOT NULL, sender_policy VARCHAR(255) NOT NULL, member_policy VARCHAR(255) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS mailinglists_creatorid__last_updated_index ON mailinglists (creatorid, last_updated);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creatorid__last_updated_index ON " + tableName + " (creatorid, last_updated);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func listModelInsert(db *sql.DB, m *ListModel) error {
-	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
+func listModelInsert(db *sql.DB, tableName string, m *ListModel) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) error {
+func listModelInsertBulk(db *sql.DB, tableName string, models []*ListModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,22 +40,22 @@ func listModelInsertBulk(db *sql.DB, models []*ListModel, allowConflict bool) er
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10))
 		args = append(args, m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO mailinglists (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func listModelGetListModelEqListID(db *sql.DB, listid string) (*ListModel, error) {
+func listModelGetListModelEqListID(db *sql.DB, tableName string, listid string) (*ListModel, error) {
 	m := &ListModel{}
-	if err := db.QueryRow("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE listid = $1;", listid).Scan(&m.ListID, &m.CreatorID, &m.Listname, &m.Name, &m.Description, &m.Archive, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM "+tableName+" WHERE listid = $1;", listid).Scan(&m.ListID, &m.CreatorID, &m.Listname, &m.Name, &m.Description, &m.Archive, &m.SenderPolicy, &m.MemberPolicy, &m.LastUpdated, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, orderasc bool, limit, offset int) ([]ListModel, error) {
+func listModelGetListModelHasListIDOrdListID(db *sql.DB, tableName string, listid []string, orderasc bool, limit, offset int) ([]ListModel, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(listid))
 	args = append(args, limit, offset)
@@ -78,7 +74,7 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 		order = "ASC"
 	}
 	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM "+tableName+" WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,31 +95,31 @@ func listModelGetListModelHasListIDOrdListID(db *sql.DB, listid []string, ordera
 	return res, nil
 }
 
-func listModelUpdListModelEqListID(db *sql.DB, m *ListModel, listid string) error {
-	_, err := db.Exec("UPDATE mailinglists SET (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE listid = $11;", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime, listid)
+func listModelUpdListModelEqListID(db *sql.DB, tableName string, m *ListModel, listid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE listid = $11;", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime, listid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func listModelDelEqListID(db *sql.DB, listid string) error {
-	_, err := db.Exec("DELETE FROM mailinglists WHERE listid = $1;", listid)
+func listModelDelEqListID(db *sql.DB, tableName string, listid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE listid = $1;", listid)
 	return err
 }
 
-func listModelDelEqCreatorID(db *sql.DB, creatorid string) error {
-	_, err := db.Exec("DELETE FROM mailinglists WHERE creatorid = $1;", creatorid)
+func listModelDelEqCreatorID(db *sql.DB, tableName string, creatorid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creatorid = $1;", creatorid)
 	return err
 }
 
-func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string, orderasc bool, limit, offset int) ([]ListModel, error) {
+func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, tableName string, creatorid string, orderasc bool, limit, offset int) ([]ListModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]ListModel, 0, limit)
-	rows, err := db.Query("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM mailinglists WHERE creatorid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := db.Query("SELECT listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time FROM "+tableName+" WHERE creatorid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +140,8 @@ func listModelGetListModelEqCreatorIDOrdLastUpdated(db *sql.DB, creatorid string
 	return res, nil
 }
 
-func listModelUpdlistLastUpdatedEqListID(db *sql.DB, m *listLastUpdated, listid string) error {
-	_, err := db.Exec("UPDATE mailinglists SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
+func listModelUpdlistLastUpdatedEqListID(db *sql.DB, tableName string, m *listLastUpdated, listid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
 	if err != nil {
 		return err
 	}

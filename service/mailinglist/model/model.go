@@ -8,11 +8,11 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-//go:generate forge model -m ListModel -t mailinglists -p list -o modellist_gen.go ListModel listLastUpdated
-//go:generate forge model -m MemberModel -t mailinglistmembers -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -t mailinglistmsgs -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
-//go:generate forge model -m SentMsgModel -t mailinglistsentmsgs -p sentmsg -o modelsentmsg_gen.go SentMsgModel
-//go:generate forge model -m TreeModel -t mailinglisttree -p tree -o modeltree_gen.go TreeModel
+//go:generate forge model -m ListModel -p list -o modellist_gen.go ListModel listLastUpdated
+//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel listLastUpdated
+//go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
+//go:generate forge model -m SentMsgModel -p sentmsg -o modelsentmsg_gen.go SentMsgModel
+//go:generate forge model -m TreeModel -p tree -o modeltree_gen.go TreeModel
 
 const (
 	keySeparator = "."
@@ -68,7 +68,12 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		tableLists   string
+		tableMembers string
+		tableMsgs    string
+		tableSent    string
+		tableTree    string
+		db           db.Database
 	}
 
 	// ListModel is the db mailing list model
@@ -174,20 +179,25 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) {
+	SetCtxRepo(inj, NewCtx(inj, tableLists, tableMembers, tableMsgs, tableSent, tableTree))
 }
 
 // NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, tableLists, tableMembers, tableMsgs, tableSent, tableTree)
 }
 
 // New creates a new user repository
-func New(database db.Database) Repo {
+func New(database db.Database, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {
 	return &repo{
-		db: database,
+		tableLists:   tableLists,
+		tableMembers: tableMembers,
+		tableMsgs:    tableMsgs,
+		tableSent:    tableSent,
+		tableTree:    tableTree,
+		db:           database,
 	}
 }
 
@@ -219,7 +229,7 @@ func (r *repo) GetListByID(listid string) (*ListModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := listModelGetListModelEqListID(d, listid)
+	m, err := listModelGetListModelEqListID(d, r.tableLists, listid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list")
 	}
@@ -234,7 +244,7 @@ func (r *repo) GetLists(listids []string) ([]ListModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := listModelGetListModelHasListIDOrdListID(d, listids, true, len(listids), 0)
+	m, err := listModelGetListModelHasListIDOrdListID(d, r.tableLists, listids, true, len(listids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get lists")
 	}
@@ -246,7 +256,7 @@ func (r *repo) GetCreatorLists(creatorid string, limit, offset int) ([]ListModel
 	if err != nil {
 		return nil, err
 	}
-	m, err := listModelGetListModelEqCreatorIDOrdLastUpdated(d, creatorid, false, limit, offset)
+	m, err := listModelGetListModelEqCreatorIDOrdLastUpdated(d, r.tableLists, creatorid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest lists")
 	}
@@ -258,7 +268,7 @@ func (r *repo) InsertList(m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := listModelInsert(d, m); err != nil {
+	if err := listModelInsert(d, r.tableLists, m); err != nil {
 		return db.WrapErr(err, "Failed to insert list")
 	}
 	return nil
@@ -269,7 +279,7 @@ func (r *repo) UpdateList(m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := listModelUpdListModelEqListID(d, m, m.ListID); err != nil {
+	if err := listModelUpdListModelEqListID(d, r.tableLists, m, m.ListID); err != nil {
 		return db.WrapErr(err, "Failed to update list")
 	}
 	return nil
@@ -280,12 +290,12 @@ func (r *repo) UpdateListLastUpdated(listid string, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := listModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
+	if err := listModelUpdlistLastUpdatedEqListID(d, r.tableLists, &listLastUpdated{
 		LastUpdated: t,
 	}, listid); err != nil {
 		return db.WrapErr(err, "Failed to update list last updated")
 	}
-	if err := memberModelUpdlistLastUpdatedEqListID(d, &listLastUpdated{
+	if err := memberModelUpdlistLastUpdatedEqListID(d, r.tableMembers, &listLastUpdated{
 		LastUpdated: t,
 	}, listid); err != nil {
 		return db.WrapErr(err, "Failed to update list last updated")
@@ -298,7 +308,7 @@ func (r *repo) DeleteList(m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := listModelDelEqListID(d, m.ListID); err != nil {
+	if err := listModelDelEqListID(d, r.tableLists, m.ListID); err != nil {
 		return db.WrapErr(err, "Failed to delete list")
 	}
 	return nil
@@ -309,7 +319,7 @@ func (r *repo) DeleteCreatorLists(creatorid string) error {
 	if err != nil {
 		return err
 	}
-	if err := listModelDelEqCreatorID(d, creatorid); err != nil {
+	if err := listModelDelEqCreatorID(d, r.tableLists, creatorid); err != nil {
 		return db.WrapErr(err, "Failed to delete lists")
 	}
 	return nil
@@ -320,7 +330,7 @@ func (r *repo) GetMember(listid, userid string) (*MemberModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqListIDEqUserid(d, listid, userid)
+	m, err := memberModelGetMemberModelEqListIDEqUserid(d, r.tableMembers, listid, userid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list member")
 	}
@@ -332,7 +342,7 @@ func (r *repo) GetMembers(listid string, limit, offset int) ([]MemberModel, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, listid, true, limit, offset)
+	m, err := memberModelGetMemberModelEqListIDOrdUserid(d, r.tableMembers, listid, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list members")
 	}
@@ -347,7 +357,7 @@ func (r *repo) GetListsMembers(listids []string, limit int) ([]MemberModel, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelHasListIDOrdListID(d, listids, true, limit, 0)
+	m, err := memberModelGetMemberModelHasListIDOrdListID(d, r.tableMembers, listids, true, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list members")
 	}
@@ -362,16 +372,12 @@ func (r *repo) GetListMembers(listid string, userids []string) ([]MemberModel, e
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqListIDHasUseridOrdUserid(d, listid, userids, true, len(userids), 0)
+	m, err := memberModelGetMemberModelEqListIDHasUseridOrdUserid(d, r.tableMembers, listid, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list members")
 	}
 	return m, nil
 }
-
-const (
-	sqlMemberCount = "SELECT COUNT(*) FROM " + memberModelTableName + " WHERE listid = $1;"
-)
 
 func (r *repo) GetMembersCount(listid string) (int, error) {
 	var count int
@@ -379,7 +385,7 @@ func (r *repo) GetMembersCount(listid string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := d.QueryRow(sqlMemberCount, listid).Scan(&count); err != nil {
+	if err := d.QueryRow("SELECT COUNT(*) FROM "+r.tableMembers+" WHERE listid = $1;", listid).Scan(&count); err != nil {
 		return 0, db.WrapErr(err, "Failed to get list members count")
 	}
 	return count, nil
@@ -390,7 +396,7 @@ func (r *repo) GetLatestLists(userid string, limit, offset int) ([]MemberModel, 
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, userid, false, limit, offset)
+	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, r.tableMembers, userid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest user lists")
 	}
@@ -420,7 +426,7 @@ func (r *repo) InsertMembers(m []*MemberModel) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelInsertBulk(d, m, false); err != nil {
+	if err := memberModelInsertBulk(d, r.tableMembers, m, false); err != nil {
 		return db.WrapErr(err, "Failed to insert list members")
 	}
 	return nil
@@ -431,7 +437,7 @@ func (r *repo) DeleteMembers(listid string, userids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelDelEqListIDHasUserid(d, listid, userids); err != nil {
+	if err := memberModelDelEqListIDHasUserid(d, r.tableMembers, listid, userids); err != nil {
 		return db.WrapErr(err, "Failed to delete list members")
 	}
 	return nil
@@ -442,7 +448,7 @@ func (r *repo) DeleteListMembers(listid string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelDelEqListID(d, listid); err != nil {
+	if err := memberModelDelEqListID(d, r.tableMembers, listid); err != nil {
 		return db.WrapErr(err, "Failed to delete list members")
 	}
 	return nil
@@ -453,7 +459,7 @@ func (r *repo) DeleteUserMembers(userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelDelEqUserid(d, userid); err != nil {
+	if err := memberModelDelEqUserid(d, r.tableMembers, userid); err != nil {
 		return db.WrapErr(err, "Failed to delete user list memberships")
 	}
 	return nil
@@ -473,7 +479,7 @@ func (r *repo) GetMsg(listid, msgid string) (*MsgModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDEqMsgid(d, listid, msgid)
+	m, err := msgModelGetMsgModelEqListIDEqMsgid(d, r.tableMsgs, listid, msgid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list")
 	}
@@ -485,7 +491,7 @@ func (r *repo) GetListMsgs(listid string, limit, offset int) ([]MsgModel, error)
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, listid, false, limit, offset)
+	m, err := msgModelGetMsgModelEqListIDOrdCreationTime(d, r.tableMsgs, listid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest list messages")
 	}
@@ -497,7 +503,7 @@ func (r *repo) GetListThreads(listid string, limit, offset int) ([]MsgModel, err
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, listid, "", false, limit, offset)
+	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, r.tableMsgs, listid, "", false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest list threads")
 	}
@@ -509,7 +515,7 @@ func (r *repo) GetListThread(listid, threadid string, limit, offset int) ([]MsgM
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, listid, threadid, true, limit, offset)
+	m, err := msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(d, r.tableMsgs, listid, threadid, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get list thread")
 	}
@@ -521,7 +527,7 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelInsert(d, m); err != nil {
+	if err := msgModelInsert(d, r.tableMsgs, m); err != nil {
 		return db.WrapErr(err, "Failed to insert list message")
 	}
 	return nil
@@ -532,7 +538,7 @@ func (r *repo) UpdateMsgParent(listid, msgid string, parentid, threadid string) 
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgParentEqListIDEqMsgidEqThreadID(d, &msgParent{
+	if err := msgModelUpdmsgParentEqListIDEqMsgidEqThreadID(d, r.tableMsgs, &msgParent{
 		ParentID: parentid,
 		ThreadID: threadid,
 	}, listid, msgid, ""); err != nil {
@@ -546,7 +552,7 @@ func (r *repo) UpdateMsgChildren(listid, parentid, threadid string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(d, &msgChildren{
+	if err := msgModelUpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(d, r.tableMsgs, &msgChildren{
 		ParentID: parentid,
 		ThreadID: threadid,
 	}, listid, "", parentid); err != nil {
@@ -555,16 +561,12 @@ func (r *repo) UpdateMsgChildren(listid, parentid, threadid string) error {
 	return nil
 }
 
-const (
-	sqlMsgUpdateThread = "UPDATE " + msgModelTableName + " SET (thread_id) = ROW($3) WHERE listid = $1 AND thread_id IN (SELECT msgid FROM " + msgModelTableName + " WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2);"
-)
-
 func (r *repo) UpdateMsgThread(listid, parentid, threadid string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := d.Exec(sqlMsgUpdateThread, listid, parentid, threadid); err != nil {
+	if _, err := d.Exec("UPDATE "+r.tableMsgs+" SET (thread_id) = ROW($3) WHERE listid = $1 AND thread_id IN (SELECT msgid FROM "+r.tableMsgs+" WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2);", listid, parentid, threadid); err != nil {
 		return db.WrapErr(err, "Failed to update list message thread")
 	}
 	return nil
@@ -575,7 +577,7 @@ func (r *repo) MarkMsgProcessed(listid, msgid string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgProcessedEqListIDEqMsgid(d, &msgProcessed{
+	if err := msgModelUpdmsgProcessedEqListIDEqMsgid(d, r.tableMsgs, &msgProcessed{
 		Processed: true,
 	}, listid, msgid); err != nil {
 		return db.WrapErr(err, "Failed to update list message")
@@ -588,7 +590,7 @@ func (r *repo) MarkMsgSent(listid, msgid string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgSentEqListIDEqMsgid(d, &msgSent{
+	if err := msgModelUpdmsgSentEqListIDEqMsgid(d, r.tableMsgs, &msgSent{
 		Sent: true,
 	}, listid, msgid); err != nil {
 		return db.WrapErr(err, "Failed to update list message")
@@ -604,7 +606,7 @@ func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgDeletedEqListIDHasMsgid(d, &msgDeleted{
+	if err := msgModelUpdmsgDeletedEqListIDHasMsgid(d, r.tableMsgs, &msgDeleted{
 		Userid:   "",
 		SPFPass:  "",
 		DKIMPass: "",
@@ -616,10 +618,6 @@ func (r *repo) DeleteMsgs(listid string, msgids []string) error {
 	return nil
 }
 
-const (
-	sqlUnsentMsgs = "SELECT m.userid FROM " + memberModelTableName + " m LEFT JOIN " + sentmsgModelTableName + " s ON m.userid = s.userid AND s.listid = $2 AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;"
-)
-
 func (r *repo) GetUnsentMsgs(listid, msgid string, limit int) ([]string, error) {
 	if limit == 0 {
 		return nil, nil
@@ -629,7 +627,7 @@ func (r *repo) GetUnsentMsgs(listid, msgid string, limit int) ([]string, error) 
 		return nil, err
 	}
 	res := make([]string, 0, limit)
-	rows, err := d.Query(sqlUnsentMsgs, limit, listid, msgid)
+	rows, err := d.Query("SELECT m.userid FROM "+r.tableMembers+" m LEFT JOIN "+r.tableSent+" s ON m.userid = s.userid AND s.listid = $2 AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;", limit, listid, msgid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get unsent list messages")
 	}
@@ -668,7 +666,7 @@ func (r *repo) LogSentMsg(listid, msgid string, userids []string) error {
 			SentTime: now,
 		})
 	}
-	if err := sentmsgModelInsertBulk(d, m, true); err != nil {
+	if err := sentmsgModelInsertBulk(d, r.tableSent, m, true); err != nil {
 		return db.WrapErr(err, "Failed to log sent messages")
 	}
 	return nil
@@ -682,7 +680,7 @@ func (r *repo) DeleteSentMsgLogs(listid string, msgids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := sentmsgModelDelEqListIDHasMsgid(d, listid, msgids); err != nil {
+	if err := sentmsgModelDelEqListIDHasMsgid(d, r.tableSent, listid, msgids); err != nil {
 		return db.WrapErr(err, "Failed to delete sent message logs")
 	}
 	return nil
@@ -703,7 +701,7 @@ func (r *repo) GetTreeEdge(listid, msgid, parentid string) (*TreeModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := treeModelGetTreeModelEqListIDEqMsgidEqParentID(d, listid, msgid, parentid)
+	m, err := treeModelGetTreeModelEqListIDEqMsgidEqParentID(d, r.tableTree, listid, msgid, parentid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get tree edge")
 	}
@@ -715,7 +713,7 @@ func (r *repo) GetTreeChildren(listid, parentid string, depth int, limit, offset
 	if err != nil {
 		return nil, err
 	}
-	m, err := treeModelGetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(d, listid, parentid, depth, true, limit, offset)
+	m, err := treeModelGetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(d, r.tableTree, listid, parentid, depth, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get tree children")
 	}
@@ -727,7 +725,7 @@ func (r *repo) GetTreeParents(listid, msgid string, limit, offset int) ([]TreeMo
 	if err != nil {
 		return nil, err
 	}
-	m, err := treeModelGetTreeModelEqListIDEqMsgidOrdDepth(d, listid, msgid, true, limit, offset)
+	m, err := treeModelGetTreeModelEqListIDEqMsgidOrdDepth(d, r.tableTree, listid, msgid, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get tree parents")
 	}
@@ -739,37 +737,29 @@ func (r *repo) InsertTree(m *TreeModel) error {
 	if err != nil {
 		return err
 	}
-	if err := treeModelInsert(d, m); err != nil {
+	if err := treeModelInsert(d, r.tableTree, m); err != nil {
 		return db.WrapErr(err, "Failed to insert tree node")
 	}
 	return nil
 }
-
-const (
-	sqlTreeEdgeInsert = "INSERT INTO " + treeModelTableName + " (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM " + treeModelTableName + " p INNER JOIN " + treeModelTableName + " c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;"
-)
 
 func (r *repo) InsertTreeEdge(listid, msgid, parentid string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := d.Exec(sqlTreeEdgeInsert, listid, parentid, msgid); err != nil {
+	if _, err := d.Exec("INSERT INTO "+r.tableTree+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+r.tableTree+" p INNER JOIN "+r.tableTree+" c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;", listid, parentid, msgid); err != nil {
 		return db.WrapErr(err, "Failed to insert tree edge")
 	}
 	return nil
 }
-
-const (
-	sqlTreeChildrenInsert = "INSERT INTO " + treeModelTableName + " (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM " + treeModelTableName + " p INNER JOIN " + treeModelTableName + " c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id IN (SELECT msgid FROM " + msgModelTableName + " WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2) ON CONFLICT DO NOTHING;"
-)
 
 func (r *repo) InsertTreeChildren(listid, msgid string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := d.Exec(sqlTreeChildrenInsert, listid, msgid); err != nil {
+	if _, err := d.Exec("INSERT INTO "+r.tableTree+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+r.tableTree+" p INNER JOIN "+r.tableTree+" c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id IN (SELECT msgid FROM "+r.tableMsgs+" WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2) ON CONFLICT DO NOTHING;", listid, msgid); err != nil {
 		return db.WrapErr(err, "Failed to insert tree children edges")
 	}
 	return nil
@@ -780,7 +770,7 @@ func (r *repo) DeleteListTrees(listid string) error {
 	if err != nil {
 		return err
 	}
-	if err := treeModelDelEqListID(d, listid); err != nil {
+	if err := treeModelDelEqListID(d, r.tableTree, listid); err != nil {
 		return db.WrapErr(err, "Failed to delete list trees")
 	}
 	return nil
@@ -791,31 +781,31 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := listModelSetup(d); err != nil {
+	if err := listModelSetup(d, r.tableLists); err != nil {
 		err = db.WrapErr(err, "Failed to setup list model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := memberModelSetup(d); err != nil {
+	if err := memberModelSetup(d, r.tableMembers); err != nil {
 		err = db.WrapErr(err, "Failed to setup list member model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := msgModelSetup(d); err != nil {
+	if err := msgModelSetup(d, r.tableMsgs); err != nil {
 		err = db.WrapErr(err, "Failed to setup list message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := sentmsgModelSetup(d); err != nil {
+	if err := sentmsgModelSetup(d, r.tableSent); err != nil {
 		err = db.WrapErr(err, "Failed to setup list sent message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := treeModelSetup(d); err != nil {
+	if err := treeModelSetup(d, r.tableTree); err != nil {
 		err = db.WrapErr(err, "Failed to setup list message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

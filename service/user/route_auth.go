@@ -252,7 +252,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := m.s.RefreshToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
-		if errors.Is(err, ErrNoSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
+		if errors.Is(err, ErrDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
 			m.rmAccessCookie(c)
 			m.rmRefreshCookie(c, res.Claims.Subject)
 		}

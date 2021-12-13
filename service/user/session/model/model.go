@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t usersessions -p session -o model_gen.go Model qID
+//go:generate forge model -m Model -p session -o model_gen.go Model qID
 
 const (
 	uidSize = 8
@@ -39,6 +39,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -77,23 +78,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new session repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new session repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new user session repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -159,7 +161,7 @@ func (r *repo) GetByID(sessionID string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := sessionModelGetModelEqSessionID(d, sessionID)
+	m, err := sessionModelGetModelEqSessionID(d, r.table, sessionID)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get session")
 	}
@@ -172,7 +174,7 @@ func (r *repo) GetUserSessions(userid string, limit, offset int) ([]Model, error
 	if err != nil {
 		return nil, err
 	}
-	m, err := sessionModelGetModelEqUseridOrdTime(d, userid, false, limit, offset)
+	m, err := sessionModelGetModelEqUseridOrdTime(d, r.table, userid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user sessions")
 	}
@@ -185,7 +187,7 @@ func (r *repo) GetUserSessionIDs(userid string, limit, offset int) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := sessionModelGetqIDEqUseridOrdSessionID(d, userid, true, limit, offset)
+	m, err := sessionModelGetqIDEqUseridOrdSessionID(d, r.table, userid, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user session ids")
 	}
@@ -202,7 +204,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelInsert(d, m); err != nil {
+	if err := sessionModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert session")
 	}
 	return nil
@@ -214,7 +216,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelUpdModelEqSessionID(d, m, m.SessionID); err != nil {
+	if err := sessionModelUpdModelEqSessionID(d, r.table, m, m.SessionID); err != nil {
 		return db.WrapErr(err, "Failed to update session")
 	}
 	return nil
@@ -226,7 +228,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelDelEqSessionID(d, m.SessionID); err != nil {
+	if err := sessionModelDelEqSessionID(d, r.table, m.SessionID); err != nil {
 		return db.WrapErr(err, "Failed to delete session")
 	}
 	return nil
@@ -241,7 +243,7 @@ func (r *repo) DeleteSessions(sessionids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelDelHasSessionID(d, sessionids); err != nil {
+	if err := sessionModelDelHasSessionID(d, r.table, sessionids); err != nil {
 		return db.WrapErr(err, "Failed to delete sessions")
 	}
 	return nil
@@ -253,7 +255,7 @@ func (r *repo) DeleteUserSessions(userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelDelEqUserid(d, userid); err != nil {
+	if err := sessionModelDelEqUserid(d, r.table, userid); err != nil {
 		return db.WrapErr(err, "Failed to delete sessions")
 	}
 	return nil
@@ -265,7 +267,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := sessionModelSetup(d); err != nil {
+	if err := sessionModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup user session model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

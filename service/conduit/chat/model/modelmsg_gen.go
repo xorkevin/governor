@@ -8,31 +8,27 @@ import (
 	"strings"
 )
 
-const (
-	msgModelTableName = "chatmessages"
-)
-
-func msgModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chatmessages (chatid VARCHAR(31), msgid VARCHAR(31), PRIMARY KEY (chatid, msgid), userid VARCHAR(31) NOT NULL, time_ms BIGINT NOT NULL, kind VARCHAR(31) NOT NULL, value VARCHAR(4095) NOT NULL);")
+func msgModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31), msgid VARCHAR(31), PRIMARY KEY (chatid, msgid), userid VARCHAR(31) NOT NULL, time_ms BIGINT NOT NULL, kind VARCHAR(31) NOT NULL, value VARCHAR(4095) NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS chatmessages_chatid__kind__msgid_index ON chatmessages (chatid, kind, msgid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_chatid__kind__msgid_index ON " + tableName + " (chatid, kind, msgid);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelInsert(db *sql.DB, m *MsgModel) error {
-	_, err := db.Exec("INSERT INTO chatmessages (chatid, msgid, userid, time_ms, kind, value) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Msgid, m.Userid, m.Timems, m.Kind, m.Value)
+func msgModelInsert(db *sql.DB, tableName string, m *MsgModel) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, msgid, userid, time_ms, kind, value) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Msgid, m.Userid, m.Timems, m.Kind, m.Value)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) error {
+func msgModelInsertBulk(db *sql.DB, tableName string, models []*MsgModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,20 +40,20 @@ func msgModelInsertBulk(db *sql.DB, models []*MsgModel, allowConflict bool) erro
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
 		args = append(args, m.Chatid, m.Msgid, m.Userid, m.Timems, m.Kind, m.Value)
 	}
-	_, err := db.Exec("INSERT INTO chatmessages (chatid, msgid, userid, time_ms, kind, value) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, msgid, userid, time_ms, kind, value) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelGetMsgModelEqChatidOrdMsgid(db *sql.DB, chatid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidOrdMsgid(db *sql.DB, tableName string, chatid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM chatmessages WHERE chatid = $3 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
+	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM "+tableName+" WHERE chatid = $3 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +74,13 @@ func msgModelGetMsgModelEqChatidOrdMsgid(db *sql.DB, chatid string, orderasc boo
 	return res, nil
 }
 
-func msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(db *sql.DB, chatid string, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(db *sql.DB, tableName string, chatid string, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM chatmessages WHERE chatid = $3 AND msgid < $4 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, msgid)
+	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM "+tableName+" WHERE chatid = $3 AND msgid < $4 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, msgid)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +101,13 @@ func msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(db *sql.DB, chatid string, msgid
 	return res, nil
 }
 
-func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, chatid string, kind string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, tableName string, chatid string, kind string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM chatmessages WHERE chatid = $3 AND kind = $4 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, kind)
+	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM "+tableName+" WHERE chatid = $3 AND kind = $4 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -132,13 +128,13 @@ func msgModelGetMsgModelEqChatidEqKindOrdMsgid(db *sql.DB, chatid string, kind s
 	return res, nil
 }
 
-func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, chatid string, kind string, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, tableName string, chatid string, kind string, msgid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM chatmessages WHERE chatid = $3 AND kind = $4 AND msgid < $5 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, kind, msgid)
+	rows, err := db.Query("SELECT chatid, msgid, userid, time_ms, kind, value FROM "+tableName+" WHERE chatid = $3 AND kind = $4 AND msgid < $5 ORDER BY msgid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid, kind, msgid)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +155,7 @@ func msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(db *sql.DB, chatid string,
 	return res, nil
 }
 
-func msgModelDelEqChatidHasMsgid(db *sql.DB, chatid string, msgid []string) error {
+func msgModelDelEqChatidHasMsgid(db *sql.DB, tableName string, chatid string, msgid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(msgid))
 	args = append(args, chatid)
@@ -173,11 +169,11 @@ func msgModelDelEqChatidHasMsgid(db *sql.DB, chatid string, msgid []string) erro
 		}
 		placeholdersmsgid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM chatmessages WHERE chatid = $1 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
 	return err
 }
 
-func msgModelDelEqChatid(db *sql.DB, chatid string) error {
-	_, err := db.Exec("DELETE FROM chatmessages WHERE chatid = $1;", chatid)
+func msgModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1;", chatid)
 	return err
 }

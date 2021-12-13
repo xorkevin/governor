@@ -9,8 +9,8 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-//go:generate forge model -m LinkModel -t courierlinks -p link -o modellink_gen.go LinkModel
-//go:generate forge model -m BrandModel -t courierbrands -p brand -o modelbrand_gen.go BrandModel
+//go:generate forge model -m LinkModel -p link -o modellink_gen.go LinkModel
+//go:generate forge model -m BrandModel -p brand -o modelbrand_gen.go BrandModel
 
 const (
 	defaultUIDSize = 8
@@ -36,7 +36,9 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		tableLinks  string
+		tableBrands string
+		db          db.Database
 	}
 
 	// LinkModel is the db link model
@@ -72,20 +74,22 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new courier repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, tableLinks, tableBrands string) {
+	SetCtxRepo(inj, NewCtx(inj, tableLinks, tableBrands))
 }
 
 // NewCtx creates a new courier repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, tableLinks, tableBrands string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, tableLinks, tableBrands)
 }
 
 // New creates a new courier repo
-func New(database db.Database) Repo {
+func New(database db.Database, tableLinks, tableBrands string) Repo {
 	return &repo{
-		db: database,
+		tableLinks:  tableLinks,
+		tableBrands: tableBrands,
+		db:          database,
 	}
 }
 
@@ -116,14 +120,14 @@ func (r *repo) GetLinkGroup(creatorid string, limit, offset int) ([]LinkModel, e
 	}
 
 	if creatorid != "" {
-		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
+		m, err := linkModelGetLinkModelEqCreatorIDOrdCreationTime(d, r.tableLinks, creatorid, false, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get links")
 		}
 		return m, nil
 	}
 
-	m, err := linkModelGetLinkModelOrdCreationTime(d, false, limit, offset)
+	m, err := linkModelGetLinkModelOrdCreationTime(d, r.tableLinks, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get links")
 	}
@@ -136,7 +140,7 @@ func (r *repo) GetLink(linkid string) (*LinkModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := linkModelGetLinkModelEqLinkID(d, linkid)
+	m, err := linkModelGetLinkModelEqLinkID(d, r.tableLinks, linkid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get link")
 	}
@@ -149,7 +153,7 @@ func (r *repo) InsertLink(m *LinkModel) error {
 	if err != nil {
 		return err
 	}
-	if err := linkModelInsert(d, m); err != nil {
+	if err := linkModelInsert(d, r.tableLinks, m); err != nil {
 		return db.WrapErr(err, "Failed to insert link")
 	}
 	return nil
@@ -161,7 +165,7 @@ func (r *repo) DeleteLink(m *LinkModel) error {
 	if err != nil {
 		return err
 	}
-	if err := linkModelDelEqLinkID(d, m.LinkID); err != nil {
+	if err := linkModelDelEqLinkID(d, r.tableLinks, m.LinkID); err != nil {
 		return db.WrapErr(err, "Failed to delete link")
 	}
 	return nil
@@ -176,7 +180,7 @@ func (r *repo) DeleteLinks(linkids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := linkModelDelHasLinkID(d, linkids); err != nil {
+	if err := linkModelDelHasLinkID(d, r.tableLinks, linkids); err != nil {
 		return db.WrapErr(err, "Failed to delete links")
 	}
 	return nil
@@ -199,14 +203,14 @@ func (r *repo) GetBrandGroup(creatorid string, limit, offset int) ([]BrandModel,
 	}
 
 	if creatorid != "" {
-		m, err := brandModelGetBrandModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
+		m, err := brandModelGetBrandModelEqCreatorIDOrdCreationTime(d, r.tableBrands, creatorid, false, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get brands")
 		}
 		return m, nil
 	}
 
-	m, err := brandModelGetBrandModelOrdCreationTime(d, false, limit, offset)
+	m, err := brandModelGetBrandModelOrdCreationTime(d, r.tableBrands, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get brands")
 	}
@@ -219,7 +223,7 @@ func (r *repo) GetBrand(creatorid, brandid string) (*BrandModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := brandModelGetBrandModelEqCreatorIDEqBrandID(d, creatorid, brandid)
+	m, err := brandModelGetBrandModelEqCreatorIDEqBrandID(d, r.tableBrands, creatorid, brandid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get brand")
 	}
@@ -232,7 +236,7 @@ func (r *repo) InsertBrand(m *BrandModel) error {
 	if err != nil {
 		return err
 	}
-	if err := brandModelInsert(d, m); err != nil {
+	if err := brandModelInsert(d, r.tableBrands, m); err != nil {
 		return db.WrapErr(err, "Failed to insert brand")
 	}
 	return nil
@@ -244,7 +248,7 @@ func (r *repo) DeleteBrand(m *BrandModel) error {
 	if err != nil {
 		return err
 	}
-	if err := brandModelDelEqCreatorIDEqBrandID(d, m.CreatorID, m.BrandID); err != nil {
+	if err := brandModelDelEqCreatorIDEqBrandID(d, r.tableBrands, m.CreatorID, m.BrandID); err != nil {
 		return db.WrapErr(err, "Failed to delete brand")
 	}
 	return nil
@@ -259,7 +263,7 @@ func (r *repo) DeleteBrands(creatorid string, brandids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := brandModelDelEqCreatorIDHasBrandID(d, creatorid, brandids); err != nil {
+	if err := brandModelDelEqCreatorIDHasBrandID(d, r.tableBrands, creatorid, brandids); err != nil {
 		return db.WrapErr(err, "Failed to delete brands")
 	}
 	return nil
@@ -271,13 +275,13 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := linkModelSetup(d); err != nil {
+	if err := linkModelSetup(d, r.tableLinks); err != nil {
 		err = db.WrapErr(err, "Failed to setup link model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := brandModelSetup(d); err != nil {
+	if err := brandModelSetup(d, r.tableBrands); err != nil {
 		err = db.WrapErr(err, "Failed to setup brand model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

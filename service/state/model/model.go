@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/state"
 )
 
-//go:generate forge model -m Model -t govstate -p state -o model_gen.go Model
+//go:generate forge model -m Model -p state -o model_gen.go Model
 
 const (
 	configID = 0
@@ -16,7 +16,8 @@ const (
 
 type (
 	repo struct {
-		db db.Database
+		table string
+		db    db.Database
 	}
 
 	// Model is the db State model
@@ -30,9 +31,10 @@ type (
 )
 
 // New returns a state service backed by a database
-func New(database db.Database) state.State {
+func New(database db.Database, table string) state.State {
 	return &repo{
-		db: database,
+		table: table,
+		db:    database,
 	}
 }
 
@@ -53,7 +55,7 @@ func (r *repo) GetModel() (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := stateModelGetModelEqconfig(d, configID)
+	m, err := stateModelGetModelEqconfig(d, r.table, configID)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get state")
 	}
@@ -67,7 +69,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := stateModelInsert(d, m); err != nil {
+	if err := stateModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert state")
 	}
 	return nil
@@ -80,7 +82,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := stateModelUpdModelEqconfig(d, m, configID); err != nil {
+	if err := stateModelUpdModelEqconfig(d, r.table, m, configID); err != nil {
 		return db.WrapErr(err, "Failed to update state")
 	}
 	return nil
@@ -122,7 +124,7 @@ func (r *repo) Setup(req state.ReqSetup) error {
 	if err != nil {
 		return err
 	}
-	if err := stateModelSetup(d); err != nil {
+	if err := stateModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup state model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

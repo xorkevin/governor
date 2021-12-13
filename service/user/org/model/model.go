@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-//go:generate forge model -m Model -t userorgs -p org -o model_gen.go Model
+//go:generate forge model -m Model -p org -o model_gen.go Model
 
 const (
 	uidSize = 16
@@ -30,7 +30,8 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		table string
+		db    db.Database
 	}
 
 	// Model is the user org model
@@ -60,20 +61,21 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new org repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new org repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new OAuth app repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	return &repo{
-		db: database,
+		table: table,
+		db:    database,
 	}
 }
 
@@ -99,7 +101,7 @@ func (r *repo) GetByID(orgid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelEqOrgID(d, orgid)
+	m, err := orgModelGetModelEqOrgID(d, r.table, orgid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get org")
 	}
@@ -111,7 +113,7 @@ func (r *repo) GetByName(orgname string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelEqName(d, orgname)
+	m, err := orgModelGetModelEqName(d, r.table, orgname)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get org")
 	}
@@ -122,7 +124,7 @@ func (r *repo) GetAllOrgs(limit, offset int) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelOrdCreationTime(d, false, limit, offset)
+	m, err := orgModelGetModelOrdCreationTime(d, r.table, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get orgs")
 	}
@@ -134,7 +136,7 @@ func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := orgModelGetModelHasOrgIDOrdOrgID(d, orgids, true, len(orgids), 0)
+	m, err := orgModelGetModelHasOrgIDOrdOrgID(d, r.table, orgids, true, len(orgids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get orgs")
 	}
@@ -146,7 +148,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := orgModelInsert(d, m); err != nil {
+	if err := orgModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert org")
 	}
 	return nil
@@ -157,7 +159,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := orgModelUpdModelEqOrgID(d, m, m.OrgID); err != nil {
+	if err := orgModelUpdModelEqOrgID(d, r.table, m, m.OrgID); err != nil {
 		return db.WrapErr(err, "Failed to update org")
 	}
 	return nil
@@ -168,7 +170,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := orgModelDelEqOrgID(d, m.OrgID); err != nil {
+	if err := orgModelDelEqOrgID(d, r.table, m.OrgID); err != nil {
 		return db.WrapErr(err, "Failed to delete org")
 	}
 	return nil
@@ -179,7 +181,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := orgModelSetup(d); err != nil {
+	if err := orgModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup org model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

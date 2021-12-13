@@ -8,27 +8,23 @@ import (
 	"strings"
 )
 
-const (
-	chatModelTableName = "chats"
-)
-
-func chatModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS chats (chatid VARCHAR(31) PRIMARY KEY, kind VARCHAR(31) NOT NULL, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+func chatModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31) PRIMARY KEY, kind VARCHAR(31) NOT NULL, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func chatModelInsert(db *sql.DB, m *ChatModel) error {
-	_, err := db.Exec("INSERT INTO chats (chatid, kind, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
+func chatModelInsert(db *sql.DB, tableName string, m *ChatModel) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, kind, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6);", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) error {
+func chatModelInsertBulk(db *sql.DB, tableName string, models []*ChatModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,22 +36,22 @@ func chatModelInsertBulk(db *sql.DB, models []*ChatModel, allowConflict bool) er
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6))
 		args = append(args, m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO chats (chatid, kind, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, kind, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func chatModelGetChatModelEqChatid(db *sql.DB, chatid string) (*ChatModel, error) {
+func chatModelGetChatModelEqChatid(db *sql.DB, tableName string, chatid string) (*ChatModel, error) {
 	m := &ChatModel{}
-	if err := db.QueryRow("SELECT chatid, kind, name, theme, last_updated, creation_time FROM chats WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Kind, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT chatid, kind, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Kind, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, orderasc bool, limit, offset int) ([]ChatModel, error) {
+func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, tableName string, chatid []string, orderasc bool, limit, offset int) ([]ChatModel, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))
 	args = append(args, limit, offset)
@@ -74,7 +70,7 @@ func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, ordera
 		order = "ASC"
 	}
 	res := make([]ChatModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, kind, name, theme, last_updated, creation_time FROM chats WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT chatid, kind, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,21 +91,21 @@ func chatModelGetChatModelHasChatidOrdChatid(db *sql.DB, chatid []string, ordera
 	return res, nil
 }
 
-func chatModelUpdChatModelEqChatid(db *sql.DB, m *ChatModel, chatid string) error {
-	_, err := db.Exec("UPDATE chats SET (chatid, kind, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE chatid = $7;", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime, chatid)
+func chatModelUpdChatModelEqChatid(db *sql.DB, tableName string, m *ChatModel, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (chatid, kind, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6) WHERE chatid = $7;", m.Chatid, m.Kind, m.Name, m.Theme, m.LastUpdated, m.CreationTime, chatid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func chatModelDelEqChatid(db *sql.DB, chatid string) error {
-	_, err := db.Exec("DELETE FROM chats WHERE chatid = $1;", chatid)
+func chatModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1;", chatid)
 	return err
 }
 
-func chatModelUpdchatLastUpdatedEqChatid(db *sql.DB, m *chatLastUpdated, chatid string) error {
-	_, err := db.Exec("UPDATE chats SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+func chatModelUpdchatLastUpdatedEqChatid(db *sql.DB, tableName string, m *chatLastUpdated, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
 		return err
 	}

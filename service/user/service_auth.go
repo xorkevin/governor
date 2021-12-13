@@ -41,12 +41,12 @@ type (
 )
 
 type (
-	// ErrNoSession is returned when the login session does not exist
-	ErrNoSession struct{}
+	// ErrDiscardSession is returned when the login session should be discarded
+	ErrDiscardSession struct{}
 )
 
-func (e ErrNoSession) Error() string {
-	return "No session"
+func (e ErrDiscardSession) Error() string {
+	return "Discard session"
 }
 
 // Login authenticates a user and returns auth tokens
@@ -252,17 +252,24 @@ func (s *service) RefreshToken(refreshToken, ipaddr, useragent string) (*resUser
 				}, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 					Status:  http.StatusUnauthorized,
 					Message: "Invalid token",
-				}), governor.ErrOptInner(governor.ErrWithKind(err, ErrNoSession{}, "No session")))
+				}), governor.ErrOptInner(governor.ErrWithKind(err, ErrDiscardSession{}, "No session")))
 		}
 		return nil, governor.ErrWithMsg(err, "Failed to get session")
 	}
 	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusUnauthorized,
-			Message: "Invalid token",
-		}))
+		return &resUserAuth{
+				Valid: false,
+				Claims: &token.Claims{
+					Claims: jwt.Claims{
+						Subject: claims.Subject,
+					},
+				},
+			}, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusUnauthorized,
+				Message: "Invalid token",
+			}), governor.ErrOptInner(governor.ErrWithKind(err, ErrDiscardSession{}, "Invalid session key")))
 	}
 
 	sessionKey, err := s.sessions.RehashKey(sm)

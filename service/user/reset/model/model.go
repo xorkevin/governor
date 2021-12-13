@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t userresets -p reset -o model_gen.go Model
+//go:generate forge model -m Model -p reset -o model_gen.go Model
 
 const (
 	keySize = 16
@@ -31,6 +31,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -63,23 +64,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new user reset request repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new user reset request repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new user reset request repo
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -125,7 +127,7 @@ func (r *repo) GetByID(userid, kind string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := resetModelGetModelEqUseridEqKind(d, userid, kind)
+	m, err := resetModelGetModelEqUseridEqKind(d, r.table, userid, kind)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get reset code")
 	}
@@ -137,7 +139,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelInsert(d, m); err != nil {
+	if err := resetModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert new reset code")
 	}
 	return nil
@@ -148,7 +150,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelUpdModelEqUseridEqKind(d, m, m.Userid, m.Kind); err != nil {
+	if err := resetModelUpdModelEqUseridEqKind(d, r.table, m, m.Userid, m.Kind); err != nil {
 		return db.WrapErr(err, "Failed to update reset code")
 	}
 	return nil
@@ -159,7 +161,7 @@ func (r *repo) Delete(userid, kind string) error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUseridEqKind(d, userid, kind); err != nil {
+	if err := resetModelDelEqUseridEqKind(d, r.table, userid, kind); err != nil {
 		return db.WrapErr(err, "Failed to delete reset code")
 	}
 	return nil
@@ -170,7 +172,7 @@ func (r *repo) DeleteByUserid(userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUserid(d, userid); err != nil {
+	if err := resetModelDelEqUserid(d, r.table, userid); err != nil {
 		return db.WrapErr(err, "Failed to delete reset codes")
 	}
 	return nil
@@ -181,7 +183,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := resetModelSetup(d); err != nil {
+	if err := resetModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup user reset code model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

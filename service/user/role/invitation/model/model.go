@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge model -m Model -t userroleinvitations -p inv -o model_gen.go Model
+//go:generate forge model -m Model -p inv -o model_gen.go Model
 
 type (
 	// Repo is a role invitation repository
@@ -24,7 +24,8 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		table string
+		db    db.Database
 	}
 
 	// Model is the db role invitation model
@@ -53,20 +54,21 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new role invitation repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new role invitation repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new role invitation repo
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	return &repo{
-		db: database,
+		table: table,
+		db:    database,
 	}
 }
 
@@ -75,7 +77,7 @@ func (r *repo) GetByID(userid, role string, after int64) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqUseridEqRoleGtCreationTime(d, userid, role, after)
+	m, err := invModelGetModelEqUseridEqRoleGtCreationTime(d, r.table, userid, role, after)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get invitation")
 	}
@@ -88,7 +90,7 @@ func (r *repo) GetByUser(userid string, after int64, limit, offset int) ([]Model
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqUseridGtCreationTimeOrdCreationTime(d, userid, after, false, limit, offset)
+	m, err := invModelGetModelEqUseridGtCreationTimeOrdCreationTime(d, r.table, userid, after, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get invitations")
 	}
@@ -101,7 +103,7 @@ func (r *repo) GetByRole(role string, after int64, limit, offset int) ([]Model, 
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(d, role, after, false, limit, offset)
+	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(d, r.table, role, after, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get invitations")
 	}
@@ -127,7 +129,7 @@ func (r *repo) Insert(userid string, roles rank.Rank, by string, at int64) error
 	if err != nil {
 		return err
 	}
-	if err := invModelInsertBulk(d, m, true); err != nil {
+	if err := invModelInsertBulk(d, r.table, m, true); err != nil {
 		return db.WrapErr(err, "Failed to insert invitations")
 	}
 	return nil
@@ -139,7 +141,7 @@ func (r *repo) DeleteByID(userid, role string) error {
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridEqRole(d, userid, role); err != nil {
+	if err := invModelDelEqUseridEqRole(d, r.table, userid, role); err != nil {
 		return db.WrapErr(err, "Failed to delete invitation")
 	}
 	return nil
@@ -155,7 +157,7 @@ func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridHasRole(d, userid, roles.ToSlice()); err != nil {
+	if err := invModelDelEqUseridHasRole(d, r.table, userid, roles.ToSlice()); err != nil {
 		return db.WrapErr(err, "Failed to delete invitations")
 	}
 	return nil
@@ -166,7 +168,7 @@ func (r *repo) DeleteBefore(before int64) error {
 	if err != nil {
 		return err
 	}
-	if err := invModelDelLeqCreationTime(d, before); err != nil {
+	if err := invModelDelLeqCreationTime(d, r.table, before); err != nil {
 		return db.WrapErr(err, "Failed to delete invitations")
 	}
 	return nil
@@ -178,7 +180,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := invModelSetup(d); err != nil {
+	if err := invModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup role invitation model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

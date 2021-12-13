@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t userapprovals -p approval -o model_gen.go Model
+//go:generate forge model -m Model -p approval -o model_gen.go Model
 
 const (
 	keySize = 16
@@ -33,6 +33,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -70,23 +71,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new approval repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new approval repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new approval repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -150,7 +152,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := approvalModelGetModelEqUserid(d, userid)
+	m, err := approvalModelGetModelEqUserid(d, r.table, userid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user")
 	}
@@ -162,7 +164,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := approvalModelGetModelOrdCreationTime(d, true, limit, offset)
+	m, err := approvalModelGetModelOrdCreationTime(d, r.table, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user approvals")
 	}
@@ -174,7 +176,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := approvalModelInsert(d, m); err != nil {
+	if err := approvalModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert user")
 	}
 	return nil
@@ -185,7 +187,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := approvalModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+	if err := approvalModelUpdModelEqUserid(d, r.table, m, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to update user approval")
 	}
 	return nil
@@ -196,7 +198,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := approvalModelDelEqUserid(d, m.Userid); err != nil {
+	if err := approvalModelDelEqUserid(d, r.table, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to delete user approval")
 	}
 	return nil
@@ -207,7 +209,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := approvalModelSetup(d); err != nil {
+	if err := approvalModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup user approval model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

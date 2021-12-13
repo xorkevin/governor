@@ -8,31 +8,27 @@ import (
 	"strings"
 )
 
-const (
-	orgModelTableName = "userorgs"
-)
-
-func orgModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userorgs (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
+func orgModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userorgs_creation_time_index ON userorgs (creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelInsert(db *sql.DB, m *Model) error {
-	_, err := db.Exec("INSERT INTO userorgs (orgid, name, display_name, description, creation_time) VALUES ($1, $2, $3, $4, $5);", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
+func orgModelInsert(db *sql.DB, tableName string, m *Model) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, name, display_name, description, creation_time) VALUES ($1, $2, $3, $4, $5);", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
+func orgModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,22 +40,22 @@ func orgModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO userorgs (orgid, name, display_name, description, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, name, display_name, description, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelGetModelEqOrgID(db *sql.DB, orgid string) (*Model, error) {
+func orgModelGetModelEqOrgID(db *sql.DB, tableName string, orgid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE orgid = $1;", orgid).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE orgid = $1;", orgid).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, tableName string, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(orgid))
 	args = append(args, limit, offset)
@@ -78,7 +74,7 @@ func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool,
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,34 +95,34 @@ func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, orgid []string, orderasc bool,
 	return res, nil
 }
 
-func orgModelUpdModelEqOrgID(db *sql.DB, m *Model, orgid string) error {
-	_, err := db.Exec("UPDATE userorgs SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
+func orgModelUpdModelEqOrgID(db *sql.DB, tableName string, m *Model, orgid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelDelEqOrgID(db *sql.DB, orgid string) error {
-	_, err := db.Exec("DELETE FROM userorgs WHERE orgid = $1;", orgid)
+func orgModelDelEqOrgID(db *sql.DB, tableName string, orgid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE orgid = $1;", orgid)
 	return err
 }
 
-func orgModelGetModelEqName(db *sql.DB, name string) (*Model, error) {
+func orgModelGetModelEqName(db *sql.DB, tableName string, name string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM userorgs WHERE name = $1;", name).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE name = $1;", name).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func orgModelGetModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]Model, error) {
+func orgModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM userorgs ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}

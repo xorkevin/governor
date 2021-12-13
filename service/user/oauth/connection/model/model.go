@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t oauthconnections -p connection -o model_gen.go Model
+//go:generate forge model -m Model -p connection -o model_gen.go Model
 
 const (
 	keySize = 32
@@ -34,6 +34,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -73,23 +74,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new oauth connection repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new oauth connection repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new OAuth connection repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -178,7 +180,7 @@ func (r *repo) GetByID(userid, clientid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := connectionModelGetModelEqUseridEqClientID(d, userid, clientid)
+	m, err := connectionModelGetModelEqUseridEqClientID(d, r.table, userid, clientid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get connected OAuth app")
 	}
@@ -190,7 +192,7 @@ func (r *repo) GetUserConnections(userid string, limit, offset int) ([]Model, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := connectionModelGetModelEqUseridOrdAccessTime(d, userid, false, limit, offset)
+	m, err := connectionModelGetModelEqUseridOrdAccessTime(d, r.table, userid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get connected OAuth apps")
 	}
@@ -202,7 +204,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelInsert(d, m); err != nil {
+	if err := connectionModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to add connected OAuth app")
 	}
 	return nil
@@ -213,7 +215,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelUpdModelEqUseridEqClientID(d, m, m.Userid, m.ClientID); err != nil {
+	if err := connectionModelUpdModelEqUseridEqClientID(d, r.table, m, m.Userid, m.ClientID); err != nil {
 		return db.WrapErr(err, "Failed to update connected OAuth app")
 	}
 	return nil
@@ -224,7 +226,7 @@ func (r *repo) Delete(userid string, clientids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelDelEqUseridHasClientID(d, userid, clientids); err != nil {
+	if err := connectionModelDelEqUseridHasClientID(d, r.table, userid, clientids); err != nil {
 		return db.WrapErr(err, "Failed to delete connected OAuth app")
 	}
 	return nil
@@ -235,7 +237,7 @@ func (r *repo) DeleteUserConnections(userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelDelEqUserid(d, userid); err != nil {
+	if err := connectionModelDelEqUserid(d, r.table, userid); err != nil {
 		return db.WrapErr(err, "Failed to delete connected OAuth apps")
 	}
 	return nil
@@ -246,7 +248,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := connectionModelSetup(d); err != nil {
+	if err := connectionModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup OAuth connection model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

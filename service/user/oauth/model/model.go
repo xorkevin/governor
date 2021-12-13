@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t oauthapps -p oauthapp -o model_gen.go Model
+//go:generate forge model -m Model -p oauthapp -o model_gen.go Model
 
 const (
 	uidSize = 16
@@ -34,6 +34,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -70,23 +71,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new oauth app repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new oauth app repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new OAuth app repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -152,7 +154,7 @@ func (r *repo) GetByID(clientid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := oauthappModelGetModelEqClientID(d, clientid)
+	m, err := oauthappModelGetModelEqClientID(d, r.table, clientid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get OAuth app")
 	}
@@ -165,13 +167,13 @@ func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
 		return nil, err
 	}
 	if creatorid == "" {
-		m, err := oauthappModelGetModelOrdCreationTime(d, false, limit, offset)
+		m, err := oauthappModelGetModelOrdCreationTime(d, r.table, false, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get OAuth apps")
 		}
 		return m, nil
 	}
-	m, err := oauthappModelGetModelEqCreatorIDOrdCreationTime(d, creatorid, false, limit, offset)
+	m, err := oauthappModelGetModelEqCreatorIDOrdCreationTime(d, r.table, creatorid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get OAuth apps")
 	}
@@ -183,7 +185,7 @@ func (r *repo) GetBulk(clientids []string) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := oauthappModelGetModelHasClientIDOrdClientID(d, clientids, true, len(clientids), 0)
+	m, err := oauthappModelGetModelHasClientIDOrdClientID(d, r.table, clientids, true, len(clientids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get OAuth apps")
 	}
@@ -195,7 +197,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelInsert(d, m); err != nil {
+	if err := oauthappModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert OAuth app config")
 	}
 	return nil
@@ -206,7 +208,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelUpdModelEqClientID(d, m, m.ClientID); err != nil {
+	if err := oauthappModelUpdModelEqClientID(d, r.table, m, m.ClientID); err != nil {
 		return db.WrapErr(err, "Failed to update OAuth app config")
 	}
 	return nil
@@ -217,7 +219,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelDelEqClientID(d, m.ClientID); err != nil {
+	if err := oauthappModelDelEqClientID(d, r.table, m.ClientID); err != nil {
 		return db.WrapErr(err, "Failed to delete OAuth app")
 	}
 	return nil
@@ -228,7 +230,7 @@ func (r *repo) DeleteCreatorApps(creatorid string) error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelDelEqCreatorID(d, creatorid); err != nil {
+	if err := oauthappModelDelEqCreatorID(d, r.table, creatorid); err != nil {
 		return db.WrapErr(err, "Failed to delete OAuth apps")
 	}
 	return nil
@@ -239,7 +241,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelSetup(d); err != nil {
+	if err := oauthappModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup OAuth app model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

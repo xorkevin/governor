@@ -7,7 +7,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-//go:generate forge model -m Model -t profiles -p profile -o model_gen.go Model
+//go:generate forge model -m Model -p profile -o model_gen.go Model
 
 type (
 	// Repo is a profile repository
@@ -22,7 +22,8 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		table string
+		db    db.Database
 	}
 
 	// Model is the db profile model
@@ -52,20 +53,21 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new profile repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new profile repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new profile repo
-func New(db db.Database) Repo {
+func New(db db.Database, table string) Repo {
 	return &repo{
-		db: db,
+		table: table,
+		db:    db,
 	}
 }
 
@@ -84,7 +86,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := profileModelGetModelEqUserid(d, userid)
+	m, err := profileModelGetModelEqUserid(d, r.table, userid)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get profile")
 	}
@@ -96,7 +98,7 @@ func (r *repo) GetBulk(userids []string) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := profileModelGetModelHasUseridOrdUserid(d, userids, true, len(userids), 0)
+	m, err := profileModelGetModelHasUseridOrdUserid(d, r.table, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get profiles of userids")
 	}
@@ -109,7 +111,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := profileModelInsert(d, m); err != nil {
+	if err := profileModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert profile")
 	}
 	return nil
@@ -121,7 +123,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := profileModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+	if err := profileModelUpdModelEqUserid(d, r.table, m, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to update profile")
 	}
 	return nil
@@ -133,7 +135,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := profileModelDelEqUserid(d, m.Userid); err != nil {
+	if err := profileModelDelEqUserid(d, r.table, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to delete profile")
 	}
 	return nil
@@ -145,7 +147,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := profileModelSetup(d); err != nil {
+	if err := profileModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup profile model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

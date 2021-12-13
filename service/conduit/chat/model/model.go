@@ -9,9 +9,9 @@ import (
 	"xorkevin.dev/governor/util/uid"
 )
 
-//go:generate forge model -m ChatModel -t chats -p chat -o modelchat_gen.go ChatModel chatLastUpdated
-//go:generate forge model -m MemberModel -t chatmembers -p member -o modelmember_gen.go MemberModel chatLastUpdated
-//go:generate forge model -m MsgModel -t chatmessages -p msg -o modelmsg_gen.go MsgModel
+//go:generate forge model -m ChatModel -p chat -o modelchat_gen.go ChatModel chatLastUpdated
+//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated
+//go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
 
 const (
 	chatUIDSize    = 16
@@ -52,7 +52,10 @@ type (
 	}
 
 	repo struct {
-		db db.Database
+		tableChats   string
+		tableMembers string
+		tableMsgs    string
+		db           db.Database
 	}
 
 	// ChatModel is the db chat model
@@ -105,20 +108,23 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs string) {
+	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs))
 }
 
 // NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, tableChats, tableMembers, tableMsgs)
 }
 
 // New creates a new user repository
-func New(database db.Database) Repo {
+func New(database db.Database, tableChats, tableMembers, tableMsgs string) Repo {
 	return &repo{
-		db: database,
+		tableChats:   tableChats,
+		tableMembers: tableMembers,
+		tableMsgs:    tableMsgs,
+		db:           database,
 	}
 }
 
@@ -145,7 +151,7 @@ func (r *repo) GetChat(chatid string) (*ChatModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := chatModelGetChatModelEqChatid(d, chatid)
+	m, err := chatModelGetChatModelEqChatid(d, r.tableChats, chatid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat")
 	}
@@ -161,7 +167,7 @@ func (r *repo) GetChats(chatids []string) ([]ChatModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := chatModelGetChatModelHasChatidOrdChatid(d, chatids, true, len(chatids), 0)
+	m, err := chatModelGetChatModelHasChatidOrdChatid(d, r.tableChats, chatids, true, len(chatids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chats")
 	}
@@ -174,7 +180,7 @@ func (r *repo) GetMembers(chatid string, limit, offset int) ([]MemberModel, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqChatidOrdUserid(d, chatid, true, limit, offset)
+	m, err := memberModelGetMemberModelEqChatidOrdUserid(d, r.tableMembers, chatid, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
@@ -190,7 +196,7 @@ func (r *repo) GetChatsMembers(chatids []string, limit int) ([]MemberModel, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, chatids, true, limit, 0)
+	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, r.tableMembers, chatids, true, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
@@ -206,7 +212,7 @@ func (r *repo) GetChatMembers(chatid string, userids []string) ([]MemberModel, e
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqChatidHasUseridOrdUserid(d, chatid, userids, true, len(userids), 0)
+	m, err := memberModelGetMemberModelEqChatidHasUseridOrdUserid(d, r.tableMembers, chatid, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat members")
 	}
@@ -222,16 +228,12 @@ func (r *repo) GetUserChats(userid string, chatids []string) ([]MemberModel, err
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, userid, chatids, true, len(chatids), 0)
+	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, r.tableMembers, userid, chatids, true, len(chatids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user chats")
 	}
 	return m, nil
 }
-
-const (
-	sqlMemberCount = "SELECT COUNT(*) FROM " + memberModelTableName + " WHERE chatid = $1;"
-)
 
 // GetMembersCount returns the count of chat members
 func (r *repo) GetMembersCount(chatid string) (int, error) {
@@ -240,7 +242,7 @@ func (r *repo) GetMembersCount(chatid string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := d.QueryRow(sqlMemberCount, chatid).Scan(&count); err != nil {
+	if err := d.QueryRow("SELECT COUNT(*) FROM "+r.tableMembers+" WHERE chatid = $1;", chatid).Scan(&count); err != nil {
 		return 0, db.WrapErr(err, "Failed to get chat members count")
 	}
 	return count, nil
@@ -252,7 +254,7 @@ func (r *repo) GetLatestChats(userid string, limit, offset int) ([]MemberModel, 
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, userid, false, limit, offset)
+	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, r.tableMembers, userid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest chats")
 	}
@@ -265,7 +267,7 @@ func (r *repo) GetLatestChatsByKind(kind string, userid string, limit, offset in
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(d, userid, kind, false, limit, offset)
+	m, err := memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(d, r.tableMembers, userid, kind, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest chats of kind")
 	}
@@ -278,7 +280,7 @@ func (r *repo) GetLatestChatsBefore(userid string, before int64, limit int) ([]M
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, userid, before, false, limit, 0)
+	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, r.tableMembers, userid, before, false, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest chats")
 	}
@@ -291,7 +293,7 @@ func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(d, userid, kind, before, false, limit, 0)
+	m, err := memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(d, r.tableMembers, userid, kind, before, false, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest chats of kind")
 	}
@@ -322,7 +324,7 @@ func (r *repo) InsertChat(m *ChatModel) error {
 	if err != nil {
 		return err
 	}
-	if err := chatModelInsert(d, m); err != nil {
+	if err := chatModelInsert(d, r.tableChats, m); err != nil {
 		return db.WrapErr(err, "Failed to insert chat")
 	}
 	return nil
@@ -334,7 +336,7 @@ func (r *repo) UpdateChat(m *ChatModel) error {
 	if err != nil {
 		return err
 	}
-	if err := chatModelUpdChatModelEqChatid(d, m, m.Chatid); err != nil {
+	if err := chatModelUpdChatModelEqChatid(d, r.tableChats, m, m.Chatid); err != nil {
 		return db.WrapErr(err, "Failed to update chat")
 	}
 	return nil
@@ -346,12 +348,12 @@ func (r *repo) UpdateChatLastUpdated(chatid string, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := chatModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+	if err := chatModelUpdchatLastUpdatedEqChatid(d, r.tableChats, &chatLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return db.WrapErr(err, "Failed to update chat last updated")
 	}
-	if err := memberModelUpdchatLastUpdatedEqChatid(d, &chatLastUpdated{
+	if err := memberModelUpdchatLastUpdatedEqChatid(d, r.tableMembers, &chatLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return db.WrapErr(err, "Failed to update chat last updated")
@@ -365,7 +367,7 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 	if err != nil {
 		return err
 	}
-	if err := chatModelDelEqChatid(d, m.Chatid); err != nil {
+	if err := chatModelDelEqChatid(d, r.tableChats, m.Chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete chat")
 	}
 	return nil
@@ -380,7 +382,7 @@ func (r *repo) InsertMembers(m []*MemberModel) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelInsertBulk(d, m, false); err != nil {
+	if err := memberModelInsertBulk(d, r.tableMembers, m, false); err != nil {
 		return db.WrapErr(err, "Failed to insert chat members")
 	}
 	return nil
@@ -395,7 +397,7 @@ func (r *repo) DeleteMembers(chatid string, userids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelDelEqChatidHasUserid(d, chatid, userids); err != nil {
+	if err := memberModelDelEqChatidHasUserid(d, r.tableMembers, chatid, userids); err != nil {
 		return db.WrapErr(err, "Failed to delete chat members")
 	}
 	return nil
@@ -407,7 +409,7 @@ func (r *repo) DeleteChatMembers(chatid string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelDelEqChatid(d, chatid); err != nil {
+	if err := memberModelDelEqChatid(d, r.tableMembers, chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete chat members")
 	}
 	return nil
@@ -419,7 +421,7 @@ func (r *repo) GetMsgs(chatid string, limit, offset int) ([]MsgModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqChatidOrdMsgid(d, chatid, false, limit, offset)
+	m, err := msgModelGetMsgModelEqChatidOrdMsgid(d, r.tableMsgs, chatid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
@@ -432,7 +434,7 @@ func (r *repo) GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(d, chatid, msgid, false, limit, 0)
+	m, err := msgModelGetMsgModelEqChatidLtMsgidOrdMsgid(d, r.tableMsgs, chatid, msgid, false, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
@@ -445,7 +447,7 @@ func (r *repo) GetMsgsByKind(chatid string, kind string, limit, offset int) ([]M
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqChatidEqKindOrdMsgid(d, chatid, kind, false, limit, offset)
+	m, err := msgModelGetMsgModelEqChatidEqKindOrdMsgid(d, r.tableMsgs, chatid, kind, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
@@ -458,7 +460,7 @@ func (r *repo) GetMsgsBeforeByKind(chatid string, kind string, msgid string, lim
 	if err != nil {
 		return nil, err
 	}
-	m, err := msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(d, chatid, kind, msgid, false, limit, 0)
+	m, err := msgModelGetMsgModelEqChatidEqKindLtMsgidOrdMsgid(d, r.tableMsgs, chatid, kind, msgid, false, limit, 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat messages")
 	}
@@ -488,7 +490,7 @@ func (r *repo) InsertMsg(m *MsgModel) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelInsert(d, m); err != nil {
+	if err := msgModelInsert(d, r.tableMsgs, m); err != nil {
 		return db.WrapErr(err, "Failed to insert chat message")
 	}
 	return nil
@@ -503,7 +505,7 @@ func (r *repo) DeleteMsgs(chatid string, msgids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelDelEqChatidHasMsgid(d, chatid, msgids); err != nil {
+	if err := msgModelDelEqChatidHasMsgid(d, r.tableMsgs, chatid, msgids); err != nil {
 		return db.WrapErr(err, "Failed to delete chat messages")
 	}
 	return nil
@@ -515,7 +517,7 @@ func (r *repo) DeleteChatMsgs(chatid string) error {
 	if err != nil {
 		return err
 	}
-	if err := msgModelDelEqChatid(d, chatid); err != nil {
+	if err := msgModelDelEqChatid(d, r.tableMsgs, chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete chat messages")
 	}
 	return nil
@@ -527,19 +529,19 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := chatModelSetup(d); err != nil {
+	if err := chatModelSetup(d, r.tableChats); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := memberModelSetup(d); err != nil {
+	if err := memberModelSetup(d, r.tableMembers); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat member model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := msgModelSetup(d); err != nil {
+	if err := msgModelSetup(d, r.tableMsgs); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat message model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

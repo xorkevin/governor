@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t userapikeys -p apikey -o model_gen.go Model
+//go:generate forge model -m Model -p apikey -o model_gen.go Model
 
 const (
 	uidSize = 8
@@ -38,6 +38,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -72,23 +73,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new apikey repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new apikey repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new apikey repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewBlake2bHasher()
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -159,7 +161,7 @@ func (r *repo) GetByID(keyid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := apikeyModelGetModelEqKeyid(d, keyid)
+	m, err := apikeyModelGetModelEqKeyid(d, r.table, keyid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get apikey")
 	}
@@ -171,7 +173,7 @@ func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := apikeyModelGetModelEqUseridOrdTime(d, userid, false, limit, offset)
+	m, err := apikeyModelGetModelEqUseridOrdTime(d, r.table, userid, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user apikeys")
 	}
@@ -183,7 +185,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelInsert(d, m); err != nil {
+	if err := apikeyModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert apikey")
 	}
 	return nil
@@ -194,7 +196,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelUpdModelEqKeyid(d, m, m.Keyid); err != nil {
+	if err := apikeyModelUpdModelEqKeyid(d, r.table, m, m.Keyid); err != nil {
 		return db.WrapErr(err, "Failed to update apikey")
 	}
 	return nil
@@ -205,7 +207,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelDelEqKeyid(d, m.Keyid); err != nil {
+	if err := apikeyModelDelEqKeyid(d, r.table, m.Keyid); err != nil {
 		return db.WrapErr(err, "Failed to delete apikey")
 	}
 	return nil
@@ -219,7 +221,7 @@ func (r *repo) DeleteKeys(keyids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelDelHasKeyid(d, keyids); err != nil {
+	if err := apikeyModelDelHasKeyid(d, r.table, keyids); err != nil {
 		return db.WrapErr(err, "Failed to delete apikeys")
 	}
 	return nil
@@ -230,7 +232,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelSetup(d); err != nil {
+	if err := apikeyModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup user apikeys model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

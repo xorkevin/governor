@@ -8,31 +8,27 @@ import (
 	"strings"
 )
 
-const (
-	roleModelTableName = "userroles"
-)
-
-func roleModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userroles (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
+func roleModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroles_role__userid_index ON userroles (role, userid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_role__userid_index ON " + tableName + " (role, userid);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelInsert(db *sql.DB, m *Model) error {
-	_, err := db.Exec("INSERT INTO userroles (userid, role) VALUES ($1, $2);", m.Userid, m.Role)
+func roleModelInsert(db *sql.DB, tableName string, m *Model) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role) VALUES ($1, $2);", m.Userid, m.Role)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
+func roleModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,20 +40,20 @@ func roleModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error 
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d)", n+1, n+2))
 		args = append(args, m.Userid, m.Role)
 	}
-	_, err := db.Exec("INSERT INTO userroles (userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelGetModelEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, limit, offset int) ([]Model, error) {
+func roleModelGetModelEqRoleOrdUserid(db *sql.DB, tableName string, role string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM userroles WHERE role = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, role)
+	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE role = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, role)
 	if err != nil {
 		return nil, err
 	}
@@ -78,26 +74,26 @@ func roleModelGetModelEqRoleOrdUserid(db *sql.DB, role string, orderasc bool, li
 	return res, nil
 }
 
-func roleModelDelEqUserid(db *sql.DB, userid string) error {
-	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1;", userid)
+func roleModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func roleModelGetModelEqUseridEqRole(db *sql.DB, userid string, role string) (*Model, error) {
+func roleModelGetModelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, role FROM userroles WHERE userid = $1 AND role = $2;", userid, role).Scan(&m.Userid, &m.Role); err != nil {
+	if err := db.QueryRow("SELECT userid, role FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role).Scan(&m.Userid, &m.Role); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func roleModelGetModelEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+func roleModelGetModelEqUseridOrdRole(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM userroles WHERE userid = $3 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +114,7 @@ func roleModelGetModelEqUseridOrdRole(db *sql.DB, userid string, orderasc bool, 
 	return res, nil
 }
 
-func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
+func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, tableName string, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, limit, offset, userid)
@@ -137,7 +133,7 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []s
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM userroles WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -158,13 +154,13 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, userid string, role []s
 	return res, nil
 }
 
-func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
+func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, tableName string, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM userroles WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
+	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +181,7 @@ func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, userid string, role st
 	return res, nil
 }
 
-func roleModelDelEqRoleHasUserid(db *sql.DB, role string, userid []string) error {
+func roleModelDelEqRoleHasUserid(db *sql.DB, tableName string, role string, userid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, role)
@@ -199,16 +195,16 @@ func roleModelDelEqRoleHasUserid(db *sql.DB, role string, userid []string) error
 		}
 		placeholdersuserid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM userroles WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
 }
 
-func roleModelDelEqUseridEqRole(db *sql.DB, userid string, role string) error {
-	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role = $2;", userid, role)
+func roleModelDelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role)
 	return err
 }
 
-func roleModelDelEqUseridHasRole(db *sql.DB, userid string, role []string) error {
+func roleModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, role []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, userid)
@@ -222,6 +218,6 @@ func roleModelDelEqUseridHasRole(db *sql.DB, userid string, role []string) error
 		}
 		placeholdersrole = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM userroles WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
 	return err
 }

@@ -57,7 +57,7 @@ func main() {
 	}
 
 	dbService := db.New()
-	stateService := statemodel.New(dbService)
+	stateService := statemodel.New(dbService, "govstate")
 
 	gov := governor.New(opts, stateService)
 
@@ -78,13 +78,13 @@ func main() {
 	}
 	{
 		inj := gov.Injector()
-		rolemodel.NewInCtx(inj)
+		rolemodel.NewInCtx(inj, "userroles")
 		kvstore.NewSubtreeInCtx(inj, "roles")
 		gov.Register("role", "/null/role", role.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		apikeymodel.NewInCtx(inj)
+		apikeymodel.NewInCtx(inj, "userapikeys")
 		kvstore.NewSubtreeInCtx(inj, "apikeys")
 		gov.Register("apikey", "/null/apikey", apikey.NewCtx(inj))
 	}
@@ -92,49 +92,49 @@ func main() {
 	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
 	{
 		inj := gov.Injector()
-		usermodel.NewInCtx(inj)
-		sessionmodel.NewInCtx(inj)
-		approvalmodel.NewInCtx(inj)
-		invitationmodel.NewInCtx(inj)
-		resetmodel.NewInCtx(inj)
+		usermodel.NewInCtx(inj, "users")
+		sessionmodel.NewInCtx(inj, "usersessions")
+		approvalmodel.NewInCtx(inj, "userapprovals")
+		invitationmodel.NewInCtx(inj, "userroleinvitations")
+		resetmodel.NewInCtx(inj, "userresets")
 		kvstore.NewSubtreeInCtx(inj, "user")
 		ratelimit.NewSubtreeInCtx(inj, "user")
 		gov.Register("user", "/u", user.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		orgmodel.NewInCtx(inj)
+		orgmodel.NewInCtx(inj, "userorgs")
 		gov.Register("org", "/org", org.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		oauthmodel.NewInCtx(inj)
-		connmodel.NewInCtx(inj)
+		oauthmodel.NewInCtx(inj, "oauthapps")
+		connmodel.NewInCtx(inj, "oauthconnections")
 		kvstore.NewSubtreeInCtx(inj, "oauth")
 		objstore.NewBucketInCtx(inj, "oauth-app-logo")
 		gov.Register("oauth", "/oauth", oauth.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		profilemodel.NewInCtx(inj)
+		profilemodel.NewInCtx(inj, "profiles")
 		objstore.NewBucketInCtx(inj, "profile-image")
 		gov.Register("profile", "/profile", profile.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		couriermodel.NewInCtx(inj)
+		couriermodel.NewInCtx(inj, "courierlinks", "courierbrands")
 		kvstore.NewSubtreeInCtx(inj, "courier")
 		objstore.NewBucketInCtx(inj, "link-qr-image")
 		gov.Register("courier", "/courier", courier.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		conduitchatmodel.NewInCtx(inj)
+		conduitchatmodel.NewInCtx(inj, "chats", "chatmembers", "chatmessages")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
-		mailinglistmodel.NewInCtx(inj)
+		mailinglistmodel.NewInCtx(inj, "mailinglists", "mailinglistmembers", "mailinglistmsgs", "mailinglistsentmsgs", "mailinglisttree")
 		objstore.NewBucketInCtx(inj, "mailinglist")
 		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}

@@ -8,27 +8,23 @@ import (
 	"strings"
 )
 
-const (
-	resetModelTableName = "userresets"
-)
-
-func resetModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userresets (userid VARCHAR(31), kind VARCHAR(255), PRIMARY KEY (userid, kind), code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL, params VARCHAR(4096));")
+func resetModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), kind VARCHAR(255), PRIMARY KEY (userid, kind), code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL, params VARCHAR(4096));")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func resetModelInsert(db *sql.DB, m *Model) error {
-	_, err := db.Exec("INSERT INTO userresets (userid, kind, code_hash, code_time, params) VALUES ($1, $2, $3, $4, $5);", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params)
+func resetModelInsert(db *sql.DB, tableName string, m *Model) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, kind, code_hash, code_time, params) VALUES ($1, $2, $3, $4, $5);", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func resetModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
+func resetModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,35 +36,35 @@ func resetModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params)
 	}
-	_, err := db.Exec("INSERT INTO userresets (userid, kind, code_hash, code_time, params) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, kind, code_hash, code_time, params) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func resetModelDelEqUserid(db *sql.DB, userid string) error {
-	_, err := db.Exec("DELETE FROM userresets WHERE userid = $1;", userid)
+func resetModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func resetModelGetModelEqUseridEqKind(db *sql.DB, userid string, kind string) (*Model, error) {
+func resetModelGetModelEqUseridEqKind(db *sql.DB, tableName string, userid string, kind string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, kind, code_hash, code_time, params FROM userresets WHERE userid = $1 AND kind = $2;", userid, kind).Scan(&m.Userid, &m.Kind, &m.CodeHash, &m.CodeTime, &m.Params); err != nil {
+	if err := db.QueryRow("SELECT userid, kind, code_hash, code_time, params FROM "+tableName+" WHERE userid = $1 AND kind = $2;", userid, kind).Scan(&m.Userid, &m.Kind, &m.CodeHash, &m.CodeTime, &m.Params); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func resetModelUpdModelEqUseridEqKind(db *sql.DB, m *Model, userid string, kind string) error {
-	_, err := db.Exec("UPDATE userresets SET (userid, kind, code_hash, code_time, params) = ROW($1, $2, $3, $4, $5) WHERE userid = $6 AND kind = $7;", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params, userid, kind)
+func resetModelUpdModelEqUseridEqKind(db *sql.DB, tableName string, m *Model, userid string, kind string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (userid, kind, code_hash, code_time, params) = ROW($1, $2, $3, $4, $5) WHERE userid = $6 AND kind = $7;", m.Userid, m.Kind, m.CodeHash, m.CodeTime, m.Params, userid, kind)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func resetModelDelEqUseridEqKind(db *sql.DB, userid string, kind string) error {
-	_, err := db.Exec("DELETE FROM userresets WHERE userid = $1 AND kind = $2;", userid, kind)
+func resetModelDelEqUseridEqKind(db *sql.DB, tableName string, userid string, kind string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND kind = $2;", userid, kind)
 	return err
 }

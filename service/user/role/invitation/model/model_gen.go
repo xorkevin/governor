@@ -8,39 +8,35 @@ import (
 	"strings"
 )
 
-const (
-	invModelTableName = "userroleinvitations"
-)
-
-func invModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userroleinvitations (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role), invited_by VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
+func invModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role), invited_by VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_creation_time_index ON userroleinvitations (creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_userid__creation_time_index ON userroleinvitations (userid, creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__creation_time_index ON " + tableName + " (userid, creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userroleinvitations_role__creation_time_index ON userroleinvitations (role, creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_role__creation_time_index ON " + tableName + " (role, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsert(db *sql.DB, m *Model) error {
-	_, err := db.Exec("INSERT INTO userroleinvitations (userid, role, invited_by, creation_time) VALUES ($1, $2, $3, $4);", m.Userid, m.Role, m.InvitedBy, m.CreationTime)
+func invModelInsert(db *sql.DB, tableName string, m *Model) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role, invited_by, creation_time) VALUES ($1, $2, $3, $4);", m.Userid, m.Role, m.InvitedBy, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
+func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -52,27 +48,27 @@ func invModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
 		args = append(args, m.Userid, m.Role, m.InvitedBy, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO userroleinvitations (userid, role, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelGetModelEqUseridEqRoleGtCreationTime(db *sql.DB, userid string, role string, creationtime int64) (*Model, error) {
+func invModelGetModelEqUseridEqRoleGtCreationTime(db *sql.DB, tableName string, userid string, role string, creationtime int64) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, role, invited_by, creation_time FROM userroleinvitations WHERE userid = $1 AND role = $2 AND creation_time > $3;", userid, role, creationtime).Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE userid = $1 AND role = $2 AND creation_time > $3;", userid, role, creationtime).Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func invModelDelEqUseridEqRole(db *sql.DB, userid string, role string) error {
-	_, err := db.Exec("DELETE FROM userroleinvitations WHERE userid = $1 AND role = $2;", userid, role)
+func invModelDelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role)
 	return err
 }
 
-func invModelDelEqUseridHasRole(db *sql.DB, userid string, role []string) error {
+func invModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, role []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, userid)
@@ -86,17 +82,17 @@ func invModelDelEqUseridHasRole(db *sql.DB, userid string, role []string) error 
 		}
 		placeholdersrole = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM userroleinvitations WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
 	return err
 }
 
-func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM userroleinvitations WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
+	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +113,13 @@ func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, userid st
 	return res, nil
 }
 
-func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, role string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, role string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM userroleinvitations WHERE role = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, role, creationtime)
+	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE role = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, role, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +140,7 @@ func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, role string
 	return res, nil
 }
 
-func invModelDelLeqCreationTime(db *sql.DB, creationtime int64) error {
-	_, err := db.Exec("DELETE FROM userroleinvitations WHERE creation_time <= $1;", creationtime)
+func invModelDelLeqCreationTime(db *sql.DB, tableName string, creationtime int64) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creation_time <= $1;", creationtime)
 	return err
 }

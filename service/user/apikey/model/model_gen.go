@@ -8,35 +8,31 @@ import (
 	"strings"
 )
 
-const (
-	apikeyModelTableName = "userapikeys"
-)
-
-func apikeyModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS userapikeys (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
+func apikeyModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_userid_index ON userapikeys (userid);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_index ON " + tableName + " (userid);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS userapikeys_userid__time_index ON userapikeys (userid, time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__time_index ON " + tableName + " (userid, time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelInsert(db *sql.DB, m *Model) error {
-	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
+func apikeyModelInsert(db *sql.DB, tableName string, m *Model) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) error {
+func apikeyModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -48,35 +44,35 @@ func apikeyModelInsertBulk(db *sql.DB, models []*Model, allowConflict bool) erro
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
 		args = append(args, m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
 	}
-	_, err := db.Exec("INSERT INTO userapikeys (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelGetModelEqKeyid(db *sql.DB, keyid string) (*Model, error) {
+func apikeyModelGetModelEqKeyid(db *sql.DB, tableName string, keyid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT keyid, userid, scope, keyhash, name, description, time FROM userapikeys WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
+	if err := db.QueryRow("SELECT keyid, userid, scope, keyhash, name, description, time FROM "+tableName+" WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func apikeyModelUpdModelEqKeyid(db *sql.DB, m *Model, keyid string) error {
-	_, err := db.Exec("UPDATE userapikeys SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
+func apikeyModelUpdModelEqKeyid(db *sql.DB, tableName string, m *Model, keyid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelDelEqKeyid(db *sql.DB, keyid string) error {
-	_, err := db.Exec("DELETE FROM userapikeys WHERE keyid = $1;", keyid)
+func apikeyModelDelEqKeyid(db *sql.DB, tableName string, keyid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE keyid = $1;", keyid)
 	return err
 }
 
-func apikeyModelDelHasKeyid(db *sql.DB, keyid []string) error {
+func apikeyModelDelHasKeyid(db *sql.DB, tableName string, keyid []string) error {
 	paramCount := 0
 	args := make([]interface{}, 0, paramCount+len(keyid))
 	var placeholderskeyid string
@@ -89,17 +85,17 @@ func apikeyModelDelHasKeyid(db *sql.DB, keyid []string) error {
 		}
 		placeholderskeyid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM userapikeys WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
 	return err
 }
 
-func apikeyModelGetModelEqUseridOrdTime(db *sql.DB, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+func apikeyModelGetModelEqUseridOrdTime(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT keyid, userid, scope, keyhash, name, description, time FROM userapikeys WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT keyid, userid, scope, keyhash, name, description, time FROM "+tableName+" WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}

@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
-//go:generate forge model -m Model -t users -p user -o model_gen.go Model Info
+//go:generate forge model -m Model -p user -o model_gen.go Model Info
 
 const (
 	uidSize       = 16
@@ -43,6 +43,7 @@ type (
 	}
 
 	repo struct {
+		table    string
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -91,23 +92,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new user repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector) {
-	SetCtxRepo(inj, NewCtx(inj))
+func NewInCtx(inj governor.Injector, table string) {
+	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
 // NewCtx creates a new user repo from a context
-func NewCtx(inj governor.Injector) Repo {
+func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService)
+	return New(dbService, table)
 }
 
 // New creates a new user repository
-func New(database db.Database) Repo {
+func New(database db.Database, table string) Repo {
 	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.DefaultScryptConfig)
 	verifier := hunter2.NewVerifier()
 	verifier.RegisterHash(hasher)
 
 	return &repo{
+		table:    table,
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -216,7 +218,7 @@ func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoOrdUserid(d, true, limit, offset)
+	m, err := userModelGetInfoOrdUserid(d, r.table, true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user info")
 	}
@@ -232,7 +234,7 @@ func (r *repo) GetBulk(userids []string) ([]Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoHasUseridOrdUserid(d, userids, true, len(userids), 0)
+	m, err := userModelGetInfoHasUseridOrdUserid(d, r.table, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user info of userids")
 	}
@@ -245,7 +247,7 @@ func (r *repo) GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoLikeUsernameOrdUsername(d, prefix+"%", true, limit, offset)
+	m, err := userModelGetInfoLikeUsernameOrdUsername(d, r.table, prefix+"%", true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user info of username prefix")
 	}
@@ -258,7 +260,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqUserid(d, userid)
+	m, err := userModelGetModelEqUserid(d, r.table, userid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user")
 	}
@@ -271,7 +273,7 @@ func (r *repo) GetByUsername(username string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqUsername(d, username)
+	m, err := userModelGetModelEqUsername(d, r.table, username)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user by username")
 	}
@@ -284,7 +286,7 @@ func (r *repo) GetByEmail(email string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqEmail(d, email)
+	m, err := userModelGetModelEqEmail(d, r.table, email)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get user by email")
 	}
@@ -297,7 +299,7 @@ func (r *repo) Insert(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := userModelInsert(d, m); err != nil {
+	if err := userModelInsert(d, r.table, m); err != nil {
 		return db.WrapErr(err, "Failed to insert user")
 	}
 	return nil
@@ -309,7 +311,7 @@ func (r *repo) Update(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := userModelUpdModelEqUserid(d, m, m.Userid); err != nil {
+	if err := userModelUpdModelEqUserid(d, r.table, m, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to update user")
 	}
 	return nil
@@ -321,7 +323,7 @@ func (r *repo) Delete(m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := userModelDelEqUserid(d, m.Userid); err != nil {
+	if err := userModelDelEqUserid(d, r.table, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to delete user")
 	}
 	return nil
@@ -333,7 +335,7 @@ func (r *repo) Setup() error {
 	if err != nil {
 		return err
 	}
-	if err := userModelSetup(d); err != nil {
+	if err := userModelSetup(d, r.table); err != nil {
 		err = db.WrapErr(err, "Failed to setup user model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err

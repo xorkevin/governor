@@ -8,35 +8,31 @@ import (
 	"strings"
 )
 
-const (
-	brandModelTableName = "courierbrands"
-)
-
-func brandModelSetup(db *sql.DB) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS courierbrands (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
+func brandModelSetup(db *sql.DB, tableName string) error {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creation_time_index ON courierbrands (creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS courierbrands_creatorid__creation_time_index ON courierbrands (creatorid, creation_time);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creatorid__creation_time_index ON " + tableName + " (creatorid, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelInsert(db *sql.DB, m *BrandModel) error {
-	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
+func brandModelInsert(db *sql.DB, tableName string, m *BrandModel) error {
+	_, err := db.Exec("INSERT INTO "+tableName+" (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) error {
+func brandModelInsertBulk(db *sql.DB, tableName string, models []*BrandModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -48,27 +44,27 @@ func brandModelInsertBulk(db *sql.DB, models []*BrandModel, allowConflict bool) 
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.CreatorID, m.BrandID, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO courierbrands (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) (*BrandModel, error) {
+func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, tableName string, creatorid string, brandid string) (*BrandModel, error) {
 	m := &BrandModel{}
-	if err := db.QueryRow("SELECT creatorid, brandid, creation_time FROM courierbrands WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
+	if err := db.QueryRow("SELECT creatorid, brandid, creation_time FROM "+tableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, creatorid string, brandid string) error {
-	_, err := db.Exec("DELETE FROM courierbrands WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid)
+func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, tableName string, creatorid string, brandid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid)
 	return err
 }
 
-func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, creatorid string, brandid []string) error {
+func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, tableName string, creatorid string, brandid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(brandid))
 	args = append(args, creatorid)
@@ -82,17 +78,17 @@ func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, creatorid string, brandid []
 		}
 		placeholdersbrandid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM courierbrands WHERE creatorid = $1 AND brandid IN (VALUES "+placeholdersbrandid+");", args...)
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creatorid = $1 AND brandid IN (VALUES "+placeholdersbrandid+");", args...)
 	return err
 }
 
-func brandModelGetBrandModelOrdCreationTime(db *sql.DB, orderasc bool, limit, offset int) ([]BrandModel, error) {
+func brandModelGetBrandModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM courierbrands ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -113,13 +109,13 @@ func brandModelGetBrandModelOrdCreationTime(db *sql.DB, orderasc bool, limit, of
 	return res, nil
 }
 
-func brandModelGetBrandModelEqCreatorIDOrdCreationTime(db *sql.DB, creatorid string, orderasc bool, limit, offset int) ([]BrandModel, error) {
+func brandModelGetBrandModelEqCreatorIDOrdCreationTime(db *sql.DB, tableName string, creatorid string, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM courierbrands WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM "+tableName+" WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
