@@ -501,18 +501,16 @@ func (m *router) listNoBan(c governor.Context, userid string) (string, bool, boo
 	return creatorid, false, true
 }
 
-const (
-	scopeMailinglistRead  = "gov.mailinglist:read"
-	scopeMailinglistWrite = "gov.mailinglist:write"
-)
-
 func (m *router) mountRoutes(r governor.Router) {
+	scopeMailinglistRead := m.s.scopens + ":read"
+	scopeMailinglistWrite := m.s.scopens + ":write"
+	scopeMailinglistSubWrite := m.s.scopens + ".sub:write"
 	r.Post("/c/{creatorid}", m.createList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Get("/c/{creatorid}/latest", m.getCreatorLists)
 	r.Get("/latest", m.getPersonalLists, gate.User(m.s.gate, scopeMailinglistRead))
 	r.Put("/c/{creatorid}/list/{listname}", m.updateList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Patch("/c/{creatorid}/list/{listname}/sub", m.subList, gate.NoBanF(m.s.gate, m.listNoBan, scopeMailinglistWrite))
-	r.Patch("/c/{creatorid}/list/{listname}/unsub", m.unsubList, gate.User(m.s.gate, scopeMailinglistWrite))
+	r.Patch("/c/{creatorid}/list/{listname}/sub", m.subList, gate.NoBanF(m.s.gate, m.listNoBan, scopeMailinglistSubWrite))
+	r.Patch("/c/{creatorid}/list/{listname}/unsub", m.unsubList, gate.User(m.s.gate, scopeMailinglistSubWrite))
 	r.Delete("/c/{creatorid}/list/{listname}/msgs", m.deleteMsgs, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Patch("/c/{creatorid}/list/{listname}/member", m.updateListMembers, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
 	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))

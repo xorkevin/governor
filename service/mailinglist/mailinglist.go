@@ -41,6 +41,7 @@ type (
 		mailer       mail.Mailer
 		gate         gate.Gate
 		logger       governor.Logger
+		scopens      string
 		streamns     string
 		opts         Opts
 		resolver     dns.Resolver
@@ -137,6 +138,7 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxMailingList(inj, s)
+	s.scopens = name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{

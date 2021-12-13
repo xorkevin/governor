@@ -42,6 +42,7 @@ type (
 		events        events.Events
 		gate          gate.Gate
 		logger        governor.Logger
+		scopens       string
 		streamns      string
 		fallbackLink  string
 		linkPrefix    string
@@ -101,6 +102,7 @@ func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Eve
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxCourier(inj, s)
+	s.scopens = name
 	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("fallbacklink", "")

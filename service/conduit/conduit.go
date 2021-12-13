@@ -21,10 +21,11 @@ type (
 	}
 
 	service struct {
-		repo   model.Repo
-		users  user.Users
-		gate   gate.Gate
-		logger governor.Logger
+		repo    model.Repo
+		users   user.Users
+		gate    gate.Gate
+		logger  governor.Logger
+		scopens string
 	}
 
 	router struct {
@@ -67,6 +68,7 @@ func New(repo model.Repo, users user.Users, g gate.Gate) Service {
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
+	s.scopens = name
 }
 
 func (s *service) router() *router {

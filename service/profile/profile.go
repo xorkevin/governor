@@ -31,6 +31,7 @@ type (
 		events        events.Events
 		gate          gate.Gate
 		logger        governor.Logger
+		scopens       string
 		streamns      string
 		useropts      user.Opts
 	}
@@ -80,6 +81,7 @@ func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, g gate.Gate
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxProfiles(inj, s)
+	s.scopens = name
 	s.streamns = strings.ToUpper(name)
 }
 

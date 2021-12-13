@@ -296,14 +296,11 @@ func (m *router) courierOwner(c governor.Context, userid string) (string, bool, 
 	return creatorid, false, true
 }
 
-const (
-	scopeLinkRead   = "gov.courier.link:read"
-	scopeLinkWrite  = "gov.courier.link:write"
-	scopeBrandRead  = "gov.courier.brand:read"
-	scopeBrandWrite = "gov.courier.brand:write"
-)
-
 func (m *router) mountRoutes(r governor.Router) {
+	scopeLinkRead := m.s.scopens + ".link:read"
+	scopeLinkWrite := m.s.scopens + ".link:write"
+	scopeBrandRead := m.s.scopens + ".brand:read"
+	scopeBrandWrite := m.s.scopens + ".brand:write"
 	r.Get("/link/id/{linkid}", m.getLink)
 	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getLinkImageCC))
 	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead))

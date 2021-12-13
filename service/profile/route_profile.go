@@ -210,12 +210,9 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-const (
-	scopeProfileRead  = "gov.profile:read"
-	scopeProfileWrite = "gov.profile:write"
-)
-
 func (m *router) mountProfileRoutes(r governor.Router) {
+	scopeProfileRead := m.s.scopens + ":read"
+	scopeProfileWrite := m.s.scopens + ":write"
 	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite))
 	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite))
 	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite))

@@ -249,18 +249,16 @@ func (m *router) conduitChatsOwner(c governor.Context, userid string) bool {
 	return len(members) == len(chatids)
 }
 
-const (
-	scopeChatRead  = "gov.conduit.chat:read"
-	scopeChatWrite = "gov.conduit.chat:write"
-)
-
 func (m *router) mountRoutes(r governor.Router) {
+	scopeChatRead := m.s.scopens + ".chat:read"
+	scopeChatWrite := m.s.scopens + ".chat:write"
+	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat", m.getChats, gate.Owner(m.s.gate, m.conduitChatsOwner, scopeChatRead))
-	r.Post("/chat", m.createChat, gate.User(m.s.gate, scopeChatWrite))
-	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
-	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
-	r.Delete("/chat/id/{id}", m.deleteChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
+	r.Post("/chat", m.createChat, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
+	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
+	r.Delete("/chat/id/{id}", m.deleteChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
 	r.Post("/chat/id/{id}/msg", m.createMsg, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
 	r.Get("/chat/id/{id}/msg/latest", m.getLatestMsgs, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatRead))
 }
