@@ -209,12 +209,11 @@ func (m *router) roleMod(c governor.Context, _ string) (string, bool, bool) {
 	return tag, false, true
 }
 
-const (
-	scopeAccountWrite = "gov.user.account:write"
-	scopeAdminWrite   = "gov.user.admin:write"
-)
-
 func (m *router) mountEdit(r governor.Router) {
+	scopeAccountRead := m.s.scopens + ".account:read"
+	scopeAccountWrite := m.s.scopens + ".account:write"
+	scopeAdminRead := m.s.scopens + ".admin:read"
+	scopeAdminWrite := m.s.scopens + ".admin:write"
 	r.Put("", m.putUser, gate.User(m.s.gate, scopeAccountWrite), m.rt)
 	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite), m.rt)
 	r.Get("/roles/invitation", m.getUserRoleInvitations, gate.User(m.s.gate, scopeAccountRead), m.rt)

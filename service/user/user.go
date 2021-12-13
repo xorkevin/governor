@@ -73,6 +73,8 @@ type (
 		otpDecrypter      *hunter2.Decrypter
 		otpCipher         hunter2.Cipher
 		logger            governor.Logger
+		rolens            string
+		scopens           string
 		streamns          string
 		opts              Opts
 		streamsize        int64
@@ -237,6 +239,8 @@ func New(
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxUser(inj, s)
+	s.rolens = "gov." + name
+	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{

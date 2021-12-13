@@ -33,6 +33,7 @@ type (
 		events     events.Events
 		gate       gate.Gate
 		logger     governor.Logger
+		scopens    string
 		streamns   string
 		opts       Opts
 		streamsize int64
@@ -107,6 +108,7 @@ func New(orgs model.Repo, roles role.Roles, ev events.Events, g gate.Gate) Servi
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOrgs(inj, s)
+	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{

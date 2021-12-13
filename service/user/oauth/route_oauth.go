@@ -246,19 +246,18 @@ func (m *router) getAppLogoCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-const (
-	scopeAppRead  = "gov.user.oauth.app:read"
-	scopeAppWrite = "gov.user.oauth.app:write"
-)
+const ()
 
 func (m *router) mountAppRoutes(r governor.Router) {
+	scopeAppRead := m.s.scopens + ".app:read"
+	scopeAppWrite := m.s.scopens + ".app:write"
 	r.Get("/id/{clientid}", m.getApp)
 	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, nil, 60, m.getAppLogoCC))
-	r.Get("", m.getAppGroup, gate.Member(m.s.gate, "gov.oauth", scopeAppRead))
+	r.Get("", m.getAppGroup, gate.Member(m.s.gate, m.s.rolens, scopeAppRead))
 	r.Get("/ids", m.getAppBulk)
-	r.Post("", m.createApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
-	r.Put("/id/{clientid}", m.updateApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
-	r.Put("/id/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
-	r.Put("/id/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
-	r.Delete("/id/{clientid}", m.deleteApp, gate.Member(m.s.gate, "gov.oauth", scopeAppWrite))
+	r.Post("", m.createApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
+	r.Put("/id/{clientid}", m.updateApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
+	r.Put("/id/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
+	r.Put("/id/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
+	r.Delete("/id/{clientid}", m.deleteApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
 }

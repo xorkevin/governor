@@ -255,6 +255,7 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountEditSecure(r governor.Router) {
+	scopeAccountWrite := m.s.scopens + ".account:write"
 	rf := ratelimit.Compose(
 		m.s.ratelimiter,
 		ratelimit.IPAddress("forgot.ip", 60, 15, 60),

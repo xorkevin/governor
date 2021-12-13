@@ -53,6 +53,8 @@ type (
 		events       events.Events
 		gate         gate.Gate
 		logger       governor.Logger
+		rolens       string
+		scopens      string
 		streamns     string
 		codeTime     int64
 		accessTime   int64
@@ -126,6 +128,8 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxOAuth(inj, s)
+	s.rolens = "gov." + name
+	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("codetime", "1m")

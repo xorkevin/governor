@@ -333,12 +333,9 @@ func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-const (
-	scopeAccountRead = "gov.user.account:read"
-	scopeAdminRead   = "gov.user.admin:read"
-)
-
 func (m *router) mountGet(r governor.Router) {
+	scopeAccountRead := m.s.scopens + ".account:read"
+	scopeAdminRead := m.s.scopens + ".admin:read"
 	rs := ratelimit.Compose(
 		m.s.ratelimiter,
 		ratelimit.IPAddress("search.ip", 60, 15, 480),

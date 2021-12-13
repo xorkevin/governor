@@ -219,12 +219,9 @@ func (m *router) checkApikey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-const (
-	scopeApikeyRead  = "gov.user.apikey:read"
-	scopeApikeyWrite = "gov.user.apikey:write"
-)
-
 func (m *router) mountApikey(r governor.Router) {
+	scopeApikeyRead := m.s.scopens + ".apikey:read"
+	scopeApikeyWrite := m.s.scopens + ".apikey:write"
 	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead), m.rt)
 	r.Post("", m.createApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
 	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)

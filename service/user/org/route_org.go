@@ -186,13 +186,8 @@ func (m *router) orgMember(c governor.Context, _ string) (string, bool, bool) {
 	return rank.ToOrgName(orgid), false, true
 }
 
-const (
-	// scopeOrgRead  = "gov.user.org:read"
-
-	scopeOrgWrite = "gov.user.org:write"
-)
-
 func (m *router) mountRoute(r governor.Router) {
+	scopeOrgWrite := m.s.scopens + ":write"
 	r.Get("/id/{id}", m.getOrg)
 	r.Get("/name/{name}", m.getOrgByName)
 	r.Get("/ids", m.getOrgs)

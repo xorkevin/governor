@@ -299,13 +299,10 @@ func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-const (
-	scopeAuthorize       = "gov.user.oauth.authorize"
-	scopeConnectionRead  = "gov.user.oauth.connection:read"
-	scopeConnectionWrite = "gov.user.oauth.connection:write"
-)
-
 func (m *router) mountOidRoutes(r governor.Router) {
+	scopeAuthorize := m.s.scopens + ".authorize"
+	scopeConnectionRead := m.s.scopens + ".connection:read"
+	scopeConnectionWrite := m.s.scopens + ".connection:write"
 	r.Get("/openid-configuration", m.getOpenidConfig)
 	r.Get(jwksRoute, m.getJWKS)
 	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize))
