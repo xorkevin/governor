@@ -90,6 +90,7 @@ type (
 		hbmaxfail       int
 		minpullduration time.Duration
 		done            <-chan struct{}
+		apisecret       string
 	}
 
 	// Subscription manages an active subscription
@@ -190,6 +191,12 @@ func (e ErrInvalidStreamMsg) Error() string {
 	return "Events invalid stream message"
 }
 
+type (
+	secretAPI struct {
+		Secret string `mapstructure:"secret"`
+	}
+)
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -208,7 +215,13 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return governor.ErrWithMsg(err, "Failed to parse min pull duration")
 	}
 
-	l.Info("loaded config", map[string]string{
+	apisecret := secretAPI{}
+	if err := r.GetSecret("apisecret", 0, &apisecret); err != nil {
+		return governor.ErrWithMsg(err, "Invalid api secret")
+	}
+	s.apisecret = apisecret.Secret
+
+	l.Info("Loaded config", map[string]string{
 		"addr":            s.addr,
 		"hbinterval":      strconv.Itoa(s.hbinterval),
 		"hbmaxfail":       strconv.Itoa(s.hbmaxfail),

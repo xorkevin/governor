@@ -21,6 +21,7 @@ configMapGenerator:
       - vaultkubemount={{ .Vars.vault.kubemount }}
       - kvmount={{ .Vars.vault.kvmount }}
       - kvpathsetup={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/setup
+      - kvpatheventsapi={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/eventsapi
       - kvpathtoken={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/token
       - kvpathrsa={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/rsakey
       - kvpathotp={{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/otpkey

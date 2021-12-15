@@ -2,6 +2,7 @@ package governor
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 
@@ -98,7 +99,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		if err := s.config.getSecret("setupsecret", 0, &secret); err != nil {
 			return ErrWithMsg(err, "Invalid setup secret")
 		}
-		if rsetup.Secret != secret.Secret {
+		if subtle.ConstantTimeCompare([]byte(rsetup.Secret), []byte(secret.Secret)) != 1 {
 			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
 				Status:  http.StatusForbidden,
 				Message: "Invalid setup secret",

@@ -81,6 +81,11 @@ spec:
                 configMapKeyRef:
                   name: {{ $rgsvcopts }}
                   key: kvpathsetup
+            - name: KV_PATH_EVENTSAPI
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $rgsvcopts }}
+                  key: kvpatheventsapi
             - name: KV_PATH_TOKEN
               valueFrom:
                 configMapKeyRef:

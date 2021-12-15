@@ -59,6 +59,7 @@ events:
   hbinterval: 5
   hbmaxfail: 3
   minpullduration: 100ms
+  apisecret: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/eventsapi
 template:
   dir: templates
 mail:

@@ -3,6 +3,9 @@
 path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/setup" {
   capabilities = ["create", "update", "delete", "read", "list"]
 }
+path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/eventsapi" {
+  capabilities = ["create", "update", "delete", "read", "list"]
+}
 path "{{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/token" {
   capabilities = ["create", "update", "delete", "read", "list"]
 }

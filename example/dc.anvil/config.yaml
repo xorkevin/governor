@@ -53,6 +53,7 @@ events:
   hbinterval: 5
   hbmaxfail: 3
   minpullduration: 100ms
+  apisecret: eventsapisecret
 template:
   dir: anvil_out/governor/governor/templates
 mail:

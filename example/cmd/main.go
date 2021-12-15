@@ -64,7 +64,7 @@ func main() {
 	gov.Register("database", "/null/db", dbService)
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
-	gov.Register("events", "/null/events", events.New())
+	gov.Register("events", "/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	{
 		inj := gov.Injector()

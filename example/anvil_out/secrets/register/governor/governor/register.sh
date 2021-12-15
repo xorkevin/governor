@@ -33,6 +33,31 @@ while true; do
   export VAULT_TOKEN=
 done
 
+log2 'generate new events api secret'
+
+eventsapisecret=$(gen_pass "${PASS_LEN:-64}")
+
+while true; do
+  i=0
+  while [ $i -lt "${CURL_REAUTH:-3}" ]; do
+    if [ -z $VAULT_TOKEN ]; then
+      export VAULT_TOKEN=$(auth_vault)
+      log2 'authenticate with vault'
+    fi
+
+    status=$(vault_kvput "$KV_MOUNT" "$KV_PATH_EVENTSAPI" "{\"secret\": \"${eventsapisecret}\"}")
+    if is_success "$status"; then
+      log2 'write events api secret to vault kv'
+      break 2
+    fi
+    log2 'error write events api secret to vault kv:' "$(cat /tmp/curlres.txt)"
+
+    i=$((i + 1))
+    sleep "${CURL_BACKOFF:-5}"
+  done
+  export VAULT_TOKEN=
+done
+
 log2 'generate new token secret'
 
 tokensecret=$(gen_pass "${PASS_LEN:-64}")
