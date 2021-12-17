@@ -60,7 +60,7 @@ type (
 	}
 
 	router struct {
-		s service
+		s *service
 	}
 
 	ctxKeyMailingList struct{}
@@ -163,7 +163,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: *s,
+		s: s,
 	}
 }
 

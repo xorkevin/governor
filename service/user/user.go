@@ -102,7 +102,7 @@ type (
 	}
 
 	router struct {
-		s  service
+		s  *service
 		rt governor.Middleware
 	}
 
@@ -274,7 +274,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: *s,
+		s: s,
 		rt: ratelimit.Compose(
 			s.ratelimiter,
 			ratelimit.IPAddress("ip", 60, 15, 240),
@@ -418,7 +418,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	sr.mountRoute(m.Group("/user"))
 	sr.mountAuth(m.Group(authRoutePrefix))
 	sr.mountApikey(m.Group("/apikey"))
-	l.Info("mounted http routes", nil)
+	l.Info("Mounted http routes", nil)
 	return nil
 }
 

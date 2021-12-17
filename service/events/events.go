@@ -93,6 +93,10 @@ type (
 		apisecret       string
 	}
 
+	router struct {
+		s *service
+	}
+
 	// Subscription manages an active subscription
 	Subscription interface {
 		Close() error
@@ -191,6 +195,12 @@ func (e ErrInvalidStreamMsg) Error() string {
 	return "Events invalid stream message"
 }
 
+func (s *service) router() *router {
+	return &router{
+		s: s,
+	}
+}
+
 type (
 	secretAPI struct {
 		Secret string `mapstructure:"secret"`
@@ -235,6 +245,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if _, _, err := s.getClient(); err != nil {
 		return err
 	}
+
+	sr := s.router()
+	sr.mountRoutes(m)
+	l.Info("Mounted http routes", nil)
 	return nil
 }
 

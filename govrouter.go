@@ -129,6 +129,8 @@ type (
 		AddHeader(key, value string)
 		Cookie(key string) (*http.Cookie, error)
 		SetCookie(cookie *http.Cookie)
+		BasicAuth() (string, string, bool)
+		ReadAllBody() ([]byte, error)
 		Bind(i interface{}) error
 		FormValue(key string) string
 		FormFile(key string) (multipart.File, *multipart.FileHeader, error)
@@ -235,6 +237,28 @@ func (c *govcontext) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(c.w, cookie)
 }
 
+func (c *govcontext) BasicAuth() (string, string, bool) {
+	return c.r.BasicAuth()
+}
+
+func (c *govcontext) ReadAllBody() ([]byte, error) {
+	data, err := io.ReadAll(c.r.Body)
+	if err != nil {
+		// No exported error is returned as of go@v1.16
+		if err.Error() == "http: request body too large" {
+			return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
+				Status:  http.StatusRequestEntityTooLarge,
+				Message: "Request too large",
+			}), ErrOptInner(err))
+		}
+		return nil, NewError(ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Failed reading request",
+		}), ErrOptInner(err))
+	}
+	return data, nil
+}
+
 func (c *govcontext) Bind(i interface{}) error {
 	// ContentLength of -1 is unknown
 	if c.r.ContentLength == 0 {
@@ -252,19 +276,9 @@ func (c *govcontext) Bind(i interface{}) error {
 	}
 	switch mediaType {
 	case "application/json":
-		data, err := io.ReadAll(c.r.Body)
+		data, err := c.ReadAllBody()
 		if err != nil {
-			// No exported error is returned as of go@v1.16
-			if err.Error() == "http: request body too large" {
-				return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-					Status:  http.StatusRequestEntityTooLarge,
-					Message: "Request too large",
-				}), ErrOptInner(err))
-			}
-			return NewError(ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Failed reading request",
-			}), ErrOptInner(err))
+			return err
 		}
 		if err := json.Unmarshal(data, i); err != nil {
 			return NewError(ErrOptRes(ErrorRes{

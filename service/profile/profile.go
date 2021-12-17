@@ -37,7 +37,7 @@ type (
 	}
 
 	router struct {
-		s service
+		s *service
 	}
 
 	ctxKeyProfiles struct{}
@@ -87,7 +87,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: *s,
+		s: s,
 	}
 }
 
@@ -99,7 +99,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	sr := s.router()
 	sr.mountProfileRoutes(m)
-	l.Info("mounted http routes", nil)
+	l.Info("Mounted http routes", nil)
 	return nil
 }
 

@@ -249,7 +249,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := governor.NewContext(w, r, s.logger)
-			keyid, password, ok := r.BasicAuth()
+			keyid, password, ok := c.BasicAuth()
 			if ok {
 				userid, keyscope, err := s.apikeys.CheckKey(keyid, password)
 				if err != nil {
