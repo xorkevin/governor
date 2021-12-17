@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 ROOT=${0%/*}
 
 inreplyto=$1
