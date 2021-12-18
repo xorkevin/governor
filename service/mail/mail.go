@@ -373,10 +373,19 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	var tag string
 	var auth *hunter2.Poly1305Auth
 
+	msgpath := ""
+
 	if emmsg.Kind == mailMsgKindFwd {
 		data := emmsg.FwdData
 		b1, _, err := s.sendMailDir.Get(data.Path)
 		if err != nil {
+			if errors.Is(err, objstore.ErrNotFound{}) {
+				s.logger.Error("Mail body content not found", map[string]string{
+					"actiontype": "getmailbody",
+					"error":      err.Error(),
+				})
+				return nil
+			}
 			return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
 		}
 		defer func() {
@@ -387,6 +396,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 				})
 			}
 		}()
+		msgpath = data.Path
 		msg = b1
 		if data.Encrypted {
 			var err error
@@ -415,6 +425,13 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			data := emmsg.RawData
 			b1, _, err := s.sendMailDir.Get(data.Path)
 			if err != nil {
+				if errors.Is(err, objstore.ErrNotFound{}) {
+					s.logger.Error("Mail body content not found", map[string]string{
+						"actiontype": "getmailbody",
+						"error":      err.Error(),
+					})
+					return nil
+				}
 				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
 			}
 			defer func() {
@@ -425,6 +442,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 					})
 				}
 			}()
+			msgpath = data.Path
 			body = b1
 			if data.Encrypted {
 				var err error
@@ -513,7 +531,17 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	return s.handleSendMail(emmsg.From.Address, to, msg)
+	if err := s.handleSendMail(emmsg.From.Address, to, msg); err != nil {
+		return err
+	}
+	if len(msgpath) != 0 {
+		if err := s.sendMailDir.Del(msgpath); err != nil {
+			if !errors.Is(err, objstore.ErrNotFound{}) {
+				return governor.ErrWithMsg(err, "Failed to delete mail body")
+			}
+		}
+	}
+	return nil
 }
 
 func msgToBytes(l governor.Logger, msgiddomain string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
