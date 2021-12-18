@@ -5,9 +5,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {{ $ns }}
 configMapGenerator:
-  - name: {{ $svc }}-start-scripts
-    files:
-      - start.sh
   - name: {{ $svc }}-init-scripts
     files:
       - init.sh

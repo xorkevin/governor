@@ -104,16 +104,21 @@ spec:
       containers:
         - name: minio
           image: {{ .Vars.kube.service.image.name }}:{{ .Vars.kube.service.image.version }}
-          command: ['sh']
-          args: ['/home/minio/start.sh']
+          command: ['minio']
+          args: ['server', '/var/lib/minio/data', '--console-address', ':9001']
+          env:
+            - name: MINIO_ROOT_USER_FILE
+              value: /etc/miniopass/username.txt
+            - name: MINIO_ROOT_PASSWORD_FILE
+              value: /etc/miniopass/pass.txt
           ports:
             - name: minio
               containerPort: 9000
+            - name: minioconsole
+              containerPort: 9001
           volumeMounts:
             - name: data
               mountPath: /var/lib/minio
-            - name: start-scripts
-              mountPath: /home/minio
             - name: config-pass
               mountPath: /etc/miniopass
           readinessProbe:
@@ -134,9 +139,6 @@ spec:
         - name: init-scripts
           configMap:
             name: {{ $svc }}-init-scripts
-        - name: start-scripts
-          configMap:
-            name: {{ $svc }}-start-scripts
   volumeClaimTemplates:
     - metadata:
         name: data

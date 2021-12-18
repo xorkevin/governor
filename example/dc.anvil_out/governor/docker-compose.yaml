@@ -26,8 +26,8 @@ services:
     entrypoint: ['minio']
     command: ['server', '/var/lib/minio/data', '--console-address', ':9001']
     environment:
-      MINIO_ACCESS_KEY: admin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: minioadmin
     ports:
       - 9000:9000
       - 9001:9001
