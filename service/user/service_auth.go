@@ -8,6 +8,7 @@ import (
 	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
@@ -194,7 +195,7 @@ func (s *service) ExchangeToken(refreshToken, ipaddr, useragent string) (*resUse
 
 	keyhash, err := s.kvsessions.Get(claims.ID)
 	if err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, kvstore.ErrNotFound{}) {
 			s.logger.Error("Failed to get cached session", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getcachesession",
