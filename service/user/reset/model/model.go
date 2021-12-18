@@ -27,6 +27,7 @@ type (
 		Update(m *Model) error
 		Delete(userid, kind string) error
 		DeleteByUserid(userid string) error
+		DeleteBefore(t int64) error
 		Setup() error
 	}
 
@@ -42,7 +43,7 @@ type (
 		Userid   string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
 		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind;getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`
 		CodeHash string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
-		CodeTime int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
+		CodeTime int64  `model:"code_time,BIGINT NOT NULL;index" query:"code_time;deleq,code_time|lt"`
 		Params   string `model:"params,VARCHAR(4096)" query:"params"`
 	}
 
@@ -173,6 +174,17 @@ func (r *repo) DeleteByUserid(userid string) error {
 		return err
 	}
 	if err := resetModelDelEqUserid(d, r.table, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete reset codes")
+	}
+	return nil
+}
+
+func (r *repo) DeleteBefore(t int64) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := resetModelDelLtCodeTime(d, r.table, t); err != nil {
 		return db.WrapErr(err, "Failed to delete reset codes")
 	}
 	return nil

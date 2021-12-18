@@ -13,6 +13,10 @@ func resetModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_code_time_index ON " + tableName + " (code_time);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -66,5 +70,10 @@ func resetModelUpdModelEqUseridEqKind(db *sql.DB, tableName string, m *Model, us
 
 func resetModelDelEqUseridEqKind(db *sql.DB, tableName string, userid string, kind string) error {
 	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND kind = $2;", userid, kind)
+	return err
+}
+
+func resetModelDelLtCodeTime(db *sql.DB, tableName string, codetime int64) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE code_time < $1;", codetime)
 	return err
 }

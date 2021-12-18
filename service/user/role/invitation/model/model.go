@@ -19,7 +19,7 @@ type (
 		Insert(userid string, roles rank.Rank, by string, at int64) error
 		DeleteByID(userid, role string) error
 		DeleteByRoles(userid string, roles rank.Rank) error
-		DeleteBefore(before int64) error
+		DeleteBefore(t int64) error
 		Setup() error
 	}
 
@@ -163,12 +163,12 @@ func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
 	return nil
 }
 
-func (r *repo) DeleteBefore(before int64) error {
+func (r *repo) DeleteBefore(t int64) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := invModelDelLeqCreationTime(d, r.table, before); err != nil {
+	if err := invModelDelLeqCreationTime(d, r.table, t); err != nil {
 		return db.WrapErr(err, "Failed to delete invitations")
 	}
 	return nil

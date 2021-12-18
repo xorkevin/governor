@@ -541,7 +541,17 @@ func (s *service) Start(ctx context.Context) error {
 	l.Info("Subscribed to user delete queue", nil)
 
 	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+	}
+	l.Info("Subscribed to gov sys gc channel", nil)
+
+	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_RESET_GC", s.UserResetGCHook); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+	}
+	l.Info("Subscribed to gov sys gc channel", nil)
+
+	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.UserInvitationGCHook); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
@@ -637,4 +647,40 @@ func (s *service) UserApprovalGCHook(msgdata []byte) {
 		return
 	}
 	l.Debug("GC user approvals", nil)
+}
+
+func (s *service) UserResetGCHook(msgdata []byte) {
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": s.syschannels.GC,
+		"group":   s.streamns + "_WORKER_RESET_GC",
+	})
+	props, err := governor.DecodeSysEventTimestampProps(msgdata)
+	if err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	if err := s.resets.DeleteBefore(props.Timestamp - time72h); err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	l.Debug("GC user resets", nil)
+}
+
+func (s *service) UserInvitationGCHook(msgdata []byte) {
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": s.syschannels.GC,
+		"group":   s.streamns + "_WORKER_INVITATION_GC",
+	})
+	props, err := governor.DecodeSysEventTimestampProps(msgdata)
+	if err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	if err := s.invitations.DeleteBefore(props.Timestamp - time72h); err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	l.Debug("GC user invitations", nil)
 }
