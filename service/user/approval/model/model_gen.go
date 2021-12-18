@@ -94,3 +94,8 @@ func approvalModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc
 	}
 	return res, nil
 }
+
+func approvalModelDelLtCreationTime(db *sql.DB, tableName string, creationtime int64) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creation_time < $1;", creationtime)
+	return err
+}

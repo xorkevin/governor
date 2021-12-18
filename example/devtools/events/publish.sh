@@ -13,7 +13,8 @@ if [ -z "$subject" ]; then
 fi
 
 if [ -z "$payload" ]; then
-  payload="{\"timestamp\":$(date '+%s')}"
+  printf "Must provide payload\n"
+  exit 1
 fi
 
 curl --user "system:secret" --request POST "http://localhost:8080/api/events/publish?subject=$subject" --data-raw "$payload"

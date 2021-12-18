@@ -29,6 +29,7 @@ type (
 		Insert(m *Model) error
 		Update(m *Model) error
 		Delete(m *Model) error
+		DeleteBefore(t int64) error
 		Setup() error
 	}
 
@@ -47,7 +48,7 @@ type (
 		Email        string `model:"email,VARCHAR(255) NOT NULL" query:"email"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup;deleq,creation_time|lt"`
 		Approved     bool   `model:"approved,BOOL NOT NULL" query:"approved"`
 		CodeHash     string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
 		CodeTime     int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
@@ -200,6 +201,17 @@ func (r *repo) Delete(m *Model) error {
 	}
 	if err := approvalModelDelEqUserid(d, r.table, m.Userid); err != nil {
 		return db.WrapErr(err, "Failed to delete user approval")
+	}
+	return nil
+}
+
+func (r *repo) DeleteBefore(t int64) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := approvalModelDelLtCreationTime(d, r.table, t); err != nil {
+		return db.WrapErr(err, "Failed to delete user approvals")
 	}
 	return nil
 }

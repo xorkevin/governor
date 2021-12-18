@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,6 +49,16 @@ type (
 		GetSecret(kvpath string) (map[string]interface{}, int64, error)
 	}
 
+	// System event channels
+	SysChannels struct {
+		GC string
+	}
+
+	// SysEventTimestampProps
+	SysEventTimestampProps struct {
+		Timestamp int64 `json:"timestamp"`
+	}
+
 	// Config is the server configuration including those from a config file and
 	// environment variables
 	Config struct {
@@ -71,6 +82,7 @@ type (
 		Port          string
 		BaseURL       string
 		Hostname      string
+		SysChannels   SysChannels
 	}
 
 	corsPathRule struct {
@@ -175,6 +187,9 @@ func newConfig(opts Opts) *Config {
 		appname:    opts.Appname,
 		version:    opts.Version,
 		vaultCache: map[string]vaultSecret{},
+		SysChannels: SysChannels{
+			GC: opts.Appname + "." + "sys.gc",
+		},
 	}
 }
 
@@ -586,4 +601,13 @@ func (c *Config) reader(opt serviceOpt) ConfigReader {
 		serviceOpt: opt,
 		c:          c,
 	}
+}
+
+// DecodeSysEventTimestampProps unmarshals json encoded sys event timestamp props
+func DecodeSysEventTimestampProps(msgdata []byte) (*SysEventTimestampProps, error) {
+	m := &SysEventTimestampProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, ErrWithMsg(err, "Failed to decode sys event timestamp props")
+	}
+	return m, nil
 }

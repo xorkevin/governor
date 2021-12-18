@@ -34,6 +34,7 @@ const (
 const (
 	time5m     int64 = int64(5 * time.Minute / time.Second)
 	time24h    int64 = int64(24 * time.Hour / time.Second)
+	time72h    int64 = time24h * 3
 	time6month int64 = time24h * 365 / 2
 )
 
@@ -99,6 +100,7 @@ type (
 		tplemailchange    *htmlTemplate.Template
 		tplforgotpass     *htmlTemplate.Template
 		tplnewuser        *htmlTemplate.Template
+		syschannels       governor.SysChannels
 	}
 
 	router struct {
@@ -391,6 +393,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.otpDecrypter.RegisterCipher(cipher)
 	}
 
+	s.syschannels = c.SysChannels
+
 	l.Info("Loaded config", map[string]string{
 		"stream size (bytes)":   r.GetStr("streamsize"),
 		"event size (bytes)":    r.GetStr("eventsize"),
@@ -524,6 +528,8 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
+	l.Info("Subscribed to user delete queue", nil)
+
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -533,6 +539,12 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
+
+	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
+	l.Info("Subscribed to gov sys gc channel", nil)
+
 	return nil
 }
 
@@ -607,4 +619,22 @@ func (s *service) UserApikeyDeleteHook(pinger events.Pinger, msgdata []byte) err
 		}
 	}
 	return nil
+}
+
+func (s *service) UserApprovalGCHook(msgdata []byte) {
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": s.syschannels.GC,
+		"group":   s.streamns + "_WORKER_APPROVAL_GC",
+	})
+	props, err := governor.DecodeSysEventTimestampProps(msgdata)
+	if err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	if err := s.approvals.DeleteBefore(props.Timestamp - time72h); err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	l.Debug("GC user approvals", nil)
 }
