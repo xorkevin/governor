@@ -88,7 +88,7 @@ func (r *repo) GetByID(userid string) (*Model, error) {
 	}
 	m, err := profileModelGetModelEqUserid(d, r.table, userid)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get profile")
+		return nil, db.WrapErr(err, "Failed to get profile")
 	}
 	return m, nil
 }
