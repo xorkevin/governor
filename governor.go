@@ -104,6 +104,9 @@ func (s *Server) init(ctx context.Context) error {
 		l.Info("Init real ip middleware", map[string]string{
 			"proxies": strings.Join(s.config.proxies, ","),
 		})
+	} else {
+		i.Use(realIPMiddleware(nil))
+		l.Info("Init real ip middleware", nil)
 	}
 
 	i.Use(s.reqLoggerMiddleware)
