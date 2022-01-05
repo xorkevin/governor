@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -51,6 +52,17 @@ type (
 
 	ctxKeyRatelimiter struct{}
 )
+
+func (p Params) String() string {
+	b := strings.Builder{}
+	b.WriteString("expiration:")
+	b.WriteString(strconv.FormatInt(p.Expiration, 10))
+	b.WriteString(",period:")
+	b.WriteString(strconv.FormatInt(p.Period, 10))
+	b.WriteString(",limit:")
+	b.WriteString(strconv.FormatInt(p.Limit, 10))
+	return b.String()
+}
 
 // getCtxRootRL returns a root Ratelimiter from the context
 func getCtxRootRL(inj governor.Injector) Ratelimiter {
@@ -154,9 +166,9 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 				}
 				sums := make([]tagSum, 0, len(tags))
 				for _, i := range tags {
-					if i.Params.Period == 0 {
-						s.logger.Error("Invalid ratelimit period 0", map[string]string{
-							"error": "Ratelimit period 0",
+					if i.Params.Period <= 0 {
+						s.logger.Error("Invalid ratelimit period", map[string]string{
+							"error": "Ratelimit period",
 						})
 						continue
 					}

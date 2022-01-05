@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -256,15 +255,11 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) mountEditSecure(r governor.Router) {
 	scopeAccountWrite := m.s.scopens + ".account:write"
-	rf := ratelimit.Compose(
-		m.s.ratelimiter,
-		ratelimit.IPAddress("forgot.ip", 60, 15, 60),
-	)
 	r.Put("/email", m.putEmail, gate.User(m.s.gate, scopeAccountWrite), m.rt)
-	r.Put("/email/verify", m.putEmailVerify, rf)
+	r.Put("/email/verify", m.putEmailVerify, m.rt)
 	r.Put("/password", m.putPassword, gate.User(m.s.gate, scopeAccountWrite), m.rt)
-	r.Put("/password/forgot", m.forgotPassword, rf)
-	r.Put("/password/forgot/reset", m.forgotPasswordReset, rf)
+	r.Put("/password/forgot", m.forgotPassword, m.rt)
+	r.Put("/password/forgot/reset", m.forgotPasswordReset, m.rt)
 	r.Put("/otp", m.addOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)
 	r.Put("/otp/verify", m.commitOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)
 	r.Delete("/otp", m.removeOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)

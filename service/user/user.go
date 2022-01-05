@@ -100,6 +100,9 @@ type (
 		tplemailchange    *htmlTemplate.Template
 		tplforgotpass     *htmlTemplate.Template
 		tplnewuser        *htmlTemplate.Template
+		ratelimitBase     ratelimit.Params
+		ratelimitAuth     ratelimit.Params
+		ratelimitSearch   ratelimit.Params
 		syschannels       governor.SysChannels
 	}
 
@@ -272,6 +275,21 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.newuser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
+	r.SetDefault("ratelimit.base", map[string]interface{}{
+		"expiration": 60,
+		"period":     15,
+		"limit":      240,
+	})
+	r.SetDefault("ratelimit.auth", map[string]interface{}{
+		"expiration": 60,
+		"period":     15,
+		"limit":      120,
+	})
+	r.SetDefault("ratelimit.search", map[string]interface{}{
+		"expiration": 60,
+		"period":     15,
+		"limit":      480,
+	})
 }
 
 func (s *service) router() *router {
@@ -279,9 +297,9 @@ func (s *service) router() *router {
 		s: s,
 		rt: ratelimit.Compose(
 			s.ratelimiter,
-			ratelimit.IPAddress("ip", 60, 15, 240),
-			ratelimit.Userid("id", 60, 15, 240),
-			ratelimit.UseridIPAddress("id_ip", 60, 15, 120),
+			ratelimit.IPAddress("ip", s.ratelimitBase),
+			ratelimit.Userid("id", s.ratelimitBase),
+			ratelimit.UseridIPAddress("id_ip", s.ratelimitAuth),
 		),
 	}
 }
@@ -374,6 +392,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.tplnewuser = t
 	}
 
+	if err := r.Unmarshal("ratelimit.base", &s.ratelimitBase); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse base ratelimit")
+	}
+	if err := r.Unmarshal("ratelimit.auth", &s.ratelimitAuth); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse auth ratelimit")
+	}
+	if err := r.Unmarshal("ratelimit.search", &s.ratelimitSearch); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse search ratelimit")
+	}
+
 	otpsecrets := secretOTP{}
 	if err := r.GetSecret("otpkey", 0, &otpsecrets); err != nil {
 		return governor.ErrWithMsg(err, "Invalid otpkey secrets")
@@ -416,6 +444,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"tplemailchange":        r.GetStr("email.url.emailchange"),
 		"tplforgotpass":         r.GetStr("email.url.forgotpass"),
 		"tplnewuser":            r.GetStr("email.url.newuser"),
+		"ratelimit base":        s.ratelimitBase.String(),
+		"ratelimit auth":        s.ratelimitAuth.String(),
+		"ratelimit search":      s.ratelimitSearch.String(),
 	})
 
 	sr := s.router()

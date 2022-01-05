@@ -338,7 +338,7 @@ func (m *router) mountGet(r governor.Router) {
 	scopeAdminRead := m.s.scopens + ".admin:read"
 	rs := ratelimit.Compose(
 		m.s.ratelimiter,
-		ratelimit.IPAddress("search.ip", 60, 15, 480),
+		ratelimit.IPAddress("search.ip", m.s.ratelimitSearch),
 	)
 	r.Get("/id/{id}", m.getByID, m.rt)
 	r.Get("", m.getByIDPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
