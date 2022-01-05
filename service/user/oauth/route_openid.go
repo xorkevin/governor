@@ -303,13 +303,13 @@ func (m *router) mountOidRoutes(r governor.Router) {
 	scopeAuthorize := m.s.scopens + ".authorize"
 	scopeConnectionRead := m.s.scopens + ".connection:read"
 	scopeConnectionWrite := m.s.scopens + ".connection:write"
-	r.Get("/openid-configuration", m.getOpenidConfig)
-	r.Get(jwksRoute, m.getJWKS)
-	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize))
-	r.Post(tokenRoute, m.authToken, cachecontrol.ControlNoStore(m.s.logger))
-	r.Get(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid))
-	r.Post(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid))
-	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead))
-	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead))
-	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite))
+	r.Get("/openid-configuration", m.getOpenidConfig, m.rt)
+	r.Get(jwksRoute, m.getJWKS, m.rt)
+	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize), m.rt)
+	r.Post(tokenRoute, m.authToken, cachecontrol.ControlNoStore(m.s.logger), m.rt)
+	r.Get(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)
+	r.Post(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)
+	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead), m.rt)
+	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead), m.rt)
+	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite), m.rt)
 }

@@ -104,6 +104,7 @@ func main() {
 	{
 		inj := gov.Injector()
 		orgmodel.NewInCtx(inj, "userorgs")
+		ratelimit.NewSubtreeInCtx(inj, "org")
 		gov.Register("org", "/org", org.NewCtx(inj))
 	}
 	{
@@ -112,12 +113,14 @@ func main() {
 		connmodel.NewInCtx(inj, "oauthconnections")
 		kvstore.NewSubtreeInCtx(inj, "oauth")
 		objstore.NewBucketInCtx(inj, "oauth-app-logo")
+		ratelimit.NewSubtreeInCtx(inj, "oauth")
 		gov.Register("oauth", "/oauth", oauth.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
 		profilemodel.NewInCtx(inj, "profiles")
 		objstore.NewBucketInCtx(inj, "profile-image")
+		ratelimit.NewSubtreeInCtx(inj, "profile")
 		gov.Register("profile", "/profile", profile.NewCtx(inj))
 	}
 	{

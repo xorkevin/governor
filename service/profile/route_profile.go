@@ -213,12 +213,12 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 func (m *router) mountProfileRoutes(r governor.Router) {
 	scopeProfileRead := m.s.scopens + ":read"
 	scopeProfileWrite := m.s.scopens + ":write"
-	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite))
-	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite))
-	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite))
-	r.Delete("/id/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite))
-	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead))
-	r.Get("/id/{id}", m.getProfile)
-	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getProfileImageCC))
-	r.Get("/ids", m.getProfilesBulk)
+	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite), m.rt)
+	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite), m.rt)
+	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite), m.rt)
+	r.Delete("/id/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite), m.rt)
+	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead), m.rt)
+	r.Get("/id/{id}", m.getProfile, m.rt)
+	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getProfileImageCC), m.rt)
+	r.Get("/ids", m.getProfilesBulk, m.rt)
 }

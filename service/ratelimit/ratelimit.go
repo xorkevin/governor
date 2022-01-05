@@ -18,6 +18,7 @@ type (
 	Ratelimiter interface {
 		Ratelimit(tagger Tagger) governor.Middleware
 		Subtree(prefix string) Ratelimiter
+		Base() governor.Middleware
 	}
 
 	// Service is a Gate and governor.Service
@@ -27,8 +28,10 @@ type (
 	}
 
 	service struct {
-		tags   kvstore.KVStore
-		logger governor.Logger
+		tags       kvstore.KVStore
+		logger     governor.Logger
+		paramsBase Params
+		paramsAuth Params
 	}
 
 	// Tag is a request tag
@@ -113,10 +116,37 @@ func New(kv kvstore.KVStore) Service {
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxRootRL(inj, s)
+
+	r.SetDefault("params.base", map[string]interface{}{
+		"expiration": 60,
+		"period":     15,
+		"limit":      240,
+	})
+	r.SetDefault("params.auth", map[string]interface{}{
+		"expiration": 60,
+		"period":     15,
+		"limit":      120,
+	})
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
+	l = s.logger.WithData(map[string]string{
+		"phase": "init",
+	})
+
+	if err := r.Unmarshal("params.base", &s.paramsBase); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse base ratelimit params")
+	}
+	if err := r.Unmarshal("params.auth", &s.paramsAuth); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse auth ratelimit params")
+	}
+
+	l.Info("Loaded config", map[string]string{
+		"params base": s.paramsBase.String(),
+		"params auth": s.paramsAuth.String(),
+	})
+
 	return nil
 }
 
@@ -231,6 +261,15 @@ func (s *service) Subtree(prefix string) Ratelimiter {
 	}
 }
 
+func (s *service) Base() governor.Middleware {
+	return Compose(
+		s,
+		IPAddress("ip", s.paramsBase),
+		Userid("id", s.paramsBase),
+		UseridIPAddress("id_ip", s.paramsAuth),
+	)
+}
+
 type (
 	tree struct {
 		kv   kvstore.KVStore
@@ -247,6 +286,10 @@ func (t *tree) Subtree(prefix string) Ratelimiter {
 		kv:   t.kv.Subtree(prefix),
 		base: t.base,
 	}
+}
+
+func (t *tree) Base() governor.Middleware {
+	return t.base.Base()
 }
 
 // Compose composes rate limit taggers

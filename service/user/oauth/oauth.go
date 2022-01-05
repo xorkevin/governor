@@ -11,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
@@ -51,6 +52,7 @@ type (
 		logoImgDir   objstore.Dir
 		users        user.Users
 		events       events.Events
+		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
 		logger       governor.Logger
 		rolens       string
@@ -72,7 +74,8 @@ type (
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.Middleware
 	}
 
 	ctxKeyOAuth struct{}
@@ -101,13 +104,25 @@ func NewCtx(inj governor.Injector) Service {
 	obj := objstore.GetCtxBucket(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(apps, connections, tokenizer, kv, obj, users, ev, g, useropts)
+	return New(apps, connections, tokenizer, kv, obj, users, ev, ratelimiter, g, useropts)
 }
 
 // New returns a new Apikey
-func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer, kv kvstore.KVStore, obj objstore.Bucket, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(
+	apps model.Repo,
+	connections connmodel.Repo,
+	tokenizer token.Tokenizer,
+	kv kvstore.KVStore,
+	obj objstore.Bucket,
+	users user.Users,
+	ev events.Events,
+	ratelimiter ratelimit.Ratelimiter,
+	g gate.Gate,
+	useropts user.Opts,
+) Service {
 	return &service{
 		apps:         apps,
 		connections:  connections,
@@ -117,6 +132,7 @@ func New(apps model.Repo, connections connmodel.Repo, tokenizer token.Tokenizer,
 		logoImgDir:   obj.Subdir("logo"),
 		users:        users,
 		events:       ev,
+		ratelimiter:  ratelimiter,
 		gate:         g,
 		codeTime:     time1m,
 		accessTime:   time5m,
@@ -144,7 +160,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.Base(),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
@@ -28,20 +29,22 @@ type (
 	}
 
 	service struct {
-		orgs       model.Repo
-		roles      role.Roles
-		events     events.Events
-		gate       gate.Gate
-		logger     governor.Logger
-		scopens    string
-		streamns   string
-		opts       Opts
-		streamsize int64
-		eventsize  int32
+		orgs        model.Repo
+		roles       role.Roles
+		events      events.Events
+		ratelimiter ratelimit.Ratelimiter
+		gate        gate.Gate
+		logger      governor.Logger
+		scopens     string
+		streamns    string
+		opts        Opts
+		streamsize  int64
+		eventsize   int32
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.Middleware
 	}
 
 	// DeleteOrgProps are properties of a deleted org
@@ -92,17 +95,19 @@ func NewCtx(inj governor.Injector) Service {
 	orgs := model.GetCtxRepo(inj)
 	roles := role.GetCtxRoles(inj)
 	ev := events.GetCtxEvents(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	return New(orgs, roles, ev, g)
+	return New(orgs, roles, ev, ratelimiter, g)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, ev events.Events, g gate.Gate) Service {
+func New(orgs model.Repo, roles role.Roles, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
-		orgs:   orgs,
-		roles:  roles,
-		events: ev,
-		gate:   g,
+		orgs:        orgs,
+		roles:       roles,
+		events:      ev,
+		ratelimiter: ratelimiter,
+		gate:        g,
 	}
 }
 
@@ -123,7 +128,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.Base(),
 	}
 }
 

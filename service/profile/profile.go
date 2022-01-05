@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -29,6 +30,7 @@ type (
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
 		events        events.Events
+		ratelimiter   ratelimit.Ratelimiter
 		gate          gate.Gate
 		logger        governor.Logger
 		scopens       string
@@ -37,7 +39,8 @@ type (
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.Middleware
 	}
 
 	ctxKeyProfiles struct{}
@@ -62,18 +65,20 @@ func NewCtx(inj governor.Injector) Service {
 	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(profiles, obj, ev, g, useropts)
+	return New(profiles, obj, ev, ratelimiter, g, useropts)
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		profiles:      profiles,
 		profileBucket: obj,
 		profileDir:    obj.Subdir("profileimage"),
 		events:        ev,
+		ratelimiter:   ratelimiter,
 		gate:          g,
 		useropts:      useropts,
 	}
@@ -87,7 +92,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.Base(),
 	}
 }
 

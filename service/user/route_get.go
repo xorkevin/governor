@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 )
@@ -336,10 +335,6 @@ func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
 func (m *router) mountGet(r governor.Router) {
 	scopeAccountRead := m.s.scopens + ".account:read"
 	scopeAdminRead := m.s.scopens + ".admin:read"
-	rs := ratelimit.Compose(
-		m.s.ratelimiter,
-		ratelimit.IPAddress("search.ip", m.s.ratelimitSearch),
-	)
 	r.Get("/id/{id}", m.getByID, m.rt)
 	r.Get("", m.getByIDPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
 	r.Get("/roles", m.getUserRolesPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
@@ -352,5 +347,5 @@ func (m *router) mountGet(r governor.Router) {
 	r.Get("/role/{role}", m.getUsersByRole, m.rt)
 	r.Get("/all", m.getAllUserInfo, gate.Admin(m.s.gate, scopeAdminRead), m.rt)
 	r.Get("/ids", m.getUserInfoBulkPublic, m.rt)
-	r.Get("/search", m.searchUsers, rs)
+	r.Get("/search", m.searchUsers, m.rt)
 }

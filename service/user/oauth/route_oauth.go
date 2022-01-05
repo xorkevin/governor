@@ -251,13 +251,13 @@ const ()
 func (m *router) mountAppRoutes(r governor.Router) {
 	scopeAppRead := m.s.scopens + ".app:read"
 	scopeAppWrite := m.s.scopens + ".app:write"
-	r.Get("/id/{clientid}", m.getApp)
-	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, nil, 60, m.getAppLogoCC))
-	r.Get("", m.getAppGroup, gate.Member(m.s.gate, m.s.rolens, scopeAppRead))
-	r.Get("/ids", m.getAppBulk)
-	r.Post("", m.createApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
-	r.Put("/id/{clientid}", m.updateApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
-	r.Put("/id/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
-	r.Put("/id/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
-	r.Delete("/id/{clientid}", m.deleteApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite))
+	r.Get("/id/{clientid}", m.getApp, m.rt)
+	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, nil, 60, m.getAppLogoCC), m.rt)
+	r.Get("", m.getAppGroup, gate.Member(m.s.gate, m.s.rolens, scopeAppRead), m.rt)
+	r.Get("/ids", m.getAppBulk, m.rt)
+	r.Post("", m.createApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
+	r.Put("/id/{clientid}", m.updateApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
+	r.Put("/id/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
+	r.Put("/id/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
+	r.Delete("/id/{clientid}", m.deleteApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
 }

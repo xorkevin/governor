@@ -78,6 +78,16 @@ mailinglist:
   mockdnssource: dc.anvil_out/governor/mockdns.yaml
   streamsize: 200M
   eventsize: 2K
+ratelimit:
+  params:
+    base:
+      expiration: 60
+      period: 15
+      limit: 240
+    auth:
+      expiration: 60
+      period: 15
+      limit: 120
 role:
   rolecache: 24h
 apikey:
@@ -119,19 +129,6 @@ user:
       emailchange: /a/confirm/email?key={{.Userid}}.{{.Key}}
       forgotpass: /x/resetpass?key={{.Userid}}.{{.Key}}
       newuser: /x/confirm?userid={{.Userid}}&key={{.Key}}
-  ratelimit:
-    base:
-      expiration: 60
-      period: 15
-      limit: 240
-    auth:
-      expiration: 60
-      period: 15
-      limit: 120
-    search:
-      expiration: 60
-      period: 15
-      limit: 480
 oauth:
   codetime: 1m
   accesstime: 5m

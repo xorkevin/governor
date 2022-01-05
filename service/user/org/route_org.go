@@ -188,11 +188,11 @@ func (m *router) orgMember(c governor.Context, _ string) (string, bool, bool) {
 
 func (m *router) mountRoute(r governor.Router) {
 	scopeOrgWrite := m.s.scopens + ":write"
-	r.Get("/id/{id}", m.getOrg)
+	r.Get("/id/{id}", m.getOrg, m.rt)
 	r.Get("/name/{name}", m.getOrgByName)
-	r.Get("/ids", m.getOrgs)
-	r.Get("", m.getAllOrgs)
-	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite))
-	r.Put("/id/{id}", m.updateOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite))
-	r.Delete("/id/{id}", m.deleteOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite))
+	r.Get("/ids", m.getOrgs, m.rt)
+	r.Get("", m.getAllOrgs, m.rt)
+	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite), m.rt)
+	r.Put("/id/{id}", m.updateOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite), m.rt)
+	r.Delete("/id/{id}", m.deleteOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite), m.rt)
 }
