@@ -32,15 +32,20 @@ type (
 
 	// Tag is a request tag
 	Tag struct {
-		Key        string
-		Value      string
-		Expiration int64
-		Period     int64
-		Limit      int64
+		Key    string
+		Value  string
+		Params Params
 	}
 
 	// Tagger computes tags for requests
 	Tagger func(c governor.Context) []Tag
+
+	// Params specify rate limiting params
+	Params struct {
+		Expiration int64 `json:"expiration"`
+		Period     int64 `json:"period"`
+		Limit      int64 `json:"limit"`
+	}
 
 	ctxKeyRootRL struct{}
 
@@ -149,23 +154,23 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 				}
 				sums := make([]tagSum, 0, len(tags))
 				for _, i := range tags {
-					if i.Period == 0 {
+					if i.Params.Period == 0 {
 						s.logger.Error("Invalid ratelimit period 0", map[string]string{
 							"error": "Ratelimit period 0",
 						})
 						continue
 					}
-					t := now / i.Period
-					l := divroundup(i.Expiration, i.Period)
+					t := now / i.Params.Period
+					l := divroundup(i.Params.Expiration, i.Params.Period)
 					periods := make([]kvstore.IntResulter, 0, l)
 					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
 					periods = append(periods, multiget.Incr(k, 1))
-					multiget.Expire(k, i.Period+1)
+					multiget.Expire(k, i.Params.Period+1)
 					for j := int64(1); j < l; j++ {
 						periods = append(periods, multiget.GetInt(multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
 					}
 					sums = append(sums, tagSum{
-						limit:   i.Limit,
+						limit:   i.Params.Limit,
 						periods: periods,
 					})
 				}
@@ -244,8 +249,8 @@ func Compose(r Ratelimiter, taggers ...Tagger) governor.Middleware {
 }
 
 // IPAddress tags ips
-func IPAddress(key string, expiration, period, limit int64) Tagger {
-	if period <= 0 {
+func IPAddress(key string, params Params) Tagger {
+	if params.Period <= 0 {
 		panic("period must be positive")
 	}
 	return func(c governor.Context) []Tag {
@@ -255,19 +260,17 @@ func IPAddress(key string, expiration, period, limit int64) Tagger {
 		}
 		return []Tag{
 			{
-				Key:        key,
-				Value:      ip.String(),
-				Expiration: expiration,
-				Period:     period,
-				Limit:      limit,
+				Key:    key,
+				Value:  ip.String(),
+				Params: params,
 			},
 		}
 	}
 }
 
 // Userid tags userids
-func Userid(key string, expiration, period, limit int64) Tagger {
-	if period <= 0 {
+func Userid(key string, params Params) Tagger {
+	if params.Period <= 0 {
 		panic("period must be positive")
 	}
 	return func(c governor.Context) []Tag {
@@ -277,19 +280,17 @@ func Userid(key string, expiration, period, limit int64) Tagger {
 		}
 		return []Tag{
 			{
-				Key:        key,
-				Value:      userid,
-				Expiration: expiration,
-				Period:     period,
-				Limit:      limit,
+				Key:    key,
+				Value:  userid,
+				Params: params,
 			},
 		}
 	}
 }
 
 // UseridIPAddress tags userid ip tuples
-func UseridIPAddress(key string, expiration, period, limit int64) Tagger {
-	if period <= 0 {
+func UseridIPAddress(key string, params Params) Tagger {
+	if params.Period <= 0 {
 		panic("period must be positive")
 	}
 	return func(c governor.Context) []Tag {
@@ -303,11 +304,9 @@ func UseridIPAddress(key string, expiration, period, limit int64) Tagger {
 		}
 		return []Tag{
 			{
-				Key:        key,
-				Value:      userid + "_" + ip.String(),
-				Expiration: expiration,
-				Period:     period,
-				Limit:      limit,
+				Key:    key,
+				Value:  userid + "_" + ip.String(),
+				Params: params,
 			},
 		}
 	}

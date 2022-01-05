@@ -294,7 +294,10 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountAuth(r governor.Router) {
-	rt := ratelimit.Compose(m.s.ratelimiter, ratelimit.IPAddress("auth.ip", 60, 15, 240))
+	rt := ratelimit.Compose(
+		m.s.ratelimiter,
+		ratelimit.IPAddress("auth.ip", 60, 15, 240),
+	)
 	r.Post("/login", m.loginUser, rt)
 	r.Post("/exchange", m.exchangeToken, rt)
 	r.Post("/refresh", m.refreshToken, rt)
