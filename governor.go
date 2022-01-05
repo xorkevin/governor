@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -85,16 +86,28 @@ func (s *Server) init(ctx context.Context) error {
 	i := chi.NewRouter()
 	s.i = i
 
-	l.Info("init server instance", nil)
+	l.Info("Init server instance", nil)
 
 	i.Use(stripSlashesMiddleware)
-	l.Info("init strip slashes middleware", nil)
+	l.Info("Init strip slashes middleware", nil)
 
-	i.Use(realIPMiddleware(nil))
-	l.Info("init real ip middleware", nil)
+	if len(s.config.proxies) > 0 {
+		proxies := make([]net.IPNet, 0, len(s.config.proxies))
+		for _, i := range s.config.proxies {
+			_, k, err := net.ParseCIDR(i)
+			if err != nil {
+				return err
+			}
+			proxies = append(proxies, *k)
+		}
+		i.Use(realIPMiddleware(proxies))
+		l.Info("Init real ip middleware", map[string]string{
+			"proxies": strings.Join(s.config.proxies, ","),
+		})
+	}
 
 	i.Use(s.reqLoggerMiddleware)
-	l.Info("init request logger", nil)
+	l.Info("Init request logger", nil)
 
 	if len(s.config.rewrite) > 0 {
 		k := make([]string, 0, len(s.config.rewrite))
@@ -105,7 +118,7 @@ func (s *Server) init(ctx context.Context) error {
 			k = append(k, i.String())
 		}
 		i.Use(routeRewriteMiddleware(s.config.rewrite))
-		l.Info("init route rewriter middleware", map[string]string{
+		l.Info("Init route rewriter middleware", map[string]string{
 			"rules": strings.Join(k, "; "),
 		})
 	}
@@ -119,7 +132,7 @@ func (s *Server) init(ctx context.Context) error {
 			k = append(k, i.pattern)
 		}
 		i.Use(corsPathsAllowAllMiddleware(s.config.allowpaths))
-		l.Info("init middleware allow all cors", map[string]string{
+		l.Info("Init middleware allow all cors", map[string]string{
 			"paths": strings.Join(k, "; "),
 		})
 	}
@@ -138,32 +151,32 @@ func (s *Server) init(ctx context.Context) error {
 			AllowCredentials: true,
 			MaxAge:           300,
 		}))
-		l.Info("init middleware CORS", map[string]string{
+		l.Info("Init middleware CORS", map[string]string{
 			"origins": strings.Join(s.config.origins, ", "),
 		})
 	}
 
 	if limit, err := bytefmt.ToBytes(s.config.maxReqSize); err != nil {
-		l.Warn("invalid maxreqsize format for middlware body limit", map[string]string{
+		l.Warn("Invalid maxreqsize format for middlware body limit", map[string]string{
 			"maxreqsize": s.config.maxReqSize,
 		})
 	} else {
 		i.Use(s.bodyLimitMiddleware(limit))
-		l.Info("init middleware body limit", map[string]string{
+		l.Info("Init middleware body limit", map[string]string{
 			"maxreqsize": s.config.maxReqSize,
 		})
 	}
 
 	i.Use(middleware.Compress(gzip.DefaultCompression))
-	l.Info("init middleware gzip", nil)
+	l.Info("Init middleware gzip", nil)
 
 	i.Use(middleware.Recoverer)
-	l.Info("init middleware Recoverer", nil)
+	l.Info("Init middleware Recoverer", nil)
 
 	s.initSetup(s.router(s.config.BaseURL + "/setupz"))
-	l.Info("init setup service", nil)
+	l.Info("Init setup service", nil)
 	s.initHealth(s.router(s.config.BaseURL + "/healthz"))
-	l.Info("init health service", nil)
+	l.Info("Init health service", nil)
 
 	if err := s.initServices(ctx); err != nil {
 		return err
@@ -183,7 +196,7 @@ func (s *Server) Start() error {
 	defer cancel()
 	if err := s.init(ctx); err != nil {
 		if s.logger != nil {
-			s.logger.Error("init failed", map[string]string{
+			s.logger.Error("Init failed", map[string]string{
 				"error": err.Error(),
 				"phase": "init",
 			})

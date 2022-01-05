@@ -20,6 +20,7 @@ routerewrite:
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
     replace: /api/oauth/openid-configuration
+proxies: []
 vault:
   filesource: dc.anvil_out/governor/secrets.yaml
 setupsecret: setupsecret
@@ -124,7 +125,7 @@ oauth:
   refreshtime: 168h
   keycache: 24h
   realm: governor
-  issuer: http://governor.dev.localhost:8080/
+  issuer: http://governor.dev.localhost:8080
   epauthorize: http://localhost:3000/oauth/auth
   ephost: http://governor.dev.localhost:8080
   epprofile: http://localhost:3000/u/{{`{{.Username}}`}}

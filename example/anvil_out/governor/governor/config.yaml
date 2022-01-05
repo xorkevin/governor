@@ -20,6 +20,7 @@ routerewrite:
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
     replace: /api/oauth/openid-configuration
+proxies: []
 vault:
   addr: http://vault.vault.svc.cluster.local:8200
   k8s:

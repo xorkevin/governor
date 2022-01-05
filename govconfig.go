@@ -79,6 +79,7 @@ type (
 		origins       []string
 		allowpaths    []*corsPathRule
 		rewrite       []*rewriteRule
+		proxies       []string
 		Port          string
 		BaseURL       string
 		Hostname      string
@@ -163,6 +164,7 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("alloworigins", []string{})
 	v.SetDefault("allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
+	v.SetDefault("proxies", []string{})
 	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -238,6 +240,7 @@ func (c *Config) init() error {
 		return err
 	}
 	c.rewrite = rewrite
+	c.proxies = c.config.GetStringSlice("proxies")
 	c.Port = c.config.GetString("port")
 	c.BaseURL = c.config.GetString("baseurl")
 	var err error
