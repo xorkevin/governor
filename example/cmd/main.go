@@ -128,6 +128,7 @@ func main() {
 		couriermodel.NewInCtx(inj, "courierlinks", "courierbrands")
 		kvstore.NewSubtreeInCtx(inj, "courier")
 		objstore.NewBucketInCtx(inj, "link-qr-image")
+		ratelimit.NewSubtreeInCtx(inj, "courier")
 		gov.Register("courier", "/courier", courier.NewCtx(inj))
 	}
 	{

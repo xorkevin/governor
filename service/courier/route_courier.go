@@ -301,13 +301,13 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeLinkWrite := m.s.scopens + ".link:write"
 	scopeBrandRead := m.s.scopens + ".brand:read"
 	scopeBrandWrite := m.s.scopens + ".brand:write"
-	r.Get("/link/id/{linkid}", m.getLink)
-	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getLinkImageCC))
-	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead))
-	r.Post("/link/c/{creatorid}", m.createLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
-	r.Delete("/link/c/{creatorid}/id/{linkid}", m.deleteLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite))
-	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, nil, 60, m.getBrandImageCC))
-	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead))
-	r.Post("/brand/c/{creatorid}", m.createBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
-	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite))
+	r.Get("/link/id/{linkid}", m.getLink, m.rt)
+	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getLinkImageCC), m.rt)
+	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead), m.rt)
+	r.Post("/link/c/{creatorid}", m.createLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite), m.rt)
+	r.Delete("/link/c/{creatorid}/id/{linkid}", m.deleteLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite), m.rt)
+	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, nil, 60, m.getBrandImageCC), m.rt)
+	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), m.rt)
+	r.Post("/brand/c/{creatorid}", m.createBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite), m.rt)
+	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite), m.rt)
 }

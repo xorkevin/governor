@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org"
@@ -40,6 +41,7 @@ type (
 		linkImgDir    objstore.Dir
 		brandImgDir   objstore.Dir
 		events        events.Events
+		ratelimiter   ratelimit.Ratelimiter
 		gate          gate.Gate
 		logger        governor.Logger
 		scopens       string
@@ -52,7 +54,8 @@ type (
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.Middleware
 	}
 
 	ctxKeyCourier struct{}
@@ -78,14 +81,24 @@ func NewCtx(inj governor.Injector) Service {
 	kv := kvstore.GetCtxKVStore(inj)
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
 	orgopts := org.GetCtxOpts(inj)
-	return New(repo, kv, obj, ev, g, useropts, orgopts)
+	return New(repo, kv, obj, ev, ratelimiter, g, useropts, orgopts)
 }
 
 // New creates a new Courier service
-func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Events, g gate.Gate, useropts user.Opts, orgopts org.Opts) Service {
+func New(
+	repo model.Repo,
+	kv kvstore.KVStore,
+	obj objstore.Bucket,
+	ev events.Events,
+	ratelimiter ratelimit.Ratelimiter,
+	g gate.Gate,
+	useropts user.Opts,
+	orgopts org.Opts,
+) Service {
 	return &service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),
@@ -93,6 +106,7 @@ func New(repo model.Repo, kv kvstore.KVStore, obj objstore.Bucket, ev events.Eve
 		linkImgDir:    obj.Subdir("qr"),
 		brandImgDir:   obj.Subdir("brand"),
 		events:        ev,
+		ratelimiter:   ratelimiter,
 		gate:          g,
 		cacheTime:     time24h,
 		useropts:      useropts,
@@ -112,7 +126,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.Base(),
 	}
 }
 
