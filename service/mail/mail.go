@@ -83,8 +83,9 @@ type (
 
 	// Addr is a mail address
 	Addr struct {
-		Address string `json:"address"`
-		Name    string `json:"name"`
+		ReturnPath string `json:"retpath"`
+		Address    string `json:"address"`
+		Name       string `json:"name"`
 	}
 
 	mailmsg struct {
@@ -116,6 +117,7 @@ type (
 		host              string
 		addr              string
 		msgiddomain       string
+		returnpath        string
 		fromAddress       string
 		fromName          string
 		streamsize        int64
@@ -222,6 +224,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.msgiddomain = r.GetStr("msgiddomain")
+	s.returnpath = r.GetStr("returnpath")
 	s.fromAddress = r.GetStr("fromaddress")
 	s.fromName = r.GetStr("fromname")
 	var err error
@@ -257,6 +260,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	l.Info("Initialize mail service", map[string]string{
 		"smtp server addr":    s.addr,
 		"msgid domain":        s.msgiddomain,
+		"return path":         s.returnpath,
 		"sender address":      s.fromAddress,
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
@@ -531,7 +535,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	if err := s.handleSendMail(emmsg.From.Address, to, msg); err != nil {
+	if err := s.handleSendMail(emmsg.From.ReturnPath, to, msg); err != nil {
 		return err
 	}
 	if len(msgpath) != 0 {
@@ -684,6 +688,9 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 		}
 	}
 
+	if from.ReturnPath == "" {
+		from.ReturnPath = s.returnpath
+	}
 	if from.Address == "" {
 		from.Address = s.fromAddress
 	}
@@ -765,6 +772,9 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 		tag = auth.String()
 	}
 
+	if from.ReturnPath == "" {
+		from.ReturnPath = s.returnpath
+	}
 	if from.Address == "" {
 		from.Address = s.fromAddress
 	}
@@ -843,7 +853,7 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 	}
 
 	if from == "" {
-		from = s.fromAddress
+		from = s.returnpath
 	}
 	toAddrs := make([]Addr, 0, len(to))
 	for _, i := range to {
@@ -853,7 +863,7 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 	}
 	msg := mailmsg{
 		From: Addr{
-			Address: from,
+			ReturnPath: from,
 		},
 		To:   toAddrs,
 		Kind: mailMsgKindFwd,

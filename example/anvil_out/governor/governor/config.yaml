@@ -65,6 +65,7 @@ mail:
   host: mailhog.governor.svc.cluster.local
   port: 1025
   msgiddomain: xorkevin.com
+  returnpath: no-reply@mail.xorkevin.com
   fromaddress: no-reply@xorkevin.com
   fromname: Governor
   streamsize: 200M
