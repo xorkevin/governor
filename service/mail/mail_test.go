@@ -18,16 +18,16 @@ func TestBuildMail(t *testing.T) {
 
 	for _, tc := range []struct {
 		Test    string
+		MsgID   string
 		Subject string
-		Sender  string
 		From    Addr
 		To      []Addr
 		Body    string
 	}{
 		{
 			Test:    "text email with multiple recipients",
+			MsgID:   "msgid@mail.example.com",
 			Subject: "Hello World",
-			Sender:  "example.com",
 			From: Addr{
 				Address: "kevin@xorkevin.com",
 				Name:    "Kevin Wang",
@@ -45,10 +45,11 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.Sender, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), nil, &buf))
+			assert.NoError(msgToBytes(nil, tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), nil, &buf))
 			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)
+			assert.Equal("<"+tc.MsgID+">", m.Header.Get("Message-Id"))
 			assert.Equal(tc.Subject, m.Header.Get("Subject"))
 			from, err := m.Header.AddressList("From")
 			assert.NoError(err)
@@ -65,15 +66,6 @@ func TestBuildMail(t *testing.T) {
 			date, err := m.Header.Date()
 			assert.NoError(err)
 			assert.False(date.IsZero())
-			{
-				id := m.Header.Get("Message-Id")
-				assert.True(strings.HasPrefix(id, "<"))
-				assert.True(strings.HasSuffix(id, ">"))
-				id = strings.TrimSuffix(strings.TrimPrefix(id, "<"), ">")
-				parts := strings.Split(id, "@")
-				assert.Len(parts, 2)
-				assert.Equal(tc.Sender, parts[1])
-			}
 			assert.Equal("quoted-printable", m.Header.Get("Content-Transfer-Encoding"))
 			plaincontenttype, plainparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 			assert.NoError(err)
@@ -87,8 +79,8 @@ func TestBuildMail(t *testing.T) {
 
 	for _, tc := range []struct {
 		Test     string
+		MsgID    string
 		Subject  string
-		Sender   string
 		From     Addr
 		To       []Addr
 		Body     string
@@ -97,7 +89,7 @@ func TestBuildMail(t *testing.T) {
 		{
 			Test:    "text and html email with multiple recipients",
 			Subject: "Hello World",
-			Sender:  "example.com",
+			MsgID:   "msgid@mail.example.com",
 			From: Addr{
 				Address: "kevin@xorkevin.com",
 				Name:    "Kevin Wang",
@@ -116,10 +108,11 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.Sender, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), strings.NewReader(tc.HtmlBody), &buf))
+			assert.NoError(msgToBytes(nil, tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), strings.NewReader(tc.HtmlBody), &buf))
 			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)
+			assert.Equal("<"+tc.MsgID+">", m.Header.Get("Message-Id"))
 			assert.Equal(tc.Subject, m.Header.Get("Subject"))
 			from, err := m.Header.AddressList("From")
 			assert.NoError(err)
@@ -136,15 +129,6 @@ func TestBuildMail(t *testing.T) {
 			date, err := m.Header.Date()
 			assert.NoError(err)
 			assert.False(date.IsZero())
-			{
-				id := m.Header.Get("Message-Id")
-				assert.True(strings.HasPrefix(id, "<"))
-				assert.True(strings.HasSuffix(id, ">"))
-				id = strings.TrimSuffix(strings.TrimPrefix(id, "<"), ">")
-				parts := strings.Split(id, "@")
-				assert.Len(parts, 2)
-				assert.Equal(tc.Sender, parts[1])
-			}
 			mixedcontenttype, mixedparams, err := mime.ParseMediaType(m.Header.Get("Content-Type"))
 			assert.NoError(err)
 			assert.Equal("multipart/mixed", mixedcontenttype)

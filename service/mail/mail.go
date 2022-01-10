@@ -43,9 +43,9 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
-		SendStream(from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error
-		FwdStream(from string, to []string, size int64, body io.Reader, encrypt bool) error
+		Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
+		SendStream(retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error
+		FwdStream(retpath string, to []string, size int64, body io.Reader, encrypt bool) error
 	}
 
 	// Service is a Mailer and governor.Service
@@ -61,12 +61,14 @@ type (
 	}
 
 	tplData struct {
+		MsgID     string `json:"msgid"`
 		Tpl       Tpl    `json:"tpl"`
 		Emdata    string `json:"emdata"`
 		Encrypted bool   `json:"encrypted"`
 	}
 
 	rawData struct {
+		MsgID     string `json:"msgid"`
 		Subject   string `json:"subject"`
 		Path      string `json:"path"`
 		Key       string `json:"key"`
@@ -83,18 +85,18 @@ type (
 
 	// Addr is a mail address
 	Addr struct {
-		ReturnPath string `json:"retpath"`
-		Address    string `json:"address"`
-		Name       string `json:"name"`
+		Address string `json:"address"`
+		Name    string `json:"name"`
 	}
 
 	mailmsg struct {
-		From    Addr    `json:"from"`
-		To      []Addr  `json:"to"`
-		Kind    string  `json:"kind"`
-		TplData tplData `json:"tpl_data"`
-		RawData rawData `json:"raw_data"`
-		FwdData fwdData `json:"fwd_data"`
+		ReturnPath string  `json:"retpath"`
+		From       Addr    `json:"from"`
+		To         []Addr  `json:"to"`
+		Kind       string  `json:"kind"`
+		TplData    tplData `json:"tpl_data"`
+		RawData    rawData `json:"raw_data"`
+		FwdData    fwdData `json:"fwd_data"`
 	}
 
 	msgbuilder struct {
@@ -424,9 +426,11 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			msg = hunter2.NewDecStreamReader(stream, auth, msg)
 		}
 	} else {
+		var msgid string
 		var subject, body, htmlbody io.Reader
 		if emmsg.Kind == mailMsgKindRaw {
 			data := emmsg.RawData
+			msgid = data.MsgID
 			b1, _, err := s.sendMailDir.Get(data.Path)
 			if err != nil {
 				if errors.Is(err, objstore.ErrNotFound{}) {
@@ -476,6 +480,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			subject = strings.NewReader(data.Subject)
 		} else if emmsg.Kind == mailMsgKindTpl {
 			data := emmsg.TplData
+			msgid = data.MsgID
 			if data.Encrypted {
 				var err error
 				data.Emdata, err = s.maildataDecrypter.Decrypt(data.Emdata)
@@ -516,7 +521,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 		}
 
 		b := &bytes.Buffer{}
-		if err := msgToBytes(s.logger, s.msgiddomain, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
+		if err := msgToBytes(s.logger, msgid, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
 			return err
 		}
 		msg = b
@@ -535,7 +540,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	if err := s.handleSendMail(emmsg.From.ReturnPath, to, msg); err != nil {
+	if err := s.handleSendMail(emmsg.ReturnPath, to, msg); err != nil {
 		return err
 	}
 	if len(msgpath) != 0 {
@@ -548,13 +553,9 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 	return nil
 }
 
-func msgToBytes(l governor.Logger, msgiddomain string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
+func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
 	h := emmail.Header{}
-	u, err := uid.NewSnowflake(mailUIDRandSize)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate mail msg id")
-	}
-	h.SetMessageID(fmt.Sprintf("%s@%s", u.Base32(), msgiddomain))
+	h.SetMessageID(msgid)
 	h.SetDate(time.Now().Round(0).In(time.UTC))
 	subj := strings.Builder{}
 	if _, err := io.Copy(&subj, subject); err != nil {
@@ -670,11 +671,25 @@ func msgToBytes(l governor.Logger, msgiddomain string, from Addr, to []Addr, sub
 	return nil
 }
 
+func genMsgID(msgiddomain string) (string, error) {
+	u, err := uid.NewSnowflake(mailUIDRandSize)
+	if err != nil {
+		return "", governor.ErrWithMsg(err, "Failed to generate mail msg id")
+	}
+	return fmt.Sprintf("%s@%s", u.Base32(), msgiddomain), nil
+}
+
 // Send creates and sends a message given a template and data
-func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
+func (s *service) Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
+
+	msgid, err := genMsgID(s.msgiddomain)
+	if err != nil {
+		return err
+	}
+
 	databytes, err := json.Marshal(emdata)
 	if err != nil {
 		return governor.ErrWithKind(err, ErrInvalidMail{}, "Failed to encode email data to JSON")
@@ -688,8 +703,8 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 		}
 	}
 
-	if from.ReturnPath == "" {
-		from.ReturnPath = s.returnpath
+	if retpath == "" {
+		retpath = s.returnpath
 	}
 	if from.Address == "" {
 		from.Address = s.fromAddress
@@ -698,10 +713,12 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 		from.Name = s.fromName
 	}
 	msg := mailmsg{
-		From: from,
-		To:   to,
-		Kind: mailMsgKindTpl,
+		ReturnPath: retpath,
+		From:       from,
+		To:         to,
+		Kind:       mailMsgKindTpl,
 		TplData: tplData{
+			MsgID:     msgid,
 			Tpl:       tpl,
 			Emdata:    datastring,
 			Encrypted: encrypt,
@@ -719,9 +736,14 @@ func (s *service) Send(from Addr, to []Addr, tpl Tpl, emdata interface{}, encryp
 }
 
 // SendStream creates and sends a message from a given body
-func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
+func (s *service) SendStream(retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
+	}
+
+	msgid, err := genMsgID(s.msgiddomain)
+	if err != nil {
+		return err
 	}
 
 	u, err := uid.NewSnowflake(mailUIDRandSize)
@@ -772,8 +794,8 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 		tag = auth.String()
 	}
 
-	if from.ReturnPath == "" {
-		from.ReturnPath = s.returnpath
+	if retpath == "" {
+		retpath = s.returnpath
 	}
 	if from.Address == "" {
 		from.Address = s.fromAddress
@@ -782,10 +804,12 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 		from.Name = s.fromName
 	}
 	msg := mailmsg{
-		From: from,
-		To:   to,
-		Kind: mailMsgKindRaw,
+		ReturnPath: retpath,
+		From:       from,
+		To:         to,
+		Kind:       mailMsgKindRaw,
 		RawData: rawData{
+			MsgID:     msgid,
 			Subject:   subject,
 			Path:      path,
 			Key:       key,
@@ -805,7 +829,7 @@ func (s *service) SendStream(from Addr, to []Addr, subject string, size int64, b
 }
 
 // FwdStream forwards an rfc5322 message
-func (s *service) FwdStream(from string, to []string, size int64, body io.Reader, encrypt bool) error {
+func (s *service) FwdStream(retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
 		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
@@ -852,8 +876,8 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 		tag = auth.String()
 	}
 
-	if from == "" {
-		from = s.returnpath
+	if retpath == "" {
+		retpath = s.returnpath
 	}
 	toAddrs := make([]Addr, 0, len(to))
 	for _, i := range to {
@@ -862,11 +886,9 @@ func (s *service) FwdStream(from string, to []string, size int64, body io.Reader
 		})
 	}
 	msg := mailmsg{
-		From: Addr{
-			ReturnPath: from,
-		},
-		To:   toAddrs,
-		Kind: mailMsgKindFwd,
+		ReturnPath: retpath,
+		To:         toAddrs,
+		Kind:       mailMsgKindFwd,
 		FwdData: fwdData{
 			Path:      path,
 			Key:       key,

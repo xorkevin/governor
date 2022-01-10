@@ -137,7 +137,7 @@ func (s *service) Login(userid, password, code, backup, sessionID, ipaddr, usera
 			Time:      time.Unix(sm.Time, 0).UTC().Format(time.RFC3339),
 			UserAgent: sm.UserAgent,
 		}
-		if err := s.mailer.Send(mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newLoginTemplate), emdata, false); err != nil {
+		if err := s.mailer.Send("", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newLoginTemplate), emdata, false); err != nil {
 			s.logger.Error("fail send new login email", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "newloginemail",
