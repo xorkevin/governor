@@ -146,6 +146,11 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
 	}
+
+	if err := s.checkUsersExist(userids); err != nil {
+		return err
+	}
+
 	if members, err := s.repo.GetChatMembers(chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to get chat members")
 	} else if len(members) != 0 {
@@ -161,10 +166,6 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 			Status:  http.StatusBadRequest,
 			Message: "May not have more than 255 chat members",
 		}), governor.ErrOptInner(err))
-	}
-
-	if err := s.checkUsersExist(userids); err != nil {
-		return err
 	}
 
 	members, now := s.repo.AddMembers(m, userids)
@@ -189,6 +190,7 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
 	}
+
 	if members, err := s.repo.GetChatMembers(chatid, userids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to get chat members")
 	} else if len(members) != len(userids) {
