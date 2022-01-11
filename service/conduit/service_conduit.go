@@ -10,6 +10,11 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
+const (
+	chatKindDM  = "dm"
+	chatKindGDM = "gdm"
+)
+
 func (s *service) notifyChatEventGetMembers(kind string, chatid string, userids []string) {
 	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap*2, 0)
 	if err != nil {
@@ -48,6 +53,13 @@ type (
 )
 
 func (s *service) CreateChat(kind string, name string, theme string) (*resChat, error) {
+	if kind == chatKindDM {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not create empty DM",
+		}))
+	}
+
 	m, err := s.repo.NewChat(kind, name, theme)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
@@ -90,6 +102,9 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
 	}
 	members, _ := s.repo.AddMembers(m, userids)
+
+	// TODO: set dm names
+
 	if err := s.repo.InsertChat(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat")
 	}
@@ -124,6 +139,7 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
+	// TODO: set gdm chat search names
 	if err := s.repo.UpdateChatLastUpdated(m.Chatid, time.Now().Round(0).UnixMilli()); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
@@ -145,6 +161,13 @@ func (s *service) AddChatMembers(chatid string, userids []string) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
+	}
+
+	if m.Kind == chatKindDM {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not add members to DM",
+		}))
 	}
 
 	if err := s.checkUsersExist(userids); err != nil {
@@ -189,6 +212,13 @@ func (s *service) RemoveChatMembers(chatid string, userids []string) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
+	}
+
+	if m.Kind == chatKindDM {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not remove members from DM",
+		}))
 	}
 
 	if members, err := s.repo.GetChatMembers(chatid, userids); err != nil {

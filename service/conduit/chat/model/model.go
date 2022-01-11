@@ -10,7 +10,7 @@ import (
 )
 
 //go:generate forge model -m ChatModel -p chat -o modelchat_gen.go ChatModel chatLastUpdated
-//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated
+//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated chatName
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
 
 const (
@@ -32,10 +32,12 @@ type (
 		GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error)
 		GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error)
+		GetChatsByNamePrefix(kind string, userid string, name string, limit, offset int) ([]MemberModel, error)
 		AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64)
 		InsertChat(m *ChatModel) error
 		UpdateChat(m *ChatModel) error
 		UpdateChatLastUpdated(chatid string, t int64) error
+		UpdateChatName(chatid string, name string) error
 		DeleteChat(m *ChatModel) error
 		InsertMembers(m []*MemberModel) error
 		DeleteMembers(chatid string, userids []string) error
@@ -74,10 +76,15 @@ type (
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind;getgroupeq,userid,last_updated|lt;getgroupeq,userid,kind,last_updated|lt"`
+		Name        string `model:"name,VARCHAR(255) NOT NULL;index,userid,kind" query:"name;getgroupeq,userid,kind,name|like"`
 	}
 
 	chatLastUpdated struct {
 		LastUpdated int64 `query:"last_updated;updeq,chatid"`
+	}
+
+	chatName struct {
+		Name string `query:"name;updeq,chatid"`
 	}
 
 	// MsgModel is the db message model
@@ -300,6 +307,18 @@ func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int
 	return m, nil
 }
 
+func (r *repo) GetChatsByNamePrefix(kind string, userid string, name string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridEqKindLikeNameOrdName(d, r.tableMembers, userid+"%", kind, name, true, limit, offset)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to search chats by name")
+	}
+	return m, nil
+}
+
 // AddMembers adds new chat members
 func (r *repo) AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64) {
 	if len(userids) == 0 {
@@ -313,6 +332,7 @@ func (r *repo) AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64
 			Userid:      i,
 			Kind:        m.Kind,
 			LastUpdated: now,
+			Name:        m.Name,
 		})
 	}
 	return members, now
@@ -357,6 +377,20 @@ func (r *repo) UpdateChatLastUpdated(chatid string, t int64) error {
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return db.WrapErr(err, "Failed to update chat last updated")
+	}
+	return nil
+}
+
+// UpdateChatName updates a chat name for users
+func (r *repo) UpdateChatName(chatid string, name string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelUpdchatNameEqChatid(d, r.tableMembers, &chatName{
+		Name: name,
+	}, chatid); err != nil {
+		return db.WrapErr(err, "Failed to update chat name")
 	}
 	return nil
 }

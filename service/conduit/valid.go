@@ -62,9 +62,11 @@ func validKind(kind string) error {
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if len(kind) > lengthCapKind {
+	switch kind {
+	case chatKindDM, chatKindGDM:
+	default:
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat kind must be shorter than 32 characters",
+			Message: "Invalid chat kind",
 			Status:  http.StatusBadRequest,
 		}))
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func memberModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), kind VARCHAR(31) NOT NULL, last_updated BIGINT NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), kind VARCHAR(31) NOT NULL, last_updated BIGINT NOT NULL, name VARCHAR(255) NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -21,11 +21,15 @@ func memberModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__kind__name_index ON " + tableName + " (userid, kind, name);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func memberModelInsert(db *sql.DB, tableName string, m *MemberModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, kind, last_updated) VALUES ($1, $2, $3, $4);", m.Chatid, m.Userid, m.Kind, m.LastUpdated)
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, kind, last_updated, name) VALUES ($1, $2, $3, $4, $5);", m.Chatid, m.Userid, m.Kind, m.LastUpdated, m.Name)
 	if err != nil {
 		return err
 	}
@@ -38,13 +42,13 @@ func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, 
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*4)
+	args := make([]interface{}, 0, len(models)*5)
 	for c, m := range models {
-		n := c * 4
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
-		args = append(args, m.Chatid, m.Userid, m.Kind, m.LastUpdated)
+		n := c * 5
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
+		args = append(args, m.Chatid, m.Userid, m.Kind, m.LastUpdated, m.Name)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, kind, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, kind, last_updated, name) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
@@ -75,7 +79,7 @@ func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, tableName s
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 AND chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +89,7 @@ func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, tableName s
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -115,7 +119,7 @@ func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, c
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +129,7 @@ func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, c
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -142,7 +146,7 @@ func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, tableName string, ch
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE chatid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE chatid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, chatid)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +156,7 @@ func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, tableName string, ch
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -182,7 +186,7 @@ func memberModelGetMemberModelEqChatidHasUseridOrdUserid(db *sql.DB, tableName s
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE chatid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE chatid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +196,7 @@ func memberModelGetMemberModelEqChatidHasUseridOrdUserid(db *sql.DB, tableName s
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -227,7 +231,7 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName strin
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +241,7 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName strin
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -254,7 +258,7 @@ func memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(db *sql.DB, tableName
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND kind = $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 AND kind = $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +268,7 @@ func memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(db *sql.DB, tableName
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -281,7 +285,7 @@ func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, ta
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +295,7 @@ func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, ta
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -308,7 +312,7 @@ func memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(db *sql.
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND kind = $4 AND last_updated < $5 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind, lastupdated)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 AND kind = $4 AND last_updated < $5 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind, lastupdated)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +322,34 @@ func memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(db *sql.
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelGetMemberModelEqUseridEqKindLikeNameOrdName(db *sql.DB, tableName string, userid string, kind string, name string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT chatid, userid, kind, last_updated, name FROM "+tableName+" WHERE userid = $3 AND kind = $4 AND name LIKE $5 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated, &m.Name); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -331,6 +362,14 @@ func memberModelGetMemberModelEqUseridEqKindLtLastUpdatedOrdLastUpdated(db *sql.
 
 func memberModelUpdchatLastUpdatedEqChatid(db *sql.DB, tableName string, m *chatLastUpdated, chatid string) error {
 	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func memberModelUpdchatNameEqChatid(db *sql.DB, tableName string, m *chatName, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (name) = ROW($1) WHERE chatid = $2;", m.Name, chatid)
 	if err != nil {
 		return err
 	}
