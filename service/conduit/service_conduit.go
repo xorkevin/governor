@@ -102,9 +102,6 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
 	}
 	members, _ := s.repo.AddMembers(m, userids)
-
-	// TODO: set dm names
-
 	if err := s.repo.InsertChat(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat")
 	}
@@ -139,7 +136,6 @@ func (s *service) UpdateChat(chatid string, name string, theme string) error {
 	if err := s.repo.UpdateChat(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
-	// TODO: set gdm chat search names
 	if err := s.repo.UpdateChatLastUpdated(m.Chatid, time.Now().Round(0).UnixMilli()); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat")
 	}
