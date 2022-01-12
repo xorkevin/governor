@@ -13,10 +13,6 @@ func memberModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__last_updated_index ON " + tableName + " (userid, last_updated);")
-	if err != nil {
-		return err
-	}
 	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__kind__last_updated_index ON " + tableName + " (userid, kind, last_updated);")
 	if err != nil {
 		return err
@@ -221,33 +217,6 @@ func memberModelDelEqChatidHasUserid(db *sql.DB, tableName string, chatid string
 	return err
 }
 
-func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 func memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(db *sql.DB, tableName string, userid string, kind string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
@@ -255,33 +224,6 @@ func memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(db *sql.DB, tableName
 	}
 	res := make([]MemberModel, 0, limit)
 	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND kind = $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, kind)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := MemberModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid, &m.Kind, &m.LastUpdated); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, tableName string, userid string, lastupdated int64, orderasc bool, limit, offset int) ([]MemberModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, kind, last_updated FROM "+tableName+" WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
 	if err != nil {
 		return nil, err
 	}

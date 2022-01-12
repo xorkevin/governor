@@ -12,6 +12,7 @@ import (
 //go:generate forge model -m ChatModel -p chat -o modelchat_gen.go ChatModel chatLastUpdated
 //go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
+//go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel
 
 const (
 	chatUIDSize    = 16
@@ -28,9 +29,7 @@ type (
 		GetChatMembers(chatid string, userid []string) ([]MemberModel, error)
 		GetUserChats(userid string, chatids []string) ([]MemberModel, error)
 		GetMembersCount(chatid string) (int, error)
-		GetLatestChats(userid string, limit, offset int) ([]MemberModel, error)
 		GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error)
-		GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error)
 		GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error)
 		AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64)
 		InsertChat(m *ChatModel) error
@@ -55,6 +54,7 @@ type (
 		tableChats   string
 		tableMembers string
 		tableMsgs    string
+		tableAssoc   string
 		db           db.Database
 	}
 
@@ -73,7 +73,7 @@ type (
 		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr;getgroupeq,chatid|arr"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid;index,userid,kind" query:"last_updated;getgroupeq,userid;getgroupeq,userid,kind;getgroupeq,userid,last_updated|lt;getgroupeq,userid,kind,last_updated|lt"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid,kind" query:"last_updated;getgroupeq,userid,kind;getgroupeq,userid,kind,last_updated|lt"`
 	}
 
 	chatLastUpdated struct {
@@ -88,6 +88,15 @@ type (
 		Timems int64  `model:"time_ms,BIGINT NOT NULL" query:"time_ms"`
 		Kind   string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		Value  string `model:"value,VARCHAR(4095) NOT NULL" query:"value"`
+	}
+
+	// AssocModel is the db chat association model
+	AssocModel struct {
+		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
+		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1;deleq,chatid,userid_1"`
+		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,userid_2;deleq,chatid,userid_2"`
+		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,userid_2,kind" query:"last_updated;getgroupeq,userid_1,userid_2,kind;getgroupeq,userid_1,userid_2,kind,last_updated|lt"`
 	}
 
 	ctxKeyRepo struct{}
@@ -108,22 +117,23 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs string) {
-	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs))
+func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc string) {
+	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs, tableAssoc))
 }
 
 // NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs string) Repo {
+func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService, tableChats, tableMembers, tableMsgs)
+	return New(dbService, tableChats, tableMembers, tableMsgs, tableAssoc)
 }
 
 // New creates a new user repository
-func New(database db.Database, tableChats, tableMembers, tableMsgs string) Repo {
+func New(database db.Database, tableChats, tableMembers, tableMsgs, tableAssoc string) Repo {
 	return &repo{
 		tableChats:   tableChats,
 		tableMembers: tableMembers,
 		tableMsgs:    tableMsgs,
+		tableAssoc:   tableAssoc,
 		db:           database,
 	}
 }
@@ -248,19 +258,6 @@ func (r *repo) GetMembersCount(chatid string) (int, error) {
 	return count, nil
 }
 
-// GetLatestChats returns latest chats for a user
-func (r *repo) GetLatestChats(userid string, limit, offset int) ([]MemberModel, error) {
-	d, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := memberModelGetMemberModelEqUseridOrdLastUpdated(d, r.tableMembers, userid, false, limit, offset)
-	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get latest chats")
-	}
-	return m, nil
-}
-
 // GetLatestChatsByKind returns latest chats for a user by kind
 func (r *repo) GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error) {
 	d, err := r.db.DB()
@@ -270,19 +267,6 @@ func (r *repo) GetLatestChatsByKind(kind string, userid string, limit, offset in
 	m, err := memberModelGetMemberModelEqUseridEqKindOrdLastUpdated(d, r.tableMembers, userid, kind, false, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get latest chats of kind")
-	}
-	return m, nil
-}
-
-// GetLatestChatsBefore returns latest chats for a user before a time
-func (r *repo) GetLatestChatsBefore(userid string, before int64, limit int) ([]MemberModel, error) {
-	d, err := r.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	m, err := memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, r.tableMembers, userid, before, false, limit, 0)
-	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get latest chats")
 	}
 	return m, nil
 }
