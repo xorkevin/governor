@@ -13,6 +13,7 @@ import (
 //go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
 //go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel chatLastUpdated
+//go:generate forge model -m NameModel -p name -o modelname_gen.go NameModel
 
 const (
 	chatUIDSize    = 16
@@ -31,6 +32,7 @@ type (
 		GetMembersCount(chatid string) (int, error)
 		GetLatestChatsByKind(kind string, userid string, limit, offset int) ([]MemberModel, error)
 		GetLatestChatsBeforeByKind(kind string, userid string, before int64, limit int) ([]MemberModel, error)
+		GetLatestChatsPrefix(kind string, userid string, prefix string, limit int) ([]string, error)
 		AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64)
 		InsertChat(m *ChatModel) error
 		UpdateChat(m *ChatModel) error
@@ -48,6 +50,8 @@ type (
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(chatid string, msgids []string) error
 		DeleteChatMsgs(chatid string) error
+		InsertUsername(userid string, username string) error
+		UpdateUsername(userid string, username string) error
 		Setup() error
 	}
 
@@ -56,6 +60,7 @@ type (
 		tableMembers string
 		tableMsgs    string
 		tableAssoc   string
+		tableName    string
 		db           db.Database
 	}
 
@@ -100,6 +105,12 @@ type (
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,kind" query:"last_updated"`
 	}
 
+	// NameModel is the db user name model mirror
+	NameModel struct {
+		Userid   string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;updeq,userid;deleq,userid"`
+		Username string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
+	}
+
 	ctxKeyRepo struct{}
 )
 
@@ -118,23 +129,24 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc string) {
-	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs, tableAssoc))
+func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) {
+	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs, tableAssoc, tableName))
 }
 
 // NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc string) Repo {
+func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService, tableChats, tableMembers, tableMsgs, tableAssoc)
+	return New(dbService, tableChats, tableMembers, tableMsgs, tableAssoc, tableName)
 }
 
 // New creates a new user repository
-func New(database db.Database, tableChats, tableMembers, tableMsgs, tableAssoc string) Repo {
+func New(database db.Database, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) Repo {
 	return &repo{
 		tableChats:   tableChats,
 		tableMembers: tableMembers,
 		tableMsgs:    tableMsgs,
 		tableAssoc:   tableAssoc,
+		tableName:    tableName,
 		db:           database,
 	}
 }
@@ -285,6 +297,37 @@ func (r *repo) GetLatestChatsBeforeByKind(kind string, userid string, before int
 	return m, nil
 }
 
+// GetLatestChatsPrefix returns latest chats for a user by kind before a time
+func (r *repo) GetLatestChatsPrefix(kind string, userid string, prefix string, limit int) ([]string, error) {
+	if limit == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	res := make([]string, 0, limit)
+	rows, err := d.Query("SELECT DISTINCT chatid FROM "+r.tableAssoc+" a INNER JOIN "+r.tableName+" n ON a.userid_2 = n.userid INNER JOIN "+r.tableChats+" c ON a.chatid = c.chatid WHERE a.userid_1 = $2 AND a.kind = $3 AND (n.username LIKE $4 OR c.name LIKE $4) ORDER BY a.last_updated DESC LIMIT $1;", limit, userid, kind, prefix+"%")
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to search chats of kind")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, db.WrapErr(err, "Failed to search chats of kind")
+		}
+		res = append(res, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, db.WrapErr(err, "Failed to chats of kind")
+	}
+	return res, nil
+}
+
 // AddMembers adds new chat members
 func (r *repo) AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64) {
 	if len(userids) == 0 {
@@ -363,19 +406,22 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 	return nil
 }
 
-// TODO: INSERT INTO assoc (chatid, userid_1, userid_2, kind, last_updated) SELECT chatid, $2, userid, kind, last_updated FROM members WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2, kind, last_updated FROM members WHERE chatid = $1 AND userid <> $2;
-
 // InsertMembers inserts a new chat member into the db
-func (r *repo) InsertMembers(m []*MemberModel) error {
-	if len(m) == 0 {
+func (r *repo) InsertMembers(members []*MemberModel) error {
+	if len(members) == 0 {
 		return nil
 	}
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := memberModelInsertBulk(d, r.tableMembers, m, true); err != nil {
-		return db.WrapErr(err, "Failed to insert chat members")
+	for _, m := range members {
+		if _, err := d.Exec("INSERT INTO "+r.tableAssoc+" (chatid, userid_1, userid_2, kind, last_updated) SELECT chatid, $2, userid, kind, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2, kind, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 ON CONFLICT DO NOTHING;", m.Chatid, m.Userid); err != nil {
+			return db.WrapErr(err, "Failed to insert chat member associations")
+		}
+		if err := memberModelInsert(d, r.tableMembers, m); err != nil {
+			return db.WrapErr(err, "Failed to insert chat member")
+		}
 	}
 	return nil
 }
@@ -421,6 +467,9 @@ func (r *repo) DeleteUser(userid string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
+	}
+	if err := nameModelDelEqUserid(d, r.tableName, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user member name")
 	}
 	if err := assocModelDelEqUserid2(d, r.tableAssoc, userid); err != nil {
 		return db.WrapErr(err, "Failed to delete user member associations")
@@ -542,6 +591,36 @@ func (r *repo) DeleteChatMsgs(chatid string) error {
 	return nil
 }
 
+// InsertUsername inserts a new user name
+func (r *repo) InsertUsername(userid string, username string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := nameModelInsert(d, r.tableName, &NameModel{
+		Userid:   userid,
+		Username: username,
+	}); err != nil {
+		return db.WrapErr(err, "Failed to insert user name")
+	}
+	return nil
+}
+
+// UpdateUsername updates a user name
+func (r *repo) UpdateUsername(userid string, username string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := nameModelUpdNameModelEqUserid(d, r.tableName, &NameModel{
+		Userid:   userid,
+		Username: username,
+	}, userid); err != nil {
+		return db.WrapErr(err, "Failed to update user name")
+	}
+	return nil
+}
+
 // Setup creates new chat, member, and msg tables
 func (r *repo) Setup() error {
 	d, err := r.db.DB()
@@ -566,8 +645,14 @@ func (r *repo) Setup() error {
 			return err
 		}
 	}
-	if err := assocModelSetup(d, r.tableMembers); err != nil {
+	if err := assocModelSetup(d, r.tableAssoc); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat member association model")
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return err
+		}
+	}
+	if err := nameModelSetup(d, r.tableName); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat member name model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
