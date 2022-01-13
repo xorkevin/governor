@@ -12,7 +12,7 @@ import (
 //go:generate forge model -m ChatModel -p chat -o modelchat_gen.go ChatModel chatLastUpdated
 //go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel chatLastUpdated
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
-//go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel
+//go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel chatLastUpdated
 
 const (
 	chatUIDSize    = 16
@@ -39,6 +39,7 @@ type (
 		InsertMembers(m []*MemberModel) error
 		DeleteMembers(chatid string, userids []string) error
 		DeleteChatMembers(chatid string) error
+		DeleteUser(userid string) error
 		GetMsgs(chatid string, limit, offset int) ([]MsgModel, error)
 		GetMsgsBefore(chatid string, msgid string, limit int) ([]MsgModel, error)
 		GetMsgsByKind(chatid string, kind string, limit, offset int) ([]MsgModel, error)
@@ -71,7 +72,7 @@ type (
 	// MemberModel is the db chat member model
 	MemberModel struct {
 		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr;getgroupeq,chatid|arr"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;deleq,userid;getgroupeq,chatid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid,kind" query:"last_updated;getgroupeq,userid,kind;getgroupeq,userid,kind,last_updated|lt"`
 	}
@@ -93,10 +94,10 @@ type (
 	// AssocModel is the db chat association model
 	AssocModel struct {
 		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
-		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1;deleq,chatid,userid_1"`
-		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,userid_2;deleq,chatid,userid_2"`
+		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1;deleq,chatid,userid_1|arr"`
+		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,userid_2;deleq,chatid,userid_2|arr"`
 		Kind        string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,userid_2,kind" query:"last_updated;getgroupeq,userid_1,userid_2,kind;getgroupeq,userid_1,userid_2,kind,last_updated|lt"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,kind" query:"last_updated"`
 	}
 
 	ctxKeyRepo struct{}
@@ -342,6 +343,11 @@ func (r *repo) UpdateChatLastUpdated(chatid string, t int64) error {
 	}, chatid); err != nil {
 		return db.WrapErr(err, "Failed to update chat last updated")
 	}
+	if err := assocModelUpdchatLastUpdatedEqChatid(d, r.tableAssoc, &chatLastUpdated{
+		LastUpdated: t,
+	}, chatid); err != nil {
+		return db.WrapErr(err, "Failed to update chat last updated")
+	}
 	return nil
 }
 
@@ -357,6 +363,8 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 	return nil
 }
 
+// TODO: INSERT INTO assoc (chatid, userid_1, userid_2, kind, last_updated) SELECT chatid, $2, userid, kind, last_updated FROM members WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2, kind, last_updated FROM members WHERE chatid = $1 AND userid <> $2;
+
 // InsertMembers inserts a new chat member into the db
 func (r *repo) InsertMembers(m []*MemberModel) error {
 	if len(m) == 0 {
@@ -366,7 +374,7 @@ func (r *repo) InsertMembers(m []*MemberModel) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelInsertBulk(d, r.tableMembers, m, false); err != nil {
+	if err := memberModelInsertBulk(d, r.tableMembers, m, true); err != nil {
 		return db.WrapErr(err, "Failed to insert chat members")
 	}
 	return nil
@@ -381,6 +389,12 @@ func (r *repo) DeleteMembers(chatid string, userids []string) error {
 	if err != nil {
 		return err
 	}
+	if err := assocModelDelEqChatidHasUserid2(d, r.tableAssoc, chatid, userids); err != nil {
+		return db.WrapErr(err, "Failed to delete chat member associations")
+	}
+	if err := assocModelDelEqChatidHasUserid1(d, r.tableAssoc, chatid, userids); err != nil {
+		return db.WrapErr(err, "Failed to delete chat member associations")
+	}
 	if err := memberModelDelEqChatidHasUserid(d, r.tableMembers, chatid, userids); err != nil {
 		return db.WrapErr(err, "Failed to delete chat members")
 	}
@@ -393,8 +407,29 @@ func (r *repo) DeleteChatMembers(chatid string) error {
 	if err != nil {
 		return err
 	}
+	if err := assocModelDelEqChatid(d, r.tableAssoc, chatid); err != nil {
+		return db.WrapErr(err, "Failed to delete chat member associations")
+	}
 	if err := memberModelDelEqChatid(d, r.tableMembers, chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete chat members")
+	}
+	return nil
+}
+
+// DeleteUser deletes user memberships
+func (r *repo) DeleteUser(userid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := assocModelDelEqUserid2(d, r.tableAssoc, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user member associations")
+	}
+	if err := assocModelDelEqUserid1(d, r.tableAssoc, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user member associations")
+	}
+	if err := memberModelDelEqUserid(d, r.tableMembers, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user memberships")
 	}
 	return nil
 }
@@ -527,6 +562,12 @@ func (r *repo) Setup() error {
 	}
 	if err := msgModelSetup(d, r.tableMsgs); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat message model")
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return err
+		}
+	}
+	if err := assocModelSetup(d, r.tableMembers); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat member association model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

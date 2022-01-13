@@ -21,7 +21,7 @@ func assocModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_1__userid_2__kind__last_updated_index ON " + tableName + " (userid_1, userid_2, kind, last_updated);")
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_1__kind__last_updated_index ON " + tableName + " (userid_1, kind, last_updated);")
 	if err != nil {
 		return err
 	}
@@ -65,8 +65,21 @@ func assocModelDelEqUserid1(db *sql.DB, tableName string, userid1 string) error 
 	return err
 }
 
-func assocModelDelEqChatidEqUserid1(db *sql.DB, tableName string, chatid string, userid1 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid_1 = $2;", chatid, userid1)
+func assocModelDelEqChatidHasUserid1(db *sql.DB, tableName string, chatid string, userid1 []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(userid1))
+	args = append(args, chatid)
+	var placeholdersuserid1 string
+	{
+		placeholders := make([]string, 0, len(userid1))
+		for _, i := range userid1 {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid1 = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid_1 IN (VALUES "+placeholdersuserid1+");", args...)
 	return err
 }
 
@@ -75,61 +88,28 @@ func assocModelDelEqUserid2(db *sql.DB, tableName string, userid2 string) error 
 	return err
 }
 
-func assocModelDelEqChatidEqUserid2(db *sql.DB, tableName string, chatid string, userid2 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid_2 = $2;", chatid, userid2)
+func assocModelDelEqChatidHasUserid2(db *sql.DB, tableName string, chatid string, userid2 []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(userid2))
+	args = append(args, chatid)
+	var placeholdersuserid2 string
+	{
+		placeholders := make([]string, 0, len(userid2))
+		for _, i := range userid2 {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid2 = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid_2 IN (VALUES "+placeholdersuserid2+");", args...)
 	return err
 }
 
-func assocModelGetAssocModelEqUserid1EqUserid2EqKindOrdLastUpdated(db *sql.DB, tableName string, userid1 string, userid2 string, kind string, orderasc bool, limit, offset int) ([]AssocModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]AssocModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid_1, userid_2, kind, last_updated FROM "+tableName+" WHERE userid_1 = $3 AND userid_2 = $4 AND kind = $5 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, userid2, kind)
+func assocModelUpdchatLastUpdatedEqChatid(db *sql.DB, tableName string, m *chatLastUpdated, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := AssocModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid1, &m.Userid2, &m.Kind, &m.LastUpdated); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func assocModelGetAssocModelEqUserid1EqUserid2EqKindLtLastUpdatedOrdLastUpdated(db *sql.DB, tableName string, userid1 string, userid2 string, kind string, lastupdated int64, orderasc bool, limit, offset int) ([]AssocModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]AssocModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid_1, userid_2, kind, last_updated FROM "+tableName+" WHERE userid_1 = $3 AND userid_2 = $4 AND kind = $5 AND last_updated < $6 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, userid2, kind, lastupdated)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := AssocModel{}
-		if err := rows.Scan(&m.Chatid, &m.Userid1, &m.Userid2, &m.Kind, &m.LastUpdated); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
+	return nil
 }

@@ -132,6 +132,11 @@ func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, c
 	return res, nil
 }
 
+func memberModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+	return err
+}
+
 func memberModelGetMemberModelEqChatidOrdUserid(db *sql.DB, tableName string, chatid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
