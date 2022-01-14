@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqChatID struct {
@@ -37,6 +37,12 @@ type (
 	reqLatestChats struct {
 		Kind   string `valid:"kind,has" json:"-"`
 		Before int64  `json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+	}
+
+	reqSearchChats struct {
+		Kind   string `valid:"kind,has" json:"-"`
+		Search string `valid:"search" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 	}
 
@@ -159,6 +165,26 @@ func (m *router) getLatestChats(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+func (m *router) searchChats(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchChats{
+		Kind:   c.Query("kind"),
+		Search: c.Query("search"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.SearchChats(req.Kind, gate.GetCtxUserid(c), req.Search, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (m *router) getChats(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqChats{
@@ -254,6 +280,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeChatWrite := m.s.scopens + ".chat:write"
 	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat", m.getChats, gate.Owner(m.s.gate, m.conduitChatsOwner, scopeChatRead))
 	r.Post("/chat", m.createChat, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))

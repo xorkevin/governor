@@ -123,12 +123,21 @@ type (
 		Userid string `json:"userid"`
 	}
 
+	// UpdateUserProps are properties of a user update
+	UpdateUserProps struct {
+		Userid    string `json:"userid"`
+		Username  string `json:"username"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+
 	ctxKeyUsers struct{}
 
 	Opts struct {
 		StreamName    string
 		CreateChannel string
 		DeleteChannel string
+		UpdateChannel string
 	}
 
 	ctxKeyOpts struct{}
@@ -249,6 +258,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 		StreamName:    streamname,
 		CreateChannel: streamname + ".create",
 		DeleteChannel: streamname + ".delete",
+		UpdateChannel: streamname + ".update",
 	}
 	SetCtxOpts(inj, s.opts)
 

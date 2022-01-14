@@ -13,6 +13,10 @@ func chatModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_kind_index ON " + tableName + " (kind);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

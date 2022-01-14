@@ -16,7 +16,7 @@ const (
 )
 
 func (s *service) notifyChatEventGetMembers(kind string, chatid string, userids []string) {
-	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap*2, 0)
+	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap+16, 0)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Failed to get chat members", map[string]string{
@@ -53,7 +53,7 @@ type (
 )
 
 func (s *service) CreateChat(kind string, name string, theme string) (*resChat, error) {
-	if kind == chatKindDM {
+	if kind == chatKindDM || kind == chatKindGDM {
 		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "May not create empty DM",
@@ -93,6 +93,19 @@ func (s *service) checkUsersExist(userids []string) error {
 }
 
 func (s *service) CreateChatWithUsers(kind string, name string, theme string, userids []string) (*resChat, error) {
+	if kind == chatKindDM && len(userids) != 2 {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "DMs may only contain 2 users",
+		}))
+	}
+	if len(userids) == 0 {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Chat must contain users",
+		}))
+	}
+
 	if err := s.checkUsersExist(userids); err != nil {
 		return nil, err
 	}
@@ -258,7 +271,7 @@ func (s *service) DeleteChat(chatid string) error {
 	if err := s.repo.DeleteChatMsgs(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat messages")
 	}
-	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap*2, 0)
+	members, err := s.repo.GetMembers(chatid, chatMemberAmountCap+16, 0)
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to get chat members")
 	}
@@ -345,6 +358,14 @@ func (s *service) GetLatestChatsByKind(kind string, userid string, before int64,
 	chatids := make([]string, 0, len(members))
 	for _, i := range members {
 		chatids = append(chatids, i.Chatid)
+	}
+	return s.GetChats(chatids)
+}
+
+func (s *service) SearchChats(kind string, userid string, prefix string, limit int) (*resChats, error) {
+	chatids, err := s.repo.GetLatestChatsPrefix(kind, userid, prefix, limit)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get search chats")
 	}
 	return s.GetChats(chatids)
 }

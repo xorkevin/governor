@@ -51,7 +51,6 @@ type (
 		DeleteMsgs(chatid string, msgids []string) error
 		DeleteChatMsgs(chatid string) error
 		UpdateUsername(userid string, username string) error
-		DeleteUsername(userid string) error
 		Setup() error
 	}
 
@@ -67,7 +66,7 @@ type (
 	// ChatModel is the db chat model
 	ChatModel struct {
 		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;getoneeq,chatid;getgroupeq,chatid|arr;updeq,chatid;deleq,chatid"`
-		Kind         string `model:"kind,VARCHAR(31) NOT NULL" query:"kind"`
+		Kind         string `model:"kind,VARCHAR(31) NOT NULL;index" query:"kind"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
@@ -599,18 +598,6 @@ func (r *repo) UpdateUsername(userid string, username string) error {
 	}
 	if _, err := d.Exec("INSERT INTO "+r.tableName+" (userid, username) VALUES ($1, $2) ON CONFLICT (userid) DO UPDATE SET username = excluded.username;", userid, username); err != nil {
 		return db.WrapErr(err, "Failed to update user name")
-	}
-	return nil
-}
-
-// DeleteUsername deletes a user name
-func (r *repo) DeleteUsername(userid string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := nameModelDelEqUserid(d, r.tableName, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user name")
 	}
 	return nil
 }

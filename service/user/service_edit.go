@@ -1,6 +1,7 @@
 package user
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -24,6 +25,15 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
+	b, err := json.Marshal(UpdateUserProps{
+		Userid:    m.Userid,
+		Username:  m.Username,
+		FirstName: m.FirstName,
+		LastName:  m.LastName,
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode update user props to json")
+	}
 	if err = s.users.Update(m); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -32,6 +42,12 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to update user")
+	}
+	if err := s.events.StreamPublish(s.opts.UpdateChannel, b); err != nil {
+		s.logger.Error("Failed to publish update user event", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishupdateuser",
+		})
 	}
 	return nil
 }

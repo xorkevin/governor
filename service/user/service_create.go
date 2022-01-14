@@ -295,7 +295,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		})
 	}
 
-	s.logger.Info("created user", map[string]string{
+	s.logger.Info("Created user", map[string]string{
 		"userid":     m.Userid,
 		"username":   m.Username,
 		"actiontype": "commituser",
@@ -393,6 +393,15 @@ func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to decode delete user props")
+	}
+	return m, nil
+}
+
+// DecodeUpdateUserProps unmarshals json encoded update user props into a struct
+func DecodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
+	m := &UpdateUserProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to decode update user props")
 	}
 	return m, nil
 }

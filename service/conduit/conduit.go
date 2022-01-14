@@ -2,9 +2,12 @@ package conduit
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 )
@@ -21,11 +24,14 @@ type (
 	}
 
 	service struct {
-		repo    model.Repo
-		users   user.Users
-		gate    gate.Gate
-		logger  governor.Logger
-		scopens string
+		repo     model.Repo
+		users    user.Users
+		events   events.Events
+		gate     gate.Gate
+		logger   governor.Logger
+		scopens  string
+		streamns string
+		useropts user.Opts
 	}
 
 	router struct {
@@ -53,22 +59,27 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 func NewCtx(inj governor.Injector) Service {
 	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
+	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(repo, users, g)
+	useropts := user.GetCtxOpts(inj)
+	return New(repo, users, ev, g, useropts)
 }
 
 // New creates a new Conduit service
-func New(repo model.Repo, users user.Users, g gate.Gate) Service {
+func New(repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
-		repo:  repo,
-		users: users,
-		gate:  g,
+		repo:     repo,
+		users:    users,
+		events:   ev,
+		gate:     g,
+		useropts: useropts,
 	}
 }
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
 	s.scopens = name
+	s.streamns = strings.ToUpper(name)
 }
 
 func (s *service) router() *router {
@@ -106,6 +117,40 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 }
 
 func (s *service) Start(ctx context.Context) error {
+	l := s.logger.WithData(map[string]string{
+		"phase": "start",
+	})
+
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.CreateChannel, s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
+	}
+	l.Info("Subscribed to user create queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+	}
+	l.Info("Subscribed to user delete queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.UpdateChannel, s.streamns+"_WORKER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user update queue")
+	}
+	l.Info("Subscribed to user update queue", nil)
+
 	return nil
 }
 
@@ -113,5 +158,41 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
+	return nil
+}
+
+// UserCreateHook creates a new user name
+func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := user.DecodeNewUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update chat user name")
+	}
+	return nil
+}
+
+// UserDeleteHook deletes a user name
+func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := user.DecodeDeleteUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.DeleteUser(props.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user from chats")
+	}
+	return nil
+}
+
+// UserUpdateHook updates a user name
+func (s *service) UserUpdateHook(pinger events.Pinger, msgdata []byte) error {
+	props, err := user.DecodeUpdateUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update chat user name")
+	}
 	return nil
 }

@@ -61,6 +61,19 @@ func (r reqLatestChats) valid() error {
 	return nil
 }
 
+func (r reqSearchChats) valid() error {
+	if err := validhasKind(r.Kind); err != nil {
+		return err
+	}
+	if err := validSearch(r.Search); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqChats) valid() error {
 	if err := validhasChatids(r.Chatids); err != nil {
 		return err

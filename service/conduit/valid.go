@@ -99,6 +99,16 @@ func validName(name string) error {
 	return nil
 }
 
+func validSearch(search string) error {
+	if len(search) > lengthCapName {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Search must be shorter than 256 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
 func validTheme(theme string) error {
 	if len(theme) > lengthCapTheme {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
