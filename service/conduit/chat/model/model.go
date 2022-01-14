@@ -50,8 +50,8 @@ type (
 		InsertMsg(m *MsgModel) error
 		DeleteMsgs(chatid string, msgids []string) error
 		DeleteChatMsgs(chatid string) error
-		InsertUsername(userid string, username string) error
 		UpdateUsername(userid string, username string) error
+		DeleteUsername(userid string) error
 		Setup() error
 	}
 
@@ -107,7 +107,7 @@ type (
 
 	// NameModel is the db user name model mirror
 	NameModel struct {
-		Userid   string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;updeq,userid;deleq,userid"`
+		Userid   string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;deleq,userid"`
 		Username string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
 	}
 
@@ -591,32 +591,26 @@ func (r *repo) DeleteChatMsgs(chatid string) error {
 	return nil
 }
 
-// InsertUsername inserts a new user name
-func (r *repo) InsertUsername(userid string, username string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := nameModelInsert(d, r.tableName, &NameModel{
-		Userid:   userid,
-		Username: username,
-	}); err != nil {
-		return db.WrapErr(err, "Failed to insert user name")
-	}
-	return nil
-}
-
 // UpdateUsername updates a user name
 func (r *repo) UpdateUsername(userid string, username string) error {
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := nameModelUpdNameModelEqUserid(d, r.tableName, &NameModel{
-		Userid:   userid,
-		Username: username,
-	}, userid); err != nil {
+	if _, err := d.Exec("INSERT INTO "+r.tableName+" (userid, username) VALUES ($1, $2) ON CONFLICT (userid) DO UPDATE SET username = excluded.username;", userid, username); err != nil {
 		return db.WrapErr(err, "Failed to update user name")
+	}
+	return nil
+}
+
+// DeleteUsername deletes a user name
+func (r *repo) DeleteUsername(userid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := nameModelDelEqUserid(d, r.tableName, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user name")
 	}
 	return nil
 }

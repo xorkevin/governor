@@ -43,14 +43,6 @@ func nameModelInsertBulk(db *sql.DB, tableName string, models []*NameModel, allo
 	return nil
 }
 
-func nameModelUpdNameModelEqUserid(db *sql.DB, tableName string, m *NameModel, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid, username) = ROW($1, $2) WHERE userid = $3;", m.Userid, m.Username, userid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func nameModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
 	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
 	return err
