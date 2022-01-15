@@ -14,6 +14,7 @@ import (
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel
 //go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel chatLastUpdated
 //go:generate forge model -m NameModel -p name -o modelname_gen.go NameModel
+//go:generate forge model -m DMModel -p dm -o modeldm_gen.go DMModel
 
 const (
 	chatUIDSize    = 16
@@ -24,6 +25,7 @@ type (
 	Repo interface {
 		NewChat(kind string, name string, theme string) (*ChatModel, error)
 		GetChat(chatid string) (*ChatModel, error)
+		GetDM(userid1, userid2 string) (*DMModel, error)
 		GetChats(chatids []string) ([]ChatModel, error)
 		GetMembers(chatid string, limit, offset int) ([]MemberModel, error)
 		GetChatsMembers(chatids []string, limit int) ([]MemberModel, error)
@@ -35,9 +37,11 @@ type (
 		GetLatestChatsPrefix(kind string, userid string, prefix string, limit int) ([]string, error)
 		AddMembers(m *ChatModel, userids []string) ([]*MemberModel, int64)
 		InsertChat(m *ChatModel) error
+		InsertDM(m *DMModel) error
 		UpdateChat(m *ChatModel) error
 		UpdateChatLastUpdated(chatid string, t int64) error
 		DeleteChat(m *ChatModel) error
+		DeleteDM(chatid string) error
 		InsertMembers(m []*MemberModel) error
 		DeleteMembers(chatid string, userids []string) error
 		DeleteChatMembers(chatid string) error
@@ -60,6 +64,7 @@ type (
 		tableMsgs    string
 		tableAssoc   string
 		tableName    string
+		tableDM      string
 		db           db.Database
 	}
 
@@ -71,6 +76,13 @@ type (
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+	}
+
+	// DMModel is the db dm model
+	DMModel struct {
+		Userid1 string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
+		Userid2 string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2)" query:"userid_2;getoneeq,userid_1,userid_2"`
+		Chatid  string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid;deleq,chatid"`
 	}
 
 	// MemberModel is the db chat member model
@@ -128,24 +140,25 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) {
-	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs, tableAssoc, tableName))
+func NewInCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName, tableDM string) {
+	SetCtxRepo(inj, NewCtx(inj, tableChats, tableMembers, tableMsgs, tableAssoc, tableName, tableDM))
 }
 
 // NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) Repo {
+func NewCtx(inj governor.Injector, tableChats, tableMembers, tableMsgs, tableAssoc, tableName, tableDM string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService, tableChats, tableMembers, tableMsgs, tableAssoc, tableName)
+	return New(dbService, tableChats, tableMembers, tableMsgs, tableAssoc, tableName, tableDM)
 }
 
 // New creates a new user repository
-func New(database db.Database, tableChats, tableMembers, tableMsgs, tableAssoc, tableName string) Repo {
+func New(database db.Database, tableChats, tableMembers, tableMsgs, tableAssoc, tableName, tableDM string) Repo {
 	return &repo{
 		tableChats:   tableChats,
 		tableMembers: tableMembers,
 		tableMsgs:    tableMsgs,
 		tableAssoc:   tableAssoc,
 		tableName:    tableName,
+		tableDM:      tableDM,
 		db:           database,
 	}
 }
@@ -176,6 +189,22 @@ func (r *repo) GetChat(chatid string) (*ChatModel, error) {
 	m, err := chatModelGetChatModelEqChatid(d, r.tableChats, chatid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get chat")
+	}
+	return m, nil
+}
+
+// GetDM returns a dm
+func (r *repo) GetDM(userid1, userid2 string) (*DMModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	if userid2 < userid1 {
+		userid1, userid2 = userid2, userid1
+	}
+	m, err := dmModelGetDMModelEqUserid1EqUserid2(d, r.tableDM, userid1, userid2)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get chat dm")
 	}
 	return m, nil
 }
@@ -357,6 +386,18 @@ func (r *repo) InsertChat(m *ChatModel) error {
 	return nil
 }
 
+// InsertDM inserts a new chat dm into the db
+func (r *repo) InsertDM(m *DMModel) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := dmModelInsert(d, r.tableDM, m); err != nil {
+		return db.WrapErr(err, "Failed to insert chat dm")
+	}
+	return nil
+}
+
 // UpdateChat updates a chat in the db
 func (r *repo) UpdateChat(m *ChatModel) error {
 	d, err := r.db.DB()
@@ -401,6 +442,18 @@ func (r *repo) DeleteChat(m *ChatModel) error {
 	}
 	if err := chatModelDelEqChatid(d, r.tableChats, m.Chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete chat")
+	}
+	return nil
+}
+
+// DeleteDM deletes a chat dm in the db
+func (r *repo) DeleteDM(chatid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := dmModelDelEqChatid(d, r.tableDM, chatid); err != nil {
+		return db.WrapErr(err, "Failed to delete chat dm")
 	}
 	return nil
 }
@@ -634,6 +687,12 @@ func (r *repo) Setup() error {
 	}
 	if err := nameModelSetup(d, r.tableName); err != nil {
 		err = db.WrapErr(err, "Failed to setup chat member name model")
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return err
+		}
+	}
+	if err := dmModelSetup(d, r.tableDM); err != nil {
+		err = db.WrapErr(err, "Failed to setup chat dm model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

@@ -110,6 +110,19 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 		return nil, err
 	}
 
+	if kind == chatKindDM {
+		if _, err := s.repo.GetDM(userids[0], userids[1]); err != nil {
+			if !errors.Is(err, db.ErrNotFound{}) {
+				return nil, governor.ErrWithMsg(err, "Failed to get chat dm")
+			}
+		} else {
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "DM already created",
+			}))
+		}
+	}
+
 	m, err := s.repo.NewChat(kind, name, theme)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to create new chat id")
@@ -121,7 +134,24 @@ func (s *service) CreateChatWithUsers(kind string, name string, theme string, us
 	if err := s.repo.InsertMembers(members); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to add chat members")
 	}
+
+	if kind == chatKindDM {
+		userid1 := userids[0]
+		userid2 := userids[1]
+		if userid2 < userid1 {
+			userid1, userid2 = userid2, userid1
+		}
+		if err := s.repo.InsertDM(&model.DMModel{
+			Userid1: userid1,
+			Userid2: userid2,
+			Chatid:  m.Chatid,
+		}); err != nil {
+			return nil, governor.ErrWithMsg(err, "Failed to create new chat dm")
+		}
+	}
+
 	s.notifyChatEvent("chat.create", m.Chatid, userids)
+
 	return &resChat{
 		ChatID:       m.Chatid,
 		Kind:         m.Kind,
@@ -267,6 +297,11 @@ func (s *service) DeleteChat(chatid string) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to get chat")
+	}
+	if m.Kind == chatKindDM {
+		if err := s.repo.DeleteDM(m.Chatid); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete chat dm")
+		}
 	}
 	if err := s.repo.DeleteChatMsgs(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete chat messages")

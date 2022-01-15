@@ -133,7 +133,7 @@ func main() {
 	}
 	{
 		inj := gov.Injector()
-		conduitchatmodel.NewInCtx(inj, "chats", "chatmembers", "chatmessages", "chatassoc", "chatusernames")
+		conduitchatmodel.NewInCtx(inj, "chats", "chatmembers", "chatmessages", "chatassoc", "chatusernames", "chatdms")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 	{

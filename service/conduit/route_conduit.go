@@ -75,7 +75,10 @@ func (m *router) createChat(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChatWithUsers(req.Kind, req.Name, req.Theme, append(req.Userids, gate.GetCtxUserid(c)))
+	members := make([]string, 0, len(req.Userids)+1)
+	members[0] = gate.GetCtxUserid(c)
+	copy(members[1:], req.Userids)
+	res, err := m.s.CreateChatWithUsers(req.Kind, req.Name, req.Theme, members)
 	if err != nil {
 		c.WriteError(err)
 		return
