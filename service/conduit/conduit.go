@@ -2,6 +2,8 @@ package conduit
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,25 +33,56 @@ type (
 	}
 
 	service struct {
-		friends     friendmodel.Repo
-		invitations invitationmodel.Repo
-		repo        model.Repo
-		users       user.Users
-		events      events.Events
-		gate        gate.Gate
-		logger      governor.Logger
-		scopens     string
-		streamns    string
-		useropts    user.Opts
-		syschannels governor.SysChannels
+		friends        friendmodel.Repo
+		invitations    invitationmodel.Repo
+		repo           model.Repo
+		users          user.Users
+		events         events.Events
+		gate           gate.Gate
+		logger         governor.Logger
+		scopens        string
+		streamns       string
+		opts           Opts
+		streamsize     int64
+		eventsize      int32
+		invitationTime int64
+		useropts       user.Opts
+		syschannels    governor.SysChannels
 	}
 
 	router struct {
 		s *service
 	}
 
+	// FriendProps are properties of a friend event
+	FriendProps struct {
+		Userid    string `json:"userid"`
+		InvitedBy string `json:"invited_by"`
+	}
+
 	ctxKeyConduit struct{}
+
+	Opts struct {
+		StreamName    string
+		FriendChannel string
+	}
+
+	ctxKeyOpts struct{}
 )
+
+// GetCtxOpts returns conduit Opts from the context
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+// SetCtxOpts sets conduit Opts in the context
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
+}
 
 // GetCtxConduit returns a Conduit service from the context
 func GetCtxCourier(inj governor.Injector) Conduit {
@@ -80,20 +113,31 @@ func NewCtx(inj governor.Injector) Service {
 // New creates a new Conduit service
 func New(friends friendmodel.Repo, invitations invitationmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
-		friends:     friends,
-		invitations: invitations,
-		repo:        repo,
-		users:       users,
-		events:      ev,
-		gate:        g,
-		useropts:    useropts,
+		friends:        friends,
+		invitations:    invitations,
+		repo:           repo,
+		users:          users,
+		events:         ev,
+		gate:           g,
+		invitationTime: time72h,
+		useropts:       useropts,
 	}
 }
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
 	s.scopens = name
-	s.streamns = strings.ToUpper(name)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:    streamname,
+		FriendChannel: streamname + ".friend",
+	}
+	SetCtxOpts(inj, s.opts)
+
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("eventsize", "2K")
+	r.SetDefault("invitationtime", "72h")
 }
 
 func (s *service) router() *router {
@@ -108,7 +152,19 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
+		return governor.ErrWithMsg(err, "Failed to parse role invitation time")
+	} else {
+		s.invitationTime = int64(t / time.Second)
+	}
+
 	s.syschannels = c.SysChannels
+
+	l.Info("Loaded config", map[string]string{
+		"stream size (bytes)": r.GetStr("streamsize"),
+		"event size (bytes)":  r.GetStr("eventsize"),
+		"invitationtime (s)":  strconv.FormatInt(s.invitationTime, 10),
+	})
 
 	sr := s.router()
 	sr.mountRoutes(m)
@@ -132,6 +188,15 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit chat tables", nil)
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init conduit stream")
+	}
+	l.Info("Created conduit stream", nil)
 	return nil
 }
 
@@ -250,4 +315,13 @@ func (s *service) FriendInvitationGCHook(msgdata []byte) {
 		return
 	}
 	l.Debug("GC friend invitations", nil)
+}
+
+// DecodeFriendProps unmarshals json encoded friend props into a struct
+func DecodeFriendProps(msgdata []byte) (*FriendProps, error) {
+	m := &FriendProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to decode friend props")
+	}
+	return m, nil
 }

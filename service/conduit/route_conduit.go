@@ -8,7 +8,118 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+
+type (
+	reqAcceptFriendInvitation struct {
+		Userid    string `valid:"userid,has" json:"-"`
+		InvitedBy string `valid:"userid,has" json:"-"`
+	}
+)
+
+func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAcceptFriendInvitation{
+		Userid:    gate.GetCtxUserid(c),
+		InvitedBy: c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.AcceptFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+type (
+	reqDelFriendInvitation struct {
+		Userid    string `valid:"userid,has" json:"-"`
+		InvitedBy string `valid:"userid,has" json:"-"`
+	}
+)
+
+func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqDelFriendInvitation{
+		Userid:    gate.GetCtxUserid(c),
+		InvitedBy: c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) deleteInvitedFriendInvitation(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqDelFriendInvitation{
+		Userid:    c.Param("id"),
+		InvitedBy: gate.GetCtxUserid(c),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+type (
+	reqGetFriendInvitations struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
+
+func (m *router) getInvitations(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetFriendInvitations{
+		Userid: gate.GetCtxUserid(c),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetUserFriendInvitations(req.Userid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getInvited(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetFriendInvitations{
+		Userid: gate.GetCtxUserid(c),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetInvitedFriendInvitations(req.Userid, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
 
 type (
 	reqChatID struct {
@@ -279,6 +390,14 @@ func (m *router) conduitChatsOwner(c governor.Context, userid string) bool {
 }
 
 func (m *router) mountRoutes(r governor.Router) {
+	scopeFriendRead := m.s.scopens + ".friend:read"
+	scopeFriendWrite := m.s.scopens + ".friend:write"
+	r.Get("/friends/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
+	r.Get("/friends/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
+	r.Post("/friends/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+	r.Delete("/friends/invitation/id/{id}", m.deleteUserFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+	r.Delete("/friends/invitation/invited/{id}", m.deleteInvitedFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+
 	scopeChatRead := m.s.scopens + ".chat:read"
 	scopeChatWrite := m.s.scopens + ".chat:write"
 	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"

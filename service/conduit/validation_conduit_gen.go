@@ -2,6 +2,39 @@
 
 package conduit
 
+func (r reqAcceptFriendInvitation) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUserid(r.InvitedBy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqDelFriendInvitation) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUserid(r.InvitedBy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetFriendInvitations) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqChatID) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err

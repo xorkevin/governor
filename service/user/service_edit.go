@@ -265,7 +265,7 @@ func (s *service) AcceptRoleInvitation(userid, role string) error {
 		return governor.ErrWithMsg(err, "Failed to get role invitation")
 	}
 	if inv.Role == rank.TagAdmin {
-		s.logger.Info("add admin role", map[string]string{
+		s.logger.Info("Add admin role", map[string]string{
 			"userid":   m.Userid,
 			"username": m.Username,
 		})

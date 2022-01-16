@@ -11,6 +11,7 @@ import (
 
 type (
 	Repo interface {
+		GetByID(userid1, userid2 string) (*Model, error)
 		GetFriends(userid string, prefix string, limit, offset int) ([]Model, error)
 		Insert(userid1, userid2 string, username1, username2 string) error
 		Remove(userid1, userid2 string) error
@@ -27,7 +28,7 @@ type (
 	// Model is the db friend relationship model
 	Model struct {
 		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;deleq,userid_2"`
+		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;deleq,userid_2"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
 	}
 
@@ -69,6 +70,18 @@ func New(database db.Database, table string) Repo {
 		table: table,
 		db:    database,
 	}
+}
+
+func (r *repo) GetByID(userid1, userid2 string) (*Model, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := friendModelGetModelEqUserid1EqUserid2(d, r.table, userid1, userid2)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get friend")
+	}
+	return m, nil
 }
 
 func (r *repo) GetFriends(userid string, prefix string, limit, offset int) ([]Model, error) {

@@ -193,6 +193,16 @@ func validAmount(amt int) error {
 	return nil
 }
 
+func validOffset(offset int) error {
+	if offset < 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Offset must not be negative",
+		}))
+	}
+	return nil
+}
+
 func validoptMsgid(kind string) error {
 	if len(kind) > lengthCapMsgid {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
