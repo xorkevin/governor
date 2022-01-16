@@ -10,10 +10,37 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
+type (
+	resFriends struct {
+		Friends []string `json:"friends"`
+	}
+)
+
+func (s *service) GetFriends(userid string, prefix string, limit, offset int) (*resFriends, error) {
+	m, err := s.friends.GetFriends(userid, prefix, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.Userid2)
+	}
+	return &resFriends{
+		Friends: res,
+	}, nil
+}
+
+func (s *service) RemoveFriend(userid1, userid2 string) error {
+	if err := s.friends.Remove(userid1, userid2); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove friend")
+	}
+	return nil
+}
+
 func (s *service) InviteFriend(userid string, invitedBy string) error {
 	if _, err := s.friends.GetByID(userid, invitedBy); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return governor.ErrWithMsg(err, "Failed to get chat")
+			return governor.ErrWithMsg(err, "Failed to search friends")
 		}
 	} else {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{

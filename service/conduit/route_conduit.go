@@ -8,7 +8,60 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+
+type (
+	reqGetFriends struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Prefix string `valid:"username,opt" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
+
+func (m *router) getFriends(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetFriends{
+		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetFriends(req.Userid, req.Prefix, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqRmFriend struct {
+		Userid1 string `valid:"userid,has" json:"-"`
+		Userid2 string `valid:"userid,has" json:"-"`
+	}
+)
+
+func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqRmFriend{
+		Userid1: gate.GetCtxUserid(c),
+		Userid2: c.Query("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.RemoveFriend(req.Userid1, req.Userid2); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
 
 type (
 	reqAcceptFriendInvitation struct {
@@ -392,6 +445,8 @@ func (m *router) conduitChatsOwner(c governor.Context, userid string) bool {
 func (m *router) mountRoutes(r governor.Router) {
 	scopeFriendRead := m.s.scopens + ".friend:read"
 	scopeFriendWrite := m.s.scopens + ".friend:write"
+	r.Get("/friends", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
+	r.Get("/friends/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
 	r.Get("/friends/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
 	r.Get("/friends/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
 	r.Post("/friends/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
