@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
+	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
@@ -24,6 +25,7 @@ type (
 	}
 
 	service struct {
+		friends  friendmodel.Repo
 		repo     model.Repo
 		users    user.Users
 		events   events.Events
@@ -57,17 +59,19 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 
 // NewCtx creates a new Conduit service from a context
 func NewCtx(inj governor.Injector) Service {
+	friends := friendmodel.GetCtxRepo(inj)
 	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(repo, users, ev, g, useropts)
+	return New(friends, repo, users, ev, g, useropts)
 }
 
 // New creates a new Conduit service
-func New(repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(friends friendmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
+		friends:  friends,
 		repo:     repo,
 		users:    users,
 		events:   ev,
@@ -104,6 +108,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
+	if err := s.friends.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created conduit friend table", nil)
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit"
 	conduitchatmodel "xorkevin.dev/governor/service/conduit/chat/model"
+	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	"xorkevin.dev/governor/service/courier"
 	couriermodel "xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
@@ -133,6 +134,7 @@ func main() {
 	}
 	{
 		inj := gov.Injector()
+		friendmodel.NewInCtx(inj, "friends")
 		conduitchatmodel.NewInCtx(inj, "chats", "chatmembers", "chatmessages", "chatassoc", "chatusernames", "chatdms")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
