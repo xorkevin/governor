@@ -446,7 +446,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeFriendRead := m.s.scopens + ".friend:read"
 	scopeFriendWrite := m.s.scopens + ".friend:write"
 	r.Get("/friends", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
-	r.Get("/friends/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
+	r.Delete("/friends/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
 	r.Get("/friends/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
 	r.Get("/friends/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
 	r.Post("/friends/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
