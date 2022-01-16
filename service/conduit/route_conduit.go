@@ -50,7 +50,7 @@ func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqRmFriend{
 		Userid1: gate.GetCtxUserid(c),
-		Userid2: c.Query("id"),
+		Userid2: c.Param("id"),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
