@@ -70,6 +70,23 @@ type (
 	}
 )
 
+func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqAcceptFriendInvitation{
+		Userid:    c.Param("id"),
+		InvitedBy: gate.GetCtxUserid(c),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.InviteFriend(req.Userid, req.InvitedBy); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqAcceptFriendInvitation{
@@ -449,6 +466,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Delete("/friend/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
 	r.Get("/friend/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
 	r.Get("/friend/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
+	r.Post("/friend/invitation/id/{id}", m.sendFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
 	r.Post("/friend/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
 	r.Delete("/friend/invitation/id/{id}", m.deleteUserFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
 	r.Delete("/friend/invitation/invited/{id}", m.deleteInvitedFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
