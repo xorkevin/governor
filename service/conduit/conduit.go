@@ -175,6 +175,9 @@ func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
 	if err != nil {
 		return err
 	}
+	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update friends username")
+	}
 	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat user name")
 	}
@@ -187,6 +190,9 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 	if err != nil {
 		return err
 	}
+	if err := s.friends.DeleteUser(props.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user friends")
+	}
 	if err := s.repo.DeleteUser(props.Userid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user from chats")
 	}
@@ -198,6 +204,9 @@ func (s *service) UserUpdateHook(pinger events.Pinger, msgdata []byte) error {
 	props, err := user.DecodeUpdateUserProps(msgdata)
 	if err != nil {
 		return err
+	}
+	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update friends username")
 	}
 	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update chat user name")
