@@ -445,13 +445,13 @@ func (m *router) conduitChatsOwner(c governor.Context, userid string) bool {
 func (m *router) mountRoutes(r governor.Router) {
 	scopeFriendRead := m.s.scopens + ".friend:read"
 	scopeFriendWrite := m.s.scopens + ".friend:write"
-	r.Get("/friends", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
-	r.Delete("/friends/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
-	r.Get("/friends/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
-	r.Get("/friends/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
-	r.Post("/friends/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
-	r.Delete("/friends/invitation/id/{id}", m.deleteUserFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
-	r.Delete("/friends/invitation/invited/{id}", m.deleteInvitedFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+	r.Get("/friend", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
+	r.Delete("/friend/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
+	r.Get("/friend/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
+	r.Get("/friend/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
+	r.Post("/friend/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+	r.Delete("/friend/invitation/id/{id}", m.deleteUserFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+	r.Delete("/friend/invitation/invited/{id}", m.deleteInvitedFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
 
 	scopeChatRead := m.s.scopens + ".chat:read"
 	scopeChatWrite := m.s.scopens + ".chat:write"
