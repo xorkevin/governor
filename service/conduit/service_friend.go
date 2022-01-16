@@ -31,8 +31,30 @@ func (s *service) GetFriends(userid string, prefix string, limit, offset int) (*
 }
 
 func (s *service) RemoveFriend(userid1, userid2 string) error {
+	if _, err := s.friends.GetByID(userid1, userid2); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Not friends",
+			}), governor.ErrOptInner(err))
+		}
+		return governor.ErrWithMsg(err, "Failed to get friends")
+	}
+	b, err := json.Marshal(UnfriendProps{
+		Userid: userid1,
+		Other:  userid2,
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode unfriend props to json")
+	}
 	if err := s.friends.Remove(userid1, userid2); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove friend")
+	}
+	if err := s.events.StreamPublish(s.opts.UnfriendChannel, b); err != nil {
+		s.logger.Error("Failed to publish unfriend event", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishunfriend",
+		})
 	}
 	return nil
 }

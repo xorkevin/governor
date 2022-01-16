@@ -60,11 +60,18 @@ type (
 		InvitedBy string `json:"invited_by"`
 	}
 
+	// UnfriendProps are properties of an unfriend event
+	UnfriendProps struct {
+		Userid string `json:"userid"`
+		Other  string `json:"other"`
+	}
+
 	ctxKeyConduit struct{}
 
 	Opts struct {
-		StreamName    string
-		FriendChannel string
+		StreamName      string
+		FriendChannel   string
+		UnfriendChannel string
 	}
 
 	ctxKeyOpts struct{}
@@ -130,8 +137,9 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{
-		StreamName:    streamname,
-		FriendChannel: streamname + ".friend",
+		StreamName:      streamname,
+		FriendChannel:   streamname + ".friend",
+		UnfriendChannel: streamname + ".unfriend",
 	}
 	SetCtxOpts(inj, s.opts)
 
@@ -320,6 +328,15 @@ func (s *service) FriendInvitationGCHook(msgdata []byte) {
 // DecodeFriendProps unmarshals json encoded friend props into a struct
 func DecodeFriendProps(msgdata []byte) (*FriendProps, error) {
 	m := &FriendProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to decode friend props")
+	}
+	return m, nil
+}
+
+// DecodeUnfriendProps unmarshals json encoded unfriend props into a struct
+func DecodeUnfriendProps(msgdata []byte) (*UnfriendProps, error) {
+	m := &UnfriendProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to decode friend props")
 	}
