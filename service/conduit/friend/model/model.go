@@ -10,19 +10,6 @@ import (
 //go:generate forge model -m Model -p friend -o model_gen.go Model friendUsername
 
 type (
-	// Model is the db friend relationship model
-	Model struct {
-		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;deleq,userid_2"`
-		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
-	}
-
-	friendUsername struct {
-		Username string `query:"username;updeq,userid_2"`
-	}
-)
-
-type (
 	Repo interface {
 		GetFriends(userid string, prefix string, limit, offset int) ([]Model, error)
 		Insert(userid1, userid2 string, username1, username2 string) error
@@ -35,6 +22,17 @@ type (
 	repo struct {
 		table string
 		db    db.Database
+	}
+
+	// Model is the db friend relationship model
+	Model struct {
+		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
+		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;deleq,userid_2"`
+		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
+	}
+
+	friendUsername struct {
+		Username string `query:"username;updeq,userid_2"`
 	}
 
 	ctxKeyRepo struct{}

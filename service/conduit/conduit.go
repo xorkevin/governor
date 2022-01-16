@@ -7,10 +7,16 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
+	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+)
+
+const (
+	time24h int64 = int64(24 * time.Hour / time.Second)
+	time72h int64 = time24h * 3
 )
 
 type (
@@ -25,15 +31,17 @@ type (
 	}
 
 	service struct {
-		friends  friendmodel.Repo
-		repo     model.Repo
-		users    user.Users
-		events   events.Events
-		gate     gate.Gate
-		logger   governor.Logger
-		scopens  string
-		streamns string
-		useropts user.Opts
+		friends     friendmodel.Repo
+		invitations invitationmodel.Repo
+		repo        model.Repo
+		users       user.Users
+		events      events.Events
+		gate        gate.Gate
+		logger      governor.Logger
+		scopens     string
+		streamns    string
+		useropts    user.Opts
+		syschannels governor.SysChannels
 	}
 
 	router struct {
@@ -60,23 +68,25 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 // NewCtx creates a new Conduit service from a context
 func NewCtx(inj governor.Injector) Service {
 	friends := friendmodel.GetCtxRepo(inj)
+	invitations := invitationmodel.GetCtxRepo(inj)
 	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, repo, users, ev, g, useropts)
+	return New(friends, invitations, repo, users, ev, g, useropts)
 }
 
 // New creates a new Conduit service
-func New(friends friendmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(friends friendmodel.Repo, invitations invitationmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
-		friends:  friends,
-		repo:     repo,
-		users:    users,
-		events:   ev,
-		gate:     g,
-		useropts: useropts,
+		friends:     friends,
+		invitations: invitations,
+		repo:        repo,
+		users:       users,
+		events:      ev,
+		gate:        g,
+		useropts:    useropts,
 	}
 }
 
@@ -98,6 +108,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	s.syschannels = c.SysChannels
+
 	sr := s.router()
 	sr.mountRoutes(m)
 	l.Info("Mounted http routes", nil)
@@ -112,11 +124,14 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit friend table", nil)
+	if err := s.invitations.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created conduit friend invitation table", nil)
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}
 	l.Info("Created conduit chat tables", nil)
-
 	return nil
 }
 
@@ -158,6 +173,11 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user update queue")
 	}
 	l.Info("Subscribed to user update queue", nil)
+
+	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.FriendInvitationGCHook); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+	}
+	l.Info("Subscribed to gov sys gc channel", nil)
 
 	return nil
 }
@@ -212,4 +232,22 @@ func (s *service) UserUpdateHook(pinger events.Pinger, msgdata []byte) error {
 		return governor.ErrWithMsg(err, "Failed to update chat user name")
 	}
 	return nil
+}
+
+func (s *service) FriendInvitationGCHook(msgdata []byte) {
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": s.syschannels.GC,
+		"group":   s.streamns + "_WORKER_INVITATION_GC",
+	})
+	props, err := governor.DecodeSysEventTimestampProps(msgdata)
+	if err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	if err := s.invitations.DeleteBefore(props.Timestamp - time72h); err != nil {
+		l.Error(err.Error(), nil)
+		return
+	}
+	l.Debug("GC friend invitations", nil)
 }
