@@ -24,7 +24,7 @@ func friendModelSetup(db *sql.DB, tableName string) error {
 	return nil
 }
 
-func friendModelInsert(db *sql.DB, tableName string, m *FriendModel) error {
+func friendModelInsert(db *sql.DB, tableName string, m *Model) error {
 	_, err := db.Exec("INSERT INTO "+tableName+" (userid_1, userid_2, username) VALUES ($1, $2, $3);", m.Userid1, m.Userid2, m.Username)
 	if err != nil {
 		return err
@@ -32,7 +32,7 @@ func friendModelInsert(db *sql.DB, tableName string, m *FriendModel) error {
 	return nil
 }
 
-func friendModelInsertBulk(db *sql.DB, tableName string, models []*FriendModel, allowConflict bool) error {
+func friendModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -61,12 +61,12 @@ func friendModelDelEqUserid2(db *sql.DB, tableName string, userid2 string) error
 	return err
 }
 
-func friendModelGetFriendModelEqUserid1OrdUsername(db *sql.DB, tableName string, userid1 string, orderasc bool, limit, offset int) ([]FriendModel, error) {
+func friendModelGetModelEqUserid1OrdUsername(db *sql.DB, tableName string, userid1 string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
-	res := make([]FriendModel, 0, limit)
+	res := make([]Model, 0, limit)
 	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func friendModelGetFriendModelEqUserid1OrdUsername(db *sql.DB, tableName string,
 		}
 	}()
 	for rows.Next() {
-		m := FriendModel{}
+		m := Model{}
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 			return nil, err
 		}
@@ -88,12 +88,12 @@ func friendModelGetFriendModelEqUserid1OrdUsername(db *sql.DB, tableName string,
 	return res, nil
 }
 
-func friendModelGetFriendModelEqUserid1LikeUsernameOrdUsername(db *sql.DB, tableName string, userid1 string, username string, orderasc bool, limit, offset int) ([]FriendModel, error) {
+func friendModelGetModelEqUserid1LikeUsernameOrdUsername(db *sql.DB, tableName string, userid1 string, username string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
-	res := make([]FriendModel, 0, limit)
+	res := make([]Model, 0, limit)
 	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, username)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func friendModelGetFriendModelEqUserid1LikeUsernameOrdUsername(db *sql.DB, table
 		}
 	}()
 	for rows.Next() {
-		m := FriendModel{}
+		m := Model{}
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 			return nil, err
 		}

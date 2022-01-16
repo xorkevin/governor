@@ -7,11 +7,11 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-//go:generate forge model -m FriendModel -p friend -o model_gen.go FriendModel friendUsername
+//go:generate forge model -m Model -p friend -o model_gen.go Model friendUsername
 
 type (
-	// FriendModel is the db friend relationship model
-	FriendModel struct {
+	// Model is the db friend relationship model
+	Model struct {
 		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
 		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;deleq,userid_2"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
@@ -24,7 +24,7 @@ type (
 
 type (
 	Repo interface {
-		GetFriends(userid string, prefix string, limit, offset int) ([]FriendModel, error)
+		GetFriends(userid string, prefix string, limit, offset int) ([]Model, error)
 		Insert(userid1, userid2 string, username1, username2 string) error
 		Remove(userid1, userid2 string) error
 		UpdateUsername(userid, username string) error
@@ -73,19 +73,19 @@ func New(database db.Database, table string) Repo {
 	}
 }
 
-func (r *repo) GetFriends(userid string, prefix string, limit, offset int) ([]FriendModel, error) {
+func (r *repo) GetFriends(userid string, prefix string, limit, offset int) ([]Model, error) {
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
 	}
 	if prefix == "" {
-		m, err := friendModelGetFriendModelEqUserid1OrdUsername(d, r.table, userid, true, limit, offset)
+		m, err := friendModelGetModelEqUserid1OrdUsername(d, r.table, userid, true, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get friends")
 		}
 		return m, nil
 	}
-	m, err := friendModelGetFriendModelEqUserid1LikeUsernameOrdUsername(d, r.table, userid, prefix+"%", true, limit, offset)
+	m, err := friendModelGetModelEqUserid1LikeUsernameOrdUsername(d, r.table, userid, prefix+"%", true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get friends")
 	}
@@ -97,7 +97,7 @@ func (r *repo) Insert(userid1, userid2 string, username1, username2 string) erro
 	if err != nil {
 		return err
 	}
-	if err := friendModelInsertBulk(d, r.table, []*FriendModel{
+	if err := friendModelInsertBulk(d, r.table, []*Model{
 		{
 			Userid1:  userid1,
 			Userid2:  userid2,
