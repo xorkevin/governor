@@ -71,6 +71,16 @@ func (r reqGetLatestChats) valid() error {
 	return nil
 }
 
+func (r reqGetChats) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasChatids(r.Chatids); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqUpdateDM) valid() error {
 	if err := validhasUserid(r.Userid1); err != nil {
 		return err

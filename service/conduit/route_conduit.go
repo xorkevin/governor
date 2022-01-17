@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqUpdateDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -199,7 +199,7 @@ type (
 	}
 )
 
-func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
+func (m *router) getLatestDMs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqGetLatestChats{
 		Userid: gate.GetCtxUserid(c),
@@ -211,6 +211,31 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := m.s.GetLatestDMs(req.Userid, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetChats struct {
+		Userid  string   `valid:"userid,has" json:"-"`
+		Chatids []string `valid:"chatids,has" json:"-"`
+	}
+)
+
+func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChats{
+		Userid:  gate.GetCtxUserid(c),
+		Chatids: strings.Split(c.Query("ids"), ","),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetDMs(req.Userid, req.Chatids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -530,7 +555,8 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeChatRead := m.s.scopens + ".chat:read"
 	scopeChatWrite := m.s.scopens + ".chat:write"
 	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
-	r.Get("/dm", m.getDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/dm", m.getLatestDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/dm/ids", m.getDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
 
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))

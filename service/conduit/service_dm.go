@@ -74,3 +74,27 @@ func (s *service) GetLatestDMs(userid string, before int64, limit int) (*resDMs,
 		DMs: res,
 	}, nil
 }
+
+func (s *service) GetDMs(userid string, chatids []string) (*resDMs, error) {
+	m, err := s.dms.GetChats(chatids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get dms")
+	}
+	res := make([]resDM, 0, len(m))
+	for _, i := range m {
+		if i.Userid1 != userid && i.Userid2 != userid {
+			continue
+		}
+		res = append(res, resDM{
+			Userid:       useridDiff(userid, i.Userid1, i.Userid2),
+			Chatid:       i.Chatid,
+			Name:         i.Name,
+			Theme:        i.Theme,
+			LastUpdated:  i.LastUpdated,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return &resDMs{
+		DMs: res,
+	}, nil
+}
