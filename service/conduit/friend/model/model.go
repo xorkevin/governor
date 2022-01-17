@@ -163,7 +163,6 @@ func (r *repo) DeleteUser(userid string) error {
 	return nil
 }
 
-// Setup creates new chat, member, and msg tables
 func (r *repo) Setup() error {
 	d, err := r.db.DB()
 	if err != nil {

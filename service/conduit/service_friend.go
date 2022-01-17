@@ -8,6 +8,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 )
 
 type (
@@ -196,4 +197,32 @@ func (s *service) GetInvitedFriendInvitations(userid string, amount, offset int)
 	return &resFriendInvitations{
 		Invitations: res,
 	}, nil
+}
+
+func (s *service) friendSubscriber(pinger events.Pinger, msgdata []byte) error {
+	msg, err := DecodeFriendProps(msgdata)
+	if err != nil {
+		return err
+	}
+	m, err := s.dms.New(msg.InvitedBy, msg.Userid)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to create new dm")
+	}
+	if err := s.dms.Insert(m); err != nil {
+		if !errors.Is(err, db.ErrUnique{}) {
+			return governor.ErrWithMsg(err, "Failed to insert new dm")
+		}
+	}
+	return nil
+}
+
+func (s *service) unfriendSubscriber(pinger events.Pinger, msgdata []byte) error {
+	msg, err := DecodeUnfriendProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.dms.Delete(msg.Userid, msg.Other); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete dm")
+	}
+	return nil
 }

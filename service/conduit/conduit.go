@@ -9,6 +9,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/chat/model"
+	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	"xorkevin.dev/governor/service/events"
@@ -35,6 +36,7 @@ type (
 	service struct {
 		friends        friendmodel.Repo
 		invitations    invitationmodel.Repo
+		dms            dmmodel.Repo
 		repo           model.Repo
 		users          user.Users
 		events         events.Events
@@ -109,19 +111,21 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 func NewCtx(inj governor.Injector) Service {
 	friends := friendmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
+	dms := dmmodel.GetCtxRepo(inj)
 	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, invitations, repo, users, ev, g, useropts)
+	return New(friends, invitations, dms, repo, users, ev, g, useropts)
 }
 
 // New creates a new Conduit service
-func New(friends friendmodel.Repo, invitations invitationmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		friends:        friends,
 		invitations:    invitations,
+		dms:            dms,
 		repo:           repo,
 		users:          users,
 		events:         ev,
@@ -192,6 +196,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit friend invitation table", nil)
+	if err := s.dms.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created conduit dm table", nil)
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}
@@ -216,6 +224,26 @@ func (s *service) Start(ctx context.Context) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "start",
 	})
+
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.FriendChannel, s.streamns+"_FRIEND_WORKER", s.friendSubscriber, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to friend queue")
+	}
+	l.Info("Subscribed to friend queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UnfriendChannel, s.streamns+"_UNFRIEND_WORKER", s.unfriendSubscriber, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to unfriend queue")
+	}
+	l.Info("Subscribed to unfriend queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.CreateChannel, s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -338,7 +366,7 @@ func DecodeFriendProps(msgdata []byte) (*FriendProps, error) {
 func DecodeUnfriendProps(msgdata []byte) (*UnfriendProps, error) {
 	m := &UnfriendProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode friend props")
+		return nil, governor.ErrWithMsg(err, "Failed to decode unfriend props")
 	}
 	return m, nil
 }
