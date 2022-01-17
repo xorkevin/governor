@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqUpdateDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -189,6 +189,62 @@ func (m *router) getInvited(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetLatestChats struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Before int64  `json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetLatestChats{
+		Userid: gate.GetCtxUserid(c),
+		Before: c.QueryInt64("before", 0),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetLatestDMs(req.Userid, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqUpdateDM struct {
+		Userid1 string `valid:"userid,has" json:"-"`
+		Userid2 string `valid:"userid,has" json:"-"`
+		Name    string `valid:"name" json:"name"`
+		Theme   string `valid:"theme" json:"theme"`
+	}
+)
+
+func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqUpdateDM{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid1 = gate.GetCtxUserid(c)
+	req.Userid2 = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.UpdateDM(req.Userid1, req.Userid2, req.Name, req.Theme); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
 }
 
 type (
@@ -474,6 +530,9 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeChatRead := m.s.scopens + ".chat:read"
 	scopeChatWrite := m.s.scopens + ".chat:write"
 	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
+	r.Get("/dm", m.getDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
+
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat", m.getChats, gate.Owner(m.s.gate, m.conduitChatsOwner, scopeChatRead))

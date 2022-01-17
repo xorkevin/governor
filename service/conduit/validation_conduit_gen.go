@@ -61,6 +61,32 @@ func (r reqGetFriendInvitations) valid() error {
 	return nil
 }
 
+func (r reqGetLatestChats) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqUpdateDM) valid() error {
+	if err := validhasUserid(r.Userid1); err != nil {
+		return err
+	}
+	if err := validhasUserid(r.Userid2); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqChatID) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err

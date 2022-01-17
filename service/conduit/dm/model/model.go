@@ -20,6 +20,8 @@ type (
 	Repo interface {
 		New(userid1, userid2 string) (*Model, error)
 		GetByID(userid1, userid2 string) (*Model, error)
+		GetLatest(userid string, before int64, limit int) ([]string, error)
+		GetChats(chatids []string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		UpdateLastUpdated(userid1, userid2 string, t int64) error
@@ -36,10 +38,10 @@ type (
 	Model struct {
 		Userid1      string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
 		Userid2      string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2)" query:"userid_2;getoneeq,userid_1,userid_2;updeq,userid_1,userid_2;deleq,userid_1,userid_2"`
-		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL" query:"chatid"`
+		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|arr"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
@@ -118,6 +120,70 @@ func (r *repo) GetByID(userid1, userid2 string) (*Model, error) {
 	m, err := dmModelGetModelEqUserid1EqUserid2(d, r.table, userid1, userid2)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get dm")
+	}
+	return m, nil
+}
+
+func (r *repo) GetLatest(userid string, before int64, limit int) ([]string, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]string, 0, limit)
+	if before == 0 {
+		rows, err := d.Query("SELECT chatid FROM "+r.table+" WHERE (userid_1 = $2 OR userid_2 = $2) ORDER BY last_updated DESC LIMIT $1;", limit, userid)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get latest dms")
+		}
+		defer func() {
+			if err := rows.Close(); err != nil {
+			}
+		}()
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				return nil, db.WrapErr(err, "Failed to get latest dms")
+			}
+			res = append(res, s)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, db.WrapErr(err, "Failed to get latest dms")
+		}
+	} else {
+		rows, err := d.Query("SELECT chatid FROM "+r.table+" WHERE (userid_1 = $2 OR userid_2 = $2) AND last_updated < $3 ORDER BY last_updated DESC LIMIT $1;", limit, userid, before)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get latest dms")
+		}
+		defer func() {
+			if err := rows.Close(); err != nil {
+			}
+		}()
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				return nil, db.WrapErr(err, "Failed to get latest dms")
+			}
+			res = append(res, s)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, db.WrapErr(err, "Failed to get latest dms")
+		}
+	}
+	return res, nil
+}
+
+func (r *repo) GetChats(chatids []string) ([]Model, error) {
+	if len(chatids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := dmModelGetModelHasChatidOrdLastUpdated(d, r.table, chatids, false, len(chatids), 0)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get dms")
 	}
 	return m, nil
 }
