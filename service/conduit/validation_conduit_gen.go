@@ -81,6 +81,19 @@ func (r reqGetChats) valid() error {
 	return nil
 }
 
+func (r reqSearchDMs) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUsername(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqUpdateDM) valid() error {
 	if err := validhasUserid(r.Userid1); err != nil {
 		return err

@@ -2,6 +2,8 @@ package model
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -20,6 +22,7 @@ type (
 		New(userid1, userid2 string) (*Model, error)
 		GetByID(userid1, userid2 string) (*Model, error)
 		GetLatest(userid string, before int64, limit int) ([]string, error)
+		GetByUser(userid string, userids []string) ([]DMInfo, error)
 		GetChats(chatids []string) ([]Model, error)
 		Insert(m *Model) error
 		Update(m *Model) error
@@ -42,6 +45,13 @@ type (
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|arr"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+	}
+
+	DMInfo struct {
+		Userid1 string
+		Userid2 string
+		Chatid  string
+		Name    string
 	}
 
 	dmLastUpdated struct {
@@ -165,6 +175,56 @@ func (r *repo) GetLatest(userid string, before int64, limit int) ([]string, erro
 		if err := rows.Err(); err != nil {
 			return nil, db.WrapErr(err, "Failed to get latest dms")
 		}
+	}
+	return res, nil
+}
+
+func (r *repo) GetByUser(userid string, userids []string) ([]DMInfo, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
+
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]DMInfo, 0, len(userids))
+	args := make([]interface{}, 0, len(userids)*2)
+	var placeholdersid string
+	{
+		paramCount := 1
+		placeholders := make([]string, 0, len(userids))
+		for _, i := range userids {
+			placeholders = append(placeholders, fmt.Sprintf("($%d, $%d)", paramCount, paramCount+1))
+			paramCount += 2
+			a, b := tupleSort(userid, i)
+			args = append(args, a, b)
+		}
+		placeholdersid = strings.Join(placeholders, ", ")
+	}
+	rows, err := d.Query("SELECT userid_1, userid_2, chatid, name FROM "+r.table+" WHERE (userid_1, userid_2) IN (VALUES "+placeholdersid+") ORDER BY last_updated DESC;", args...)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get user dms")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var userid1, userid2, chatid, name string
+		if err := rows.Scan(&userid1, &userid2, &chatid, &name); err != nil {
+			return nil, db.WrapErr(err, "Failed to get user dms")
+		}
+		res = append(res, DMInfo{
+			Userid1: userid1,
+			Userid2: userid2,
+			Chatid:  chatid,
+			Name:    name,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, db.WrapErr(err, "Failed to get user dms")
 	}
 	return res, nil
 }

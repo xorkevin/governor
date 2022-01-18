@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqSearchDMs reqUpdateDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -236,6 +236,33 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := m.s.GetDMs(req.Userid, req.Chatids)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqSearchDMs struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Prefix string `valid:"username,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchDMs{
+		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.SearchDMs(req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -558,6 +585,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/dm", m.getLatestDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/dm/ids", m.getDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Get("/dm/search", m.searchDMs, gate.User(m.s.gate, scopeChatRead))
 
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))

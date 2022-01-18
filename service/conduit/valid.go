@@ -177,6 +177,22 @@ func validoptUserids(members []string) error {
 	return nil
 }
 
+func validhasUsername(username string) error {
+	if len(username) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username must be provided",
+		}))
+	}
+	if len(username) > lengthCapName {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username must be shorter than 128 characters",
+		}))
+	}
+	return nil
+}
+
 func validoptUsername(username string) error {
 	if len(username) > lengthCapName {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{

@@ -98,3 +98,46 @@ func (s *service) GetDMs(userid string, chatids []string) (*resDMs, error) {
 		DMs: res,
 	}, nil
 }
+
+type (
+	resDMSearch struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+		Chatid   string `json:"chatid"`
+		Name     string `json:"name"`
+	}
+
+	resDMSearches struct {
+		DMs []resDMSearch
+	}
+)
+
+func (s *service) SearchDMs(userid string, prefix string, limit int) (*resDMSearches, error) {
+	m, err := s.friends.GetFriends(userid, prefix, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+	}
+	usernames := map[string]string{}
+	userids := make([]string, 0, len(m))
+	for _, i := range m {
+		userids = append(userids, i.Userid2)
+		usernames[i.Userid2] = i.Username
+	}
+	chatInfo, err := s.dms.GetByUser(userid, userids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get dms")
+	}
+	res := make([]resDMSearch, 0, len(chatInfo))
+	for _, i := range chatInfo {
+		k := useridDiff(userid, i.Userid1, i.Userid2)
+		res = append(res, resDMSearch{
+			Userid:   k,
+			Username: usernames[k],
+			Chatid:   i.Chatid,
+			Name:     i.Name,
+		})
+	}
+	return &resDMSearches{
+		DMs: res,
+	}, nil
+}
