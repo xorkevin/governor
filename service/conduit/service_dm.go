@@ -108,7 +108,7 @@ type (
 	}
 
 	resDMSearches struct {
-		DMs []resDMSearch
+		DMs []resDMSearch `json:"dms"`
 	}
 )
 
