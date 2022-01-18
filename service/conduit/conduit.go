@@ -12,6 +12,7 @@ import (
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
+	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
@@ -37,6 +38,7 @@ type (
 		friends        friendmodel.Repo
 		invitations    invitationmodel.Repo
 		dms            dmmodel.Repo
+		msgs           msgmodel.Repo
 		repo           model.Repo
 		users          user.Users
 		events         events.Events
@@ -112,20 +114,22 @@ func NewCtx(inj governor.Injector) Service {
 	friends := friendmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
 	dms := dmmodel.GetCtxRepo(inj)
+	msgs := msgmodel.GetCtxRepo(inj)
 	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, invitations, dms, repo, users, ev, g, useropts)
+	return New(friends, invitations, dms, msgs, repo, users, ev, g, useropts)
 }
 
 // New creates a new Conduit service
-func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel.Repo, msgs msgmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
 	return &service{
 		friends:        friends,
 		invitations:    invitations,
 		dms:            dms,
+		msgs:           msgs,
 		repo:           repo,
 		users:          users,
 		events:         ev,
@@ -200,6 +204,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit dm table", nil)
+	if err := s.msgs.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created conduit msg table", nil)
 	if err := s.repo.Setup(); err != nil {
 		return err
 	}

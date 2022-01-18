@@ -53,18 +53,15 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 	inj.Set(ctxKeyRepo{}, r)
 }
 
-// NewInCtx creates a new chat repo from a context and sets it in the context
 func NewInCtx(inj governor.Injector, table string) {
 	SetCtxRepo(inj, NewCtx(inj, table))
 }
 
-// NewCtx creates a new chat repo from a context
 func NewCtx(inj governor.Injector, table string) Repo {
 	dbService := db.GetCtxDB(inj)
 	return New(dbService, table)
 }
 
-// New creates a new user repository
 func New(database db.Database, table string) Repo {
 	return &repo{
 		table: table,

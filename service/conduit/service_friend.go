@@ -221,6 +221,16 @@ func (s *service) unfriendSubscriber(pinger events.Pinger, msgdata []byte) error
 	if err != nil {
 		return err
 	}
+	m, err := s.dms.GetByID(msg.Userid, msg.Other)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get dm")
+	}
+	if err := s.msgs.DeleteChatMsgs(m.Chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+	}
 	if err := s.dms.Delete(msg.Userid, msg.Other); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete dm")
 	}
