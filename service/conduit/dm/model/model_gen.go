@@ -72,6 +72,14 @@ func dmModelDelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1 string, 
 	return err
 }
 
+func dmModelGetModelEqChatid(db *sql.DB, tableName string, chatid string) (*Model, error) {
+	m := &Model{}
+	if err := db.QueryRow("SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid = $1;", chatid).Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func dmModelGetModelHasChatidOrdLastUpdated(db *sql.DB, tableName string, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))

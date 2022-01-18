@@ -8,8 +8,8 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
-func (s *service) UpdateDM(userid1, userid2 string, name, theme string) error {
-	m, err := s.dms.GetByID(userid1, userid2)
+func (s *service) UpdateDM(userid string, chatid string, name, theme string) error {
+	m, err := s.dms.GetByChatID(chatid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -18,6 +18,12 @@ func (s *service) UpdateDM(userid1, userid2 string, name, theme string) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to get dm")
+	}
+	if m.Userid1 != userid && m.Userid2 != userid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusNotFound,
+			Message: "DM not found",
+		}))
 	}
 	m.Name = name
 	m.Theme = theme

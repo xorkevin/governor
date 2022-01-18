@@ -95,10 +95,10 @@ func (r reqSearchDMs) valid() error {
 }
 
 func (r reqUpdateDM) valid() error {
-	if err := validhasUserid(r.Userid1); err != nil {
+	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validhasUserid(r.Userid2); err != nil {
+	if err := validhasChatid(r.Chatid); err != nil {
 		return err
 	}
 	if err := validName(r.Name); err != nil {

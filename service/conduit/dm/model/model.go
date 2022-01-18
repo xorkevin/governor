@@ -21,6 +21,7 @@ type (
 	Repo interface {
 		New(userid1, userid2 string) (*Model, error)
 		GetByID(userid1, userid2 string) (*Model, error)
+		GetByChatID(chatid string) (*Model, error)
 		GetLatest(userid string, before int64, limit int) ([]string, error)
 		GetByUser(userid string, userids []string) ([]DMInfo, error)
 		GetChats(chatids []string) ([]Model, error)
@@ -40,7 +41,7 @@ type (
 	Model struct {
 		Userid1      string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
 		Userid2      string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2)" query:"userid_2;getoneeq,userid_1,userid_2;updeq,userid_1,userid_2;deleq,userid_1,userid_2"`
-		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid"`
+		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid;getoneeq,chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|arr"`
@@ -124,6 +125,18 @@ func (r *repo) GetByID(userid1, userid2 string) (*Model, error) {
 		return nil, err
 	}
 	m, err := dmModelGetModelEqUserid1EqUserid2(d, r.table, userid1, userid2)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get dm")
+	}
+	return m, nil
+}
+
+func (r *repo) GetByChatID(chatid string) (*Model, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := dmModelGetModelEqChatid(d, r.table, chatid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get dm")
 	}

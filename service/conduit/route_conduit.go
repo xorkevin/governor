@@ -272,10 +272,10 @@ func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqUpdateDM struct {
-		Userid1 string `valid:"userid,has" json:"-"`
-		Userid2 string `valid:"userid,has" json:"-"`
-		Name    string `valid:"name" json:"name"`
-		Theme   string `valid:"theme" json:"theme"`
+		Userid string `valid:"userid,has" json:"-"`
+		Chatid string `valid:"chatid,has" json:"-"`
+		Name   string `valid:"name" json:"name"`
+		Theme  string `valid:"theme" json:"theme"`
 	}
 )
 
@@ -286,13 +286,13 @@ func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Userid1 = gate.GetCtxUserid(c)
-	req.Userid2 = c.Param("id")
+	req.Userid = gate.GetCtxUserid(c)
+	req.Chatid = c.Param("id")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateDM(req.Userid1, req.Userid2, req.Name, req.Theme); err != nil {
+	if err := m.s.UpdateDM(req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
