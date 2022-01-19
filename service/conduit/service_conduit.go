@@ -405,17 +405,6 @@ func (s *service) SearchChats(kind string, userid string, prefix string, limit i
 	return s.GetChats(chatids)
 }
 
-type (
-	resMsg struct {
-		Chatid string `json:"chatid"`
-		Msgid  string `json:"msgid"`
-		Userid string `json:"userid"`
-		Timems int64  `json:"time_ms"`
-		Kind   string `json:"kind"`
-		Value  string `json:"value"`
-	}
-)
-
 func (s *service) CreateMsg(chatid string, userid string, kind string, value string) (*resMsg, error) {
 	m, err := s.repo.GetChat(chatid)
 	if err != nil {
@@ -449,12 +438,6 @@ func (s *service) CreateMsg(chatid string, userid string, kind string, value str
 		Value:  msg.Value,
 	}, nil
 }
-
-type (
-	resMsgs struct {
-		Msgs []resMsg `json:"msgs"`
-	}
-)
 
 func (s *service) GetLatestChatMsgsByKind(chatid string, kind string, before string, limit int) (*resMsgs, error) {
 	var msgs []model.MsgModel

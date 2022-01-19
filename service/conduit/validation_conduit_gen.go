@@ -110,6 +110,54 @@ func (r reqUpdateDM) valid() error {
 	return nil
 }
 
+func (r reqCreateDMMsg) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validMsgvalue(r.Value); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetDMMsgs) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validoptMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validoptMsgid(r.Before); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqDelDMMsg) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validhasMsgid(r.Msgid); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqChatID) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err

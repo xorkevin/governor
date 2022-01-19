@@ -5,25 +5,34 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/conduit/dm/model"
 	"xorkevin.dev/governor/service/db"
 )
 
-func (s *service) UpdateDM(userid string, chatid string, name, theme string) error {
+func (s *service) getDMByChatid(userid string, chatid string) (*model.Model, error) {
 	m, err := s.dms.GetByChatID(chatid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 				Status:  http.StatusNotFound,
 				Message: "DM not found",
 			}), governor.ErrOptInner(err))
 		}
-		return governor.ErrWithMsg(err, "Failed to get dm")
+		return nil, governor.ErrWithMsg(err, "Failed to get dm")
 	}
 	if m.Userid1 != userid && m.Userid2 != userid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Status:  http.StatusNotFound,
 			Message: "DM not found",
 		}))
+	}
+	return m, nil
+}
+
+func (s *service) UpdateDM(userid string, chatid string, name, theme string) error {
+	m, err := s.getDMByChatid(userid, chatid)
+	if err != nil {
+		return err
 	}
 	m.Name = name
 	m.Theme = theme
@@ -146,4 +155,77 @@ func (s *service) SearchDMs(userid string, prefix string, limit int) (*resDMSear
 	return &resDMSearches{
 		DMs: res,
 	}, nil
+}
+
+type (
+	resMsg struct {
+		Chatid string `json:"chatid"`
+		Msgid  string `json:"msgid"`
+		Userid string `json:"userid"`
+		Timems int64  `json:"time_ms"`
+		Kind   string `json:"kind"`
+		Value  string `json:"value"`
+	}
+)
+
+func (s *service) CreateDMMsg(userid string, chatid string, kind string, value string) (*resMsg, error) {
+	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.New(chatid, userid, kind, value)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new dm msg")
+	}
+	if err := s.msgs.Insert(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to send new dm msg")
+	}
+	// TODO: notify dm event
+	return &resMsg{
+		Chatid: m.Chatid,
+		Msgid:  m.Msgid,
+		Userid: m.Userid,
+		Timems: m.Timems,
+		Kind:   m.Kind,
+		Value:  m.Value,
+	}, nil
+}
+
+type (
+	resMsgs struct {
+		Msgs []resMsg `json:"msgs"`
+	}
+)
+
+func (s *service) GetDMMsgs(userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.GetMsgs(chatid, kind, before, limit)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get dm msgs")
+	}
+	res := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		res = append(res, resMsg{
+			Chatid: i.Chatid,
+			Msgid:  i.Msgid,
+			Userid: i.Userid,
+			Timems: i.Timems,
+			Kind:   i.Kind,
+			Value:  i.Value,
+		})
+	}
+	return &resMsgs{
+		Msgs: res,
+	}, nil
+}
+
+func (s *service) DelDMMsg(userid string, chatid string, msgid string) error {
+	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+		return err
+	}
+	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+	}
+	return nil
 }

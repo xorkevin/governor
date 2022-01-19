@@ -229,8 +229,24 @@ func validOffset(offset int) error {
 	return nil
 }
 
-func validoptMsgid(kind string) error {
-	if len(kind) > lengthCapMsgid {
+func validhasMsgid(msgid string) error {
+	if len(msgid) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msgid must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(msgid) > lengthCapMsgid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Msgid must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validoptMsgid(msgid string) error {
+	if len(msgid) > lengthCapMsgid {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Msgid must be shorter than 32 characters",
 			Status:  http.StatusBadRequest,
