@@ -9,6 +9,10 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
+const (
+	chatMsgKindTxt = "t"
+)
+
 func (s *service) getDMByChatid(userid string, chatid string) (*model.Model, error) {
 	m, err := s.dms.GetByChatID(chatid)
 	if err != nil {

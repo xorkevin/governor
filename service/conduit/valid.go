@@ -262,9 +262,11 @@ func validMsgkind(kind string) error {
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if len(kind) > lengthCapKind {
+	switch kind {
+	case chatMsgKindTxt:
+	default:
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Msg kind must be shorter than 32 characters",
+			Message: "Invalid chat msg kind",
 			Status:  http.StatusBadRequest,
 		}))
 	}
