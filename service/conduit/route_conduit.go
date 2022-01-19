@@ -675,7 +675,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/dm/search", m.searchDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Post("/dm/id/{id}/msg", m.createDMMsg, gate.User(m.s.gate, scopeChatWrite))
 	r.Get("/dm/id/{id}/msg", m.getDMMsgs, gate.User(m.s.gate, scopeChatRead))
-	r.Delete("/dm/id/{id}/msg/{msgid}", m.deleteMsg, gate.User(m.s.gate, scopeChatWrite))
+	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteMsg, gate.User(m.s.gate, scopeChatWrite))
 
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))
