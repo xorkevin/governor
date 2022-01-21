@@ -26,6 +26,7 @@ require (
 	golang.org/x/image v0.0.0-20211028202545-6944b10bf410
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.1.7
 )
 

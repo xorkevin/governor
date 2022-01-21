@@ -15,6 +15,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"nhooyr.io/websocket"
+)
+
+const (
+	WSProtocolVersion = "xorkevin.dev/governor/ws/v1alpha1"
 )
 
 type (
@@ -145,6 +150,7 @@ type (
 		Req() *http.Request
 		Res() http.ResponseWriter
 		R() (http.ResponseWriter, *http.Request)
+		Websocket() (Websocket, error)
 	}
 
 	govcontext struct {
@@ -153,6 +159,15 @@ type (
 		query url.Values
 		ctx   context.Context
 		l     Logger
+	}
+
+	Websocket interface {
+		Close(status int, reason string)
+	}
+
+	govws struct {
+		c    *govcontext
+		conn *websocket.Conn
 	}
 )
 
@@ -389,6 +404,42 @@ func (c *govcontext) Res() http.ResponseWriter {
 
 func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
 	return c.Res(), c.Req()
+}
+
+func (c *govcontext) Websocket() (Websocket, error) {
+	conn, err := websocket.Accept(c.w, c.r, &websocket.AcceptOptions{
+		Subprotocols:    []string{WSProtocolVersion},
+		CompressionMode: websocket.CompressionContextTakeover,
+	})
+	if err != nil {
+		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Failed to open ws connection",
+		}))
+	}
+	w := &govws{
+		c:    c,
+		conn: conn,
+	}
+	if conn.Subprotocol() != WSProtocolVersion {
+		w.Close(int(websocket.StatusProtocolError), "Invalid ws subprotocol")
+		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Invalid ws subprotocol",
+		}))
+	}
+	return w, nil
+}
+
+func (w *govws) Close(status int, reason string) {
+	if err := w.conn.Close(websocket.StatusCode(status), reason); err != nil {
+		if w.c.l != nil {
+			w.c.l.Error("Failed to close ws connection", map[string]string{
+				"endpoint": w.c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		}
+	}
 }
 
 func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
