@@ -173,7 +173,8 @@ type (
 )
 
 func (s *service) CreateDMMsg(userid string, chatid string, kind string, value string) (*resMsg, error) {
-	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+	dm, err := s.getDMByChatid(userid, chatid)
+	if err != nil {
 		return nil, err
 	}
 	m, err := s.msgs.New(chatid, userid, kind, value)
@@ -182,6 +183,9 @@ func (s *service) CreateDMMsg(userid string, chatid string, kind string, value s
 	}
 	if err := s.msgs.Insert(m); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to send new dm msg")
+	}
+	if err := s.dms.UpdateLastUpdated(dm.Userid1, dm.Userid2, m.Timems); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update dm last updated")
 	}
 	// TODO: notify dm event
 	return &resMsg{
