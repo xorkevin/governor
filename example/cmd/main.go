@@ -39,6 +39,7 @@ import (
 	rolemodel "xorkevin.dev/governor/service/user/role/model"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/ws"
 )
 
 var (
@@ -94,6 +95,7 @@ func main() {
 	}
 	gov.Register("token", "/null/token", token.New())
 	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
+	gov.Register("ws", "/ws", ws.NewCtx(gov.Injector()))
 	{
 		inj := gov.Injector()
 		usermodel.NewInCtx(inj, "users")
