@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -430,7 +429,7 @@ func (c *govcontext) Websocket() (Websocket, error) {
 		conn: conn,
 	}
 	if conn.Subprotocol() != WSProtocolVersion {
-		w.Close(int(websocket.StatusProtocolError), "Invalid ws subprotocol")
+		w.Close(int(websocket.StatusPolicyViolation), "Invalid ws subprotocol")
 		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Invalid ws subprotocol",
@@ -453,7 +452,20 @@ type (
 )
 
 func (e *ErrorWS) Error() string {
-	return fmt.Sprintf("%d: %s", e.Status, e.Reason)
+	b := strings.Builder{}
+	b.WriteString("[")
+	b.WriteString(strconv.Itoa(e.Status))
+	b.WriteString("]")
+	if e.Reason != "" {
+		b.WriteString(" ")
+		b.WriteString(e.Reason)
+	}
+	if e.Inner == nil {
+		return b.String()
+	}
+	b.WriteString(": ")
+	b.WriteString(e.Inner.Error())
+	return b.String()
 }
 
 func (e *ErrorWS) Unwrap() error {
@@ -487,6 +499,7 @@ func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
 
 func (w *govws) Close(status int, reason string) {
 	if err := w.conn.Close(websocket.StatusCode(status), reason); err != nil {
+		err = w.wrapWSErr(err, "Failed to close ws connection")
 		if w.c.l != nil {
 			w.c.l.Error("Failed to close ws connection", map[string]string{
 				"endpoint": w.c.r.URL.EscapedPath(),
