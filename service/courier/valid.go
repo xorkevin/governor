@@ -61,9 +61,6 @@ func validhasLinkID(linkid string) error {
 }
 
 func validBrandID(brandid string) error {
-	if len(brandid) == 0 {
-		return nil
-	}
 	if len(brandid) < 3 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Brand id must be longer than 2 characters",
