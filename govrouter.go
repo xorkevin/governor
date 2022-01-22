@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -12,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -19,7 +22,8 @@ import (
 )
 
 const (
-	WSProtocolVersion = "xorkevin.dev/governor/ws/v1alpha1"
+	WSProtocolVersion  = "xorkevin.dev/governor/ws/v1alpha1"
+	WSReadLimitDefault = 32768
 )
 
 type (
@@ -159,15 +163,6 @@ type (
 		query url.Values
 		ctx   context.Context
 		l     Logger
-	}
-
-	Websocket interface {
-		Close(status int, reason string)
-	}
-
-	govws struct {
-		c    *govcontext
-		conn *websocket.Conn
 	}
 )
 
@@ -406,6 +401,19 @@ func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
 	return c.Res(), c.Req()
 }
 
+type (
+	Websocket interface {
+		SetReadLimit(limit int64)
+		Write(ctx context.Context, txt bool, b []byte) error
+		Close(status int, reason string)
+	}
+
+	govws struct {
+		c    *govcontext
+		conn *websocket.Conn
+	}
+)
+
 func (c *govcontext) Websocket() (Websocket, error) {
 	conn, err := websocket.Accept(c.w, c.r, &websocket.AcceptOptions{
 		Subprotocols:    []string{WSProtocolVersion},
@@ -428,7 +436,53 @@ func (c *govcontext) Websocket() (Websocket, error) {
 			Message: "Invalid ws subprotocol",
 		}))
 	}
+	w.SetReadLimit(WSReadLimitDefault)
 	return w, nil
+}
+
+func (w *govws) SetReadLimit(limit int64) {
+	w.conn.SetReadLimit(limit)
+}
+
+type (
+	ErrorWS struct {
+		Status int
+		Reason string
+		Inner  error
+	}
+)
+
+func (e *ErrorWS) Error() string {
+	return fmt.Sprintf("%d: %s", e.Status, e.Reason)
+}
+
+func (e *ErrorWS) Unwrap() error {
+	return e.Inner
+}
+
+func (w *govws) wrapWSErr(err error, msg string) error {
+	werr := websocket.CloseError{}
+	if errors.As(err, &werr) {
+		return ErrWithMsg(&ErrorWS{
+			Status: int(werr.Code),
+			Reason: werr.Reason,
+			Inner:  err,
+		}, msg)
+	}
+	return ErrWithMsg(err, msg)
+}
+
+func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
+	msgtype := websocket.MessageBinary
+	if txt {
+		msgtype = websocket.MessageText
+	}
+	reqctx, reqcancel := context.WithTimeout(ctx, 5*time.Second)
+	defer reqcancel()
+	if err := w.conn.Write(reqctx, msgtype, b); err != nil {
+		return w.wrapWSErr(err, "Failed to write to ws")
+	}
+	return nil
 }
 
 func (w *govws) Close(status int, reason string) {
