@@ -13,6 +13,9 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	conn, err := c.Websocket()
 	if err != nil {
+		m.s.logger.Debug("Failed to accept WS conn", map[string]string{
+			"error": err.Error(),
+		})
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")

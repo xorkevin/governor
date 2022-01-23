@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"compress/gzip"
 	"context"
 	_ "embed"
 	"fmt"
@@ -170,7 +169,7 @@ func (s *Server) init(ctx context.Context) error {
 		})
 	}
 
-	i.Use(middleware.Compress(gzip.DefaultCompression))
+	i.Use(compressorMiddleware())
 	l.Info("Init middleware gzip", nil)
 
 	i.Use(middleware.Recoverer)

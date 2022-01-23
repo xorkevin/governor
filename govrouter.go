@@ -2,6 +2,7 @@ package governor
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"nhooyr.io/websocket"
 )
@@ -429,7 +431,7 @@ func (c *govcontext) Websocket() (Websocket, error) {
 		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
 			Status:  http.StatusBadRequest,
 			Message: "Failed to open ws connection",
-		}))
+		}), ErrOptInner(err))
 	}
 	w := &govws{
 		c:    c,
@@ -686,4 +688,43 @@ func ipnetsContain(ip net.IP, ipnet []net.IPNet) bool {
 		}
 	}
 	return false
+}
+
+const (
+	headerConnection           = "Connection"
+	headerUpgrade              = "Upgrade"
+	headerConnectionValUpgrade = "upgrade"
+	headerUpgradeValWS         = "websocket"
+)
+
+func reqIsWS(r *http.Request) bool {
+	isUpgrade := false
+	for _, i := range r.Header.Values(headerConnection) {
+		if strings.Contains(strings.ToLower(i), headerConnectionValUpgrade) {
+			isUpgrade = true
+			break
+		}
+	}
+	if !isUpgrade {
+		return false
+	}
+	for _, i := range r.Header.Values(headerUpgrade) {
+		if strings.Contains(strings.ToLower(i), headerUpgradeValWS) {
+			return true
+		}
+	}
+	return false
+}
+
+func compressorMiddleware() Middleware {
+	return func(next http.Handler) http.Handler {
+		compressor := middleware.Compress(gzip.DefaultCompression)(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if reqIsWS(r) {
+				next.ServeHTTP(w, r)
+			} else {
+				compressor.ServeHTTP(w, r)
+			}
+		})
+	}
 }
