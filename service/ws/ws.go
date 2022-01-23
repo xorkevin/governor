@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
@@ -22,11 +21,11 @@ type (
 	}
 
 	service struct {
-		events   events.Events
-		gate     gate.Gate
-		logger   governor.Logger
-		scopens  string
-		streamns string
+		events  events.Events
+		gate    gate.Gate
+		logger  governor.Logger
+		rolens  string
+		scopens string
 	}
 
 	router struct {
@@ -79,9 +78,8 @@ func New(ev events.Events, g gate.Gate) Service {
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxWS(inj, s)
-	s.scopens = name
-	streamname := strings.ToUpper(name)
-	s.streamns = streamname
+	s.rolens = "gov." + name
+	s.scopens = "gov." + name
 }
 
 func (s *service) router() *router {

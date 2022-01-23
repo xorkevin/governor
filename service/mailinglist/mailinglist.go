@@ -138,7 +138,7 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxMailingList(inj, s)
-	s.scopens = name
+	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{

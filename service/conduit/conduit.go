@@ -141,7 +141,7 @@ func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
-	s.scopens = name
+	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{

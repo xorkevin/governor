@@ -116,7 +116,7 @@ func New(
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxCourier(inj, s)
-	s.scopens = name
+	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 
 	r.SetDefault("fallbacklink", "")

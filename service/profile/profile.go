@@ -86,7 +86,7 @@ func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, ratelimiter
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxProfiles(inj, s)
-	s.scopens = name
+	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 }
 

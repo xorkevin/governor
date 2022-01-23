@@ -126,6 +126,8 @@ user:
     - mod.gov.user
     - usr.gov.oauth
     - mod.gov.oauth
+    - usr.gov.ws
+    - mod.gov.ws
   email:
     url:
       base: http://localhost:3000

@@ -176,13 +176,12 @@ func (c *govcontext) WriteError(err error) {
 	var rerr *ErrorRes
 	if !errors.As(err, &rerr) {
 		rerr = &ErrorRes{
-			Status: http.StatusInternalServerError,
+			Status:  http.StatusInternalServerError,
+			Message: "Internal Server Error",
 		}
 		if isError {
 			rerr.Code = gerr.Code
 			rerr.Message = gerr.Message
-		} else {
-			rerr.Message = "Internal Server Error"
 		}
 	}
 

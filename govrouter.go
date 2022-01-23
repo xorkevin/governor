@@ -148,6 +148,7 @@ type (
 		WriteJSON(status int, body interface{})
 		WriteFile(status int, contentType string, r io.Reader)
 		WriteError(err error)
+		Ctx() context.Context
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
 		Req() *http.Request
@@ -374,15 +375,19 @@ func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
 	}
 }
 
+func (c *govcontext) Ctx() context.Context {
+	if c.ctx == nil {
+		return c.r.Context()
+	}
+	return c.ctx
+}
+
 func (c *govcontext) Get(key interface{}) interface{} {
-	return c.r.Context().Value(key)
+	return c.Ctx().Value(key)
 }
 
 func (c *govcontext) Set(key, value interface{}) {
-	if c.ctx == nil {
-		c.ctx = c.r.Context()
-	}
-	c.ctx = context.WithValue(c.ctx, key, value)
+	c.ctx = context.WithValue(c.Ctx(), key, value)
 }
 
 func (c *govcontext) Req() *http.Request {
@@ -403,8 +408,10 @@ func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
 type (
 	Websocket interface {
 		SetReadLimit(limit int64)
+		Read(ctx context.Context) (bool, []byte, error)
 		Write(ctx context.Context, txt bool, b []byte) error
 		Close(status int, reason string)
+		CloseError(err error)
 	}
 
 	govws struct {
@@ -473,7 +480,7 @@ func (e *ErrorWS) Unwrap() error {
 }
 
 func (w *govws) wrapWSErr(err error, msg string) error {
-	werr := websocket.CloseError{}
+	var werr websocket.CloseError
 	if errors.As(err, &werr) {
 		return ErrWithMsg(&ErrorWS{
 			Status: int(werr.Code),
@@ -482,6 +489,23 @@ func (w *govws) wrapWSErr(err error, msg string) error {
 		}, msg)
 	}
 	return ErrWithMsg(err, msg)
+}
+
+// ErrWS returns a wrapped error with a websocket code
+func ErrWS(err error, status int, reason string) error {
+	return &ErrorWS{
+		Status: status,
+		Reason: reason,
+		Inner:  err,
+	}
+}
+
+func (w *govws) Read(ctx context.Context) (bool, []byte, error) {
+	t, b, err := w.conn.Read(ctx)
+	if err != nil {
+		return false, nil, w.wrapWSErr(err, "Failed to read from ws")
+	}
+	return t == websocket.MessageText, b, nil
 }
 
 func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
@@ -507,6 +531,33 @@ func (w *govws) Close(status int, reason string) {
 			})
 		}
 	}
+}
+
+func (w *govws) CloseError(err error) {
+	var werr *ErrorWS
+	isError := errors.As(err, &werr)
+	if !isError {
+		werr = &ErrorWS{
+			Status: int(websocket.StatusInternalError),
+			Reason: "Internal error",
+		}
+	}
+
+	if w.c.l != nil && !errors.Is(err, ErrorUser{}) {
+		msg := "non governor error"
+		var gerr *Error
+		if errors.As(err, &gerr) {
+			msg = gerr.Message
+		} else if isError {
+			msg = werr.Reason
+		}
+		w.c.l.Error(msg, map[string]string{
+			"endpoint": w.c.r.URL.EscapedPath(),
+			"error":    err.Error(),
+		})
+	}
+
+	w.Close(werr.Status, werr.Reason)
 }
 
 func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
