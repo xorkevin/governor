@@ -210,7 +210,7 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			forwarded = ip.String()
 		}
 		if reqIsWS(r) {
-			s.logger.Debug("", map[string]string{
+			s.logger.Debug("ws open", map[string]string{
 				"host":      host,
 				"method":    method,
 				"ws":        "t",
@@ -219,6 +219,14 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 				"forwarded": forwarded,
 			})
 			next.ServeHTTP(w, r)
+			s.logger.Debug("ws close", map[string]string{
+				"host":      host,
+				"method":    method,
+				"ws":        "f",
+				"path":      path,
+				"remote":    remote,
+				"forwarded": forwarded,
+			})
 		} else {
 			start := time.Now()
 			w2 := &govResponseWriter{
