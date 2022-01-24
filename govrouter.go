@@ -530,7 +530,7 @@ func (w *govws) Close(status int, reason string) {
 		}
 		err = w.wrapWSErr(err, "Failed to close ws connection")
 		if w.c.l != nil {
-			w.c.l.Error("Failed to close ws connection", map[string]string{
+			w.c.l.Warn("Failed to close ws connection", map[string]string{
 				"endpoint": w.c.r.URL.EscapedPath(),
 				"error":    err.Error(),
 			})
