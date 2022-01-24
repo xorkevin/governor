@@ -257,7 +257,7 @@ func (c *govcontext) ReadAllBody() ([]byte, error) {
 	data, err := io.ReadAll(c.r.Body)
 	if err != nil {
 		// No exported error is returned as of go@v1.16
-		if err.Error() == "http: request body too large" {
+		if strings.Contains(strings.ToLower(err.Error()), "http: request body too large") {
 			return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
 				Status:  http.StatusRequestEntityTooLarge,
 				Message: "Request too large",
@@ -525,6 +525,9 @@ func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
 
 func (w *govws) Close(status int, reason string) {
 	if err := w.conn.Close(websocket.StatusCode(status), reason); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "already wrote close") {
+			return
+		}
 		err = w.wrapWSErr(err, "Failed to close ws connection")
 		if w.c.l != nil {
 			w.c.l.Error("Failed to close ws connection", map[string]string{
