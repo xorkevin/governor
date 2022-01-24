@@ -14,7 +14,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 	conn, err := c.Websocket()
 	if err != nil {
 		m.s.logger.Debug("Failed to accept WS conn", map[string]string{
-			"error": err.Error(),
+			"msg": err.Error(),
 		})
 		return
 	}
@@ -24,7 +24,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 		t, b, err := conn.Read(c.Ctx())
 		if err != nil {
 			m.s.logger.Debug("WS conn closed", map[string]string{
-				"error": err.Error(),
+				"msg": err.Error(),
 			})
 			return
 		}
@@ -63,7 +63,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := conn.Write(c.Ctx(), true, res); err != nil {
 			m.s.logger.Debug("WS conn closed", map[string]string{
-				"error": err.Error(),
+				"msg": err.Error(),
 			})
 			return
 		}
