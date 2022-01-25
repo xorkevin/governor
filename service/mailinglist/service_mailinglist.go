@@ -616,7 +616,7 @@ const (
 	msgDeleteBatchSize = 256
 )
 
-func (s *service) deleteSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) deleteSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	msg := &delmsg{}
 	if err := json.Unmarshal(msgdata, msg); err != nil {
 		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode list delete message")
@@ -676,7 +676,7 @@ func (e ErrMailEvent) Error() string {
 	return "Malformed mail message"
 }
 
-func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
@@ -773,7 +773,7 @@ const (
 	mailingListSendBatchSize = 256
 )
 
-func (s *service) sendSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) sendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	emmsg := &sendmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")

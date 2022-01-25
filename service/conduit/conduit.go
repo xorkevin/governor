@@ -299,7 +299,7 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new user name
-func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserCreateHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeNewUserProps(msgdata)
 	if err != nil {
 		return err
@@ -314,7 +314,7 @@ func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
 }
 
 // UserDeleteHook deletes a user name
-func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
@@ -329,7 +329,7 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 }
 
 // UserUpdateHook updates a user name
-func (s *service) UserUpdateHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserUpdateHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeUpdateUserProps(msgdata)
 	if err != nil {
 		return err
@@ -343,7 +343,7 @@ func (s *service) UserUpdateHook(pinger events.Pinger, msgdata []byte) error {
 	return nil
 }
 
-func (s *service) FriendInvitationGCHook(msgdata []byte) {
+func (s *service) FriendInvitationGCHook(topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,

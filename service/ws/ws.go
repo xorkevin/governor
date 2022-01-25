@@ -21,11 +21,13 @@ type (
 	}
 
 	service struct {
-		events  events.Events
-		gate    gate.Gate
-		logger  governor.Logger
-		rolens  string
-		scopens string
+		events    events.Events
+		gate      gate.Gate
+		logger    governor.Logger
+		rolens    string
+		scopens   string
+		channelns string
+		opts      Opts
 	}
 
 	router struct {
@@ -45,6 +47,13 @@ type (
 	}
 
 	ctxKeyWS struct{}
+
+	Opts struct {
+		UserSendChannelPrefix string
+		UserRcvChannelPrefix  string
+	}
+
+	ctxKeyOpts struct{}
 )
 
 // GetCtxWS returns a WS service from the context
@@ -59,6 +68,18 @@ func GetCtxWS(inj governor.Injector) WS {
 // setCtxWS sets a WS service in the context
 func setCtxWS(inj governor.Injector, w WS) {
 	inj.Set(ctxKeyWS{}, w)
+}
+
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new WS service from a context
@@ -80,6 +101,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	setCtxWS(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
+	s.channelns = "gov." + name
+	s.opts = Opts{
+		UserSendChannelPrefix: s.channelns + ".send.user",
+		UserRcvChannelPrefix:  s.channelns + ".rcv.user",
+	}
+	SetCtxOpts(inj, s.opts)
 }
 
 func (s *service) router() *router {
@@ -126,6 +153,18 @@ func DecodeRcvMsg(b []byte) (string, []byte, error) {
 		return "", nil, governor.ErrWithMsg(err, "Failed to decode received msg")
 	}
 	return m.Channel, m.Value, nil
+}
+
+// EncodeRcvMsg marshals received messages to json
+func EncodeRcvMsg(channel string, v []byte) ([]byte, error) {
+	b, err := json.Marshal(RcvMsg{
+		Channel: channel,
+		Value:   v,
+	})
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to encode received msg")
+	}
+	return b, nil
 }
 
 // EncodeSendMsg marshals sent messages to json

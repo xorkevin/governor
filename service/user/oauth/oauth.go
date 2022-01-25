@@ -287,7 +287,7 @@ func (s *service) Health() error {
 }
 
 // UserDeleteHook deletes the oauth connections of a deleted user
-func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err

@@ -164,7 +164,7 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserCreateHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeNewUserProps(msgdata)
 	if err != nil {
 		return err
@@ -176,7 +176,7 @@ func (s *service) UserCreateHook(pinger events.Pinger, msgdata []byte) error {
 }
 
 // UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err

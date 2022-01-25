@@ -227,7 +227,7 @@ const (
 )
 
 // UserDeleteHook deletes the courier links and brands of a deleted user
-func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
@@ -236,7 +236,7 @@ func (s *service) UserDeleteHook(pinger events.Pinger, msgdata []byte) error {
 }
 
 // OrgDeleteHook deletes the courier links and brands of a deleted org
-func (s *service) OrgDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) OrgDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := org.DecodeDeleteOrgProps(msgdata)
 	if err != nil {
 		return err

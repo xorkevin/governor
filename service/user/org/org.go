@@ -218,7 +218,7 @@ const (
 )
 
 // OrgRoleDeleteHook deletes the roles of a deleted org
-func (s *service) OrgRoleDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := DecodeDeleteOrgProps(msgdata)
 	if err != nil {
 		return err

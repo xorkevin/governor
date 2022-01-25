@@ -575,7 +575,7 @@ const (
 )
 
 // UserRoleDeleteHook deletes the roles of a deleted user
-func (s *service) UserRoleDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserRoleDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
@@ -606,7 +606,7 @@ const (
 )
 
 // UserApikeyDeleteHook deletes the apikeys of a deleted user
-func (s *service) UserApikeyDeleteHook(pinger events.Pinger, msgdata []byte) error {
+func (s *service) UserApikeyDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
@@ -636,7 +636,7 @@ func (s *service) UserApikeyDeleteHook(pinger events.Pinger, msgdata []byte) err
 	return nil
 }
 
-func (s *service) UserApprovalGCHook(msgdata []byte) {
+func (s *service) UserApprovalGCHook(topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
@@ -654,7 +654,7 @@ func (s *service) UserApprovalGCHook(msgdata []byte) {
 	l.Debug("GC user approvals", nil)
 }
 
-func (s *service) UserResetGCHook(msgdata []byte) {
+func (s *service) UserResetGCHook(topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
@@ -672,7 +672,7 @@ func (s *service) UserResetGCHook(msgdata []byte) {
 	l.Debug("GC user resets", nil)
 }
 
-func (s *service) UserInvitationGCHook(msgdata []byte) {
+func (s *service) UserInvitationGCHook(topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,

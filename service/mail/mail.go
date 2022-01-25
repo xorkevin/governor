@@ -368,7 +368,7 @@ func (e ErrBuildMail) Error() string {
 	return "Error building email"
 }
 
-func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	emmsg := &mailmsg{}
 	if err := json.Unmarshal(msgdata, emmsg); err != nil {
 		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")

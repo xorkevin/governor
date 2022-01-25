@@ -199,7 +199,7 @@ func (s *service) GetInvitedFriendInvitations(userid string, amount, offset int)
 	}, nil
 }
 
-func (s *service) friendSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) friendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	msg, err := DecodeFriendProps(msgdata)
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func (s *service) friendSubscriber(pinger events.Pinger, msgdata []byte) error {
 	return nil
 }
 
-func (s *service) unfriendSubscriber(pinger events.Pinger, msgdata []byte) error {
+func (s *service) unfriendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
 	msg, err := DecodeUnfriendProps(msgdata)
 	if err != nil {
 		return err

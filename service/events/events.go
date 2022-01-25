@@ -16,10 +16,10 @@ import (
 
 type (
 	// WorkerFunc is a type alias for a subscriber handler
-	WorkerFunc = func(msgdata []byte)
+	WorkerFunc = func(topic string, msgdata []byte)
 
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
-	StreamWorkerFunc = func(pinger Pinger, msgdata []byte) error
+	StreamWorkerFunc = func(pinger Pinger, topic string, msgdata []byte) error
 
 	// StreamOpts are opts for streams
 	StreamOpts struct {
@@ -569,7 +569,7 @@ func (s *subscription) ok() bool {
 }
 
 func (s *subscription) subscriber(msg *nats.Msg) {
-	s.worker(msg.Data)
+	s.worker(msg.Subject, msg.Data)
 }
 
 // Close closes the subscription
@@ -696,7 +696,7 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 			continue
 		}
 		for _, msg := range msgs {
-			if err := s.worker(&pinger{msg: msg}, msg.Data); err != nil {
+			if err := s.worker(&pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
 				s.logger.Error("Failed executing worker", map[string]string{
 					"error": err.Error(),
 				})
@@ -810,7 +810,7 @@ func channelMaxDelivery(stream, consumer string) string {
 
 // DLQSubscribe subscribes to the deadletter queue of another stream consumer
 func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
-	return s.StreamSubscribe(stream, channelMaxDelivery(targetStream, targetConsumer), group, func(pinger Pinger, msgdata []byte) error {
+	return s.StreamSubscribe(stream, channelMaxDelivery(targetStream, targetConsumer), group, func(pinger Pinger, topic string, msgdata []byte) error {
 		schemaType, advmsg, err := jsmapi.ParseMessage(msgdata)
 		if err != nil {
 			return governor.ErrWithKind(err, ErrInvalidStreamMsg{}, "Failed to parse dead letter queue message with unknown type")
@@ -830,6 +830,6 @@ func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, grou
 		if err != nil {
 			return governor.ErrWithKind(err, ErrClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
 		}
-		return worker(pinger, msg.Data)
+		return worker(pinger, msg.Subject, msg.Data)
 	}, opts)
 }
