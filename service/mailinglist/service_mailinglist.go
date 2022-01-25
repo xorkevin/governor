@@ -723,6 +723,8 @@ func (s *service) mailSubscriber(pinger events.Pinger, msgdata []byte) error {
 			// parent not found
 		} else {
 			// parent exists
+			// A messages parent may not be updated, so all messages must be in the
+			// form of a tree, and will not form a more general DAG.
 			if err := s.lists.InsertTreeEdge(m.ListID, m.Msgid, p.Msgid); err != nil {
 				return governor.ErrWithMsg(err, "Failed to insert list thread edge")
 			}
