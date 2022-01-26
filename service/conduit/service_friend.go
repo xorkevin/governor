@@ -234,5 +234,6 @@ func (s *service) unfriendSubscriber(pinger events.Pinger, topic string, msgdata
 	if err := s.dms.Delete(msg.Userid, msg.Other); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete dm")
 	}
+	// TODO: emit dm delete event
 	return nil
 }

@@ -166,15 +166,3 @@ func EncodeRcvMsg(channel string, v []byte) ([]byte, error) {
 	}
 	return b, nil
 }
-
-// EncodeSendMsg marshals sent messages to json
-func EncodeSendMsg(channel string, v interface{}) ([]byte, error) {
-	b, err := json.Marshal(SendMsg{
-		Channel: channel,
-		Value:   v,
-	})
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to encode sent msg")
-	}
-	return b, nil
-}

@@ -16,6 +16,7 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/ws"
 )
 
 const (
@@ -45,11 +46,13 @@ type (
 		gate           gate.Gate
 		logger         governor.Logger
 		scopens        string
+		channelns      string
 		streamns       string
 		opts           Opts
 		streamsize     int64
 		eventsize      int32
 		invitationTime int64
+		wsopts         ws.Opts
 		useropts       user.Opts
 		syschannels    governor.SysChannels
 	}
@@ -115,26 +118,36 @@ func NewCtx(inj governor.Injector) Service {
 	invitations := invitationmodel.GetCtxRepo(inj)
 	dms := dmmodel.GetCtxRepo(inj)
 	msgs := msgmodel.GetCtxRepo(inj)
-	repo := model.GetCtxRepo(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
+	wsopts := ws.GetCtxOpts(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, invitations, dms, msgs, repo, users, ev, g, useropts)
+	return New(friends, invitations, dms, msgs, users, ev, g, wsopts, useropts)
 }
 
 // New creates a new Conduit service
-func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel.Repo, msgs msgmodel.Repo, repo model.Repo, users user.Users, ev events.Events, g gate.Gate, useropts user.Opts) Service {
+func New(
+	friends friendmodel.Repo,
+	invitations invitationmodel.Repo,
+	dms dmmodel.Repo,
+	msgs msgmodel.Repo,
+	users user.Users,
+	ev events.Events,
+	g gate.Gate,
+	wsopts ws.Opts,
+	useropts user.Opts,
+) Service {
 	return &service{
 		friends:        friends,
 		invitations:    invitations,
 		dms:            dms,
 		msgs:           msgs,
-		repo:           repo,
 		users:          users,
 		events:         ev,
 		gate:           g,
 		invitationTime: time72h,
+		wsopts:         wsopts,
 		useropts:       useropts,
 	}
 }
@@ -142,6 +155,7 @@ func New(friends friendmodel.Repo, invitations invitationmodel.Repo, dms dmmodel
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxConduit(inj, s)
 	s.scopens = "gov." + name
+	s.channelns = name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{
@@ -208,10 +222,6 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit msg table", nil)
-	if err := s.repo.Setup(); err != nil {
-		return err
-	}
-	l.Info("Created conduit chat tables", nil)
 	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
@@ -307,9 +317,6 @@ func (s *service) UserCreateHook(pinger events.Pinger, topic string, msgdata []b
 	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update friends username")
 	}
-	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat user name")
-	}
 	return nil
 }
 
@@ -322,9 +329,6 @@ func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []b
 	if err := s.friends.DeleteUser(props.Userid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user friends")
 	}
-	if err := s.repo.DeleteUser(props.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user from chats")
-	}
 	return nil
 }
 
@@ -336,9 +340,6 @@ func (s *service) UserUpdateHook(pinger events.Pinger, topic string, msgdata []b
 	}
 	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update friends username")
-	}
-	if err := s.repo.UpdateUsername(props.Userid, props.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update chat user name")
 	}
 	return nil
 }

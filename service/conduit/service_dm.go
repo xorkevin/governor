@@ -1,13 +1,53 @@
 package conduit
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/dm/model"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/ws"
 )
+
+func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		s.logger.Error("Failed to marshal dm msg json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshaldmmsgjson",
+		})
+		return
+	}
+	for _, i := range userids {
+		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.msg"), b); err != nil {
+			s.logger.Error("Failed to publish dm msg event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishdmmsg",
+			})
+		}
+	}
+}
+
+func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		s.logger.Error("Failed to marshal dm settings json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshaldmsettingsjson",
+		})
+		return
+	}
+	for _, i := range userids {
+		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.settings"), b); err != nil {
+			s.logger.Error("Failed to publish dm settings event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishdmsettings",
+			})
+		}
+	}
+}
 
 const (
 	chatMsgKindTxt = "t"
@@ -33,6 +73,12 @@ func (s *service) getDMByChatid(userid string, chatid string) (*model.Model, err
 	return m, nil
 }
 
+type (
+	resDMID struct {
+		Chatid string `json:"chatid"`
+	}
+)
+
 func (s *service) UpdateDM(userid string, chatid string, name, theme string) error {
 	m, err := s.getDMByChatid(userid, chatid)
 	if err != nil {
@@ -43,7 +89,9 @@ func (s *service) UpdateDM(userid string, chatid string, name, theme string) err
 	if err := s.dms.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update dm")
 	}
-	// TODO: notify dm event
+	s.publishDMSettingsEvent([]string{m.Userid1, m.Userid2}, resDMID{
+		Chatid: m.Chatid,
+	})
 	return nil
 }
 
@@ -187,15 +235,16 @@ func (s *service) CreateDMMsg(userid string, chatid string, kind string, value s
 	if err := s.dms.UpdateLastUpdated(dm.Userid1, dm.Userid2, m.Timems); err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to update dm last updated")
 	}
-	// TODO: notify dm event
-	return &resMsg{
+	res := resMsg{
 		Chatid: m.Chatid,
 		Msgid:  m.Msgid,
 		Userid: m.Userid,
 		Timems: m.Timems,
 		Kind:   m.Kind,
 		Value:  m.Value,
-	}, nil
+	}
+	s.publishDMMsgEvent([]string{dm.Userid1, dm.Userid2}, res)
+	return &res, nil
 }
 
 type (
@@ -235,5 +284,6 @@ func (s *service) DelDMMsg(userid string, chatid string, msgid string) error {
 	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete dm msgs")
 	}
+	// TODO: emit msg delete event
 	return nil
 }
