@@ -3,7 +3,6 @@ package main
 import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit"
-	conduitchatmodel "xorkevin.dev/governor/service/conduit/chat/model"
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	friendinvmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
@@ -143,7 +142,6 @@ func main() {
 		friendinvmodel.NewInCtx(inj, "friendinvitations")
 		dmmodel.NewInCtx(inj, "dms")
 		msgmodel.NewInCtx(inj, "chatmsgs")
-		conduitchatmodel.NewInCtx(inj, "chats", "chatmembers", "chatmessages", "chatassoc", "chatusernames", "chatdms")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 	{
