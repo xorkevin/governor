@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	WSProtocolVersion  = "xorkevin.dev/governor/ws/v1alpha1"
+	WSProtocolVersion  = "xorkevin.dev-governor_ws_v1alpha1"
 	WSReadLimitDefault = 32768
 )
 
