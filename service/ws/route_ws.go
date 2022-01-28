@@ -22,6 +22,18 @@ func UserChannelPrefix(prefix, userid string) string {
 	return fmt.Sprintf("%s.%s.", prefix, userid)
 }
 
+func ServiceChannel(prefix, channel, userid string) string {
+	return fmt.Sprintf("%s.%s.user.%s", prefix, channel, userid)
+}
+
+func ServiceChannelAll(prefix, channel string) string {
+	return fmt.Sprintf("%s.%s.user.>", prefix, channel)
+}
+
+func ServiceChannelPrefix(prefix, channel string) string {
+	return fmt.Sprintf("%s.%s.user.", prefix, channel)
+}
+
 func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	userid := gate.GetCtxUserid(c)
@@ -98,7 +110,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			))
 			return
 		}
-		if channel == "" {
+		if channel == "" || len(channel) > 127 {
 			conn.CloseError(governor.ErrWS(
 				governor.NewError(governor.ErrOptUser),
 				int(websocket.StatusUnsupportedData),
@@ -106,7 +118,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			))
 			return
 		}
-		if err := m.s.events.Publish(UserChannel(m.s.opts.UserRcvChannelPrefix, userid, channel), msg); err != nil {
+		if err := m.s.events.Publish(ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel, userid), msg); err != nil {
 			conn.CloseError(governor.ErrWS(
 				governor.ErrWithMsg(err, "Failed to publish ws user rcv msg"),
 				int(websocket.StatusInternalError),
