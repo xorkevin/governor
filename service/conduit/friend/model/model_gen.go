@@ -64,6 +64,46 @@ func friendModelGetModelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1
 	return m, nil
 }
 
+func friendModelGetModelEqUserid1HasUserid2OrdUserid2(db *sql.DB, tableName string, userid1 string, userid2 []string, orderasc bool, limit, offset int) ([]Model, error) {
+	paramCount := 3
+	args := make([]interface{}, 0, paramCount+len(userid2))
+	args = append(args, limit, offset, userid1)
+	var placeholdersuserid2 string
+	{
+		placeholders := make([]string, 0, len(userid2))
+		for _, i := range userid2 {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersuserid2 = strings.Join(placeholders, ", ")
+	}
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]Model, 0, limit)
+	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 AND userid_2 IN (VALUES "+placeholdersuserid2+") ORDER BY userid_2 "+order+" LIMIT $1 OFFSET $2;", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := Model{}
+		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func friendModelDelEqUserid2(db *sql.DB, tableName string, userid2 string) error {
 	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_2 = $1;", userid2)
 	return err

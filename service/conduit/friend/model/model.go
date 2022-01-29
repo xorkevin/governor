@@ -13,6 +13,7 @@ type (
 	Repo interface {
 		GetByID(userid1, userid2 string) (*Model, error)
 		GetFriends(userid string, prefix string, limit, offset int) ([]Model, error)
+		GetFriendsByID(userid string, userids []string) ([]Model, error)
 		Insert(userid1, userid2 string, username1, username2 string) error
 		Remove(userid1, userid2 string) error
 		UpdateUsername(userid, username string) error
@@ -28,7 +29,7 @@ type (
 	// Model is the db friend relationship model
 	Model struct {
 		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;deleq,userid_2"`
+		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|arr;deleq,userid_2"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
 	}
 
@@ -94,6 +95,21 @@ func (r *repo) GetFriends(userid string, prefix string, limit, offset int) ([]Mo
 		return m, nil
 	}
 	m, err := friendModelGetModelEqUserid1LikeUsernameOrdUsername(d, r.table, userid, prefix+"%", true, limit, offset)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get friends")
+	}
+	return m, nil
+}
+
+func (r *repo) GetFriendsByID(userid string, userids []string) ([]Model, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := friendModelGetModelEqUserid1HasUserid2OrdUserid2(d, r.table, userid, userids, true, len(userids), 0)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get friends")
 	}

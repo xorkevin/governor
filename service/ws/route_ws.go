@@ -67,6 +67,29 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
 
+	presenceChannel := PresenceChannel(m.s.opts.PresenceChannel, userid)
+	{
+		msg, err := json.Marshal(PresenceEventProps{
+			Timestamp: time.Now().Round(0).Unix(),
+		})
+		if err != nil {
+			conn.CloseError(governor.ErrWS(
+				governor.ErrWithMsg(err, "Failed to marshal ws user presence msg"),
+				int(websocket.StatusInternalError),
+				"Failed to encode presence msg",
+			))
+			return
+		}
+		if err := m.s.events.Publish(presenceChannel, msg); err != nil {
+			conn.CloseError(governor.ErrWS(
+				governor.ErrWithMsg(err, "Failed to publish ws user presence msg"),
+				int(websocket.StatusInternalError),
+				"Failed to publish presence msg",
+			))
+			return
+		}
+	}
+
 	topicPrefix := UserChannelPrefix(m.s.opts.UserSendChannelPrefix, userid)
 	sub, err := m.s.events.Subscribe(UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(topic string, msgdata []byte) {
 		b, err := EncodeRcvMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
@@ -111,7 +134,6 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	defer tickCancel()
 	go func() {
 		defer wg.Done()
-		presenceChannel := PresenceChannel(m.s.opts.PresenceChannel, userid)
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -179,6 +201,11 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				"Failed to publish msg",
 			))
 			return
+		}
+		select {
+		case <-c.Ctx().Done():
+			return
+		case <-time.After(64 * time.Millisecond):
 		}
 	}
 }

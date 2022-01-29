@@ -158,6 +158,16 @@ func (r reqDelDMMsg) valid() error {
 	return nil
 }
 
+func (r reqGetPresence) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUserids(r.Userids); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqChatID) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err

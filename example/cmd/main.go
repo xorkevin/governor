@@ -142,6 +142,7 @@ func main() {
 		friendinvmodel.NewInCtx(inj, "friendinvitations")
 		dmmodel.NewInCtx(inj, "dms")
 		msgmodel.NewInCtx(inj, "chatmsgs")
+		kvstore.NewSubtreeInCtx(inj, "conduit")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 	{

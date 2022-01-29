@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqSearchDMs reqUpdateDM reqCreateDMMsg reqGetDMMsgs reqDelDMMsg reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqSearchDMs reqUpdateDM reqCreateDMMsg reqGetDMMsgs reqDelDMMsg reqGetPresence reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -385,6 +385,13 @@ func (m *router) deleteMsg(w http.ResponseWriter, r *http.Request) {
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
+
+type (
+	reqGetPresence struct {
+		Userid  string   `valid:"userid,has" json:"-"`
+		Userids []string `valid:"userids,has" json:"userids"`
+	}
+)
 
 type (
 	reqChatID struct {

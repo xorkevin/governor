@@ -14,6 +14,7 @@ import (
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/ws"
@@ -41,6 +42,7 @@ type (
 		dms            dmmodel.Repo
 		msgs           msgmodel.Repo
 		repo           model.Repo
+		kvpresence     kvstore.KVStore
 		users          user.Users
 		events         events.Events
 		gate           gate.Gate
@@ -76,9 +78,10 @@ type (
 	ctxKeyConduit struct{}
 
 	Opts struct {
-		StreamName      string
-		FriendChannel   string
-		UnfriendChannel string
+		StreamName           string
+		FriendChannel        string
+		UnfriendChannel      string
+		PresenceQueryChannel string
 	}
 
 	ctxKeyOpts struct{}
@@ -118,12 +121,13 @@ func NewCtx(inj governor.Injector) Service {
 	invitations := invitationmodel.GetCtxRepo(inj)
 	dms := dmmodel.GetCtxRepo(inj)
 	msgs := msgmodel.GetCtxRepo(inj)
+	kv := kvstore.GetCtxKVStore(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	wsopts := ws.GetCtxOpts(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, invitations, dms, msgs, users, ev, g, wsopts, useropts)
+	return New(friends, invitations, dms, msgs, kv, users, ev, g, wsopts, useropts)
 }
 
 // New creates a new Conduit service
@@ -132,6 +136,7 @@ func New(
 	invitations invitationmodel.Repo,
 	dms dmmodel.Repo,
 	msgs msgmodel.Repo,
+	kv kvstore.KVStore,
 	users user.Users,
 	ev events.Events,
 	g gate.Gate,
@@ -143,6 +148,7 @@ func New(
 		invitations:    invitations,
 		dms:            dms,
 		msgs:           msgs,
+		kvpresence:     kv.Subtree("presence"),
 		users:          users,
 		events:         ev,
 		gate:           g,
@@ -159,9 +165,10 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
 	s.opts = Opts{
-		StreamName:      streamname,
-		FriendChannel:   streamname + ".friend",
-		UnfriendChannel: streamname + ".unfriend",
+		StreamName:           streamname,
+		FriendChannel:        streamname + ".friend",
+		UnfriendChannel:      streamname + ".unfriend",
+		PresenceQueryChannel: name + ".presence",
 	}
 	SetCtxOpts(inj, s.opts)
 
@@ -297,6 +304,16 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
+
+	if _, err := s.events.Subscribe(ws.PresenceChannelAll(s.wsopts.PresenceChannel), s.streamns+"_WORKER_PRESENCE", s.PresenceHandler); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to ws presence channel")
+	}
+	l.Info("Subscribed to ws presence channel", nil)
+
+	if _, err := s.events.Subscribe(ws.ServiceChannelAll(s.wsopts.UserRcvChannelPrefix, s.opts.PresenceQueryChannel), s.streamns+"_PRESENCE_QUERY", s.PresenceQueryHandler); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to ws presence query channel")
+	}
+	l.Info("Subscribed to ws presence query channel", nil)
 
 	return nil
 }
