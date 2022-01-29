@@ -1,14 +1,30 @@
 package ws
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 )
+
+func PresenceChannel(prefix, userid string) string {
+	return fmt.Sprintf("%s.%s", prefix, userid)
+}
+
+func PresenceChannelAll(prefix string) string {
+	return fmt.Sprintf("%s.>", prefix)
+}
+
+func PresenceChannelPrefix(prefix string) string {
+	return fmt.Sprintf("%s.", prefix)
+}
 
 func UserChannel(prefix, userid, channel string) string {
 	return fmt.Sprintf("%s.%s.%s", prefix, userid, channel)
@@ -85,6 +101,44 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				"error":      err.Error(),
 				"actiontype": "closewsusersub",
 			})
+		}
+	}()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	defer wg.Wait()
+	tickCtx, tickCancel := context.WithCancel(c.Ctx())
+	defer tickCancel()
+	go func() {
+		defer wg.Done()
+		presenceChannel := PresenceChannel(m.s.opts.PresenceChannel, userid)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-tickCtx.Done():
+				return
+			case <-ticker.C:
+				msg, err := json.Marshal(PresenceEventProps{
+					Timestamp: time.Now().Round(0).Unix(),
+				})
+				if err != nil {
+					conn.CloseError(governor.ErrWS(
+						governor.ErrWithMsg(err, "Failed to marshal ws user presence msg"),
+						int(websocket.StatusInternalError),
+						"Failed to encode presence msg",
+					))
+					return
+				}
+				if err := m.s.events.Publish(presenceChannel, msg); err != nil {
+					conn.CloseError(governor.ErrWS(
+						governor.ErrWithMsg(err, "Failed to publish ws user presence msg"),
+						int(websocket.StatusInternalError),
+						"Failed to publish presence msg",
+					))
+					return
+				}
+			}
 		}
 	}()
 

@@ -49,11 +49,16 @@ type (
 	ctxKeyWS struct{}
 
 	Opts struct {
+		PresenceChannel       string
 		UserSendChannelPrefix string
 		UserRcvChannelPrefix  string
 	}
 
 	ctxKeyOpts struct{}
+
+	PresenceEventProps struct {
+		Timestamp int64 `json:"timestamp"`
+	}
 )
 
 // GetCtxWS returns a WS service from the context
@@ -103,8 +108,9 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.scopens = "gov." + name
 	s.channelns = "gov." + name
 	s.opts = Opts{
+		PresenceChannel:       s.channelns + ".presence.user",
 		UserSendChannelPrefix: s.channelns + ".send.user",
-		UserRcvChannelPrefix:  s.channelns + ".rcv.user",
+		UserRcvChannelPrefix:  s.channelns + ".rcv",
 	}
 	SetCtxOpts(inj, s.opts)
 }
