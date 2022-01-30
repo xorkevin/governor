@@ -11,6 +11,7 @@ import (
 
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
 )
 
@@ -48,6 +49,13 @@ func ServiceChannelAll(prefix, channel string) string {
 
 func ServiceChannelPrefix(prefix, channel string) string {
 	return fmt.Sprintf("%s.%s.user.", prefix, channel)
+}
+
+func min(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (m *router) ws(w http.ResponseWriter, r *http.Request) {
@@ -90,48 +98,72 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	topicPrefix := UserChannelPrefix(m.s.opts.UserSendChannelPrefix, userid)
-	sub, err := m.s.events.Subscribe(UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(topic string, msgdata []byte) {
-		b, err := EncodeRcvMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
-		if err != nil {
-			conn.CloseError(governor.ErrWS(
-				governor.ErrWithMsg(err, "Failed to marshal sent json msg"),
-				int(websocket.StatusInternalError),
-				"Failed to encode msg",
-			))
-			return
-		}
-		if err := conn.Write(c.Ctx(), true, b); err != nil {
-			conn.CloseError(governor.ErrWS(
-				governor.NewError(governor.ErrOptUser),
-				int(websocket.StatusAbnormalClosure),
-				"Failed to write msg",
-			))
-			return
-		}
-	})
-	if err != nil {
-		conn.CloseError(governor.ErrWS(
-			governor.ErrWithMsg(err, "Failed to subscribe to ws user msg channels"),
-			int(websocket.StatusInternalError),
-			"Failed to subscribe to msgs",
-		))
-		return
-	}
-	defer func() {
-		if err := sub.Close(); err != nil {
-			m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "closewsusersub",
+	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
+	tickCtx, tickCancel := context.WithCancel(c.Ctx())
+	defer tickCancel()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		topicPrefix := UserChannelPrefix(m.s.opts.UserSendChannelPrefix, userid)
+		var sub events.SyncSubscription
+		defer func() {
+			if sub != nil {
+				if err := sub.Close(); err != nil {
+					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "closewsusersub",
+					})
+				}
+			}
+		}()
+		delay := 250 * time.Millisecond
+		for {
+			k, err := m.s.events.SubscribeSync(UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(topic string, msgdata []byte) {
+				b, err := EncodeRcvMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
+				if err != nil {
+					conn.CloseError(governor.ErrWS(
+						governor.ErrWithMsg(err, "Failed to marshal sent json msg"),
+						int(websocket.StatusInternalError),
+						"Failed to encode msg",
+					))
+					return
+				}
+				if err := conn.Write(c.Ctx(), true, b); err != nil {
+					conn.CloseError(governor.ErrWS(
+						governor.NewError(governor.ErrOptUser),
+						int(websocket.StatusAbnormalClosure),
+						"Failed to write msg",
+					))
+					return
+				}
 			})
+			if err != nil {
+				m.s.logger.Error("Failed to subscribe to ws user msg channels", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "subwsuser",
+				})
+				select {
+				case <-tickCtx.Done():
+					return
+				case <-time.After(delay):
+					delay *= min(delay*2, 15*time.Second)
+				}
+				continue
+			}
+			sub = k
+			delay = 250 * time.Millisecond
+			select {
+			case <-tickCtx.Done():
+				return
+			case <-k.Done():
+			}
 		}
 	}()
 
-	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	defer wg.Wait()
-	tickCtx, tickCancel := context.WithCancel(c.Ctx())
-	defer tickCancel()
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(30 * time.Second)
