@@ -156,16 +156,24 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 				continue
 			}
-			sub = k
+			sub, k = k, sub
 			delay = 250 * time.Millisecond
 			if first {
 				first = false
 				close(subSuccess)
 			}
+			if k != nil {
+				if err := k.Close(); err != nil {
+					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
+						"error":      err.Error(),
+						"actiontype": "closewsusersub",
+					})
+				}
+			}
 			select {
 			case <-tickCtx.Done():
 				return
-			case <-k.Done():
+			case <-sub.Done():
 			}
 		}
 	}()
