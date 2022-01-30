@@ -104,6 +104,8 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	tickCtx, tickCancel := context.WithCancel(c.Ctx())
 	defer tickCancel()
 
+	subSuccess := make(chan struct{})
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -119,6 +121,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}()
+		first := true
 		delay := 250 * time.Millisecond
 		for {
 			k, err := m.s.events.SubscribeSync(UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(topic string, msgdata []byte) {
@@ -155,6 +158,10 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			}
 			sub = k
 			delay = 250 * time.Millisecond
+			if first {
+				first = false
+				close(subSuccess)
+			}
 			select {
 			case <-tickCtx.Done():
 				return
@@ -195,6 +202,12 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+
+	select {
+	case <-c.Ctx().Done():
+		return
+	case <-subSuccess:
+	}
 
 	for {
 		t, b, err := conn.Read(c.Ctx())
