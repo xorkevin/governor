@@ -26,7 +26,7 @@ type (
 		GetMembers(chatid string, userids []string) ([]string, error)
 		GetChatsMembers(chatids []string, limit int) ([]MemberModel, error)
 		GetMembersCount(chatid string) (int, error)
-		GetAssocs(userid1, userid2 string) ([]string, error)
+		GetAssocs(userid1, userid2 string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		UpdateLastUpdated(chatid string, t int64) error
