@@ -6,6 +6,7 @@ import (
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	friendinvmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
+	gdmmodel "xorkevin.dev/governor/service/conduit/gdm/model"
 	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
 	"xorkevin.dev/governor/service/courier"
 	couriermodel "xorkevin.dev/governor/service/courier/model"
@@ -141,6 +142,7 @@ func main() {
 		friendmodel.NewInCtx(inj, "friends")
 		friendinvmodel.NewInCtx(inj, "friendinvitations")
 		dmmodel.NewInCtx(inj, "dms")
+		gdmmodel.NewInCtx(inj, "gdms", "gdmmembers", "gdmassocs")
 		msgmodel.NewInCtx(inj, "chatmsgs")
 		kvstore.NewSubtreeInCtx(inj, "conduit")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))

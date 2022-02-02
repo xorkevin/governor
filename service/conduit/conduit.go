@@ -12,6 +12,7 @@ import (
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
+	gdmmodel "xorkevin.dev/governor/service/conduit/gdm/model"
 	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
@@ -40,6 +41,7 @@ type (
 		friends        friendmodel.Repo
 		invitations    invitationmodel.Repo
 		dms            dmmodel.Repo
+		gdms           gdmmodel.Repo
 		msgs           msgmodel.Repo
 		repo           model.Repo
 		kvpresence     kvstore.KVStore
@@ -120,6 +122,7 @@ func NewCtx(inj governor.Injector) Service {
 	friends := friendmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
 	dms := dmmodel.GetCtxRepo(inj)
+	gdms := gdmmodel.GetCtxRepo(inj)
 	msgs := msgmodel.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	users := user.GetCtxUsers(inj)
@@ -127,7 +130,19 @@ func NewCtx(inj governor.Injector) Service {
 	g := gate.GetCtxGate(inj)
 	wsopts := ws.GetCtxOpts(inj)
 	useropts := user.GetCtxOpts(inj)
-	return New(friends, invitations, dms, msgs, kv, users, ev, g, wsopts, useropts)
+	return New(
+		friends,
+		invitations,
+		dms,
+		gdms,
+		msgs,
+		kv,
+		users,
+		ev,
+		g,
+		wsopts,
+		useropts,
+	)
 }
 
 // New creates a new Conduit service
@@ -135,6 +150,7 @@ func New(
 	friends friendmodel.Repo,
 	invitations invitationmodel.Repo,
 	dms dmmodel.Repo,
+	gdms gdmmodel.Repo,
 	msgs msgmodel.Repo,
 	kv kvstore.KVStore,
 	users user.Users,
@@ -147,6 +163,7 @@ func New(
 		friends:        friends,
 		invitations:    invitations,
 		dms:            dms,
+		gdms:           gdms,
 		msgs:           msgs,
 		kvpresence:     kv.Subtree("presence"),
 		users:          users,
