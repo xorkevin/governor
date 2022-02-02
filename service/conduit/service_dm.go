@@ -12,6 +12,9 @@ import (
 )
 
 func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
+	if len(userids) == 0 {
+		return
+	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		s.logger.Error("Failed to marshal dm msg json", map[string]string{
@@ -20,7 +23,15 @@ func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
 		})
 		return
 	}
-	for _, i := range userids {
+	present, err := s.getPresence(userids)
+	if err != nil {
+		s.logger.Error("Failed to get presence", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "dmmsgeventgetpresence",
+		})
+		return
+	}
+	for _, i := range present {
 		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.msg"), b); err != nil {
 			s.logger.Error("Failed to publish dm msg event", map[string]string{
 				"error":      err.Error(),
@@ -31,6 +42,9 @@ func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
 }
 
 func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
+	if len(userids) == 0 {
+		return
+	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		s.logger.Error("Failed to marshal dm settings json", map[string]string{
@@ -39,7 +53,15 @@ func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
 		})
 		return
 	}
-	for _, i := range userids {
+	present, err := s.getPresence(userids)
+	if err != nil {
+		s.logger.Error("Failed to get presence", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "dmsettingseventgetpresence",
+		})
+		return
+	}
+	for _, i := range present {
 		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.settings"), b); err != nil {
 			s.logger.Error("Failed to publish dm settings event", map[string]string{
 				"error":      err.Error(),

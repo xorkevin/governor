@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/ws"
 )
@@ -30,6 +31,36 @@ func (s *service) PresenceHandler(topic string, msgdata []byte) {
 		})
 		return
 	}
+}
+
+func (s *service) getPresence(userids []string) ([]string, error) {
+	if len(userids) == 0 {
+		return nil, nil
+	}
+
+	kvres := make([]kvstore.Resulter, 0, len(userids))
+	mget, err := s.kvpresence.Multi()
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to begin kv multi")
+	}
+	for _, i := range userids {
+		kvres = append(kvres, mget.Get(i))
+	}
+	if err := mget.Exec(); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to exec kv multi")
+	}
+
+	res := make([]string, 0, len(kvres))
+	for n, i := range kvres {
+		k, err := i.Result()
+		if err != nil {
+			continue
+		}
+		if k == presenceMarker {
+			res = append(res, userids[n])
+		}
+	}
+	return res, nil
 }
 
 type (
@@ -85,33 +116,12 @@ func (s *service) PresenceQueryHandler(topic string, msgdata []byte) {
 		return
 	}
 
-	kvres := make([]kvstore.Resulter, 0, len(userids))
-	mget, err := s.kvpresence.Multi()
+	res, err := s.getPresence(userids)
 	if err != nil {
-		l.Error("Failed to begin kv multi", map[string]string{
+		l.Error("Failed to get presence", map[string]string{
 			"error": err.Error(),
 		})
 		return
-	}
-	for _, i := range userids {
-		kvres = append(kvres, mget.Get(i))
-	}
-	if err := mget.Exec(); err != nil {
-		l.Error("Failed to exec kv multi", map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	res := make([]string, 0, len(kvres))
-	for n, i := range kvres {
-		k, err := i.Result()
-		if err != nil {
-			continue
-		}
-		if k == presenceMarker {
-			res = append(res, userids[n])
-		}
 	}
 
 	b, err := json.Marshal(resPresence{
