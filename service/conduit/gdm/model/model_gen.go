@@ -103,3 +103,11 @@ func gdmModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
 	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1;", chatid)
 	return err
 }
+
+func gdmModelUpdmodelLastUpdatedEqChatid(db *sql.DB, tableName string, m *modelLastUpdated, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+	if err != nil {
+		return err
+	}
+	return nil
+}

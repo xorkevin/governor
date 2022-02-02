@@ -252,3 +252,11 @@ func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, ta
 	}
 	return res, nil
 }
+
+func memberModelUpdmodelLastUpdatedEqChatid(db *sql.DB, tableName string, m *modelLastUpdated, chatid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
