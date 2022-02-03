@@ -18,6 +18,19 @@ func (r reqGetFriends) valid() error {
 	return nil
 }
 
+func (r reqSearchFriends) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUsername(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqRmFriend) valid() error {
 	if err := validhasUserid(r.Userid1); err != nil {
 		return err
@@ -76,19 +89,6 @@ func (r reqGetChats) valid() error {
 		return err
 	}
 	if err := validhasChatids(r.Chatids); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqSearchDMs) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validhasUsername(r.Prefix); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
 	return nil

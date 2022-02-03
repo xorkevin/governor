@@ -25,6 +25,7 @@ type (
 		GetChats(chatids []string) ([]Model, error)
 		GetMembers(chatid string, userids []string) ([]string, error)
 		GetChatsMembers(chatids []string, limit int) ([]MemberModel, error)
+		GetUserChats(userid string, chatids []string) ([]string, error)
 		GetMembersCount(chatid string) (int, error)
 		GetAssocs(userid1, userid2 string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
@@ -175,7 +176,7 @@ func (r *repo) GetChats(chatids []string) ([]Model, error) {
 	}
 	m, err := gdmModelGetModelHasChatidOrdChatid(d, r.table, chatids, true, len(chatids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat")
+		return nil, db.WrapErr(err, "Failed to get group chats")
 	}
 	return m, nil
 }
@@ -192,7 +193,7 @@ func (r *repo) GetMembers(chatid string, userids []string) ([]string, error) {
 	}
 	m, err := memberModelGetMemberModelEqChatidHasUseridOrdUserid(d, r.tableMembers, chatid, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat")
+		return nil, db.WrapErr(err, "Failed to get group chat members")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -213,9 +214,29 @@ func (r *repo) GetChatsMembers(chatids []string, limit int) ([]MemberModel, erro
 	}
 	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, r.tableMembers, chatids, true, limit, 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat")
+		return nil, db.WrapErr(err, "Failed to get group chat members")
 	}
 	return m, nil
+}
+
+func (r *repo) GetUserChats(userid string, chatids []string) ([]string, error) {
+	if len(chatids) == 0 {
+		return nil, nil
+	}
+
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, r.tableMembers, userid, chatids, true, len(chatids), 0)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get group chats")
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.Chatid)
+	}
+	return res, nil
 }
 
 // GetMembersCount returns the count of group chat members

@@ -31,6 +31,34 @@ func (s *service) GetFriends(userid string, prefix string, limit, offset int) (*
 	}, nil
 }
 
+type (
+	resFriendSearch struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+	}
+
+	resFriendSearches struct {
+		Friends []resFriendSearch `json:"friends"`
+	}
+)
+
+func (s *service) SearchFriends(userid string, prefix string, limit int) (*resFriendSearches, error) {
+	m, err := s.friends.GetFriends(userid, prefix, limit, 0)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+	}
+	res := make([]resFriendSearch, 0, len(m))
+	for _, i := range m {
+		res = append(res, resFriendSearch{
+			Userid:   i.Userid2,
+			Username: i.Username,
+		})
+	}
+	return &resFriendSearches{
+		Friends: res,
+	}, nil
+}
+
 func (s *service) RemoveFriend(userid1, userid2 string) error {
 	if _, err := s.friends.GetByID(userid1, userid2); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {

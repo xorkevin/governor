@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqSearchDMs reqUpdateDM reqCreateDMMsg reqGetDMMsgs reqDelDMMsg reqGetPresence reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateDMMsg reqGetDMMsgs reqDelDMMsg reqGetPresence reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -32,6 +32,33 @@ func (m *router) getFriends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := m.s.GetFriends(req.Userid, req.Prefix, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqSearchFriends struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Prefix string `valid:"username,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) searchFriends(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchFriends{
+		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.SearchFriends(req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -243,17 +270,9 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-type (
-	reqSearchDMs struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Prefix string `valid:"username,has" json:"-"`
-		Amount int    `valid:"amount" json:"-"`
-	}
-)
-
 func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqSearchDMs{
+	req := reqSearchFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
@@ -666,6 +685,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeFriendWrite := m.s.scopens + ".friend:write"
 	r.Get("/friend", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
 	r.Delete("/friend/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
+	r.Get("/friend/search", m.searchFriends, gate.User(m.s.gate, scopeFriendRead))
 	r.Get("/friend/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
 	r.Get("/friend/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
 	r.Post("/friend/invitation/id/{id}", m.sendFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
