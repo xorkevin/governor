@@ -9,6 +9,72 @@ import (
 	"xorkevin.dev/governor/service/db"
 )
 
+func (s *service) checkUsersExist(userids []string) error {
+	ids, err := s.users.CheckUsersExist(userids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to users exist check")
+	}
+	if len(ids) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "User does not exist",
+		}))
+	}
+	return nil
+}
+
+type (
+	resGDM struct {
+		Chatid       string   `json:"chatid"`
+		Name         string   `json:"name"`
+		Theme        string   `json:"theme"`
+		LastUpdated  int64    `json:"last_updated"`
+		CreationTime int64    `json:"creation_time"`
+		Members      []string `json:"members"`
+	}
+)
+
+func (s *service) CreateGDM(name string, theme string, requserids []string) (*resGDM, error) {
+	userids := make([]string, 0, len(requserids))
+	useridSet := map[string]struct{}{}
+	for _, i := range requserids {
+		if _, ok := useridSet[i]; ok {
+			continue
+		}
+		userids = append(userids, i)
+		useridSet[i] = struct{}{}
+	}
+	if len(userids) < 3 {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not create group chat with less than 3 users",
+		}))
+	}
+
+	if err := s.checkUsersExist(userids); err != nil {
+		return nil, err
+	}
+
+	m, err := s.gdms.New(name, theme)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new group chat")
+	}
+	if err := s.gdms.Insert(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new group chat")
+	}
+	if _, err := s.gdms.AddMembers(m.Chatid, userids); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to add members to new group chat")
+	}
+	return &resGDM{
+		Chatid:       m.Chatid,
+		Name:         m.Name,
+		Theme:        m.Theme,
+		LastUpdated:  m.LastUpdated,
+		CreationTime: m.CreationTime,
+		Members:      userids,
+	}, nil
+}
+
 func (s *service) getGDMByChatid(userid string, chatid string) (*model.Model, error) {
 	members, err := s.gdms.GetMembers(chatid, []string{userid})
 	if err != nil {
@@ -52,15 +118,6 @@ const (
 )
 
 type (
-	resGDM struct {
-		Chatid       string   `json:"chatid"`
-		Name         string   `json:"name"`
-		Theme        string   `json:"theme"`
-		LastUpdated  int64    `json:"last_updated"`
-		CreationTime int64    `json:"creation_time"`
-		Members      []string `json:"members"`
-	}
-
 	resGDMs struct {
 		GDMs []resGDM `json:"gdms"`
 	}

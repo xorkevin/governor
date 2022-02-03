@@ -78,20 +78,6 @@ func (s *service) CreateChat(kind string, name string, theme string) (*resChat, 
 	}, nil
 }
 
-func (s *service) checkUsersExist(userids []string) error {
-	ids, err := s.users.CheckUsersExist(userids)
-	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to users exist check")
-	}
-	if len(ids) != len(userids) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "User does not exist",
-		}))
-	}
-	return nil
-}
-
 func (s *service) CreateChatWithUsers(kind string, name string, theme string, userids []string) (*resChat, error) {
 	if kind == chatKindDM && len(userids) != 2 {
 		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
