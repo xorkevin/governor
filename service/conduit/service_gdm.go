@@ -303,3 +303,64 @@ func (s *service) SearchGDMs(userid1, userid2 string, limit, offset int) (*resGD
 	}
 	return s.getGDMsWithMembers(chatids)
 }
+
+func (s *service) CreateGDMMsg(userid string, chatid string, kind string, value string) (*resMsg, error) {
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.New(chatid, userid, kind, value)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new group chat msg")
+	}
+	if err := s.msgs.Insert(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to send new group chat msg")
+	}
+	if err := s.gdms.UpdateLastUpdated(chatid, m.Timems); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to update group chat last updated")
+	}
+	res := resMsg{
+		Chatid: m.Chatid,
+		Msgid:  m.Msgid,
+		Userid: m.Userid,
+		Timems: m.Timems,
+		Kind:   m.Kind,
+		Value:  m.Value,
+	}
+	// TODO publish gdm message send event
+	return &res, nil
+}
+
+func (s *service) GetGDMMsgs(userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.GetMsgs(chatid, kind, before, limit)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get group chat msgs")
+	}
+	res := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		res = append(res, resMsg{
+			Chatid: i.Chatid,
+			Msgid:  i.Msgid,
+			Userid: i.Userid,
+			Timems: i.Timems,
+			Kind:   i.Kind,
+			Value:  i.Value,
+		})
+	}
+	return &resMsgs{
+		Msgs: res,
+	}, nil
+}
+
+func (s *service) DelGDMMsg(userid string, chatid string, msgid string) error {
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return err
+	}
+	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete group chat msgs")
+	}
+	// TODO: emit msg delete event
+	return nil
+}
