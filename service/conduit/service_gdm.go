@@ -3,6 +3,7 @@ package conduit
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/gdm/model"
@@ -23,6 +24,19 @@ func (s *service) checkUsersExist(userids []string) error {
 	return nil
 }
 
+func uniqStrs(a []string) []string {
+	res := make([]string, 0, len(a))
+	set := map[string]struct{}{}
+	for _, i := range a {
+		if _, ok := set[i]; ok {
+			continue
+		}
+		res = append(res, i)
+		set[i] = struct{}{}
+	}
+	return res
+}
+
 type (
 	resGDM struct {
 		Chatid       string   `json:"chatid"`
@@ -35,14 +49,12 @@ type (
 )
 
 func (s *service) CreateGDM(name string, theme string, requserids []string) (*resGDM, error) {
-	userids := make([]string, 0, len(requserids))
-	useridSet := map[string]struct{}{}
-	for _, i := range requserids {
-		if _, ok := useridSet[i]; ok {
-			continue
-		}
-		userids = append(userids, i)
-		useridSet[i] = struct{}{}
+	userids := uniqStrs(requserids)
+	if len(userids) != len(requserids) {
+		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Must provide unique users",
+		}))
 	}
 	if len(userids) < 3 {
 		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -114,8 +126,124 @@ func (s *service) UpdateGDM(userid string, chatid string, name, theme string) er
 }
 
 const (
-	groupChatMemberCap = 127
+	groupChatMemberCap = 31
 )
+
+func (s *service) AddGDMMembers(userid string, chatid string, reqmembers []string) error {
+	if len(reqmembers) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "No users to add",
+		}))
+	}
+
+	members := uniqStrs(reqmembers)
+	if len(members) != len(reqmembers) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Must provide unique users",
+		}))
+	}
+
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return err
+	}
+
+	if err := s.checkUsersExist(members); err != nil {
+		return err
+	}
+
+	count, err := s.gdms.GetMembersCount(chatid)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get group chat members count")
+	}
+	if count+len(members) > groupChatMemberCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May not have more than 31 group chat members",
+		}), governor.ErrOptInner(err))
+	}
+
+	now, err := s.gdms.AddMembers(chatid, members)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to add group chat members")
+	}
+
+	if err := s.gdms.UpdateLastUpdated(chatid, now); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update group chat last updated")
+	}
+
+	// TODO publish member added event
+	return nil
+}
+
+func (s *service) RmGDMMembers(userid string, chatid string, reqmembers []string) error {
+	if len(reqmembers) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "No users to remove",
+		}))
+	}
+
+	members := uniqStrs(reqmembers)
+	if len(members) != len(reqmembers) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Must provide unique users",
+		}))
+	}
+
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return err
+	}
+
+	found, err := s.gdms.GetMembers(chatid, members)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get group chat members")
+	}
+	if len(found) != len(members) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Member does not exist",
+		}))
+	}
+
+	count, err := s.gdms.GetMembersCount(chatid)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get group chat members count")
+	}
+	if count-len(found) < 3 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Group chat must have at least 3 users",
+		}), governor.ErrOptInner(err))
+	}
+
+	if err := s.gdms.RmMembers(chatid, members); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove group chat members")
+	}
+
+	if err := s.gdms.UpdateLastUpdated(chatid, time.Now().Round(0).UnixMilli()); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update group chat last updated")
+	}
+
+	// TODO publish member added event
+	return nil
+}
+
+func (s *service) DeleteGDM(userid string, chatid string) error {
+	if _, err := s.getGDMByChatid(userid, chatid); err != nil {
+		return err
+	}
+
+	// TODO delete gdm chat messages
+	if err := s.gdms.Delete(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete group chat")
+	}
+
+	// TODO publish chat delete event
+	return nil
+}
 
 type (
 	resGDMs struct {
