@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateDMMsg reqGetDMMsgs reqDelDMMsg reqGetPresence reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqCreateMsg reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqUpdateGDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqLatestMsgs
 
 type (
 	reqGetFriends struct {
@@ -319,7 +319,7 @@ func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqCreateDMMsg struct {
+	reqCreateMsg struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
 		Kind   string `valid:"msgkind" json:"kind"`
@@ -329,7 +329,7 @@ type (
 
 func (m *router) createDMMsg(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateDMMsg{}
+	req := reqCreateMsg{}
 	if err := c.Bind(&req); err != nil {
 		c.WriteError(err)
 		return
@@ -349,7 +349,7 @@ func (m *router) createDMMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqGetDMMsgs struct {
+	reqGetMsgs struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
 		Kind   string `valid:"msgkind,opt" json:"-"`
@@ -360,7 +360,7 @@ type (
 
 func (m *router) getDMMsgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqGetDMMsgs{
+	req := reqGetMsgs{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
 		Kind:   c.Query("kind"),
@@ -380,16 +380,16 @@ func (m *router) getDMMsgs(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqDelDMMsg struct {
+	reqDelMsg struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
 		Msgid  string `valid:"msgid,has" json:"-"`
 	}
 )
 
-func (m *router) deleteMsg(w http.ResponseWriter, r *http.Request) {
+func (m *router) deleteDMMsg(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqDelDMMsg{
+	req := reqDelMsg{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
 		Msgid:  c.Param("msgid"),
@@ -411,6 +411,161 @@ type (
 		Userids []string `valid:"userids,has" json:"userids"`
 	}
 )
+
+func (m *router) getLatestGDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetLatestChats{
+		Userid: gate.GetCtxUserid(c),
+		Before: c.QueryInt64("before", 0),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetLatestGDMs(req.Userid, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getGDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChats{
+		Userid:  gate.GetCtxUserid(c),
+		Chatids: strings.Split(c.Query("ids"), ","),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetGDMs(req.Userid, req.Chatids)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqSearchGDMs struct {
+		Userid1 string `valid:"userid,has" json:"-"`
+		Userid2 string `valid:"userid,has" json:"-"`
+		Amount  int    `valid:"amount" json:"-"`
+		Offset  int    `valid:"offset" json:"-"`
+	}
+)
+
+func (m *router) searchGDMs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchGDMs{
+		Userid1: gate.GetCtxUserid(c),
+		Userid2: c.Query("id"),
+		Amount:  c.QueryInt("amount", -1),
+		Offset:  c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.SearchGDMs(req.Userid1, req.Userid2, req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqUpdateGDM struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Chatid string `valid:"chatid,has" json:"-"`
+		Name   string `valid:"name" json:"name"`
+		Theme  string `valid:"theme" json:"theme"`
+	}
+)
+
+func (m *router) updateGDM(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqUpdateGDM{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	req.Chatid = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.UpdateGDM(req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateMsg{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	req.Chatid = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.CreateGDMMsg(req.Userid, req.Chatid, req.Kind, req.Value)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+func (m *router) getGDMMsgs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetMsgs{
+		Userid: gate.GetCtxUserid(c),
+		Chatid: c.Param("id"),
+		Kind:   c.Query("kind"),
+		Before: c.Query("before"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetGDMMsgs(req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) deleteGDMMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqDelMsg{
+		Userid: gate.GetCtxUserid(c),
+		Chatid: c.Param("id"),
+		Msgid:  c.Param("msgid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DelGDMMsg(req.Userid, req.Chatid, req.Msgid); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
 
 type (
 	reqChatID struct {
@@ -450,12 +605,6 @@ type (
 
 	reqChats struct {
 		Chatids []string `valid:"chatids,has" json:"-"`
-	}
-
-	reqCreateMsg struct {
-		Chatid string `valid:"chatid,has" json:"-"`
-		Kind   string `valid:"msgkind" json:"kind"`
-		Value  string `valid:"msgvalue" json:"value"`
 	}
 
 	reqLatestMsgs struct {
@@ -698,11 +847,19 @@ func (m *router) mountRoutes(r governor.Router) {
 	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
 	r.Get("/dm", m.getLatestDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/dm/ids", m.getDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Put("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Get("/dm/search", m.searchDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Put("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Post("/dm/id/{id}/msg", m.createDMMsg, gate.User(m.s.gate, scopeChatWrite))
 	r.Get("/dm/id/{id}/msg", m.getDMMsgs, gate.User(m.s.gate, scopeChatRead))
-	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteMsg, gate.User(m.s.gate, scopeChatWrite))
+	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteDMMsg, gate.User(m.s.gate, scopeChatWrite))
+
+	r.Get("/gdm", m.getLatestGDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/gdm/ids", m.getGDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Get("/gdm/search", m.searchGDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Put("/gdm/id/{id}", m.updateGDM, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Post("/gdm/id/{id}/msg", m.createGDMMsg, gate.User(m.s.gate, scopeChatWrite))
+	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
+	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 
 	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))

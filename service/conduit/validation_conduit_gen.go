@@ -110,7 +110,7 @@ func (r reqUpdateDM) valid() error {
 	return nil
 }
 
-func (r reqCreateDMMsg) valid() error {
+func (r reqCreateMsg) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (r reqCreateDMMsg) valid() error {
 	return nil
 }
 
-func (r reqGetDMMsgs) valid() error {
+func (r reqGetMsgs) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (r reqGetDMMsgs) valid() error {
 	return nil
 }
 
-func (r reqDelDMMsg) valid() error {
+func (r reqDelMsg) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -163,6 +163,38 @@ func (r reqGetPresence) valid() error {
 		return err
 	}
 	if err := validhasUserids(r.Userids); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqSearchGDMs) valid() error {
+	if err := validhasUserid(r.Userid1); err != nil {
+		return err
+	}
+	if err := validhasUserid(r.Userid2); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqUpdateGDM) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasChatid(r.Chatid); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
 		return err
 	}
 	return nil
@@ -242,19 +274,6 @@ func (r reqSearchChats) valid() error {
 
 func (r reqChats) valid() error {
 	if err := validhasChatids(r.Chatids); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqCreateMsg) valid() error {
-	if err := validhasChatid(r.Chatid); err != nil {
-		return err
-	}
-	if err := validMsgkind(r.Kind); err != nil {
-		return err
-	}
-	if err := validMsgvalue(r.Value); err != nil {
 		return err
 	}
 	return nil
