@@ -200,96 +200,24 @@ func (r reqUpdateGDM) valid() error {
 	return nil
 }
 
-func (r reqChatID) valid() error {
+func (r reqDelGDM) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r reqCreateChat) valid() error {
-	if err := validKind(r.Kind); err != nil {
+func (r reqGDMMember) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validName(r.Name); err != nil {
-		return err
-	}
-	if err := validTheme(r.Theme); err != nil {
-		return err
-	}
-	if err := validhasUserids(r.Userids); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqUpdateChat) valid() error {
 	if err := validhasChatid(r.Chatid); err != nil {
 		return err
 	}
-	if err := validName(r.Name); err != nil {
-		return err
-	}
-	if err := validTheme(r.Theme); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqChatMembers) valid() error {
-	if err := validhasChatid(r.Chatid); err != nil {
-		return err
-	}
-	if err := validoptUserids(r.Add); err != nil {
-		return err
-	}
-	if err := validoptUserids(r.Remove); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqLatestChats) valid() error {
-	if err := validhasKind(r.Kind); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqSearchChats) valid() error {
-	if err := validhasKind(r.Kind); err != nil {
-		return err
-	}
-	if err := validSearch(r.Search); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqChats) valid() error {
-	if err := validhasChatids(r.Chatids); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqLatestMsgs) valid() error {
-	if err := validhasChatid(r.Chatid); err != nil {
-		return err
-	}
-	if err := validoptMsgkind(r.Kind); err != nil {
-		return err
-	}
-	if err := validoptMsgid(r.Before); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
+	if err := validhasUserids(r.Members); err != nil {
 		return err
 	}
 	return nil

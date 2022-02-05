@@ -55,40 +55,6 @@ func validhasChatids(chatids []string) error {
 	return nil
 }
 
-func validKind(kind string) error {
-	if len(kind) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat kind must be provided",
-			Status:  http.StatusBadRequest,
-		}))
-	}
-	switch kind {
-	case chatKindDM, chatKindGDM:
-	default:
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Invalid chat kind",
-			Status:  http.StatusBadRequest,
-		}))
-	}
-	return nil
-}
-
-func validhasKind(kind string) error {
-	if len(kind) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat kind must be provided",
-			Status:  http.StatusBadRequest,
-		}))
-	}
-	if len(kind) > lengthCapKind {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat kind must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
-	}
-	return nil
-}
-
 func validName(name string) error {
 	if len(name) > lengthCapName {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{

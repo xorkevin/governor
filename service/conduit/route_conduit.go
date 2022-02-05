@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqUpdateGDM reqChatID reqCreateChat reqUpdateChat reqChatMembers reqLatestChats reqSearchChats reqChats reqLatestMsgs
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqUpdateGDM reqDelGDM reqGDMMember
 
 type (
 	reqGetFriends struct {
@@ -507,6 +507,30 @@ func (m *router) updateGDM(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	reqDelGDM struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Chatid string `valid:"chatid,has" json:"-"`
+	}
+)
+
+func (m *router) deleteGDM(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqDelGDM{
+		Userid: gate.GetCtxUserid(c),
+		Chatid: c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteGDM(req.Userid, req.Chatid); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqCreateMsg{}
@@ -568,265 +592,51 @@ func (m *router) deleteGDMMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqChatID struct {
-		Chatid string `valid:"chatid,has" json:"-"`
-	}
-
-	reqCreateChat struct {
-		Kind    string   `valid:"kind" json:"kind"`
-		Name    string   `valid:"name" json:"name"`
-		Theme   string   `valid:"theme" json:"theme"`
-		Userids []string `valid:"userids,has" json:"userids"`
-	}
-
-	reqUpdateChat struct {
-		Chatid string `valid:"chatid,has" json:"-"`
-		Name   string `valid:"name" json:"name"`
-		Theme  string `valid:"theme" json:"theme"`
-	}
-
-	reqChatMembers struct {
-		Chatid string   `valid:"chatid,has" json:"-"`
-		Add    []string `valid:"userids,opt" json:"add"`
-		Remove []string `valid:"userids,opt" json:"remove"`
-	}
-
-	reqLatestChats struct {
-		Kind   string `valid:"kind,has" json:"-"`
-		Before int64  `json:"-"`
-		Amount int    `valid:"amount" json:"-"`
-	}
-
-	reqSearchChats struct {
-		Kind   string `valid:"kind,has" json:"-"`
-		Search string `valid:"search" json:"-"`
-		Amount int    `valid:"amount" json:"-"`
-	}
-
-	reqChats struct {
-		Chatids []string `valid:"chatids,has" json:"-"`
-	}
-
-	reqLatestMsgs struct {
-		Chatid string `valid:"chatid,has" json:"-"`
-		Kind   string `valid:"msgkind,opt" json:"-"`
-		Before string `valid:"msgid,opt" json:"-"`
-		Amount int    `valid:"amount" json:"-"`
+	reqGDMMember struct {
+		Userid  string   `valid:"userid,has" json:"-"`
+		Chatid  string   `valid:"chatid,has" json:"-"`
+		Members []string `valid:"userids,has" json:"members"`
 	}
 )
 
-func (m *router) createChat(w http.ResponseWriter, r *http.Request) {
+func (m *router) addGDMMember(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateChat{}
+	req := reqGDMMember{}
 	if err := c.Bind(&req); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	members := make([]string, 0, len(req.Userids)+1)
-	members[0] = gate.GetCtxUserid(c)
-	copy(members[1:], req.Userids)
-	res, err := m.s.CreateChatWithUsers(req.Kind, req.Name, req.Theme, members)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusCreated, res)
-}
-
-func (m *router) updateChat(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdateChat{}
-	if err := c.Bind(&req); err != nil {
-		c.WriteError(err)
-		return
-	}
+	req.Userid = gate.GetCtxUserid(c)
 	req.Chatid = c.Param("id")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateChat(req.Chatid, req.Name, req.Theme); err != nil {
+	if err := m.s.AddGDMMembers(req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) updateChatMembers(w http.ResponseWriter, r *http.Request) {
+func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqChatMembers{}
+	req := reqGDMMember{}
 	if err := c.Bind(&req); err != nil {
 		c.WriteError(err)
 		return
 	}
+	req.Userid = gate.GetCtxUserid(c)
 	req.Chatid = c.Param("id")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if len(req.Add) > 0 {
-		if err := m.s.AddChatMembers(req.Chatid, req.Add); err != nil {
-			c.WriteError(err)
-			return
-		}
-	}
-	if len(req.Remove) > 0 {
-		if err := m.s.RemoveChatMembers(req.Chatid, req.Remove); err != nil {
-			c.WriteError(err)
-			return
-		}
-	}
-	c.WriteStatus(http.StatusNoContent)
-}
-
-func (m *router) deleteChat(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqChatID{
-		Chatid: c.Param("id"),
-	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	if err := m.s.DeleteChat(req.Chatid); err != nil {
+	if err := m.s.RmGDMMembers(req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
-}
-
-func (m *router) getLatestChats(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqLatestChats{
-		Kind:   c.Query("kind"),
-		Before: c.QueryInt64("before", 0),
-		Amount: c.QueryInt("amount", -1),
-	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-
-	res, err := m.s.GetLatestChatsByKind(req.Kind, gate.GetCtxUserid(c), req.Before, req.Amount)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) searchChats(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqSearchChats{
-		Kind:   c.Query("kind"),
-		Search: c.Query("search"),
-		Amount: c.QueryInt("amount", -1),
-	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-
-	res, err := m.s.SearchChats(req.Kind, gate.GetCtxUserid(c), req.Search, req.Amount)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) getChats(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqChats{
-		Chatids: strings.Split(c.Query("ids"), ","),
-	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-
-	res, err := m.s.GetChats(req.Chatids)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) createMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateMsg{}
-	if err := c.Bind(&req); err != nil {
-		c.WriteError(err)
-		return
-	}
-	req.Chatid = c.Param("id")
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	res, err := m.s.CreateMsg(req.Chatid, gate.GetCtxUserid(c), req.Kind, req.Value)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusCreated, res)
-}
-
-func (m *router) getLatestMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqLatestMsgs{
-		Chatid: c.Param("id"),
-		Kind:   c.Query("kind"),
-		Before: c.Query("before"),
-		Amount: c.QueryInt("amount", -1),
-	}
-	if err := req.valid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	res, err := m.s.GetLatestChatMsgsByKind(req.Chatid, req.Kind, req.Before, req.Amount)
-	if err != nil {
-		c.WriteError(err)
-		return
-	}
-	c.WriteJSON(http.StatusOK, res)
-}
-
-func (m *router) conduitChatOwner(c governor.Context, userid string) bool {
-	chatid := c.Param("id")
-	if err := validhasChatid(chatid); err != nil {
-		return false
-	}
-	members, err := m.s.GetUserChats(userid, []string{chatid})
-	if err != nil {
-		m.s.logger.Error("Failed to get chat owners", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "getchatowners",
-		})
-		return false
-	}
-	return len(members) != 0
-}
-
-func (m *router) conduitChatsOwner(c governor.Context, userid string) bool {
-	chatids := strings.Split(c.Query("ids"), ",")
-	if err := validhasChatids(chatids); err != nil {
-		return false
-	}
-	members, err := m.s.GetUserChats(userid, chatids)
-	if err != nil {
-		m.s.logger.Error("Failed to get user chats", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "getuserchats",
-		})
-		return false
-	}
-	return len(members) == len(chatids)
 }
 
 func (m *router) mountRoutes(r governor.Router) {
@@ -857,17 +667,10 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/gdm/ids", m.getGDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/gdm/search", m.searchGDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Put("/gdm/id/{id}", m.updateGDM, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Delete("/gdm/id/{id}", m.deleteGDM, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Patch("/gdm/id/{id}/member/add", m.addGDMMember, gate.User(m.s.gate, scopeChatAdminWrite))
+	r.Patch("/gdm/id/{id}/member/rm", m.rmGDMMembers, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Post("/gdm/id/{id}/msg", m.createGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
-	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
-
-	r.Get("/chat/latest", m.getLatestChats, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/chat/search", m.searchChats, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/chat", m.getChats, gate.Owner(m.s.gate, m.conduitChatsOwner, scopeChatRead))
-	r.Post("/chat", m.createChat, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Put("/chat/id/{id}", m.updateChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
-	r.Patch("/chat/id/{id}/member", m.updateChatMembers, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
-	r.Delete("/chat/id/{id}", m.deleteChat, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatAdminWrite))
-	r.Post("/chat/id/{id}/msg", m.createMsg, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatWrite))
-	r.Get("/chat/id/{id}/msg/latest", m.getLatestMsgs, gate.Owner(m.s.gate, m.conduitChatOwner, scopeChatRead))
+	r.Delete("/gdm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 }
