@@ -55,6 +55,11 @@ func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConf
 	return nil
 }
 
+func invModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+	return err
+}
+
 func invModelGetModelEqUseridEqInvitedByGtCreationTime(db *sql.DB, tableName string, userid string, invitedby string, creationtime int64) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid, invited_by, creation_time FROM "+tableName+" WHERE userid = $1 AND invited_by = $2 AND creation_time > $3;", userid, invitedby, creationtime).Scan(&m.Userid, &m.InvitedBy, &m.CreationTime); err != nil {

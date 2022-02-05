@@ -51,11 +51,6 @@ func friendModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowC
 	return nil
 }
 
-func friendModelDelEqUserid1(db *sql.DB, tableName string, userid1 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_1 = $1;", userid1)
-	return err
-}
-
 func friendModelGetModelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1 string, userid2 string) (*Model, error) {
 	m := &Model{}
 	if err := db.QueryRow("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2).Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
@@ -102,11 +97,6 @@ func friendModelGetModelEqUserid1HasUserid2OrdUserid2(db *sql.DB, tableName stri
 		return nil, err
 	}
 	return res, nil
-}
-
-func friendModelDelEqUserid2(db *sql.DB, tableName string, userid2 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_2 = $1;", userid2)
-	return err
 }
 
 func friendModelGetModelEqUserid1OrdUsername(db *sql.DB, tableName string, userid1 string, orderasc bool, limit, offset int) ([]Model, error) {

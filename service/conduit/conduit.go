@@ -358,15 +358,7 @@ func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []b
 	if err != nil {
 		return err
 	}
-	// TODO refactor to iterate through group chats
-	if err := s.gdms.DeleteUser(props.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user group chats")
-	}
-	// TODO refactor to iterate through friends
-	if err := s.friends.DeleteUser(props.Userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user friends")
-	}
-	return nil
+	return s.userDeleteHook(pinger, props.Userid)
 }
 
 // UserUpdateHook updates a user name
@@ -415,4 +407,56 @@ func DecodeUnfriendProps(msgdata []byte) (*UnfriendProps, error) {
 		return nil, governor.ErrWithMsg(err, "Failed to decode unfriend props")
 	}
 	return m, nil
+}
+
+const (
+	chatDeleteBatchSize = 256
+)
+
+// userDeleteHook deletes the chats of a deleted user
+func (s *service) userDeleteHook(pinger events.Pinger, userid string) error {
+	if err := s.invitations.DeleteByUser(userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user invitations")
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		chatids, err := s.gdms.GetLatest(userid, 0, chatDeleteBatchSize)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get user chats")
+		}
+		if len(chatids) == 0 {
+			break
+		}
+		for _, i := range chatids {
+			if err := s.rmGDMUser(i, userid); err != nil {
+				return governor.ErrWithMsg(err, "Failed to delete group chat")
+			}
+		}
+		if len(chatids) < chatDeleteBatchSize {
+			break
+		}
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		friends, err := s.friends.GetFriends(userid, "", chatDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get user friends")
+		}
+		if len(friends) == 0 {
+			break
+		}
+		for _, i := range friends {
+			if err := s.rmFriend(userid, i.Userid2); err != nil {
+				return governor.ErrWithMsg(err, "Failed to remove friend")
+			}
+		}
+		if len(friends) < chatDeleteBatchSize {
+			break
+		}
+	}
+	return nil
 }

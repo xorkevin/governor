@@ -19,6 +19,7 @@ type (
 		DeleteByID(userid, invitedBy string) error
 		DeleteByInviters(userid string, inviters []string) error
 		DeleteBefore(t int64) error
+		DeleteByUser(userid string) error
 		Setup() error
 	}
 
@@ -29,7 +30,7 @@ type (
 
 	// Model is the db friend invitation model
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31)" query:"userid"`
+		Userid       string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
 		InvitedBy    string `model:"invited_by,VARCHAR(31), PRIMARY KEY (userid, invited_by)" query:"invited_by;getoneeq,userid,invited_by,creation_time|gt;deleq,userid,invited_by;deleq,userid,invited_by|arr"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,invited_by" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,invited_by,creation_time|gt;deleq,creation_time|leq"`
 	}
@@ -158,6 +159,17 @@ func (r *repo) DeleteBefore(t int64) error {
 	}
 	if err := invModelDelLeqCreationTime(d, r.table, t); err != nil {
 		return db.WrapErr(err, "Failed to delete invitations")
+	}
+	return nil
+}
+
+func (r *repo) DeleteByUser(userid string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := invModelDelEqUserid(d, r.table, userid); err != nil {
+		return db.WrapErr(err, "Failed to delete user invitations")
 	}
 	return nil
 }

@@ -17,7 +17,6 @@ type (
 		Insert(userid1, userid2 string, username1, username2 string) error
 		Remove(userid1, userid2 string) error
 		UpdateUsername(userid, username string) error
-		DeleteUser(userid string) error
 		Setup() error
 	}
 
@@ -28,8 +27,8 @@ type (
 
 	// Model is the db friend relationship model
 	Model struct {
-		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|arr;deleq,userid_2"`
+		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
+		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|arr"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
 	}
 
@@ -158,20 +157,6 @@ func (r *repo) UpdateUsername(userid, username string) error {
 		Username: username,
 	}, userid); err != nil {
 		return db.WrapErr(err, "Failed to update username")
-	}
-	return nil
-}
-
-func (r *repo) DeleteUser(userid string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := friendModelDelEqUserid2(d, r.table, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete friends")
-	}
-	if err := friendModelDelEqUserid1(d, r.table, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete friends")
 	}
 	return nil
 }

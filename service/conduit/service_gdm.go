@@ -247,6 +247,26 @@ func (s *service) DeleteGDM(userid string, chatid string) error {
 	return nil
 }
 
+func (s *service) rmGDMUser(chatid string, userid string) error {
+	count, err := s.gdms.GetMembersCount(chatid)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get group chat members count")
+	}
+	if count > 3 {
+		if err := s.gdms.RmMembers(chatid, []string{userid}); err != nil {
+			return governor.ErrWithMsg(err, "Failed to remove user from group chat")
+		}
+		return nil
+	}
+	if err := s.msgs.DeleteChatMsgs(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete group chat messages")
+	}
+	if err := s.gdms.Delete(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete group chat")
+	}
+	return nil
+}
+
 type (
 	resGDMs struct {
 		GDMs []resGDM `json:"gdms"`

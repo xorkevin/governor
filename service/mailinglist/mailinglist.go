@@ -393,7 +393,7 @@ func (s *service) OrgDeleteHook(pinger events.Pinger, topic string, msgdata []by
 	return s.creatorDeleteHook(pinger, rank.ToOrgName(props.OrgID))
 }
 
-// creatorDeleteHook deletes the roles of a deleted creator
+// creatorDeleteHook deletes the mailinglists of a deleted creator
 func (s *service) creatorDeleteHook(pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(); err != nil {
@@ -401,7 +401,7 @@ func (s *service) creatorDeleteHook(pinger events.Pinger, creatorid string) erro
 		}
 		lists, err := s.GetCreatorLists(creatorid, listDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user roles")
+			return governor.ErrWithMsg(err, "Failed to get user mailinglists")
 		}
 		if len(lists.Lists) == 0 {
 			break

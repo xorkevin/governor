@@ -34,7 +34,6 @@ type (
 		AddMembers(chatid string, userids []string) (int64, error)
 		RmMembers(chatid string, userids []string) error
 		Delete(chatid string) error
-		DeleteUser(userid string) error
 		Setup() error
 	}
 
@@ -61,15 +60,15 @@ type (
 	// MemberModel is the db chat member model
 	MemberModel struct {
 		Chatid      string `model:"chatid,VARCHAR(31);index,userid" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr;getgroupeq,chatid|arr"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;deleq,userid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
 	}
 
 	// AssocModel is the db chat association model
 	AssocModel struct {
 		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
-		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,userid_1;deleq,chatid,userid_1|arr"`
-		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,userid_2;deleq,chatid,userid_2|arr"`
+		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,chatid,userid_1|arr"`
+		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,chatid,userid_2|arr"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,userid_2" query:"last_updated;getgroupeq,userid_1,userid_2"`
 	}
 
@@ -377,24 +376,6 @@ func (r *repo) Delete(chatid string) error {
 	}
 	if err := gdmModelDelEqChatid(d, r.table, chatid); err != nil {
 		return db.WrapErr(err, "Failed to delete group chat")
-	}
-	return nil
-}
-
-// DeleteUser deletes a user from all group chats
-func (r *repo) DeleteUser(userid string) error {
-	d, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	if err := assocModelDelEqUserid2(d, r.tableAssoc, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user group chat associations")
-	}
-	if err := assocModelDelEqUserid1(d, r.tableAssoc, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user group chat associations")
-	}
-	if err := memberModelDelEqUserid(d, r.tableMembers, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user group chat memberships")
 	}
 	return nil
 }

@@ -265,3 +265,22 @@ func (s *service) unfriendSubscriber(pinger events.Pinger, topic string, msgdata
 	// TODO: emit dm delete event
 	return nil
 }
+
+func (s *service) rmFriend(userid1, userid2 string) error {
+	if m, err := s.dms.GetByID(userid1, userid2); err != nil {
+		if !errors.Is(err, db.ErrNotFound{}) {
+			return governor.ErrWithMsg(err, "Failed to get dm")
+		}
+	} else {
+		if err := s.msgs.DeleteChatMsgs(m.Chatid); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+		}
+		if err := s.dms.Delete(userid1, userid2); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete dm")
+		}
+	}
+	if err := s.friends.Remove(userid1, userid2); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove friend")
+	}
+	return nil
+}

@@ -60,11 +60,6 @@ func assocModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
 	return err
 }
 
-func assocModelDelEqUserid1(db *sql.DB, tableName string, userid1 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_1 = $1;", userid1)
-	return err
-}
-
 func assocModelDelEqChatidHasUserid1(db *sql.DB, tableName string, chatid string, userid1 []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(userid1))
@@ -80,11 +75,6 @@ func assocModelDelEqChatidHasUserid1(db *sql.DB, tableName string, chatid string
 		placeholdersuserid1 = strings.Join(placeholders, ", ")
 	}
 	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid_1 IN (VALUES "+placeholdersuserid1+");", args...)
-	return err
-}
-
-func assocModelDelEqUserid2(db *sql.DB, tableName string, userid2 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_2 = $1;", userid2)
 	return err
 }
 
