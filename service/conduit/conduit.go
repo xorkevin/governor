@@ -358,6 +358,11 @@ func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []b
 	if err != nil {
 		return err
 	}
+	// TODO refactor to iterate through group chats
+	if err := s.gdms.DeleteUser(props.Userid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete user group chats")
+	}
+	// TODO refactor to iterate through friends
 	if err := s.friends.DeleteUser(props.Userid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete user friends")
 	}
