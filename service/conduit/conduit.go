@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/conduit/chat/model"
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
 	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
@@ -43,7 +42,6 @@ type (
 		dms            dmmodel.Repo
 		gdms           gdmmodel.Repo
 		msgs           msgmodel.Repo
-		repo           model.Repo
 		kvpresence     kvstore.KVStore
 		users          user.Users
 		events         events.Events

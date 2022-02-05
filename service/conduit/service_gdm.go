@@ -227,7 +227,7 @@ func (s *service) RmGDMMembers(userid string, chatid string, reqmembers []string
 		return governor.ErrWithMsg(err, "Failed to update group chat last updated")
 	}
 
-	// TODO publish member added event
+	// TODO publish member removed event
 	return nil
 }
 
@@ -236,7 +236,9 @@ func (s *service) DeleteGDM(userid string, chatid string) error {
 		return err
 	}
 
-	// TODO delete gdm chat messages
+	if err := s.msgs.DeleteChatMsgs(chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete group chat messages")
+	}
 	if err := s.gdms.Delete(chatid); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete group chat")
 	}
