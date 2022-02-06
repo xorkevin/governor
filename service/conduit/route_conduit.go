@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqUpdateGDM reqDelGDM reqGDMMember
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember
 
 type (
 	reqGetFriends struct {
@@ -479,6 +479,38 @@ func (m *router) searchGDMs(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
+	reqCreateGDM struct {
+		Userid  string   `valid:"userid,has" json:"-"`
+		Name    string   `valid:"name" json:"name"`
+		Theme   string   `valid:"theme" json:"theme"`
+		Members []string `valid:"userids,has" json:"members"`
+	}
+)
+
+func (m *router) createGDM(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateGDM{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	members := make([]string, 0, len(req.Members)+1)
+	members[0] = req.Userid
+	copy(members[1:], req.Members)
+	res, err := m.s.CreateGDM(req.Name, req.Theme, members)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+type (
 	reqUpdateGDM struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -666,6 +698,7 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/gdm", m.getLatestGDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/gdm/ids", m.getGDMs, gate.User(m.s.gate, scopeChatRead))
 	r.Get("/gdm/search", m.searchGDMs, gate.User(m.s.gate, scopeChatRead))
+	r.Post("/gdm", m.createGDM, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Put("/gdm/id/{id}", m.updateGDM, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Delete("/gdm/id/{id}", m.deleteGDM, gate.User(m.s.gate, scopeChatAdminWrite))
 	r.Patch("/gdm/id/{id}/member/add", m.addGDMMember, gate.User(m.s.gate, scopeChatAdminWrite))

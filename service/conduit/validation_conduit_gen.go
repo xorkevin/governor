@@ -184,6 +184,22 @@ func (r reqSearchGDMs) valid() error {
 	return nil
 }
 
+func (r reqCreateGDM) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	if err := validhasUserids(r.Members); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqUpdateGDM) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
