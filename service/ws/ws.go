@@ -34,8 +34,8 @@ type (
 		s *service
 	}
 
-	// RcvMsg is a received ws msg
-	RcvMsg struct {
+	// rcvMsg is a received ws msg
+	rcvMsg struct {
 		Channel string          `json:"channel"`
 		Value   json.RawMessage `json:"value"`
 	}
@@ -57,7 +57,8 @@ type (
 	ctxKeyOpts struct{}
 
 	PresenceEventProps struct {
-		Timestamp int64 `json:"timestamp"`
+		Timestamp int64  `json:"timestamp"`
+		Location  string `json:"location"`
 	}
 )
 
@@ -152,18 +153,18 @@ func (s *service) Health() error {
 	return nil
 }
 
-// DecodeRcvMsg unmarshals json encoded received messages into a struct
-func DecodeRcvMsg(b []byte) (string, []byte, error) {
-	m := &RcvMsg{}
+// decodeRcvMsg unmarshals json encoded received messages into a struct
+func decodeRcvMsg(b []byte) (string, []byte, error) {
+	m := &rcvMsg{}
 	if err := json.Unmarshal(b, m); err != nil {
 		return "", nil, governor.ErrWithMsg(err, "Failed to decode received msg")
 	}
 	return m.Channel, m.Value, nil
 }
 
-// EncodeRcvMsg marshals received messages to json
-func EncodeRcvMsg(channel string, v []byte) ([]byte, error) {
-	b, err := json.Marshal(RcvMsg{
+// encodeRcvMsg marshals received messages to json
+func encodeRcvMsg(channel string, v []byte) ([]byte, error) {
+	b, err := json.Marshal(rcvMsg{
 		Channel: channel,
 		Value:   v,
 	})
