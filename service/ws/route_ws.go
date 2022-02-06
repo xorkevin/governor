@@ -269,6 +269,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				))
 				return
 			}
+			origLocation := presenceLocation
 			for _, i := range o.Ops {
 				switch i.Op {
 				case ctlOpLoc:
@@ -282,12 +283,22 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 							))
 							return
 						}
-						presenceLocation = args.Location
-						if err := m.sendPresenceUpdate(presenceChannel, presenceLocation); err != nil {
-							conn.CloseError(err)
+						if len(args.Location) > 127 {
+							conn.CloseError(governor.ErrWS(
+								governor.NewError(governor.ErrOptUser),
+								int(websocket.StatusUnsupportedData),
+								"Invalid location",
+							))
 							return
 						}
+						presenceLocation = args.Location
 					}
+				}
+			}
+			if presenceLocation != origLocation {
+				if err := m.sendPresenceUpdate(presenceChannel, presenceLocation); err != nil {
+					conn.CloseError(err)
+					return
 				}
 			}
 		} else {

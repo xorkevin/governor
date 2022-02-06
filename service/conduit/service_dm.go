@@ -23,7 +23,7 @@ func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
 		})
 		return
 	}
-	present, err := s.getPresence(userids)
+	present, err := s.getPresence(locDM, userids)
 	if err != nil {
 		s.logger.Error("Failed to get presence", map[string]string{
 			"error":      err.Error(),
@@ -53,7 +53,7 @@ func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
 		})
 		return
 	}
-	present, err := s.getPresence(userids)
+	present, err := s.getPresence(locDM, userids)
 	if err != nil {
 		s.logger.Error("Failed to get presence", map[string]string{
 			"error":      err.Error(),

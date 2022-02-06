@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	presenceMarker = "t"
+	locDM  = "dm"
+	locGDM = "gdm"
 )
 
 func (s *service) PresenceHandler(topic string, msgdata []byte) {
@@ -24,7 +25,24 @@ func (s *service) PresenceHandler(topic string, msgdata []byte) {
 		l.Error("Invalid userid", nil)
 		return
 	}
-	if err := s.kvpresence.Set(userid, presenceMarker, 60); err != nil {
+	req := &ws.PresenceEventProps{}
+	if err := json.Unmarshal(msgdata, &req); err != nil {
+		l.Error("Invalid presence event msg format", map[string]string{
+			"error":  err.Error(),
+			"userid": userid,
+		})
+		return
+	}
+	if !strings.HasPrefix(req.Location, s.channelns+".") {
+		return
+	}
+	subloc := strings.TrimPrefix(req.Location, s.channelns+".")
+	switch subloc {
+	case locDM, locGDM:
+	default:
+		return
+	}
+	if err := s.kvpresence.Set(userid, subloc, 60); err != nil {
 		l.Error("Failed to set presence", map[string]string{
 			"error":  err.Error(),
 			"userid": userid,
@@ -33,7 +51,7 @@ func (s *service) PresenceHandler(topic string, msgdata []byte) {
 	}
 }
 
-func (s *service) getPresence(userids []string) ([]string, error) {
+func (s *service) getPresence(loc string, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
@@ -56,7 +74,7 @@ func (s *service) getPresence(userids []string) ([]string, error) {
 		if err != nil {
 			continue
 		}
-		if k == presenceMarker {
+		if loc == "" || k == loc {
 			res = append(res, userids[n])
 		}
 	}
@@ -116,7 +134,7 @@ func (s *service) PresenceQueryHandler(topic string, msgdata []byte) {
 		return
 	}
 
-	res, err := s.getPresence(userids)
+	res, err := s.getPresence("", userids)
 	if err != nil {
 		l.Error("Failed to get presence", map[string]string{
 			"error": err.Error(),

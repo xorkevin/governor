@@ -24,6 +24,20 @@ func (s *service) checkUsersExist(userids []string) error {
 	return nil
 }
 
+func (s *service) checkFriends(userid string, userids []string) error {
+	m, err := s.friends.GetFriendsByID(userid, userids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to users exist check")
+	}
+	if len(m) != len(userids) {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "May only add friends to group chat",
+		}))
+	}
+	return nil
+}
+
 func uniqStrs(a []string) []string {
 	res := make([]string, 0, len(a))
 	set := map[string]struct{}{}
@@ -64,6 +78,9 @@ func (s *service) CreateGDM(name string, theme string, requserids []string) (*re
 	}
 
 	if err := s.checkUsersExist(userids); err != nil {
+		return nil, err
+	}
+	if err := s.checkFriends(userids[0], userids[1:]); err != nil {
 		return nil, err
 	}
 
@@ -150,6 +167,9 @@ func (s *service) AddGDMMembers(userid string, chatid string, reqmembers []strin
 	}
 
 	if err := s.checkUsersExist(members); err != nil {
+		return err
+	}
+	if err := s.checkFriends(userid, members); err != nil {
 		return err
 	}
 
