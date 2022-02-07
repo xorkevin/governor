@@ -499,7 +499,7 @@ func (m *router) createGDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	members := make([]string, 0, len(req.Members)+1)
+	members := make([]string, len(req.Members)+1)
 	members[0] = req.Userid
 	copy(members[1:], req.Members)
 	res, err := m.s.CreateGDM(req.Name, req.Theme, members)
