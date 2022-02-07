@@ -335,7 +335,7 @@ func (r *repo) AddMembers(chatid string, userids []string) (int64, error) {
 		return 0, db.WrapErr(err, "Failed to add group chat members")
 	}
 	for _, i := range userids {
-		if _, err := d.Exec("INSERT INTO "+r.tableAssoc+" (chatid, userid_1, userid_2, last_updated) SELECT chatid, $2, userid, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 ON CONFLICT DO NOTHING;", chatid, i); err != nil {
+		if _, err := d.Exec("INSERT INTO "+r.tableAssoc+" (chatid, userid_1, userid_2, last_updated) SELECT chatid, $2::VARCHAR, userid, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2::VARCHAR, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 ON CONFLICT DO NOTHING;", chatid, i); err != nil {
 			return 0, db.WrapErr(err, "Failed to add group chat associations")
 		}
 	}

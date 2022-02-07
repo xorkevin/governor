@@ -306,15 +306,23 @@ func (s *service) getGDMsWithMembers(chatids []string) (*resGDMs, error) {
 	for _, i := range members {
 		memMap[i.Chatid] = append(memMap[i.Chatid], i.Userid)
 	}
-	res := make([]resGDM, 0, len(m))
+	chatMap := map[string]model.Model{}
 	for _, i := range m {
+		chatMap[i.Chatid] = i
+	}
+	res := make([]resGDM, 0, len(chatMap))
+	for _, i := range chatids {
+		k, ok := chatMap[i]
+		if !ok {
+			continue
+		}
 		res = append(res, resGDM{
-			Chatid:       i.Chatid,
-			Name:         i.Name,
-			Theme:        i.Theme,
-			LastUpdated:  i.LastUpdated,
-			CreationTime: i.CreationTime,
-			Members:      memMap[i.Chatid],
+			Chatid:       k.Chatid,
+			Name:         k.Name,
+			Theme:        k.Theme,
+			LastUpdated:  k.LastUpdated,
+			CreationTime: k.CreationTime,
+			Members:      memMap[k.Chatid],
 		})
 	}
 	return &resGDMs{
