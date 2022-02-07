@@ -240,6 +240,10 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		return err
 	}
 	l.Info("Created conduit dm table", nil)
+	if err := s.gdms.Setup(); err != nil {
+		return err
+	}
+	l.Info("Created conduit gdm tables", nil)
 	if err := s.msgs.Setup(); err != nil {
 		return err
 	}
