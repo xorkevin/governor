@@ -1,6 +1,7 @@
 package conduit
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -8,7 +9,92 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/gdm/model"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/ws"
 )
+
+func (s *service) publishGDMMsgEvent(chatid string, v interface{}) {
+	m, err := s.gdms.GetChatsMembers([]string{chatid}, groupChatMemberCap*2)
+	if err != nil {
+		s.logger.Error("Failed to get gdm members", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "getgdmnotifymembers",
+		})
+		return
+	}
+	if len(m) == 0 {
+		return
+	}
+	userids := make([]string, 0, len(m))
+	for _, i := range m {
+		userids = append(userids, i.Userid)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		s.logger.Error("Failed to marshal gdm msg json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshalgdmmsgjson",
+		})
+		return
+	}
+	present, err := s.getPresence(locGDM, userids)
+	if err != nil {
+		s.logger.Error("Failed to get presence", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "gdmmsgeventgetpresence",
+		})
+		return
+	}
+	for _, i := range present {
+		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.gdm.msg"), b); err != nil {
+			s.logger.Error("Failed to publish gdm msg event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishgdmmsg",
+			})
+		}
+	}
+}
+
+func (s *service) publishGDMSettingsEvent(chatid string, v interface{}) {
+	m, err := s.gdms.GetChatsMembers([]string{chatid}, groupChatMemberCap*2)
+	if err != nil {
+		s.logger.Error("Failed to get gdm members", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "getgdmnotifymembers",
+		})
+		return
+	}
+	if len(m) == 0 {
+		return
+	}
+	userids := make([]string, 0, len(m))
+	for _, i := range m {
+		userids = append(userids, i.Userid)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		s.logger.Error("Failed to marshal gdm settings json", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "marshalgdmsettingsjson",
+		})
+		return
+	}
+	present, err := s.getPresence(locGDM, userids)
+	if err != nil {
+		s.logger.Error("Failed to get presence", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "gdmsettingseventgetpresence",
+		})
+		return
+	}
+	for _, i := range present {
+		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.gdm.settings"), b); err != nil {
+			s.logger.Error("Failed to publish gdm settings event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishgdmsettings",
+			})
+		}
+	}
+}
 
 func (s *service) checkUsersExist(userids []string) error {
 	ids, err := s.users.CheckUsersExist(userids)
@@ -128,6 +214,12 @@ func (s *service) getGDMByChatid(userid string, chatid string) (*model.Model, er
 	return m, nil
 }
 
+type (
+	resGDMID struct {
+		Chatid string `json:"chatid"`
+	}
+)
+
 func (s *service) UpdateGDM(userid string, chatid string, name, theme string) error {
 	m, err := s.getGDMByChatid(userid, chatid)
 	if err != nil {
@@ -138,7 +230,9 @@ func (s *service) UpdateGDM(userid string, chatid string, name, theme string) er
 	if err := s.gdms.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update group chat")
 	}
-	// TODO publish gdm settings event
+	s.publishGDMSettingsEvent(chatid, resDMID{
+		Chatid: m.Chatid,
+	})
 	return nil
 }
 
@@ -376,7 +470,7 @@ func (s *service) CreateGDMMsg(userid string, chatid string, kind string, value 
 		Kind:   m.Kind,
 		Value:  m.Value,
 	}
-	// TODO publish gdm message send event
+	s.publishGDMMsgEvent(chatid, res)
 	return &res, nil
 }
 
