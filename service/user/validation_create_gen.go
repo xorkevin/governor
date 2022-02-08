@@ -31,7 +31,7 @@ func (r reqUserPostConfirm) valid() error {
 	return nil
 }
 
-func (r reqUserDelete) valid() error {
+func (r reqUserDeleteSelf) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
@@ -39,6 +39,16 @@ func (r reqUserDelete) valid() error {
 		return err
 	}
 	if err := validhasPassword(r.Password); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqUserDelete) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasUsername(r.Username); err != nil {
 		return err
 	}
 	return nil

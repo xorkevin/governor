@@ -309,7 +309,7 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 	}, nil
 }
 
-func (s *service) DeleteUser(userid string, username string, password string) error {
+func (s *service) DeleteUser(userid string, username string, admin bool, password string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -335,13 +335,15 @@ func (s *service) DeleteUser(userid string, username string, password string) er
 			Message: "Not allowed to delete admin user",
 		}))
 	}
-	if ok, err := s.users.ValidatePass(password, m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to validate password")
-	} else if !ok {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Incorrect password",
-		}))
+	if !admin {
+		if ok, err := s.users.ValidatePass(password, m); err != nil {
+			return governor.ErrWithMsg(err, "Failed to validate password")
+		} else if !ok {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Incorrect password",
+			}))
+		}
 	}
 
 	j, err := json.Marshal(DeleteUserProps{
