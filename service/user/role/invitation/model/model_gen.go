@@ -86,6 +86,11 @@ func invModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, rol
 	return err
 }
 
+func invModelDelEqRole(db *sql.DB, tableName string, role string) error {
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE role = $1;", role)
+	return err
+}
+
 func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {

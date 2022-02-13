@@ -342,3 +342,10 @@ func (s *service) DeleteRoleInvitation(userid, role string) error {
 	}
 	return nil
 }
+
+func (s *service) DeleteRoleInvitations(role string) error {
+	if err := s.invitations.DeleteRole(role); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete role invitations")
+	}
+	return nil
+}

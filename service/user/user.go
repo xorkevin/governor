@@ -47,6 +47,7 @@ type (
 		GetInfoBulk(userids []string) (*ResUserInfoList, error)
 		CheckUserExists(userid string) (bool, error)
 		CheckUsersExist(userids []string) ([]string, error)
+		DeleteRoleInvitations(role string) error
 	}
 
 	// Service is a Users and governor.Service

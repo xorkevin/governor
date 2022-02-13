@@ -19,6 +19,7 @@ type (
 		Insert(userid string, roles rank.Rank, by string, at int64) error
 		DeleteByID(userid, role string) error
 		DeleteByRoles(userid string, roles rank.Rank) error
+		DeleteRole(role string) error
 		DeleteBefore(t int64) error
 		Setup() error
 	}
@@ -31,7 +32,7 @@ type (
 	// Model is the db role invitation model
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31)" query:"userid"`
-		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr"`
+		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr;deleq,role"`
 		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,role" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
 	}
@@ -158,6 +159,17 @@ func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
 		return err
 	}
 	if err := invModelDelEqUseridHasRole(d, r.table, userid, roles.ToSlice()); err != nil {
+		return db.WrapErr(err, "Failed to delete invitations")
+	}
+	return nil
+}
+
+func (r *repo) DeleteRole(role string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := invModelDelEqRole(d, r.table, role); err != nil {
 		return db.WrapErr(err, "Failed to delete invitations")
 	}
 	return nil

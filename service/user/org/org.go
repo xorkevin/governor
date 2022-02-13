@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/ratelimit"
+	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
@@ -31,6 +32,7 @@ type (
 	service struct {
 		orgs        model.Repo
 		roles       role.Roles
+		users       user.Users
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
@@ -94,17 +96,19 @@ func SetCtxOpts(inj governor.Injector, o Opts) {
 func NewCtx(inj governor.Injector) Service {
 	orgs := model.GetCtxRepo(inj)
 	roles := role.GetCtxRoles(inj)
+	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	return New(orgs, roles, ev, ratelimiter, g)
+	return New(orgs, roles, users, ev, ratelimiter, g)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
+func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
 		orgs:        orgs,
 		roles:       roles,
+		users:       users,
 		events:      ev,
 		ratelimiter: ratelimiter,
 		gate:        g,
@@ -226,23 +230,8 @@ func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata 
 	orgrole := rank.ToOrgName(props.OrgID)
 	usrOrgrole := rank.ToUsrName(orgrole)
 	modOrgrole := rank.ToModName(orgrole)
-	for {
-		if err := pinger.Ping(); err != nil {
-			return err
-		}
-		userids, err := s.roles.GetByRole(usrOrgrole, roleDeleteBatchSize, 0)
-		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get role users")
-		}
-		if len(userids) == 0 {
-			break
-		}
-		if err := s.roles.DeleteByRole(usrOrgrole, userids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete role users")
-		}
-		if len(userids) < roleDeleteBatchSize {
-			break
-		}
+	if err := s.users.DeleteRoleInvitations(modOrgrole); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete role mod invitations")
 	}
 	for {
 		if err := pinger.Ping(); err != nil {
@@ -257,6 +246,27 @@ func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata 
 		}
 		if err := s.roles.DeleteByRole(modOrgrole, userids); err != nil {
 			return governor.ErrWithMsg(err, "Failed to delete role mods")
+		}
+		if len(userids) < roleDeleteBatchSize {
+			break
+		}
+	}
+	if err := s.users.DeleteRoleInvitations(usrOrgrole); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete role user invitations")
+	}
+	for {
+		if err := pinger.Ping(); err != nil {
+			return err
+		}
+		userids, err := s.roles.GetByRole(usrOrgrole, roleDeleteBatchSize, 0)
+		if err != nil {
+			return governor.ErrWithMsg(err, "Failed to get role users")
+		}
+		if len(userids) == 0 {
+			break
+		}
+		if err := s.roles.DeleteByRole(usrOrgrole, userids); err != nil {
+			return governor.ErrWithMsg(err, "Failed to delete role users")
 		}
 		if len(userids) < roleDeleteBatchSize {
 			break
