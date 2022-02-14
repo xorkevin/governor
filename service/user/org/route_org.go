@@ -248,7 +248,7 @@ func (m *router) mountRoute(r governor.Router) {
 	r.Get("/id/{id}", m.getOrg, m.rt)
 	r.Get("/name/{name}", m.getOrgByName)
 	r.Get("/ids", m.getOrgs, m.rt)
-	r.Get("/id/{id}/member", m.getOrgMembers, gate.User(m.s.gate, scopeOrgRead), m.rt)
+	r.Get("/id/{id}/member", m.getOrgMembers, m.rt)
 	r.Get("/search", m.getUserOrgs, gate.User(m.s.gate, scopeOrgRead), m.rt)
 	r.Get("", m.getAllOrgs, m.rt)
 	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite), m.rt)

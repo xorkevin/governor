@@ -25,8 +25,8 @@ type (
 	}
 
 	resMember struct {
-		Userid   string
-		Username string
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
 	}
 
 	resMembers struct {
