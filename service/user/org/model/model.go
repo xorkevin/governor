@@ -150,6 +150,10 @@ func (r *repo) GetAllOrgs(limit, offset int) ([]Model, error) {
 }
 
 func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
+	if len(orgids) == 0 {
+		return nil, nil
+	}
+
 	d, err := r.db.DB()
 	if err != nil {
 		return nil, err
@@ -214,7 +218,7 @@ func (r *repo) UpdateName(orgid string, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := memberModelUpdorgNameEqOrgID(d, r.table, &orgName{
+	if err := memberModelUpdorgNameEqOrgID(d, r.tableMembers, &orgName{
 		Name: name,
 	}, orgid); err != nil {
 		return db.WrapErr(err, "Failed to update org name")

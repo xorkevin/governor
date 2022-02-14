@@ -307,10 +307,10 @@ func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []b
 
 	orgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
-		if !strings.HasPrefix(i, rank.PrefixOrgUsr) {
+		if !strings.HasPrefix(i, rank.PrefixUsrOrg) {
 			continue
 		}
-		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixOrgUsr))
+		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixUsrOrg))
 	}
 
 	m, err := s.orgs.GetOrgs(orgids)
@@ -341,10 +341,10 @@ func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []b
 
 	orgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
-		if !strings.HasPrefix(i, rank.PrefixOrgUsr) {
+		if !strings.HasPrefix(i, rank.PrefixUsrOrg) {
 			continue
 		}
-		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixOrgUsr))
+		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixUsrOrg))
 	}
 	if err := s.orgs.RmMembers(props.Userid, orgids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove org members")
