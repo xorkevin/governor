@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -101,6 +102,38 @@ func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
 	}
 	return &resOrgs{
 		Orgs: orgs,
+	}, nil
+}
+
+func (s *service) GetUserOrgs(userid string, prefix string, limit, offset int) (*resOrgs, error) {
+	orgids, err := s.orgs.GetUserOrgs(userid, prefix, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user orgs")
+	}
+	m, err := s.orgs.GetOrgs(orgids)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user orgs")
+	}
+	orgMap := map[string]model.Model{}
+	for _, i := range m {
+		orgMap[i.OrgID] = i
+	}
+	res := make([]ResOrg, 0, len(orgMap))
+	for _, i := range orgids {
+		k, ok := orgMap[i]
+		if !ok {
+			continue
+		}
+		res = append(res, ResOrg{
+			OrgID:        k.OrgID,
+			Name:         k.Name,
+			DisplayName:  k.DisplayName,
+			Desc:         k.Desc,
+			CreationTime: k.CreationTime,
+		})
+	}
+	return &resOrgs{
+		Orgs: res,
 	}, nil
 }
 

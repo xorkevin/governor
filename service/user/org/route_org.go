@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgsGetBulk reqOrgPost reqOrgPut
+//go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgsSearch reqOrgsGetBulk reqOrgPost reqOrgPut
 
 type (
 	reqOrgGet struct {
@@ -22,6 +22,13 @@ type (
 
 	reqOrgsGet struct {
 		OrgIDs []string `valid:"orgids,has" json:"-"`
+	}
+
+	reqOrgsSearch struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Prefix string `valid:"name,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
 	}
 
 	reqOrgsGetBulk struct {
@@ -77,6 +84,27 @@ func (m *router) getOrgs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := m.s.GetOrgs(req.OrgIDs)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getUserOrgs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqOrgsSearch{
+		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetUserOrgs(req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -187,10 +215,12 @@ func (m *router) orgMember(c governor.Context, _ string) (string, bool, bool) {
 }
 
 func (m *router) mountRoute(r governor.Router) {
+	scopeOrgRead := m.s.scopens + ":read"
 	scopeOrgWrite := m.s.scopens + ":write"
 	r.Get("/id/{id}", m.getOrg, m.rt)
 	r.Get("/name/{name}", m.getOrgByName)
 	r.Get("/ids", m.getOrgs, m.rt)
+	r.Get("/search", m.getUserOrgs, gate.User(m.s.gate, scopeOrgRead), m.rt)
 	r.Get("", m.getAllOrgs, m.rt)
 	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite), m.rt)
 	r.Put("/id/{id}", m.updateOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite), m.rt)

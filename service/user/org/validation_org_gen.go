@@ -23,6 +23,22 @@ func (r reqOrgsGet) valid() error {
 	return nil
 }
 
+func (r reqOrgsSearch) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasName(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqOrgsGetBulk) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err

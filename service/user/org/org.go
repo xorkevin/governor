@@ -346,7 +346,6 @@ func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []b
 		}
 		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixOrgUsr))
 	}
-
 	if err := s.orgs.RmMembers(props.Userid, orgids); err != nil {
 		return governor.ErrWithMsg(err, "Failed to remove org members")
 	}
