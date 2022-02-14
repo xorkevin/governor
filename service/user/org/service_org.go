@@ -142,6 +142,7 @@ func (s *service) UpdateOrg(orgid, name, displayName, desc string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get org")
 	}
+	updName := m.Name != name
 	m.Name = name
 	m.DisplayName = displayName
 	m.Desc = desc
@@ -153,6 +154,11 @@ func (s *service) UpdateOrg(orgid, name, displayName, desc string) error {
 			}), governor.ErrOptInner(err))
 		}
 		return governor.ErrWithMsg(err, "Failed to update org")
+	}
+	if updName {
+		if err := s.orgs.UpdateName(m.OrgID, m.Name); err != nil {
+			return governor.ErrWithMsg(err, "Failed to update org name")
+		}
 	}
 	return nil
 }

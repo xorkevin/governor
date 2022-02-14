@@ -159,6 +159,10 @@ var (
 	rankRegexOrg = regexp.MustCompile(`^org.[A-Za-z0-9_-]+$`)
 )
 
+const (
+	PrefixOrgUsr = "org.usr."
+)
+
 // FromSlice creates a new Rank from a list of strings
 func FromSlice(rankSlice []string) Rank {
 	if len(rankSlice) == 0 {

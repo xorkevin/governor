@@ -300,17 +300,56 @@ func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata 
 }
 
 func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []byte) error {
-	_, err := role.DecodeRolesProps(msgdata)
+	props, err := role.DecodeRolesProps(msgdata)
 	if err != nil {
 		return err
 	}
+
+	orgids := make([]string, 0, len(props.Roles))
+	for _, i := range props.Roles {
+		if !strings.HasPrefix(i, rank.PrefixOrgUsr) {
+			continue
+		}
+		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixOrgUsr))
+	}
+
+	m, err := s.orgs.GetOrgs(orgids)
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to get orgs")
+	}
+
+	members := make([]*model.MemberModel, 0, len(m))
+	for _, i := range m {
+		members = append(members, &model.MemberModel{
+			OrgID:  i.OrgID,
+			Userid: props.Userid,
+			Name:   i.Name,
+		})
+	}
+	if err := s.orgs.AddMembers(members); err != nil {
+		return governor.ErrWithMsg(err, "Failed to add org members")
+	}
+
 	return nil
 }
 
 func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []byte) error {
-	_, err := role.DecodeRolesProps(msgdata)
+	props, err := role.DecodeRolesProps(msgdata)
 	if err != nil {
 		return err
 	}
+
+	orgids := make([]string, 0, len(props.Roles))
+	for _, i := range props.Roles {
+		if !strings.HasPrefix(i, rank.PrefixOrgUsr) {
+			continue
+		}
+		orgids = append(orgids, strings.TrimPrefix(i, rank.PrefixOrgUsr))
+	}
+
+	if err := s.orgs.RmMembers(props.Userid, orgids); err != nil {
+		return governor.ErrWithMsg(err, "Failed to remove org members")
+	}
+
 	return nil
 }

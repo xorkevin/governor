@@ -27,6 +27,7 @@ type (
 		GetUserOrgs(userid string, prefix string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
+		UpdateName(orgid string, name string) error
 		AddMembers(m []*MemberModel) error
 		RmMembers(userid string, roles []string) error
 		Delete(m *Model) error
@@ -204,6 +205,19 @@ func (r *repo) Update(m *Model) error {
 	}
 	if err := orgModelUpdModelEqOrgID(d, r.table, m, m.OrgID); err != nil {
 		return db.WrapErr(err, "Failed to update org")
+	}
+	return nil
+}
+
+func (r *repo) UpdateName(orgid string, name string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelUpdorgNameEqOrgID(d, r.table, &orgName{
+		Name: name,
+	}, orgid); err != nil {
+		return db.WrapErr(err, "Failed to update org name")
 	}
 	return nil
 }
