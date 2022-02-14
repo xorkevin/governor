@@ -1,6 +1,7 @@
 package role
 
 import (
+	"encoding/json"
 	"errors"
 
 	"xorkevin.dev/governor"
@@ -101,18 +102,44 @@ end:
 }
 
 func (s *service) InsertRoles(userid string, roles rank.Rank) error {
+	b, err := json.Marshal(RolesProps{
+		Userid: userid,
+		Roles:  roles.ToSlice(),
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode roles props to json")
+	}
 	if err := s.roles.InsertRoles(userid, roles); err != nil {
 		return governor.ErrWithMsg(err, "Failed to create roles")
 	}
 	s.clearCache(userid, roles)
+	if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
+		s.logger.Error("Failed to publish new roles event", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishnewroles",
+		})
+	}
 	return nil
 }
 
 func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
+	b, err := json.Marshal(RolesProps{
+		Userid: userid,
+		Roles:  roles.ToSlice(),
+	})
+	if err != nil {
+		return governor.ErrWithMsg(err, "Failed to encode roles props to json")
+	}
 	if err := s.roles.DeleteRoles(userid, roles); err != nil {
 		return governor.ErrWithMsg(err, "Failed to delete roles")
 	}
 	s.clearCache(userid, roles)
+	if err := s.events.StreamPublish(s.opts.DeleteChannel, b); err != nil {
+		s.logger.Error("Failed to publish delete roles event", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "publishdelroles",
+		})
+	}
 	return nil
 }
 

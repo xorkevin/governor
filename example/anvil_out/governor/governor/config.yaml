@@ -93,6 +93,8 @@ ratelimit:
       limit: 120
 role:
   rolecache: 24h
+  streamsize: 200M
+  eventsize: 2K
 apikey:
   scopecache: 24h
 token:

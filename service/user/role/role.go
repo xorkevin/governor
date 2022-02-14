@@ -2,12 +2,16 @@ package role
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -32,14 +36,32 @@ type (
 		Roles
 	}
 
+	RolesProps struct {
+		Userid string
+		Roles  []string
+	}
+
 	service struct {
 		roles         model.Repo
 		kvroleset     kvstore.KVStore
+		events        events.Events
 		logger        governor.Logger
+		streamns      string
+		opts          Opts
+		streamsize    int64
+		eventsize     int32
 		roleCacheTime int64
 	}
 
 	ctxKeyRoles struct{}
+
+	Opts struct {
+		StreamName    string
+		CreateChannel string
+		DeleteChannel string
+	}
+
+	ctxKeyOpts struct{}
 )
 
 // GetCtxRoles returns a Roles service from the context
@@ -56,25 +78,49 @@ func setCtxRoles(inj governor.Injector, r Roles) {
 	inj.Set(ctxKeyRoles{}, r)
 }
 
+func GetCtxOpts(inj governor.Injector) Opts {
+	v := inj.Get(ctxKeyOpts{})
+	if v == nil {
+		return Opts{}
+	}
+	return v.(Opts)
+}
+
+func SetCtxOpts(inj governor.Injector, o Opts) {
+	inj.Set(ctxKeyOpts{}, o)
+}
+
 // NewCtx creates a new Roles service from a context
 func NewCtx(inj governor.Injector) Service {
 	roles := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
-	return New(roles, kv)
+	ev := events.GetCtxEvents(inj)
+	return New(roles, kv, ev)
 }
 
 // New returns a new Roles
-func New(roles model.Repo, kv kvstore.KVStore) Service {
+func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) Service {
 	return &service{
 		roles:         roles,
 		kvroleset:     kv.Subtree("roleset"),
+		events:        ev,
 		roleCacheTime: time24h,
 	}
 }
 
 func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
 	setCtxRoles(inj, s)
+	streamname := strings.ToUpper(name)
+	s.streamns = streamname
+	s.opts = Opts{
+		StreamName:    streamname,
+		CreateChannel: streamname + ".create",
+		DeleteChannel: streamname + ".delete",
+	}
+	SetCtxOpts(inj, s.opts)
 
+	r.SetDefault("streamsize", "200M")
+	r.SetDefault("eventsize", "2K")
 	r.SetDefault("rolecache", "24h")
 }
 
@@ -84,14 +130,26 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	var err error
+	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid stream size")
+	}
+	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
+	if err != nil {
+		return governor.ErrWithMsg(err, "Invalid msg size")
+	}
+	s.eventsize = int32(eventsize)
 	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
 		return governor.ErrWithMsg(err, "Failed to parse role cache time")
 	} else {
 		s.roleCacheTime = int64(t / time.Second)
 	}
 
-	l.Info("loaded config", map[string]string{
-		"rolecache (s)": strconv.FormatInt(s.roleCacheTime, 10),
+	l.Info("Loaded config", map[string]string{
+		"stream size (bytes)": r.GetStr("streamsize"),
+		"event size (bytes)":  r.GetStr("eventsize"),
+		"rolecache (s)":       strconv.FormatInt(s.roleCacheTime, 10),
 	})
 
 	return nil
@@ -102,10 +160,20 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
+	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to init roles stream")
+	}
+	l.Info("Created roles stream", nil)
+
 	if err := s.roles.Setup(); err != nil {
 		return err
 	}
-	l.Info("created userrole table", nil)
+	l.Info("Created userrole table", nil)
 
 	return nil
 }
@@ -123,4 +191,13 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health() error {
 	return nil
+}
+
+// DecodeRolesProps unmarshals json encoded roles props into a struct
+func DecodeRolesProps(msgdata []byte) (*RolesProps, error) {
+	m := &RolesProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to decode roles props")
+	}
+	return m, nil
 }
