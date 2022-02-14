@@ -43,6 +43,7 @@ type (
 		streamsize  int64
 		eventsize   int32
 		roleopts    role.Opts
+		useropts    user.Opts
 	}
 
 	router struct {
@@ -102,11 +103,12 @@ func NewCtx(inj governor.Injector) Service {
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	roleopts := role.GetCtxOpts(inj)
-	return New(orgs, roles, users, ev, ratelimiter, g, roleopts)
+	useropts := user.GetCtxOpts(inj)
+	return New(orgs, roles, users, ev, ratelimiter, g, roleopts, useropts)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, roleopts role.Opts) Service {
+func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, roleopts role.Opts, useropts user.Opts) Service {
 	return &service{
 		orgs:        orgs,
 		roles:       roles,
@@ -115,6 +117,7 @@ func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, 
 		ratelimiter: ratelimiter,
 		gate:        g,
 		roleopts:    roleopts,
+		useropts:    useropts,
 	}
 }
 
@@ -230,6 +233,16 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to user role delete queue")
 	}
 	l.Info("Subscribed to user role delete queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.UpdateChannel, s.streamns+"_WORKER_USER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user update queue")
+	}
+	l.Info("Subscribed to user update queue", nil)
 
 	return nil
 }
@@ -350,5 +363,17 @@ func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []b
 		return governor.ErrWithMsg(err, "Failed to remove org members")
 	}
 
+	return nil
+}
+
+// UserUpdateHook updates a user name
+func (s *service) UserUpdateHook(pinger events.Pinger, topic string, msgdata []byte) error {
+	props, err := user.DecodeUpdateUserProps(msgdata)
+	if err != nil {
+		return err
+	}
+	if err := s.orgs.UpdateUsername(props.Userid, props.Username); err != nil {
+		return governor.ErrWithMsg(err, "Failed to update member username")
+	}
 	return nil
 }

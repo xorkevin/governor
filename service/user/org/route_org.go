@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgsSearch reqOrgsGetBulk reqOrgPost reqOrgPut
+//go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgMembersSearch reqOrgsSearch reqOrgsGetBulk reqOrgPost reqOrgPut
 
 type (
 	reqOrgGet struct {
@@ -24,9 +24,16 @@ type (
 		OrgIDs []string `valid:"orgids,has" json:"-"`
 	}
 
+	reqOrgMembersSearch struct {
+		OrgID  string `valid:"orgid,has" json:"-"`
+		Prefix string `valid:"username,opt" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+
 	reqOrgsSearch struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Prefix string `valid:"name,has" json:"-"`
+		Prefix string `valid:"name,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
 	}
@@ -84,6 +91,27 @@ func (m *router) getOrgs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := m.s.GetOrgs(req.OrgIDs)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (m *router) getOrgMembers(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqOrgMembersSearch{
+		OrgID:  c.Param("id"),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+		Offset: c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := m.s.GetOrgMembers(req.OrgID, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -220,6 +248,7 @@ func (m *router) mountRoute(r governor.Router) {
 	r.Get("/id/{id}", m.getOrg, m.rt)
 	r.Get("/name/{name}", m.getOrgByName)
 	r.Get("/ids", m.getOrgs, m.rt)
+	r.Get("/id/{id}/member", m.getOrgMembers, gate.User(m.s.gate, scopeOrgRead), m.rt)
 	r.Get("/search", m.getUserOrgs, gate.User(m.s.gate, scopeOrgRead), m.rt)
 	r.Get("", m.getAllOrgs, m.rt)
 	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite), m.rt)

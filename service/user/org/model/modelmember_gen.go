@@ -9,7 +9,7 @@ import (
 )
 
 func memberModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (orgid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (orgid, userid), name VARCHAR(255) NOT NULL);")
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (orgid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (orgid, userid), name VARCHAR(255) NOT NULL, username VARCHAR(255) NOT NULL);")
 	if err != nil {
 		return err
 	}
@@ -17,11 +17,15 @@ func memberModelSetup(db *sql.DB, tableName string) error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_orgid__username_index ON " + tableName + " (orgid, username);")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func memberModelInsert(db *sql.DB, tableName string, m *MemberModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name) VALUES ($1, $2, $3);", m.OrgID, m.Userid, m.Name)
+	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name, username) VALUES ($1, $2, $3, $4);", m.OrgID, m.Userid, m.Name, m.Username)
 	if err != nil {
 		return err
 	}
@@ -34,13 +38,13 @@ func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, 
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*3)
+	args := make([]interface{}, 0, len(models)*4)
 	for c, m := range models {
-		n := c * 3
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
-		args = append(args, m.OrgID, m.Userid, m.Name)
+		n := c * 4
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
+		args = append(args, m.OrgID, m.Userid, m.Name, m.Username)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
@@ -76,7 +80,7 @@ func memberModelGetMemberModelEqUseridOrdName(db *sql.DB, tableName string, user
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name FROM "+tableName+" WHERE userid = $3 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE userid = $3 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +90,7 @@ func memberModelGetMemberModelEqUseridOrdName(db *sql.DB, tableName string, user
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name); err != nil {
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -103,7 +107,7 @@ func memberModelGetMemberModelEqUseridLikeNameOrdName(db *sql.DB, tableName stri
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name FROM "+tableName+" WHERE userid = $3 AND name LIKE $4 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, name)
+	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE userid = $3 AND name LIKE $4 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, name)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +117,61 @@ func memberModelGetMemberModelEqUseridLikeNameOrdName(db *sql.DB, tableName stri
 	}()
 	for rows.Next() {
 		m := MemberModel{}
-		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name); err != nil {
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelGetMemberModelEqOrgIDOrdUsername(db *sql.DB, tableName string, orgid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE orgid = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(db *sql.DB, tableName string, orgid string, username string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE orgid = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid, username)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		m := MemberModel{}
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -126,6 +184,14 @@ func memberModelGetMemberModelEqUseridLikeNameOrdName(db *sql.DB, tableName stri
 
 func memberModelUpdorgNameEqOrgID(db *sql.DB, tableName string, m *orgName, orgid string) error {
 	_, err := db.Exec("UPDATE "+tableName+" SET (name) = ROW($1) WHERE orgid = $2;", m.Name, orgid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func memberModelUpdmemberUsernameEqUserid(db *sql.DB, tableName string, m *memberUsername, userid string) error {
+	_, err := db.Exec("UPDATE "+tableName+" SET (username) = ROW($1) WHERE userid = $2;", m.Username, userid)
 	if err != nil {
 		return err
 	}

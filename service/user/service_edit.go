@@ -27,10 +27,8 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
 	b, err := json.Marshal(UpdateUserProps{
-		Userid:    m.Userid,
-		Username:  m.Username,
-		FirstName: m.FirstName,
-		LastName:  m.LastName,
+		Userid:   m.Userid,
+		Username: m.Username,
 	})
 	if err != nil {
 		return governor.ErrWithMsg(err, "Failed to encode update user props to json")

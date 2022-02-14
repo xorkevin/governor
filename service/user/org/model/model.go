@@ -10,7 +10,7 @@ import (
 )
 
 //go:generate forge model -m Model -p org -o model_gen.go Model
-//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel orgName
+//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel orgName memberUsername
 
 const (
 	uidSize = 16
@@ -24,12 +24,14 @@ type (
 		GetByName(orgname string) (*Model, error)
 		GetAllOrgs(limit, offset int) ([]Model, error)
 		GetOrgs(orgids []string) ([]Model, error)
+		GetOrgMembers(orgid string, prefix string, limit, offset int) ([]MemberModel, error)
 		GetUserOrgs(userid string, prefix string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		UpdateName(orgid string, name string) error
 		AddMembers(m []*MemberModel) error
 		RmMembers(userid string, roles []string) error
+		UpdateUsername(userid string, username string) error
 		Delete(m *Model) error
 		Setup() error
 	}
@@ -51,13 +53,18 @@ type (
 
 	// MemberModel is the user org member model
 	MemberModel struct {
-		OrgID  string `model:"orgid,VARCHAR(31)" query:"orgid;deleq,orgid"`
-		Userid string `model:"userid,VARCHAR(31), PRIMARY KEY (orgid, userid)" query:"userid;deleq,userid,orgid|arr"`
-		Name   string `model:"name,VARCHAR(255) NOT NULL;index,userid" query:"name;getgroupeq,userid;getgroupeq,userid,name|like"`
+		OrgID    string `model:"orgid,VARCHAR(31)" query:"orgid;deleq,orgid"`
+		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (orgid, userid)" query:"userid;deleq,userid,orgid|arr"`
+		Name     string `model:"name,VARCHAR(255) NOT NULL;index,userid" query:"name;getgroupeq,userid;getgroupeq,userid,name|like"`
+		Username string `model:"username,VARCHAR(255) NOT NULL;index,orgid" query:"username;getgroupeq,orgid;getgroupeq,orgid,username|like"`
 	}
 
 	orgName struct {
 		Name string `query:"name;updeq,orgid"`
+	}
+
+	memberUsername struct {
+		Username string `query:"username;updeq,userid"`
 	}
 
 	ctxKeyRepo struct{}
@@ -165,6 +172,26 @@ func (r *repo) GetOrgs(orgids []string) ([]Model, error) {
 	return m, nil
 }
 
+func (r *repo) GetOrgMembers(orgid string, prefix string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	if prefix == "" {
+		var err error
+		m, err := memberModelGetMemberModelEqOrgIDOrdUsername(d, r.tableMembers, orgid, true, limit, offset)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get org members")
+		}
+		return m, nil
+	}
+	m, err := memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(d, r.tableMembers, orgid, prefix, true, limit, offset)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get org members")
+	}
+	return m, nil
+}
+
 func (r *repo) GetUserOrgs(userid string, prefix string, limit, offset int) ([]string, error) {
 	d, err := r.db.DB()
 	if err != nil {
@@ -252,6 +279,19 @@ func (r *repo) RmMembers(userid string, orgids []string) error {
 	}
 	if err := memberModelDelEqUseridHasOrgID(d, r.tableMembers, userid, orgids); err != nil {
 		return db.WrapErr(err, "Failed to remove org members")
+	}
+	return nil
+}
+
+func (r *repo) UpdateUsername(userid string, username string) error {
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelUpdmemberUsernameEqUserid(d, r.tableMembers, &memberUsername{
+		Username: username,
+	}, userid); err != nil {
+		return db.WrapErr(err, "Failed to update username")
 	}
 	return nil
 }

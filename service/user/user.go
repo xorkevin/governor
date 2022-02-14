@@ -126,10 +126,8 @@ type (
 
 	// UpdateUserProps are properties of a user update
 	UpdateUserProps struct {
-		Userid    string `json:"userid"`
-		Username  string `json:"username"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
 	}
 
 	ctxKeyUsers struct{}

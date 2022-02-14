@@ -98,6 +98,16 @@ func validhasName(name string) error {
 	return nil
 }
 
+func validoptName(name string) error {
+	if len(name) > lengthCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Org name must be shorter than 128 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
 func validhasOrgids(orgids []string) error {
 	if len(orgids) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -130,6 +140,16 @@ func validhasUserid(userid string) error {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Userid must be shorter than 32 characters",
 			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validoptUsername(username string) error {
+	if len(username) > lengthCap {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Status:  http.StatusBadRequest,
+			Message: "Username must be shorter than 128 characters",
 		}))
 	}
 	return nil

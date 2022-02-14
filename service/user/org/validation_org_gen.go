@@ -23,11 +23,27 @@ func (r reqOrgsGet) valid() error {
 	return nil
 }
 
+func (r reqOrgMembersSearch) valid() error {
+	if err := validhasOrgid(r.OrgID); err != nil {
+		return err
+	}
+	if err := validoptUsername(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqOrgsSearch) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validhasName(r.Prefix); err != nil {
+	if err := validoptName(r.Prefix); err != nil {
 		return err
 	}
 	if err := validAmount(r.Amount); err != nil {

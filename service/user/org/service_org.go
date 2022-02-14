@@ -23,6 +23,15 @@ type (
 	resOrgs struct {
 		Orgs []ResOrg `json:"orgs"`
 	}
+
+	resMember struct {
+		Userid   string
+		Username string
+	}
+
+	resMembers struct {
+		Members []resMember `json:"members"`
+	}
 )
 
 func (s *service) GetByID(orgid string) (*ResOrg, error) {
@@ -102,6 +111,23 @@ func (s *service) GetAllOrgs(limit, offset int) (*resOrgs, error) {
 	}
 	return &resOrgs{
 		Orgs: orgs,
+	}, nil
+}
+
+func (s *service) GetOrgMembers(orgid string, prefix string, limit, offset int) (*resMembers, error) {
+	m, err := s.orgs.GetOrgMembers(orgid, prefix, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get org members")
+	}
+	res := make([]resMember, 0, len(m))
+	for _, i := range m {
+		res = append(res, resMember{
+			Userid:   i.Userid,
+			Username: i.Username,
+		})
+	}
+	return &resMembers{
+		Members: res,
 	}, nil
 }
 
