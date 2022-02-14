@@ -42,6 +42,7 @@ type (
 		opts        Opts
 		streamsize  int64
 		eventsize   int32
+		roleopts    role.Opts
 	}
 
 	router struct {
@@ -100,11 +101,12 @@ func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	return New(orgs, roles, users, ev, ratelimiter, g)
+	roleopts := role.GetCtxOpts(inj)
+	return New(orgs, roles, users, ev, ratelimiter, g, roleopts)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
+func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, roleopts role.Opts) Service {
 	return &service{
 		orgs:        orgs,
 		roles:       roles,
@@ -112,6 +114,7 @@ func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, 
 		events:      ev,
 		ratelimiter: ratelimiter,
 		gate:        g,
+		roleopts:    roleopts,
 	}
 }
 
@@ -207,6 +210,27 @@ func (s *service) Start(ctx context.Context) error {
 		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
 	}
 	l.Info("Subscribed to org delete queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.roleopts.StreamName, s.roleopts.CreateChannel, s.streamns+"_WORKER_USER_ROLE_CREATE", s.UserRoleCreate, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user role create queue")
+	}
+	l.Info("Subscribed to user role create queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.roleopts.StreamName, s.roleopts.DeleteChannel, s.streamns+"_WORKER_USER_ROLE_DELETE", s.UserRoleDelete, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to subscribe to user role delete queue")
+	}
+	l.Info("Subscribed to user role delete queue", nil)
+
 	return nil
 }
 
@@ -271,6 +295,22 @@ func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata 
 		if len(userids) < roleDeleteBatchSize {
 			break
 		}
+	}
+	return nil
+}
+
+func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []byte) error {
+	_, err := role.DecodeRolesProps(msgdata)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []byte) error {
+	_, err := role.DecodeRolesProps(msgdata)
+	if err != nil {
+		return err
 	}
 	return nil
 }

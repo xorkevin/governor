@@ -22,6 +22,7 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get user")
 	}
+	updUsername := m.Username != ruser.Username
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
@@ -43,11 +44,13 @@ func (s *service) UpdateUser(userid string, ruser reqUserPut) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to update user")
 	}
-	if err := s.events.StreamPublish(s.opts.UpdateChannel, b); err != nil {
-		s.logger.Error("Failed to publish update user event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "publishupdateuser",
-		})
+	if updUsername {
+		if err := s.events.StreamPublish(s.opts.UpdateChannel, b); err != nil {
+			s.logger.Error("Failed to publish update user event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "publishupdateuser",
+			})
+		}
 	}
 	return nil
 }

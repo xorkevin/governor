@@ -109,7 +109,7 @@ func main() {
 	}
 	{
 		inj := gov.Injector()
-		orgmodel.NewInCtx(inj, "userorgs")
+		orgmodel.NewInCtx(inj, "userorgs", "userorgmembers")
 		ratelimit.NewSubtreeInCtx(inj, "org")
 		gov.Register("org", "/org", org.NewCtx(inj))
 	}
