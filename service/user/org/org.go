@@ -2,10 +2,12 @@ package org
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
@@ -318,6 +320,14 @@ func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []b
 		return err
 	}
 
+	u, err := s.users.GetByID(props.Userid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			return nil
+		}
+		return governor.ErrWithMsg(err, "Failed to get user")
+	}
+
 	orgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
 		if !strings.HasPrefix(i, rank.PrefixUsrOrg) {
@@ -334,9 +344,10 @@ func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []b
 	members := make([]*model.MemberModel, 0, len(m))
 	for _, i := range m {
 		members = append(members, &model.MemberModel{
-			OrgID:  i.OrgID,
-			Userid: props.Userid,
-			Name:   i.Name,
+			OrgID:    i.OrgID,
+			Userid:   props.Userid,
+			Name:     i.Name,
+			Username: u.Username,
 		})
 	}
 	if err := s.orgs.AddMembers(members); err != nil {
