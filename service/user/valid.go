@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 	"net/mail"
 	"regexp"
@@ -283,7 +284,13 @@ func validRankStr(rankString string) error {
 		}))
 	}
 	if _, err := rank.FromString(rankString); err != nil {
-		return err
+		if errors.Is(err, rank.ErrInvalidRank{}) {
+			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid rank string",
+			}))
+		}
+		return governor.ErrWithMsg(err, "Failed to parse rank string")
 	}
 	return nil
 }

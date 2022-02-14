@@ -185,7 +185,7 @@ func (r *repo) GetOrgMembers(orgid string, prefix string, limit, offset int) ([]
 		}
 		return m, nil
 	}
-	m, err := memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(d, r.tableMembers, orgid, prefix, true, limit, offset)
+	m, err := memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(d, r.tableMembers, orgid, prefix+"%", true, limit, offset)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get org members")
 	}
@@ -206,7 +206,7 @@ func (r *repo) GetUserOrgs(userid string, prefix string, limit, offset int) ([]s
 		}
 	} else {
 		var err error
-		m, err = memberModelGetMemberModelEqUseridLikeNameOrdName(d, r.tableMembers, userid, prefix, true, limit, offset)
+		m, err = memberModelGetMemberModelEqUseridLikeNameOrdName(d, r.tableMembers, userid, prefix+"%", true, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get user orgs")
 		}

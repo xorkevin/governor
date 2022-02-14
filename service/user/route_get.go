@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -191,6 +192,13 @@ func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
 
 	roles, err := rank.FromString(req.Roles)
 	if err != nil {
+		if errors.Is(err, rank.ErrInvalidRank{}) {
+			c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid rank string",
+			})))
+			return
+		}
 		c.WriteError(err)
 		return
 	}
@@ -216,6 +224,13 @@ func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Re
 
 	roles, err := rank.FromString(req.Roles)
 	if err != nil {
+		if errors.Is(err, rank.ErrInvalidRank{}) {
+			c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+				Status:  http.StatusBadRequest,
+				Message: "Invalid rank string",
+			})))
+			return
+		}
 		c.WriteError(err)
 		return
 	}
