@@ -161,6 +161,7 @@ var (
 
 const (
 	PrefixUsrOrg = "usr.org."
+	PrefixModOrg = "mod.org."
 )
 
 // FromSlice creates a new Rank from a list of strings

@@ -25,12 +25,16 @@ type (
 		GetAllOrgs(limit, offset int) ([]Model, error)
 		GetOrgs(orgids []string) ([]Model, error)
 		GetOrgMembers(orgid string, prefix string, limit, offset int) ([]MemberModel, error)
+		GetOrgMods(orgid string, prefix string, limit, offset int) ([]MemberModel, error)
 		GetUserOrgs(userid string, prefix string, limit, offset int) ([]string, error)
+		GetUserMods(userid string, prefix string, limit, offset int) ([]string, error)
 		Insert(m *Model) error
 		Update(m *Model) error
 		UpdateName(orgid string, name string) error
 		AddMembers(m []*MemberModel) error
+		AddMods(m []*MemberModel) error
 		RmMembers(userid string, roles []string) error
+		RmMods(userid string, roles []string) error
 		UpdateUsername(userid string, username string) error
 		Delete(m *Model) error
 		Setup() error
@@ -39,6 +43,7 @@ type (
 	repo struct {
 		table        string
 		tableMembers string
+		tableMods    string
 		db           db.Database
 	}
 
@@ -85,21 +90,22 @@ func SetCtxRepo(inj governor.Injector, r Repo) {
 }
 
 // NewInCtx creates a new org repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, table, tableMembers string) {
-	SetCtxRepo(inj, NewCtx(inj, table, tableMembers))
+func NewInCtx(inj governor.Injector, table, tableMembers, tableMods string) {
+	SetCtxRepo(inj, NewCtx(inj, table, tableMembers, tableMods))
 }
 
 // NewCtx creates a new org repo from a context
-func NewCtx(inj governor.Injector, table, tableMembers string) Repo {
+func NewCtx(inj governor.Injector, table, tableMembers, tableMods string) Repo {
 	dbService := db.GetCtxDB(inj)
-	return New(dbService, table, tableMembers)
+	return New(dbService, table, tableMembers, tableMods)
 }
 
 // New creates a new OAuth app repository
-func New(database db.Database, table, tableMembers string) Repo {
+func New(database db.Database, table, tableMembers, tableMods string) Repo {
 	return &repo{
 		table:        table,
 		tableMembers: tableMembers,
+		tableMods:    tableMods,
 		db:           database,
 	}
 }
@@ -192,6 +198,26 @@ func (r *repo) GetOrgMembers(orgid string, prefix string, limit, offset int) ([]
 	return m, nil
 }
 
+func (r *repo) GetOrgMods(orgid string, prefix string, limit, offset int) ([]MemberModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	if prefix == "" {
+		var err error
+		m, err := memberModelGetMemberModelEqOrgIDOrdUsername(d, r.tableMods, orgid, true, limit, offset)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get org mods")
+		}
+		return m, nil
+	}
+	m, err := memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(d, r.tableMods, orgid, prefix+"%", true, limit, offset)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get org mods")
+	}
+	return m, nil
+}
+
 func (r *repo) GetUserOrgs(userid string, prefix string, limit, offset int) ([]string, error) {
 	d, err := r.db.DB()
 	if err != nil {
@@ -207,6 +233,32 @@ func (r *repo) GetUserOrgs(userid string, prefix string, limit, offset int) ([]s
 	} else {
 		var err error
 		m, err = memberModelGetMemberModelEqUseridLikeNameOrdName(d, r.tableMembers, userid, prefix+"%", true, limit, offset)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get user orgs")
+		}
+	}
+	res := make([]string, 0, len(m))
+	for _, i := range m {
+		res = append(res, i.OrgID)
+	}
+	return res, nil
+}
+
+func (r *repo) GetUserMods(userid string, prefix string, limit, offset int) ([]string, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	var m []MemberModel
+	if prefix == "" {
+		var err error
+		m, err = memberModelGetMemberModelEqUseridOrdName(d, r.tableMods, userid, true, limit, offset)
+		if err != nil {
+			return nil, db.WrapErr(err, "Failed to get user orgs")
+		}
+	} else {
+		var err error
+		m, err = memberModelGetMemberModelEqUseridLikeNameOrdName(d, r.tableMods, userid, prefix+"%", true, limit, offset)
 		if err != nil {
 			return nil, db.WrapErr(err, "Failed to get user orgs")
 		}
@@ -248,7 +300,12 @@ func (r *repo) UpdateName(orgid string, name string) error {
 	if err := memberModelUpdorgNameEqOrgID(d, r.tableMembers, &orgName{
 		Name: name,
 	}, orgid); err != nil {
-		return db.WrapErr(err, "Failed to update org name")
+		return db.WrapErr(err, "Failed to update org name for members")
+	}
+	if err := memberModelUpdorgNameEqOrgID(d, r.tableMods, &orgName{
+		Name: name,
+	}, orgid); err != nil {
+		return db.WrapErr(err, "Failed to update org name for mods")
 	}
 	return nil
 }
@@ -268,6 +325,21 @@ func (r *repo) AddMembers(m []*MemberModel) error {
 	return nil
 }
 
+func (r *repo) AddMods(m []*MemberModel) error {
+	if len(m) == 0 {
+		return nil
+	}
+
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelInsertBulk(d, r.tableMods, m, true); err != nil {
+		return db.WrapErr(err, "Failed to add org mods")
+	}
+	return nil
+}
+
 func (r *repo) RmMembers(userid string, orgids []string) error {
 	if len(orgids) == 0 {
 		return nil
@@ -283,6 +355,21 @@ func (r *repo) RmMembers(userid string, orgids []string) error {
 	return nil
 }
 
+func (r *repo) RmMods(userid string, orgids []string) error {
+	if len(orgids) == 0 {
+		return nil
+	}
+
+	d, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	if err := memberModelDelEqUseridHasOrgID(d, r.tableMods, userid, orgids); err != nil {
+		return db.WrapErr(err, "Failed to remove org mods")
+	}
+	return nil
+}
+
 func (r *repo) UpdateUsername(userid string, username string) error {
 	d, err := r.db.DB()
 	if err != nil {
@@ -291,7 +378,12 @@ func (r *repo) UpdateUsername(userid string, username string) error {
 	if err := memberModelUpdmemberUsernameEqUserid(d, r.tableMembers, &memberUsername{
 		Username: username,
 	}, userid); err != nil {
-		return db.WrapErr(err, "Failed to update username")
+		return db.WrapErr(err, "Failed to update member username")
+	}
+	if err := memberModelUpdmemberUsernameEqUserid(d, r.tableMods, &memberUsername{
+		Username: username,
+	}, userid); err != nil {
+		return db.WrapErr(err, "Failed to update mod username")
 	}
 	return nil
 }
@@ -303,6 +395,9 @@ func (r *repo) Delete(m *Model) error {
 	}
 	if err := memberModelDelEqOrgID(d, r.tableMembers, m.OrgID); err != nil {
 		return db.WrapErr(err, "Failed to delete org members")
+	}
+	if err := memberModelDelEqOrgID(d, r.tableMods, m.OrgID); err != nil {
+		return db.WrapErr(err, "Failed to delete org mods")
 	}
 	if err := orgModelDelEqOrgID(d, r.table, m.OrgID); err != nil {
 		return db.WrapErr(err, "Failed to delete org")
@@ -323,6 +418,12 @@ func (r *repo) Setup() error {
 	}
 	if err := memberModelSetup(d, r.tableMembers); err != nil {
 		err = db.WrapErr(err, "Failed to setup org member model")
+		if !errors.Is(err, db.ErrAuthz{}) {
+			return err
+		}
+	}
+	if err := memberModelSetup(d, r.tableMods); err != nil {
+		err = db.WrapErr(err, "Failed to setup org mod model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
