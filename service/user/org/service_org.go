@@ -131,11 +131,24 @@ func (s *service) GetOrgMembers(orgid string, prefix string, limit, offset int) 
 	}, nil
 }
 
-func (s *service) GetUserOrgs(userid string, prefix string, limit, offset int) (*resOrgs, error) {
-	orgids, err := s.orgs.GetUserOrgs(userid, prefix, limit, offset)
+func (s *service) GetOrgMods(orgid string, prefix string, limit, offset int) (*resMembers, error) {
+	m, err := s.orgs.GetOrgMods(orgid, prefix, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user orgs")
+		return nil, governor.ErrWithMsg(err, "Failed to get org mods")
 	}
+	res := make([]resMember, 0, len(m))
+	for _, i := range m {
+		res = append(res, resMember{
+			Userid:   i.Userid,
+			Username: i.Username,
+		})
+	}
+	return &resMembers{
+		Members: res,
+	}, nil
+}
+
+func (s *service) getOrgsByID(orgids []string) (*resOrgs, error) {
 	m, err := s.orgs.GetOrgs(orgids)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to get user orgs")
@@ -161,6 +174,22 @@ func (s *service) GetUserOrgs(userid string, prefix string, limit, offset int) (
 	return &resOrgs{
 		Orgs: res,
 	}, nil
+}
+
+func (s *service) GetUserOrgs(userid string, prefix string, limit, offset int) (*resOrgs, error) {
+	orgids, err := s.orgs.GetUserOrgs(userid, prefix, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user orgs")
+	}
+	return s.getOrgsByID(orgids)
+}
+
+func (s *service) GetUserMods(userid string, prefix string, limit, offset int) (*resOrgs, error) {
+	orgids, err := s.orgs.GetUserMods(userid, prefix, limit, offset)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get user mod orgs")
+	}
+	return s.getOrgsByID(orgids)
 }
 
 func (s *service) CreateOrg(userid, displayName, desc string) (*ResOrg, error) {

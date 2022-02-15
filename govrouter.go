@@ -134,6 +134,7 @@ type (
 		QueryDef(key string, def string) string
 		QueryInt(key string, def int) int
 		QueryInt64(key string, def int64) int64
+		QueryBool(key string) bool
 		Header(key string) string
 		SetHeader(key, value string)
 		AddHeader(key, value string)
@@ -227,6 +228,16 @@ func (c *govcontext) QueryInt64(key string, def int64) int64 {
 		return def
 	}
 	return v
+}
+
+func (c *govcontext) QueryBool(key string) bool {
+	s := c.query.Get(key)
+	switch s {
+	case "t", "true", "y", "yes", "1":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *govcontext) Header(key string) string {

@@ -26,6 +26,7 @@ type (
 
 	reqOrgMembersSearch struct {
 		OrgID  string `valid:"orgid,has" json:"-"`
+		Mods   bool   `json:"-"`
 		Prefix string `valid:"username,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
@@ -33,6 +34,7 @@ type (
 
 	reqOrgsSearch struct {
 		Userid string `valid:"userid,has" json:"-"`
+		Mods   bool   `json:"-"`
 		Prefix string `valid:"name,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 		Offset int    `valid:"offset" json:"-"`
@@ -102,6 +104,7 @@ func (m *router) getOrgMembers(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqOrgMembersSearch{
 		OrgID:  c.Param("id"),
+		Mods:   c.QueryBool("mod"),
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -111,18 +114,28 @@ func (m *router) getOrgMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetOrgMembers(req.OrgID, req.Prefix, req.Amount, req.Offset)
-	if err != nil {
-		c.WriteError(err)
-		return
+	if req.Mods {
+		res, err := m.s.GetOrgMods(req.OrgID, req.Prefix, req.Amount, req.Offset)
+		if err != nil {
+			c.WriteError(err)
+			return
+		}
+		c.WriteJSON(http.StatusOK, res)
+	} else {
+		res, err := m.s.GetOrgMembers(req.OrgID, req.Prefix, req.Amount, req.Offset)
+		if err != nil {
+			c.WriteError(err)
+			return
+		}
+		c.WriteJSON(http.StatusOK, res)
 	}
-	c.WriteJSON(http.StatusOK, res)
 }
 
 func (m *router) getUserOrgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	req := reqOrgsSearch{
 		Userid: gate.GetCtxUserid(c),
+		Mods:   c.QueryBool("mod"),
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -132,12 +145,21 @@ func (m *router) getUserOrgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserOrgs(req.Userid, req.Prefix, req.Amount, req.Offset)
-	if err != nil {
-		c.WriteError(err)
-		return
+	if req.Mods {
+		res, err := m.s.GetUserMods(req.Userid, req.Prefix, req.Amount, req.Offset)
+		if err != nil {
+			c.WriteError(err)
+			return
+		}
+		c.WriteJSON(http.StatusOK, res)
+	} else {
+		res, err := m.s.GetUserOrgs(req.Userid, req.Prefix, req.Amount, req.Offset)
+		if err != nil {
+			c.WriteError(err)
+			return
+		}
+		c.WriteJSON(http.StatusOK, res)
 	}
-	c.WriteJSON(http.StatusOK, res)
 }
 
 func (m *router) getAllOrgs(w http.ResponseWriter, r *http.Request) {
