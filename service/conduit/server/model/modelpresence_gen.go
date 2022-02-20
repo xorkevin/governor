@@ -52,14 +52,6 @@ func presenceModelDelEqServerID(db *sql.DB, tableName string, serverid string) e
 	return err
 }
 
-func presenceModelUpdPresenceModelEqServerIDEqUserid(db *sql.DB, tableName string, m *PresenceModel, serverid string, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (serverid, userid, last_updated) = ROW($1, $2, $3) WHERE serverid = $4 AND userid = $5;", m.ServerID, m.Userid, m.LastUpdated, serverid, userid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func presenceModelGetPresenceModelEqServerIDGtLastUpdatedOrdLastUpdated(db *sql.DB, tableName string, serverid string, lastupdated int64, orderasc bool, limit, offset int) ([]PresenceModel, error) {
 	order := "DESC"
 	if orderasc {
