@@ -110,7 +110,20 @@ func channelModelUpdChannelModelEqServerIDEqChannelID(db *sql.DB, tableName stri
 	return nil
 }
 
-func channelModelDelEqServerIDEqChannelID(db *sql.DB, tableName string, serverid string, channelid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1 AND channelid = $2;", serverid, channelid)
+func channelModelDelEqServerIDHasChannelID(db *sql.DB, tableName string, serverid string, channelid []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(channelid))
+	args = append(args, serverid)
+	var placeholderschannelid string
+	{
+		placeholders := make([]string, 0, len(channelid))
+		for _, i := range channelid {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholderschannelid = strings.Join(placeholders, ", ")
+	}
+	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1 AND channelid IN (VALUES "+placeholderschannelid+");", args...)
 	return err
 }

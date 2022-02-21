@@ -13,6 +13,7 @@ import (
 	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
 	gdmmodel "xorkevin.dev/governor/service/conduit/gdm/model"
 	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
+	servermodel "xorkevin.dev/governor/service/conduit/server/model"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user"
@@ -41,6 +42,7 @@ type (
 		invitations    invitationmodel.Repo
 		dms            dmmodel.Repo
 		gdms           gdmmodel.Repo
+		servers        servermodel.Repo
 		msgs           msgmodel.Repo
 		kvpresence     kvstore.KVStore
 		users          user.Users

@@ -34,7 +34,7 @@ func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, e
 	if err := s.profiles.Insert(m); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
 			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
+				Status:  http.StatusConflict,
 				Message: "Profile already created",
 			}), governor.ErrOptInner(err))
 		}

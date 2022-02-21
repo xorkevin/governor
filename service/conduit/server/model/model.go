@@ -19,7 +19,7 @@ const (
 
 type (
 	Repo interface {
-		New(serverid string, name, desc string, theme string) (*Model, error)
+		New(serverid string, name, desc string, theme string) *Model
 		GetServer(serverid string) (*Model, error)
 		GetChannels(serverid string, prefix string, limit, offset int) ([]ChannelModel, error)
 		GetPresence(serverid string, after int64, limit, offset int) ([]PresenceModel, error)
@@ -28,7 +28,7 @@ type (
 		NewChannel(serverid, channelid string, name, desc string, theme string) (*ChannelModel, error)
 		InsertChannel(m *ChannelModel) error
 		UpdateChannel(m *ChannelModel) error
-		DeleteChannel(serverid, channelid string) error
+		DeleteChannels(serverid string, channelids []string) error
 		UpdatePresence(serverid string, userid string, t int64) error
 		DeletePresence(serverid string, before int64) error
 		Delete(serverid string) error
@@ -54,7 +54,7 @@ type (
 	// ChannelModel is the db server channel model
 	ChannelModel struct {
 		ServerID     string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
-		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;updeq,serverid,channelid;deleq,serverid,channelid"`
+		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;updeq,serverid,channelid;deleq,serverid,channelid|arr"`
 		Chatid       string `model:"chatid,VARCHAR(31) UNIQUE" query:"chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Desc         string `model:"desc,VARCHAR(255)" query:"desc"`
@@ -105,14 +105,14 @@ func New(database db.Database, table, tableChannels, tablePresence string) Repo 
 }
 
 // New creates new conduit server
-func (r *repo) New(serverid string, name, desc string, theme string) (*Model, error) {
+func (r *repo) New(serverid string, name, desc string, theme string) *Model {
 	return &Model{
 		ServerID:     serverid,
 		Name:         name,
 		Desc:         desc,
 		Theme:        theme,
 		CreationTime: time.Now().Round(0).Unix(),
-	}, nil
+	}
 }
 
 // GetServer returns a server by id
@@ -219,13 +219,17 @@ func (r *repo) UpdateChannel(m *ChannelModel) error {
 	return nil
 }
 
-func (r *repo) DeleteChannel(serverid, channelid string) error {
+func (r *repo) DeleteChannels(serverid string, channelids []string) error {
+	if len(channelids) == 0 {
+		return nil
+	}
+
 	d, err := r.db.DB()
 	if err != nil {
 		return err
 	}
-	if err := channelModelDelEqServerIDEqChannelID(d, r.tableChannels, serverid, channelid); err != nil {
-		return db.WrapErr(err, "Failed to delete channel")
+	if err := channelModelDelEqServerIDHasChannelID(d, r.tableChannels, serverid, channelids); err != nil {
+		return db.WrapErr(err, "Failed to delete channels")
 	}
 	return nil
 }
