@@ -48,6 +48,14 @@ func channelModelDelEqServerID(db *sql.DB, tableName string, serverid string) er
 	return err
 }
 
+func channelModelGetChannelModelEqServerIDEqChannelID(db *sql.DB, tableName string, serverid string, channelid string) (*ChannelModel, error) {
+	m := &ChannelModel{}
+	if err := db.QueryRow("SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+tableName+" WHERE serverid = $1 AND channelid = $2;", serverid, channelid).Scan(&m.ServerID, &m.ChannelID, &m.Chatid, &m.Name, &m.Desc, &m.Theme, &m.CreationTime); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func channelModelGetChannelModelEqServerIDOrdChannelID(db *sql.DB, tableName string, serverid string, orderasc bool, limit, offset int) ([]ChannelModel, error) {
 	order := "DESC"
 	if orderasc {

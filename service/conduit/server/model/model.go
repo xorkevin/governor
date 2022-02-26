@@ -21,6 +21,7 @@ type (
 	Repo interface {
 		New(serverid string, name, desc string, theme string) *Model
 		GetServer(serverid string) (*Model, error)
+		GetChannel(serverid, channelid string) (*ChannelModel, error)
 		GetChannels(serverid string, prefix string, limit, offset int) ([]ChannelModel, error)
 		GetPresence(serverid string, after int64, limit, offset int) ([]PresenceModel, error)
 		Insert(m *Model) error
@@ -54,7 +55,7 @@ type (
 	// ChannelModel is the db server channel model
 	ChannelModel struct {
 		ServerID     string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
-		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;updeq,serverid,channelid;deleq,serverid,channelid|arr"`
+		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getoneeq,serverid,channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;updeq,serverid,channelid;deleq,serverid,channelid|arr"`
 		Chatid       string `model:"chatid,VARCHAR(31) UNIQUE" query:"chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Desc         string `model:"desc,VARCHAR(255)" query:"desc"`
@@ -124,6 +125,18 @@ func (r *repo) GetServer(serverid string) (*Model, error) {
 	m, err := serverModelGetModelEqServerID(d, r.table, serverid)
 	if err != nil {
 		return nil, db.WrapErr(err, "Failed to get server")
+	}
+	return m, nil
+}
+
+func (r *repo) GetChannel(serverid string, channelid string) (*ChannelModel, error) {
+	d, err := r.db.DB()
+	if err != nil {
+		return nil, err
+	}
+	m, err := channelModelGetChannelModelEqServerIDEqChannelID(d, r.tableChannels, serverid, channelid)
+	if err != nil {
+		return nil, db.WrapErr(err, "Failed to get channel")
 	}
 	return m, nil
 }
