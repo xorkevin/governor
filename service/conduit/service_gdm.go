@@ -503,7 +503,7 @@ func (s *service) DelGDMMsg(userid string, chatid string, msgid string) error {
 		return err
 	}
 	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete group chat msgs")
+		return governor.ErrWithMsg(err, "Failed to delete group chat msg")
 	}
 	// TODO: emit msg delete event
 	return nil

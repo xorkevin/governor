@@ -304,7 +304,7 @@ func (s *service) DelDMMsg(userid string, chatid string, msgid string) error {
 		return err
 	}
 	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+		return governor.ErrWithMsg(err, "Failed to delete dm msg")
 	}
 	// TODO: emit msg delete event
 	return nil

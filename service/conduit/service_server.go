@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/conduit/server/model"
 	"xorkevin.dev/governor/service/db"
 )
 
@@ -75,6 +76,7 @@ func (s *service) UpdateServer(serverid string, name, desc string, theme string)
 	if err := s.servers.Update(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update server")
 	}
+	// TODO publish server update event
 	return nil
 }
 
@@ -112,6 +114,7 @@ func (s *service) CreateChannel(serverid, channelid string, name, desc string, t
 			}), governor.ErrOptInner(err))
 		}
 	}
+	// TODO publish chat create event
 	return &resChannel{
 		ServerID:     m.ServerID,
 		ChannelID:    m.ChannelID,
@@ -123,7 +126,7 @@ func (s *service) CreateChannel(serverid, channelid string, name, desc string, t
 	}, nil
 }
 
-func (s *service) GetChannel(serverid, channelid string) (*resChannel, error) {
+func (s *service) getServerChannel(serverid, channelid string) (*model.ChannelModel, error) {
 	if _, err := s.servers.GetServer(serverid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
 			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -141,7 +144,15 @@ func (s *service) GetChannel(serverid, channelid string) (*resChannel, error) {
 				Message: "Channel not found",
 			}), governor.ErrOptInner(err))
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get channels")
+		return nil, governor.ErrWithMsg(err, "Failed to get channel")
+	}
+	return m, nil
+}
+
+func (s *service) GetChannel(serverid, channelid string) (*resChannel, error) {
+	m, err := s.getServerChannel(serverid, channelid)
+	if err != nil {
+		return nil, err
 	}
 	return &resChannel{
 		ServerID:     m.ServerID,
@@ -192,24 +203,9 @@ func (s *service) GetChannels(serverid string, prefix string, limit, offset int)
 }
 
 func (s *service) UpdateChannel(serverid, channelid string, name, desc string, theme string) error {
-	if _, err := s.servers.GetServer(serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Server not found",
-			}), governor.ErrOptInner(err))
-		}
-		return governor.ErrWithMsg(err, "Failed to get server")
-	}
-	m, err := s.servers.GetChannel(serverid, channelid)
+	m, err := s.getServerChannel(serverid, channelid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Channel not found",
-			}), governor.ErrOptInner(err))
-		}
-		return governor.ErrWithMsg(err, "Failed to get channels")
+		return err
 	}
 	m.Name = name
 	m.Desc = desc
@@ -217,5 +213,82 @@ func (s *service) UpdateChannel(serverid, channelid string, name, desc string, t
 	if err := s.servers.UpdateChannel(m); err != nil {
 		return governor.ErrWithMsg(err, "Failed to update channel")
 	}
+	// TODO publish chat update event
+	return nil
+}
+
+func (s *service) DeleteChannel(serverid, channelid string) error {
+	m, err := s.getServerChannel(serverid, channelid)
+	if err != nil {
+		return err
+	}
+	if err := s.msgs.DeleteChatMsgs(m.Chatid); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete channel messages")
+	}
+	if err := s.servers.DeleteChannels(serverid, []string{channelid}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete channel")
+	}
+	// TODO publish chat delete event
+	return nil
+}
+
+func (s *service) CreateChannelMsg(serverid, channelid string, userid string, kind string, value string) (*resMsg, error) {
+	ch, err := s.getServerChannel(serverid, channelid)
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.New(ch.Chatid, userid, kind, value)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to create new server msg")
+	}
+	if err := s.msgs.Insert(m); err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to send new server msg")
+	}
+	res := resMsg{
+		Chatid: m.Chatid,
+		Msgid:  m.Msgid,
+		Userid: m.Userid,
+		Timems: m.Timems,
+		Kind:   m.Kind,
+		Value:  m.Value,
+	}
+	// TODO publish chat message event
+	return &res, nil
+}
+
+func (s *service) GetChannelMsgs(serverid, channelid string, userid string, kind string, before string, limit int) (*resMsgs, error) {
+	ch, err := s.getServerChannel(serverid, channelid)
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.msgs.GetMsgs(ch.Chatid, kind, before, limit)
+	if err != nil {
+		return nil, governor.ErrWithMsg(err, "Failed to get server chat msgs")
+	}
+	res := make([]resMsg, 0, len(m))
+	for _, i := range m {
+		res = append(res, resMsg{
+			Chatid: i.Chatid,
+			Msgid:  i.Msgid,
+			Userid: i.Userid,
+			Timems: i.Timems,
+			Kind:   i.Kind,
+			Value:  i.Value,
+		})
+	}
+	return &resMsgs{
+		Msgs: res,
+	}, nil
+}
+
+func (s *service) DelServerMsg(serverid, channelid string, msgid string) error {
+	ch, err := s.getServerChannel(serverid, channelid)
+	if err != nil {
+		return err
+	}
+	if err := s.msgs.DeleteMsgs(ch.Chatid, []string{msgid}); err != nil {
+		return governor.ErrWithMsg(err, "Failed to delete server chat msg")
+	}
+	// TODO: emit msg delete event
 	return nil
 }
