@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	lengthCapChatid = 31
-	lengthCapKind   = 31
-	lengthCapName   = 127
-	lengthCapTheme  = 4095
-	lengthCapUserid = 31
-	lengthCapMsgid  = 31
-	lengthCapMsg    = 4095
-	amountCap       = 255
+	lengthCapChatid   = 31
+	lengthCapServerid = 31
+	lengthCapKind     = 31
+	lengthCapName     = 127
+	lengthCapDesc     = 127
+	lengthCapTheme    = 4095
+	lengthCapUserid   = 31
+	lengthCapMsgid    = 31
+	lengthCapMsg      = 4095
+	amountCap         = 255
 )
 
 func validhasChatid(chatid string) error {
@@ -55,10 +57,36 @@ func validhasChatids(chatids []string) error {
 	return nil
 }
 
+func validhasServerid(serverid string) error {
+	if len(serverid) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Server id must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(serverid) > lengthCapServerid {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Server id must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
 func validName(name string) error {
 	if len(name) > lengthCapName {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat name must be shorter than 256 characters",
+			Message: "Name must be shorter than 128 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validDesc(desc string) error {
+	if len(desc) > lengthCapDesc {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Description must be shorter than 128 characters",
 			Status:  http.StatusBadRequest,
 		}))
 	}
@@ -68,7 +96,7 @@ func validName(name string) error {
 func validSearch(search string) error {
 	if len(search) > lengthCapName {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Search must be shorter than 256 characters",
+			Message: "Search must be shorter than 128 characters",
 			Status:  http.StatusBadRequest,
 		}))
 	}
@@ -78,13 +106,13 @@ func validSearch(search string) error {
 func validTheme(theme string) error {
 	if len(theme) > lengthCapTheme {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat theme must be shorter than 4096 characters",
+			Message: "Theme must be shorter than 4096 characters",
 			Status:  http.StatusBadRequest,
 		}))
 	}
 	if err := json.Unmarshal([]byte(theme), &struct{}{}); err != nil {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Chat theme is invalid JSON",
+			Message: "Theme is invalid JSON",
 			Status:  http.StatusBadRequest,
 		}))
 	}

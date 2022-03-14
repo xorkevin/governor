@@ -281,7 +281,7 @@ func (s *service) GetChannelMsgs(serverid, channelid string, userid string, kind
 	}, nil
 }
 
-func (s *service) DelServerMsg(serverid, channelid string, msgid string) error {
+func (s *service) DeleteChannelMsg(serverid, channelid string, msgid string) error {
 	ch, err := s.getServerChannel(serverid, channelid)
 	if err != nil {
 		return err

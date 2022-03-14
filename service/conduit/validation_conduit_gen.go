@@ -238,3 +238,19 @@ func (r reqGDMMember) valid() error {
 	}
 	return nil
 }
+
+func (r reqCreateServer) valid() error {
+	if err := validhasServerid(r.Serverid); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	return nil
+}

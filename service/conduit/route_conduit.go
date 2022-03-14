@@ -6,9 +6,10 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqCreateServer
 
 type (
 	reqGetFriends struct {
@@ -671,6 +672,43 @@ func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	reqCreateServer struct {
+		Serverid string `valid:"serverid,has" json:"-"`
+		Name     string `valid:"name" json:"name"`
+		Desc     string `valid:"desc" json:"desc"`
+		Theme    string `valid:"theme" json:"theme"`
+	}
+)
+
+func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateServer{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Serverid = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.CreateServer(req.Serverid, req.Name, req.Desc, req.Theme)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+func (m *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
+	serverid := c.Param("id")
+	if err := validhasServerid(serverid); err != nil {
+		return "", false, false
+	}
+	return rank.ToOrgName(serverid), false, true
+}
+
 func (m *router) mountRoutes(r governor.Router) {
 	scopeFriendRead := m.s.scopens + ".friend:read"
 	scopeFriendWrite := m.s.scopens + ".friend:write"
@@ -706,4 +744,6 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Post("/gdm/id/{id}/msg", m.createGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
 	r.Delete("/gdm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
+
+	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeChatAdminWrite))
 }
