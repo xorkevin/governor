@@ -256,7 +256,7 @@ func (s *service) CreateChannelMsg(serverid, channelid string, userid string, ki
 	return &res, nil
 }
 
-func (s *service) GetChannelMsgs(serverid, channelid string, userid string, kind string, before string, limit int) (*resMsgs, error) {
+func (s *service) GetChannelMsgs(serverid, channelid string, kind string, before string, limit int) (*resMsgs, error) {
 	ch, err := s.getServerChannel(serverid, channelid)
 	if err != nil {
 		return nil, err

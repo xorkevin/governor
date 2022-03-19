@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel reqCreateChannelMsg reqGetChannelMsgs reqDelChannelMsg
 
 type (
 	reqGetFriends struct {
@@ -899,6 +899,95 @@ func (m *router) deleteChannel(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	reqCreateChannelMsg struct {
+		Userid    string `valid:"userid,has" json:"-"`
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID,has" json:"-"`
+		Kind      string `valid:"msgkind" json:"kind"`
+		Value     string `valid:"msgvalue" json:"value"`
+	}
+)
+
+func (m *router) createChannelMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateChannelMsg{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.Userid = gate.GetCtxUserid(c)
+	req.ServerID = c.Param("id")
+	req.ChannelID = c.Param("cid")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.CreateChannelMsg(req.ServerID, req.ChannelID, req.Userid, req.Kind, req.Value)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+type (
+	reqGetChannelMsgs struct {
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID,has" json:"-"`
+		Kind      string `valid:"msgkind,opt" json:"-"`
+		Before    string `valid:"msgid,opt" json:"-"`
+		Amount    int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) getChannelMsgs(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChannelMsgs{
+		ServerID:  c.Param("id"),
+		ChannelID: c.Param("cid"),
+		Kind:      c.Query("kind"),
+		Before:    c.Query("before"),
+		Amount:    c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetChannelMsgs(req.ServerID, req.ChannelID, req.Kind, req.Before, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqDelChannelMsg struct {
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID,has" json:"-"`
+		Msgid     string `valid:"msgid,has" json:"-"`
+	}
+)
+
+func (m *router) deleteChannelMsg(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqDelChannelMsg{
+		ServerID:  c.Param("id"),
+		ChannelID: c.Param("cid"),
+		Msgid:     c.Param("msgid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteChannelMsg(req.ServerID, req.ChannelID, req.Msgid); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
 	serverid := c.Param("id")
 	if err := validhasServerID(serverid); err != nil {
@@ -943,16 +1032,19 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
 	r.Delete("/gdm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 
-	scopeServerRead := m.s.scopens + ".chat:read"
-	//scopeServerWrite := m.s.scopens + ".chat:write"
-	scopeServerAdminWrite := m.s.scopens + ".chat.admin:write"
+	scopeServerRead := m.s.scopens + ".server:read"
+	scopeServerWrite := m.s.scopens + ".server:write"
+	scopeServerChatWrite := m.s.scopens + ".server.chat:write"
 	r.Get("/server/id/{id}", m.getServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
-	r.Put("/server/id/{id}", m.updateServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
+	r.Put("/server/id/{id}", m.updateServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
 	r.Get("/server/id/{id}/channel/id/{cid}", m.getChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
 	r.Get("/server/id/{id}/channel", m.getChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
 	r.Get("/server/id/{id}/channel/search", m.searchChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Post("/server/id/{id}/channel", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
-	r.Put("/server/id/{id}/channel/id/{cid}", m.updateChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
-	r.Delete("/server/id/{id}/channel/id/{cid}", m.deleteChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Post("/server/id/{id}/channel", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
+	r.Put("/server/id/{id}/channel/id/{cid}", m.updateChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
+	r.Delete("/server/id/{id}/channel/id/{cid}", m.deleteChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
+	r.Post("/server/id/{id}/channel/id/{cid}/msg", m.createChannelMsg, gate.MemberF(m.s.gate, m.serverMember, scopeServerChatWrite))
+	r.Get("/server/id/{id}/channel/id/{cid}/msg", m.getChannelMsgs, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
+	r.Delete("/server/id/{id}/channel/id/{cid}/msg/id/{msgid}", m.deleteChannelMsg, gate.MemberF(m.s.gate, m.serverMember, scopeServerChatWrite))
 }

@@ -335,3 +335,54 @@ func (r reqUpdateChannel) valid() error {
 	}
 	return nil
 }
+
+func (r reqCreateChannelMsg) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
+		return err
+	}
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.ChannelID); err != nil {
+		return err
+	}
+	if err := validMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validMsgvalue(r.Value); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetChannelMsgs) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.ChannelID); err != nil {
+		return err
+	}
+	if err := validoptMsgkind(r.Kind); err != nil {
+		return err
+	}
+	if err := validoptMsgid(r.Before); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqDelChannelMsg) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.ChannelID); err != nil {
+		return err
+	}
+	if err := validhasMsgid(r.Msgid); err != nil {
+		return err
+	}
+	return nil
+}
