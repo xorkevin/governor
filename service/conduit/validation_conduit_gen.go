@@ -316,3 +316,22 @@ func (r reqCreateChannel) valid() error {
 	}
 	return nil
 }
+
+func (r reqUpdateChannel) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.ChannelID); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	return nil
+}

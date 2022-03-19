@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel
 
 type (
 	reqGetFriends struct {
@@ -852,6 +852,53 @@ func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
+type (
+	reqUpdateChannel struct {
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID,has" json:"-"`
+		Name      string `valid:"name" json:"name"`
+		Desc      string `valid:"desc" json:"desc"`
+		Theme     string `valid:"theme" json:"theme"`
+	}
+)
+
+func (m *router) updateChannel(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqUpdateChannel{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.ServerID = c.Param("id")
+	req.ChannelID = c.Param("cid")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.UpdateChannel(req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+func (m *router) deleteChannel(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChannel{
+		ServerID:  c.Param("id"),
+		ChannelID: c.Param("cid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.DeleteChannel(req.ServerID, req.ChannelID); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (m *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
 	serverid := c.Param("id")
 	if err := validhasServerID(serverid); err != nil {
@@ -906,4 +953,6 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/server/id/{id}/channel", m.getChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
 	r.Get("/server/id/{id}/channel/search", m.searchChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
 	r.Post("/server/id/{id}/channel", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Put("/server/id/{id}/channel/id/{cid}", m.updateChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Delete("/server/id/{id}/channel/id/{cid}", m.deleteChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
 }
