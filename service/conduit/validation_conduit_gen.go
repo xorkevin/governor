@@ -239,8 +239,34 @@ func (r reqGDMMember) valid() error {
 	return nil
 }
 
+func (r reqGetServer) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqCreateServer) valid() error {
-	if err := validhasServerid(r.Serverid); err != nil {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validName(r.Name); err != nil {
+		return err
+	}
+	if err := validDesc(r.Desc); err != nil {
+		return err
+	}
+	if err := validTheme(r.Theme); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqCreateChannel) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validChannelID(r.ChannelID); err != nil {
 		return err
 	}
 	if err := validName(r.Name); err != nil {

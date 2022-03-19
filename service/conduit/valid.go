@@ -3,21 +3,27 @@ package conduit
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	"xorkevin.dev/governor"
 )
 
 const (
-	lengthCapChatid   = 31
-	lengthCapServerid = 31
-	lengthCapKind     = 31
-	lengthCapName     = 127
-	lengthCapDesc     = 127
-	lengthCapTheme    = 4095
-	lengthCapUserid   = 31
-	lengthCapMsgid    = 31
-	lengthCapMsg      = 4095
-	amountCap         = 255
+	lengthCapChatid    = 31
+	lengthCapServerID  = 31
+	lengthCapChannelID = 31
+	lengthCapKind      = 31
+	lengthCapName      = 127
+	lengthCapDesc      = 127
+	lengthCapTheme     = 4095
+	lengthCapUserid    = 31
+	lengthCapMsgid     = 31
+	lengthCapMsg       = 4095
+	amountCap          = 255
+)
+
+var (
+	channelRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 )
 
 func validhasChatid(chatid string) error {
@@ -57,16 +63,32 @@ func validhasChatids(chatids []string) error {
 	return nil
 }
 
-func validhasServerid(serverid string) error {
+func validhasServerID(serverid string) error {
 	if len(serverid) == 0 {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Server id must be provided",
 			Status:  http.StatusBadRequest,
 		}))
 	}
-	if len(serverid) > lengthCapServerid {
+	if len(serverid) > lengthCapServerID {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
 			Message: "Server id must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
+func validChannelID(channelid string) error {
+	if len(channelid) < 3 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Channel id must be longer than 2 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(channelid) > lengthCapChannelID {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Channel id must be shorter than 32 characters",
 			Status:  http.StatusBadRequest,
 		}))
 	}

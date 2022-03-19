@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqCreateServer
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqCreateChannel
 
 type (
 	reqGetFriends struct {
@@ -673,8 +673,31 @@ func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
+	reqGetServer struct {
+		ServerID string `valid:"serverID,has" json:"-"`
+	}
+)
+
+func (m *router) getServer(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetServer{
+		ServerID: c.Param("id"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetServer(req.ServerID)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
 	reqCreateServer struct {
-		Serverid string `valid:"serverid,has" json:"-"`
+		ServerID string `valid:"serverID,has" json:"-"`
 		Name     string `valid:"name" json:"name"`
 		Desc     string `valid:"desc" json:"desc"`
 		Theme    string `valid:"theme" json:"theme"`
@@ -688,12 +711,62 @@ func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	req.Serverid = c.Param("id")
+	req.ServerID = c.Param("id")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateServer(req.Serverid, req.Name, req.Desc, req.Theme)
+	res, err := m.s.CreateServer(req.ServerID, req.Name, req.Desc, req.Theme)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+func (m *router) updateServer(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateServer{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.ServerID = c.Param("id")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := m.s.UpdateServer(req.ServerID, req.Name, req.Desc, req.Theme); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+type (
+	reqCreateChannel struct {
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID" json:"-"`
+		Name      string `valid:"name" json:"name"`
+		Desc      string `valid:"desc" json:"desc"`
+		Theme     string `valid:"theme" json:"theme"`
+	}
+)
+
+func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqCreateChannel{}
+	if err := c.Bind(&req); err != nil {
+		c.WriteError(err)
+		return
+	}
+	req.ServerID = c.Param("id")
+	req.ChannelID = c.Param("cid")
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.CreateChannel(req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -703,7 +776,7 @@ func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
 	serverid := c.Param("id")
-	if err := validhasServerid(serverid); err != nil {
+	if err := validhasServerID(serverid); err != nil {
 		return "", false, false
 	}
 	return rank.ToOrgName(serverid), false, true
@@ -745,5 +818,11 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
 	r.Delete("/gdm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
 
-	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeChatAdminWrite))
+	scopeServerRead := m.s.scopens + ".chat:read"
+	//scopeServerWrite := m.s.scopens + ".chat:write"
+	scopeServerAdminWrite := m.s.scopens + ".chat.admin:write"
+	r.Get("/server/id/{id}", m.getServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
+	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Put("/server/id/{id}", m.updateServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Post("/server/id/{id}/channel/id/{cid}", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
 }
