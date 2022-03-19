@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqCreateChannel
+//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel
 
 type (
 	reqGetFriends struct {
@@ -744,9 +744,88 @@ func (m *router) updateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
+	reqGetChannel struct {
+		ServerID  string `valid:"serverID,has" json:"-"`
+		ChannelID string `valid:"channelID,has" json:"-"`
+	}
+)
+
+func (m *router) getChannel(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChannel{
+		ServerID:  c.Param("id"),
+		ChannelID: c.Param("cid"),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetChannel(req.ServerID, req.ChannelID)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqGetChannels struct {
+		ServerID string `valid:"serverID,has" json:"-"`
+		Amount   int    `valid:"amount" json:"-"`
+		Offset   int    `valid:"offset" json:"-"`
+	}
+)
+
+func (m *router) getChannels(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqGetChannels{
+		ServerID: c.Param("id"),
+		Amount:   c.QueryInt("amount", -1),
+		Offset:   c.QueryInt("offset", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetChannels(req.ServerID, "", req.Amount, req.Offset)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
+	reqSearchChannels struct {
+		ServerID string `valid:"serverID,has" json:"-"`
+		Prefix   string `valid:"channelID,has" json:"-"`
+		Amount   int    `valid:"amount" json:"-"`
+	}
+)
+
+func (m *router) searchChannels(w http.ResponseWriter, r *http.Request) {
+	c := governor.NewContext(w, r, m.s.logger)
+	req := reqSearchChannels{
+		ServerID: c.Param("id"),
+		Prefix:   c.Query("prefix"),
+		Amount:   c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := m.s.GetChannels(req.ServerID, req.Prefix, req.Amount, 0)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+type (
 	reqCreateChannel struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
-		ChannelID string `valid:"channelID" json:"-"`
+		ChannelID string `valid:"channelID" json:"channelid"`
 		Name      string `valid:"name" json:"name"`
 		Desc      string `valid:"desc" json:"desc"`
 		Theme     string `valid:"theme" json:"theme"`
@@ -761,7 +840,6 @@ func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ServerID = c.Param("id")
-	req.ChannelID = c.Param("cid")
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
@@ -824,5 +902,8 @@ func (m *router) mountRoutes(r governor.Router) {
 	r.Get("/server/id/{id}", m.getServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
 	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
 	r.Put("/server/id/{id}", m.updateServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
-	r.Post("/server/id/{id}/channel/id/{cid}", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
+	r.Get("/server/id/{id}/channel/id/{cid}", m.getChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
+	r.Get("/server/id/{id}/channel", m.getChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
+	r.Get("/server/id/{id}/channel/search", m.searchChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
+	r.Post("/server/id/{id}/channel", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerAdminWrite))
 }

@@ -95,6 +95,22 @@ func validChannelID(channelid string) error {
 	return nil
 }
 
+func validhasChannelID(channelid string) error {
+	if len(channelid) == 0 {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Channel id must be provided",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	if len(channelid) > lengthCapChannelID {
+		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
+			Message: "Channel id must be shorter than 32 characters",
+			Status:  http.StatusBadRequest,
+		}))
+	}
+	return nil
+}
+
 func validName(name string) error {
 	if len(name) > lengthCapName {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{

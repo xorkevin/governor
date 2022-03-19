@@ -262,6 +262,42 @@ func (r reqCreateServer) valid() error {
 	return nil
 }
 
+func (r reqGetChannel) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.ChannelID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetChannels) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqSearchChannels) valid() error {
+	if err := validhasServerID(r.ServerID); err != nil {
+		return err
+	}
+	if err := validhasChannelID(r.Prefix); err != nil {
+		return err
+	}
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r reqCreateChannel) valid() error {
 	if err := validhasServerID(r.ServerID); err != nil {
 		return err
