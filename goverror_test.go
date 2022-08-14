@@ -107,6 +107,9 @@ func TestError(t *testing.T) {
 					assert.Equal(tc.Status, r.Status)
 					assert.Equal(tc.Code, r.Code)
 					assert.Equal(tc.Msg, r.Message)
+				} else {
+					var r *ErrorRes
+					assert.False(errors.As(err, &r))
 				}
 				assert.ErrorIs(err, tc.Kind)
 				assert.Equal(tc.ErrMsg, err.Error())
