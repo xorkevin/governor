@@ -267,17 +267,11 @@ func (c *govcontext) BasicAuth() (string, string, bool) {
 func (c *govcontext) ReadAllBody() ([]byte, error) {
 	data, err := io.ReadAll(c.r.Body)
 	if err != nil {
-		// No exported error is returned as of go@v1.16
-		if strings.Contains(strings.ToLower(err.Error()), "http: request body too large") {
-			return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusRequestEntityTooLarge,
-				Message: "Request too large",
-			}), ErrOptInner(err))
+		var rerr *http.MaxBytesError
+		if errors.As(err, &rerr) {
+			return nil, ErrWithRes(err, http.StatusRequestEntityTooLarge, "", "Request too large")
 		}
-		return nil, NewError(ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Failed reading request",
-		}), ErrOptInner(err))
+		return nil, ErrWithRes(err, http.StatusBadRequest, "", "Failed reading request")
 	}
 	return data, nil
 }
@@ -285,17 +279,11 @@ func (c *govcontext) ReadAllBody() ([]byte, error) {
 func (c *govcontext) Bind(i interface{}) error {
 	// ContentLength of -1 is unknown
 	if c.r.ContentLength == 0 {
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Empty request body",
-		}))
+		return ErrWithRes(nil, http.StatusBadRequest, "", "Empty request body")
 	}
 	mediaType, _, err := mime.ParseMediaType(c.r.Header.Get("Content-Type"))
 	if err != nil {
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid mime type",
-		}))
+		return ErrWithRes(err, http.StatusBadRequest, "", "Invalid mime type")
 	}
 	switch mediaType {
 	case "application/json":
@@ -304,16 +292,10 @@ func (c *govcontext) Bind(i interface{}) error {
 			return err
 		}
 		if err := json.Unmarshal(data, i); err != nil {
-			return NewError(ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid JSON",
-			}), ErrOptInner(err))
+			return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
 		}
 	default:
-		return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusUnsupportedMediaType,
-			Message: "Unsupported media type",
-		}), ErrOptInner(err))
+		return ErrWithRes(nil, http.StatusUnsupportedMediaType, "", "Unsupported media type")
 	}
 	return nil
 }
@@ -439,10 +421,7 @@ func (c *govcontext) Websocket() (Websocket, error) {
 		CompressionMode: websocket.CompressionContextTakeover,
 	})
 	if err != nil {
-		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Failed to open ws connection",
-		}), ErrOptInner(err))
+		return nil, ErrWithRes(err, http.StatusBadRequest, "", "Failed to open ws connection")
 	}
 	w := &govws{
 		c:    c,
@@ -450,10 +429,7 @@ func (c *govcontext) Websocket() (Websocket, error) {
 	}
 	if conn.Subprotocol() != WSProtocolVersion {
 		w.Close(int(websocket.StatusPolicyViolation), "Invalid ws subprotocol")
-		return nil, NewError(ErrOptUser, ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid ws subprotocol",
-		}))
+		return nil, ErrWithRes(nil, http.StatusBadRequest, "", "Invalid ws subprotocol")
 	}
 	w.SetReadLimit(WSReadLimitDefault)
 	return w, nil
@@ -559,7 +535,7 @@ func (w *govws) CloseError(err error) {
 		}
 	}
 
-	if w.c.l != nil && !errors.Is(err, ErrorUser{}) {
+	if w.c.l != nil && !errors.Is(err, ErrorNoLog{}) {
 		msg := "non governor error"
 		var gerr *Error
 		if errors.As(err, &gerr) {
@@ -582,10 +558,7 @@ func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 			// ContentLength of -1 is unknown
 			if r.ContentLength > limit {
 				c := NewContext(w, r, s.logger)
-				c.WriteError(NewError(ErrOptUser, ErrOptRes(ErrorRes{
-					Status:  http.StatusRequestEntityTooLarge,
-					Message: "Request too large",
-				})))
+				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, limit)

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -45,6 +46,7 @@ type (
 		i             chi.Router
 		flags         Flags
 		firstSetupRun bool
+		mu            *sync.RWMutex
 	}
 )
 
@@ -59,6 +61,7 @@ func New(opts Opts, stateService state.State) *Server {
 			ConfigFile: "",
 		},
 		firstSetupRun: false,
+		mu:            &sync.RWMutex{},
 	}
 }
 

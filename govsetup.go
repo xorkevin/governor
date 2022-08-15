@@ -30,35 +30,20 @@ const (
 func (r *ReqSetup) valid() error {
 	if a := r.Admin; a != nil {
 		if len(a.Username) < 3 {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Username must be longer than 2 chars",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "Username must be longer than 2 chars")
 		}
 		if len(a.Password) < 10 {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Password must be longer than 9 chars",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "Password must be longer than 9 chars")
 		}
 		if len(a.Email) > lengthCapEmail {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Email must be shorter than 255 characters",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "Email must be shorter than 255 characters")
 		}
 		addr, err := mail.ParseAddress(a.Email)
 		if err != nil {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Email is invalid",
-			}), ErrOptInner(err))
+			return ErrWithRes(err, http.StatusBadRequest, "", "Email is invalid")
 		}
 		if addr.Address != a.Email {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Email is invalid",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "Email is invalid")
 		}
 	}
 	return nil

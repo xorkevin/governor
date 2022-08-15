@@ -70,48 +70,49 @@ type (
 	}
 )
 
+func (s *Server) hasFirstSetupRun() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.firstSetupRun
+}
+
+func (s *Server) setFirstSetupRun(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.firstSetupRun {
+		return
+	}
+	s.firstSetupRun = v
+}
+
 func (s *Server) setupServices(rsetup ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
-	if !s.firstSetupRun {
+	if !s.hasFirstSetupRun() {
 		m, err := s.state.Get()
 		if err != nil {
-			return NewError(ErrOptRes(ErrorRes{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to get state",
-			}), ErrOptInner(err))
+			return ErrWithRes(err, http.StatusInternalServerError, "", "Failed to get state")
 		}
-		s.firstSetupRun = m.Setup
+		s.setFirstSetupRun(m.Setup)
 	}
 	if err := rsetup.valid(); err != nil {
 		return err
 	}
-	if s.firstSetupRun {
+	if s.hasFirstSetupRun() {
 		if rsetup.First {
-			l.Warn("First setup already run", nil)
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "First setup already run",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "First setup already run")
 		}
 		var secret secretSetup
 		if err := s.config.getSecret("setupsecret", 0, &secret); err != nil {
 			return ErrWithMsg(err, "Invalid setup secret")
 		}
 		if subtle.ConstantTimeCompare([]byte(rsetup.Secret), []byte(secret.Secret)) != 1 {
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusForbidden,
-				Message: "Invalid setup secret",
-			}))
+			return ErrWithRes(nil, http.StatusForbidden, "", "Invalid setup secret")
 		}
 	} else {
 		if !rsetup.First {
-			l.Warn("First setup not yet run", nil)
-			return NewError(ErrOptUser, ErrOptRes(ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "First setup not yet run",
-			}))
+			return ErrWithRes(nil, http.StatusBadRequest, "", "First setup not yet run")
 		}
 	}
 	rsetup.Secret = ""
@@ -152,11 +153,9 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 			l.Error("Setup state service failed", map[string]string{
 				"error": err.Error(),
 			})
-			return NewError(ErrOptRes(ErrorRes{
-				Status:  http.StatusInternalServerError,
-				Message: "Failed to set state",
-			}), ErrOptInner(err))
+			return ErrWithRes(err, http.StatusInternalServerError, "", "Failed to set state")
 		}
+		s.setFirstSetupRun(true)
 	}
 	l.Info("Setup all services complete", nil)
 	return nil

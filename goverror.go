@@ -149,19 +149,13 @@ func ErrWithStackTrace(err error, msg string) error {
 }
 
 // ErrWithNoLog returns a wrapped error with a [ErrorNoLog] kind and message
-func ErrWithNoLog(err error, msg string) error {
-	if msg == "" {
-		msg = "No log"
-	}
-	return NewError(ErrOptMsg(msg), ErrOptNoLog, ErrOptInner(err))
+func ErrWithNoLog(err error) error {
+	return NewError(ErrOptMsg("No log"), ErrOptNoLog, ErrOptInner(err))
 }
 
 // ErrWithRes returns a wrapped error with a [ErrorRes] kind and message
-func ErrWithRes(err error, status int, code string, resmsg string, msg string) error {
-	if msg == "" {
-		msg = "Error response"
-	}
-	return NewError(ErrOptMsg(msg), ErrOptKind(&ErrorRes{
+func ErrWithRes(err error, status int, code string, resmsg string) error {
+	return NewError(ErrOptMsg("Error response"), ErrOptKind(&ErrorRes{
 		Status:  status,
 		Code:    code,
 		Message: resmsg,
