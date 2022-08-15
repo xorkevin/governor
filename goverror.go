@@ -3,6 +3,7 @@ package governor
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -130,7 +131,16 @@ type (
 )
 
 func (e *ErrorRes) Error() string {
-	return e.Message
+	b := strings.Builder{}
+	b.WriteString(strconv.Itoa(e.Status))
+	if e.Code != "" {
+		b.WriteString(" [")
+		b.WriteString(e.Code)
+		b.WriteString("]")
+	}
+	b.WriteString(": ")
+	b.WriteString(e.Message)
+	return b.String()
 }
 
 // ErrWithMsg returns a wrapped error with a message

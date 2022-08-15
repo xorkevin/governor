@@ -28,64 +28,59 @@ func TestError(t *testing.T) {
 		t.Parallel()
 
 		errorsErr := errors.New("test errors err")
-		govErr := NewError(ErrOptRes(ErrorRes{
-			Status:  http.StatusInternalServerError,
-			Code:    "test_gov_err_code",
-			Message: "test gov error",
-		}), ErrOptInner(errorsErr))
+		govErr := ErrWithRes(errorsErr, http.StatusInternalServerError, "test_gov_err_code", "test gov error")
 
 		for _, tc := range []struct {
 			Test   string
 			Opts   []ErrorOpt
-			Status int
-			Code   string
 			Msg    string
 			Kind   error
+			Res    *ErrorRes
 			ErrMsg string
 		}{
 			{
 				Test:   "produces an error with an errors kind and message",
-				Opts:   []ErrorOpt{ErrOptKind(errorsErr), ErrOptMsg("test message 123")},
-				Status: 0,
-				Code:   "",
+				Opts:   []ErrorOpt{ErrOptMsg("test message 123"), ErrOptKind(errorsErr)},
 				Msg:    "test message 123",
 				Kind:   errorsErr,
-				ErrMsg: "[test errors err] test message 123",
+				ErrMsg: "test message 123 [test errors err]",
 			},
 			{
 				Test:   "produces an error with an error struct kind and message",
-				Opts:   []ErrorOpt{ErrOptKind(testErr{}), ErrOptMsg("test message 321")},
-				Status: 0,
-				Code:   "",
+				Opts:   []ErrorOpt{ErrOptMsg("test message 321"), ErrOptKind(testErr{})},
 				Msg:    "test message 321",
 				Kind:   testErr{},
-				ErrMsg: "[test struct err] test message 321",
+				ErrMsg: "test message 321 [test struct err]",
 			},
 			{
 				Test: "produces an error with an error res",
-				Opts: []ErrorOpt{ErrOptKind(testErr{}), ErrOptRes(ErrorRes{
+				Opts: []ErrorOpt{ErrOptMsg("test message 456"), ErrOptKind(&ErrorRes{
 					Status:  http.StatusBadRequest,
 					Code:    "test_err_code",
-					Message: "test message 456",
+					Message: "test response message 456",
 				})},
-				Status: http.StatusBadRequest,
-				Code:   "test_err_code",
-				Msg:    "test message 456",
-				Kind:   testErr{},
-				ErrMsg: "[test struct err] test_err_code test message 456",
+				Msg: "test message 456",
+				Res: &ErrorRes{
+					Status:  http.StatusBadRequest,
+					Code:    "test_err_code",
+					Message: "test response message 456",
+				},
+				ErrMsg: "test message 456 [400 [test_err_code]: test response message 456]",
 			},
 			{
 				Test: "produces an error with a deeply nested error",
-				Opts: []ErrorOpt{ErrOptKind(testErr{}), ErrOptRes(ErrorRes{
+				Opts: []ErrorOpt{ErrOptMsg("test message 654"), ErrOptKind(&ErrorRes{
 					Status:  http.StatusBadRequest,
 					Code:    "test_err_code",
-					Message: "test message 654",
+					Message: "test response message 654",
 				}), ErrOptInner(govErr)},
-				Status: http.StatusBadRequest,
-				Code:   "test_err_code",
-				Msg:    "test message 654",
-				Kind:   errorsErr,
-				ErrMsg: "[test struct err] test_err_code test message 654: test_gov_err_code test gov error: test errors err",
+				Msg: "test message 654",
+				Res: &ErrorRes{
+					Status:  http.StatusBadRequest,
+					Code:    "test_err_code",
+					Message: "test response message 654",
+				},
+				ErrMsg: "test message 654 [400 [test_err_code]: test response message 654]: Error response [500 [test_gov_err_code]: test gov error]: test errors err",
 			},
 		} {
 			tc := tc
@@ -98,21 +93,16 @@ func TestError(t *testing.T) {
 				assert.Error(err)
 				var k *Error
 				assert.ErrorAs(err, &k)
-				assert.Equal(tc.Status, k.Status)
-				assert.Equal(tc.Code, k.Code)
 				assert.Equal(tc.Msg, k.Message)
-				if tc.Status != 0 {
+				assert.Equal(tc.ErrMsg, err.Error())
+				if tc.Kind != nil {
+					assert.ErrorIs(err, tc.Kind)
+				}
+				if tc.Res != nil {
 					var r *ErrorRes
 					assert.ErrorAs(err, &r)
-					assert.Equal(tc.Status, r.Status)
-					assert.Equal(tc.Code, r.Code)
-					assert.Equal(tc.Msg, r.Message)
-				} else {
-					var r *ErrorRes
-					assert.False(errors.As(err, &r))
+					assert.Equal(tc.Res, r)
 				}
-				assert.ErrorIs(err, tc.Kind)
-				assert.Equal(tc.ErrMsg, err.Error())
 			})
 		}
 	})
@@ -121,11 +111,7 @@ func TestError(t *testing.T) {
 		t.Parallel()
 
 		rootErr := errors.New("test root error")
-		govErr := NewError(ErrOptRes(ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    "test_gov_err_code",
-			Message: "test gov error",
-		}), ErrOptInner(rootErr))
+		govErr := ErrWithRes(rootErr, http.StatusBadRequest, "test_gov_err_code", "test gov error")
 
 		for _, tc := range []struct {
 			Test   string
@@ -140,27 +126,27 @@ func TestError(t *testing.T) {
 		}{
 			{
 				Test: "logs the error",
-				Err: NewError(ErrOptKind(testErr{}), ErrOptRes(ErrorRes{
+				Err: NewError(ErrOptMsg("test error message"), ErrOptKind(&ErrorRes{
 					Status:  http.StatusInternalServerError,
 					Code:    "err_code_890",
-					Message: "test error message",
+					Message: "test error response message",
 				}), ErrOptInner(rootErr)),
 				Path:   "/error1",
 				Body:   `{"ping":"pong"}`,
 				Status: http.StatusInternalServerError,
-				Res:    `{"code":"err_code_890","message":"test error message"}`,
+				Res:    `{"code":"err_code_890","message":"test error response message"}`,
 				LogMsg: "test error message",
-				Log:    "[test struct err] err_code_890 test error message: test root error",
+				Log:    "test error message [500 [err_code_890]: test error response message]: test root error",
 			},
 			{
 				Test:   "sends the Error with a non zero status",
-				Err:    NewError(ErrOptKind(testErr{}), ErrOptMsg("test error message"), ErrOptInner(govErr)),
+				Err:    NewError(ErrOptMsg("test error message"), ErrOptKind(testErr{}), ErrOptInner(govErr)),
 				Path:   "/error9",
 				Body:   `{"ping":"pong"}`,
 				Status: http.StatusBadRequest,
 				Res:    `{"code":"test_gov_err_code","message":"test gov error"}`,
 				LogMsg: "test error message",
-				Log:    "[test struct err] test error message: test_gov_err_code test gov error: test root error",
+				Log:    "test error message [test struct err]: Error response [400 [test_gov_err_code]: test gov error]: test root error",
 			},
 			{
 				Test:   "can send arbitrary errors",
@@ -171,19 +157,6 @@ func TestError(t *testing.T) {
 				Res:    `{"message":"Internal Server Error"}`,
 				LogMsg: "non governor error",
 				Log:    "Plain error",
-			},
-			{
-				Test: "does not log user errors",
-				Err: NewError(ErrOptUser, ErrOptRes(ErrorRes{
-					Status:  http.StatusBadRequest,
-					Code:    "test_err_code",
-					Message: "an error message",
-				}), ErrOptInner(rootErr)),
-				Path:   "/error8",
-				Body:   `{"ping":"pong"}`,
-				Status: http.StatusBadRequest,
-				Res:    `{"code":"test_err_code","message":"an error message"}`,
-				NoLog:  true,
 			},
 		} {
 			tc := tc
