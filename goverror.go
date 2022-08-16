@@ -173,23 +173,30 @@ func ErrWithRes(err error, status int, code string, resmsg string) error {
 }
 
 func (c *govcontext) WriteError(err error) {
+	var rerr *ErrorRes
+	if !errors.As(err, &rerr) {
+		rerr = &ErrorRes{
+			Status:  http.StatusInternalServerError,
+			Message: "Internal Server Error",
+		}
+	}
+
 	if c.l != nil && !errors.Is(err, ErrorNoLog{}) {
 		msg := "non governor error"
 		var gerr *Error
 		if errors.As(err, &gerr) {
 			msg = gerr.Message
 		}
-		c.l.Error(msg, map[string]string{
-			"endpoint": c.r.URL.EscapedPath(),
-			"error":    err.Error(),
-		})
-	}
-
-	var rerr *ErrorRes
-	if !errors.As(err, &rerr) {
-		rerr = &ErrorRes{
-			Status:  http.StatusInternalServerError,
-			Message: "Internal Server Error",
+		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
+			c.l.Warn(msg, map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
+		} else {
+			c.l.Error(msg, map[string]string{
+				"endpoint": c.r.URL.EscapedPath(),
+				"error":    err.Error(),
+			})
 		}
 	}
 

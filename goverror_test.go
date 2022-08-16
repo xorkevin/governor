@@ -120,6 +120,7 @@ func TestError(t *testing.T) {
 			Body   string
 			Status int
 			Res    string
+			Level  string
 			LogMsg string
 			Log    string
 			NoLog  bool
@@ -135,6 +136,7 @@ func TestError(t *testing.T) {
 				Body:   `{"ping":"pong"}`,
 				Status: http.StatusInternalServerError,
 				Res:    `{"code":"err_code_890","message":"test error response message"}`,
+				Level:  "error",
 				LogMsg: "test error message",
 				Log:    "test error message [500 [err_code_890]: test error response message]: test root error",
 			},
@@ -145,6 +147,7 @@ func TestError(t *testing.T) {
 				Body:   `{"ping":"pong"}`,
 				Status: http.StatusBadRequest,
 				Res:    `{"code":"test_gov_err_code","message":"test gov error"}`,
+				Level:  "warn",
 				LogMsg: "test error message",
 				Log:    "test error message [test struct err]: Error response [400 [test_gov_err_code]: test gov error]: test root error",
 			},
@@ -155,6 +158,7 @@ func TestError(t *testing.T) {
 				Body:   `{"ping":"pong"}`,
 				Status: http.StatusInternalServerError,
 				Res:    `{"message":"Internal Server Error"}`,
+				Level:  "error",
 				LogMsg: "non governor error",
 				Log:    "Plain error",
 			},
@@ -191,7 +195,7 @@ func TestError(t *testing.T) {
 					UnixTime string `json:"unixtime"`
 				}{}
 				assert.NoError(json.Unmarshal(logbuf.Bytes(), &logjson))
-				assert.Equal("error", logjson.Level)
+				assert.Equal(tc.Level, logjson.Level)
 				assert.Equal("root", logjson.Module)
 				assert.Equal(tc.Path, logjson.Endpoint)
 				assert.Equal(tc.LogMsg, logjson.Msg)
