@@ -43,14 +43,14 @@ func TestError(t *testing.T) {
 				Opts:   []ErrorOpt{ErrOptMsg("test message 123"), ErrOptKind(errorsErr)},
 				Msg:    "test message 123",
 				Kind:   errorsErr,
-				ErrMsg: "test message 123 [test errors err]",
+				ErrMsg: "test message 123 [test errors err]: Stack trace [Error stack trace]",
 			},
 			{
 				Test:   "produces an error with an error struct kind and message",
 				Opts:   []ErrorOpt{ErrOptMsg("test message 321"), ErrOptKind(testErr{})},
 				Msg:    "test message 321",
 				Kind:   testErr{},
-				ErrMsg: "test message 321 [test struct err]",
+				ErrMsg: "test message 321 [test struct err]: Stack trace [Error stack trace]",
 			},
 			{
 				Test: "produces an error with an error res",
@@ -65,7 +65,7 @@ func TestError(t *testing.T) {
 					Code:    "test_err_code",
 					Message: "test response message 456",
 				},
-				ErrMsg: "test message 456 [400 [test_err_code]: test response message 456]",
+				ErrMsg: "test message 456 [400 [test_err_code]: test response message 456]: Stack trace [Error stack trace]",
 			},
 			{
 				Test: "produces an error with a deeply nested error",
@@ -80,7 +80,7 @@ func TestError(t *testing.T) {
 					Code:    "test_err_code",
 					Message: "test response message 654",
 				},
-				ErrMsg: "test message 654 [400 [test_err_code]: test response message 654]: Error response [500 [test_gov_err_code]: test gov error]: test errors err",
+				ErrMsg: "test message 654 [400 [test_err_code]: test response message 654]: Error response [500 [test_gov_err_code]: test gov error]: Stack trace [Error stack trace]: test errors err",
 			},
 		} {
 			tc := tc
@@ -138,7 +138,7 @@ func TestError(t *testing.T) {
 				Res:    `{"code":"err_code_890","message":"test error response message"}`,
 				Level:  "error",
 				LogMsg: "test error message",
-				Log:    "test error message [500 [err_code_890]: test error response message]: test root error",
+				Log:    "test error message [500 [err_code_890]: test error response message]: Stack trace [Error stack trace]: test root error",
 			},
 			{
 				Test:   "sends the Error with a non zero status",
@@ -149,7 +149,7 @@ func TestError(t *testing.T) {
 				Res:    `{"code":"test_gov_err_code","message":"test gov error"}`,
 				Level:  "warn",
 				LogMsg: "test error message",
-				Log:    "test error message [test struct err]: Error response [400 [test_gov_err_code]: test gov error]: test root error",
+				Log:    "test error message [test struct err]: Error response [400 [test_gov_err_code]: test gov error]: Stack trace [Error stack trace]: test root error",
 			},
 			{
 				Test:   "can send arbitrary errors",

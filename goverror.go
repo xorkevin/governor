@@ -19,12 +19,13 @@ type (
 	ErrorOpt = func(e *Error)
 )
 
-// NewError creates a new governor [Error]
+// NewError creates a new [Error]
 func NewError(opts ...ErrorOpt) error {
 	e := &Error{}
 	for _, i := range opts {
 		i(e)
 	}
+	e.Inner = addErrStackTrace(e.Inner)
 	return e
 }
 
@@ -101,9 +102,16 @@ func (e *ErrorStackTrace) Error() string {
 	return "Error stack trace"
 }
 
-// ErrOptStackTrace sets the error kind to [ErrorStackTrace]
-func ErrOptStackTrace(e *Error) {
-	e.Kind = NewErrorStackTrace()
+func addErrStackTrace(err error) error {
+	var t *ErrorStackTrace
+	if err != nil && errors.As(err, &t) {
+		return err
+	}
+	return &Error{
+		Message: "Stack trace",
+		Kind:    NewErrorStackTrace(),
+		Inner:   err,
+	}
 }
 
 type (
@@ -151,11 +159,6 @@ func ErrWithMsg(err error, msg string) error {
 // ErrWithKind returns a wrapped error with a kind and message
 func ErrWithKind(err error, kind error, msg string) error {
 	return NewError(ErrOptMsg(msg), ErrOptKind(kind), ErrOptInner(err))
-}
-
-// ErrWithStackTrace returns a wrapped error with a [ErrorStackTrace] kind and message
-func ErrWithStackTrace(err error, msg string) error {
-	return NewError(ErrOptMsg(msg), ErrOptStackTrace, ErrOptInner(err))
 }
 
 // ErrWithNoLog returns a wrapped error with a [ErrorNoLog] kind and message
