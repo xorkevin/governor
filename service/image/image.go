@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	goimg "image"
 	"image/color"
 	"image/gif"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/image/draw"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/fileloader"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -84,10 +84,7 @@ func (e ErrEncode) Error() string {
 func FromJpeg(file io.Reader) (Image, error) {
 	i, err := jpeg.Decode(file)
 	if err != nil {
-		return nil, governor.NewError(governor.ErrOptKind(ErrInvalidImage{}), governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid JPEG image",
-		}), governor.ErrOptInner(err))
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidImage{}, "Invalid JPEG"), http.StatusBadRequest, "", "Invalid JPEG image")
 	}
 	return FromImage(i), nil
 }
@@ -96,10 +93,7 @@ func FromJpeg(file io.Reader) (Image, error) {
 func FromPng(file io.Reader) (Image, error) {
 	i, err := png.Decode(file)
 	if err != nil {
-		return nil, governor.NewError(governor.ErrOptKind(ErrInvalidImage{}), governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid PNG image",
-		}), governor.ErrOptInner(err))
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidImage{}, "Invalid PNG"), http.StatusBadRequest, "", "Invalid PNG image")
 	}
 	return FromImage(i), nil
 }
@@ -108,10 +102,7 @@ func FromPng(file io.Reader) (Image, error) {
 func FromGif(file io.Reader) (Image, error) {
 	i, err := gif.Decode(file)
 	if err != nil {
-		return nil, governor.NewError(governor.ErrOptKind(ErrInvalidImage{}), governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid GIF image",
-		}), governor.ErrOptInner(err))
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidImage{}, "Invalid GIF"), http.StatusBadRequest, "", "Invalid GIF image")
 	}
 	return FromImage(i), nil
 }
@@ -137,12 +128,12 @@ var (
 func LoadImage(l governor.Logger, c governor.Context, formField string) (Image, error) {
 	file, mediaType, _, err := fileloader.LoadOpenFile(l, c, formField, allowedMediaTypes)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Invalid image file")
+		return nil, kerrors.WithMsg(err, "Invalid image file")
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
 			l.Error("Failed to close open file on request", map[string]string{
-				"actiontype": "closefile",
+				"actiontype": "image_load_close_file",
 				"error":      err.Error(),
 			})
 		}
@@ -155,7 +146,7 @@ func LoadImage(l governor.Logger, c governor.Context, formField string) (Image, 
 	case MediaTypeGif:
 		return FromGif(file)
 	default:
-		return nil, errors.New("Invalid file type, invariant violated, branch should not be hit")
+		return nil, governor.ErrWithUnreachable(nil, "Invalid file type "+mediaType)
 	}
 }
 
@@ -263,7 +254,7 @@ func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
 		Quality: quality,
 	}
 	if err := jpeg.Encode(b, i.img, &j); err != nil {
-		return nil, governor.ErrWithKind(err, ErrEncode{}, "Failed to encode JPEG image")
+		return nil, kerrors.WithKind(err, ErrEncode{}, "Failed to encode JPEG image")
 	}
 	return b, nil
 }
@@ -300,7 +291,7 @@ func (i *imageData) ToPng(level PngCompressionOpt) (*bytes.Buffer, error) {
 		CompressionLevel: compressionOptTranslate(level),
 	}
 	if err := encoder.Encode(b, i.img); err != nil {
-		return nil, governor.ErrWithKind(err, ErrEncode{}, "Failed to encode PNG image")
+		return nil, kerrors.WithKind(err, ErrEncode{}, "Failed to encode PNG image")
 	}
 	return b, nil
 }

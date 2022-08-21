@@ -30,15 +30,15 @@ type (
 )
 
 // WriteError implements [xorkevin.dev/kerrors.ErrorWriter]
-func (e *ErrorRes) WriteError(b io.StringWriter) {
-	b.WriteString("(")
-	b.WriteString(strconv.Itoa(e.Status))
-	b.WriteString(") ")
-	b.WriteString(e.Message)
+func (e *ErrorRes) WriteError(b io.Writer) {
+	io.WriteString(b, "(")
+	io.WriteString(b, strconv.Itoa(e.Status))
+	io.WriteString(b, ") ")
+	io.WriteString(b, e.Message)
 	if e.Code != "" {
-		b.WriteString(" [")
-		b.WriteString(e.Code)
-		b.WriteString("]")
+		io.WriteString(b, " [")
+		io.WriteString(b, e.Code)
+		io.WriteString(b, "]")
 	}
 }
 
@@ -47,6 +47,16 @@ func (e *ErrorRes) Error() string {
 	b := strings.Builder{}
 	e.WriteError(&b)
 	return b.String()
+}
+
+type (
+	// ErrorUnreachable is an error kind to mark unreachable code
+	ErrorUnreachable struct{}
+)
+
+// Error implements error
+func (e ErrorUnreachable) Error() string {
+	return "Unreachable code. Invariant violated"
 }
 
 // ErrWithNoLog returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorNoLog] kind and message
@@ -61,6 +71,11 @@ func ErrWithRes(err error, status int, code string, resmsg string) error {
 		Code:    code,
 		Message: resmsg,
 	}, "Error response")
+}
+
+// ErrWithUnreachable returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorUnreachable] kind and message
+func ErrWithUnreachable(err error, msg string) error {
+	return kerrors.WithKind(err, ErrorUnreachable{}, msg)
 }
 
 func (c *govcontext) WriteError(err error) {

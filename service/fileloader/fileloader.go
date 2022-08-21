@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -27,17 +28,14 @@ func (e ErrUnsupportedMIME) Error() string {
 func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {
-		return nil, "", 0, governor.NewError(governor.ErrOptKind(ErrInvalidFile{}), governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid file format",
-		}), governor.ErrOptInner(err))
+		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidFile{}, "Invalid file format"), http.StatusBadRequest, "", "Invalid file format")
 	}
 	shouldClose := true
 	defer func() {
 		if shouldClose {
 			if err := file.Close(); err != nil {
 				l.Error("Failed to close open file on request", map[string]string{
-					"actiontype": "closefile",
+					"actiontype": "fileloader_close_file",
 					"error":      err.Error(),
 				})
 			}
@@ -46,17 +44,11 @@ func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeT
 
 	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
-		return nil, "", 0, governor.NewError(governor.ErrOptKind(ErrInvalidFile{}), governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "File does not have a media type",
-		}), governor.ErrOptInner(err))
+		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidFile{}, "No media type"), http.StatusBadRequest, "", "File does not have a media type")
 	}
 	if len(mimeTypes) > 0 {
 		if _, ok := mimeTypes[mediaType]; !ok {
-			return nil, "", 0, governor.NewError(governor.ErrOptKind(ErrUnsupportedMIME{}), governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusUnsupportedMediaType,
-				Message: mediaType + " is unsupported",
-			}))
+			return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(nil, ErrUnsupportedMIME{}, "Unsupported MIME type"), http.StatusUnsupportedMediaType, "", mediaType+" is unsupported")
 		}
 	}
 	shouldClose = false
