@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor/service/state"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -105,7 +106,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		}
 		var secret secretSetup
 		if err := s.config.getSecret("setupsecret", 0, &secret); err != nil {
-			return ErrWithMsg(err, "Invalid setup secret")
+			return kerrors.WithMsg(err, "Invalid setup secret")
 		}
 		if subtle.ConstantTimeCompare([]byte(rsetup.Secret), []byte(secret.Secret)) != 1 {
 			return ErrWithRes(nil, http.StatusForbidden, "", "Invalid setup secret")

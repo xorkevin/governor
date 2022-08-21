@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -65,7 +66,7 @@ func (c *Client) Init() error {
 		c.config.SetConfigFile(file)
 	}
 	if err := c.config.ReadInConfig(); err != nil {
-		return ErrWithKind(err, ErrInvalidConfig{}, "Failed to read in config")
+		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read in config")
 	}
 	c.addr = c.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.GetString("timeout")); err == nil {
@@ -101,7 +102,7 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 	if data != nil {
 		b := &bytes.Buffer{}
 		if err := json.NewEncoder(b).Encode(data); err != nil {
-			return 0, ErrWithKind(err, ErrInvalidClientReq{}, "Failed to encode body to json")
+			return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Failed to encode body to json")
 		}
 		body = b
 	}
@@ -110,21 +111,21 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 		req.Header.Add("Content-Type", "application/json")
 	}
 	if err != nil {
-		return 0, ErrWithKind(err, ErrInvalidClientReq{}, "Malformed request")
+		return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Malformed request")
 	}
 	res, err := c.httpc.Do(req)
 	if err != nil {
-		return 0, ErrWithKind(err, ErrInvalidClientReq{}, "Failed request")
+		return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Failed request")
 	}
 	defer res.Body.Close()
-	if res.StatusCode >= 400 {
-		errres := &ErrorRes{}
-		if err := json.NewDecoder(res.Body).Decode(errres); err != nil {
-			return 0, ErrWithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
+	if res.StatusCode >= http.StatusBadRequest {
+		var errres ErrorRes
+		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
+			return 0, kerrors.WithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
 		}
-		return res.StatusCode, ErrWithKind(nil, ErrServerRes{}, errres.Message)
+		return res.StatusCode, kerrors.WithKind(nil, ErrServerRes{}, errres.Message)
 	} else if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-		return 0, ErrWithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
+		return 0, kerrors.WithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
 	}
 	return res.StatusCode, nil
 }
@@ -139,7 +140,7 @@ func (c *Client) Setup(req ReqSetup) (*ResponseSetup, error) {
 	if status, err := c.Request("POST", "/setupz", req, res); err != nil {
 		return nil, err
 	} else if !isStatusOK(status) {
-		return nil, ErrWithKind(nil, ErrServerRes{}, "Non success response")
+		return nil, kerrors.WithKind(nil, ErrServerRes{}, "Non success response")
 	}
 	return res, nil
 }

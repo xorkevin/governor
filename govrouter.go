@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"nhooyr.io/websocket"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -471,13 +472,13 @@ func (e *ErrorWS) Unwrap() error {
 func (w *govws) wrapWSErr(err error, msg string) error {
 	var werr websocket.CloseError
 	if errors.As(err, &werr) {
-		return ErrWithMsg(&ErrorWS{
+		return kerrors.WithMsg(&ErrorWS{
 			Status: int(werr.Code),
 			Reason: werr.Reason,
 			Inner:  err,
 		}, msg)
 	}
-	return ErrWithMsg(err, msg)
+	return kerrors.WithMsg(err, msg)
 }
 
 // ErrWS returns a wrapped error with a websocket code
@@ -537,9 +538,9 @@ func (w *govws) CloseError(err error) {
 
 	if w.c.l != nil && !errors.Is(err, ErrorNoLog{}) {
 		msg := "non governor error"
-		var gerr *Error
-		if errors.As(err, &gerr) {
-			msg = gerr.Message
+		var kerr *kerrors.Error
+		if errors.As(err, &kerr) {
+			msg = kerr.Message
 		} else if isError {
 			msg = werr.Reason
 		}

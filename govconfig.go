@@ -16,6 +16,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -216,7 +217,7 @@ func (e ErrVault) Error() string {
 
 func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
-		return ErrWithKind(err, ErrInvalidConfig{}, "Failed to read in config")
+		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read in config")
 	}
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = envToLevel(c.config.GetString("mode"))
@@ -270,11 +271,11 @@ type (
 func newSecretsFileSource(s string) (secretsClient, error) {
 	b, err := os.ReadFile(s)
 	if err != nil {
-		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to read secrets file source")
+		return nil, kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read secrets file source")
 	}
 	data := secretsFileData{}
 	if err := yaml.Unmarshal(b, &data); err != nil {
-		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Invalid secrets file source file")
+		return nil, kerrors.WithKind(err, ErrInvalidConfig{}, "Invalid secrets file source file")
 	}
 	return &secretsFileSource{
 		path: s,
@@ -293,7 +294,7 @@ func (s *secretsFileSource) Init() error {
 func (s *secretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
 	data, ok := s.data.Data[kvpath]
 	if !ok {
-		return nil, 0, ErrWithKind(nil, ErrVault{}, "Failed to read vault secret")
+		return nil, 0, kerrors.WithKind(nil, ErrVault{}, "Failed to read vault secret")
 	}
 	return data, 0, nil
 }
@@ -322,12 +323,12 @@ type (
 func NewSecretsVaultSource(config secretsVaultSourceConfig) (secretsClient, error) {
 	vconfig := vaultapi.DefaultConfig()
 	if err := vconfig.Error; err != nil {
-		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault default config")
+		return nil, kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to create vault default config")
 	}
 	vconfig.Address = config.Addr
 	vault, err := vaultapi.NewClient(vconfig)
 	if err != nil {
-		return nil, ErrWithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
+		return nil, kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to create vault client")
 	}
 	return &secretsVaultSource{
 		address: config.Addr,
@@ -375,7 +376,7 @@ func (s *secretsVaultSource) authVault() error {
 		"role": s.config.K8SRole,
 	})
 	if err != nil {
-		return ErrWithKind(err, ErrVault{}, "Failed to auth with vault k8s")
+		return kerrors.WithKind(err, ErrVault{}, "Failed to auth with vault k8s")
 	}
 	s.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
 	s.vault.SetToken(authsecret.Auth.ClientToken)
@@ -390,7 +391,7 @@ func (s *secretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, i
 	vault := s.vault.Logical()
 	secret, err := vault.Read(kvpath)
 	if err != nil {
-		return nil, 0, ErrWithKind(err, ErrVault{}, "Failed to read vault secret")
+		return nil, 0, kerrors.WithKind(err, ErrVault{}, "Failed to read vault secret")
 	}
 	data := secret.Data
 	if v, ok := data["data"].(map[string]interface{}); ok {
@@ -427,17 +428,17 @@ func (c *Config) initsecrets() error {
 		config.K8SLoginPath = c.config.GetString("vault.k8s.loginpath")
 		jwtpath := c.config.GetString("vault.k8s.jwtpath")
 		if config.K8SRole == "" {
-			return ErrWithKind(nil, ErrInvalidConfig{}, "No vault role set")
+			return kerrors.WithKind(nil, ErrInvalidConfig{}, "No vault role set")
 		}
 		if config.K8SLoginPath == "" {
-			return ErrWithKind(nil, ErrInvalidConfig{}, "No vault k8s login path set")
+			return kerrors.WithKind(nil, ErrInvalidConfig{}, "No vault k8s login path set")
 		}
 		if jwtpath == "" {
-			return ErrWithKind(nil, ErrInvalidConfig{}, "No path for vault k8s service account jwt auth")
+			return kerrors.WithKind(nil, ErrInvalidConfig{}, "No path for vault k8s service account jwt auth")
 		}
 		jwtbytes, err := os.ReadFile(jwtpath)
 		if err != nil {
-			return ErrWithKind(err, ErrInvalidConfig{}, "Failed to read vault k8s service account jwt")
+			return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read vault k8s service account jwt")
 		}
 		config.K8SJWT = string(jwtbytes)
 	}
@@ -455,14 +456,14 @@ func (c *Config) initsecrets() error {
 func (c *Config) getSecret(key string, seconds int64, target interface{}) error {
 	if s, ok := c.vaultCache[key]; ok && s.isValid() {
 		if err := mapstructure.Decode(s.value, target); err != nil {
-			return ErrWithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
+			return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
 		}
 		return nil
 	}
 
 	kvpath := c.config.GetString(key)
 	if kvpath == "" {
-		return ErrWithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
+		return kerrors.WithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
 	}
 
 	data, expire, err := c.vault.GetSecret(kvpath)
@@ -479,7 +480,7 @@ func (c *Config) getSecret(key string, seconds int64, target interface{}) error 
 	}
 
 	if err := mapstructure.Decode(data, target); err != nil {
-		return ErrWithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
+		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
 	}
 	return nil
 }
@@ -610,7 +611,7 @@ func (c *Config) reader(opt serviceOpt) ConfigReader {
 func DecodeSysEventTimestampProps(msgdata []byte) (*SysEventTimestampProps, error) {
 	m := &SysEventTimestampProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, ErrWithMsg(err, "Failed to decode sys event timestamp props")
+		return nil, kerrors.WithMsg(err, "Failed to decode sys event timestamp props")
 	}
 	return m, nil
 }

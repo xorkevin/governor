@@ -20,7 +20,7 @@ BENCHMARK_ARGS=-benchtime 5s -benchmem
 .PHONY: test coverage cover bench
 
 test: ## Run tests
-	go test $(TEST_ARGS) -cover $(COVERAGE_ARGS) ./...
+	go test -trimpath -ldflags "-w -s" $(TEST_ARGS) -cover $(COVERAGE_ARGS) ./...
 
 coverage: ## View test coverage
 	go tool cover -html $(COVERAGE)
