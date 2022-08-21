@@ -10,6 +10,7 @@ import (
 	textTemplate "text/template"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -66,6 +67,10 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("htmlglob", "*.html")
 }
 
+const (
+	tplNoMatchErrSubstring = "pattern matches no files"
+)
+
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
 	s.logger = l
 	l = s.logger.WithData(map[string]string{
@@ -74,32 +79,32 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	templateDir := os.DirFS(r.GetStr("dir"))
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
 	if err != nil {
-		if err.Error() == fmt.Sprintf("text/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
-			l.Warn("no templates loaded", nil)
+		if strings.Contains(err.Error(), tplNoMatchErrSubstring) {
+			l.Warn("No templates loaded", nil)
 			tt = textTemplate.New("default")
 		} else {
-			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
+			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
 		}
 	}
 	s.tt = tt
 	ht, err := htmlTemplate.ParseFS(templateDir, r.GetStr("htmlglob"))
 	if err != nil {
-		if err.Error() == fmt.Sprintf("html/template: pattern matches no files: %#q", r.GetStr("dir")+"/*.html") {
-			l.Warn("no templates loaded", nil)
+		if strings.Contains(err.Error(), tplNoMatchErrSubstring) {
+			l.Warn("No templates loaded", nil)
 			ht = htmlTemplate.New("default")
 		} else {
-			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
+			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Failed to load templates")
 		}
 	}
 	s.ht = ht
 
 	if k := tt.DefinedTemplates(); k != "" {
-		l.Info("loaded text templates", map[string]string{
+		l.Info("Loaded text templates", map[string]string{
 			"templates": strings.TrimLeft(k, "; "),
 		})
 	}
 	if k := ht.DefinedTemplates(); k != "" {
-		l.Info("loaded html templates", map[string]string{
+		l.Info("Loaded html templates", map[string]string{
 			"templates": strings.TrimLeft(k, "; "),
 		})
 	}
@@ -145,13 +150,13 @@ func (s *service) Execute(dst io.Writer, kind string, templateName string, data 
 	switch kind {
 	case KindLocal:
 		if s.tt.Lookup(templateName) == nil {
-			return governor.ErrWithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+			return kerrors.WithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
 		}
 		if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
-			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing text template")
+			return kerrors.WithKind(err, ErrExecute{}, "Failed executing text template")
 		}
 	default:
-		return governor.ErrWithKind(nil, ErrExecute{}, "Invalid text template kind")
+		return kerrors.WithKind(nil, ErrTemplateDNE{}, "Invalid text template kind")
 	}
 	return nil
 }
@@ -161,13 +166,13 @@ func (s *service) ExecuteHTML(dst io.Writer, kind string, templateName string, d
 	switch kind {
 	case KindLocal:
 		if s.ht.Lookup(templateName) == nil {
-			return governor.ErrWithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+			return kerrors.WithKind(nil, ErrTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
 		}
 		if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
-			return governor.ErrWithKind(err, ErrExecute{}, "Failed executing html template")
+			return kerrors.WithKind(err, ErrExecute{}, "Failed executing html template")
 		}
 	default:
-		return governor.ErrWithKind(nil, ErrExecute{}, "Invalid html template kind")
+		return kerrors.WithKind(nil, ErrTemplateDNE{}, "Invalid html template kind")
 	}
 	return nil
 }
