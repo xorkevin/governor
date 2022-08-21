@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -210,7 +211,7 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			forwarded = ip.String()
 		}
 		if reqIsWS(r) {
-			s.logger.Debug("ws open", map[string]string{
+			s.logger.Info("WS open", map[string]string{
 				"host":      host,
 				"method":    method,
 				"ws":        "t",
@@ -218,14 +219,19 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 				"remote":    remote,
 				"forwarded": forwarded,
 			})
+			start := time.Now()
 			next.ServeHTTP(w, r)
-			s.logger.Debug("ws close", map[string]string{
+			duration := time.Since(start)
+			route := chi.RouteContext(r.Context()).RoutePattern()
+			s.logger.Info("WS close", map[string]string{
 				"host":      host,
 				"method":    method,
 				"ws":        "f",
+				"route":     route,
 				"path":      path,
 				"remote":    remote,
 				"forwarded": forwarded,
+				"duration":  duration.String(),
 			})
 		} else {
 			start := time.Now()
@@ -235,10 +241,12 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			}
 			next.ServeHTTP(w2, r)
 			duration := time.Since(start)
-			s.logger.Debug("", map[string]string{
+			route := chi.RouteContext(r.Context()).RoutePattern()
+			s.logger.Info("HTTP response", map[string]string{
 				"host":      host,
 				"method":    method,
 				"ws":        "f",
+				"route":     route,
 				"path":      path,
 				"remote":    remote,
 				"forwarded": forwarded,
