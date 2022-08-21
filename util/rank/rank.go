@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -193,7 +193,7 @@ func FromString(rankStr string) (Rank, error) {
 	rankSlice := strings.Split(rankStr, ",")
 	for _, i := range rankSlice {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+			return Rank{}, kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 		}
 	}
 	return FromSlice(rankSlice), nil
@@ -203,12 +203,12 @@ func FromString(rankStr string) (Rank, error) {
 func SplitTag(key string) (string, string, error) {
 	k := strings.SplitN(key, rankSeparator, 2)
 	if len(k) != 2 {
-		return "", "", governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
 	switch k[0] {
 	case TagModPrefix, TagUserPrefix, TagBanPrefix:
 	default:
-		return "", "", governor.ErrWithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
 	return k[0], k[1], nil
 }

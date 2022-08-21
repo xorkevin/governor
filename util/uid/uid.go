@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -38,7 +38,7 @@ func New(size int) (*UID, error) {
 	u := make([]byte, size)
 	_, err := rand.Read(u)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrRand{}, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrRand{}, "Failed reading crypto/rand")
 	}
 
 	return &UID{
@@ -57,7 +57,7 @@ func FromBytes(b []byte) *UID {
 func FromBase64(ustring string) (*UID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrInvalidUID{}, "Invalid uid string")
+		return nil, kerrors.WithKind(err, ErrInvalidUID{}, "Invalid uid string")
 	}
 	return FromBytes(b), nil
 }
@@ -90,7 +90,7 @@ func NewSnowflake(randsize int) (*Snowflake, error) {
 	binary.BigEndian.PutUint64(u[:timeSize], now)
 	_, err := rand.Read(u[timeSize:])
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrRand{}, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrRand{}, "Failed reading crypto/rand")
 	}
 	return &Snowflake{
 		u: u,
