@@ -58,6 +58,7 @@ events:
   hbmaxfail: 3
   minpullduration: 100ms
   apisecret: kv/data/infra/governor/eventsapi
+  apirefresh: 60
 template:
   dir: templates
 mail:

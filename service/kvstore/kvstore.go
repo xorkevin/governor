@@ -236,7 +236,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 
 func (s *service) handlePing(ctx context.Context) {
 	if s.client != nil {
-		_, err := s.client.Ping(context.Background()).Result()
+		_, err := s.client.Ping(ctx).Result()
 		if err == nil {
 			s.ready = true
 			s.hbfailed = 0
@@ -296,7 +296,7 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 		Password: secret.Password,
 		DB:       s.dbname,
 	})
-	if _, err := client.Ping(context.Background()).Result(); err != nil {
+	if _, err := client.Ping(ctx).Result(); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping kvstore")
 	}

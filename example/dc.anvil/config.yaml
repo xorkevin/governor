@@ -55,6 +55,7 @@ events:
   hbmaxfail: 3
   minpullduration: 100ms
   apisecret: eventsapisecret
+  apirefresh: 60
 template:
   dir: anvil_out/governor/governor/templates
 mail:
