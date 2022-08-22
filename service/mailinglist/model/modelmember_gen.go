@@ -3,32 +3,40 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func memberModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (listid VARCHAR(255), userid VARCHAR(31), PRIMARY KEY (listid, userid), last_updated BIGINT NOT NULL);")
+type (
+	memberModelTable struct {
+		TableName string
+	}
+)
+
+func (t *memberModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (listid VARCHAR(255), userid VARCHAR(31), PRIMARY KEY (listid, userid), last_updated BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__last_updated_index ON " + tableName + " (userid, last_updated);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__last_updated_index ON "+t.TableName+" (userid, last_updated);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsert(db *sql.DB, tableName string, m *MemberModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, userid, last_updated) VALUES ($1, $2, $3);", m.ListID, m.Userid, m.LastUpdated)
+func (t *memberModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *MemberModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, userid, last_updated) VALUES ($1, $2, $3);", m.ListID, m.Userid, m.LastUpdated)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, allowConflict bool) error {
+func (t *memberModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*MemberModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,19 +48,19 @@ func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, 
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.ListID, m.Userid, m.LastUpdated)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelDelEqListID(db *sql.DB, tableName string, listid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE listid = $1;", listid)
+func (t *memberModelTable) DelEqListID(ctx context.Context, d db.SQLExecutor, listid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE listid = $1;", listid)
 	return err
 }
 
-func memberModelGetMemberModelHasListIDOrdListID(db *sql.DB, tableName string, listid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelHasListIDOrdListID(ctx context.Context, d db.SQLExecutor, listid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(listid))
 	args = append(args, limit, offset)
@@ -71,7 +79,7 @@ func memberModelGetMemberModelHasListIDOrdListID(db *sql.DB, tableName string, l
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT listid, userid, last_updated FROM "+tableName+" WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT listid, userid, last_updated FROM "+t.TableName+" WHERE listid IN (VALUES "+placeholderslistid+") ORDER BY listid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,21 +100,21 @@ func memberModelGetMemberModelHasListIDOrdListID(db *sql.DB, tableName string, l
 	return res, nil
 }
 
-func memberModelGetMemberModelEqListIDEqUserid(db *sql.DB, tableName string, listid string, userid string) (*MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqListIDEqUserid(ctx context.Context, d db.SQLExecutor, listid string, userid string) (*MemberModel, error) {
 	m := &MemberModel{}
-	if err := db.QueryRow("SELECT listid, userid, last_updated FROM "+tableName+" WHERE listid = $1 AND userid = $2;", listid, userid).Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT listid, userid, last_updated FROM "+t.TableName+" WHERE listid = $1 AND userid = $2;", listid, userid).Scan(&m.ListID, &m.Userid, &m.LastUpdated); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func memberModelGetMemberModelEqListIDOrdUserid(db *sql.DB, tableName string, listid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqListIDOrdUserid(ctx context.Context, d db.SQLExecutor, listid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT listid, userid, last_updated FROM "+tableName+" WHERE listid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
+	rows, err := d.QueryContext(ctx, "SELECT listid, userid, last_updated FROM "+t.TableName+" WHERE listid = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +135,7 @@ func memberModelGetMemberModelEqListIDOrdUserid(db *sql.DB, tableName string, li
 	return res, nil
 }
 
-func memberModelGetMemberModelEqListIDHasUseridOrdUserid(db *sql.DB, tableName string, listid string, userid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqListIDHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, listid string, userid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, limit, offset, listid)
@@ -146,7 +154,7 @@ func memberModelGetMemberModelEqListIDHasUseridOrdUserid(db *sql.DB, tableName s
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT listid, userid, last_updated FROM "+tableName+" WHERE listid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT listid, userid, last_updated FROM "+t.TableName+" WHERE listid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +175,7 @@ func memberModelGetMemberModelEqListIDHasUseridOrdUserid(db *sql.DB, tableName s
 	return res, nil
 }
 
-func memberModelDelEqListIDHasUserid(db *sql.DB, tableName string, listid string, userid []string) error {
+func (t *memberModelTable) DelEqListIDHasUserid(ctx context.Context, d db.SQLExecutor, listid string, userid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, listid)
@@ -181,22 +189,22 @@ func memberModelDelEqListIDHasUserid(db *sql.DB, tableName string, listid string
 		}
 		placeholdersuserid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE listid = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE listid = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
 }
 
-func memberModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *memberModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT listid, userid, last_updated FROM "+tableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT listid, userid, last_updated FROM "+t.TableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +225,8 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName strin
 	return res, nil
 }
 
-func memberModelUpdlistLastUpdatedEqListID(db *sql.DB, tableName string, m *listLastUpdated, listid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
+func (t *memberModelTable) UpdlistLastUpdatedEqListID(ctx context.Context, d db.SQLExecutor, m *listLastUpdated, listid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (last_updated) = ROW($1) WHERE listid = $2;", m.LastUpdated, listid)
 	if err != nil {
 		return err
 	}

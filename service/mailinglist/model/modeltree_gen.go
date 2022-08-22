@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func treeModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (listid VARCHAR(255), msgid VARCHAR(1023), parent_id VARCHAR(1023), PRIMARY KEY (listid, msgid, parent_id), depth INT NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	treeModelTable struct {
+		TableName string
+	}
+)
+
+func (t *treeModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (listid VARCHAR(255), msgid VARCHAR(1023), parent_id VARCHAR(1023), PRIMARY KEY (listid, msgid, parent_id), depth INT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__msgid__depth_index ON " + tableName + " (listid, msgid, depth);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__msgid__depth_index ON "+t.TableName+" (listid, msgid, depth);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__parent_id__depth__creation_time_index ON " + tableName + " (listid, parent_id, depth, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__parent_id__depth__creation_time_index ON "+t.TableName+" (listid, parent_id, depth, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func treeModelInsert(db *sql.DB, tableName string, m *TreeModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, msgid, parent_id, depth, creation_time) VALUES ($1, $2, $3, $4, $5);", m.ListID, m.Msgid, m.ParentID, m.Depth, m.CreationTime)
+func (t *treeModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *TreeModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) VALUES ($1, $2, $3, $4, $5);", m.ListID, m.Msgid, m.ParentID, m.Depth, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func treeModelInsertBulk(db *sql.DB, tableName string, models []*TreeModel, allowConflict bool) error {
+func (t *treeModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*TreeModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,33 +52,33 @@ func treeModelInsertBulk(db *sql.DB, tableName string, models []*TreeModel, allo
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.ListID, m.Msgid, m.ParentID, m.Depth, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, msgid, parent_id, depth, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func treeModelDelEqListID(db *sql.DB, tableName string, listid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE listid = $1;", listid)
+func (t *treeModelTable) DelEqListID(ctx context.Context, d db.SQLExecutor, listid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE listid = $1;", listid)
 	return err
 }
 
-func treeModelGetTreeModelEqListIDEqMsgidEqParentID(db *sql.DB, tableName string, listid string, msgid string, parentid string) (*TreeModel, error) {
+func (t *treeModelTable) GetTreeModelEqListIDEqMsgidEqParentID(ctx context.Context, d db.SQLExecutor, listid string, msgid string, parentid string) (*TreeModel, error) {
 	m := &TreeModel{}
-	if err := db.QueryRow("SELECT listid, msgid, parent_id, depth, creation_time FROM "+tableName+" WHERE listid = $1 AND msgid = $2 AND parent_id = $3;", listid, msgid, parentid).Scan(&m.ListID, &m.Msgid, &m.ParentID, &m.Depth, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT listid, msgid, parent_id, depth, creation_time FROM "+t.TableName+" WHERE listid = $1 AND msgid = $2 AND parent_id = $3;", listid, msgid, parentid).Scan(&m.ListID, &m.Msgid, &m.ParentID, &m.Depth, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func treeModelGetTreeModelEqListIDEqMsgidOrdDepth(db *sql.DB, tableName string, listid string, msgid string, orderasc bool, limit, offset int) ([]TreeModel, error) {
+func (t *treeModelTable) GetTreeModelEqListIDEqMsgidOrdDepth(ctx context.Context, d db.SQLExecutor, listid string, msgid string, orderasc bool, limit, offset int) ([]TreeModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]TreeModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, parent_id, depth, creation_time FROM "+tableName+" WHERE listid = $3 AND msgid = $4 ORDER BY depth "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, msgid)
+	rows, err := d.QueryContext(ctx, "SELECT listid, msgid, parent_id, depth, creation_time FROM "+t.TableName+" WHERE listid = $3 AND msgid = $4 ORDER BY depth "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, msgid)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +99,13 @@ func treeModelGetTreeModelEqListIDEqMsgidOrdDepth(db *sql.DB, tableName string, 
 	return res, nil
 }
 
-func treeModelGetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(db *sql.DB, tableName string, listid string, parentid string, depth int, orderasc bool, limit, offset int) ([]TreeModel, error) {
+func (t *treeModelTable) GetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(ctx context.Context, d db.SQLExecutor, listid string, parentid string, depth int, orderasc bool, limit, offset int) ([]TreeModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]TreeModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, parent_id, depth, creation_time FROM "+tableName+" WHERE listid = $3 AND parent_id = $4 AND depth = $5 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, parentid, depth)
+	rows, err := d.QueryContext(ctx, "SELECT listid, msgid, parent_id, depth, creation_time FROM "+t.TableName+" WHERE listid = $3 AND parent_id = $4 AND depth = $5 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, parentid, depth)
 	if err != nil {
 		return nil, err
 	}

@@ -3,28 +3,36 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func serverModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (serverid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, desc VARCHAR(255), theme VARCHAR(4095) NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	serverModelTable struct {
+		TableName string
+	}
+)
+
+func (t *serverModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (serverid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, desc VARCHAR(255), theme VARCHAR(4095) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func serverModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, name, desc, theme, creation_time) VALUES ($1, $2, $3, $4, $5);", m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime)
+func (t *serverModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, name, desc, theme, creation_time) VALUES ($1, $2, $3, $4, $5);", m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func serverModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *serverModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -36,30 +44,30 @@ func serverModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowC
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, name, desc, theme, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, name, desc, theme, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func serverModelGetModelEqServerID(db *sql.DB, tableName string, serverid string) (*Model, error) {
+func (t *serverModelTable) GetModelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT serverid, name, desc, theme, creation_time FROM "+tableName+" WHERE serverid = $1;", serverid).Scan(&m.ServerID, &m.Name, &m.Desc, &m.Theme, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT serverid, name, desc, theme, creation_time FROM "+t.TableName+" WHERE serverid = $1;", serverid).Scan(&m.ServerID, &m.Name, &m.Desc, &m.Theme, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func serverModelUpdModelEqServerID(db *sql.DB, tableName string, m *Model, serverid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (serverid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5) WHERE serverid = $6;", m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime, serverid)
+func (t *serverModelTable) UpdModelEqServerID(ctx context.Context, d db.SQLExecutor, m *Model, serverid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (serverid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5) WHERE serverid = $6;", m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime, serverid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func serverModelDelEqServerID(db *sql.DB, tableName string, serverid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1;", serverid)
+func (t *serverModelTable) DelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1;", serverid)
 	return err
 }

@@ -3,28 +3,36 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func profileModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
+type (
+	profileModelTable struct {
+		TableName string
+	}
+)
+
+func (t *profileModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31) PRIMARY KEY, contact_email VARCHAR(255), bio VARCHAR(4095), profile_image_url VARCHAR(4095));")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func profileModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", m.Userid, m.Email, m.Bio, m.Image)
+func (t *profileModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, contact_email, bio, profile_image_url) VALUES ($1, $2, $3, $4);", m.Userid, m.Email, m.Bio, m.Image)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func profileModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *profileModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -36,22 +44,22 @@ func profileModelInsertBulk(db *sql.DB, tableName string, models []*Model, allow
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
 		args = append(args, m.Userid, m.Email, m.Bio, m.Image)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, contact_email, bio, profile_image_url) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, contact_email, bio, profile_image_url) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func profileModelGetModelEqUserid(db *sql.DB, tableName string, userid string) (*Model, error) {
+func (t *profileModelTable) GetModelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, contact_email, bio, profile_image_url FROM "+tableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, contact_email, bio, profile_image_url FROM "+t.TableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func profileModelGetModelHasUseridOrdUserid(db *sql.DB, tableName string, userid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *profileModelTable) GetModelHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, limit, offset)
@@ -70,7 +78,7 @@ func profileModelGetModelHasUseridOrdUserid(db *sql.DB, tableName string, userid
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, contact_email, bio, profile_image_url FROM "+tableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, contact_email, bio, profile_image_url FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,15 +99,15 @@ func profileModelGetModelHasUseridOrdUserid(db *sql.DB, tableName string, userid
 	return res, nil
 }
 
-func profileModelUpdModelEqUserid(db *sql.DB, tableName string, m *Model, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid, contact_email, bio, profile_image_url) = ROW($1, $2, $3, $4) WHERE userid = $5;", m.Userid, m.Email, m.Bio, m.Image, userid)
+func (t *profileModelTable) UpdModelEqUserid(ctx context.Context, d db.SQLExecutor, m *Model, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, contact_email, bio, profile_image_url) = ROW($1, $2, $3, $4) WHERE userid = $5;", m.Userid, m.Email, m.Bio, m.Image, userid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func profileModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *profileModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }

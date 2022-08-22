@@ -3,28 +3,36 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func gdmModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	gdmModelTable struct {
+		TableName string
+	}
+)
+
+func (t *gdmModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (chatid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func gdmModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5);", m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
+func (t *gdmModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (chatid, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5);", m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func gdmModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *gdmModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -36,22 +44,22 @@ func gdmModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConf
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (chatid, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func gdmModelGetModelEqChatid(db *sql.DB, tableName string, chatid string) (*Model, error) {
+func (t *gdmModelTable) GetModelEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid = $1;", chatid).Scan(&m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func gdmModelGetModelHasChatidOrdChatid(db *sql.DB, tableName string, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *gdmModelTable) GetModelHasChatidOrdChatid(ctx context.Context, d db.SQLExecutor, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))
 	args = append(args, limit, offset)
@@ -70,7 +78,7 @@ func gdmModelGetModelHasChatidOrdChatid(db *sql.DB, tableName string, chatid []s
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,21 +99,21 @@ func gdmModelGetModelHasChatidOrdChatid(db *sql.DB, tableName string, chatid []s
 	return res, nil
 }
 
-func gdmModelUpdModelEqChatid(db *sql.DB, tableName string, m *Model, chatid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (chatid, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5) WHERE chatid = $6;", m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime, chatid)
+func (t *gdmModelTable) UpdModelEqChatid(ctx context.Context, d db.SQLExecutor, m *Model, chatid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (chatid, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5) WHERE chatid = $6;", m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime, chatid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func gdmModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1;", chatid)
+func (t *gdmModelTable) DelEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE chatid = $1;", chatid)
 	return err
 }
 
-func gdmModelUpdmodelLastUpdatedEqChatid(db *sql.DB, tableName string, m *modelLastUpdated, chatid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+func (t *gdmModelTable) UpdmodelLastUpdatedEqChatid(ctx context.Context, d db.SQLExecutor, m *modelLastUpdated, chatid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
 		return err
 	}

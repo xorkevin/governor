@@ -3,40 +3,48 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func invModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role), invited_by VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	invModelTable struct {
+		TableName string
+	}
+)
+
+func (t *invModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role), invited_by VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__creation_time_index ON " + tableName + " (userid, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__creation_time_index ON "+t.TableName+" (userid, creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_role__creation_time_index ON " + tableName + " (role, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_role__creation_time_index ON "+t.TableName+" (role, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role, invited_by, creation_time) VALUES ($1, $2, $3, $4);", m.Userid, m.Role, m.InvitedBy, m.CreationTime)
+func (t *invModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, role, invited_by, creation_time) VALUES ($1, $2, $3, $4);", m.Userid, m.Role, m.InvitedBy, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *invModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -48,27 +56,27 @@ func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConf
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
 		args = append(args, m.Userid, m.Role, m.InvitedBy, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, role, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelGetModelEqUseridEqRoleGtCreationTime(db *sql.DB, tableName string, userid string, role string, creationtime int64) (*Model, error) {
+func (t *invModelTable) GetModelEqUseridEqRoleGtCreationTime(ctx context.Context, d db.SQLExecutor, userid string, role string, creationtime int64) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE userid = $1 AND role = $2 AND creation_time > $3;", userid, role, creationtime).Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, role, invited_by, creation_time FROM "+t.TableName+" WHERE userid = $1 AND role = $2 AND creation_time > $3;", userid, role, creationtime).Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func invModelDelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role)
+func (t *invModelTable) DelEqUseridEqRole(ctx context.Context, d db.SQLExecutor, userid string, role string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role = $2;", userid, role)
 	return err
 }
 
-func invModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, role []string) error {
+func (t *invModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, role []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, userid)
@@ -82,22 +90,22 @@ func invModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, rol
 		}
 		placeholdersrole = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
 	return err
 }
 
-func invModelDelEqRole(db *sql.DB, tableName string, role string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE role = $1;", role)
+func (t *invModelTable) DelEqRole(ctx context.Context, d db.SQLExecutor, role string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE role = $1;", role)
 	return err
 }
 
-func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *invModelTable) GetModelEqUseridGtCreationTimeOrdCreationTime(ctx context.Context, d db.SQLExecutor, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role, invited_by, creation_time FROM "+t.TableName+" WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -118,13 +126,13 @@ func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName
 	return res, nil
 }
 
-func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, role string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *invModelTable) GetModelEqRoleGtCreationTimeOrdCreationTime(ctx context.Context, d db.SQLExecutor, role string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role, invited_by, creation_time FROM "+tableName+" WHERE role = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, role, creationtime)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role, invited_by, creation_time FROM "+t.TableName+" WHERE role = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, role, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +153,7 @@ func invModelGetModelEqRoleGtCreationTimeOrdCreationTime(db *sql.DB, tableName s
 	return res, nil
 }
 
-func invModelDelLeqCreationTime(db *sql.DB, tableName string, creationtime int64) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creation_time <= $1;", creationtime)
+func (t *invModelTable) DelLeqCreationTime(ctx context.Context, d db.SQLExecutor, creationtime int64) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creation_time <= $1;", creationtime)
 	return err
 }

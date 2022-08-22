@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func linkModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	linkModelTable struct {
+		TableName string
+	}
+)
+
+func (t *linkModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (linkid VARCHAR(63) PRIMARY KEY, url VARCHAR(2047) NOT NULL, creatorid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creatorid__creation_time_index ON " + tableName + " (creatorid, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creatorid__creation_time_index ON "+t.TableName+" (creatorid, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func linkModelInsert(db *sql.DB, tableName string, m *LinkModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (linkid, url, creatorid, creation_time) VALUES ($1, $2, $3, $4);", m.LinkID, m.URL, m.CreatorID, m.CreationTime)
+func (t *linkModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *LinkModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (linkid, url, creatorid, creation_time) VALUES ($1, $2, $3, $4);", m.LinkID, m.URL, m.CreatorID, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func linkModelInsertBulk(db *sql.DB, tableName string, models []*LinkModel, allowConflict bool) error {
+func (t *linkModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*LinkModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,27 +52,27 @@ func linkModelInsertBulk(db *sql.DB, tableName string, models []*LinkModel, allo
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
 		args = append(args, m.LinkID, m.URL, m.CreatorID, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (linkid, url, creatorid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (linkid, url, creatorid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func linkModelGetLinkModelEqLinkID(db *sql.DB, tableName string, linkid string) (*LinkModel, error) {
+func (t *linkModelTable) GetLinkModelEqLinkID(ctx context.Context, d db.SQLExecutor, linkid string) (*LinkModel, error) {
 	m := &LinkModel{}
-	if err := db.QueryRow("SELECT linkid, url, creatorid, creation_time FROM "+tableName+" WHERE linkid = $1;", linkid).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT linkid, url, creatorid, creation_time FROM "+t.TableName+" WHERE linkid = $1;", linkid).Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func linkModelDelEqLinkID(db *sql.DB, tableName string, linkid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE linkid = $1;", linkid)
+func (t *linkModelTable) DelEqLinkID(ctx context.Context, d db.SQLExecutor, linkid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE linkid = $1;", linkid)
 	return err
 }
 
-func linkModelDelHasLinkID(db *sql.DB, tableName string, linkid []string) error {
+func (t *linkModelTable) DelHasLinkID(ctx context.Context, d db.SQLExecutor, linkid []string) error {
 	paramCount := 0
 	args := make([]interface{}, 0, paramCount+len(linkid))
 	var placeholderslinkid string
@@ -77,17 +85,17 @@ func linkModelDelHasLinkID(db *sql.DB, tableName string, linkid []string) error 
 		}
 		placeholderslinkid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE linkid IN (VALUES "+placeholderslinkid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE linkid IN (VALUES "+placeholderslinkid+");", args...)
 	return err
 }
 
-func linkModelGetLinkModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]LinkModel, error) {
+func (t *linkModelTable) GetLinkModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]LinkModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]LinkModel, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT linkid, url, creatorid, creation_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -108,13 +116,13 @@ func linkModelGetLinkModelOrdCreationTime(db *sql.DB, tableName string, orderasc
 	return res, nil
 }
 
-func linkModelGetLinkModelEqCreatorIDOrdCreationTime(db *sql.DB, tableName string, creatorid string, orderasc bool, limit, offset int) ([]LinkModel, error) {
+func (t *linkModelTable) GetLinkModelEqCreatorIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, creatorid string, orderasc bool, limit, offset int) ([]LinkModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]LinkModel, 0, limit)
-	rows, err := db.Query("SELECT linkid, url, creatorid, creation_time FROM "+tableName+" WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := d.QueryContext(ctx, "SELECT linkid, url, creatorid, creation_time FROM "+t.TableName+" WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}

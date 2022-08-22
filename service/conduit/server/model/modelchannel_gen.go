@@ -3,28 +3,36 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func channelModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (serverid VARCHAR(31), channelid VARCHAR(31), PRIMARY KEY (serverid, channelid), chatid VARCHAR(31) UNIQUE, name VARCHAR(255) NOT NULL, desc VARCHAR(255), theme VARCHAR(4095) NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	channelModelTable struct {
+		TableName string
+	}
+)
+
+func (t *channelModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (serverid VARCHAR(31), channelid VARCHAR(31), PRIMARY KEY (serverid, channelid), chatid VARCHAR(31) UNIQUE, name VARCHAR(255) NOT NULL, desc VARCHAR(255), theme VARCHAR(4095) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func channelModelInsert(db *sql.DB, tableName string, m *ChannelModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, channelid, chatid, name, desc, theme, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime)
+func (t *channelModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *ChannelModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, channelid, chatid, name, desc, theme, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func channelModelInsertBulk(db *sql.DB, tableName string, models []*ChannelModel, allowConflict bool) error {
+func (t *channelModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*ChannelModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -36,33 +44,33 @@ func channelModelInsertBulk(db *sql.DB, tableName string, models []*ChannelModel
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
 		args = append(args, m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, channelid, chatid, name, desc, theme, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, channelid, chatid, name, desc, theme, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func channelModelDelEqServerID(db *sql.DB, tableName string, serverid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1;", serverid)
+func (t *channelModelTable) DelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1;", serverid)
 	return err
 }
 
-func channelModelGetChannelModelEqServerIDEqChannelID(db *sql.DB, tableName string, serverid string, channelid string) (*ChannelModel, error) {
+func (t *channelModelTable) GetChannelModelEqServerIDEqChannelID(ctx context.Context, d db.SQLExecutor, serverid string, channelid string) (*ChannelModel, error) {
 	m := &ChannelModel{}
-	if err := db.QueryRow("SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+tableName+" WHERE serverid = $1 AND channelid = $2;", serverid, channelid).Scan(&m.ServerID, &m.ChannelID, &m.Chatid, &m.Name, &m.Desc, &m.Theme, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+t.TableName+" WHERE serverid = $1 AND channelid = $2;", serverid, channelid).Scan(&m.ServerID, &m.ChannelID, &m.Chatid, &m.Name, &m.Desc, &m.Theme, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func channelModelGetChannelModelEqServerIDOrdChannelID(db *sql.DB, tableName string, serverid string, orderasc bool, limit, offset int) ([]ChannelModel, error) {
+func (t *channelModelTable) GetChannelModelEqServerIDOrdChannelID(ctx context.Context, d db.SQLExecutor, serverid string, orderasc bool, limit, offset int) ([]ChannelModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]ChannelModel, 0, limit)
-	rows, err := db.Query("SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+tableName+" WHERE serverid = $3 ORDER BY channelid "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid)
+	rows, err := d.QueryContext(ctx, "SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+t.TableName+" WHERE serverid = $3 ORDER BY channelid "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +91,13 @@ func channelModelGetChannelModelEqServerIDOrdChannelID(db *sql.DB, tableName str
 	return res, nil
 }
 
-func channelModelGetChannelModelEqServerIDLikeChannelIDOrdChannelID(db *sql.DB, tableName string, serverid string, channelid string, orderasc bool, limit, offset int) ([]ChannelModel, error) {
+func (t *channelModelTable) GetChannelModelEqServerIDLikeChannelIDOrdChannelID(ctx context.Context, d db.SQLExecutor, serverid string, channelid string, orderasc bool, limit, offset int) ([]ChannelModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]ChannelModel, 0, limit)
-	rows, err := db.Query("SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+tableName+" WHERE serverid = $3 AND channelid LIKE $4 ORDER BY channelid "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid, channelid)
+	rows, err := d.QueryContext(ctx, "SELECT serverid, channelid, chatid, name, desc, theme, creation_time FROM "+t.TableName+" WHERE serverid = $3 AND channelid LIKE $4 ORDER BY channelid "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid, channelid)
 	if err != nil {
 		return nil, err
 	}
@@ -110,15 +118,15 @@ func channelModelGetChannelModelEqServerIDLikeChannelIDOrdChannelID(db *sql.DB, 
 	return res, nil
 }
 
-func channelModelUpdChannelModelEqServerIDEqChannelID(db *sql.DB, tableName string, m *ChannelModel, serverid string, channelid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (serverid, channelid, chatid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE serverid = $8 AND channelid = $9;", m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime, serverid, channelid)
+func (t *channelModelTable) UpdChannelModelEqServerIDEqChannelID(ctx context.Context, d db.SQLExecutor, m *ChannelModel, serverid string, channelid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (serverid, channelid, chatid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE serverid = $8 AND channelid = $9;", m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime, serverid, channelid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func channelModelDelEqServerIDHasChannelID(db *sql.DB, tableName string, serverid string, channelid []string) error {
+func (t *channelModelTable) DelEqServerIDHasChannelID(ctx context.Context, d db.SQLExecutor, serverid string, channelid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(channelid))
 	args = append(args, serverid)
@@ -132,6 +140,6 @@ func channelModelDelEqServerIDHasChannelID(db *sql.DB, tableName string, serveri
 		}
 		placeholderschannelid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1 AND channelid IN (VALUES "+placeholderschannelid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1 AND channelid IN (VALUES "+placeholderschannelid+");", args...)
 	return err
 }

@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func oauthappModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31) NOT NULL);")
+type (
+	oauthappModelTable struct {
+		TableName string
+	}
+)
+
+func (t *oauthappModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (clientid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL, url VARCHAR(512) NOT NULL, redirect_uri VARCHAR(512) NOT NULL, logo VARCHAR(4095), keyhash VARCHAR(255) NOT NULL, time BIGINT NOT NULL, creation_time BIGINT NOT NULL, creator_id VARCHAR(31) NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creator_id__creation_time_index ON " + tableName + " (creator_id, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creator_id__creation_time_index ON "+t.TableName+" (creator_id, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func oauthappModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID)
+func (t *oauthappModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func oauthappModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *oauthappModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,22 +52,22 @@ func oauthappModelInsertBulk(db *sql.DB, tableName string, models []*Model, allo
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9))
 		args = append(args, m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func oauthappModelGetModelEqClientID(db *sql.DB, tableName string, clientid string) (*Model, error) {
+func (t *oauthappModelTable) GetModelEqClientID(ctx context.Context, d db.SQLExecutor, clientid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+tableName+" WHERE clientid = $1;", clientid).Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" WHERE clientid = $1;", clientid).Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, tableName string, clientid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *oauthappModelTable) GetModelHasClientIDOrdClientID(ctx context.Context, d db.SQLExecutor, clientid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(clientid))
 	args = append(args, limit, offset)
@@ -78,7 +86,7 @@ func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, tableName string, c
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+tableName+" WHERE clientid IN (VALUES "+placeholdersclientid+") ORDER BY clientid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" WHERE clientid IN (VALUES "+placeholdersclientid+") ORDER BY clientid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,26 +107,26 @@ func oauthappModelGetModelHasClientIDOrdClientID(db *sql.DB, tableName string, c
 	return res, nil
 }
 
-func oauthappModelUpdModelEqClientID(db *sql.DB, tableName string, m *Model, clientid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE clientid = $10;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID, clientid)
+func (t *oauthappModelTable) UpdModelEqClientID(ctx context.Context, d db.SQLExecutor, m *Model, clientid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE clientid = $10;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID, clientid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func oauthappModelDelEqClientID(db *sql.DB, tableName string, clientid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE clientid = $1;", clientid)
+func (t *oauthappModelTable) DelEqClientID(ctx context.Context, d db.SQLExecutor, clientid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE clientid = $1;", clientid)
 	return err
 }
 
-func oauthappModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *oauthappModelTable) GetModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -139,13 +147,13 @@ func oauthappModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc
 	return res, nil
 }
 
-func oauthappModelGetModelEqCreatorIDOrdCreationTime(db *sql.DB, tableName string, creatorid string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *oauthappModelTable) GetModelEqCreatorIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, creatorid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+tableName+" WHERE creator_id = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := d.QueryContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" WHERE creator_id = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +174,7 @@ func oauthappModelGetModelEqCreatorIDOrdCreationTime(db *sql.DB, tableName strin
 	return res, nil
 }
 
-func oauthappModelDelEqCreatorID(db *sql.DB, tableName string, creatorid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creator_id = $1;", creatorid)
+func (t *oauthappModelTable) DelEqCreatorID(ctx context.Context, d db.SQLExecutor, creatorid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creator_id = $1;", creatorid)
 	return err
 }

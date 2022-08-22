@@ -3,32 +3,40 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func approvalModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, approved BOOL NOT NULL, code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL);")
+type (
+	approvalModelTable struct {
+		TableName string
+	}
+)
+
+func (t *approvalModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL, pass_hash VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, approved BOOL NOT NULL, code_hash VARCHAR(255) NOT NULL, code_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func approvalModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, m.Approved, m.CodeHash, m.CodeTime)
+func (t *approvalModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, m.Approved, m.CodeHash, m.CodeTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func approvalModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *approvalModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,41 +48,41 @@ func approvalModelInsertBulk(db *sql.DB, tableName string, models []*Model, allo
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10))
 		args = append(args, m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, m.Approved, m.CodeHash, m.CodeTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func approvalModelGetModelEqUserid(db *sql.DB, tableName string, userid string) (*Model, error) {
+func (t *approvalModelTable) GetModelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time FROM "+tableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.Approved, &m.CodeHash, &m.CodeTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time FROM "+t.TableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.Approved, &m.CodeHash, &m.CodeTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func approvalModelUpdModelEqUserid(db *sql.DB, tableName string, m *Model, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE userid = $11;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, m.Approved, m.CodeHash, m.CodeTime, userid)
+func (t *approvalModelTable) UpdModelEqUserid(ctx context.Context, d db.SQLExecutor, m *Model, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE userid = $11;", m.Userid, m.Username, m.PassHash, m.Email, m.FirstName, m.LastName, m.CreationTime, m.Approved, m.CodeHash, m.CodeTime, userid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func approvalModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *approvalModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func approvalModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *approvalModelTable) GetModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, pass_hash, email, first_name, last_name, creation_time, approved, code_hash, code_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +103,7 @@ func approvalModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc
 	return res, nil
 }
 
-func approvalModelDelLtCreationTime(db *sql.DB, tableName string, creationtime int64) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creation_time < $1;", creationtime)
+func (t *approvalModelTable) DelLtCreationTime(ctx context.Context, d db.SQLExecutor, creationtime int64) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creation_time < $1;", creationtime)
 	return err
 }

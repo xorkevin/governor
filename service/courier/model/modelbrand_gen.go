@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func brandModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
+type (
+	brandModelTable struct {
+		TableName string
+	}
+)
+
+func (t *brandModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (creatorid VARCHAR(31), brandid VARCHAR(63), PRIMARY KEY (creatorid, brandid), creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creatorid__creation_time_index ON " + tableName + " (creatorid, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creatorid__creation_time_index ON "+t.TableName+" (creatorid, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelInsert(db *sql.DB, tableName string, m *BrandModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
+func (t *brandModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *BrandModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (creatorid, brandid, creation_time) VALUES ($1, $2, $3);", m.CreatorID, m.BrandID, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelInsertBulk(db *sql.DB, tableName string, models []*BrandModel, allowConflict bool) error {
+func (t *brandModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*BrandModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,27 +52,27 @@ func brandModelInsertBulk(db *sql.DB, tableName string, models []*BrandModel, al
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.CreatorID, m.BrandID, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (creatorid, brandid, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func brandModelGetBrandModelEqCreatorIDEqBrandID(db *sql.DB, tableName string, creatorid string, brandid string) (*BrandModel, error) {
+func (t *brandModelTable) GetBrandModelEqCreatorIDEqBrandID(ctx context.Context, d db.SQLExecutor, creatorid string, brandid string) (*BrandModel, error) {
 	m := &BrandModel{}
-	if err := db.QueryRow("SELECT creatorid, brandid, creation_time FROM "+tableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT creatorid, brandid, creation_time FROM "+t.TableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid).Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func brandModelDelEqCreatorIDEqBrandID(db *sql.DB, tableName string, creatorid string, brandid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid)
+func (t *brandModelTable) DelEqCreatorIDEqBrandID(ctx context.Context, d db.SQLExecutor, creatorid string, brandid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creatorid = $1 AND brandid = $2;", creatorid, brandid)
 	return err
 }
 
-func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, tableName string, creatorid string, brandid []string) error {
+func (t *brandModelTable) DelEqCreatorIDHasBrandID(ctx context.Context, d db.SQLExecutor, creatorid string, brandid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(brandid))
 	args = append(args, creatorid)
@@ -78,17 +86,17 @@ func brandModelDelEqCreatorIDHasBrandID(db *sql.DB, tableName string, creatorid 
 		}
 		placeholdersbrandid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creatorid = $1 AND brandid IN (VALUES "+placeholdersbrandid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creatorid = $1 AND brandid IN (VALUES "+placeholdersbrandid+");", args...)
 	return err
 }
 
-func brandModelGetBrandModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]BrandModel, error) {
+func (t *brandModelTable) GetBrandModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT creatorid, brandid, creation_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +117,13 @@ func brandModelGetBrandModelOrdCreationTime(db *sql.DB, tableName string, ordera
 	return res, nil
 }
 
-func brandModelGetBrandModelEqCreatorIDOrdCreationTime(db *sql.DB, tableName string, creatorid string, orderasc bool, limit, offset int) ([]BrandModel, error) {
+func (t *brandModelTable) GetBrandModelEqCreatorIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, creatorid string, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]BrandModel, 0, limit)
-	rows, err := db.Query("SELECT creatorid, brandid, creation_time FROM "+tableName+" WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
+	rows, err := d.QueryContext(ctx, "SELECT creatorid, brandid, creation_time FROM "+t.TableName+" WHERE creatorid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, creatorid)
 	if err != nil {
 		return nil, err
 	}

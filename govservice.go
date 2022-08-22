@@ -91,7 +91,7 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 		"phase": "setup",
 	})
 	if !s.hasFirstSetupRun() {
-		m, err := s.state.Get()
+		m, err := s.state.Get(ctx)
 		if err != nil {
 			return ErrWithRes(err, http.StatusInternalServerError, "", "Failed to get state")
 		}
@@ -149,7 +149,7 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 	}
 
 	if rsetup.First {
-		if err := s.state.Setup(state.ReqSetup{
+		if err := s.state.Setup(context.Background(), state.ReqSetup{
 			Version: s.config.version.Num,
 			VHash:   s.config.version.Hash,
 		}); err != nil {

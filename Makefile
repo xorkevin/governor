@@ -34,7 +34,7 @@ bench: ## Run benchmarks
 
 .PHONY: fmt vet prepare
 
-fmt: ## Run go fmt
+fmt: ## Format code
 	goimports -w .
 
 vet: ## Lint code

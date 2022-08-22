@@ -3,32 +3,40 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func presenceModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (serverid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (serverid, userid), last_updated BIGINT NOT NULL);")
+type (
+	presenceModelTable struct {
+		TableName string
+	}
+)
+
+func (t *presenceModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (serverid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (serverid, userid), last_updated BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_serverid__last_updated_index ON " + tableName + " (serverid, last_updated);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_serverid__last_updated_index ON "+t.TableName+" (serverid, last_updated);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func presenceModelInsert(db *sql.DB, tableName string, m *PresenceModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, userid, last_updated) VALUES ($1, $2, $3);", m.ServerID, m.Userid, m.LastUpdated)
+func (t *presenceModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *PresenceModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, userid, last_updated) VALUES ($1, $2, $3);", m.ServerID, m.Userid, m.LastUpdated)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func presenceModelInsertBulk(db *sql.DB, tableName string, models []*PresenceModel, allowConflict bool) error {
+func (t *presenceModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*PresenceModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,25 +48,25 @@ func presenceModelInsertBulk(db *sql.DB, tableName string, models []*PresenceMod
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.ServerID, m.Userid, m.LastUpdated)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (serverid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func presenceModelDelEqServerID(db *sql.DB, tableName string, serverid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1;", serverid)
+func (t *presenceModelTable) DelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1;", serverid)
 	return err
 }
 
-func presenceModelGetPresenceModelEqServerIDGtLastUpdatedOrdLastUpdated(db *sql.DB, tableName string, serverid string, lastupdated int64, orderasc bool, limit, offset int) ([]PresenceModel, error) {
+func (t *presenceModelTable) GetPresenceModelEqServerIDGtLastUpdatedOrdLastUpdated(ctx context.Context, d db.SQLExecutor, serverid string, lastupdated int64, orderasc bool, limit, offset int) ([]PresenceModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]PresenceModel, 0, limit)
-	rows, err := db.Query("SELECT serverid, userid, last_updated FROM "+tableName+" WHERE serverid = $3 AND last_updated > $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid, lastupdated)
+	rows, err := d.QueryContext(ctx, "SELECT serverid, userid, last_updated FROM "+t.TableName+" WHERE serverid = $3 AND last_updated > $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, serverid, lastupdated)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +87,7 @@ func presenceModelGetPresenceModelEqServerIDGtLastUpdatedOrdLastUpdated(db *sql.
 	return res, nil
 }
 
-func presenceModelDelEqServerIDLeqLastUpdated(db *sql.DB, tableName string, serverid string, lastupdated int64) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE serverid = $1 AND last_updated <= $2;", serverid, lastupdated)
+func (t *presenceModelTable) DelEqServerIDLeqLastUpdated(ctx context.Context, d db.SQLExecutor, serverid string, lastupdated int64) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1 AND last_updated <= $2;", serverid, lastupdated)
 	return err
 }

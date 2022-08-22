@@ -3,32 +3,40 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func orgModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	orgModelTable struct {
+		TableName string
+	}
+)
+
+func (t *orgModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (orgid VARCHAR(31) PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, description VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, name, display_name, description, creation_time) VALUES ($1, $2, $3, $4, $5);", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
+func (t *orgModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, name, display_name, description, creation_time) VALUES ($1, $2, $3, $4, $5);", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *orgModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,22 +48,22 @@ func orgModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConf
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, name, display_name, description, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, name, display_name, description, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelGetModelEqOrgID(db *sql.DB, tableName string, orgid string) (*Model, error) {
+func (t *orgModelTable) GetModelEqOrgID(ctx context.Context, d db.SQLExecutor, orgid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE orgid = $1;", orgid).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" WHERE orgid = $1;", orgid).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, tableName string, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *orgModelTable) GetModelHasOrgIDOrdOrgID(ctx context.Context, d db.SQLExecutor, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(orgid))
 	args = append(args, limit, offset)
@@ -74,7 +82,7 @@ func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, tableName string, orgid []stri
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,34 +103,34 @@ func orgModelGetModelHasOrgIDOrdOrgID(db *sql.DB, tableName string, orgid []stri
 	return res, nil
 }
 
-func orgModelUpdModelEqOrgID(db *sql.DB, tableName string, m *Model, orgid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
+func (t *orgModelTable) UpdModelEqOrgID(ctx context.Context, d db.SQLExecutor, m *Model, orgid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (orgid, name, display_name, description, creation_time) = ROW($1, $2, $3, $4, $5) WHERE orgid = $6;", m.OrgID, m.Name, m.DisplayName, m.Desc, m.CreationTime, orgid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func orgModelDelEqOrgID(db *sql.DB, tableName string, orgid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE orgid = $1;", orgid)
+func (t *orgModelTable) DelEqOrgID(ctx context.Context, d db.SQLExecutor, orgid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE orgid = $1;", orgid)
 	return err
 }
 
-func orgModelGetModelEqName(db *sql.DB, tableName string, name string) (*Model, error) {
+func (t *orgModelTable) GetModelEqName(ctx context.Context, d db.SQLExecutor, name string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" WHERE name = $1;", name).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" WHERE name = $1;", name).Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func orgModelGetModelOrdCreationTime(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *orgModelTable) GetModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT orgid, name, display_name, description, creation_time FROM "+tableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}

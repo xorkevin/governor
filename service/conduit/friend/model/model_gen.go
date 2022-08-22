@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func friendModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid_1 VARCHAR(31), userid_2 VARCHAR(31), PRIMARY KEY (userid_1, userid_2), username VARCHAR(255) NOT NULL);")
+type (
+	friendModelTable struct {
+		TableName string
+	}
+)
+
+func (t *friendModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid_1 VARCHAR(31), userid_2 VARCHAR(31), PRIMARY KEY (userid_1, userid_2), username VARCHAR(255) NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_2_index ON " + tableName + " (userid_2);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_2_index ON "+t.TableName+" (userid_2);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_1__username_index ON " + tableName + " (userid_1, username);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_1__username_index ON "+t.TableName+" (userid_1, username);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func friendModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid_1, userid_2, username) VALUES ($1, $2, $3);", m.Userid1, m.Userid2, m.Username)
+func (t *friendModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid_1, userid_2, username) VALUES ($1, $2, $3);", m.Userid1, m.Userid2, m.Username)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func friendModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *friendModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,22 +52,22 @@ func friendModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowC
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.Userid1, m.Userid2, m.Username)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid_1, userid_2, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid_1, userid_2, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func friendModelGetModelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1 string, userid2 string) (*Model, error) {
+func (t *friendModelTable) GetModelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2).Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2).Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func friendModelGetModelEqUserid1HasUserid2OrdUserid2(db *sql.DB, tableName string, userid1 string, userid2 []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *friendModelTable) GetModelEqUserid1HasUserid2OrdUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(userid2))
 	args = append(args, limit, offset, userid1)
@@ -78,7 +86,7 @@ func friendModelGetModelEqUserid1HasUserid2OrdUserid2(db *sql.DB, tableName stri
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 AND userid_2 IN (VALUES "+placeholdersuserid2+") ORDER BY userid_2 "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND userid_2 IN (VALUES "+placeholdersuserid2+") ORDER BY userid_2 "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +107,13 @@ func friendModelGetModelEqUserid1HasUserid2OrdUserid2(db *sql.DB, tableName stri
 	return res, nil
 }
 
-func friendModelGetModelEqUserid1OrdUsername(db *sql.DB, tableName string, userid1 string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *friendModelTable) GetModelEqUserid1OrdUsername(ctx context.Context, d db.SQLExecutor, userid1 string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1)
 	if err != nil {
 		return nil, err
 	}
@@ -126,13 +134,13 @@ func friendModelGetModelEqUserid1OrdUsername(db *sql.DB, tableName string, useri
 	return res, nil
 }
 
-func friendModelGetModelEqUserid1LikeUsernameOrdUsername(db *sql.DB, tableName string, userid1 string, username string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *friendModelTable) GetModelEqUserid1LikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, userid1 string, username string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid_1, userid_2, username FROM "+tableName+" WHERE userid_1 = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, username)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, username)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +161,8 @@ func friendModelGetModelEqUserid1LikeUsernameOrdUsername(db *sql.DB, tableName s
 	return res, nil
 }
 
-func friendModelUpdfriendUsernameEqUserid2(db *sql.DB, tableName string, m *friendUsername, userid2 string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (username) = ROW($1) WHERE userid_2 = $2;", m.Username, userid2)
+func (t *friendModelTable) UpdfriendUsernameEqUserid2(ctx context.Context, d db.SQLExecutor, m *friendUsername, userid2 string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (username) = ROW($1) WHERE userid_2 = $2;", m.Username, userid2)
 	if err != nil {
 		return err
 	}

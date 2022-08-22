@@ -1,11 +1,13 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/state"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p state -o model_gen.go Model
@@ -16,7 +18,7 @@ const (
 
 type (
 	repo struct {
-		table string
+		table *stateModelTable
 		db    db.Database
 	}
 
@@ -33,8 +35,10 @@ type (
 // New returns a state service backed by a database
 func New(database db.Database, table string) state.State {
 	return &repo{
-		table: table,
-		db:    database,
+		table: &stateModelTable{
+			TableName: table,
+		},
+		db: database,
 	}
 }
 
@@ -50,47 +54,47 @@ func (r *repo) New(version string, vhash string) *Model {
 }
 
 // GetModel returns the state model
-func (r *repo) GetModel() (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetModel(ctx context.Context) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := stateModelGetModelEqconfig(d, r.table, configID)
+	m, err := r.table.GetModelEqconfig(ctx, d, configID)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get state")
+		return nil, kerrors.WithMsg(err, "Failed to get state")
 	}
 	return m, nil
 }
 
 // Insert inserts the model into the db
-func (r *repo) Insert(m *Model) error {
+func (r *repo) Insert(ctx context.Context, m *Model) error {
 	m.config = configID
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := stateModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert state")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert state")
 	}
 	return nil
 }
 
 // Update updates the model in the db
-func (r *repo) Update(m *Model) error {
+func (r *repo) Update(ctx context.Context, m *Model) error {
 	m.config = configID
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := stateModelUpdModelEqconfig(d, r.table, m, configID); err != nil {
-		return db.WrapErr(err, "Failed to update state")
+	if err := r.table.UpdModelEqconfig(ctx, d, m, configID); err != nil {
+		return kerrors.WithMsg(err, "Failed to update state")
 	}
 	return nil
 }
 
 // Get retrieves the current server state
-func (r *repo) Get() (*state.Model, error) {
-	m, err := r.GetModel()
+func (r *repo) Get(ctx context.Context) (*state.Model, error) {
+	m, err := r.GetModel(ctx)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) || errors.Is(err, db.ErrUndefinedTable{}) {
 			return &state.Model{
@@ -108,8 +112,8 @@ func (r *repo) Get() (*state.Model, error) {
 }
 
 // Set updates the server state entry
-func (r *repo) Set(m *state.Model) error {
-	return r.Update(&Model{
+func (r *repo) Set(ctx context.Context, m *state.Model) error {
+	return r.Update(ctx, &Model{
 		Setup:        m.Setup,
 		Version:      m.Version,
 		VHash:        m.VHash,
@@ -119,20 +123,20 @@ func (r *repo) Set(m *state.Model) error {
 
 // Setup creates a new State table if it does not exist and updates the server
 // state entry
-func (r *repo) Setup(req state.ReqSetup) error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context, req state.ReqSetup) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := stateModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup state model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup state model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
 	k := r.New(req.Version, req.VHash)
 	k.Setup = true
-	if err := r.Insert(k); err != nil {
+	if err := r.Insert(ctx, k); err != nil {
 		return err
 	}
 	return nil

@@ -3,40 +3,48 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func invModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), invited_by VARCHAR(31), PRIMARY KEY (userid, invited_by), creation_time BIGINT NOT NULL);")
+type (
+	invModelTable struct {
+		TableName string
+	}
+)
+
+func (t *invModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31), invited_by VARCHAR(31), PRIMARY KEY (userid, invited_by), creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_creation_time_index ON " + tableName + " (creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_creation_time_index ON "+t.TableName+" (creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__creation_time_index ON " + tableName + " (userid, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__creation_time_index ON "+t.TableName+" (userid, creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_invited_by__creation_time_index ON " + tableName + " (invited_by, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_invited_by__creation_time_index ON "+t.TableName+" (invited_by, creation_time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, invited_by, creation_time) VALUES ($1, $2, $3);", m.Userid, m.InvitedBy, m.CreationTime)
+func (t *invModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, invited_by, creation_time) VALUES ($1, $2, $3);", m.Userid, m.InvitedBy, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *invModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -48,32 +56,32 @@ func invModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConf
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.Userid, m.InvitedBy, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, invited_by, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func invModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *invModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func invModelGetModelEqUseridEqInvitedByGtCreationTime(db *sql.DB, tableName string, userid string, invitedby string, creationtime int64) (*Model, error) {
+func (t *invModelTable) GetModelEqUseridEqInvitedByGtCreationTime(ctx context.Context, d db.SQLExecutor, userid string, invitedby string, creationtime int64) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, invited_by, creation_time FROM "+tableName+" WHERE userid = $1 AND invited_by = $2 AND creation_time > $3;", userid, invitedby, creationtime).Scan(&m.Userid, &m.InvitedBy, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, invited_by, creation_time FROM "+t.TableName+" WHERE userid = $1 AND invited_by = $2 AND creation_time > $3;", userid, invitedby, creationtime).Scan(&m.Userid, &m.InvitedBy, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func invModelDelEqUseridEqInvitedBy(db *sql.DB, tableName string, userid string, invitedby string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND invited_by = $2;", userid, invitedby)
+func (t *invModelTable) DelEqUseridEqInvitedBy(ctx context.Context, d db.SQLExecutor, userid string, invitedby string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND invited_by = $2;", userid, invitedby)
 	return err
 }
 
-func invModelDelEqUseridHasInvitedBy(db *sql.DB, tableName string, userid string, invitedby []string) error {
+func (t *invModelTable) DelEqUseridHasInvitedBy(ctx context.Context, d db.SQLExecutor, userid string, invitedby []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(invitedby))
 	args = append(args, userid)
@@ -87,17 +95,17 @@ func invModelDelEqUseridHasInvitedBy(db *sql.DB, tableName string, userid string
 		}
 		placeholdersinvitedby = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND invited_by IN (VALUES "+placeholdersinvitedby+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND invited_by IN (VALUES "+placeholdersinvitedby+");", args...)
 	return err
 }
 
-func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *invModelTable) GetModelEqUseridGtCreationTimeOrdCreationTime(ctx context.Context, d db.SQLExecutor, userid string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, invited_by, creation_time FROM "+tableName+" WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
+	rows, err := d.QueryContext(ctx, "SELECT userid, invited_by, creation_time FROM "+t.TableName+" WHERE userid = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -118,13 +126,13 @@ func invModelGetModelEqUseridGtCreationTimeOrdCreationTime(db *sql.DB, tableName
 	return res, nil
 }
 
-func invModelGetModelEqInvitedByGtCreationTimeOrdCreationTime(db *sql.DB, tableName string, invitedby string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *invModelTable) GetModelEqInvitedByGtCreationTimeOrdCreationTime(ctx context.Context, d db.SQLExecutor, invitedby string, creationtime int64, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, invited_by, creation_time FROM "+tableName+" WHERE invited_by = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, invitedby, creationtime)
+	rows, err := d.QueryContext(ctx, "SELECT userid, invited_by, creation_time FROM "+t.TableName+" WHERE invited_by = $3 AND creation_time > $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, invitedby, creationtime)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +153,7 @@ func invModelGetModelEqInvitedByGtCreationTimeOrdCreationTime(db *sql.DB, tableN
 	return res, nil
 }
 
-func invModelDelLeqCreationTime(db *sql.DB, tableName string, creationtime int64) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE creation_time <= $1;", creationtime)
+func (t *invModelTable) DelLeqCreationTime(ctx context.Context, d db.SQLExecutor, creationtime int64) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creation_time <= $1;", creationtime)
 	return err
 }

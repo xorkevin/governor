@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func dmModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid_1 VARCHAR(31), userid_2 VARCHAR(31), PRIMARY KEY (userid_1, userid_2), chatid VARCHAR(31) NOT NULL UNIQUE, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
+type (
+	dmModelTable struct {
+		TableName string
+	}
+)
+
+func (t *dmModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid_1 VARCHAR(31), userid_2 VARCHAR(31), PRIMARY KEY (userid_1, userid_2), chatid VARCHAR(31) NOT NULL UNIQUE, name VARCHAR(255) NOT NULL, theme VARCHAR(4095) NOT NULL, last_updated BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_1__last_updated_index ON " + tableName + " (userid_1, last_updated);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_1__last_updated_index ON "+t.TableName+" (userid_1, last_updated);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_2__last_updated_index ON " + tableName + " (userid_2, last_updated);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_2__last_updated_index ON "+t.TableName+" (userid_2, last_updated);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func dmModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
+func (t *dmModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func dmModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *dmModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,43 +52,43 @@ func dmModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConfl
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
 		args = append(args, m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func dmModelGetModelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1 string, userid2 string) (*Model, error) {
+func (t *dmModelTable) GetModelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2).Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2).Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func dmModelUpdModelEqUserid1EqUserid2(db *sql.DB, tableName string, m *Model, userid1 string, userid2 string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE userid_1 = $8 AND userid_2 = $9;", m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime, userid1, userid2)
+func (t *dmModelTable) UpdModelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, m *Model, userid1 string, userid2 string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE userid_1 = $8 AND userid_2 = $9;", m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime, userid1, userid2)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func dmModelDelEqUserid1EqUserid2(db *sql.DB, tableName string, userid1 string, userid2 string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2)
+func (t *dmModelTable) DelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2)
 	return err
 }
 
-func dmModelGetModelEqChatid(db *sql.DB, tableName string, chatid string) (*Model, error) {
+func (t *dmModelTable) GetModelEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid = $1;", chatid).Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid = $1;", chatid).Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func dmModelGetModelHasChatidOrdLastUpdated(db *sql.DB, tableName string, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *dmModelTable) GetModelHasChatidOrdLastUpdated(ctx context.Context, d db.SQLExecutor, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))
 	args = append(args, limit, offset)
@@ -99,7 +107,7 @@ func dmModelGetModelHasChatidOrdLastUpdated(db *sql.DB, tableName string, chatid
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +128,8 @@ func dmModelGetModelHasChatidOrdLastUpdated(db *sql.DB, tableName string, chatid
 	return res, nil
 }
 
-func dmModelUpddmLastUpdatedEqUserid1EqUserid2(db *sql.DB, tableName string, m *dmLastUpdated, userid1 string, userid2 string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE userid_1 = $2 AND userid_2 = $3;", m.LastUpdated, userid1, userid2)
+func (t *dmModelTable) UpddmLastUpdatedEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, m *dmLastUpdated, userid1 string, userid2 string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (last_updated) = ROW($1) WHERE userid_1 = $2 AND userid_2 = $3;", m.LastUpdated, userid1, userid2)
 	if err != nil {
 		return err
 	}

@@ -3,44 +3,52 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func msgModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL, processed BOOL NOT NULL, sent BOOL NOT NULL, deleted BOOL NOT NULL);")
+type (
+	msgModelTable struct {
+		TableName string
+	}
+)
+
+func (t *msgModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (listid VARCHAR(255), msgid VARCHAR(1023), PRIMARY KEY (listid, msgid), userid VARCHAR(31) NOT NULL, creation_time BIGINT NOT NULL, spf_pass VARCHAR(255) NOT NULL, dkim_pass VARCHAR(255) NOT NULL, subject VARCHAR(255) NOT NULL, in_reply_to VARCHAR(1023) NOT NULL, parent_id VARCHAR(1023) NOT NULL, thread_id VARCHAR(1023) NOT NULL, processed BOOL NOT NULL, sent BOOL NOT NULL, deleted BOOL NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__creation_time_index ON " + tableName + " (listid, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__creation_time_index ON "+t.TableName+" (listid, creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__thread_id__creation_time_index ON " + tableName + " (listid, thread_id, creation_time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__thread_id__creation_time_index ON "+t.TableName+" (listid, thread_id, creation_time);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__in_reply_to_index ON " + tableName + " (listid, in_reply_to);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__in_reply_to_index ON "+t.TableName+" (listid, in_reply_to);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_listid__thread_id__in_reply_to_index ON " + tableName + " (listid, thread_id, in_reply_to);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_listid__thread_id__in_reply_to_index ON "+t.TableName+" (listid, thread_id, in_reply_to);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelInsert(db *sql.DB, tableName string, m *MsgModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Sent, m.Deleted)
+func (t *msgModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *MsgModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);", m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Sent, m.Deleted)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelInsertBulk(db *sql.DB, tableName string, models []*MsgModel, allowConflict bool) error {
+func (t *msgModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*MsgModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -52,28 +60,28 @@ func msgModelInsertBulk(db *sql.DB, tableName string, models []*MsgModel, allowC
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12, n+13))
 		args = append(args, m.ListID, m.Msgid, m.Userid, m.CreationTime, m.SPFPass, m.DKIMPass, m.Subject, m.InReplyTo, m.ParentID, m.ThreadID, m.Processed, m.Sent, m.Deleted)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelGetMsgModelEqListIDEqMsgid(db *sql.DB, tableName string, listid string, msgid string) (*MsgModel, error) {
+func (t *msgModelTable) GetMsgModelEqListIDEqMsgid(ctx context.Context, d db.SQLExecutor, listid string, msgid string) (*MsgModel, error) {
 	m := &MsgModel{}
-	if err := db.QueryRow("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+tableName+" WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+t.TableName+" WHERE listid = $1 AND msgid = $2;", listid, msgid).Scan(&m.ListID, &m.Msgid, &m.Userid, &m.CreationTime, &m.SPFPass, &m.DKIMPass, &m.Subject, &m.InReplyTo, &m.ParentID, &m.ThreadID, &m.Processed, &m.Sent, &m.Deleted); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, tableName string, listid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func (t *msgModelTable) GetMsgModelEqListIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, listid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+tableName+" WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
+	rows, err := d.QueryContext(ctx, "SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+t.TableName+" WHERE listid = $3 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid)
 	if err != nil {
 		return nil, err
 	}
@@ -94,13 +102,13 @@ func msgModelGetMsgModelEqListIDOrdCreationTime(db *sql.DB, tableName string, li
 	return res, nil
 }
 
-func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, tableName string, listid string, threadid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
+func (t *msgModelTable) GetMsgModelEqListIDEqThreadIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, listid string, threadid string, orderasc bool, limit, offset int) ([]MsgModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MsgModel, 0, limit)
-	rows, err := db.Query("SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+tableName+" WHERE listid = $3 AND thread_id = $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, threadid)
+	rows, err := d.QueryContext(ctx, "SELECT listid, msgid, userid, creation_time, spf_pass, dkim_pass, subject, in_reply_to, parent_id, thread_id, processed, sent, deleted FROM "+t.TableName+" WHERE listid = $3 AND thread_id = $4 ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset, listid, threadid)
 	if err != nil {
 		return nil, err
 	}
@@ -121,23 +129,23 @@ func msgModelGetMsgModelEqListIDEqThreadIDOrdCreationTime(db *sql.DB, tableName 
 	return res, nil
 }
 
-func msgModelUpdmsgProcessedEqListIDEqMsgid(db *sql.DB, tableName string, m *msgProcessed, listid string, msgid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (processed) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Processed, listid, msgid)
+func (t *msgModelTable) UpdmsgProcessedEqListIDEqMsgid(ctx context.Context, d db.SQLExecutor, m *msgProcessed, listid string, msgid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (processed) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Processed, listid, msgid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelUpdmsgSentEqListIDEqMsgid(db *sql.DB, tableName string, m *msgSent, listid string, msgid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (sent) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Sent, listid, msgid)
+func (t *msgModelTable) UpdmsgSentEqListIDEqMsgid(ctx context.Context, d db.SQLExecutor, m *msgSent, listid string, msgid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (sent) = ROW($1) WHERE listid = $2 AND msgid = $3;", m.Sent, listid, msgid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelUpdmsgDeletedEqListIDHasMsgid(db *sql.DB, tableName string, m *msgDeleted, listid string, msgid []string) error {
+func (t *msgModelTable) UpdmsgDeletedEqListIDHasMsgid(ctx context.Context, d db.SQLExecutor, m *msgDeleted, listid string, msgid []string) error {
 	paramCount := 6
 	args := make([]interface{}, 0, paramCount+len(msgid))
 	args = append(args, m.Userid, m.SPFPass, m.DKIMPass, m.Subject, m.Deleted, listid)
@@ -151,23 +159,23 @@ func msgModelUpdmsgDeletedEqListIDHasMsgid(db *sql.DB, tableName string, m *msgD
 		}
 		placeholdersmsgid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid, spf_pass, dkim_pass, subject, deleted) = ROW($1, $2, $3, $4, $5) WHERE listid = $6 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, spf_pass, dkim_pass, subject, deleted) = ROW($1, $2, $3, $4, $5) WHERE listid = $6 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelUpdmsgParentEqListIDEqMsgidEqThreadID(db *sql.DB, tableName string, m *msgParent, listid string, msgid string, threadid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND msgid = $4 AND thread_id = $5;", m.ParentID, m.ThreadID, listid, msgid, threadid)
+func (t *msgModelTable) UpdmsgParentEqListIDEqMsgidEqThreadID(ctx context.Context, d db.SQLExecutor, m *msgParent, listid string, msgid string, threadid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND msgid = $4 AND thread_id = $5;", m.ParentID, m.ThreadID, listid, msgid, threadid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func msgModelUpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(db *sql.DB, tableName string, m *msgChildren, listid string, threadid string, inreplyto string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND thread_id = $4 AND in_reply_to = $5;", m.ParentID, m.ThreadID, listid, threadid, inreplyto)
+func (t *msgModelTable) UpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(ctx context.Context, d db.SQLExecutor, m *msgChildren, listid string, threadid string, inreplyto string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (parent_id, thread_id) = ROW($1, $2) WHERE listid = $3 AND thread_id = $4 AND in_reply_to = $5;", m.ParentID, m.ThreadID, listid, threadid, inreplyto)
 	if err != nil {
 		return err
 	}

@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func memberModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (orgid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (orgid, userid), name VARCHAR(255) NOT NULL, username VARCHAR(255) NOT NULL);")
+type (
+	memberModelTable struct {
+		TableName string
+	}
+)
+
+func (t *memberModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (orgid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (orgid, userid), name VARCHAR(255) NOT NULL, username VARCHAR(255) NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__name_index ON " + tableName + " (userid, name);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__name_index ON "+t.TableName+" (userid, name);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_orgid__username_index ON " + tableName + " (orgid, username);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_orgid__username_index ON "+t.TableName+" (orgid, username);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsert(db *sql.DB, tableName string, m *MemberModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name, username) VALUES ($1, $2, $3, $4);", m.OrgID, m.Userid, m.Name, m.Username)
+func (t *memberModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *MemberModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, userid, name, username) VALUES ($1, $2, $3, $4);", m.OrgID, m.Userid, m.Name, m.Username)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, allowConflict bool) error {
+func (t *memberModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*MemberModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,19 +52,19 @@ func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, 
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
 		args = append(args, m.OrgID, m.Userid, m.Name, m.Username)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (orgid, userid, name, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, userid, name, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelDelEqOrgID(db *sql.DB, tableName string, orgid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE orgid = $1;", orgid)
+func (t *memberModelTable) DelEqOrgID(ctx context.Context, d db.SQLExecutor, orgid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE orgid = $1;", orgid)
 	return err
 }
 
-func memberModelDelEqUseridHasOrgID(db *sql.DB, tableName string, userid string, orgid []string) error {
+func (t *memberModelTable) DelEqUseridHasOrgID(ctx context.Context, d db.SQLExecutor, userid string, orgid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(orgid))
 	args = append(args, userid)
@@ -70,17 +78,17 @@ func memberModelDelEqUseridHasOrgID(db *sql.DB, tableName string, userid string,
 		}
 		placeholdersorgid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND orgid IN (VALUES "+placeholdersorgid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND orgid IN (VALUES "+placeholdersorgid+");", args...)
 	return err
 }
 
-func memberModelGetMemberModelEqUseridOrdName(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridOrdName(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE userid = $3 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE userid = $3 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -101,13 +109,13 @@ func memberModelGetMemberModelEqUseridOrdName(db *sql.DB, tableName string, user
 	return res, nil
 }
 
-func memberModelGetMemberModelEqUseridLikeNameOrdName(db *sql.DB, tableName string, userid string, name string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridLikeNameOrdName(ctx context.Context, d db.SQLExecutor, userid string, name string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE userid = $3 AND name LIKE $4 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, name)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE userid = $3 AND name LIKE $4 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, name)
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +136,13 @@ func memberModelGetMemberModelEqUseridLikeNameOrdName(db *sql.DB, tableName stri
 	return res, nil
 }
 
-func memberModelGetMemberModelEqOrgIDOrdUsername(db *sql.DB, tableName string, orgid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqOrgIDOrdUsername(ctx context.Context, d db.SQLExecutor, orgid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE orgid = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE orgid = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid)
 	if err != nil {
 		return nil, err
 	}
@@ -155,13 +163,13 @@ func memberModelGetMemberModelEqOrgIDOrdUsername(db *sql.DB, tableName string, o
 	return res, nil
 }
 
-func memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(db *sql.DB, tableName string, orgid string, username string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqOrgIDLikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, orgid string, username string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT orgid, userid, name, username FROM "+tableName+" WHERE orgid = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid, username)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE orgid = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid, username)
 	if err != nil {
 		return nil, err
 	}
@@ -182,16 +190,16 @@ func memberModelGetMemberModelEqOrgIDLikeUsernameOrdUsername(db *sql.DB, tableNa
 	return res, nil
 }
 
-func memberModelUpdorgNameEqOrgID(db *sql.DB, tableName string, m *orgName, orgid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (name) = ROW($1) WHERE orgid = $2;", m.Name, orgid)
+func (t *memberModelTable) UpdorgNameEqOrgID(ctx context.Context, d db.SQLExecutor, m *orgName, orgid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name) = ROW($1) WHERE orgid = $2;", m.Name, orgid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelUpdmemberUsernameEqUserid(db *sql.DB, tableName string, m *memberUsername, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (username) = ROW($1) WHERE userid = $2;", m.Username, userid)
+func (t *memberModelTable) UpdmemberUsernameEqUserid(ctx context.Context, d db.SQLExecutor, m *memberUsername, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (username) = ROW($1) WHERE userid = $2;", m.Username, userid)
 	if err != nil {
 		return err
 	}

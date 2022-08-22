@@ -3,32 +3,40 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func roleModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
+type (
+	roleModelTable struct {
+		TableName string
+	}
+)
+
+func (t *roleModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31), role VARCHAR(255), PRIMARY KEY (userid, role));")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_role__userid_index ON " + tableName + " (role, userid);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_role__userid_index ON "+t.TableName+" (role, userid);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role) VALUES ($1, $2);", m.Userid, m.Role)
+func (t *roleModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, role) VALUES ($1, $2);", m.Userid, m.Role)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *roleModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -40,20 +48,20 @@ func roleModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowCon
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d)", n+1, n+2))
 		args = append(args, m.Userid, m.Role)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, role) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func roleModelGetModelEqRoleOrdUserid(db *sql.DB, tableName string, role string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqRoleOrdUserid(ctx context.Context, d db.SQLExecutor, role string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE role = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, role)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE role = $3 ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset, role)
 	if err != nil {
 		return nil, err
 	}
@@ -74,26 +82,26 @@ func roleModelGetModelEqRoleOrdUserid(db *sql.DB, tableName string, role string,
 	return res, nil
 }
 
-func roleModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *roleModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func roleModelGetModelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) (*Model, error) {
+func (t *roleModelTable) GetModelEqUseridEqRole(ctx context.Context, d db.SQLExecutor, userid string, role string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, role FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role).Scan(&m.Userid, &m.Role); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $1 AND role = $2;", userid, role).Scan(&m.Userid, &m.Role); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func roleModelGetModelEqUseridOrdRole(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqUseridOrdRole(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +122,7 @@ func roleModelGetModelEqUseridOrdRole(db *sql.DB, tableName string, userid strin
 	return res, nil
 }
 
-func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, tableName string, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqUseridHasRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, limit, offset, userid)
@@ -133,7 +141,7 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, tableName string, useri
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -154,13 +162,13 @@ func roleModelGetModelEqUseridHasRoleOrdRole(db *sql.DB, tableName string, useri
 	return res, nil
 }
 
-func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, tableName string, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqUseridLikeRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT userid, role FROM "+tableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +189,7 @@ func roleModelGetModelEqUseridLikeRoleOrdRole(db *sql.DB, tableName string, user
 	return res, nil
 }
 
-func roleModelDelEqRoleHasUserid(db *sql.DB, tableName string, role string, userid []string) error {
+func (t *roleModelTable) DelEqRoleHasUserid(ctx context.Context, d db.SQLExecutor, role string, userid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, role)
@@ -195,16 +203,16 @@ func roleModelDelEqRoleHasUserid(db *sql.DB, tableName string, role string, user
 		}
 		placeholdersuserid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
 }
 
-func roleModelDelEqUseridEqRole(db *sql.DB, tableName string, userid string, role string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role = $2;", userid, role)
+func (t *roleModelTable) DelEqUseridEqRole(ctx context.Context, d db.SQLExecutor, userid string, role string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role = $2;", userid, role)
 	return err
 }
 
-func roleModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, role []string) error {
+func (t *roleModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, role []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(role))
 	args = append(args, userid)
@@ -218,6 +226,6 @@ func roleModelDelEqUseridHasRole(db *sql.DB, tableName string, userid string, ro
 		}
 		placeholdersrole = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
 	return err
 }

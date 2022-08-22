@@ -3,28 +3,36 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func userModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash VARCHAR(255) NOT NULL, otp_enabled BOOLEAN NOT NULL, otp_secret VARCHAR(255) NOT NULL, otp_backup VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, failed_login_time BIGINT NOT NULL, failed_login_count INT NOT NULL);")
+type (
+	userModelTable struct {
+		TableName string
+	}
+)
+
+func (t *userModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31) PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, pass_hash VARCHAR(255) NOT NULL, otp_enabled BOOLEAN NOT NULL, otp_secret VARCHAR(255) NOT NULL, otp_backup VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, creation_time BIGINT NOT NULL, failed_login_time BIGINT NOT NULL, failed_login_count INT NOT NULL);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func userModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount)
+func (t *userModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func userModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *userModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -36,57 +44,57 @@ func userModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowCon
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12))
 		args = append(args, m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func userModelGetModelEqUserid(db *sql.DB, tableName string, userid string) (*Model, error) {
+func (t *userModelTable) GetModelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+tableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+t.TableName+" WHERE userid = $1;", userid).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func userModelUpdModelEqUserid(db *sql.DB, tableName string, m *Model, userid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13;", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount, userid)
+func (t *userModelTable) UpdModelEqUserid(ctx context.Context, d db.SQLExecutor, m *Model, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13;", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount, userid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func userModelDelEqUserid(db *sql.DB, tableName string, userid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE userid = $1;", userid)
+func (t *userModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
-func userModelGetModelEqUsername(db *sql.DB, tableName string, username string) (*Model, error) {
+func (t *userModelTable) GetModelEqUsername(ctx context.Context, d db.SQLExecutor, username string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+tableName+" WHERE username = $1;", username).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+t.TableName+" WHERE username = $1;", username).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func userModelGetModelEqEmail(db *sql.DB, tableName string, email string) (*Model, error) {
+func (t *userModelTable) GetModelEqEmail(ctx context.Context, d db.SQLExecutor, email string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+tableName+" WHERE email = $1;", email).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count FROM "+t.TableName+" WHERE email = $1;", email).Scan(&m.Userid, &m.Username, &m.PassHash, &m.OTPEnabled, &m.OTPSecret, &m.OTPBackup, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.FailedLoginTime, &m.FailedLoginCount); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func userModelGetInfoOrdUserid(db *sql.DB, tableName string, orderasc bool, limit, offset int) ([]Info, error) {
+func (t *userModelTable) GetInfoOrdUserid(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]Info, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM "+tableName+" ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +115,7 @@ func userModelGetInfoOrdUserid(db *sql.DB, tableName string, orderasc bool, limi
 	return res, nil
 }
 
-func userModelGetInfoHasUseridOrdUserid(db *sql.DB, tableName string, userid []string, orderasc bool, limit, offset int) ([]Info, error) {
+func (t *userModelTable) GetInfoHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userid []string, orderasc bool, limit, offset int) ([]Info, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, limit, offset)
@@ -126,7 +134,7 @@ func userModelGetInfoHasUseridOrdUserid(db *sql.DB, tableName string, userid []s
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM "+tableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,13 +155,13 @@ func userModelGetInfoHasUseridOrdUserid(db *sql.DB, tableName string, userid []s
 	return res, nil
 }
 
-func userModelGetInfoLikeUsernameOrdUsername(db *sql.DB, tableName string, username string, orderasc bool, limit, offset int) ([]Info, error) {
+func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, username string, orderasc bool, limit, offset int) ([]Info, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := db.Query("SELECT userid, username, email, first_name, last_name FROM "+tableName+" WHERE username LIKE $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, username)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE username LIKE $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, username)
 	if err != nil {
 		return nil, err
 	}

@@ -1,5 +1,9 @@
 package state
 
+import (
+	"context"
+)
+
 type (
 	// Model is the data about a governor server in between restarts
 	//
@@ -24,8 +28,8 @@ type (
 	// Set sets the state
 	// Setup sets up the state
 	State interface {
-		Get() (*Model, error)
-		Set(m *Model) error
-		Setup(req ReqSetup) error
+		Get(ctx context.Context) (*Model, error)
+		Set(ctx context.Context, m *Model) error
+		Setup(ctx context.Context, req ReqSetup) error
 	}
 )

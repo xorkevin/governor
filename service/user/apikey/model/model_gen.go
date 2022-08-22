@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func apikeyModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
+type (
+	apikeyModelTable struct {
+		TableName string
+	}
+)
+
+func (t *apikeyModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid_index ON " + tableName + " (userid);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_index ON "+t.TableName+" (userid);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__time_index ON " + tableName + " (userid, time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__time_index ON "+t.TableName+" (userid, time);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelInsert(db *sql.DB, tableName string, m *Model) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
+func (t *apikeyModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *Model) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowConflict bool) error {
+func (t *apikeyModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*Model, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,35 +52,35 @@ func apikeyModelInsertBulk(db *sql.DB, tableName string, models []*Model, allowC
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
 		args = append(args, m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelGetModelEqKeyid(db *sql.DB, tableName string, keyid string) (*Model, error) {
+func (t *apikeyModelTable) GetModelEqKeyid(ctx context.Context, d db.SQLExecutor, keyid string) (*Model, error) {
 	m := &Model{}
-	if err := db.QueryRow("SELECT keyid, userid, scope, keyhash, name, description, time FROM "+tableName+" WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, time FROM "+t.TableName+" WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func apikeyModelUpdModelEqKeyid(db *sql.DB, tableName string, m *Model, keyid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
+func (t *apikeyModelTable) UpdModelEqKeyid(ctx context.Context, d db.SQLExecutor, m *Model, keyid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func apikeyModelDelEqKeyid(db *sql.DB, tableName string, keyid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE keyid = $1;", keyid)
+func (t *apikeyModelTable) DelEqKeyid(ctx context.Context, d db.SQLExecutor, keyid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid = $1;", keyid)
 	return err
 }
 
-func apikeyModelDelHasKeyid(db *sql.DB, tableName string, keyid []string) error {
+func (t *apikeyModelTable) DelHasKeyid(ctx context.Context, d db.SQLExecutor, keyid []string) error {
 	paramCount := 0
 	args := make([]interface{}, 0, paramCount+len(keyid))
 	var placeholderskeyid string
@@ -85,17 +93,17 @@ func apikeyModelDelHasKeyid(db *sql.DB, tableName string, keyid []string) error 
 		}
 		placeholderskeyid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
 	return err
 }
 
-func apikeyModelGetModelEqUseridOrdTime(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *apikeyModelTable) GetModelEqUseridOrdTime(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := db.Query("SELECT keyid, userid, scope, keyhash, name, description, time FROM "+tableName+" WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, time FROM "+t.TableName+" WHERE userid = $3 ORDER BY time "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}

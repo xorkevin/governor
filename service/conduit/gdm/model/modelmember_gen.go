@@ -3,36 +3,44 @@
 package model
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
+
+	"xorkevin.dev/governor/service/db"
 )
 
-func memberModelSetup(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE TABLE IF NOT EXISTS " + tableName + " (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), last_updated BIGINT NOT NULL);")
+type (
+	memberModelTable struct {
+		TableName string
+	}
+)
+
+func (t *memberModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (chatid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (chatid, userid), last_updated BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__chatid_index ON " + tableName + " (userid, chatid);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__chatid_index ON "+t.TableName+" (userid, chatid);")
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE INDEX IF NOT EXISTS " + tableName + "_userid__last_updated_index ON " + tableName + " (userid, last_updated);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__last_updated_index ON "+t.TableName+" (userid, last_updated);")
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsert(db *sql.DB, tableName string, m *MemberModel) error {
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, last_updated) VALUES ($1, $2, $3);", m.Chatid, m.Userid, m.LastUpdated)
+func (t *memberModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *MemberModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (chatid, userid, last_updated) VALUES ($1, $2, $3);", m.Chatid, m.Userid, m.LastUpdated)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, allowConflict bool) error {
+func (t *memberModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*MemberModel, allowConflict bool) error {
 	conflictSQL := ""
 	if allowConflict {
 		conflictSQL = " ON CONFLICT DO NOTHING"
@@ -44,19 +52,19 @@ func memberModelInsertBulk(db *sql.DB, tableName string, models []*MemberModel, 
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d)", n+1, n+2, n+3))
 		args = append(args, m.Chatid, m.Userid, m.LastUpdated)
 	}
-	_, err := db.Exec("INSERT INTO "+tableName+" (chatid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (chatid, userid, last_updated) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func memberModelDelEqChatid(db *sql.DB, tableName string, chatid string) error {
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1;", chatid)
+func (t *memberModelTable) DelEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE chatid = $1;", chatid)
 	return err
 }
 
-func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, tableName string, userid string, chatid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridHasChatidOrdChatid(ctx context.Context, d db.SQLExecutor, userid string, chatid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(chatid))
 	args = append(args, limit, offset, userid)
@@ -75,7 +83,7 @@ func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, tableName s
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, last_updated FROM "+tableName+" WHERE userid = $3 AND chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, userid, last_updated FROM "+t.TableName+" WHERE userid = $3 AND chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +104,7 @@ func memberModelGetMemberModelEqUseridHasChatidOrdChatid(db *sql.DB, tableName s
 	return res, nil
 }
 
-func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, chatid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelHasChatidOrdChatid(ctx context.Context, d db.SQLExecutor, chatid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	paramCount := 2
 	args := make([]interface{}, 0, paramCount+len(chatid))
 	args = append(args, limit, offset)
@@ -115,7 +123,7 @@ func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, c
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, last_updated FROM "+tableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, userid, last_updated FROM "+t.TableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY chatid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +144,7 @@ func memberModelGetMemberModelHasChatidOrdChatid(db *sql.DB, tableName string, c
 	return res, nil
 }
 
-func memberModelGetMemberModelEqChatidHasUseridOrdUserid(db *sql.DB, tableName string, chatid string, userid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqChatidHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, chatid string, userid []string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, limit, offset, chatid)
@@ -155,7 +163,7 @@ func memberModelGetMemberModelEqChatidHasUseridOrdUserid(db *sql.DB, tableName s
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, last_updated FROM "+tableName+" WHERE chatid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, userid, last_updated FROM "+t.TableName+" WHERE chatid = $3 AND userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +184,7 @@ func memberModelGetMemberModelEqChatidHasUseridOrdUserid(db *sql.DB, tableName s
 	return res, nil
 }
 
-func memberModelDelEqChatidHasUserid(db *sql.DB, tableName string, chatid string, userid []string) error {
+func (t *memberModelTable) DelEqChatidHasUserid(ctx context.Context, d db.SQLExecutor, chatid string, userid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(userid))
 	args = append(args, chatid)
@@ -190,17 +198,17 @@ func memberModelDelEqChatidHasUserid(db *sql.DB, tableName string, chatid string
 		}
 		placeholdersuserid = strings.Join(placeholders, ", ")
 	}
-	_, err := db.Exec("DELETE FROM "+tableName+" WHERE chatid = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE chatid = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
 	return err
 }
 
-func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName string, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, last_updated FROM "+tableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, userid, last_updated FROM "+t.TableName+" WHERE userid = $3 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -221,13 +229,13 @@ func memberModelGetMemberModelEqUseridOrdLastUpdated(db *sql.DB, tableName strin
 	return res, nil
 }
 
-func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, tableName string, userid string, lastupdated int64, orderasc bool, limit, offset int) ([]MemberModel, error) {
+func (t *memberModelTable) GetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, lastupdated int64, orderasc bool, limit, offset int) ([]MemberModel, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]MemberModel, 0, limit)
-	rows, err := db.Query("SELECT chatid, userid, last_updated FROM "+tableName+" WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
+	rows, err := d.QueryContext(ctx, "SELECT chatid, userid, last_updated FROM "+t.TableName+" WHERE userid = $3 AND last_updated < $4 ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, lastupdated)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +256,8 @@ func memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(db *sql.DB, ta
 	return res, nil
 }
 
-func memberModelUpdmodelLastUpdatedEqChatid(db *sql.DB, tableName string, m *modelLastUpdated, chatid string) error {
-	_, err := db.Exec("UPDATE "+tableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
+func (t *memberModelTable) UpdmodelLastUpdatedEqChatid(ctx context.Context, d db.SQLExecutor, m *modelLastUpdated, chatid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {
 		return err
 	}
