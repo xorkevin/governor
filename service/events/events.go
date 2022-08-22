@@ -800,7 +800,8 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				s.logger.Error("Failed obtaining messages", map[string]string{
-					"error": err.Error(),
+					"error":      err.Error(),
+					"actiontype": "events_fetch_stream_msgs",
 				})
 				return
 			}
@@ -809,12 +810,14 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 		for _, msg := range msgs {
 			if err := s.worker(ctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
 				s.logger.Error("Failed executing worker", map[string]string{
-					"error": err.Error(),
+					"error":      err.Error(),
+					"actiontype": "events_exec_stream_worker",
 				})
 			} else {
 				if err := msg.Ack(); err != nil {
 					s.logger.Error("Failed to ack message", map[string]string{
-						"error": err.Error(),
+						"error":      err.Error(),
+						"actiontype": "events_ack_stream_msg",
 					})
 				}
 			}
