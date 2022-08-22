@@ -343,7 +343,7 @@ func (s *service) DB(ctx context.Context) (SQLDB, error) {
 	case <-s.done:
 		return nil, kerrors.WithKind(nil, ErrConn{}, "DB service shutdown")
 	case <-ctx.Done():
-		return nil, kerrors.WithMsg(ctx.Err(), "Context closed")
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err

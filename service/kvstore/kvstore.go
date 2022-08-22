@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -39,28 +40,28 @@ type (
 
 	// Multi is a kvstore multi
 	Multi interface {
-		Get(key string) Resulter
-		GetInt(key string) IntResulter
-		Set(key, val string, seconds int64) ErrResulter
-		Del(key ...string) ErrResulter
-		Incr(key string, delta int64) IntResulter
-		Expire(key string, seconds int64) BoolResulter
+		Get(ctx context.Context, key string) Resulter
+		GetInt(ctx context.Context, key string) IntResulter
+		Set(ctx context.Context, key, val string, seconds int64) ErrResulter
+		Del(ctx context.Context, key ...string) ErrResulter
+		Incr(ctx context.Context, key string, delta int64) IntResulter
+		Expire(ctx context.Context, key string, seconds int64) BoolResulter
 		Subkey(keypath ...string) string
 		Subtree(prefix string) Multi
-		Exec() error
+		Exec(ctx context.Context) error
 	}
 
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
-		Get(key string) (string, error)
-		GetInt(key string) (int64, error)
-		Set(key, val string, seconds int64) error
-		Del(key ...string) error
-		Incr(key string, delta int64) (int64, error)
-		Expire(key string, seconds int64) error
+		Get(ctx context.Context, key string) (string, error)
+		GetInt(ctx context.Context, key string) (int64, error)
+		Set(ctx context.Context, key, val string, seconds int64) error
+		Del(ctx context.Context, key ...string) error
+		Incr(ctx context.Context, key string, delta int64) (int64, error)
+		Expire(ctx context.Context, key string, seconds int64) error
 		Subkey(keypath ...string) string
-		Multi() (Multi, error)
-		Tx() (Multi, error)
+		Multi(ctx context.Context) (Multi, error)
+		Tx(ctx context.Context) (Multi, error)
 		Subtree(prefix string) KVStore
 	}
 
@@ -76,12 +77,13 @@ type (
 	}
 
 	getOp struct {
+		ctx context.Context
 		res chan<- getClientRes
 	}
 
 	service struct {
 		client     *redis.Client
-		auth       string
+		auth       secretAuth
 		addr       string
 		dbname     int
 		config     governor.SecretReader
@@ -193,7 +195,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"addr":       s.addr,
 		"dbname":     strconv.Itoa(s.dbname),
 		"hbinterval": strconv.Itoa(s.hbinterval),
@@ -204,9 +206,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	go s.execute(ctx, done)
 	s.done = done
 
-	if _, err := s.getClient(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -220,19 +219,22 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			s.closeClient()
 			return
 		case <-ticker.C:
-			s.handlePing()
+			s.handlePing(ctx)
 		case op := <-s.ops:
-			client, err := s.handleGetClient()
-			op.res <- getClientRes{
+			client, err := s.handleGetClient(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getClientRes{
 				client: client,
 				err:    err,
+			}:
 			}
 			close(op.res)
 		}
 	}
 }
 
-func (s *service) handlePing() {
+func (s *service) handlePing(ctx context.Context) {
 	if s.client != nil {
 		_, err := s.client.Ping(context.Background()).Result()
 		if err == nil {
@@ -244,27 +246,27 @@ func (s *service) handlePing() {
 		if s.hbfailed < s.hbmaxfail {
 			s.logger.Warn("Failed to ping kvstore", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "pingkv",
+				"actiontype": "kvstore_ping",
 				"address":    s.addr,
 				"dbname":     strconv.Itoa(s.dbname),
 			})
 			return
 		}
-		s.logger.Error("failed max pings to kvstore", map[string]string{
+		s.logger.Error("Failed max pings to kvstore", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "pingkvmax",
+			"actiontype": "kvstore_ping",
 			"address":    s.addr,
 			"dbname":     strconv.Itoa(s.dbname),
 		})
 		s.ready = false
 		s.hbfailed = 0
-		s.auth = ""
+		s.auth = secretAuth{}
 		s.config.InvalidateSecret("auth")
 	}
-	if _, err := s.handleGetClient(); err != nil {
+	if _, err := s.handleGetClient(ctx); err != nil {
 		s.logger.Error("Failed to create kvstore client", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "createkvclient",
+			"actiontype": "kvstore_create_client",
 		})
 	}
 }
@@ -275,15 +277,15 @@ type (
 	}
 )
 
-func (s *service) handleGetClient() (*redis.Client, error) {
+func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	var secret secretAuth
-	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
-		return nil, governor.ErrWithMsg(err, "Invalid secret")
+	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
+		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if secret.Password == "" {
-		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
-	if secret.Password == s.auth {
+	if secret == s.auth {
 		return s.client, nil
 	}
 
@@ -296,14 +298,14 @@ func (s *service) handleGetClient() (*redis.Client, error) {
 	})
 	if _, err := client.Ping(context.Background()).Result(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping kvstore")
+		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping kvstore")
 	}
 
 	s.client = client
-	s.auth = secret.Password
+	s.auth = secret
 	s.ready = true
 	s.hbfailed = 0
-	s.logger.Info(fmt.Sprintf("established connection to %s dbname %d", s.addr, s.dbname), nil)
+	s.logger.Info(fmt.Sprintf("Established connection to %s dbname %d", s.addr, s.dbname), nil)
 	return s.client, nil
 }
 
@@ -314,19 +316,19 @@ func (s *service) closeClient() {
 	if err := s.client.Close(); err != nil {
 		s.logger.Error("Failed to close kvstore connection", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "closekverr",
+			"actiontype": "kvstore_close",
 			"address":    s.addr,
 			"dbname":     strconv.Itoa(s.dbname),
 		})
 	} else {
 		s.logger.Info("Closed kvstore connection", map[string]string{
-			"actiontype": "closekvok",
+			"actiontype": "kvstore_close_ok",
 			"address":    s.addr,
 			"dbname":     strconv.Itoa(s.dbname),
 		})
 	}
 	s.client = nil
-	s.auth = ""
+	s.auth = secretAuth{}
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -349,111 +351,117 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", nil)
+		l.Warn("Failed to stop", map[string]string{
+			"error":      ctx.Err().Error(),
+			"actiontype": "kvstore_stop",
+		})
 	}
 }
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.ErrWithKind(nil, ErrConn{}, "KVStore service not ready")
+		return kerrors.WithKind(nil, ErrConn{}, "KVStore service not ready")
 	}
 	return nil
 }
 
-func (s *service) getClient() (*redis.Client, error) {
+func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
 	res := make(chan getClientRes)
 	op := getOp{
+		ctx: ctx,
 		res: res,
 	}
 	select {
 	case <-s.done:
-		return nil, governor.ErrWithKind(nil, ErrConn{}, "KVStore service shutdown")
+		return nil, kerrors.WithKind(nil, ErrConn{}, "KVStore service shutdown")
+	case <-ctx.Done():
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
 	}
 }
 
-func (s *service) Get(key string) (string, error) {
-	client, err := s.getClient()
+func (s *service) Get(ctx context.Context, key string) (string, error) {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return "", err
 	}
-	val, err := client.Get(context.Background(), key).Result()
+	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return "", kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
 
-func (s *service) GetInt(key string) (int64, error) {
-	client, err := s.getClient()
+func (s *service) GetInt(ctx context.Context, key string) (int64, error) {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
 	}
-	val, err := client.Get(context.Background(), key).Result()
+	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, governor.ErrWithKind(err, ErrVal{}, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrVal{}, "Invalid int value")
 	}
 	return num, nil
 }
 
-func (s *service) Set(key, val string, seconds int64) error {
-	client, err := s.getClient()
+func (s *service) Set(ctx context.Context, key, val string, seconds int64) error {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Set(context.Background(), key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to set key")
+	if err := client.Set(ctx, key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
+		return kerrors.WithKind(err, ErrClient{}, "Failed to set key")
 	}
 	return nil
 }
 
-func (s *service) Del(key ...string) error {
+func (s *service) Del(ctx context.Context, key ...string) error {
 	if len(key) == 0 {
 		return nil
 	}
 
-	client, err := s.getClient()
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	if err := client.Del(context.Background(), key...).Err(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to delete key")
+	if err := client.Del(ctx, key...).Err(); err != nil {
+		return kerrors.WithKind(err, ErrClient{}, "Failed to delete key")
 	}
 	return nil
 }
 
-func (s *service) Incr(key string, delta int64) (int64, error) {
-	client, err := s.getClient()
+func (s *service) Incr(ctx context.Context, key string, delta int64) (int64, error) {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
 	}
-	val, err := client.IncrBy(context.Background(), key, delta).Result()
+	val, err := client.IncrBy(ctx, key, delta).Result()
 	if err != nil {
-		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to incr key")
+		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to incr key")
 	}
 	return val, nil
 }
 
-func (s *service) Expire(key string, seconds int64) error {
-	client, err := s.getClient()
+func (s *service) Expire(ctx context.Context, key string, seconds int64) error {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Expire(context.Background(), key, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to set expire key")
+	if err := client.Expire(ctx, key, time.Duration(seconds)*time.Second).Err(); err != nil {
+		return kerrors.WithKind(err, ErrClient{}, "Failed to set expire key")
 	}
 	return nil
 }
@@ -465,8 +473,8 @@ func (s *service) Subkey(keypath ...string) string {
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (s *service) Multi() (Multi, error) {
-	client, err := s.getClient()
+func (s *service) Multi(ctx context.Context) (Multi, error) {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -475,8 +483,8 @@ func (s *service) Multi() (Multi, error) {
 	}, nil
 }
 
-func (s *service) Tx() (Multi, error) {
-	client, err := s.getClient()
+func (s *service) Tx(ctx context.Context) (Multi, error) {
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -503,39 +511,39 @@ type (
 	}
 )
 
-func (t *baseMulti) Get(key string) Resulter {
+func (t *baseMulti) Get(ctx context.Context, key string) Resulter {
 	return &resulter{
-		res: t.base.Get(context.Background(), key),
+		res: t.base.Get(ctx, key),
 	}
 }
 
-func (t *baseMulti) GetInt(key string) IntResulter {
+func (t *baseMulti) GetInt(ctx context.Context, key string) IntResulter {
 	return &intResulter{
-		res: t.base.Get(context.Background(), key),
+		res: t.base.Get(ctx, key),
 	}
 }
 
-func (t *baseMulti) Set(key, val string, seconds int64) ErrResulter {
+func (t *baseMulti) Set(ctx context.Context, key, val string, seconds int64) ErrResulter {
 	return &statusCmdErrResulter{
-		res: t.base.Set(context.Background(), key, val, time.Duration(seconds)*time.Second),
+		res: t.base.Set(ctx, key, val, time.Duration(seconds)*time.Second),
 	}
 }
 
-func (t *baseMulti) Del(key ...string) ErrResulter {
+func (t *baseMulti) Del(ctx context.Context, key ...string) ErrResulter {
 	return &intCmdErrResulter{
-		res: t.base.Del(context.Background(), key...),
+		res: t.base.Del(ctx, key...),
 	}
 }
 
-func (t *baseMulti) Incr(key string, delta int64) IntResulter {
+func (t *baseMulti) Incr(ctx context.Context, key string, delta int64) IntResulter {
 	return &intCmdResulter{
-		res: t.base.IncrBy(context.Background(), key, delta),
+		res: t.base.IncrBy(ctx, key, delta),
 	}
 }
 
-func (t *baseMulti) Expire(key string, seconds int64) BoolResulter {
+func (t *baseMulti) Expire(ctx context.Context, key string, seconds int64) BoolResulter {
 	return &boolCmdResulter{
-		res: t.base.Expire(context.Background(), key, time.Duration(seconds)*time.Second),
+		res: t.base.Expire(ctx, key, time.Duration(seconds)*time.Second),
 	}
 }
 
@@ -553,45 +561,45 @@ func (t *baseMulti) Subtree(prefix string) Multi {
 	}
 }
 
-func (t *baseMulti) Exec() error {
-	if _, err := t.base.Exec(context.Background()); err != nil {
+func (t *baseMulti) Exec(ctx context.Context) error {
+	if _, err := t.base.Exec(ctx); err != nil {
 		if !errors.Is(err, redis.Nil) {
-			return governor.ErrWithKind(err, ErrNotFound{}, "Failed to execute multi")
+			return kerrors.WithKind(err, ErrNotFound{}, "Failed to execute multi")
 		}
 	}
 	return nil
 }
 
-func (t *multi) Get(key string) Resulter {
-	return t.base.Get(t.prefix + kvpathSeparator + key)
+func (t *multi) Get(ctx context.Context, key string) Resulter {
+	return t.base.Get(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *multi) GetInt(key string) IntResulter {
-	return t.base.GetInt(t.prefix + kvpathSeparator + key)
+func (t *multi) GetInt(ctx context.Context, key string) IntResulter {
+	return t.base.GetInt(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *multi) Set(key, val string, seconds int64) ErrResulter {
-	return t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
+func (t *multi) Set(ctx context.Context, key, val string, seconds int64) ErrResulter {
+	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, seconds)
 }
 
-func (t *multi) Del(key ...string) ErrResulter {
+func (t *multi) Del(ctx context.Context, key ...string) ErrResulter {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
 		args = append(args, t.prefix+kvpathSeparator+i)
 	}
-	return t.base.Del(args...)
+	return t.base.Del(ctx, args...)
 }
 
-func (t *multi) Incr(key string, delta int64) IntResulter {
-	return t.base.Incr(t.prefix+kvpathSeparator+key, delta)
+func (t *multi) Incr(ctx context.Context, key string, delta int64) IntResulter {
+	return t.base.Incr(ctx, t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *multi) Expire(key string, seconds int64) BoolResulter {
-	return t.base.Expire(t.prefix+kvpathSeparator+key, seconds)
+func (t *multi) Expire(ctx context.Context, key string, seconds int64) BoolResulter {
+	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, seconds)
 }
 
-func (t *multi) Exec() error {
-	return t.base.Exec()
+func (t *multi) Exec(ctx context.Context) error {
+	return t.base.Exec(ctx)
 }
 
 func (t *multi) Subkey(keypath ...string) string {
@@ -615,32 +623,32 @@ type (
 	}
 )
 
-func (t *tree) Get(key string) (string, error) {
-	return t.base.Get(t.prefix + kvpathSeparator + key)
+func (t *tree) Get(ctx context.Context, key string) (string, error) {
+	return t.base.Get(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *tree) GetInt(key string) (int64, error) {
-	return t.base.GetInt(t.prefix + kvpathSeparator + key)
+func (t *tree) GetInt(ctx context.Context, key string) (int64, error) {
+	return t.base.GetInt(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *tree) Set(key, val string, seconds int64) error {
-	return t.base.Set(t.prefix+kvpathSeparator+key, val, seconds)
+func (t *tree) Set(ctx context.Context, key, val string, seconds int64) error {
+	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, seconds)
 }
 
-func (t *tree) Del(key ...string) error {
+func (t *tree) Del(ctx context.Context, key ...string) error {
 	args := make([]string, 0, len(key))
 	for _, i := range key {
 		args = append(args, t.prefix+kvpathSeparator+i)
 	}
-	return t.base.Del(args...)
+	return t.base.Del(ctx, args...)
 }
 
-func (t *tree) Incr(key string, delta int64) (int64, error) {
-	return t.base.Incr(t.prefix+kvpathSeparator+key, delta)
+func (t *tree) Incr(ctx context.Context, key string, delta int64) (int64, error) {
+	return t.base.Incr(ctx, t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *tree) Expire(key string, seconds int64) error {
-	return t.base.Expire(t.prefix+kvpathSeparator+key, seconds)
+func (t *tree) Expire(ctx context.Context, key string, seconds int64) error {
+	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, seconds)
 }
 
 func (t *tree) Subkey(keypath ...string) string {
@@ -650,16 +658,16 @@ func (t *tree) Subkey(keypath ...string) string {
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (t *tree) Multi() (Multi, error) {
-	tx, err := t.base.Multi()
+func (t *tree) Multi(ctx context.Context) (Multi, error) {
+	tx, err := t.base.Multi(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return tx.Subtree(t.prefix), nil
 }
 
-func (t *tree) Tx() (Multi, error) {
-	tx, err := t.base.Tx()
+func (t *tree) Tx(ctx context.Context) (Multi, error) {
+	tx, err := t.base.Tx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -683,9 +691,9 @@ func (r *resulter) Result() (string, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return "", kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return "", governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -700,9 +708,9 @@ func (r *intCmdResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -717,13 +725,13 @@ func (r *intResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return 0, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, governor.ErrWithKind(err, ErrVal{}, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrVal{}, "Invalid int value")
 	}
 	return num, nil
 }
@@ -738,9 +746,9 @@ func (r *boolCmdResulter) Result() (bool, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return false, governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return false, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return false, governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return false, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -754,9 +762,9 @@ type (
 func (r *statusCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return nil
 }
@@ -770,9 +778,9 @@ type (
 func (r *intCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return governor.ErrWithKind(err, ErrNotFound{}, "Key not found")
+			return kerrors.WithKind(err, ErrNotFound{}, "Key not found")
 		}
-		return governor.ErrWithKind(err, ErrClient{}, "Failed to get key")
+		return kerrors.WithKind(err, ErrClient{}, "Failed to get key")
 	}
 	return nil
 }
