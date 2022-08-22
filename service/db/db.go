@@ -345,8 +345,15 @@ func (s *service) DB(ctx context.Context) (SQLDB, error) {
 	case <-ctx.Done():
 		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
-		v := <-res
-		return v.client, v.err
+		select {
+		case <-ctx.Done():
+			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			if v == (getClientRes{}) {
+				return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+			}
+			return v.client, v.err
+		}
 	}
 }
 
