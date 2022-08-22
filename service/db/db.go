@@ -189,8 +189,8 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 				client: client,
 				err:    err,
 			}:
+				close(op.res)
 			}
-			close(op.res)
 		}
 	}
 }
@@ -341,7 +341,7 @@ func (s *service) DB(ctx context.Context) (SQLDB, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, kerrors.WithKind(nil, ErrConn{}, "DB service shutdown")
+		return nil, kerrors.WithMsg(nil, "DB service shutdown")
 	case <-ctx.Done():
 		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
@@ -349,9 +349,6 @@ func (s *service) DB(ctx context.Context) (SQLDB, error) {
 		case <-ctx.Done():
 			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 		case v := <-res:
-			if v == (getClientRes{}) {
-				return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-			}
 			return v.client, v.err
 		}
 	}

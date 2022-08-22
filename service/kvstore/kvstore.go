@@ -228,8 +228,8 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 				client: client,
 				err:    err,
 			}:
+				close(op.res)
 			}
-			close(op.res)
 		}
 	}
 }
@@ -373,7 +373,7 @@ func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
 	}
 	select {
 	case <-s.done:
-		return nil, kerrors.WithKind(nil, ErrConn{}, "KVStore service shutdown")
+		return nil, kerrors.WithMsg(nil, "KVStore service shutdown")
 	case <-ctx.Done():
 		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
@@ -381,9 +381,6 @@ func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
 		case <-ctx.Done():
 			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 		case v := <-res:
-			if v == (getClientRes{}) {
-				return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-			}
 			return v.client, v.err
 		}
 	}
