@@ -86,7 +86,7 @@ func (s *Server) setFirstSetupRun(v bool) {
 	s.firstSetupRun = v
 }
 
-func (s *Server) setupServices(rsetup ReqSetup) error {
+func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
@@ -105,7 +105,7 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 			return ErrWithRes(nil, http.StatusBadRequest, "", "First setup already run")
 		}
 		var secret secretSetup
-		if err := s.config.getSecret("setupsecret", 0, &secret); err != nil {
+		if err := s.config.getSecret(ctx, "setupsecret", 0, &secret); err != nil {
 			return kerrors.WithMsg(err, "Invalid setup secret")
 		}
 		if subtle.ConstantTimeCompare([]byte(rsetup.Secret), []byte(secret.Secret)) != 1 {
@@ -117,6 +117,8 @@ func (s *Server) setupServices(rsetup ReqSetup) error {
 		}
 	}
 	rsetup.Secret = ""
+
+	// To avoid partial setup, no context is passed beyond this point
 
 	l.Info("Setup all services begin", nil)
 	for _, i := range s.services {

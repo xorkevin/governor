@@ -59,8 +59,8 @@ type (
 func (s *Server) initSetup(m Router) {
 	m.Post("", func(w http.ResponseWriter, r *http.Request) {
 		c := NewContext(w, r, s.logger)
-		req := &ReqSetup{}
-		if err := c.Bind(req); err != nil {
+		var req ReqSetup
+		if err := c.Bind(&req); err != nil {
 			c.WriteError(err)
 			return
 		}
@@ -68,7 +68,7 @@ func (s *Server) initSetup(m Router) {
 			c.WriteError(err)
 			return
 		}
-		if err := s.setupServices(*req); err != nil {
+		if err := s.setupServices(c.Ctx(), req); err != nil {
 			c.WriteError(err)
 			return
 		}

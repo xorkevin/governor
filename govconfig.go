@@ -1,6 +1,7 @@
 package governor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,7 +48,7 @@ type (
 	secretsClient interface {
 		Info() string
 		Init() error
-		GetSecret(kvpath string) (map[string]interface{}, int64, error)
+		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error)
 	}
 
 	// System event channels
@@ -291,7 +292,7 @@ func (s *secretsFileSource) Init() error {
 	return nil
 }
 
-func (s *secretsFileSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsFileSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error) {
 	data, ok := s.data.Data[kvpath]
 	if !ok {
 		return nil, 0, kerrors.WithKind(nil, ErrVault{}, "Failed to read vault secret")
@@ -383,13 +384,13 @@ func (s *secretsVaultSource) authVault() error {
 	return nil
 }
 
-func (s *secretsVaultSource) GetSecret(kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error) {
 	if err := s.Init(); err != nil {
 		return nil, 0, err
 	}
 
 	vault := s.vault.Logical()
-	secret, err := vault.Read(kvpath)
+	secret, err := vault.ReadWithContext(ctx, kvpath)
 	if err != nil {
 		return nil, 0, kerrors.WithKind(err, ErrVault{}, "Failed to read vault secret")
 	}
@@ -453,7 +454,7 @@ func (c *Config) initsecrets() error {
 	return nil
 }
 
-func (c *Config) getSecret(key string, seconds int64, target interface{}) error {
+func (c *Config) getSecret(ctx context.Context, key string, seconds int64, target interface{}) error {
 	if s, ok := c.vaultCache[key]; ok && s.isValid() {
 		if err := mapstructure.Decode(s.value, target); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed decoding secret")
@@ -466,7 +467,7 @@ func (c *Config) getSecret(key string, seconds int64, target interface{}) error 
 		return kerrors.WithKind(nil, ErrInvalidConfig{}, "Empty secret key "+key)
 	}
 
-	data, expire, err := c.vault.GetSecret(kvpath)
+	data, expire, err := c.vault.GetSecret(ctx, kvpath)
 	if err != nil {
 		return err
 	}
@@ -533,7 +534,7 @@ type (
 
 	// SecretReader gets values from a secret engine
 	SecretReader interface {
-		GetSecret(key string, seconds int64, target interface{}) error
+		GetSecret(ctx context.Context, key string, seconds int64, target interface{}) error
 		InvalidateSecret(key string)
 	}
 
@@ -592,8 +593,8 @@ func (s *vaultSecret) isValid() bool {
 	return s.expire == 0 || s.expire-time.Now().Round(0).Unix() > 5
 }
 
-func (r *configReader) GetSecret(key string, seconds int64, target interface{}) error {
-	return r.c.getSecret(r.name+"."+key, seconds, target)
+func (r *configReader) GetSecret(ctx context.Context, key string, seconds int64, target interface{}) error {
+	return r.c.getSecret(ctx, r.name+"."+key, seconds, target)
 }
 
 func (r *configReader) InvalidateSecret(key string) {

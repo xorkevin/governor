@@ -8,17 +8,15 @@ import (
 	"strconv"
 	"time"
 
-	// depends upon postgres
 	"github.com/lib/pq"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/kerrors"
 )
 
 type (
 	// Database is a service wrapper around an sql.DB instance
-	//
-	// DB returns the wrapped sql database instance
 	Database interface {
-		DB() (*sql.DB, error)
+		DB(ctx context.Context) (SQLDB, error)
 	}
 
 	// Service is a DB and governor.Service
@@ -27,23 +25,20 @@ type (
 		Database
 	}
 
-	pgauth struct {
-		username string
-		password string
-	}
-
 	getClientRes struct {
-		client *sql.DB
+		client SQLDB
 		err    error
 	}
 
 	getOp struct {
+		ctx context.Context
 		res chan<- getClientRes
 	}
 
 	service struct {
 		client     *sql.DB
-		auth       pgauth
+		sqldb      SQLDB
+		auth       pgAuth
 		connopts   string
 		config     governor.SecretReader
 		logger     governor.Logger
@@ -132,22 +127,22 @@ func (e ErrAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
-func WrapErr(err error, message string) error {
+func wrapDBErr(err error, fallbackmsg string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return governor.ErrWithKind(err, ErrNotFound{}, message)
+		return kerrors.WithKind(err, ErrNotFound{}, "Not found")
 	}
 	perr := &pq.Error{}
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return governor.ErrWithKind(err, ErrUnique{}, message)
+			return kerrors.WithKind(err, ErrUnique{}, "Unique constraint violated")
 		case "42P01": // undefined_table
-			return governor.ErrWithKind(err, ErrUndefinedTable{}, message)
+			return kerrors.WithKind(err, ErrUndefinedTable{}, "Table not defined")
 		case "42501": // insufficient_privilege
-			return governor.ErrWithKind(err, ErrAuthz{}, message)
+			return kerrors.WithKind(err, ErrAuthz{}, "Unauthorized")
 		}
 	}
-	return governor.ErrWithMsg(err, message)
+	return kerrors.WithMsg(err, fallbackmsg)
 }
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
@@ -162,7 +157,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"connopts":   s.connopts,
 		"hbinterval": strconv.Itoa(s.hbinterval),
 		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
@@ -172,9 +167,6 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	go s.execute(ctx, done)
 	s.done = done
 
-	if _, err := s.DB(); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -188,19 +180,22 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			s.closeClient()
 			return
 		case <-ticker.C:
-			s.handlePing()
+			s.handlePing(ctx)
 		case op := <-s.ops:
-			client, err := s.handleGetClient()
-			op.res <- getClientRes{
+			client, err := s.handleGetClient(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getClientRes{
 				client: client,
 				err:    err,
+			}:
 			}
 			close(op.res)
 		}
 	}
 }
 
-func (s *service) handlePing() {
+func (s *service) handlePing(ctx context.Context) {
 	if s.client != nil {
 		err := s.client.Ping()
 		if err == nil {
@@ -212,72 +207,72 @@ func (s *service) handlePing() {
 		if s.hbfailed < s.hbmaxfail {
 			s.logger.Warn("Failed to ping db", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "pingdb",
+				"actiontype": "db_ping",
 				"connection": s.connopts,
-				"username":   s.auth.username,
+				"username":   s.auth.Username,
 			})
 			return
 		}
-		s.logger.Error("failed max pings to db", map[string]string{
+		s.logger.Error("Failed max pings to db", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "pingdbmax",
+			"actiontype": "db_ping",
 			"connection": s.connopts,
-			"username":   s.auth.username,
+			"username":   s.auth.Username,
 		})
 		s.ready = false
 		s.hbfailed = 0
-		s.auth = pgauth{}
+		s.auth = pgAuth{}
 		s.config.InvalidateSecret("auth")
 	}
-	if _, err := s.handleGetClient(); err != nil {
+	if _, err := s.handleGetClient(ctx); err != nil {
 		s.logger.Error("Failed to create db client", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "createdbclient",
+			"actiontype": "db_create_client",
 		})
 	}
 }
 
 type (
-	secretAuth struct {
+	pgAuth struct {
 		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
 
-func (s *service) handleGetClient() (*sql.DB, error) {
-	var secret secretAuth
-	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
-		return nil, governor.ErrWithMsg(err, "Invalid secret")
+func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
+	var auth pgAuth
+	if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
+		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
-	if secret.Username == "" || secret.Password == "" {
-		return nil, governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
-	}
-	auth := pgauth{
-		username: secret.Username,
-		password: secret.Password,
+	if auth.Username == "" {
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
 	}
 	if auth == s.auth {
-		return s.client, nil
+		return s.sqldb, nil
 	}
 
 	s.closeClient()
 
-	opts := fmt.Sprintf("user=%s password=%s %s", auth.username, auth.password, s.connopts)
+	opts := fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts)
 	client, err := sql.Open("postgres", opts)
 	if err != nil {
-		return nil, governor.ErrWithKind(err, ErrClient{}, "Failed to init db conn")
+		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to init db conn")
 	}
-	if err := client.Ping(); err != nil {
+	if err := client.PingContext(ctx); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, governor.ErrWithKind(err, ErrConn{}, "Failed to ping db")
+		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping db")
 	}
 
 	s.client = client
+	s.sqldb = &sqldb{
+		logger: s.logger,
+		client: client,
+	}
 	s.auth = auth
 	s.ready = true
 	s.hbfailed = 0
-	s.logger.Info(fmt.Sprintf("established connection to %s with user %s", s.connopts, s.auth.username), nil)
-	return s.client, nil
+	s.logger.Info(fmt.Sprintf("Established connection to %s with user %s", s.connopts, s.auth.Username), nil)
+	return s.sqldb, nil
 }
 
 func (s *service) closeClient() {
@@ -287,19 +282,20 @@ func (s *service) closeClient() {
 	if err := s.client.Close(); err != nil {
 		s.logger.Error("Failed to close db connection", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "closedberr",
+			"actiontype": "db_close",
 			"connection": s.connopts,
-			"username":   s.auth.username,
+			"username":   s.auth.Username,
 		})
 	} else {
-		s.logger.Info("closed db connection", map[string]string{
-			"actiontype": "closedbok",
+		s.logger.Info("Closed db connection", map[string]string{
+			"actiontype": "db_close_ok",
 			"connection": s.connopts,
-			"username":   s.auth.username,
+			"username":   s.auth.Username,
 		})
 	}
 	s.client = nil
-	s.auth = pgauth{}
+	s.sqldb = nil
+	s.auth = pgAuth{}
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -322,28 +318,157 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", nil)
+		l.Warn("Failed to stop", map[string]string{
+			"error":      ctx.Err().Error(),
+			"actiontype": "db_stop",
+		})
 	}
 }
 
 func (s *service) Health() error {
 	if !s.ready {
-		return governor.ErrWithKind(nil, ErrConn{}, "DB service not ready")
+		return kerrors.WithKind(nil, ErrConn{}, "DB service not ready")
 	}
 	return nil
 }
 
-// DB implements Database.DB by returning its wrapped sql.DB
-func (s *service) DB() (*sql.DB, error) {
+// DB implements [Database] and returns [SQLDB]
+func (s *service) DB(ctx context.Context) (SQLDB, error) {
 	res := make(chan getClientRes)
 	op := getOp{
+		ctx: ctx,
 		res: res,
 	}
 	select {
 	case <-s.done:
-		return nil, governor.ErrWithKind(nil, ErrConn{}, "DB service shutdown")
+		return nil, kerrors.WithKind(nil, ErrConn{}, "DB service shutdown")
+	case <-ctx.Done():
+		return nil, kerrors.WithMsg(ctx.Err(), "Context closed")
 	case s.ops <- op:
 		v := <-res
 		return v.client, v.err
 	}
+}
+
+type (
+	// SQLExecutor is the interface of the subset of methods shared by [database/sql.DB] and [database/sql.Tx]
+	SQLExecutor interface {
+		ExecContext(ctx context.Context, query string, args ...interface{}) (SQLResult, error)
+		QueryContext(ctx context.Context, query string, args ...interface{}) (SQLRows, error)
+		QueryRowContext(ctx context.Context, query string, args ...interface{}) SQLRow
+	}
+
+	// SQLResult is [sql.Result]
+	SQLResult = sql.Result
+
+	// SQLRows is the interface boundary of [database/sql.Rows]
+	SQLRows interface {
+		Next() bool
+		Scan(dest ...interface{}) error
+		Err() error
+		Close() error
+	}
+
+	// SQLRow is the interface boundary of [database/sql.Row]
+	SQLRow interface {
+		Scan(dest ...interface{}) error
+		Err() error
+	}
+
+	// SQLDB is the interface boundary of a [database/sql.DB]
+	SQLDB interface {
+		SQLExecutor
+	}
+
+	sqldb struct {
+		logger governor.Logger
+		client *sql.DB
+	}
+
+	sqlrows struct {
+		logger governor.Logger
+		rows   *sql.Rows
+	}
+
+	sqlrow struct {
+		row *sql.Row
+	}
+)
+
+// ExecContext implements [SQLExecutor]
+func (s *sqldb) ExecContext(ctx context.Context, query string, args ...interface{}) (SQLResult, error) {
+	r, err := s.client.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, wrapDBErr(err, "Failed executing command")
+	}
+	return r, nil
+}
+
+// QueryContext implements [SQLExecutor]
+func (s *sqldb) QueryContext(ctx context.Context, query string, args ...interface{}) (SQLRows, error) {
+	rows, err := s.client.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, wrapDBErr(err, "Failed executing query")
+	}
+	return &sqlrows{
+		logger: s.logger,
+		rows:   rows,
+	}, nil
+}
+
+// QueryRowContext implements [SQLExecutor]
+func (s *sqldb) QueryRowContext(ctx context.Context, query string, args ...interface{}) SQLRow {
+	return &sqlrow{
+		row: s.client.QueryRowContext(ctx, query, args...),
+	}
+}
+
+// Next implements [SQLRows]
+func (r *sqlrows) Next() bool {
+	return r.rows.Next()
+}
+
+// Scan implements [SQLRows]
+func (r *sqlrows) Scan(dest ...interface{}) error {
+	if err := r.rows.Scan(dest...); err != nil {
+		return wrapDBErr(err, "Failed scanning row")
+	}
+	return nil
+}
+
+// Err implements [SQLRows]
+func (r *sqlrows) Err() error {
+	if err := r.rows.Err(); err != nil {
+		return wrapDBErr(err, "Failed iterating rows")
+	}
+	return nil
+}
+
+// Close implements [SQLRows]
+func (r *sqlrows) Close() error {
+	if err := r.rows.Close(); err != nil {
+		err := wrapDBErr(err, "Failed closing rows")
+		r.logger.Error("Failed closing rows", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "db_close_rows",
+		})
+		return err
+	}
+	return nil
+}
+
+// Scan implements [SQLRow]
+func (r *sqlrow) Scan(dest ...interface{}) error {
+	if err := r.row.Scan(dest...); err != nil {
+		return wrapDBErr(err, "Failed scanning row")
+	}
+	return nil
+}
+
+// Err implements [SQLRow]
+func (r *sqlrow) Err() error {
+	if err := r.row.Err(); err != nil {
+		return wrapDBErr(err, "Failed executing query")
+	}
+	return nil
 }
