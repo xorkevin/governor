@@ -11,6 +11,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -21,7 +22,7 @@ type (
 		Base() governor.Middleware
 	}
 
-	// Service is a Gate and governor.Service
+	// Service is a Ratelimiter and governor.Service
 	Service interface {
 		governor.Service
 		Ratelimiter
@@ -136,10 +137,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if err := r.Unmarshal("params.base", &s.paramsBase); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse base ratelimit params")
+		return kerrors.WithMsg(err, "Failed to parse base ratelimit params")
 	}
 	if err := r.Unmarshal("params.auth", &s.paramsAuth); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse auth ratelimit params")
+		return kerrors.WithMsg(err, "Failed to parse auth ratelimit params")
 	}
 
 	l.Info("Loaded config", map[string]string{
@@ -187,10 +188,11 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
-				multiget, err := kv.Tx()
+				multiget, err := kv.Tx(c.Ctx())
 				if err != nil {
 					s.logger.Error("Failed to create kvstore multi", map[string]string{
-						"error": err.Error(),
+						"error":      err.Error(),
+						"actiontype": "ratelimit_create_tags_query",
 					})
 					goto end
 				}
@@ -198,7 +200,8 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 				for _, i := range tags {
 					if i.Params.Period <= 0 {
 						s.logger.Error("Invalid ratelimit period", map[string]string{
-							"error": "Ratelimit period",
+							"error":      "Ratelimit period",
+							"actiontype": "ratelimit_query_tags",
 						})
 						continue
 					}
@@ -206,20 +209,20 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 					l := divroundup(i.Params.Expiration, i.Params.Period)
 					periods := make([]kvstore.IntResulter, 0, l)
 					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
-					periods = append(periods, multiget.Incr(k, 1))
-					multiget.Expire(k, i.Params.Period+1)
+					periods = append(periods, multiget.Incr(c.Ctx(), k, 1))
+					multiget.Expire(c.Ctx(), k, i.Params.Period+1)
 					for j := int64(1); j < l; j++ {
-						periods = append(periods, multiget.GetInt(multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
+						periods = append(periods, multiget.GetInt(c.Ctx(), multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
 					}
 					sums = append(sums, tagSum{
 						limit:   i.Params.Limit,
 						periods: periods,
 					})
 				}
-				if err := multiget.Exec(); err != nil {
+				if err := multiget.Exec(c.Ctx()); err != nil {
 					s.logger.Error("Failed to get tags from cache", map[string]string{
 						"error":      err.Error(),
-						"actiontype": "getratelimittags",
+						"actiontype": "ratelimit_get_tags",
 					})
 					goto end
 				}
@@ -231,7 +234,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 							if !errors.Is(err, kvstore.ErrNotFound{}) {
 								s.logger.Error("Failed to get tag from cache", map[string]string{
 									"error":      err.Error(),
-									"actiontype": "getratelimittagresult",
+									"actiontype": "ratelimit_get_tag_result",
 								})
 							}
 							continue

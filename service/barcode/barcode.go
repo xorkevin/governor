@@ -3,8 +3,8 @@ package barcode
 import (
 	bar "github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/image"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -42,12 +42,12 @@ func qrecTranslate(level QRECLevel) qr.ErrorCorrectionLevel {
 func GenerateQR(data string, level QRECLevel, scale int) (image.Image, error) {
 	qrCode, err := qr.Encode(data, qrecTranslate(level), qr.Unicode)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to encode qr data")
+		return nil, kerrors.WithMsg(err, "Failed to encode qr data")
 	}
 	size := qrCode.Bounds().Size()
 	qrCode, err = bar.Scale(qrCode, size.X*scale, size.Y*scale)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to scale qr code")
+		return nil, kerrors.WithMsg(err, "Failed to scale qr code")
 	}
 	return image.FromImage(qrCode), nil
 }
