@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	jsmapi "github.com/nats-io/jsm.go/api"
@@ -88,7 +89,7 @@ type (
 		subops          chan subOp
 		subs            map[*subscription]struct{}
 		streamSubs      map[*streamSubscription]struct{}
-		ready           bool
+		ready           *atomic.Bool
 		canary          <-chan struct{}
 		hbinterval      int
 		hbmaxfail       int
@@ -182,7 +183,7 @@ func New() Service {
 		subops:     make(chan subOp),
 		subs:       map[*subscription]struct{}{},
 		streamSubs: map[*streamSubscription]struct{}{},
-		ready:      false,
+		ready:      &atomic.Bool{},
 		canary:     canary,
 	}
 }
@@ -319,11 +320,11 @@ func (s *service) handlePing(ctx context.Context) {
 		select {
 		case <-s.canary:
 		default:
-			s.ready = true
+			s.ready.Store(true)
 			s.updateSubs(s.client, s.stream)
 			return
 		}
-		s.ready = false
+		s.ready.Store(false)
 		s.auth = secretAuth{}
 		s.config.InvalidateSecret("auth")
 	}
@@ -337,7 +338,7 @@ func (s *service) handlePing(ctx context.Context) {
 
 func (s *service) refreshApiSecret(ctx context.Context) {
 	apisecret := secretAPI{}
-	if err := s.config.GetSecret(ctx, "apisecret", 60, &apisecret); err != nil {
+	if err := s.config.GetSecret(ctx, "apisecret", int64(s.apirefresh), &apisecret); err != nil {
 		s.logger.Error("Invalid api secret", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "events_get_api_secret",
@@ -462,7 +463,7 @@ func (s *service) handleGetClient(ctx context.Context) (*nats.Conn, nats.JetStre
 	s.client = conn
 	s.stream = stream
 	s.auth = secret
-	s.ready = true
+	s.ready.Store(true)
 	s.canary = canary
 	s.logger.Info(fmt.Sprintf("Established connection to %s", s.addr), nil)
 	return s.client, s.stream, s.canary, nil
@@ -520,12 +521,15 @@ func (s *service) Stop(ctx context.Context) {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", nil)
+		l.Warn("Failed to stop", map[string]string{
+			"error":      ctx.Err().Error(),
+			"actiontype": "events_stop",
+		})
 	}
 }
 
 func (s *service) Health() error {
-	if !s.ready {
+	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrConn{}, "Events service not ready")
 	}
 	return nil

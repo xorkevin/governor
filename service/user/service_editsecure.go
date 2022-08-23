@@ -2,6 +2,7 @@ package user
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	htmlTemplate "html/template"
@@ -496,7 +497,7 @@ type (
 )
 
 // AddOTP adds an otp secret
-func (s *service) AddOTP(userid string, alg string, digits int, password string) (*resAddOTP, error) {
+func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits int, password string) (*resAddOTP, error) {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -522,7 +523,11 @@ func (s *service) AddOTP(userid string, alg string, digits int, password string)
 		}))
 	}
 
-	uri, backup, err := s.users.GenerateOTPSecret(s.otpCipher, m, s.otpIssuer, alg, digits)
+	cipher, _, err := s.getCipher(ctx)
+	if err != nil {
+		return nil, err
+	}
+	uri, backup, err := s.users.GenerateOTPSecret(cipher, m, s.otpIssuer, alg, digits)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate otp secret")
 	}
@@ -538,7 +543,7 @@ func (s *service) AddOTP(userid string, alg string, digits int, password string)
 }
 
 // CommitOTP commits to using an otp
-func (s *service) CommitOTP(userid string, code string) error {
+func (s *service) CommitOTP(ctx context.Context, userid string, code string) error {
 	m, err := s.users.GetByID(userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
@@ -561,7 +566,11 @@ func (s *service) CommitOTP(userid string, code string) error {
 			Message: "OTP secret not yet added",
 		}))
 	}
-	if ok, err := s.users.ValidateOTPCode(s.otpDecrypter, m, code); err != nil {
+	_, decrypter, err := s.getCipher(ctx)
+	if err != nil {
+		return err
+	}
+	if ok, err := s.users.ValidateOTPCode(decrypter, m, code); err != nil {
 		return governor.ErrWithMsg(err, "Failed to validate otp code")
 	} else if !ok {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -578,7 +587,7 @@ func (s *service) CommitOTP(userid string, code string) error {
 	return nil
 }
 
-func (s *service) checkOTPCode(m *model.Model, code string, backup string, ipaddr, useragent string) error {
+func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string, backup string, ipaddr, useragent string) error {
 	var k int64
 	if m.FailedLoginCount > 293 || k < 0 {
 		k = time24h
@@ -594,7 +603,11 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string, ipadd
 		}))
 	}
 	if code == "" {
-		if ok, err := s.users.ValidateOTPBackup(s.otpDecrypter, m, backup); err != nil {
+		_, decrypter, err := s.getCipher(ctx)
+		if err != nil {
+			return err
+		}
+		if ok, err := s.users.ValidateOTPBackup(decrypter, m, backup); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp backup code")
 		} else if !ok {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -631,7 +644,11 @@ func (s *service) checkOTPCode(m *model.Model, code string, backup string, ipadd
 				Message: "OTP code already used",
 			}))
 		}
-		if ok, err := s.users.ValidateOTPCode(s.otpDecrypter, m, code); err != nil {
+		_, decrypter, err := s.getCipher(ctx)
+		if err != nil {
+			return err
+		}
+		if ok, err := s.users.ValidateOTPCode(decrypter, m, code); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp code")
 		} else if !ok {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{

@@ -10,6 +10,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 )
@@ -50,7 +51,7 @@ type (
 		config     governor.SecretReader
 		logger     governor.Logger
 		ops        chan getOp
-		ready      bool
+		ready      *atomic.Bool
 		hbfailed   int
 		hbinterval int
 		hbmaxfail  int
@@ -100,7 +101,7 @@ func NewBucketInCtx(inj governor.Injector, name string) {
 func New() Service {
 	return &service{
 		ops:      make(chan getOp),
-		ready:    false,
+		ready:    &atomic.Bool{},
 		hbfailed: 0,
 	}
 }
@@ -196,7 +197,7 @@ func (s *service) handlePing(ctx context.Context) {
 	if s.client != nil {
 		_, err := s.client.ListBuckets(ctx)
 		if err == nil {
-			s.ready = true
+			s.ready.Store(true)
 			s.hbfailed = 0
 			return
 		}
@@ -216,7 +217,7 @@ func (s *service) handlePing(ctx context.Context) {
 			"address":    s.addr,
 			"username":   s.auth.Username,
 		})
-		s.ready = false
+		s.ready.Store(false)
 		s.hbfailed = 0
 		s.auth = minioauth{}
 		s.config.InvalidateSecret("auth")
@@ -264,7 +265,7 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 
 	s.client = client
 	s.auth = auth
-	s.ready = false
+	s.ready.Store(false)
 	s.hbfailed = 0
 	s.logger.Info(fmt.Sprintf("Established connection to %s with key %s", s.addr, s.auth.Username), nil)
 	return s.client, nil
@@ -303,7 +304,7 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	if !s.ready {
+	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrConn{}, "Objstore service not ready")
 	}
 	return nil

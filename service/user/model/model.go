@@ -1,7 +1,8 @@
 package model
 
 import (
-	"crypto/hmac"
+	"context"
+	"crypto/subtle"
 	"errors"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p user -o model_gen.go Model Info
@@ -30,20 +32,20 @@ type (
 		ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
 		ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error)
 		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
-		GetGroup(limit, offset int) ([]Info, error)
-		GetBulk(userids []string) ([]Info, error)
-		GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, error)
-		GetByID(userid string) (*Model, error)
-		GetByUsername(username string) (*Model, error)
-		GetByEmail(email string) (*Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		Delete(m *Model) error
-		Setup() error
+		GetGroup(ctx context.Context, limit, offset int) ([]Info, error)
+		GetBulk(ctx context.Context, userids []string) ([]Info, error)
+		GetByUsernamePrefix(ctx context.Context, prefix string, limit, offset int) ([]Info, error)
+		GetByID(ctx context.Context, userid string) (*Model, error)
+		GetByUsername(ctx context.Context, username string) (*Model, error)
+		GetByEmail(ctx context.Context, email string) (*Model, error)
+		Insert(ctx context.Context, m *Model) error
+		Update(ctx context.Context, m *Model) error
+		Delete(ctx context.Context, m *Model) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *userModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -109,7 +111,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &userModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -120,12 +124,12 @@ func New(database db.Database, table string) Repo {
 func (r *repo) New(username, password, email, firstname, lastname string) (*Model, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
+		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}
 
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to hash password")
+		return nil, kerrors.WithMsg(err, "Failed to hash password")
 	}
 
 	return &Model{
@@ -143,7 +147,7 @@ func (r *repo) New(username, password, email, firstname, lastname string) (*Mode
 func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(password, m.PassHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify password")
+		return false, kerrors.WithMsg(err, "Failed to verify password")
 	}
 	return ok, nil
 }
@@ -152,7 +156,7 @@ func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 func (r *repo) RehashPass(m *Model, password string) error {
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to rehash password")
+		return kerrors.WithMsg(err, "Failed to rehash password")
 	}
 	m.PassHash = mHash
 	return nil
@@ -162,11 +166,11 @@ func (r *repo) RehashPass(m *Model, password string) error {
 func (r *repo) ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error) {
 	params, err := decrypter.Decrypt(m.OTPSecret)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to decrypt otp secret")
+		return false, kerrors.WithMsg(err, "Failed to decrypt otp secret")
 	}
 	ok, err := hunter2.TOTPVerify(params, code, hunter2.DefaultOTPHashes)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify otp code")
+		return false, kerrors.WithMsg(err, "Failed to verify otp code")
 	}
 	return ok, nil
 }
@@ -175,9 +179,9 @@ func (r *repo) ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code stri
 func (r *repo) ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error) {
 	code, err := decrypter.Decrypt(m.OTPBackup)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to decrypt otp backup")
+		return false, kerrors.WithMsg(err, "Failed to decrypt otp backup")
 	}
-	return hmac.Equal([]byte(code), []byte(backup)), nil
+	return subtle.ConstantTimeCompare([]byte(code), []byte(backup)) == 1, nil
 }
 
 // GenerateOTPSecret generates an otp secret
@@ -193,19 +197,19 @@ func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string,
 		AccountName: m.Username,
 	})
 	if err != nil {
-		return "", "", governor.ErrWithMsg(err, "Failed to generate otp secret")
+		return "", "", kerrors.WithMsg(err, "Failed to generate otp secret")
 	}
 	backup, err := hunter2.GenerateRandomCode(totpBackupLen)
 	if err != nil {
-		return "", "", governor.ErrWithMsg(err, "Failed to generate otp backup")
+		return "", "", kerrors.WithMsg(err, "Failed to generate otp backup")
 	}
 	encryptedParams, err := cipher.Encrypt(params)
 	if err != nil {
-		return "", "", governor.ErrWithMsg(err, "Failed to encrypt otp secret")
+		return "", "", kerrors.WithMsg(err, "Failed to encrypt otp secret")
 	}
 	encryptedBackup, err := cipher.Encrypt(backup)
 	if err != nil {
-		return "", "", governor.ErrWithMsg(err, "Failed to encrypt otp backup")
+		return "", "", kerrors.WithMsg(err, "Failed to encrypt otp backup")
 	}
 	m.OTPSecret = encryptedParams
 	m.OTPBackup = encryptedBackup
@@ -213,130 +217,130 @@ func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string,
 }
 
 // GetGroup gets information from each user
-func (r *repo) GetGroup(limit, offset int) ([]Info, error) {
-	d, err := r.db.DB()
+func (r *repo) GetGroup(ctx context.Context, limit, offset int) ([]Info, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoOrdUserid(d, r.table, true, limit, offset)
+	m, err := r.table.GetInfoOrdUserid(ctx, d, true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user info")
+		return nil, kerrors.WithMsg(err, "Failed to get user info")
 	}
 	return m, nil
 }
 
 // GetBulk gets information from users
-func (r *repo) GetBulk(userids []string) ([]Info, error) {
+func (r *repo) GetBulk(ctx context.Context, userids []string) ([]Info, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoHasUseridOrdUserid(d, r.table, userids, true, len(userids), 0)
+	m, err := r.table.GetInfoHasUseridOrdUserid(ctx, d, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user info of userids")
+		return nil, kerrors.WithMsg(err, "Failed to get user info of userids")
 	}
 	return m, nil
 }
 
 // GetByUsernamePrefix gets users by username prefix
-func (r *repo) GetByUsernamePrefix(prefix string, limit, offset int) ([]Info, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByUsernamePrefix(ctx context.Context, prefix string, limit, offset int) ([]Info, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetInfoLikeUsernameOrdUsername(d, r.table, prefix+"%", true, limit, offset)
+	m, err := r.table.GetInfoLikeUsernameOrdUsername(ctx, d, prefix+"%", true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user info of username prefix")
+		return nil, kerrors.WithMsg(err, "Failed to get user info of username prefix")
 	}
 	return m, nil
 }
 
 // GetByID returns a user model with the given id
-func (r *repo) GetByID(userid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqUserid(d, r.table, userid)
+	m, err := r.table.GetModelEqUserid(ctx, d, userid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
 	return m, nil
 }
 
 // GetByUsername returns a user model with the given username
-func (r *repo) GetByUsername(username string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByUsername(ctx context.Context, username string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqUsername(d, r.table, username)
+	m, err := r.table.GetModelEqUsername(ctx, d, username)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user by username")
+		return nil, kerrors.WithMsg(err, "Failed to get user by username")
 	}
 	return m, nil
 }
 
 // GetByEmail returns a user model with the given email
-func (r *repo) GetByEmail(email string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByEmail(ctx context.Context, email string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := userModelGetModelEqEmail(d, r.table, email)
+	m, err := r.table.GetModelEqEmail(ctx, d, email)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user by email")
+		return nil, kerrors.WithMsg(err, "Failed to get user by email")
 	}
 	return m, nil
 }
 
 // Insert inserts the model into the db
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := userModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert user")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert user")
 	}
 	return nil
 }
 
 // Update updates the model in the db
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Update(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := userModelUpdModelEqUserid(d, r.table, m, m.Userid); err != nil {
-		return db.WrapErr(err, "Failed to update user")
+	if err := r.table.UpdModelEqUserid(ctx, d, m, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user")
 	}
 	return nil
 }
 
 // Delete deletes the model in the db
-func (r *repo) Delete(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := userModelDelEqUserid(d, r.table, m.Userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user")
+	if err := r.table.DelEqUserid(ctx, d, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user")
 	}
 	return nil
 }
 
 // Setup creates a new User table
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := userModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup user model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup user model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

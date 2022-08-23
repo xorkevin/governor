@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 )
@@ -43,7 +44,7 @@ type (
 		config     governor.SecretReader
 		logger     governor.Logger
 		ops        chan getOp
-		ready      bool
+		ready      *atomic.Bool
 		hbfailed   int
 		hbinterval int
 		hbmaxfail  int
@@ -71,7 +72,7 @@ func setCtxDB(inj governor.Injector, d Database) {
 func New() Service {
 	return &service{
 		ops:      make(chan getOp),
-		ready:    false,
+		ready:    &atomic.Bool{},
 		hbfailed: 0,
 	}
 }
@@ -199,7 +200,7 @@ func (s *service) handlePing(ctx context.Context) {
 	if s.client != nil {
 		err := s.client.Ping()
 		if err == nil {
-			s.ready = true
+			s.ready.Store(true)
 			s.hbfailed = 0
 			return
 		}
@@ -219,7 +220,7 @@ func (s *service) handlePing(ctx context.Context) {
 			"connection": s.connopts,
 			"username":   s.auth.Username,
 		})
-		s.ready = false
+		s.ready.Store(false)
 		s.hbfailed = 0
 		s.auth = pgAuth{}
 		s.config.InvalidateSecret("auth")
@@ -269,7 +270,7 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 		client: client,
 	}
 	s.auth = auth
-	s.ready = true
+	s.ready.Store(true)
 	s.hbfailed = 0
 	s.logger.Info(fmt.Sprintf("Established connection to %s with user %s", s.connopts, s.auth.Username), nil)
 	return s.sqldb, nil
@@ -326,7 +327,7 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Health() error {
-	if !s.ready {
+	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrConn{}, "DB service not ready")
 	}
 	return nil

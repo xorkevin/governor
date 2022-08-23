@@ -6,6 +6,7 @@ import (
 	htmlTemplate "html/template"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -25,6 +26,7 @@ import (
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -56,6 +58,17 @@ type (
 		Users
 	}
 
+	getCipherRes struct {
+		cipher    hunter2.Cipher
+		decrypter *hunter2.Decrypter
+		err       error
+	}
+
+	getOp struct {
+		ctx context.Context
+		res chan<- getCipherRes
+	}
+
 	service struct {
 		users             model.Repo
 		sessions          sessionmodel.Repo
@@ -74,6 +87,7 @@ type (
 		tokenizer         token.Tokenizer
 		otpDecrypter      *hunter2.Decrypter
 		otpCipher         hunter2.Cipher
+		config            governor.SecretReader
 		logger            governor.Logger
 		rolens            string
 		scopens           string
@@ -101,6 +115,13 @@ type (
 		tplemailchange    *htmlTemplate.Template
 		tplforgotpass     *htmlTemplate.Template
 		tplnewuser        *htmlTemplate.Template
+		ops               chan getOp
+		ready             *atomic.Bool
+		hbfailed          int
+		hbinterval        int
+		hbmaxfail         int
+		done              <-chan struct{}
+		otprefresh        int
 		syschannels       governor.SysChannels
 	}
 
@@ -244,6 +265,9 @@ func New(
 		passResetDelay:    0,
 		invitationTime:    time24h,
 		userCacheTime:     time24h,
+		ops:               make(chan getOp),
+		ready:             &atomic.Bool{},
+		hbfailed:          0,
 	}
 }
 
@@ -281,6 +305,9 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.newuser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
+	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbmaxfail", 6)
+	r.SetDefault("otprefresh", 60)
 }
 
 func (s *service) router() *router {
@@ -302,56 +329,58 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"phase": "init",
 	})
 
+	s.config = r
+
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid stream size")
+		return kerrors.WithMsg(err, "Invalid stream size")
 	}
 	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid msg size")
+		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse access time")
+		return kerrors.WithMsg(err, "Failed to parse access time")
 	} else {
 		s.accessTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse refresh time")
+		return kerrors.WithMsg(err, "Failed to parse refresh time")
 	} else {
 		s.refreshTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("refreshcache")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse refresh cache")
+		return kerrors.WithMsg(err, "Failed to parse refresh cache")
 	} else {
 		s.refreshCacheTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse confirm time")
+		return kerrors.WithMsg(err, "Failed to parse confirm time")
 	} else {
 		s.confirmTime = int64(t / time.Second)
 	}
 	s.passwordReset = r.GetBool("passwordreset")
 	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse password reset time")
+		return kerrors.WithMsg(err, "Failed to parse password reset time")
 	} else {
 		s.passwordResetTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("passresetdelay")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse password reset delay")
+		return kerrors.WithMsg(err, "Failed to parse password reset delay")
 	} else {
 		s.passResetDelay = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse role invitation time")
+		return kerrors.WithMsg(err, "Failed to parse role invitation time")
 	} else {
 		s.invitationTime = int64(t / time.Second)
 	}
 	if t, err := time.ParseDuration(r.GetStr("usercachetime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse user cache time")
+		return kerrors.WithMsg(err, "Failed to parse user cache time")
 	} else {
 		s.userCacheTime = int64(t / time.Second)
 	}
@@ -363,39 +392,24 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.emailurlbase = r.GetStr("email.url.base")
 	if t, err := htmlTemplate.New("email.url.emailchange").Parse(r.GetStr("email.url.emailchange")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse email change url template")
+		return kerrors.WithMsg(err, "Failed to parse email change url template")
 	} else {
 		s.tplemailchange = t
 	}
 	if t, err := htmlTemplate.New("email.url.forgotpass").Parse(r.GetStr("email.url.forgotpass")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse forgot pass url template")
+		return kerrors.WithMsg(err, "Failed to parse forgot pass url template")
 	} else {
 		s.tplforgotpass = t
 	}
 	if t, err := htmlTemplate.New("email.url.newuser").Parse(r.GetStr("email.url.newuser")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse new user url template")
+		return kerrors.WithMsg(err, "Failed to parse new user url template")
 	} else {
 		s.tplnewuser = t
 	}
 
-	otpsecrets := secretOTP{}
-	if err := r.GetSecret("otpkey", 0, &otpsecrets); err != nil {
-		return governor.ErrWithMsg(err, "Invalid otpkey secrets")
-	}
-	if len(otpsecrets.Keys) == 0 {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
-	}
-	s.otpDecrypter = hunter2.NewDecrypter()
-	for n, i := range otpsecrets.Keys {
-		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
-		if err != nil {
-			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
-		}
-		if n == 0 {
-			s.otpCipher = cipher
-		}
-		s.otpDecrypter.RegisterCipher(cipher)
-	}
+	s.hbinterval = r.GetInt("hbinterval")
+	s.hbmaxfail = r.GetInt("hbmaxfail")
+	s.otprefresh = r.GetInt("otprefresh")
 
 	s.syschannels = c.SysChannels
 
@@ -415,12 +429,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
 		"userapproval":          strconv.FormatBool(s.userApproval),
 		"otpissuer":             s.otpIssuer,
-		"numotpkeys":            strconv.Itoa(len(otpsecrets.Keys)),
 		"rolesummary":           s.rolesummary.String(),
 		"tplemailchange":        r.GetStr("email.url.emailchange"),
 		"tplforgotpass":         r.GetStr("email.url.forgotpass"),
 		"tplnewuser":            r.GetStr("email.url.newuser"),
+		"hbinterval":            strconv.Itoa(s.hbinterval),
+		"hbmaxfail":             strconv.Itoa(s.hbmaxfail),
+		"otprefresh":            strconv.Itoa(s.otprefresh),
 	})
+
+	done := make(chan struct{})
+	go s.execute(ctx, done)
+	s.done = done
 
 	sr := s.router()
 	sr.mountRoute(m.Group("/user"))
@@ -430,22 +450,133 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+			s.handlePing(ctx)
+		case op := <-s.ops:
+			cipher, decrypter, err := s.handleGetCipher(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getCipherRes{
+				cipher:    cipher,
+				decrypter: decrypter,
+				err:       err,
+			}:
+				close(op.res)
+			}
+		}
+	}
+}
+
+func (s *service) handlePing(ctx context.Context) {
+	err := s.refreshSecrets(ctx)
+	if err == nil {
+		s.ready.Store(true)
+		s.hbfailed = 0
+		return
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to refresh otp secrets", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "user_refresh_otp_secrets",
+		})
+		return
+	}
+	s.logger.Error("Failed max refresh attempts", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "user_refresh_otp_secrets",
+	})
+	s.ready.Store(false)
+	s.hbfailed = 0
+}
+
+func (s *service) refreshSecrets(ctx context.Context) error {
+	var otpsecrets secretOTP
+	if err := s.config.GetSecret(ctx, "otpkey", int64(s.otprefresh), &otpsecrets); err != nil {
+		return kerrors.WithMsg(err, "Invalid otpkey secrets")
+	}
+	if len(otpsecrets.Keys) == 0 {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
+	}
+	decrypter := hunter2.NewDecrypter()
+	var cipher hunter2.Cipher
+	for n, i := range otpsecrets.Keys {
+		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		if err != nil {
+			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
+		}
+		if n == 0 {
+			if s.otpCipher != nil && s.otpCipher.ID() == c.ID() {
+				// first, newest cipher matches current cipher, therefore no change in ciphers
+				return nil
+			}
+			cipher = c
+		}
+		decrypter.RegisterCipher(c)
+	}
+	s.otpCipher = cipher
+	s.otpDecrypter = decrypter
+	s.logger.Info("Refreshed otp secrets with new secrets", map[string]string{
+		"actiontype": "user_refresh_otp_secrets",
+		"kid":        s.otpCipher.ID(),
+		"numotpkeys": strconv.Itoa(len(otpsecrets.Keys)),
+	})
+	return nil
+}
+
+func (s *service) handleGetCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+	if s.otpCipher != nil {
+		if err := s.refreshSecrets(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	return s.otpCipher, s.otpDecrypter, nil
+}
+
+func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+	res := make(chan getCipherRes)
+	op := getOp{
+		ctx: ctx,
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return nil, nil, kerrors.WithMsg(nil, "User service shutdown")
+	case <-ctx.Done():
+		return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+	case s.ops <- op:
+		select {
+		case <-ctx.Done():
+			return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			return v.cipher, v.decrypter, v.err
+		}
+	}
+}
+
 func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
 
-	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
 		MaxMsgSize: s.eventsize,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init user stream")
+		return kerrors.WithMsg(err, "Failed to init user stream")
 	}
 	l.Info("Created user stream", nil)
 
-	if err := s.users.Setup(); err != nil {
+	if err := s.users.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created user table", nil)
@@ -493,26 +624,27 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 			CreationTime: madmin.CreationTime,
 		})
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to encode admin user props to json")
+			return kerrors.WithMsg(err, "Failed to encode admin user props to json")
 		}
 
-		if err := s.users.Insert(madmin); err != nil {
+		if err := s.users.Insert(context.Background(), madmin); err != nil {
 			return err
 		}
 		if err := s.roles.InsertRoles(madmin.Userid, rank.Admin()); err != nil {
 			return err
 		}
 
-		if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
+		if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
 			s.logger.Error("Failed to publish new user", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "publishadminuser",
+				"actiontype": "user_publish_admin_user",
 			})
 		}
 
-		l.Info("inserted new setup admin", map[string]string{
-			"username": madmin.Username,
-			"userid":   madmin.Userid,
+		l.Info("Created admin from setup", map[string]string{
+			"actiontype": "user_create_admin",
+			"username":   madmin.Username,
+			"userid":     madmin.Userid,
 		})
 	}
 
@@ -530,7 +662,7 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
@@ -540,22 +672,22 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
 	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
 	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_RESET_GC", s.UserResetGCHook); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
 	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.UserInvitationGCHook); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
@@ -563,9 +695,24 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	select {
+	case <-s.done:
+		return
+	case <-ctx.Done():
+		l.Warn("Failed to stop", map[string]string{
+			"error":      ctx.Err().Error(),
+			"actiontype": "user_stop",
+		})
+	}
 }
 
 func (s *service) Health() error {
+	if !s.ready.Load() {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "User service not ready")
+	}
 	return nil
 }
 
@@ -574,24 +721,24 @@ const (
 )
 
 // UserRoleDeleteHook deletes the roles of a deleted user
-func (s *service) UserRoleDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *service) UserRoleDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
 	}
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
 		r, err := s.roles.GetRoles(props.Userid, "", roleDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user roles")
+			return kerrors.WithMsg(err, "Failed to get user roles")
 		}
 		if len(r) == 0 {
 			break
 		}
 		if err := s.roles.DeleteRoles(props.Userid, r); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete user roles")
+			return kerrors.WithMsg(err, "Failed to delete user roles")
 		}
 		if len(r) < roleDeleteBatchSize {
 			break
@@ -605,18 +752,18 @@ const (
 )
 
 // UserApikeyDeleteHook deletes the apikeys of a deleted user
-func (s *service) UserApikeyDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
 	}
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
 		keys, err := s.apikeys.GetUserKeys(props.Userid, apikeyDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user apikeys")
+			return kerrors.WithMsg(err, "Failed to get user apikeys")
 		}
 		if len(keys) == 0 {
 			break
@@ -626,7 +773,7 @@ func (s *service) UserApikeyDeleteHook(pinger events.Pinger, topic string, msgda
 			keyids = append(keyids, i.Keyid)
 		}
 		if err := s.apikeys.DeleteKeys(keyids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete user apikeys")
+			return kerrors.WithMsg(err, "Failed to delete user apikeys")
 		}
 		if len(keys) < apikeyDeleteBatchSize {
 			break
@@ -635,7 +782,7 @@ func (s *service) UserApikeyDeleteHook(pinger events.Pinger, topic string, msgda
 	return nil
 }
 
-func (s *service) UserApprovalGCHook(topic string, msgdata []byte) {
+func (s *service) UserApprovalGCHook(ctx context.Context, topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
@@ -653,7 +800,7 @@ func (s *service) UserApprovalGCHook(topic string, msgdata []byte) {
 	l.Debug("GC user approvals", nil)
 }
 
-func (s *service) UserResetGCHook(topic string, msgdata []byte) {
+func (s *service) UserResetGCHook(ctx context.Context, topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
@@ -671,7 +818,7 @@ func (s *service) UserResetGCHook(topic string, msgdata []byte) {
 	l.Debug("GC user resets", nil)
 }
 
-func (s *service) UserInvitationGCHook(topic string, msgdata []byte) {
+func (s *service) UserInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
