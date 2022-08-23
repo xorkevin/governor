@@ -140,6 +140,9 @@ user:
       emailchange: /a/confirm/email?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
       forgotpass: /x/resetpass?key={{`{{.Userid}}`}}.{{`{{.Key}}`}}
       newuser: /x/confirm?userid={{`{{.Userid}}`}}&key={{`{{.Key}}`}}
+  hbinterval: 5
+  hbmaxfail: 6
+  otprefresh: 60
 oauth:
   codetime: 1m
   accesstime: 5m
