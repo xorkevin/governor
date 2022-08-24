@@ -2,10 +2,10 @@ package user
 
 import (
 	"net/http"
-	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/session/model"
 )
 
 //go:generate forge validation -o validation_session_gen.go reqGetUserSessions reqUserRmSessions
@@ -44,18 +44,14 @@ type (
 	}
 )
 
-const (
-	keySeparator = "."
-)
-
 func (r *reqUserRmSessions) validUserid() error {
 	for _, i := range r.SessionIDs {
-		j := strings.SplitN(i, keySeparator, 2)
-		if r.Userid != j[0] {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid session ids",
-			}))
+		userid, err := model.ParseIDUserid(i)
+		if err != nil {
+			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid session ids")
+		}
+		if r.Userid != userid {
+			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid session ids")
 		}
 	}
 	return nil

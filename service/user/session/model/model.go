@@ -2,12 +2,14 @@ package model
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p session -o model_gen.go Model qID
@@ -127,6 +129,15 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 		IPAddr:    ipaddr,
 		UserAgent: useragent,
 	}, keystr, nil
+}
+
+// ParseIDUserid gets the userid from a keyid
+func ParseIDUserid(sessionID string) (string, error) {
+	userid, _, ok := strings.Cut(sessionID, keySeparator)
+	if !ok {
+		return "", kerrors.WithMsg(nil, "Invalid session id")
+	}
+	return userid, nil
 }
 
 // ValidateKey validates the key against a hash

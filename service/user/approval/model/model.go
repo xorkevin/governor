@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	usermodel "xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p approval -o model_gen.go Model
@@ -24,17 +26,17 @@ type (
 		ToUserModel(m *Model) *usermodel.Model
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
-		GetByID(userid string) (*Model, error)
-		GetGroup(limit, offset int) ([]Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		Delete(m *Model) error
-		DeleteBefore(t int64) error
-		Setup() error
+		GetByID(ctx context.Context, userid string) (*Model, error)
+		GetGroup(ctx context.Context, limit, offset int) ([]Model, error)
+		Insert(ctx context.Context, m *Model) error
+		Update(ctx context.Context, m *Model) error
+		Delete(ctx context.Context, m *Model) error
+		DeleteBefore(ctx context.Context, t int64) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *approvalModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -89,7 +91,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &approvalModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -126,7 +130,7 @@ func (r *repo) ToUserModel(m *Model) *usermodel.Model {
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify code")
+		return false, kerrors.WithMsg(err, "Failed to verify code")
 	}
 	return ok, nil
 }
@@ -134,12 +138,12 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 func (r *repo) RehashCode(m *Model) (string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create new user code")
+		return "", kerrors.WithMsg(err, "Failed to create new user code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash new user code")
+		return "", kerrors.WithMsg(err, "Failed to hash new user code")
 	}
 	now := time.Now().Round(0).Unix()
 	m.Approved = true
@@ -148,81 +152,81 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 	return codestr, nil
 }
 
-func (r *repo) GetByID(userid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := approvalModelGetModelEqUserid(d, r.table, userid)
+	m, err := r.table.GetModelEqUserid(ctx, d, userid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
 	return m, nil
 }
 
-func (r *repo) GetGroup(limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetGroup(ctx context.Context, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := approvalModelGetModelOrdCreationTime(d, r.table, true, limit, offset)
+	m, err := r.table.GetModelOrdCreationTime(ctx, d, true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user approvals")
+		return nil, kerrors.WithMsg(err, "Failed to get user approvals")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := approvalModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert user")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert user")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Update(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := approvalModelUpdModelEqUserid(d, r.table, m, m.Userid); err != nil {
-		return db.WrapErr(err, "Failed to update user approval")
+	if err := r.table.UpdModelEqUserid(ctx, d, m, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user approval")
 	}
 	return nil
 }
 
-func (r *repo) Delete(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := approvalModelDelEqUserid(d, r.table, m.Userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user approval")
+	if err := r.table.DelEqUserid(ctx, d, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user approval")
 	}
 	return nil
 }
 
-func (r *repo) DeleteBefore(t int64) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := approvalModelDelLtCreationTime(d, r.table, t); err != nil {
-		return db.WrapErr(err, "Failed to delete user approvals")
+	if err := r.table.DelLtCreationTime(ctx, d, t); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user approvals")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := approvalModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup user approval model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup user approval model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

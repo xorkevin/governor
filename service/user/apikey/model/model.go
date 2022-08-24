@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p apikey -o model_gen.go Model
@@ -125,11 +126,11 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 
 // ParseIDUserid gets the userid from a keyid
 func ParseIDUserid(keyid string) (string, error) {
-	k := strings.SplitN(keyid, keySeparator, 2)
-	if len(k) != 2 {
-		return "", governor.ErrWithMsg(nil, "Invalid apikey format")
+	userid, _, ok := strings.Cut(keyid, keySeparator)
+	if !ok {
+		return "", kerrors.WithMsg(nil, "Invalid apikey format")
 	}
-	return k[0], nil
+	return userid, nil
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {

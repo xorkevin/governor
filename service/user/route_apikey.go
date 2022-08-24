@@ -176,7 +176,7 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 type (
 	reqApikeyCheck struct {
 		Roles string `valid:"rankStr"`
-		Scope string
+		Scope string `valid:"scope"`
 	}
 )
 

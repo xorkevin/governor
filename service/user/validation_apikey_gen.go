@@ -64,5 +64,8 @@ func (r reqApikeyCheck) valid() error {
 	if err := validRankStr(r.Roles); err != nil {
 		return err
 	}
+	if err := validScope(r.Scope); err != nil {
+		return err
+	}
 	return nil
 }
