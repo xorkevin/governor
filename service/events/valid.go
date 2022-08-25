@@ -12,16 +12,10 @@ const (
 
 func validSubject(subject string) error {
 	if len(subject) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Subject must be provided",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Subject must be provided")
 	}
 	if len(subject) > lengthCapSubject {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Subject must be shorter than 256 characters",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Subject must be shorter than 256 characters")
 	}
 	return nil
 }

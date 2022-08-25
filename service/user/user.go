@@ -586,7 +586,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("Created usersessions table", nil)
 
-	if err := s.approvals.Setup(); err != nil {
+	if err := s.approvals.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created userapprovals table", nil)

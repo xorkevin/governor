@@ -19,11 +19,17 @@ func (m *router) publishEvent(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 
 	username, password, ok := c.BasicAuth()
-	if !ok || username != "system" || subtle.ConstantTimeCompare([]byte(password), []byte(m.s.apisecret)) != 1 {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusForbidden,
-			Message: "User is forbidden",
-		})))
+	if !ok || username != "system" {
+		c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
+		return
+	}
+	apisecret, err := m.s.getApiSecret(c.Ctx())
+	if err != nil {
+		c.WriteError(governor.ErrWithRes(err, http.StatusInternalServerError, "", "Unable to authenticate caller"))
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(password), []byte(apisecret)) != 1 {
+		c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 		return
 	}
 
@@ -40,7 +46,7 @@ func (m *router) publishEvent(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.Publish(req.Subject, data); err != nil {
+	if err := m.s.Publish(c.Ctx(), req.Subject, data); err != nil {
 		c.WriteError(err)
 		return
 	}

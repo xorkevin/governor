@@ -77,6 +77,16 @@ type (
 		stream *streamSubscription
 	}
 
+	getSecretRes struct {
+		secret string
+		err    error
+	}
+
+	getSecretOp struct {
+		ctx context.Context
+		res chan<- getSecretRes
+	}
+
 	service struct {
 		client          *nats.Conn
 		stream          nats.JetStreamContext
@@ -87,10 +97,12 @@ type (
 		logger          governor.Logger
 		ops             chan getOp
 		subops          chan subOp
+		secretops       chan getSecretOp
 		subs            map[*subscription]struct{}
 		streamSubs      map[*streamSubscription]struct{}
 		ready           *atomic.Bool
 		canary          <-chan struct{}
+		hbfailed        int
 		hbinterval      int
 		hbmaxfail       int
 		minpullduration time.Duration
@@ -185,6 +197,7 @@ func New() Service {
 		streamSubs: map[*streamSubscription]struct{}{},
 		ready:      &atomic.Bool{},
 		canary:     canary,
+		hbfailed:   0,
 	}
 }
 
@@ -281,6 +294,16 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
+		case op := <-s.secretops:
+			secret, err := s.handleGetApiSecret(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getSecretRes{
+				secret: secret,
+				err:    err,
+			}:
+				close(op.res)
+			}
 		case op := <-s.subops:
 			if op.rm {
 				if op.sub != nil {
@@ -314,38 +337,97 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	s.refreshApiSecret(ctx)
-
+	clientIsLive := false
+	canaryIsDead := false
 	if s.client != nil {
 		select {
 		case <-s.canary:
+			canaryIsDead = true
 		default:
-			s.ready.Store(true)
-			s.updateSubs(s.client, s.stream)
+			clientIsLive = true
+		}
+	}
+	if clientIsLive {
+		s.updateSubs(s.client, s.stream)
+	} else {
+		if canaryIsDead {
+			s.ready.Store(false)
+			s.auth = secretAuth{}
+			s.config.InvalidateSecret("auth")
+		}
+		if _, _, _, err := s.handleGetClient(ctx); err != nil {
+			s.logger.Error("Failed to create events client", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "events_create_client",
+			})
 			return
 		}
-		s.ready.Store(false)
-		s.auth = secretAuth{}
-		s.config.InvalidateSecret("auth")
 	}
-	if _, _, _, err := s.handleGetClient(ctx); err != nil {
-		s.logger.Error("Failed to create events client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "events_create_client",
-		})
-	}
-}
 
-func (s *service) refreshApiSecret(ctx context.Context) {
-	apisecret := secretAPI{}
-	if err := s.config.GetSecret(ctx, "apisecret", int64(s.apirefresh), &apisecret); err != nil {
-		s.logger.Error("Invalid api secret", map[string]string{
+	err := s.refreshApiSecret(ctx)
+	if err == nil {
+		s.ready.Store(true)
+		s.hbfailed = 0
+		return
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to refresh api secret", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "events_get_api_secret",
+			"actiontype": "events_refresh_api_secret",
 		})
 		return
 	}
-	s.apisecret = apisecret
+	s.logger.Error("Failed max refresh attempts", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "events_refresh_api_secret",
+	})
+	s.ready.Store(false)
+	s.hbfailed = 0
+}
+
+func (s *service) refreshApiSecret(ctx context.Context) error {
+	apisecret := secretAPI{}
+	if err := s.config.GetSecret(ctx, "apisecret", int64(s.apirefresh), &apisecret); err != nil {
+		return kerrors.WithMsg(err, "Invalid api secret")
+	}
+	if apisecret != s.apisecret {
+		s.apisecret = apisecret
+		s.logger.Info("Refreshed api secret with new secret", map[string]string{
+			"actiontype": "events_refresh_api_secret",
+		})
+	}
+	return nil
+}
+
+func (s *service) handleGetApiSecret(ctx context.Context) (string, error) {
+	if s.apisecret.Secret == "" {
+		if err := s.refreshApiSecret(ctx); err != nil {
+			return "", err
+		}
+	}
+	return s.apisecret.Secret, nil
+}
+
+func (s *service) getApiSecret(ctx context.Context) (string, error) {
+	res := make(chan getSecretRes)
+	op := getSecretOp{
+		ctx: ctx,
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return "", kerrors.WithMsg(nil, "Events service shutdown")
+	case <-ctx.Done():
+		return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
+	case s.secretops <- op:
+		select {
+		case <-ctx.Done():
+			return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			return v.secret, v.err
+		}
+	}
 }
 
 func (s *service) updateSubs(client *nats.Conn, stream nats.JetStreamContext) {

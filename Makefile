@@ -13,6 +13,7 @@ all: test ## Default
 ## TESTS
 
 TEST_ARGS?=
+TEST_PACKAGE?=./...
 COVERAGE=cover.out
 COVERAGE_ARGS=-covermode count -coverprofile $(COVERAGE)
 BENCHMARK_ARGS=-benchtime 5s -benchmem
@@ -20,7 +21,7 @@ BENCHMARK_ARGS=-benchtime 5s -benchmem
 .PHONY: test coverage cover bench
 
 test: ## Run tests
-	go test -trimpath -ldflags "-w -s" $(TEST_ARGS) -cover $(COVERAGE_ARGS) ./...
+	go test -trimpath -ldflags "-w -s" $(TEST_ARGS) -cover $(COVERAGE_ARGS) $(TEST_PACKAGE)
 
 coverage: ## View test coverage
 	go tool cover -html $(COVERAGE)
