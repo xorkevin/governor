@@ -532,10 +532,11 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 }
 
 func (s *service) handleGetCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
-	if s.otpCipher != nil {
+	if s.otpCipher == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
 			return nil, nil, err
 		}
+		s.ready.Store(true)
 	}
 	return s.otpCipher, s.otpDecrypter, nil
 }

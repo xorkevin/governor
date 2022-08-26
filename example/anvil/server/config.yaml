@@ -75,6 +75,9 @@ mail:
   streamsize: 200M
   eventsize: 2K
   mailkey: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvappprefix }}{{ . }}/{{ end }}{{ $ns }}/{{ $svc }}/mailkey
+  hbinterval: 5
+  hbmaxfail: 6
+  authrefresh: 60
 mailinglist:
   port: 2525
   authdomain: lists.governor.dev.localhost

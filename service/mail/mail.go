@@ -15,6 +15,7 @@ import (
 	emmail "github.com/emersion/go-message/mail"
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
+	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
@@ -22,6 +23,7 @@ import (
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -43,9 +45,9 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
-		SendStream(retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error
-		FwdStream(retpath string, to []string, size int64, body io.Reader, encrypt bool) error
+		FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error
+		SendStream(ctx context.Context, retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error
+		SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
 	}
 
 	// Service is a Mailer and governor.Service
@@ -105,6 +107,31 @@ type (
 		htmlbody []byte
 	}
 
+	mailgcmsg struct {
+		MsgPath string `json:"msgpath"`
+	}
+
+	getCipherRes struct {
+		cipher    hunter2.Cipher
+		decrypter *hunter2.Decrypter
+		err       error
+	}
+
+	getOp struct {
+		ctx context.Context
+		res chan<- getCipherRes
+	}
+
+	getAuthRes struct {
+		auth secretAuth
+		err  error
+	}
+
+	getAuthOp struct {
+		ctx context.Context
+		res chan<- getAuthRes
+	}
+
 	service struct {
 		tpl               template.Template
 		events            events.Events
@@ -118,12 +145,21 @@ type (
 		opts              Opts
 		host              string
 		addr              string
+		auth              secretAuth
 		msgiddomain       string
 		returnpath        string
 		fromAddress       string
 		fromName          string
 		streamsize        int64
 		eventsize         int32
+		ops               chan getOp
+		authops           chan getAuthOp
+		ready             *atomic.Bool
+		hbfailed          int
+		hbinterval        int
+		hbmaxfail         int
+		done              <-chan struct{}
+		authrefresh       int
 	}
 
 	ctxKeyMailer struct{}
@@ -131,6 +167,7 @@ type (
 	Opts struct {
 		StreamName  string
 		MailChannel string
+		GCChannel   string
 	}
 
 	ctxKeyOpts struct{}
@@ -186,6 +223,10 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 		events:      ev,
 		mailBucket:  obj,
 		sendMailDir: obj.Subdir("sendmail"),
+		ops:         make(chan getOp),
+		authops:     make(chan getAuthOp),
+		ready:       &atomic.Bool{},
+		hbfailed:    0,
 	}
 }
 
@@ -196,6 +237,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.opts = Opts{
 		StreamName:  streamname,
 		MailChannel: streamname + ".mail",
+		GCChannel:   streamname + ".gc",
 	}
 	SetCtxOpts(inj, s.opts)
 
@@ -207,6 +249,9 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "16K")
+	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbmaxfail", 6)
+	r.SetDefault("authrefresh", 60)
 }
 
 type (
@@ -232,32 +277,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid stream size")
+		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid stream size")
 	}
 	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid msg size")
+		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-
-	maildataSecrets := secretMaildata{}
-	if err := r.GetSecret("mailkey", 0, &maildataSecrets); err != nil {
-		return governor.ErrWithMsg(err, "Invalid mailkey secrets")
-	}
-	if len(maildataSecrets.Keys) == 0 {
-		return governor.ErrWithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
-	}
-	s.maildataDecrypter = hunter2.NewDecrypter()
-	for n, i := range maildataSecrets.Keys {
-		cipher, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
-		if err != nil {
-			return governor.ErrWithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
-		}
-		if n == 0 {
-			s.maildataCipher = cipher
-		}
-		s.maildataDecrypter.RegisterCipher(cipher)
-	}
+	s.hbinterval = r.GetInt("hbinterval")
+	s.hbmaxfail = r.GetInt("hbmaxfail")
+	s.authrefresh = r.GetInt("authrefresh")
 
 	l.Info("Initialize mail service", map[string]string{
 		"smtp server addr":    s.addr,
@@ -267,26 +296,214 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"sender name":         s.fromName,
 		"stream size (bytes)": r.GetStr("streamsize"),
 		"event size (bytes)":  r.GetStr("eventsize"),
-		"nummaildatakeys":     strconv.Itoa(len(maildataSecrets.Keys)),
+		"hbinterval":          strconv.Itoa(s.hbinterval),
+		"hbmaxfail":           strconv.Itoa(s.hbmaxfail),
+		"authrefresh":         strconv.Itoa(s.authrefresh),
+	})
+
+	done := make(chan struct{})
+	go s.execute(ctx, done)
+	s.done = done
+
+	return nil
+}
+
+func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+			s.handlePing(ctx)
+		case op := <-s.ops:
+			cipher, decrypter, err := s.handleGetCipher(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getCipherRes{
+				cipher:    cipher,
+				decrypter: decrypter,
+				err:       err,
+			}:
+				close(op.res)
+			}
+		case op := <-s.authops:
+			auth, err := s.handleGetAuth(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getAuthRes{
+				auth: auth,
+				err:  err,
+			}:
+				close(op.res)
+			}
+		}
+	}
+}
+
+func (s *service) handlePing(ctx context.Context) {
+	if err := s.refreshAuth(ctx); err != nil {
+		s.logger.Error("Failed to refresh mail auth", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "mail_refresh_auth",
+		})
+	}
+
+	err := s.refreshSecrets(ctx)
+	if err == nil {
+		s.ready.Store(true)
+		s.hbfailed = 0
+		return
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to refresh mail keys", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "mail_refresh_keys",
+		})
+		return
+	}
+	s.logger.Error("Failed max refresh attempts", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "mail_refresh_keys",
+	})
+	s.ready.Store(false)
+	s.hbfailed = 0
+}
+
+func (s *service) refreshAuth(ctx context.Context) error {
+	var auth secretAuth
+	if err := s.config.GetSecret(ctx, "auth", int64(s.authrefresh), &auth); err != nil {
+		return kerrors.WithMsg(err, "Invalid mail auth")
+	}
+	if auth.Username == "" {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid mail auth")
+	}
+	if auth != s.auth {
+		s.auth = auth
+		s.logger.Info("Refreshed smtp auth", map[string]string{
+			"actiontype": "mail_refresh_auth",
+		})
+		s.logger.Debug("Refreshed smtp auth", map[string]string{
+			"actiontype": "mail_refresh_auth",
+			"username":   auth.Username,
+		})
+	}
+	return nil
+}
+
+func (s *service) handleGetAuth(ctx context.Context) (secretAuth, error) {
+	if s.auth.Username == "" {
+		if err := s.refreshAuth(ctx); err != nil {
+			return secretAuth{}, err
+		}
+	}
+	return s.auth, nil
+}
+
+func (s *service) getAuth(ctx context.Context) (secretAuth, error) {
+	res := make(chan getAuthRes)
+	op := getAuthOp{
+		ctx: ctx,
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return secretAuth{}, kerrors.WithMsg(nil, "Mail service shutdown")
+	case <-ctx.Done():
+		return secretAuth{}, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+	case s.authops <- op:
+		select {
+		case <-ctx.Done():
+			return secretAuth{}, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			return v.auth, v.err
+		}
+	}
+}
+
+func (s *service) refreshSecrets(ctx context.Context) error {
+	var maildataSecrets secretMaildata
+	if err := s.config.GetSecret(ctx, "mailkey", int64(s.authrefresh), &maildataSecrets); err != nil {
+		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid mailkey secrets")
+	}
+	if len(maildataSecrets.Keys) == 0 {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No mailkey present")
+	}
+	decrypter := hunter2.NewDecrypter()
+	var cipher hunter2.Cipher
+	s.maildataDecrypter = hunter2.NewDecrypter()
+	for n, i := range maildataSecrets.Keys {
+		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		if err != nil {
+			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
+		}
+		if n == 0 {
+			if s.maildataCipher != nil && s.maildataCipher.ID() == c.ID() {
+				// first, newest cipher matches current cipher, therefore no change in ciphers
+				return nil
+			}
+			cipher = c
+		}
+		decrypter.RegisterCipher(c)
+	}
+	s.maildataCipher = cipher
+	s.maildataDecrypter = decrypter
+	s.logger.Info("Refreshed mailkey with new keys", map[string]string{
+		"actiontype":      "mail_refresh_key",
+		"kid":             s.maildataCipher.ID(),
+		"nummaildatakeys": strconv.Itoa(len(maildataSecrets.Keys)),
 	})
 	return nil
+}
+
+func (s *service) handleGetCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+	if s.maildataCipher == nil {
+		if err := s.refreshSecrets(ctx); err != nil {
+			return nil, nil, err
+		}
+		s.ready.Store(true)
+	}
+	return s.maildataCipher, s.maildataDecrypter, nil
+}
+
+func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+	res := make(chan getCipherRes)
+	op := getOp{
+		ctx: ctx,
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return nil, nil, kerrors.WithMsg(nil, "Mail service shutdown")
+	case <-ctx.Done():
+		return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+	case s.ops <- op:
+		select {
+		case <-ctx.Done():
+			return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			return v.cipher, v.decrypter, v.err
+		}
+	}
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
-	if err := s.mailBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init mail bucket")
+	if err := s.mailBucket.Init(context.Background()); err != nil {
+		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
 	l.Info("Created mail bucket", nil)
-	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
 		MaxMsgSize: s.eventsize,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init mail stream")
+		return kerrors.WithMsg(err, "Failed to init mail stream")
 	}
 	l.Info("Created mail stream", nil)
 	return nil
@@ -307,16 +524,42 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to mail queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
 	}
 	l.Info("Subscribed to mail queue", nil)
+
+	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.GCChannel, s.streamns+"_WORKER_GC", s.gcSubscriber, events.StreamConsumerOpts{
+		AckWait:     15 * time.Second,
+		MaxDeliver:  30,
+		MaxPending:  1024,
+		MaxRequests: 32,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to subscribe to mail gc queue")
+	}
+	l.Info("Subscribed to mail gc queue", nil)
+
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
+	l := s.logger.WithData(map[string]string{
+		"phase": "stop",
+	})
+	select {
+	case <-s.done:
+		return
+	case <-ctx.Done():
+		l.Warn("Failed to stop", map[string]string{
+			"error":      ctx.Err().Error(),
+			"actiontype": "mail_stop",
+		})
+	}
 }
 
 func (s *service) Health() error {
+	if !s.ready.Load() {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Mail service not ready")
+	}
 	return nil
 }
 
@@ -327,18 +570,22 @@ type (
 	}
 )
 
-func (s *service) handleSendMail(from string, to []string, msg io.Reader) error {
-	var secret secretAuth
-	if err := s.config.GetSecret("auth", 0, &secret); err != nil {
-		return governor.ErrWithMsg(err, "Invalid secret")
+func (s *service) handleSendMail(ctx context.Context, from string, to []string, msg io.Reader) error {
+	secret, err := s.getAuth(ctx)
+	if err != nil {
+		return err
 	}
 
 	auth := sasl.NewPlainClient("", secret.Username, secret.Password)
 	if err := smtp.SendMail(s.addr, auth, from, to, msg); err != nil {
-		return err
+		return kerrors.WithKind(err, ErrSendMail{}, "Failed to send mail")
 	}
+	s.logger.Info("Mail sent", map[string]string{
+		"actiontype": "mail_send",
+		"addr":       s.addr,
+	})
 	s.logger.Debug("Mail sent", map[string]string{
-		"actiontype": "sendmail",
+		"actiontype": "mail_send",
 		"addr":       s.addr,
 		"username":   secret.Username,
 		"from":       from,
@@ -354,6 +601,8 @@ type (
 	ErrInvalidMail struct{}
 	// ErrBuildMail is returned when failing to build an email message
 	ErrBuildMail struct{}
+	// ErrSendMail is returned when failing to send an email message
+	ErrSendMail struct{}
 )
 
 func (e ErrMailEvent) Error() string {
@@ -368,10 +617,14 @@ func (e ErrBuildMail) Error() string {
 	return "Error building email"
 }
 
-func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	emmsg := &mailmsg{}
-	if err := json.Unmarshal(msgdata, emmsg); err != nil {
-		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
+func (e ErrSendMail) Error() string {
+	return "Error sending email"
+}
+
+func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	var emmsg mailmsg
+	if err := json.Unmarshal(msgdata, &emmsg); err != nil {
+		return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode mail message")
 	}
 
 	var msg io.Reader
@@ -383,21 +636,21 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 
 	if emmsg.Kind == mailMsgKindFwd {
 		data := emmsg.FwdData
-		b1, _, err := s.sendMailDir.Get(data.Path)
+		b1, _, err := s.sendMailDir.Get(ctx, data.Path)
 		if err != nil {
 			if errors.Is(err, objstore.ErrNotFound{}) {
 				s.logger.Error("Mail body content not found", map[string]string{
-					"actiontype": "getmailbody",
+					"actiontype": "mail_get_body",
 					"error":      err.Error(),
 				})
 				return nil
 			}
-			return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
+			return kerrors.WithKind(err, ErrMailEvent{}, "Failed to get mail body")
 		}
 		defer func() {
 			if err := b1.Close(); err != nil {
 				s.logger.Error("Failed to close mail body", map[string]string{
-					"actiontype": "getmailbody",
+					"actiontype": "mail_get_body",
 					"error":      err.Error(),
 				})
 			}
@@ -408,19 +661,19 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 			var err error
 			data.Key, err = s.maildataDecrypter.Decrypt(data.Key)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
+				return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
 			}
 			config, err := hunter2.ParseChaCha20Config(data.Key)
 			if err != nil {
-				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to parse mail data key")
+				return kerrors.WithKind(err, ErrMailEvent{}, "Failed to parse mail data key")
 			}
 			stream, err := hunter2.NewChaCha20Stream(*config)
 			if err != nil {
-				return governor.ErrWithMsg(err, "Failed to create decryption stream")
+				return kerrors.WithMsg(err, "Failed to create decryption stream")
 			}
 			auth, err = hunter2.NewPoly1305Auth(*config)
 			if err != nil {
-				return governor.ErrWithMsg(err, "Failed to create decryption auth")
+				return kerrors.WithMsg(err, "Failed to create decryption auth")
 			}
 			tag = data.Tag
 			msg = hunter2.NewDecStreamReader(stream, auth, msg)
@@ -431,7 +684,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 		if emmsg.Kind == mailMsgKindRaw {
 			data := emmsg.RawData
 			msgid = data.MsgID
-			b1, _, err := s.sendMailDir.Get(data.Path)
+			b1, _, err := s.sendMailDir.Get(ctx, data.Path)
 			if err != nil {
 				if errors.Is(err, objstore.ErrNotFound{}) {
 					s.logger.Error("Mail body content not found", map[string]string{
@@ -440,7 +693,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 					})
 					return nil
 				}
-				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to get mail body")
+				return kerrors.WithKind(err, ErrMailEvent{}, "Failed to get mail body")
 			}
 			defer func() {
 				if err := b1.Close(); err != nil {
@@ -456,23 +709,23 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 				var err error
 				data.Subject, err = s.maildataDecrypter.Decrypt(data.Subject)
 				if err != nil {
-					return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail subject")
+					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail subject")
 				}
 				data.Key, err = s.maildataDecrypter.Decrypt(data.Key)
 				if err != nil {
-					return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
+					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
 				}
 				config, err := hunter2.ParseChaCha20Config(data.Key)
 				if err != nil {
-					return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to parse mail data key")
+					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to parse mail data key")
 				}
 				stream, err := hunter2.NewChaCha20Stream(*config)
 				if err != nil {
-					return governor.ErrWithMsg(err, "Failed to create decryption stream")
+					return kerrors.WithMsg(err, "Failed to create decryption stream")
 				}
 				auth, err = hunter2.NewPoly1305Auth(*config)
 				if err != nil {
-					return governor.ErrWithMsg(err, "Failed to create decryption auth")
+					return kerrors.WithMsg(err, "Failed to create decryption auth")
 				}
 				tag = data.Tag
 				body = hunter2.NewDecStreamReader(stream, auth, body)
@@ -485,23 +738,23 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 				var err error
 				data.Emdata, err = s.maildataDecrypter.Decrypt(data.Emdata)
 				if err != nil {
-					return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decrypt mail data")
+					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data")
 				}
 			}
 			emdata := map[string]string{}
 			if err := json.Unmarshal([]byte(data.Emdata), &emdata); err != nil {
-				return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail data")
+				return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode mail data")
 			}
 
 			s1 := &bytes.Buffer{}
 			b1 := &bytes.Buffer{}
 			b2 := &bytes.Buffer{}
 			if err := s.tpl.Execute(s1, data.Tpl.Kind, data.Tpl.Name+"_subject.txt", emdata); err != nil {
-				return governor.ErrWithMsg(err, "Failed to execute mail subject template")
+				return kerrors.WithMsg(err, "Failed to execute mail subject template")
 			}
 			subject = s1
 			if err := s.tpl.Execute(b1, data.Tpl.Kind, data.Tpl.Name+".txt", emdata); err != nil {
-				return governor.ErrWithMsg(err, "Failed to execute mail body template")
+				return kerrors.WithMsg(err, "Failed to execute mail body template")
 			}
 			body = b1
 			if err := s.tpl.ExecuteHTML(b2, data.Tpl.Kind, data.Tpl.Name+".html", emdata); err != nil {
@@ -517,7 +770,7 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 				htmlbody = b2
 			}
 		} else {
-			return governor.ErrWithKind(nil, ErrMailEvent{}, "Invalid mail message kind")
+			return kerrors.WithKind(nil, ErrMailEvent{}, "Invalid mail message kind")
 		}
 
 		b := &bytes.Buffer{}
@@ -529,25 +782,35 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 
 	if auth != nil {
 		if err := auth.WriteCount(); err != nil {
-			return governor.ErrWithMsg(err, "Failed to write auth content length")
+			return kerrors.WithMsg(err, "Failed to write auth content length")
 		}
 		if err := auth.Auth(tag); err != nil {
-			return governor.ErrWithKind(err, ErrMailEvent{}, "Mail body failed authentication")
+			return kerrors.WithKind(err, ErrMailEvent{}, "Mail body failed authentication")
 		}
+	}
+
+	var gcpath []byte
+	if msgpath != "" {
+		b, err := json.Marshal(mailgcmsg{
+			MsgPath: msgpath,
+		})
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to encode mail gc event to json")
+		}
+		gcpath = b
 	}
 
 	to := make([]string, 0, len(emmsg.To))
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
-	if err := s.handleSendMail(emmsg.ReturnPath, to, msg); err != nil {
+	if err := s.handleSendMail(ctx, emmsg.ReturnPath, to, msg); err != nil {
 		return err
 	}
-	if len(msgpath) != 0 {
-		if err := s.sendMailDir.Del(msgpath); err != nil {
-			if !errors.Is(err, objstore.ErrNotFound{}) {
-				return governor.ErrWithMsg(err, "Failed to delete mail body")
-			}
+
+	if len(gcpath) != 0 {
+		if err := s.events.StreamPublish(ctx, s.opts.GCChannel, gcpath); err != nil {
+			return kerrors.WithMsg(err, "Failed to publish mail gc event")
 		}
 	}
 	return nil
@@ -559,7 +822,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 	h.SetDate(time.Now().Round(0).In(time.UTC))
 	subj := strings.Builder{}
 	if _, err := io.Copy(&subj, subject); err != nil {
-		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write mail subject")
+		return kerrors.WithKind(err, ErrBuildMail{}, "Failed to write mail subject")
 	}
 	h.SetSubject(subj.String())
 	h.SetAddressList("From", []*emmail.Address{
@@ -581,7 +844,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 		h.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
 		mw, err := emmail.CreateSingleInlineWriter(dst, h)
 		if err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create plain mail writer")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to create plain mail writer")
 		}
 		defer func() {
 			if err := mw.Close(); err != nil {
@@ -592,14 +855,14 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 			}
 		}()
 		if _, err := io.Copy(mw, body); err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
 		}
 		return nil
 	}
 
 	mw, err := emmail.CreateWriter(dst, h)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail writer")
+		return kerrors.WithKind(err, ErrBuildMail{}, "Failed to create mail writer")
 	}
 	defer func() {
 		if err := mw.Close(); err != nil {
@@ -612,7 +875,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 
 	bw, err := mw.CreateInline()
 	if err != nil {
-		return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body writer")
+		return kerrors.WithKind(err, ErrBuildMail{}, "Failed to create mail body writer")
 	}
 	defer func() {
 		if err := bw.Close(); err != nil {
@@ -628,7 +891,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 		hh.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
 		pw, err := bw.CreatePart(hh)
 		if err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body plaintext writer")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to create mail body plaintext writer")
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
@@ -639,7 +902,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 			}
 		}()
 		if _, err := io.Copy(pw, body); err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to write plaintext mail body")
 		}
 		return nil
 	}(); err != nil {
@@ -651,7 +914,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 		hh.SetContentType(mediaTypeTextHTML, map[string]string{"charset": "utf-8"})
 		pw, err := bw.CreatePart(hh)
 		if err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to create mail body html writer")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to create mail body html writer")
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
@@ -662,7 +925,7 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 			}
 		}()
 		if _, err := io.Copy(pw, htmlbody); err != nil {
-			return governor.ErrWithKind(err, ErrBuildMail{}, "Failed to write html mail body")
+			return kerrors.WithKind(err, ErrBuildMail{}, "Failed to write html mail body")
 		}
 		return nil
 	}(); err != nil {
@@ -674,15 +937,28 @@ func msgToBytes(l governor.Logger, msgid string, from Addr, to []Addr, subject, 
 func genMsgID(msgiddomain string) (string, error) {
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to generate mail msg id")
+		return "", kerrors.WithMsg(err, "Failed to generate mail msg id")
 	}
 	return fmt.Sprintf("%s@%s", u.Base32(), msgiddomain), nil
 }
 
-// Send creates and sends a message given a template and data
-func (s *service) Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
+func (s *service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	var gcmsg mailgcmsg
+	if err := json.Unmarshal(msgdata, &gcmsg); err != nil {
+		return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode mail gc message")
+	}
+	if err := s.sendMailDir.Del(ctx, gcmsg.MsgPath); err != nil {
+		if !errors.Is(err, objstore.ErrNotFound{}) {
+			return kerrors.WithMsg(err, "Failed to delete mail body")
+		}
+	}
+	return nil
+}
+
+// SendTpl creates and sends a message given a template and data
+func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
 	if len(to) == 0 {
-		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
+		return kerrors.WithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
 
 	msgid, err := genMsgID(s.msgiddomain)
@@ -692,14 +968,17 @@ func (s *service) Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata int
 
 	databytes, err := json.Marshal(emdata)
 	if err != nil {
-		return governor.ErrWithKind(err, ErrInvalidMail{}, "Failed to encode email data to JSON")
+		return kerrors.WithKind(err, ErrInvalidMail{}, "Failed to encode email data to JSON")
 	}
 	datastring := string(databytes)
 	if encrypt {
-		var err error
-		datastring, err = s.maildataCipher.Encrypt(datastring)
+		cipher, _, err := s.getCipher(ctx)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to encrypt mail data")
+			return err
+		}
+		datastring, err = cipher.Encrypt(datastring)
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to encrypt mail data")
 		}
 	}
 
@@ -727,18 +1006,18 @@ func (s *service) Send(retpath string, from Addr, to []Addr, tpl Tpl, emdata int
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
+		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish mail event")
+	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail event")
 	}
 	return nil
 }
 
 // SendStream creates and sends a message from a given body
-func (s *service) SendStream(retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
+func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
-		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
+		return kerrors.WithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
 
 	msgid, err := genMsgID(s.msgiddomain)
@@ -748,7 +1027,7 @@ func (s *service) SendStream(retpath string, from Addr, to []Addr, subject strin
 
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate mail body obj id")
+		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
 	}
 	path := u.Base32()
 
@@ -758,38 +1037,41 @@ func (s *service) SendStream(retpath string, from Addr, to []Addr, subject strin
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
-		var err error
-		subject, err = s.maildataCipher.Encrypt(subject)
+		cipher, _, err := s.getCipher(ctx)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to encrypt mail subject")
+			return err
+		}
+		subject, err = cipher.Encrypt(subject)
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to encrypt mail subject")
 		}
 
 		contentType = mediaTypeOctet
 		config, err := hunter2.NewChaCha20Config()
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create mail data key")
+			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = s.maildataCipher.Encrypt(config.String())
+		key, err = cipher.Encrypt(config.String())
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to encrypt mail data key")
+			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
 		stream, err := hunter2.NewChaCha20Stream(*config)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create encryption stream")
+			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}
 		auth, err = hunter2.NewPoly1305Auth(*config)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create encryption auth")
+			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
 		body = hunter2.NewEncStreamReader(stream, auth, body)
 	}
 
-	if err := s.sendMailDir.Put(path, contentType, size, nil, body); err != nil {
-		return governor.ErrWithMsg(err, "Failed to save mail body")
+	if err := s.sendMailDir.Put(ctx, path, contentType, size, nil, body); err != nil {
+		return kerrors.WithMsg(err, "Failed to save mail body")
 	}
 	if auth != nil {
 		if err := auth.WriteCount(); err != nil {
-			return governor.ErrWithMsg(err, "Failed to write auth content length")
+			return kerrors.WithMsg(err, "Failed to write auth content length")
 		}
 		tag = auth.String()
 	}
@@ -820,23 +1102,23 @@ func (s *service) SendStream(retpath string, from Addr, to []Addr, subject strin
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
+		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish mail event")
+	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail event")
 	}
 	return nil
 }
 
 // FwdStream forwards an rfc5322 message
-func (s *service) FwdStream(retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
+func (s *service) FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
-		return governor.ErrWithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
+		return kerrors.WithKind(nil, ErrInvalidMail{}, "Email must have at least one recipient")
 	}
 
 	u, err := uid.NewSnowflake(mailUIDRandSize)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate mail body obj id")
+		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
 	}
 	path := u.Base32()
 
@@ -846,32 +1128,36 @@ func (s *service) FwdStream(retpath string, to []string, size int64, body io.Rea
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
+		cipher, _, err := s.getCipher(ctx)
+		if err != nil {
+			return err
+		}
 		contentType = mediaTypeOctet
 		config, err := hunter2.NewChaCha20Config()
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create mail data key")
+			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = s.maildataCipher.Encrypt(config.String())
+		key, err = cipher.Encrypt(config.String())
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to encrypt mail data key")
+			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
 		stream, err := hunter2.NewChaCha20Stream(*config)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create encryption stream")
+			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}
 		auth, err = hunter2.NewPoly1305Auth(*config)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to create encryption auth")
+			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
 		body = hunter2.NewEncStreamReader(stream, auth, body)
 	}
 
-	if err := s.sendMailDir.Put(path, contentType, size, nil, body); err != nil {
-		return governor.ErrWithMsg(err, "Failed to save mail body")
+	if err := s.sendMailDir.Put(ctx, path, contentType, size, nil, body); err != nil {
+		return kerrors.WithMsg(err, "Failed to save mail body")
 	}
 	if auth != nil {
 		if err := auth.WriteCount(); err != nil {
-			return governor.ErrWithMsg(err, "Failed to write auth content length")
+			return kerrors.WithMsg(err, "Failed to write auth content length")
 		}
 		tag = auth.String()
 	}
@@ -899,10 +1185,10 @@ func (s *service) FwdStream(retpath string, to []string, size int64, body io.Rea
 
 	b, err := json.Marshal(msg)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode mail event to json")
+		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(s.opts.MailChannel, b); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish mail event")
+	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail event")
 	}
 	return nil
 }
