@@ -457,6 +457,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			s.handlePing(ctx)
 		case op := <-s.ops:
