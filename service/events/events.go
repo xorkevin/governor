@@ -59,10 +59,14 @@ type (
 		Events
 	}
 
-	getClientRes struct {
+	natsClient struct {
 		client *nats.Conn
 		stream nats.JetStreamContext
 		canary <-chan struct{}
+	}
+
+	getClientRes struct {
+		client *natsClient
 		err    error
 	}
 
@@ -88,8 +92,8 @@ type (
 	}
 
 	service struct {
-		client          *nats.Conn
-		stream          nats.JetStreamContext
+		client          *natsClient
+		aclient         *atomic.Pointer[natsClient]
 		clientname      string
 		auth            secretAuth
 		addr            string
@@ -109,6 +113,7 @@ type (
 		done            <-chan struct{}
 		apirefresh      int
 		apisecret       secretAPI
+		aapisecret      *atomic.Pointer[secretAPI]
 	}
 
 	router struct {
@@ -191,6 +196,7 @@ func New() Service {
 	canary := make(chan struct{})
 	close(canary)
 	return &service{
+		aclient:    &atomic.Pointer[natsClient]{},
 		ops:        make(chan getOp),
 		subops:     make(chan subOp),
 		subs:       map[*subscription]struct{}{},
@@ -198,6 +204,7 @@ func New() Service {
 		ready:      &atomic.Bool{},
 		canary:     canary,
 		hbfailed:   0,
+		aapisecret: &atomic.Pointer[secretAPI]{},
 	}
 }
 
@@ -321,13 +328,11 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 				}
 			}
 		case op := <-s.ops:
-			client, stream, canary, err := s.handleGetClient(ctx)
+			client, err := s.handleGetClient(ctx)
 			select {
 			case <-op.ctx.Done():
 			case op.res <- getClientRes{
 				client: client,
-				stream: stream,
-				canary: canary,
 				err:    err,
 			}:
 				close(op.res)
@@ -337,36 +342,36 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	clientIsLive := false
-	canaryIsDead := false
+	// Check client auth expiry, and reinit client if about to be expired
+	if _, err := s.handleGetClient(ctx); err != nil {
+		s.logger.Error("Failed to create events client", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "events_create_client",
+		})
+	}
+	// Regardless of whether we were able to successfully retrieve a client, if
+	// there is a client then check the canary. This allows vault to be
+	// temporarily unavailable without disrupting the client connections. The
+	// canary is closed after failing the maximum number of heartbeats already,
+	// so no need to track number of heartbeat failures.
+	canaryIsLive := false
 	if s.client != nil {
 		select {
 		case <-s.canary:
-			canaryIsDead = true
-		default:
-			clientIsLive = true
-		}
-	}
-	if clientIsLive {
-		s.updateSubs(s.client, s.stream)
-	} else {
-		if canaryIsDead {
+			s.aclient.Store(nil)
 			s.ready.Store(false)
 			s.auth = secretAuth{}
 			s.config.InvalidateSecret("auth")
-		}
-		if _, _, _, err := s.handleGetClient(ctx); err != nil {
-			s.logger.Error("Failed to create events client", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "events_create_client",
-			})
-			return
+		default:
+			canaryIsLive = true
+			s.updateSubs(s.client)
 		}
 	}
-
 	err := s.refreshApiSecret(ctx)
 	if err == nil {
-		s.ready.Store(true)
+		if canaryIsLive {
+			s.ready.Store(true)
+		}
 		s.hbfailed = 0
 		return
 	}
@@ -382,17 +387,22 @@ func (s *service) handlePing(ctx context.Context) {
 		"error":      err.Error(),
 		"actiontype": "events_refresh_api_secret",
 	})
+	s.aapisecret.Store(nil)
 	s.ready.Store(false)
 	s.hbfailed = 0
 }
 
 func (s *service) refreshApiSecret(ctx context.Context) error {
-	apisecret := secretAPI{}
+	var apisecret secretAPI
 	if err := s.config.GetSecret(ctx, "apisecret", int64(s.apirefresh), &apisecret); err != nil {
 		return kerrors.WithMsg(err, "Invalid api secret")
 	}
+	if apisecret.Secret == "" {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty api secret")
+	}
 	if apisecret != s.apisecret {
 		s.apisecret = apisecret
+		s.aapisecret.Store(&apisecret)
 		s.logger.Info("Refreshed api secret with new secret", map[string]string{
 			"actiontype": "events_refresh_api_secret",
 		})
@@ -410,6 +420,10 @@ func (s *service) handleGetApiSecret(ctx context.Context) (string, error) {
 }
 
 func (s *service) getApiSecret(ctx context.Context) (string, error) {
+	if apisecret := s.aapisecret.Load(); apisecret != nil {
+		return apisecret.Secret, nil
+	}
+
 	res := make(chan getSecretRes)
 	op := getSecretOp{
 		ctx: ctx,
@@ -430,12 +444,12 @@ func (s *service) getApiSecret(ctx context.Context) (string, error) {
 	}
 }
 
-func (s *service) updateSubs(client *nats.Conn, stream nats.JetStreamContext) {
+func (s *service) updateSubs(client *natsClient) {
 	for k := range s.subs {
 		if k.ok() {
 			continue
 		}
-		if err := k.init(client); err != nil {
+		if err := k.init(client.client); err != nil {
 			s.logger.Error("Failed to subscribe to channel", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "events_create_sub",
@@ -454,7 +468,7 @@ func (s *service) updateSubs(client *nats.Conn, stream nats.JetStreamContext) {
 		if k.ok() {
 			continue
 		}
-		if err := k.init(stream); err != nil {
+		if err := k.init(client.stream); err != nil {
 			s.logger.Error("Failed to subscribe to stream", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "events_create_stream_sub",
@@ -502,16 +516,16 @@ type (
 	}
 )
 
-func (s *service) handleGetClient(ctx context.Context) (*nats.Conn, nats.JetStreamContext, <-chan struct{}, error) {
+func (s *service) handleGetClient(ctx context.Context) (*natsClient, error) {
 	var secret secretAuth
 	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
-		return nil, nil, nil, kerrors.WithMsg(err, "Invalid secret")
+		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if secret.Password == "" {
-		return nil, nil, nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
 	}
 	if secret == s.auth {
-		return s.client, s.stream, s.canary, nil
+		return s.client, nil
 	}
 
 	s.closeClient()
@@ -535,25 +549,31 @@ func (s *service) handleGetClient(ctx context.Context) (*nats.Conn, nats.JetStre
 			})
 		}))
 	if err != nil {
-		return nil, nil, nil, kerrors.WithKind(err, ErrConn{}, "Failed to connect to events")
+		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to connect to events")
 	}
 	stream, err := conn.JetStream()
 	if err != nil {
-		return nil, nil, nil, kerrors.WithKind(err, ErrClient{}, "Failed to connect to events jetstream")
+		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to connect to events jetstream")
 	}
 
-	s.client = conn
-	s.stream = stream
+	s.client = &natsClient{
+		client: conn,
+		stream: stream,
+		canary: canary,
+	}
+	s.aclient.Store(s.client)
 	s.auth = secret
 	s.ready.Store(true)
 	s.canary = canary
-	s.logger.Info(fmt.Sprintf("Established connection to %s", s.addr), nil)
-	return s.client, s.stream, s.canary, nil
+	s.logger.Info("Established connection to event stream", map[string]string{
+		"addr": s.addr,
+	})
+	return s.client, nil
 }
 
 func (s *service) closeClient() {
-	if s.client != nil && !s.client.IsClosed() {
-		s.client.Close()
+	if s.client != nil && !s.client.client.IsClosed() {
+		s.client.client.Close()
 		s.logger.Info("Closed events connection", map[string]string{
 			"actiontype": "events_close_ok",
 			"address":    s.addr,
@@ -562,7 +582,11 @@ func (s *service) closeClient() {
 	s.deinitSubs()
 }
 
-func (s *service) getClient(ctx context.Context) (*nats.Conn, nats.JetStreamContext, <-chan struct{}, error) {
+func (s *service) getClient(ctx context.Context) (*natsClient, error) {
+	if client := s.aclient.Load(); client != nil {
+		return client, nil
+	}
+
 	res := make(chan getClientRes)
 	op := getOp{
 		ctx: ctx,
@@ -570,15 +594,15 @@ func (s *service) getClient(ctx context.Context) (*nats.Conn, nats.JetStreamCont
 	}
 	select {
 	case <-s.done:
-		return nil, nil, nil, kerrors.WithMsg(nil, "Events service shutdown")
+		return nil, kerrors.WithMsg(nil, "Events service shutdown")
 	case <-ctx.Done():
-		return nil, nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
 		select {
 		case <-ctx.Done():
-			return nil, nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 		case v := <-res:
-			return v.client, v.stream, v.canary, v.err
+			return v.client, v.err
 		}
 	}
 }
@@ -643,11 +667,11 @@ func (s *service) rmSub(sub *subscription, stream *streamSubscription) {
 
 // Publish publishes to a channel
 func (s *service) Publish(ctx context.Context, channel string, msgdata []byte) error {
-	client, _, _, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Publish(channel, msgdata); err != nil {
+	if err := client.client.Publish(channel, msgdata); err != nil {
 		return kerrors.WithKind(err, ErrClient{}, "Failed to publish message to channel")
 	}
 	return nil
@@ -721,7 +745,7 @@ func (s *subscription) Close() error {
 
 // SubscribeSync subscribes to a channel synchronously
 func (s *service) SubscribeSync(ctx context.Context, channel, group string, worker WorkerFunc) (SyncSubscription, error) {
-	client, _, canary, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +763,7 @@ func (s *service) SubscribeSync(ctx context.Context, channel, group string, work
 		ctx:     subctx,
 		cancel:  cancel,
 	}
-	if err := sub.init(client, canary); err != nil {
+	if err := sub.init(client.client, client.canary); err != nil {
 		return nil, err
 	}
 	return sub, nil
@@ -786,11 +810,11 @@ func (s *syncSubscription) Close() error {
 
 // StreamPublish publishes to a stream
 func (s *service) StreamPublish(ctx context.Context, channel string, msgdata []byte) error {
-	_, client, _, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := client.Publish(channel, msgdata, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.Publish(channel, msgdata, nats.Context(ctx)); err != nil {
 		return kerrors.WithKind(err, ErrClient{}, "Failed to publish message to stream")
 	}
 	return nil
@@ -936,7 +960,7 @@ func (p *pinger) Ping(ctx context.Context) error {
 
 // InitStream initializes a stream
 func (s *service) InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error {
-	_, client, _, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -952,15 +976,15 @@ func (s *service) InitStream(ctx context.Context, name string, subjects []string
 		MaxMsgSize: opts.MaxMsgSize,
 		MaxMsgs:    opts.MaxMsgs,
 	}
-	if _, err := client.StreamInfo(name, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to get stream")
 		}
-		if _, err := client.AddStream(cfg, nats.Context(ctx)); err != nil {
+		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to create stream")
 		}
 	} else {
-		if _, err := client.UpdateStream(cfg, nats.Context(ctx)); err != nil {
+		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to update stream")
 		}
 	}
@@ -969,16 +993,16 @@ func (s *service) InitStream(ctx context.Context, name string, subjects []string
 
 // DeleteStream deletes a stream
 func (s *service) DeleteStream(ctx context.Context, name string) error {
-	_, client, _, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := client.StreamInfo(name, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to get stream")
 		}
 	} else {
-		if err := client.DeleteStream(name, nats.Context(ctx)); err != nil {
+		if err := client.stream.DeleteStream(name, nats.Context(ctx)); err != nil {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to delete stream")
 		}
 	}
@@ -987,16 +1011,16 @@ func (s *service) DeleteStream(ctx context.Context, name string) error {
 
 // DeleteConsumer deletes a consumer
 func (s *service) DeleteConsumer(ctx context.Context, stream, consumer string) error {
-	_, client, _, err := s.getClient(ctx)
+	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := client.ConsumerInfo(stream, consumer, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.ConsumerInfo(stream, consumer, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to get consumer")
 		}
 	} else {
-		if err := client.DeleteConsumer(stream, consumer, nats.Context(ctx)); err != nil {
+		if err := client.stream.DeleteConsumer(stream, consumer, nats.Context(ctx)); err != nil {
 			return kerrors.WithKind(err, ErrClient{}, "Failed to delete consumer")
 		}
 	}
@@ -1022,11 +1046,11 @@ func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, grou
 		if jse.Stream != targetStream || jse.Consumer != targetConsumer {
 			return kerrors.WithKind(nil, ErrInvalidStreamMsg{}, fmt.Sprintf("Invalid target stream and consumer: %s, %s", jse.Stream, jse.Consumer))
 		}
-		_, client, _, err := s.getClient(ctx)
+		client, err := s.getClient(ctx)
 		if err != nil {
 			return err
 		}
-		msg, err := client.GetMsg(targetStream, jse.StreamSeq, nats.Context(ctx))
+		msg, err := client.stream.GetMsg(targetStream, jse.StreamSeq, nats.Context(ctx))
 		if err != nil {
 			return kerrors.WithKind(err, ErrClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
 		}

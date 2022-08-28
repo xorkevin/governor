@@ -293,7 +293,7 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if secret.Password == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
 	}
 	if secret == s.auth {
 		return s.client, nil

@@ -254,7 +254,7 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if auth.Username == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid secret")
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
 	}
 	if auth == s.auth {
 		return s.sqldb, nil
