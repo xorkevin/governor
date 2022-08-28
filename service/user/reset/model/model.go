@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p reset -o model_gen.go Model
@@ -22,17 +24,17 @@ type (
 		New(userid, kind string) *Model
 		ValidateCode(code string, m *Model) (bool, error)
 		RehashCode(m *Model) (string, error)
-		GetByID(userid, kind string) (*Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		Delete(userid, kind string) error
-		DeleteByUserid(userid string) error
-		DeleteBefore(t int64) error
-		Setup() error
+		GetByID(ctx context.Context, userid, kind string) (*Model, error)
+		Insert(ctx context.Context, m *Model) error
+		Update(ctx context.Context, m *Model) error
+		Delete(ctx context.Context, userid, kind string) error
+		DeleteByUserid(ctx context.Context, userid string) error
+		DeleteBefore(ctx context.Context, t int64) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *resetModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -82,7 +84,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &resetModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -102,7 +106,7 @@ func (r *repo) New(userid, kind string) *Model {
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify code")
+		return false, kerrors.WithMsg(err, "Failed to verify code")
 	}
 	return ok, nil
 }
@@ -110,12 +114,12 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 func (r *repo) RehashCode(m *Model) (string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create new code")
+		return "", kerrors.WithMsg(err, "Failed to create new code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash new code")
+		return "", kerrors.WithMsg(err, "Failed to hash new code")
 	}
 	now := time.Now().Round(0).Unix()
 	m.CodeHash = codehash
@@ -123,80 +127,80 @@ func (r *repo) RehashCode(m *Model) (string, error) {
 	return codestr, nil
 }
 
-func (r *repo) GetByID(userid, kind string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid, kind string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := resetModelGetModelEqUseridEqKind(d, r.table, userid, kind)
+	m, err := r.table.GetModelEqUseridEqKind(ctx, d, userid, kind)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get reset code")
+		return nil, kerrors.WithMsg(err, "Failed to get reset code")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert new reset code")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert new reset code")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Update(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelUpdModelEqUseridEqKind(d, r.table, m, m.Userid, m.Kind); err != nil {
-		return db.WrapErr(err, "Failed to update reset code")
+	if err := r.table.UpdModelEqUseridEqKind(ctx, d, m, m.Userid, m.Kind); err != nil {
+		return kerrors.WithMsg(err, "Failed to update reset code")
 	}
 	return nil
 }
 
-func (r *repo) Delete(userid, kind string) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, userid, kind string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUseridEqKind(d, r.table, userid, kind); err != nil {
-		return db.WrapErr(err, "Failed to delete reset code")
+	if err := r.table.DelEqUseridEqKind(ctx, d, userid, kind); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete reset code")
 	}
 	return nil
 }
 
-func (r *repo) DeleteByUserid(userid string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteByUserid(ctx context.Context, userid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelEqUserid(d, r.table, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete reset codes")
+	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete reset codes")
 	}
 	return nil
 }
 
-func (r *repo) DeleteBefore(t int64) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelDelLtCodeTime(d, r.table, t); err != nil {
-		return db.WrapErr(err, "Failed to delete reset codes")
+	if err := r.table.DelLtCodeTime(ctx, d, t); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete reset codes")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := resetModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup user reset code model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup user reset code model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

@@ -594,7 +594,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("Created user table", nil)
 
-	if err := s.sessions.Setup(); err != nil {
+	if err := s.sessions.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created usersessions table", nil)
@@ -604,12 +604,12 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	}
 	l.Info("Created userapprovals table", nil)
 
-	if err := s.invitations.Setup(); err != nil {
+	if err := s.invitations.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created userroleinvitations table", nil)
 
-	if err := s.resets.Setup(); err != nil {
+	if err := s.resets.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created userresets table", nil)
@@ -824,7 +824,7 @@ func (s *service) UserResetGCHook(ctx context.Context, topic string, msgdata []b
 		l.Error(err.Error(), nil)
 		return
 	}
-	if err := s.resets.DeleteBefore(props.Timestamp - time72h); err != nil {
+	if err := s.resets.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		l.Error(err.Error(), nil)
 		return
 	}
@@ -842,7 +842,7 @@ func (s *service) UserInvitationGCHook(ctx context.Context, topic string, msgdat
 		l.Error(err.Error(), nil)
 		return
 	}
-	if err := s.invitations.DeleteBefore(props.Timestamp - time72h); err != nil {
+	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		l.Error(err.Error(), nil)
 		return
 	}

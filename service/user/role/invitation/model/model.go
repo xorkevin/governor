@@ -1,11 +1,13 @@
 package model
 
 import (
+	"context"
 	"errors"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p inv -o model_gen.go Model
@@ -13,19 +15,19 @@ import (
 type (
 	// Repo is a role invitation repository
 	Repo interface {
-		GetByID(userid, role string, after int64) (*Model, error)
-		GetByUser(userid string, after int64, limit, offset int) ([]Model, error)
-		GetByRole(role string, after int64, limit, offset int) ([]Model, error)
-		Insert(userid string, roles rank.Rank, by string, at int64) error
-		DeleteByID(userid, role string) error
-		DeleteByRoles(userid string, roles rank.Rank) error
-		DeleteRole(role string) error
-		DeleteBefore(t int64) error
-		Setup() error
+		GetByID(ctx context.Context, userid, role string, after int64) (*Model, error)
+		GetByUser(ctx context.Context, userid string, after int64, limit, offset int) ([]Model, error)
+		GetByRole(ctx context.Context, role string, after int64, limit, offset int) ([]Model, error)
+		Insert(ctx context.Context, userid string, roles rank.Rank, by string, at int64) error
+		DeleteByID(ctx context.Context, userid, role string) error
+		DeleteByRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteRole(ctx context.Context, role string) error
+		DeleteBefore(ctx context.Context, t int64) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table string
+		table *invModelTable
 		db    db.Database
 	}
 
@@ -68,51 +70,53 @@ func NewCtx(inj governor.Injector, table string) Repo {
 // New creates a new role invitation repo
 func New(database db.Database, table string) Repo {
 	return &repo{
-		table: table,
-		db:    database,
+		table: &invModelTable{
+			TableName: table,
+		},
+		db: database,
 	}
 }
 
-func (r *repo) GetByID(userid, role string, after int64) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid, role string, after int64) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqUseridEqRoleGtCreationTime(d, r.table, userid, role, after)
+	m, err := r.table.GetModelEqUseridEqRoleGtCreationTime(ctx, d, userid, role, after)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get invitation")
+		return nil, kerrors.WithMsg(err, "Failed to get invitation")
 	}
 	return m, nil
 }
 
 // GetByUser returns a user's invitations
-func (r *repo) GetByUser(userid string, after int64, limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByUser(ctx context.Context, userid string, after int64, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqUseridGtCreationTimeOrdCreationTime(d, r.table, userid, after, false, limit, offset)
+	m, err := r.table.GetModelEqUseridGtCreationTimeOrdCreationTime(ctx, d, userid, after, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get invitations")
+		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
 	return m, nil
 }
 
 // GetByRole returns a role's invitations
-func (r *repo) GetByRole(role string, after int64, limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByRole(ctx context.Context, role string, after int64, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := invModelGetModelEqRoleGtCreationTimeOrdCreationTime(d, r.table, role, after, false, limit, offset)
+	m, err := r.table.GetModelEqRoleGtCreationTimeOrdCreationTime(ctx, d, role, after, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get invitations")
+		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
 	return m, nil
 }
 
 // Insert inserts invitations into the db
-func (r *repo) Insert(userid string, roles rank.Rank, by string, at int64) error {
+func (r *repo) Insert(ctx context.Context, userid string, roles rank.Rank, by string, at int64) error {
 	if len(roles) == 0 {
 		return nil
 	}
@@ -126,74 +130,74 @@ func (r *repo) Insert(userid string, roles rank.Rank, by string, at int64) error
 			CreationTime: at,
 		})
 	}
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelInsertBulk(d, r.table, m, true); err != nil {
-		return db.WrapErr(err, "Failed to insert invitations")
+	if err := r.table.InsertBulk(ctx, d, m, true); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert invitations")
 	}
 	return nil
 }
 
 // DeleteByID deletes an invitation by userid and role
-func (r *repo) DeleteByID(userid, role string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteByID(ctx context.Context, userid, role string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridEqRole(d, r.table, userid, role); err != nil {
-		return db.WrapErr(err, "Failed to delete invitation")
+	if err := r.table.DelEqUseridEqRole(ctx, d, userid, role); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete invitation")
 	}
 	return nil
 }
 
 // DeleteByRoles deletes invitations by userid and roles
-func (r *repo) DeleteByRoles(userid string, roles rank.Rank) error {
+func (r *repo) DeleteByRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	if len(roles) == 0 {
 		return nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqUseridHasRole(d, r.table, userid, roles.ToSlice()); err != nil {
-		return db.WrapErr(err, "Failed to delete invitations")
+	if err := r.table.DelEqUseridHasRole(ctx, d, userid, roles.ToSlice()); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
 }
 
-func (r *repo) DeleteRole(role string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteRole(ctx context.Context, role string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelDelEqRole(d, r.table, role); err != nil {
-		return db.WrapErr(err, "Failed to delete invitations")
+	if err := r.table.DelEqRole(ctx, d, role); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
 }
 
-func (r *repo) DeleteBefore(t int64) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelDelLeqCreationTime(d, r.table, t); err != nil {
-		return db.WrapErr(err, "Failed to delete invitations")
+	if err := r.table.DelLeqCreationTime(ctx, d, t); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
 }
 
 // Setup creates a new role invitation table
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := invModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup role invitation model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup role invitation model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
