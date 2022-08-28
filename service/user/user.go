@@ -58,10 +58,14 @@ type (
 		Users
 	}
 
-	getCipherRes struct {
+	otpCipher struct {
 		cipher    hunter2.Cipher
 		decrypter *hunter2.Decrypter
-		err       error
+	}
+
+	getCipherRes struct {
+		cipher *otpCipher
+		err    error
 	}
 
 	getOp struct {
@@ -85,8 +89,8 @@ type (
 		ratelimiter       ratelimit.Ratelimiter
 		gate              gate.Gate
 		tokenizer         token.Tokenizer
-		otpDecrypter      *hunter2.Decrypter
-		otpCipher         hunter2.Cipher
+		otpCipher         *otpCipher
+		aotpCipher        *atomic.Pointer[otpCipher]
 		config            governor.SecretReader
 		logger            governor.Logger
 		rolens            string
@@ -256,6 +260,7 @@ func New(
 		ratelimiter:       ratelimiter,
 		gate:              g,
 		tokenizer:         tokenizer,
+		aotpCipher:        &atomic.Pointer[otpCipher]{},
 		accessTime:        time5m,
 		refreshTime:       time6month,
 		refreshCacheTime:  time24h,
@@ -461,13 +466,12 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 		case <-ticker.C:
 			s.handlePing(ctx)
 		case op := <-s.ops:
-			cipher, decrypter, err := s.handleGetCipher(ctx)
+			cipher, err := s.handleGetCipher(ctx)
 			select {
 			case <-op.ctx.Done():
 			case op.res <- getCipherRes{
-				cipher:    cipher,
-				decrypter: decrypter,
-				err:       err,
+				cipher: cipher,
+				err:    err,
 			}:
 				close(op.res)
 			}
@@ -514,7 +518,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
 		}
 		if n == 0 {
-			if s.otpCipher != nil && s.otpCipher.ID() == c.ID() {
+			if s.otpCipher != nil && s.otpCipher.cipher.ID() == c.ID() {
 				// first, newest cipher matches current cipher, therefore no change in ciphers
 				return nil
 			}
@@ -522,27 +526,34 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		}
 		decrypter.RegisterCipher(c)
 	}
-	s.otpCipher = cipher
-	s.otpDecrypter = decrypter
+	s.otpCipher = &otpCipher{
+		cipher:    cipher,
+		decrypter: decrypter,
+	}
+	s.aotpCipher.Store(s.otpCipher)
 	s.logger.Info("Refreshed otp secrets with new secrets", map[string]string{
 		"actiontype": "user_refresh_otp_secrets",
-		"kid":        s.otpCipher.ID(),
+		"kid":        s.otpCipher.cipher.ID(),
 		"numotpkeys": strconv.Itoa(len(otpsecrets.Keys)),
 	})
 	return nil
 }
 
-func (s *service) handleGetCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+func (s *service) handleGetCipher(ctx context.Context) (*otpCipher, error) {
 	if s.otpCipher == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		s.ready.Store(true)
 	}
-	return s.otpCipher, s.otpDecrypter, nil
+	return s.otpCipher, nil
 }
 
-func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+func (s *service) getCipher(ctx context.Context) (*otpCipher, error) {
+	if cipher := s.aotpCipher.Load(); cipher != nil {
+		return cipher, nil
+	}
+
 	res := make(chan getCipherRes)
 	op := getOp{
 		ctx: ctx,
@@ -550,15 +561,15 @@ func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decry
 	}
 	select {
 	case <-s.done:
-		return nil, nil, kerrors.WithMsg(nil, "User service shutdown")
+		return nil, kerrors.WithMsg(nil, "User service shutdown")
 	case <-ctx.Done():
-		return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
 		select {
 		case <-ctx.Done():
-			return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 		case v := <-res:
-			return v.cipher, v.decrypter, v.err
+			return v.cipher, v.err
 		}
 	}
 }
@@ -795,7 +806,7 @@ func (s *service) UserApprovalGCHook(ctx context.Context, topic string, msgdata 
 		l.Error(err.Error(), nil)
 		return
 	}
-	if err := s.approvals.DeleteBefore(props.Timestamp - time72h); err != nil {
+	if err := s.approvals.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		l.Error(err.Error(), nil)
 		return
 	}

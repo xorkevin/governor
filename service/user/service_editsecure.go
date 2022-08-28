@@ -523,11 +523,11 @@ func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits 
 		}))
 	}
 
-	cipher, _, err := s.getCipher(ctx)
+	cipher, err := s.getCipher(ctx)
 	if err != nil {
 		return nil, err
 	}
-	uri, backup, err := s.users.GenerateOTPSecret(cipher, m, s.otpIssuer, alg, digits)
+	uri, backup, err := s.users.GenerateOTPSecret(cipher.cipher, m, s.otpIssuer, alg, digits)
 	if err != nil {
 		return nil, governor.ErrWithMsg(err, "Failed to generate otp secret")
 	}
@@ -566,11 +566,11 @@ func (s *service) CommitOTP(ctx context.Context, userid string, code string) err
 			Message: "OTP secret not yet added",
 		}))
 	}
-	_, decrypter, err := s.getCipher(ctx)
+	cipher, err := s.getCipher(ctx)
 	if err != nil {
 		return err
 	}
-	if ok, err := s.users.ValidateOTPCode(decrypter, m, code); err != nil {
+	if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
 		return governor.ErrWithMsg(err, "Failed to validate otp code")
 	} else if !ok {
 		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -603,11 +603,11 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 		}))
 	}
 	if code == "" {
-		_, decrypter, err := s.getCipher(ctx)
+		cipher, err := s.getCipher(ctx)
 		if err != nil {
 			return err
 		}
-		if ok, err := s.users.ValidateOTPBackup(decrypter, m, backup); err != nil {
+		if ok, err := s.users.ValidateOTPBackup(cipher.decrypter, m, backup); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp backup code")
 		} else if !ok {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
@@ -644,11 +644,11 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 				Message: "OTP code already used",
 			}))
 		}
-		_, decrypter, err := s.getCipher(ctx)
+		cipher, err := s.getCipher(ctx)
 		if err != nil {
 			return err
 		}
-		if ok, err := s.users.ValidateOTPCode(decrypter, m, code); err != nil {
+		if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
 			return governor.ErrWithMsg(err, "Failed to validate otp code")
 		} else if !ok {
 			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
