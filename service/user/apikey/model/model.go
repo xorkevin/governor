@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p apikey -o model_gen.go Model
+//go:generate forge model -m Model -p apikey -o model_gen.go Model apikeyHash apikeyProps
 
 const (
 	uidSize = 8
@@ -28,18 +29,18 @@ type (
 	Repo interface {
 		New(userid string, scope string, name, desc string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
-		RehashKey(m *Model) (string, error)
-		GetByID(keyid string) (*Model, error)
-		GetUserKeys(userid string, limit, offset int) ([]Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		Delete(m *Model) error
-		DeleteKeys(keyids []string) error
-		Setup() error
+		RehashKey(ctx context.Context, m *Model) (string, error)
+		GetByID(ctx context.Context, keyid string) (*Model, error)
+		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]Model, error)
+		Insert(ctx context.Context, m *Model) error
+		UpdateProps(ctx context.Context, m *Model) error
+		Delete(ctx context.Context, m *Model) error
+		DeleteKeys(ctx context.Context, keyids []string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *apikeyModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -54,6 +55,17 @@ type (
 		Name    string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Desc    string `model:"description,VARCHAR(255)" query:"description"`
 		Time    int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
+	}
+
+	apikeyHash struct {
+		KeyHash string `query:"keyhash;updeq,keyid"`
+		Time    int64  `query:"time"`
+	}
+
+	apikeyProps struct {
+		Scope string `query:"scope;updeq,keyid"`
+		Name  string `query:"name"`
+		Desc  string `query:"description"`
 	}
 
 	ctxKeyRepo struct{}
@@ -91,7 +103,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &apikeyModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -101,16 +115,16 @@ func New(database db.Database, table string) Repo {
 func (r *repo) New(userid string, scope string, name, desc string) (*Model, string, error) {
 	aid, err := uid.New(uidSize)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to create new api key id")
+		return nil, "", kerrors.WithMsg(err, "Failed to create new api key id")
 	}
 	key, err := uid.New(keySize)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to create new session key")
+		return nil, "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
 	keystr := key.Base64()
 	hash, err := r.hasher.Hash(keystr)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to hash session key")
+		return nil, "", kerrors.WithMsg(err, "Failed to hash api key")
 	}
 	now := time.Now().Round(0).Unix()
 	return &Model{
@@ -136,105 +150,119 @@ func ParseIDUserid(keyid string) (string, error) {
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(key, m.KeyHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify key")
+		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
 	return ok, nil
 }
 
-func (r *repo) RehashKey(m *Model) (string, error) {
+func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 	key, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create new session key")
+		return "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
 	keystr := key.Base64()
 	hash, err := r.hasher.Hash(keystr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash session key")
+		return "", kerrors.WithMsg(err, "Failed to hash api key")
+	}
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return "", err
 	}
 	now := time.Now().Round(0).Unix()
 	m.KeyHash = hash
 	m.Time = now
+	if err := r.table.UpdapikeyHashEqKeyid(ctx, d, &apikeyHash{
+		KeyHash: m.KeyHash,
+		Time:    m.Time,
+	}, m.Keyid); err != nil {
+		return "", kerrors.WithMsg(err, "Failed to update apikey")
+	}
 	return keystr, nil
 }
 
-func (r *repo) GetByID(keyid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, keyid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := apikeyModelGetModelEqKeyid(d, r.table, keyid)
+	m, err := r.table.GetModelEqKeyid(ctx, d, keyid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get apikey")
+		return nil, kerrors.WithMsg(err, "Failed to get apikey")
 	}
 	return m, nil
 }
 
-func (r *repo) GetUserKeys(userid string, limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := apikeyModelGetModelEqUseridOrdTime(d, r.table, userid, false, limit, offset)
+	m, err := r.table.GetModelEqUseridOrdTime(ctx, d, userid, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user apikeys")
+		return nil, kerrors.WithMsg(err, "Failed to get user apikeys")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert apikey")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert apikey")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelUpdModelEqKeyid(d, r.table, m, m.Keyid); err != nil {
-		return db.WrapErr(err, "Failed to update apikey")
+	if err := r.table.UpdapikeyPropsEqKeyid(ctx, d, &apikeyProps{
+		Scope: m.Scope,
+		Name:  m.Name,
+		Desc:  m.Desc,
+	}, m.Keyid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update apikey")
 	}
 	return nil
 }
 
-func (r *repo) Delete(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelDelEqKeyid(d, r.table, m.Keyid); err != nil {
-		return db.WrapErr(err, "Failed to delete apikey")
+	if err := r.table.DelEqKeyid(ctx, d, m.Keyid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete apikey")
 	}
 	return nil
 }
 
-func (r *repo) DeleteKeys(keyids []string) error {
+func (r *repo) DeleteKeys(ctx context.Context, keyids []string) error {
 	if len(keyids) == 0 {
 		return nil
 	}
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelDelHasKeyid(d, r.table, keyids); err != nil {
-		return db.WrapErr(err, "Failed to delete apikeys")
+	if err := r.table.DelHasKeyid(ctx, d, keyids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete apikeys")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := apikeyModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup user apikeys model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup user apikeys model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

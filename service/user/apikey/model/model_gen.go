@@ -123,3 +123,19 @@ func (t *apikeyModelTable) GetModelEqUseridOrdTime(ctx context.Context, d db.SQL
 	}
 	return res, nil
 }
+
+func (t *apikeyModelTable) UpdapikeyHashEqKeyid(ctx context.Context, d db.SQLExecutor, m *apikeyHash, keyid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyhash, time) = ROW($1, $2) WHERE keyid = $3;", m.KeyHash, m.Time, keyid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *apikeyModelTable) UpdapikeyPropsEqKeyid(ctx context.Context, d db.SQLExecutor, m *apikeyProps, keyid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (scope, name, description) = ROW($1, $2, $3) WHERE keyid = $4;", m.Scope, m.Name, m.Desc, keyid)
+	if err != nil {
+		return err
+	}
+	return nil
+}

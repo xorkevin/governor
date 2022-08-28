@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -17,13 +18,13 @@ const (
 type (
 	// Apikeys manages apikeys
 	Apikeys interface {
-		GetUserKeys(userid string, limit, offset int) ([]model.Model, error)
-		CheckKey(keyid, key string) (string, string, error)
-		Insert(userid string, scope string, name, desc string) (*ResApikeyModel, error)
-		RotateKey(keyid string) (*ResApikeyModel, error)
-		UpdateKey(keyid string, scope string, name, desc string) error
-		DeleteKey(keyid string) error
-		DeleteKeys(keyids []string) error
+		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]model.Model, error)
+		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
+		Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
+		RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error)
+		UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error
+		DeleteKey(ctx context.Context, keyid string) error
+		DeleteKeys(ctx context.Context, keyids []string) error
 	}
 
 	// Service is an Apikeys and governor.Service
@@ -85,7 +86,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse scope cache time")
+		return kerrors.WithMsg(err, "Failed to parse scope cache time")
 	} else {
 		s.scopeCacheTime = int64(t / time.Second)
 	}
@@ -102,7 +103,7 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.apikeys.Setup(); err != nil {
+	if err := s.apikeys.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("created userapikeys table", nil)
