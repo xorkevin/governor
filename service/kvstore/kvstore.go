@@ -54,6 +54,7 @@ type (
 
 	// KVStore is a service wrapper around a kv store client
 	KVStore interface {
+		Ping(ctx context.Context) error
 		Get(ctx context.Context, key string) (string, error)
 		GetInt(ctx context.Context, key string) (int64, error)
 		Set(ctx context.Context, key, val string, seconds int64) error
@@ -84,6 +85,7 @@ type (
 
 	service struct {
 		client     *redis.Client
+		aclient    *atomic.Pointer[redis.Client]
 		auth       secretAuth
 		addr       string
 		dbname     int
@@ -139,6 +141,7 @@ func NewSubtreeInCtx(inj governor.Injector, prefix string) {
 // New creates a new cache service
 func New() Service {
 	return &service{
+		aclient:  &atomic.Pointer[redis.Client]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
 		hbfailed: 0,
@@ -236,40 +239,46 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	if s.client != nil {
-		_, err := s.client.Ping(ctx).Result()
-		if err == nil {
-			s.ready.Store(true)
-			s.hbfailed = 0
-			return
-		}
-		s.hbfailed++
-		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("Failed to ping kvstore", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "kvstore_ping",
-				"address":    s.addr,
-				"dbname":     strconv.Itoa(s.dbname),
-			})
-			return
-		}
-		s.logger.Error("Failed max pings to kvstore", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "kvstore_ping",
-			"address":    s.addr,
-			"dbname":     strconv.Itoa(s.dbname),
-		})
-		s.ready.Store(false)
-		s.hbfailed = 0
-		s.auth = secretAuth{}
-		s.config.InvalidateSecret("auth")
-	}
-	if _, err := s.handleGetClient(ctx); err != nil {
+	var err error
+	// Check client auth expiry, and reinit client if about to be expired
+	if _, err = s.handleGetClient(ctx); err != nil {
 		s.logger.Error("Failed to create kvstore client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "kvstore_create_client",
 		})
 	}
+	// Regardless of whether we were able to successfully retrieve a client, if
+	// there is a client then ping the store. This allows vault to be temporarily
+	// unavailable without disrupting the client connections.
+	if s.client != nil {
+		_, err = s.client.Ping(ctx).Result()
+		if err == nil {
+			s.ready.Store(true)
+			s.hbfailed = 0
+			return
+		}
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to ping kvstore", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "kvstore_ping",
+			"address":    s.addr,
+			"dbname":     strconv.Itoa(s.dbname),
+		})
+		return
+	}
+	s.logger.Error("Failed max pings to kvstore", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "kvstore_ping",
+		"address":    s.addr,
+		"dbname":     strconv.Itoa(s.dbname),
+	})
+	s.aclient.Store(nil)
+	s.ready.Store(false)
+	s.hbfailed = 0
+	s.auth = secretAuth{}
+	s.config.InvalidateSecret("auth")
 }
 
 type (
@@ -303,10 +312,15 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	}
 
 	s.client = client
+	s.aclient.Store(s.client)
 	s.auth = secret
 	s.ready.Store(true)
 	s.hbfailed = 0
-	s.logger.Info(fmt.Sprintf("Established connection to %s dbname %d", s.addr, s.dbname), nil)
+	s.logger.Info("Established connection to kvstore", map[string]string{
+		"actiontype": "kvstore_conn",
+		"addr":       s.addr,
+		"dbname":     strconv.Itoa(s.dbname),
+	})
 	return s.client, nil
 }
 
@@ -314,6 +328,7 @@ func (s *service) closeClient() {
 	if s.client == nil {
 		return
 	}
+	s.aclient.Store(nil)
 	if err := s.client.Close(); err != nil {
 		s.logger.Error("Failed to close kvstore connection", map[string]string{
 			"error":      err.Error(),
@@ -367,6 +382,10 @@ func (s *service) Health() error {
 }
 
 func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
+	if client := s.aclient.Load(); client != nil {
+		return client, nil
+	}
+
 	res := make(chan getClientRes)
 	op := getOp{
 		ctx: ctx,
@@ -385,6 +404,17 @@ func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
 			return v.client, v.err
 		}
 	}
+}
+
+func (s *service) Ping(ctx context.Context) error {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := client.Ping(ctx).Result(); err != nil {
+		return kerrors.WithKind(err, ErrClient{}, "Failed to ping kvstore")
+	}
+	return nil
 }
 
 func (s *service) Get(ctx context.Context, key string) (string, error) {
@@ -627,6 +657,10 @@ type (
 		base   *service
 	}
 )
+
+func (t *tree) Ping(ctx context.Context) error {
+	return t.base.Ping(ctx)
+}
 
 func (t *tree) Get(ctx context.Context, key string) (string, error) {
 	return t.base.Get(ctx, t.prefix+kvpathSeparator+key)

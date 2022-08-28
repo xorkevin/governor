@@ -280,7 +280,11 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 	s.auth = auth
 	s.ready.Store(true)
 	s.hbfailed = 0
-	s.logger.Info(fmt.Sprintf("Established connection to %s with user %s", s.connopts, s.auth.Username), nil)
+	s.logger.Info("Established connection to db", map[string]string{
+		"actiontype": "db_conn",
+		"connopts":   s.connopts,
+		"username":   s.auth.Username,
+	})
 	return s.sqldb, nil
 }
 
@@ -343,8 +347,7 @@ func (s *service) Health() error {
 
 // DB implements [Database] and returns [SQLDB]
 func (s *service) DB(ctx context.Context) (SQLDB, error) {
-	client := s.asqldb.Load()
-	if client != nil {
+	if client := s.asqldb.Load(); client != nil {
 		return client, nil
 	}
 

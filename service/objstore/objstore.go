@@ -22,6 +22,7 @@ const (
 type (
 	// Objstore is a service wrapper around a object storage client
 	Objstore interface {
+		Ping(ctx context.Context) error
 		GetBucket(name string) Bucket
 		DelBucket(ctx context.Context, name string) error
 	}
@@ -44,6 +45,8 @@ type (
 
 	service struct {
 		client     *minio.Client
+		aclient    *atomic.Pointer[minio.Client]
+		clientname string
 		auth       minioauth
 		addr       string
 		sslmode    bool
@@ -100,6 +103,7 @@ func NewBucketInCtx(inj governor.Injector, name string) {
 // New creates a new object store service instance
 func New() Service {
 	return &service{
+		aclient:  &atomic.Pointer[minio.Client]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
 		hbfailed: 0,
@@ -146,6 +150,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	s.config = r
+	s.clientname = c.Hostname
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.sslmode = r.GetBool("sslmode")
@@ -153,7 +158,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"addr":       s.addr,
 		"sslmode":    strconv.FormatBool(s.sslmode),
 		"location":   s.location,
@@ -194,40 +199,46 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	if s.client != nil {
-		_, err := s.client.ListBuckets(ctx)
-		if err == nil {
-			s.ready.Store(true)
-			s.hbfailed = 0
-			return
-		}
-		s.hbfailed++
-		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("Failed to ping objstore", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "objstore_ping",
-				"address":    s.addr,
-				"username":   s.auth.Username,
-			})
-			return
-		}
-		s.logger.Warn("Failed max pings to objstore", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "objstore_ping",
-			"address":    s.addr,
-			"username":   s.auth.Username,
-		})
-		s.ready.Store(false)
-		s.hbfailed = 0
-		s.auth = minioauth{}
-		s.config.InvalidateSecret("auth")
-	}
-	if _, err := s.handleGetClient(ctx); err != nil {
+	var err error
+	// Check client auth expiry, and reinit client if about to be expired
+	if _, err = s.handleGetClient(ctx); err != nil {
 		s.logger.Error("Failed to create objstore client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "objstore_create_client",
 		})
 	}
+	// Regardless of whether we were able to successfully retrieve a client, if
+	// there is a client then ping the store. This allows vault to be temporarily
+	// unavailable without disrupting the client connections.
+	if s.client != nil {
+		err = s.clientPing(ctx, s.client)
+		if err == nil {
+			s.ready.Store(true)
+			s.hbfailed = 0
+			return
+		}
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to ping objstore", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "objstore_ping",
+			"address":    s.addr,
+			"username":   s.auth.Username,
+		})
+		return
+	}
+	s.logger.Warn("Failed max pings to objstore", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "objstore_ping",
+		"address":    s.addr,
+		"username":   s.auth.Username,
+	})
+	s.aclient.Store(nil)
+	s.ready.Store(false)
+	s.hbfailed = 0
+	s.auth = minioauth{}
+	s.config.InvalidateSecret("auth")
 }
 
 type (
@@ -258,20 +269,26 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to create objstore client")
 	}
-	if _, err := client.ListBuckets(ctx); err != nil {
+	if err := s.clientPing(ctx, client); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping objstore")
 	}
 
 	s.client = client
+	s.aclient.Store(s.client)
 	s.auth = auth
 	s.ready.Store(false)
 	s.hbfailed = 0
-	s.logger.Info(fmt.Sprintf("Established connection to %s with key %s", s.addr, s.auth.Username), nil)
+	s.logger.Info("Established connection to objstore", map[string]string{
+		"actiontype": "objstore_conn",
+		"addr":       s.addr,
+		"username":   s.auth.Username,
+	})
 	return s.client, nil
 }
 
 func (s *service) closeClient() {
+	s.aclient.Store(nil)
 	s.client = nil
 	s.auth = minioauth{}
 }
@@ -311,6 +328,10 @@ func (s *service) Health() error {
 }
 
 func (s *service) getClient(ctx context.Context) (*minio.Client, error) {
+	if client := s.aclient.Load(); client != nil {
+		return client, nil
+	}
+
 	res := make(chan getClientRes)
 	op := getOp{
 		ctx: ctx,
@@ -329,6 +350,23 @@ func (s *service) getClient(ctx context.Context) (*minio.Client, error) {
 			return v.client, v.err
 		}
 	}
+}
+
+func (s *service) clientPing(ctx context.Context, client *minio.Client) error {
+	if _, err := client.GetBucketLocation(ctx, "healthcheck-probe-"+s.clientname); err != nil {
+		if minio.ToErrorResponse(err).StatusCode != http.StatusNotFound {
+			return kerrors.WithKind(err, ErrConn{}, "Failed to ping objstore")
+		}
+	}
+	return nil
+}
+
+func (s *service) Ping(ctx context.Context) error {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	return s.clientPing(ctx, client)
 }
 
 // GetBucket returns the bucket of the given name
@@ -367,6 +405,7 @@ type (
 
 	// Dir is a collection of objects in the store at a specified directory
 	Dir interface {
+		Ping(ctx context.Context) error
 		Stat(ctx context.Context, name string) (*ObjectInfo, error)
 		Get(ctx context.Context, name string) (io.ReadCloser, *ObjectInfo, error)
 		Put(ctx context.Context, name string, contentType string, size int64, userMeta map[string]string, object io.Reader) error
@@ -410,6 +449,10 @@ func (b *bucket) Init(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (b *bucket) Ping(ctx context.Context) error {
+	return b.s.Ping(ctx)
 }
 
 // Stat returns metadata of an object from the bucket
@@ -485,6 +528,10 @@ func (b *bucket) Del(ctx context.Context, name string) error {
 		return kerrors.WithKind(err, ErrClient{}, "Failed to remove object")
 	}
 	return nil
+}
+
+func (d *dir) Ping(ctx context.Context) error {
+	return d.base.Ping(ctx)
 }
 
 func (d *dir) Stat(ctx context.Context, name string) (*ObjectInfo, error) {
