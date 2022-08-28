@@ -55,12 +55,12 @@ type (
 
 	// Tokenizer is a token generator
 	Tokenizer interface {
-		GetJWKS() *jose.JSONWebKeySet
-		Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
-		GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
-		Validate(kind string, tokenString string) (bool, *Claims)
-		GetClaims(kind string, tokenString string) (bool, *Claims)
-		GetClaimsExt(kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims)
+		GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error)
+		Generate(ctx context.Context, kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
+		GenerateExt(ctx context.Context, kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
+		Validate(ctx context.Context, kind string, tokenString string) (bool, *Claims)
+		GetClaims(ctx context.Context, kind string, tokenString string) (bool, *Claims)
+		GetClaimsExt(ctx context.Context, kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims)
 	}
 
 	// Service is a Tokenizer and governor.Service
@@ -69,8 +69,16 @@ type (
 		Tokenizer
 	}
 
+	tokenSigner struct {
+		signer    jose.Signer
+		keySigner jose.Signer
+		keys      *signingKeys
+		jwks      []jose.JSONWebKey
+	}
+
 	getSignerRes struct {
-		err error
+		signer *tokenSigner
+		err    error
 	}
 
 	getOp struct {
@@ -80,11 +88,9 @@ type (
 
 	service struct {
 		hs512id    string
-		signer     jose.Signer
 		rs256id    string
-		keySigner  jose.Signer
-		keys       signingKeys
-		jwks       []jose.JSONWebKey
+		signer     *tokenSigner
+		asigner    *atomic.Pointer[tokenSigner]
 		issuer     string
 		audience   string
 		config     governor.SecretReader
@@ -118,6 +124,7 @@ func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
 // New creates a new Tokenizer
 func New() Service {
 	return &service{
+		asigner:  &atomic.Pointer[tokenSigner]{},
 		issuer:   "",
 		audience: "",
 		signer:   nil,
@@ -187,12 +194,22 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
+		case op := <-s.ops:
+			signer, err := s.handleGetSigner(ctx)
+			select {
+			case <-op.ctx.Done():
+			case op.res <- getSignerRes{
+				signer: signer,
+				err:    err,
+			}:
+				close(op.res)
+			}
 		}
 	}
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	err := s.refreshTokenSecrets(ctx)
+	err := s.refreshSecrets(ctx)
 	if err == nil {
 		s.ready.Store(true)
 		s.hbfailed = 0
@@ -373,14 +390,14 @@ func rs256FromParams(params string) (*rs256Key, error) {
 	}, nil
 }
 
-func (s *service) refreshTokenSecrets(ctx context.Context) error {
+func (s *service) refreshSecrets(ctx context.Context) error {
 	var tokenSecrets secretToken
 	if err := s.config.GetSecret(ctx, "tokensecret", int64(s.keyrefresh), &tokenSecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid token secret")
 	}
 	var khs512 signingKey
 	var krs256 signingKey
-	keys := signingKeys{
+	keys := &signingKeys{
 		keys: map[string]signingKey{},
 	}
 	var jwks []jose.JSONWebKey
@@ -405,33 +422,35 @@ func (s *service) refreshTokenSecrets(ctx context.Context) error {
 				krs256 = k
 			}
 		}
+		if khs512 != nil && krs256 != nil && khs512.ID() == s.hs512id && krs256.ID() == s.rs256id {
+			// first signing keys of each type match current signing keys, therefore no
+			// change in signing keys
+			return nil
+		}
 		keys.Register(k)
 	}
 	if khs512 == nil || krs256 == nil {
 		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No token keys present")
 	}
-	if khs512.ID() == s.hs512id && krs256.ID() == s.rs256id {
-		// first signing keys of each type match current signing keys, therefore no
-		// change in signing keys
-		return nil
-	}
 
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private().([]byte)}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
 	if err != nil {
 		return kerrors.WithKind(err, ErrSigner{}, "Failed to create new jwt HS512 signer")
 	}
 
-	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private().(*rsa.PrivateKey)}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
+	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
 	if err != nil {
 		return kerrors.WithKind(err, ErrSigner{}, "Failed to create new jwt RS256 signer")
 	}
 
 	s.hs512id = khs512.ID()
-	s.signer = sig
 	s.rs256id = krs256.ID()
-	s.keySigner = keySig
-	s.keys = keys
-	s.jwks = jwks
+	s.signer = &tokenSigner{
+		signer:    sig,
+		keySigner: keySig,
+		keys:      keys,
+		jwks:      jwks,
+	}
 
 	s.logger.Info("Refreshed token keys with new keys", map[string]string{
 		"actiontype": "token_refresh_keys",
@@ -441,6 +460,41 @@ func (s *service) refreshTokenSecrets(ctx context.Context) error {
 		"numother":   strconv.Itoa(len(tokenSecrets.Secrets) - len(jwks)),
 	})
 	return nil
+}
+
+func (s *service) handleGetSigner(ctx context.Context) (*tokenSigner, error) {
+	if s.signer == nil {
+		if err := s.refreshSecrets(ctx); err != nil {
+			return nil, err
+		}
+		s.ready.Store(true)
+	}
+	return s.signer, nil
+}
+
+func (s *service) getSigner(ctx context.Context) (*tokenSigner, error) {
+	if signer := s.asigner.Load(); signer != nil {
+		return signer, nil
+	}
+
+	res := make(chan getSignerRes)
+	op := getOp{
+		ctx: ctx,
+		res: res,
+	}
+	select {
+	case <-s.done:
+		return nil, kerrors.WithMsg(nil, "Token service shutdown")
+	case <-ctx.Done():
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+	case s.ops <- op:
+		select {
+		case <-ctx.Done():
+			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		case v := <-res:
+			return v.signer, v.err
+		}
+	}
 }
 
 func (s *service) Setup(req governor.ReqSetup) error {
@@ -478,14 +532,22 @@ func (s *service) Health() error {
 }
 
 // GetJWKS returns an RFC 7517 representation of the public signing key
-func (s *service) GetJWKS() *jose.JSONWebKeySet {
-	return &jose.JSONWebKeySet{
-		Keys: s.jwks,
+func (s *service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return nil, err
 	}
+	return &jose.JSONWebKeySet{
+		Keys: signer.jwks,
+	}, nil
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
+func (s *service) Generate(ctx context.Context, kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return "", nil, err
+	}
 	now := time.Now().Round(0)
 	claims := Claims{
 		Claims: jwt.Claims{
@@ -502,7 +564,7 @@ func (s *service) Generate(kind string, userid string, duration int64, id string
 		Scope:    scope,
 		Key:      key,
 	}
-	token, err := jwt.Signed(s.signer).Claims(claims).CompactSerialize()
+	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
 		return "", nil, kerrors.WithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
 	}
@@ -510,7 +572,11 @@ func (s *service) Generate(kind string, userid string, duration int64, id string
 }
 
 // GenerateExt creates a new id token
-func (s *service) GenerateExt(kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
+func (s *service) GenerateExt(ctx context.Context, kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return "", err
+	}
 	now := time.Now().Round(0)
 	baseClaims := Claims{
 		Claims: jwt.Claims{
@@ -525,7 +591,7 @@ func (s *service) GenerateExt(kind string, issuer string, userid string, audienc
 		Kind:     kind,
 		AuthTime: authTime,
 	}
-	token, err := jwt.Signed(s.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
+	token, err := jwt.Signed(signer.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
 		return "", kerrors.WithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
 	}
@@ -546,7 +612,7 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(kind string, tokenString string) (bool, *Claims) {
+func (s *service) Validate(ctx context.Context, kind string, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -554,7 +620,15 @@ func (s *service) Validate(kind string, tokenString string) (bool, *Claims) {
 	if len(token.Headers) != 1 {
 		return false, nil
 	}
-	key := s.keys.Get(token.Headers[0].KeyID)
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get signer keys", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "token_get_keys",
+		})
+		return false, nil
+	}
+	key := signer.keys.Get(token.Headers[0].KeyID)
 	if key == nil {
 		return false, nil
 	}
@@ -577,7 +651,7 @@ func (s *service) Validate(kind string, tokenString string) (bool, *Claims) {
 }
 
 // GetClaims returns token claims without validating time
-func (s *service) GetClaims(kind string, tokenString string) (bool, *Claims) {
+func (s *service) GetClaims(ctx context.Context, kind string, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -585,7 +659,15 @@ func (s *service) GetClaims(kind string, tokenString string) (bool, *Claims) {
 	if len(token.Headers) != 1 {
 		return false, nil
 	}
-	key := s.keys.Get(token.Headers[0].KeyID)
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get signer keys", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "token_get_keys",
+		})
+		return false, nil
+	}
+	key := signer.keys.Get(token.Headers[0].KeyID)
 	if key == nil {
 		return false, nil
 	}
@@ -606,7 +688,7 @@ func (s *service) GetClaims(kind string, tokenString string) (bool, *Claims) {
 }
 
 // GetClaimsExt returns external token claims without validating time
-func (s *service) GetClaimsExt(kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
+func (s *service) GetClaimsExt(ctx context.Context, kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -614,7 +696,15 @@ func (s *service) GetClaimsExt(kind string, tokenString string, audience []strin
 	if len(token.Headers) != 1 {
 		return false, nil
 	}
-	key := s.keys.Get(token.Headers[0].KeyID)
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get signer keys", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "token_get_keys",
+		})
+		return false, nil
+	}
+	key := signer.keys.Get(token.Headers[0].KeyID)
 	if key == nil {
 		return false, nil
 	}
