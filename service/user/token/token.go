@@ -9,9 +9,9 @@ import (
 	"encoding/pem"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"go.uber.org/atomic"
 	"golang.org/x/crypto/blake2b"
 	_ "golang.org/x/crypto/blake2b" // depends on registering blake2b hash
 	"gopkg.in/square/go-jose.v2"

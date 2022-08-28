@@ -6,11 +6,11 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 )

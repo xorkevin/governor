@@ -590,7 +590,7 @@ func (r *configReader) Unmarshal(key string, val interface{}) error {
 }
 
 func (s *vaultSecret) isValid() bool {
-	return s.expire == 0 || s.expire-time.Now().Round(0).Unix() > 5
+	return s.expire == 0 || time.Now().Round(0).Unix()+5 < s.expire
 }
 
 func (r *configReader) GetSecret(ctx context.Context, key string, seconds int64, target interface{}) error {

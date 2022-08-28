@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/lib/pq"
-	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 )
@@ -37,8 +37,8 @@ type (
 	}
 
 	service struct {
-		client     *sql.DB
-		sqldb      SQLDB
+		sqldb      *sqldb
+		asqldb     *atomic.Pointer[sqldb]
 		auth       pgAuth
 		connopts   string
 		config     governor.SecretReader
@@ -71,6 +71,7 @@ func setCtxDB(inj governor.Injector, d Database) {
 // New creates a new db service
 func New() Service {
 	return &service{
+		asqldb:   &atomic.Pointer[sqldb]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
 		hbfailed: 0,
@@ -197,40 +198,47 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *service) handlePing(ctx context.Context) {
-	if s.client != nil {
-		err := s.client.Ping()
-		if err == nil {
-			s.ready.Store(true)
-			s.hbfailed = 0
-			return
-		}
-		s.hbfailed++
-		if s.hbfailed < s.hbmaxfail {
-			s.logger.Warn("Failed to ping db", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "db_ping",
-				"connection": s.connopts,
-				"username":   s.auth.Username,
-			})
-			return
-		}
-		s.logger.Error("Failed max pings to db", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "db_ping",
-			"connection": s.connopts,
-			"username":   s.auth.Username,
-		})
-		s.ready.Store(false)
-		s.hbfailed = 0
-		s.auth = pgAuth{}
-		s.config.InvalidateSecret("auth")
-	}
-	if _, err := s.handleGetClient(ctx); err != nil {
+	var err error
+	// Check db auth expiry, and reinit client if about to be expired
+	if _, err = s.handleGetClient(ctx); err != nil {
 		s.logger.Error("Failed to create db client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "db_create_client",
 		})
 	}
+	// Regardless of whether we were able to successfully retrieve a db client,
+	// if there is a db client then ping the db. This allows vault to be
+	// temporarily unavailable without disrupting the DB connections.
+	if s.sqldb != nil {
+		err = s.sqldb.PingContext(ctx)
+		if err == nil {
+			s.ready.Store(true)
+			s.hbfailed = 0
+			return
+		}
+	}
+	// Failed a heartbeat
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.logger.Warn("Failed to ping db", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "db_ping",
+			"connection": s.connopts,
+			"username":   s.auth.Username,
+		})
+		return
+	}
+	s.logger.Error("Failed max pings to db", map[string]string{
+		"error":      err.Error(),
+		"actiontype": "db_ping",
+		"connection": s.connopts,
+		"username":   s.auth.Username,
+	})
+	s.asqldb.Store(nil)
+	s.ready.Store(false)
+	s.hbfailed = 0
+	s.auth = pgAuth{}
+	s.config.InvalidateSecret("auth")
 }
 
 type (
@@ -264,11 +272,11 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping db")
 	}
 
-	s.client = client
 	s.sqldb = &sqldb{
 		logger: s.logger,
 		client: client,
 	}
+	s.asqldb.Store(s.sqldb)
 	s.auth = auth
 	s.ready.Store(true)
 	s.hbfailed = 0
@@ -277,24 +285,24 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 }
 
 func (s *service) closeClient() {
-	if s.client == nil {
+	if s.sqldb == nil {
 		return
 	}
-	if err := s.client.Close(); err != nil {
-		s.logger.Error("Failed to close db connection", map[string]string{
+	s.asqldb.Store(nil)
+	if err := s.sqldb.Close(); err != nil {
+		s.logger.Error("Failed to close db client", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "db_close",
 			"connection": s.connopts,
 			"username":   s.auth.Username,
 		})
 	} else {
-		s.logger.Info("Closed db connection", map[string]string{
+		s.logger.Info("Closed db client", map[string]string{
 			"actiontype": "db_close_ok",
 			"connection": s.connopts,
 			"username":   s.auth.Username,
 		})
 	}
-	s.client = nil
 	s.sqldb = nil
 	s.auth = pgAuth{}
 }
@@ -335,6 +343,11 @@ func (s *service) Health() error {
 
 // DB implements [Database] and returns [SQLDB]
 func (s *service) DB(ctx context.Context) (SQLDB, error) {
+	client := s.asqldb.Load()
+	if client != nil {
+		return client, nil
+	}
+
 	res := make(chan getClientRes)
 	op := getOp{
 		ctx: ctx,
@@ -383,6 +396,7 @@ type (
 	// SQLDB is the interface boundary of a [database/sql.DB]
 	SQLDB interface {
 		SQLExecutor
+		PingContext(ctx context.Context) error
 	}
 
 	sqldb struct {
@@ -426,6 +440,22 @@ func (s *sqldb) QueryRowContext(ctx context.Context, query string, args ...inter
 	return &sqlrow{
 		row: s.client.QueryRowContext(ctx, query, args...),
 	}
+}
+
+// PingContext implements [SQLDB]
+func (s *sqldb) PingContext(ctx context.Context) error {
+	if err := s.client.PingContext(ctx); err != nil {
+		return wrapDBErr(err, "Failed to ping db")
+	}
+	return nil
+}
+
+// Close closes the db client
+func (s *sqldb) Close() error {
+	if err := s.client.Close(); err != nil {
+		return wrapDBErr(err, "Failed to close db client")
+	}
+	return nil
 }
 
 // Next implements [SQLRows]

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"go.uber.org/atomic"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 )
