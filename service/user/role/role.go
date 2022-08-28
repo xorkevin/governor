@@ -13,6 +13,7 @@ import (
 	"xorkevin.dev/governor/service/user/role/model"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -22,12 +23,12 @@ const (
 type (
 	// Roles manages user roles
 	Roles interface {
-		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
-		InsertRoles(userid string, roles rank.Rank) error
-		DeleteRoles(userid string, roles rank.Rank) error
-		DeleteByRole(roleName string, userids []string) error
-		GetRoles(userid string, prefix string, amount, offset int) (rank.Rank, error)
-		GetByRole(roleName string, amount, offset int) ([]string, error)
+		IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
+		InsertRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteByRole(ctx context.Context, roleName string, userids []string) error
+		GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error)
+		GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error)
 	}
 
 	// Service is a Roles and governor.Service
@@ -133,15 +134,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid stream size")
+		return kerrors.WithMsg(err, "Invalid stream size")
 	}
 	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid msg size")
+		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
 	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse role cache time")
+		return kerrors.WithMsg(err, "Failed to parse role cache time")
 	} else {
 		s.roleCacheTime = int64(t / time.Second)
 	}
@@ -160,17 +161,17 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
 		MaxMsgSize: s.eventsize,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init roles stream")
+		return kerrors.WithMsg(err, "Failed to init roles stream")
 	}
 	l.Info("Created roles stream", nil)
 
-	if err := s.roles.Setup(); err != nil {
+	if err := s.roles.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created userrole table", nil)
@@ -197,7 +198,7 @@ func (s *service) Health() error {
 func DecodeRolesProps(msgdata []byte) (*RolesProps, error) {
 	m := &RolesProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode roles props")
+		return nil, kerrors.WithMsg(err, "Failed to decode roles props")
 	}
 	return m, nil
 }

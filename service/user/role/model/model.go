@@ -1,11 +1,13 @@
 package model
 
 import (
+	"context"
 	"errors"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p role -o model_gen.go Model
@@ -14,20 +16,20 @@ type (
 	// Repo is a user role repository
 	Repo interface {
 		New(userid, role string) *Model
-		GetByID(userid, role string) (*Model, error)
-		IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
-		GetByRole(role string, limit, offset int) ([]string, error)
-		GetRoles(userid string, limit, offset int) (rank.Rank, error)
-		GetRolesPrefix(userid string, prefix string, limit, offset int) (rank.Rank, error)
-		InsertRoles(userid string, roles rank.Rank) error
-		DeleteRoles(userid string, roles rank.Rank) error
-		DeleteByRole(role string, userids []string) error
-		DeleteUserRoles(userid string) error
-		Setup() error
+		GetByID(ctx context.Context, userid, role string) (*Model, error)
+		IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
+		GetByRole(ctx context.Context, role string, limit, offset int) ([]string, error)
+		GetRoles(ctx context.Context, userid string, limit, offset int) (rank.Rank, error)
+		GetRolesPrefix(ctx context.Context, userid string, prefix string, limit, offset int) (rank.Rank, error)
+		InsertRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteByRole(ctx context.Context, role string, userids []string) error
+		DeleteUserRoles(ctx context.Context, userid string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table string
+		table *roleModelTable
 		db    db.Database
 	}
 
@@ -68,8 +70,10 @@ func NewCtx(inj governor.Injector, table string) Repo {
 // New creates a new user role repository
 func New(database db.Database, table string) Repo {
 	return &repo{
-		table: table,
-		db:    database,
+		table: &roleModelTable{
+			TableName: table,
+		},
+		db: database,
 	}
 }
 
@@ -82,31 +86,31 @@ func (r *repo) New(userid, role string) *Model {
 }
 
 // GetByID returns a user role model with the given id
-func (r *repo) GetByID(userid, role string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid, role string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := roleModelGetModelEqUseridEqRole(d, r.table, userid, role)
+	m, err := r.table.GetModelEqUseridEqRole(ctx, d, userid, role)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get role")
+		return nil, kerrors.WithMsg(err, "Failed to get role")
 	}
 	return m, nil
 }
 
 // IntersectRoles gets the intersection of user roles and the input roles
-func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+func (r *repo) IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
 	if len(roles) == 0 {
 		return rank.Rank{}, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := roleModelGetModelEqUseridHasRoleOrdRole(d, r.table, userid, roles.ToSlice(), true, len(roles), 0)
+	m, err := r.table.GetModelEqUseridHasRoleOrdRole(ctx, d, userid, roles.ToSlice(), true, len(roles), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get user roles")
+		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
 	res := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -116,14 +120,14 @@ func (r *repo) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error)
 }
 
 // GetByRole returns a list of userids with the given role
-func (r *repo) GetByRole(role string, limit, offset int) ([]string, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByRole(ctx context.Context, role string, limit, offset int) ([]string, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := roleModelGetModelEqRoleOrdUserid(d, r.table, role, true, limit, offset)
+	m, err := r.table.GetModelEqRoleOrdUserid(ctx, d, role, true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get userids of role")
+		return nil, kerrors.WithMsg(err, "Failed to get userids of role")
 	}
 	userids := make([]string, 0, len(m))
 	for _, i := range m {
@@ -133,14 +137,14 @@ func (r *repo) GetByRole(role string, limit, offset int) ([]string, error) {
 }
 
 // GetRoles returns a list of a user's roles
-func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
-	d, err := r.db.DB()
+func (r *repo) GetRoles(ctx context.Context, userid string, limit, offset int) (rank.Rank, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := roleModelGetModelEqUseridOrdRole(d, r.table, userid, true, limit, offset)
+	m, err := r.table.GetModelEqUseridOrdRole(ctx, d, userid, true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get roles of userid")
+		return nil, kerrors.WithMsg(err, "Failed to get roles of userid")
 	}
 	roles := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -150,14 +154,14 @@ func (r *repo) GetRoles(userid string, limit, offset int) (rank.Rank, error) {
 }
 
 // GetRolesPrefix returns a list of a user's roles with a prefix
-func (r *repo) GetRolesPrefix(userid string, prefix string, limit, offset int) (rank.Rank, error) {
-	d, err := r.db.DB()
+func (r *repo) GetRolesPrefix(ctx context.Context, userid string, prefix string, limit, offset int) (rank.Rank, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := roleModelGetModelEqUseridLikeRoleOrdRole(d, r.table, userid, prefix+"%", true, limit, offset)
+	m, err := r.table.GetModelEqUseridLikeRoleOrdRole(ctx, d, userid, prefix+"%", true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get roles of userid")
+		return nil, kerrors.WithMsg(err, "Failed to get roles of userid")
 	}
 	roles := make(rank.Rank, len(m))
 	for _, i := range m {
@@ -167,19 +171,19 @@ func (r *repo) GetRolesPrefix(userid string, prefix string, limit, offset int) (
 }
 
 // Insert inserts the model into the db
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert role")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert role")
 	}
 	return nil
 }
 
 // InsertRoles inserts roles for a user into the db
-func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
+func (r *repo) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	if len(roles) == 0 {
 		return nil
 	}
@@ -191,79 +195,80 @@ func (r *repo) InsertRoles(userid string, roles rank.Rank) error {
 			Role:   i,
 		})
 	}
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelInsertBulk(d, r.table, m, true); err != nil {
-		return db.WrapErr(err, "Failed to insert roles")
+	if err := r.table.InsertBulk(ctx, d, m, true); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert roles")
 	}
 	return nil
 }
 
 // Delete deletes the model in the db
-func (r *repo) Delete(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelDelEqUseridEqRole(d, r.table, m.Userid, m.Role); err != nil {
-		return db.WrapErr(err, "Failed to delete role")
+	if err := r.table.DelEqUseridEqRole(ctx, d, m.Userid, m.Role); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete role")
 	}
 	return nil
 }
 
 // DeleteRoles deletes multiple roles from the db of a userid
-func (r *repo) DeleteRoles(userid string, roles rank.Rank) error {
+func (r *repo) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	if len(roles) == 0 {
 		return nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelDelEqUseridHasRole(d, r.table, userid, roles.ToSlice()); err != nil {
-		return db.WrapErr(err, "Failed to delete roles")
+	if err := r.table.DelEqUseridHasRole(ctx, d, userid, roles.ToSlice()); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
 	return nil
 }
 
 // DeleteByRole deletes by role name
-func (r *repo) DeleteByRole(role string, userids []string) error {
+func (r *repo) DeleteByRole(ctx context.Context, role string, userids []string) error {
 	if len(userids) == 0 {
 		return nil
 	}
-	d, err := r.db.DB()
+
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelDelEqRoleHasUserid(d, r.table, role, userids); err != nil {
-		return db.WrapErr(err, "Failed to delete roles")
+	if err := r.table.DelEqRoleHasUserid(ctx, d, role, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
 	return nil
 }
 
 // DeleteUserRoles deletes all the roles of a user
-func (r *repo) DeleteUserRoles(userid string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteUserRoles(ctx context.Context, userid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelDelEqUserid(d, r.table, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete user roles")
+	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user roles")
 	}
 	return nil
 }
 
 // Setup creates a new User role table
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := roleModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup role model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup role model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

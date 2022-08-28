@@ -1,12 +1,13 @@
 package role
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -14,30 +15,30 @@ const (
 	cacheValN = "n"
 )
 
-func (s *service) intersectRolesRepo(userid string, roles rank.Rank) (rank.Rank, error) {
-	m, err := s.roles.IntersectRoles(userid, roles)
+func (s *service) intersectRolesRepo(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
+	m, err := s.roles.IntersectRoles(ctx, userid, roles)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get roles")
+		return nil, kerrors.WithMsg(err, "Failed to get roles")
 	}
 	return m, nil
 }
 
-func (s *service) IntersectRoles(userid string, roles rank.Rank) (rank.Rank, error) {
+func (s *service) IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
 	userkv := s.kvroleset.Subtree(userid)
 
 	res := rank.Rank{}
 	uncachedRoles := roles
 
-	if multiget, err := userkv.Multi(); err != nil {
+	if multiget, err := userkv.Multi(ctx); err != nil {
 		s.logger.Error("Failed to create kvstore multi", map[string]string{
 			"error": err.Error(),
 		})
 	} else {
 		resget := make(map[string]kvstore.Resulter, roles.Len())
 		for _, i := range roles.ToSlice() {
-			resget[i] = multiget.Get(i)
+			resget[i] = multiget.Get(ctx, i)
 		}
-		if err := multiget.Exec(); err != nil {
+		if err := multiget.Exec(ctx); err != nil {
 			s.logger.Error("Failed to get user roles from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "getroleset",
@@ -68,7 +69,7 @@ end:
 		return res, nil
 	}
 
-	m, err := s.intersectRolesRepo(userid, uncachedRoles)
+	m, err := s.intersectRolesRepo(ctx, userid, uncachedRoles)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ end:
 		res.AddOne(i)
 	}
 
-	multiset, err := userkv.Multi()
+	multiset, err := userkv.Multi(ctx)
 	if err != nil {
 		s.logger.Error("Failed to create kvstore multi", map[string]string{
 			"error": err.Error(),
@@ -86,12 +87,12 @@ end:
 	}
 	for _, i := range uncachedRoles.ToSlice() {
 		if m.Has(i) {
-			multiset.Set(i, cacheValY, s.roleCacheTime)
+			multiset.Set(ctx, i, cacheValY, s.roleCacheTime)
 		} else {
-			multiset.Set(i, cacheValN, s.roleCacheTime)
+			multiset.Set(ctx, i, cacheValN, s.roleCacheTime)
 		}
 	}
-	if err := multiset.Exec(); err != nil {
+	if err := multiset.Exec(ctx); err != nil {
 		s.logger.Error("Failed to set user roles in cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "setroleset",
@@ -101,19 +102,19 @@ end:
 	return res, nil
 }
 
-func (s *service) InsertRoles(userid string, roles rank.Rank) error {
+func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := json.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode roles props to json")
+		return kerrors.WithMsg(err, "Failed to encode roles props to json")
 	}
-	if err := s.roles.InsertRoles(userid, roles); err != nil {
-		return governor.ErrWithMsg(err, "Failed to create roles")
+	if err := s.roles.InsertRoles(ctx, userid, roles); err != nil {
+		return kerrors.WithMsg(err, "Failed to create roles")
 	}
-	s.clearCache(userid, roles)
-	if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
+	s.clearCache(ctx, userid, roles)
+	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
 		s.logger.Error("Failed to publish new roles event", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishnewroles",
@@ -122,19 +123,19 @@ func (s *service) InsertRoles(userid string, roles rank.Rank) error {
 	return nil
 }
 
-func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
+func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := json.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode roles props to json")
+		return kerrors.WithMsg(err, "Failed to encode roles props to json")
 	}
-	if err := s.roles.DeleteRoles(userid, roles); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete roles")
+	if err := s.roles.DeleteRoles(ctx, userid, roles); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
-	s.clearCache(userid, roles)
-	if err := s.events.StreamPublish(s.opts.DeleteChannel, b); err != nil {
+	s.clearCache(ctx, userid, roles)
+	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, b); err != nil {
 		s.logger.Error("Failed to publish delete roles event", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "publishdelroles",
@@ -143,33 +144,33 @@ func (s *service) DeleteRoles(userid string, roles rank.Rank) error {
 	return nil
 }
 
-func (s *service) DeleteByRole(roleName string, userids []string) error {
+func (s *service) DeleteByRole(ctx context.Context, roleName string, userids []string) error {
 	if len(userids) == 0 {
 		return nil
 	}
-	if err := s.roles.DeleteByRole(roleName, userids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete role users")
+	if err := s.roles.DeleteByRole(ctx, roleName, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete role users")
 	}
-	s.clearCacheRoles(roleName, userids)
+	s.clearCacheRoles(ctx, roleName, userids)
 	return nil
 }
 
-func (s *service) GetRoles(userid string, prefix string, amount, offset int) (rank.Rank, error) {
+func (s *service) GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error) {
 	if len(prefix) == 0 {
-		return s.roles.GetRoles(userid, amount, offset)
+		return s.roles.GetRoles(ctx, userid, amount, offset)
 	}
-	return s.roles.GetRolesPrefix(userid, prefix, amount, offset)
+	return s.roles.GetRolesPrefix(ctx, userid, prefix, amount, offset)
 }
 
-func (s *service) GetByRole(roleName string, amount, offset int) ([]string, error) {
-	return s.roles.GetByRole(roleName, amount, offset)
+func (s *service) GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error) {
+	return s.roles.GetByRole(ctx, roleName, amount, offset)
 }
 
-func (s *service) clearCache(userid string, roles rank.Rank) {
+func (s *service) clearCache(ctx context.Context, userid string, roles rank.Rank) {
 	if len(roles) == 0 {
 		return
 	}
-	if err := s.kvroleset.Subtree(userid).Del(roles.ToSlice()...); err != nil {
+	if err := s.kvroleset.Subtree(userid).Del(ctx, roles.ToSlice()...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "clearroleset",
@@ -177,7 +178,7 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 	}
 }
 
-func (s *service) clearCacheRoles(role string, userids []string) {
+func (s *service) clearCacheRoles(ctx context.Context, role string, userids []string) {
 	if len(userids) == 0 {
 		return
 	}
@@ -185,7 +186,7 @@ func (s *service) clearCacheRoles(role string, userids []string) {
 	for _, i := range userids {
 		args = append(args, s.kvroleset.Subkey(i, role))
 	}
-	if err := s.kvroleset.Del(args...); err != nil {
+	if err := s.kvroleset.Del(ctx, args...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "clearroleset",
