@@ -354,7 +354,6 @@ func (s *service) handlePing(ctx context.Context) {
 	// temporarily unavailable without disrupting the client connections. The
 	// canary is closed after failing the maximum number of heartbeats already,
 	// so no need to track number of heartbeat failures.
-	canaryIsLive := false
 	if s.client != nil {
 		select {
 		case <-s.canary:
@@ -363,15 +362,12 @@ func (s *service) handlePing(ctx context.Context) {
 			s.auth = secretAuth{}
 			s.config.InvalidateSecret("auth")
 		default:
-			canaryIsLive = true
+			s.ready.Store(true)
 			s.updateSubs(s.client)
 		}
 	}
 	err := s.refreshApiSecret(ctx)
 	if err == nil {
-		if canaryIsLive {
-			s.ready.Store(true)
-		}
 		s.hbfailed = 0
 		return
 	}
@@ -388,7 +384,6 @@ func (s *service) handlePing(ctx context.Context) {
 		"actiontype": "events_refresh_api_secret",
 	})
 	s.aapisecret.Store(nil)
-	s.ready.Store(false)
 	s.hbfailed = 0
 }
 

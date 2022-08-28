@@ -111,10 +111,14 @@ type (
 		MsgPath string `json:"msgpath"`
 	}
 
-	getCipherRes struct {
+	maildataCipher struct {
 		cipher    hunter2.Cipher
 		decrypter *hunter2.Decrypter
-		err       error
+	}
+
+	getCipherRes struct {
+		cipher *maildataCipher
+		err    error
 	}
 
 	getOp struct {
@@ -133,33 +137,34 @@ type (
 	}
 
 	service struct {
-		tpl               template.Template
-		events            events.Events
-		mailBucket        objstore.Bucket
-		sendMailDir       objstore.Dir
-		config            governor.SecretReader
-		maildataDecrypter *hunter2.Decrypter
-		maildataCipher    hunter2.Cipher
-		logger            governor.Logger
-		streamns          string
-		opts              Opts
-		host              string
-		addr              string
-		auth              secretAuth
-		msgiddomain       string
-		returnpath        string
-		fromAddress       string
-		fromName          string
-		streamsize        int64
-		eventsize         int32
-		ops               chan getOp
-		authops           chan getAuthOp
-		ready             *atomic.Bool
-		hbfailed          int
-		hbinterval        int
-		hbmaxfail         int
-		done              <-chan struct{}
-		authrefresh       int
+		tpl             template.Template
+		events          events.Events
+		mailBucket      objstore.Bucket
+		sendMailDir     objstore.Dir
+		maildataCipher  *maildataCipher
+		amaildataCipher *atomic.Pointer[maildataCipher]
+		config          governor.SecretReader
+		logger          governor.Logger
+		streamns        string
+		opts            Opts
+		host            string
+		addr            string
+		auth            secretAuth
+		aauth           *atomic.Pointer[secretAuth]
+		msgiddomain     string
+		returnpath      string
+		fromAddress     string
+		fromName        string
+		streamsize      int64
+		eventsize       int32
+		ops             chan getOp
+		authops         chan getAuthOp
+		ready           *atomic.Bool
+		hbfailed        int
+		hbinterval      int
+		hbmaxfail       int
+		done            <-chan struct{}
+		authrefresh     int
 	}
 
 	ctxKeyMailer struct{}
@@ -219,14 +224,16 @@ func NewCtx(inj governor.Injector) Service {
 // New creates a new Mailer
 func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 	return &service{
-		tpl:         tpl,
-		events:      ev,
-		mailBucket:  obj,
-		sendMailDir: obj.Subdir("sendmail"),
-		ops:         make(chan getOp),
-		authops:     make(chan getAuthOp),
-		ready:       &atomic.Bool{},
-		hbfailed:    0,
+		tpl:             tpl,
+		events:          ev,
+		mailBucket:      obj,
+		sendMailDir:     obj.Subdir("sendmail"),
+		amaildataCipher: &atomic.Pointer[maildataCipher]{},
+		aauth:           &atomic.Pointer[secretAuth]{},
+		ops:             make(chan getOp),
+		authops:         make(chan getAuthOp),
+		ready:           &atomic.Bool{},
+		hbfailed:        0,
 	}
 }
 
@@ -319,13 +326,12 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 		case <-ticker.C:
 			s.handlePing(ctx)
 		case op := <-s.ops:
-			cipher, decrypter, err := s.handleGetCipher(ctx)
+			cipher, err := s.handleGetCipher(ctx)
 			select {
 			case <-op.ctx.Done():
 			case op.res <- getCipherRes{
-				cipher:    cipher,
-				decrypter: decrypter,
-				err:       err,
+				cipher: cipher,
+				err:    err,
 			}:
 				close(op.res)
 			}
@@ -379,14 +385,12 @@ func (s *service) refreshAuth(ctx context.Context) error {
 		return kerrors.WithMsg(err, "Invalid mail auth")
 	}
 	if auth.Username == "" {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid mail auth")
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty mail auth")
 	}
 	if auth != s.auth {
 		s.auth = auth
+		s.aauth.Store(&auth)
 		s.logger.Info("Refreshed smtp auth", map[string]string{
-			"actiontype": "mail_refresh_auth",
-		})
-		s.logger.Debug("Refreshed smtp auth", map[string]string{
 			"actiontype": "mail_refresh_auth",
 			"username":   auth.Username,
 		})
@@ -404,6 +408,10 @@ func (s *service) handleGetAuth(ctx context.Context) (secretAuth, error) {
 }
 
 func (s *service) getAuth(ctx context.Context) (secretAuth, error) {
+	if auth := s.aauth.Load(); auth != nil {
+		return *auth, nil
+	}
+
 	res := make(chan getAuthRes)
 	op := getAuthOp{
 		ctx: ctx,
@@ -434,14 +442,13 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	}
 	decrypter := hunter2.NewDecrypter()
 	var cipher hunter2.Cipher
-	s.maildataDecrypter = hunter2.NewDecrypter()
 	for n, i := range maildataSecrets.Keys {
 		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
 			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
 		}
 		if n == 0 {
-			if s.maildataCipher != nil && s.maildataCipher.ID() == c.ID() {
+			if s.maildataCipher != nil && s.maildataCipher.cipher.ID() == c.ID() {
 				// first, newest cipher matches current cipher, therefore no change in ciphers
 				return nil
 			}
@@ -449,27 +456,34 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		}
 		decrypter.RegisterCipher(c)
 	}
-	s.maildataCipher = cipher
-	s.maildataDecrypter = decrypter
+	s.maildataCipher = &maildataCipher{
+		cipher:    cipher,
+		decrypter: decrypter,
+	}
+	s.amaildataCipher.Store(s.maildataCipher)
 	s.logger.Info("Refreshed mailkey with new keys", map[string]string{
 		"actiontype":      "mail_refresh_key",
-		"kid":             s.maildataCipher.ID(),
+		"kid":             s.maildataCipher.cipher.ID(),
 		"nummaildatakeys": strconv.Itoa(len(maildataSecrets.Keys)),
 	})
 	return nil
 }
 
-func (s *service) handleGetCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+func (s *service) handleGetCipher(ctx context.Context) (*maildataCipher, error) {
 	if s.maildataCipher == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		s.ready.Store(true)
 	}
-	return s.maildataCipher, s.maildataDecrypter, nil
+	return s.maildataCipher, nil
 }
 
-func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decrypter, error) {
+func (s *service) getCipher(ctx context.Context) (*maildataCipher, error) {
+	if cipher := s.amaildataCipher.Load(); cipher != nil {
+		return cipher, nil
+	}
+
 	res := make(chan getCipherRes)
 	op := getOp{
 		ctx: ctx,
@@ -477,15 +491,15 @@ func (s *service) getCipher(ctx context.Context) (hunter2.Cipher, *hunter2.Decry
 	}
 	select {
 	case <-s.done:
-		return nil, nil, kerrors.WithMsg(nil, "Mail service shutdown")
+		return nil, kerrors.WithMsg(nil, "Mail service shutdown")
 	case <-ctx.Done():
-		return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 	case s.ops <- op:
 		select {
 		case <-ctx.Done():
-			return nil, nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
+			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
 		case v := <-res:
-			return v.cipher, v.decrypter, v.err
+			return v.cipher, v.err
 		}
 	}
 }
@@ -584,6 +598,7 @@ func (s *service) handleSendMail(ctx context.Context, from string, to []string, 
 	s.logger.Info("Mail sent", map[string]string{
 		"actiontype": "mail_send",
 		"addr":       s.addr,
+		"username":   secret.Username,
 	})
 	s.logger.Debug("Mail sent", map[string]string{
 		"actiontype": "mail_send",
@@ -659,8 +674,11 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 		msgpath = data.Path
 		msg = b1
 		if data.Encrypted {
-			var err error
-			data.Key, err = s.maildataDecrypter.Decrypt(data.Key)
+			cipher, err := s.getCipher(ctx)
+			if err != nil {
+				return err
+			}
+			data.Key, err = cipher.decrypter.Decrypt(data.Key)
 			if err != nil {
 				return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
 			}
@@ -707,12 +725,15 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 			msgpath = data.Path
 			body = b1
 			if data.Encrypted {
-				var err error
-				data.Subject, err = s.maildataDecrypter.Decrypt(data.Subject)
+				cipher, err := s.getCipher(ctx)
+				if err != nil {
+					return err
+				}
+				data.Subject, err = cipher.decrypter.Decrypt(data.Subject)
 				if err != nil {
 					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail subject")
 				}
-				data.Key, err = s.maildataDecrypter.Decrypt(data.Key)
+				data.Key, err = cipher.decrypter.Decrypt(data.Key)
 				if err != nil {
 					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data key")
 				}
@@ -736,8 +757,11 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 			data := emmsg.TplData
 			msgid = data.MsgID
 			if data.Encrypted {
-				var err error
-				data.Emdata, err = s.maildataDecrypter.Decrypt(data.Emdata)
+				cipher, err := s.getCipher(ctx)
+				if err != nil {
+					return err
+				}
+				data.Emdata, err = cipher.decrypter.Decrypt(data.Emdata)
 				if err != nil {
 					return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decrypt mail data")
 				}
@@ -973,11 +997,11 @@ func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 	}
 	datastring := string(databytes)
 	if encrypt {
-		cipher, _, err := s.getCipher(ctx)
+		cipher, err := s.getCipher(ctx)
 		if err != nil {
 			return err
 		}
-		datastring, err = cipher.Encrypt(datastring)
+		datastring, err = cipher.cipher.Encrypt(datastring)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data")
 		}
@@ -1038,11 +1062,11 @@ func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to 
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
-		cipher, _, err := s.getCipher(ctx)
+		cipher, err := s.getCipher(ctx)
 		if err != nil {
 			return err
 		}
-		subject, err = cipher.Encrypt(subject)
+		subject, err = cipher.cipher.Encrypt(subject)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail subject")
 		}
@@ -1052,7 +1076,7 @@ func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = cipher.Encrypt(config.String())
+		key, err = cipher.cipher.Encrypt(config.String())
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
@@ -1129,7 +1153,7 @@ func (s *service) FwdStream(ctx context.Context, retpath string, to []string, si
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
-		cipher, _, err := s.getCipher(ctx)
+		cipher, err := s.getCipher(ctx)
 		if err != nil {
 			return err
 		}
@@ -1138,7 +1162,7 @@ func (s *service) FwdStream(ctx context.Context, retpath string, to []string, si
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = cipher.Encrypt(config.String())
+		key, err = cipher.cipher.Encrypt(config.String())
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
