@@ -14,6 +14,14 @@ import (
 )
 
 type (
+	ErrNotFound struct{}
+)
+
+func (e ErrNotFound) Error() string {
+	return "User not found"
+}
+
+type (
 	// ResUserGetPublic holds the public fields of a user
 	ResUserGetPublic struct {
 		Userid       string   `json:"userid"`

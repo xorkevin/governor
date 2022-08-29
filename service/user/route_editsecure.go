@@ -5,6 +5,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 )
 
 //go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPassword reqForgotPasswordReset reqAddOTP reqOTPCode reqOTPCodeBackup
@@ -254,13 +255,12 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountEditSecure(r governor.Router) {
-	scopeAccountWrite := m.s.scopens + ".account:write"
-	r.Put("/email", m.putEmail, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Put("/email", m.putEmail, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Put("/email/verify", m.putEmailVerify, m.rt)
-	r.Put("/password", m.putPassword, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Put("/password", m.putPassword, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Put("/password/forgot", m.forgotPassword, m.rt)
 	r.Put("/password/forgot/reset", m.forgotPasswordReset, m.rt)
-	r.Put("/otp", m.addOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)
-	r.Put("/otp/verify", m.commitOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)
-	r.Delete("/otp", m.removeOTP, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Put("/otp", m.addOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
+	r.Put("/otp/verify", m.commitOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
+	r.Delete("/otp", m.removeOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 }

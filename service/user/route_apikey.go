@@ -6,6 +6,7 @@ import (
 	"xorkevin.dev/governor"
 	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -217,8 +218,8 @@ func (m *router) mountApikey(r governor.Router) {
 	scopeApikeyRead := m.s.scopens + ".apikey:read"
 	scopeApikeyWrite := m.s.scopens + ".apikey:write"
 	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead), m.rt)
-	r.Post("", m.createApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
-	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
+	r.Post("", m.createApikey, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
+	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
 	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
 	r.Any("/check", m.checkApikey, m.s.gate.Authenticate(m.checkApikeyValidator, ""), m.rt)

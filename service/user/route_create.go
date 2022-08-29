@@ -5,6 +5,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 )
 
 //go:generate forge validation -o validation_create_gen.go reqUserPost reqUserPostConfirm reqUserDeleteSelf reqUserDelete reqGetUserApprovals
@@ -187,13 +188,12 @@ func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
 func (m *router) mountCreate(r governor.Router) {
 	scopeApprovalRead := m.s.scopens + ".approval:read"
 	scopeApprovalWrite := m.s.scopens + ".approval:write"
-	scopeAccountDelete := m.s.scopens + ".account:delete"
 	scopeAdminAccount := m.s.scopens + ".admin.account:delete"
 	r.Post("", m.createUser, m.rt)
 	r.Post("/confirm", m.commitUser, m.rt)
 	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, m.s.rolens, scopeApprovalRead), m.rt)
 	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, m.s.rolens, scopeApprovalWrite), m.rt)
 	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, m.s.rolens, scopeApprovalWrite), m.rt)
-	r.Delete("", m.deleteUserSelf, gate.User(m.s.gate, scopeAccountDelete), m.rt)
+	r.Delete("", m.deleteUserSelf, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Delete("/id/{id}", m.deleteUser, gate.Admin(m.s.gate, scopeAdminAccount), m.rt)
 }

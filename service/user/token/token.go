@@ -23,6 +23,8 @@ import (
 const (
 	// ScopeAll grants all scopes to a token
 	ScopeAll = "all"
+	// ScopeForbidden denies all access
+	ScopeForbidden = "forbidden"
 )
 
 type (
@@ -607,6 +609,9 @@ func (s *service) GenerateExt(ctx context.Context, kind Kind, issuer string, use
 func HasScope(tokenScope string, scope string) bool {
 	if scope == "" {
 		return true
+	}
+	if scope == ScopeForbidden {
+		return false
 	}
 	for _, i := range strings.Fields(tokenScope) {
 		if i == ScopeAll || i == scope {

@@ -5,6 +5,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -214,7 +215,7 @@ func (m *router) mountEdit(r governor.Router) {
 	scopeAccountWrite := m.s.scopens + ".account:write"
 	scopeAdminRead := m.s.scopens + ".admin:read"
 	scopeAdminWrite := m.s.scopens + ".admin:write"
-	r.Put("", m.putUser, gate.User(m.s.gate, scopeAccountWrite), m.rt)
+	r.Put("", m.putUser, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Patch("/id/{id}/rank", m.patchRank, gate.User(m.s.gate, scopeAdminWrite), m.rt)
 	r.Get("/roles/invitation", m.getUserRoleInvitations, gate.User(m.s.gate, scopeAccountRead), m.rt)
 	r.Post("/roles/invitation/{role}/accept", m.postAcceptRoleInvitation, gate.User(m.s.gate, scopeAccountWrite), m.rt)

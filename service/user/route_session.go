@@ -29,7 +29,7 @@ func (m *router) getSessions(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserSessions(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserSessions(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -74,7 +74,7 @@ func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.KillSessions(req.SessionIDs); err != nil {
+	if err := m.s.KillSessions(c.Ctx(), req.SessionIDs); err != nil {
 		c.WriteError(err)
 		return
 	}
