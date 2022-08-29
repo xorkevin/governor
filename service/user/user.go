@@ -47,7 +47,7 @@ type (
 		GetByUsername(username string) (*ResUserGet, error)
 		GetByEmail(email string) (*ResUserGet, error)
 		GetInfoBulk(userids []string) (*ResUserInfoList, error)
-		CheckUserExists(userid string) (bool, error)
+		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(userids []string) ([]string, error)
 		DeleteRoleInvitations(role string) error
 	}
@@ -61,6 +61,23 @@ type (
 	otpCipher struct {
 		cipher    hunter2.Cipher
 		decrypter *hunter2.Decrypter
+	}
+
+	tplName struct {
+		emailchange       string
+		emailchangenotify string
+		passchange        string
+		forgotpass        string
+		passreset         string
+		loginratelimit    string
+		otpbackupused     string
+	}
+
+	emailURLTpl struct {
+		base        string
+		emailchange *htmlTemplate.Template
+		forgotpass  *htmlTemplate.Template
+		newuser     *htmlTemplate.Template
 	}
 
 	getCipherRes struct {
@@ -113,12 +130,10 @@ type (
 		newLoginEmail     bool
 		passwordMinSize   int
 		userApproval      bool
-		rolesummary       rank.Rank
-		emailurlbase      string
 		otpIssuer         string
-		tplemailchange    *htmlTemplate.Template
-		tplforgotpass     *htmlTemplate.Template
-		tplnewuser        *htmlTemplate.Template
+		rolesummary       rank.Rank
+		tplname           tplName
+		emailurl          emailURLTpl
 		ops               chan getOp
 		ready             *atomic.Bool
 		hbfailed          int
@@ -306,6 +321,13 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("userapproval", false)
 	r.SetDefault("otpissuer", "governor")
 	r.SetDefault("rolesummary", []string{rank.TagUser, rank.TagAdmin})
+	r.SetDefault("email.tpl.emailchange", "emailchange")
+	r.SetDefault("email.tpl.emailchangenotify", "emailchangenotify")
+	r.SetDefault("email.tpl.passchange", "passchange")
+	r.SetDefault("email.tpl.forgotpass", "forgotpass")
+	r.SetDefault("email.tpl.passreset", "passreset")
+	r.SetDefault("email.tpl.loginratelimit", "loginratelimit")
+	r.SetDefault("email.tpl.otpbackupused", "otpbackupused")
 	r.SetDefault("email.url.base", "http://localhost:8080")
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
@@ -395,21 +417,31 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.otpIssuer = r.GetStr("otpissuer")
 	s.rolesummary = rank.FromSlice(r.GetStrSlice("rolesummary"))
 
-	s.emailurlbase = r.GetStr("email.url.base")
+	s.tplname = tplName{
+		emailchange:       r.GetStr("email.tpl.emailchange"),
+		emailchangenotify: r.GetStr("email.tpl.emailchangenotify"),
+		passchange:        r.GetStr("email.tpl.passchange"),
+		forgotpass:        r.GetStr("email.tpl.forgotpass"),
+		passreset:         r.GetStr("email.tpl.passreset"),
+		loginratelimit:    r.GetStr("email.tpl.loginratelimit"),
+		otpbackupused:     r.GetStr("email.tpl.otpbackupused"),
+	}
+
+	s.emailurl.base = r.GetStr("email.url.base")
 	if t, err := htmlTemplate.New("email.url.emailchange").Parse(r.GetStr("email.url.emailchange")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse email change url template")
 	} else {
-		s.tplemailchange = t
+		s.emailurl.emailchange = t
 	}
 	if t, err := htmlTemplate.New("email.url.forgotpass").Parse(r.GetStr("email.url.forgotpass")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse forgot pass url template")
 	} else {
-		s.tplforgotpass = t
+		s.emailurl.forgotpass = t
 	}
 	if t, err := htmlTemplate.New("email.url.newuser").Parse(r.GetStr("email.url.newuser")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse new user url template")
 	} else {
-		s.tplnewuser = t
+		s.emailurl.newuser = t
 	}
 
 	s.hbinterval = r.GetInt("hbinterval")
@@ -419,28 +451,36 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.syschannels = c.SysChannels
 
 	l.Info("Loaded config", map[string]string{
-		"stream size (bytes)":   r.GetStr("streamsize"),
-		"event size (bytes)":    r.GetStr("eventsize"),
-		"accesstime (s)":        strconv.FormatInt(s.accessTime, 10),
-		"refreshtime (s)":       strconv.FormatInt(s.refreshTime, 10),
-		"refreshcache (s)":      strconv.FormatInt(s.refreshCacheTime, 10),
-		"confirmtime (s)":       strconv.FormatInt(s.confirmTime, 10),
-		"passwordreset":         strconv.FormatBool(s.passwordReset),
-		"passwordresettime (s)": strconv.FormatInt(s.passwordResetTime, 10),
-		"passresetdelay (s)":    strconv.FormatInt(s.passResetDelay, 10),
-		"invitationtime (s)":    strconv.FormatInt(s.invitationTime, 10),
-		"usercachetime (s)":     strconv.FormatInt(s.userCacheTime, 10),
-		"newloginemail":         strconv.FormatBool(s.newLoginEmail),
-		"passwordminsize":       strconv.Itoa(s.passwordMinSize),
-		"userapproval":          strconv.FormatBool(s.userApproval),
-		"otpissuer":             s.otpIssuer,
-		"rolesummary":           s.rolesummary.String(),
-		"tplemailchange":        r.GetStr("email.url.emailchange"),
-		"tplforgotpass":         r.GetStr("email.url.forgotpass"),
-		"tplnewuser":            r.GetStr("email.url.newuser"),
-		"hbinterval":            strconv.Itoa(s.hbinterval),
-		"hbmaxfail":             strconv.Itoa(s.hbmaxfail),
-		"otprefresh":            strconv.Itoa(s.otprefresh),
+		"stream size (bytes)":      r.GetStr("streamsize"),
+		"event size (bytes)":       r.GetStr("eventsize"),
+		"accesstime (s)":           strconv.FormatInt(s.accessTime, 10),
+		"refreshtime (s)":          strconv.FormatInt(s.refreshTime, 10),
+		"refreshcache (s)":         strconv.FormatInt(s.refreshCacheTime, 10),
+		"confirmtime (s)":          strconv.FormatInt(s.confirmTime, 10),
+		"passwordreset":            strconv.FormatBool(s.passwordReset),
+		"passwordresettime (s)":    strconv.FormatInt(s.passwordResetTime, 10),
+		"passresetdelay (s)":       strconv.FormatInt(s.passResetDelay, 10),
+		"invitationtime (s)":       strconv.FormatInt(s.invitationTime, 10),
+		"usercachetime (s)":        strconv.FormatInt(s.userCacheTime, 10),
+		"newloginemail":            strconv.FormatBool(s.newLoginEmail),
+		"passwordminsize":          strconv.Itoa(s.passwordMinSize),
+		"userapproval":             strconv.FormatBool(s.userApproval),
+		"otpissuer":                s.otpIssuer,
+		"rolesummary":              s.rolesummary.String(),
+		"tplnameemailchange":       s.tplname.emailchange,
+		"tplnameemailchangenotify": s.tplname.emailchangenotify,
+		"tplnamepasschange":        s.tplname.passchange,
+		"tplnameforgotpass":        s.tplname.forgotpass,
+		"tplnamepassreset":         s.tplname.passreset,
+		"tplnameloginratelimit":    s.tplname.loginratelimit,
+		"tplnameotpbackupused":     s.tplname.otpbackupused,
+		"emailurlbase":             s.emailurl.base,
+		"tplemailchange":           r.GetStr("email.url.emailchange"),
+		"tplforgotpass":            r.GetStr("email.url.forgotpass"),
+		"tplnewuser":               r.GetStr("email.url.newuser"),
+		"hbinterval":               strconv.Itoa(s.hbinterval),
+		"hbmaxfail":                strconv.Itoa(s.hbmaxfail),
+		"otprefresh":               strconv.Itoa(s.otprefresh),
 	})
 
 	done := make(chan struct{})
@@ -643,7 +683,7 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 		if err := s.users.Insert(context.Background(), madmin); err != nil {
 			return err
 		}
-		if err := s.roles.InsertRoles(madmin.Userid, rank.Admin()); err != nil {
+		if err := s.roles.InsertRoles(context.Background(), madmin.Userid, rank.Admin()); err != nil {
 			return err
 		}
 
@@ -743,14 +783,14 @@ func (s *service) UserRoleDeleteHook(ctx context.Context, pinger events.Pinger, 
 		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		r, err := s.roles.GetRoles(props.Userid, "", roleDeleteBatchSize, 0)
+		r, err := s.roles.GetRoles(ctx, props.Userid, "", roleDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user roles")
 		}
 		if len(r) == 0 {
 			break
 		}
-		if err := s.roles.DeleteRoles(props.Userid, r); err != nil {
+		if err := s.roles.DeleteRoles(ctx, props.Userid, r); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user roles")
 		}
 		if len(r) < roleDeleteBatchSize {
@@ -774,7 +814,7 @@ func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		keys, err := s.apikeys.GetUserKeys(props.Userid, apikeyDeleteBatchSize, 0)
+		keys, err := s.apikeys.GetUserKeys(ctx, props.Userid, apikeyDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user apikeys")
 		}
@@ -785,7 +825,7 @@ func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 		for _, i := range keys {
 			keyids = append(keyids, i.Keyid)
 		}
-		if err := s.apikeys.DeleteKeys(keyids); err != nil {
+		if err := s.apikeys.DeleteKeys(ctx, keyids); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user apikeys")
 		}
 		if len(keys) < apikeyDeleteBatchSize {

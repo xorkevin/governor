@@ -48,7 +48,7 @@ type (
 
 	// Model is the db Apikey model
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;updeq,keyid;deleq,keyid;deleq,keyid|arr"`
+		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;deleq,keyid;deleq,keyid|arr"`
 		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid"`
 		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
@@ -170,14 +170,14 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 		return "", err
 	}
 	now := time.Now().Round(0).Unix()
-	m.KeyHash = hash
-	m.Time = now
 	if err := r.table.UpdapikeyHashEqKeyid(ctx, d, &apikeyHash{
-		KeyHash: m.KeyHash,
-		Time:    m.Time,
+		KeyHash: hash,
+		Time:    now,
 	}, m.Keyid); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to update apikey")
 	}
+	m.KeyHash = hash
+	m.Time = now
 	return keystr, nil
 }
 

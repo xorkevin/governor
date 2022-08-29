@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p user -o model_gen.go Model Info
+//go:generate forge model -m Model -p user -o model_gen.go Model Info userEmail userPassHash userGenOTP userFailLogin
 
 const (
 	uidSize       = 16
@@ -28,10 +28,13 @@ type (
 	Repo interface {
 		New(username, password, email, firstname, lastname string) (*Model, error)
 		ValidatePass(password string, m *Model) (bool, error)
-		RehashPass(m *Model, password string) error
+		RehashPass(ctx context.Context, m *Model, password string) error
 		ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
 		ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error)
-		GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
+		GenerateOTPSecret(ctx context.Context, cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
+		EnableOTP(ctx context.Context, m *Model) error
+		DisableOTP(ctx context.Context, m *Model) error
+		UpdateLoginFailed(ctx context.Context, m *Model) error
 		GetGroup(ctx context.Context, limit, offset int) ([]Info, error)
 		GetBulk(ctx context.Context, userids []string) ([]Info, error)
 		GetByUsernamePrefix(ctx context.Context, prefix string, limit, offset int) ([]Info, error)
@@ -39,7 +42,7 @@ type (
 		GetByUsername(ctx context.Context, username string) (*Model, error)
 		GetByEmail(ctx context.Context, email string) (*Model, error)
 		Insert(ctx context.Context, m *Model) error
-		Update(ctx context.Context, m *Model) error
+		UpdateEmail(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
 		Setup(ctx context.Context) error
 	}
@@ -53,7 +56,7 @@ type (
 
 	// Model is the db User model
 	Model struct {
-		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;updeq,userid;deleq,userid"`
+		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;deleq,userid"`
 		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username;getoneeq,username"`
 		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
 		OTPEnabled       bool   `model:"otp_enabled,BOOLEAN NOT NULL" query:"otp_enabled"`
@@ -65,6 +68,27 @@ type (
 		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 		FailedLoginTime  int64  `model:"failed_login_time,BIGINT NOT NULL" query:"failed_login_time"`
 		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL" query:"failed_login_count"`
+	}
+
+	userEmail struct {
+		Email string `query:"email;updeq,userid"`
+	}
+
+	userPassHash struct {
+		PassHash string `query:"pass_hash;updeq,userid"`
+	}
+
+	userGenOTP struct {
+		OTPEnabled       bool   `query:"otp_enabled;updeq,userid"`
+		OTPSecret        string `query:"otp_secret"`
+		OTPBackup        string `query:"otp_backup"`
+		FailedLoginTime  int64  `query:"failed_login_time"`
+		FailedLoginCount int    `query:"failed_login_count"`
+	}
+
+	userFailLogin struct {
+		FailedLoginTime  int64 `query:"failed_login_time;updeq,userid"`
+		FailedLoginCount int   `query:"failed_login_count"`
 	}
 
 	// Info is the metadata of a user
@@ -153,10 +177,19 @@ func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 }
 
 // RehashPass updates the password with a new hash
-func (r *repo) RehashPass(m *Model, password string) error {
+func (r *repo) RehashPass(ctx context.Context, m *Model, password string) error {
 	mHash, err := r.hasher.Hash(password)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to rehash password")
+	}
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserPassHashEqUserid(ctx, d, &userPassHash{
+		PassHash: mHash,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user")
 	}
 	m.PassHash = mHash
 	return nil
@@ -185,7 +218,7 @@ func (r *repo) ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup 
 }
 
 // GenerateOTPSecret generates an otp secret
-func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
+func (r *repo) GenerateOTPSecret(ctx context.Context, cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
 	params, uri, err := hunter2.TOTPGenerateSecret(totpSecretLen, hunter2.TOTPURI{
 		TOTPConfig: hunter2.TOTPConfig{
 			Alg:    alg,
@@ -211,9 +244,84 @@ func (r *repo) GenerateOTPSecret(cipher hunter2.Cipher, m *Model, issuer string,
 	if err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to encrypt otp backup")
 	}
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+		OTPEnabled:       false,
+		OTPSecret:        encryptedParams,
+		OTPBackup:        encryptedBackup,
+		FailedLoginTime:  0,
+		FailedLoginCount: 0,
+	}, m.Userid); err != nil {
+		return "", "", kerrors.WithMsg(err, "Failed to update user otp settings")
+	}
+	m.OTPEnabled = false
 	m.OTPSecret = encryptedParams
 	m.OTPBackup = encryptedBackup
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
 	return uri, backup, nil
+}
+
+// EnableOTP enables OTP
+func (r *repo) EnableOTP(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+		OTPEnabled:       true,
+		OTPSecret:        m.OTPSecret,
+		OTPBackup:        m.OTPBackup,
+		FailedLoginTime:  0,
+		FailedLoginCount: 0,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user otp settings")
+	}
+	m.OTPEnabled = true
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
+	return nil
+}
+
+// DisableOTP disables OTP
+func (r *repo) DisableOTP(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+		OTPEnabled:       false,
+		OTPSecret:        "",
+		OTPBackup:        "",
+		FailedLoginTime:  0,
+		FailedLoginCount: 0,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user otp settings")
+	}
+	m.OTPEnabled = false
+	m.OTPSecret = ""
+	m.OTPBackup = ""
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
+	return nil
+}
+
+// UpdateLoginFailed updates login failure count
+func (r *repo) UpdateLoginFailed(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserFailLoginEqUserid(ctx, d, &userFailLogin{
+		FailedLoginTime:  m.FailedLoginTime,
+		FailedLoginCount: m.FailedLoginCount,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user otp failure count")
+	}
+	return nil
 }
 
 // GetGroup gets information from each user
@@ -309,14 +417,16 @@ func (r *repo) Insert(ctx context.Context, m *Model) error {
 	return nil
 }
 
-// Update updates the model in the db
-func (r *repo) Update(ctx context.Context, m *Model) error {
+// UpdateEmail updates the user email
+func (r *repo) UpdateEmail(ctx context.Context, m *Model) error {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqUserid(ctx, d, m, m.Userid); err != nil {
-		return kerrors.WithMsg(err, "Failed to update user")
+	if err := r.table.UpduserEmailEqUserid(ctx, d, &userEmail{
+		Email: m.Email,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user email")
 	}
 	return nil
 }

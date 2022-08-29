@@ -25,9 +25,14 @@ const (
 	ScopeAll = "all"
 )
 
+type (
+	// Kind is a token kind
+	Kind string
+)
+
 const (
 	// KindAccess is an access token kind
-	KindAccess = "access"
+	KindAccess Kind = "access"
 	// KindRefresh is a refresh token kind
 	KindRefresh = "refresh"
 	// KindOAuthAccess is an oauth access token kind
@@ -47,7 +52,7 @@ type (
 	// Claims is a set of fields to describe a user
 	Claims struct {
 		jwt.Claims
-		Kind     string `json:"kind"`
+		Kind     Kind   `json:"kind"`
 		AuthTime int64  `json:"auth_time,omitempty"`
 		Scope    string `json:"scope,omitempty"`
 		Key      string `json:"key,omitempty"`
@@ -56,11 +61,11 @@ type (
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error)
-		Generate(ctx context.Context, kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
-		GenerateExt(ctx context.Context, kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
-		Validate(ctx context.Context, kind string, tokenString string) (bool, *Claims)
-		GetClaims(ctx context.Context, kind string, tokenString string) (bool, *Claims)
-		GetClaimsExt(ctx context.Context, kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims)
+		Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
+		GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
+		Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
+		GetClaims(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
+		GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims)
 	}
 
 	// Service is a Tokenizer and governor.Service
@@ -543,7 +548,7 @@ func (s *service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(ctx context.Context, kind string, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
+func (s *service) Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", nil, err
@@ -572,7 +577,7 @@ func (s *service) Generate(ctx context.Context, kind string, userid string, dura
 }
 
 // GenerateExt creates a new id token
-func (s *service) GenerateExt(ctx context.Context, kind string, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
+func (s *service) GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", err
@@ -612,7 +617,7 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(ctx context.Context, kind string, tokenString string) (bool, *Claims) {
+func (s *service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -651,7 +656,7 @@ func (s *service) Validate(ctx context.Context, kind string, tokenString string)
 }
 
 // GetClaims returns token claims without validating time
-func (s *service) GetClaims(ctx context.Context, kind string, tokenString string) (bool, *Claims) {
+func (s *service) GetClaims(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -688,7 +693,7 @@ func (s *service) GetClaims(ctx context.Context, kind string, tokenString string
 }
 
 // GetClaimsExt returns external token claims without validating time
-func (s *service) GetClaimsExt(ctx context.Context, kind string, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
+func (s *service) GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil

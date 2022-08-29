@@ -67,14 +67,6 @@ func (t *apikeyModelTable) GetModelEqKeyid(ctx context.Context, d db.SQLExecutor
 	return m, nil
 }
 
-func (t *apikeyModelTable) UpdModelEqKeyid(ctx context.Context, d db.SQLExecutor, m *Model, keyid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyid, userid, scope, keyhash, name, description, time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE keyid = $8;", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time, keyid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *apikeyModelTable) DelEqKeyid(ctx context.Context, d db.SQLExecutor, keyid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid = $1;", keyid)
 	return err

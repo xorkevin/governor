@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -327,12 +329,12 @@ const (
 )
 
 // CheckUserExists is a fast check to determine if a user exists
-func (s *service) CheckUserExists(userid string) (bool, error) {
-	if v, err := s.kvusers.Get(userid); err != nil {
+func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, error) {
+	if v, err := s.kvusers.Get(ctx, userid); err != nil {
 		if !errors.Is(err, kvstore.ErrNotFound{}) {
 			s.logger.Error("Failed to get user exists from cache", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "getuserexists",
+				"actiontype": "user_get_cache_exists",
 			})
 		}
 	} else {
@@ -343,10 +345,9 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 	}
 
 	exists := true
-	_, err := s.users.GetByID(userid)
-	if err != nil {
+	if _, err := s.users.GetByID(ctx, userid); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return false, governor.ErrWithMsg(err, "Failed to get user")
+			return false, kerrors.WithMsg(err, "Failed to get user")
 		}
 		exists = false
 	}
@@ -355,10 +356,10 @@ func (s *service) CheckUserExists(userid string) (bool, error) {
 	if exists {
 		v = cacheValY
 	}
-	if err := s.kvusers.Set(userid, v, s.userCacheTime); err != nil {
+	if err := s.kvusers.Set(ctx, userid, v, s.userCacheTime); err != nil {
 		s.logger.Error("Failed to set user exists in cache", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "setuserexists",
+			"actiontype": "user_set_cache_exists",
 		})
 	}
 
@@ -462,29 +463,23 @@ end:
 }
 
 // GetUseridForLogin gets a userid for login
-func (s *service) GetUseridForLogin(useroremail string) (string, error) {
+func (s *service) GetUseridForLogin(ctx context.Context, useroremail string) (string, error) {
 	if isEmail(useroremail) {
-		m, err := s.users.GetByEmail(useroremail)
+		m, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
-				return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusUnauthorized,
-					Message: "Invalid username or password",
-				}), governor.ErrOptInner(err))
+				return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 			}
-			return "", governor.ErrWithMsg(err, "Failed to get user")
+			return "", kerrors.WithMsg(err, "Failed to get user")
 		}
 		return m.Userid, nil
 	}
-	m, err := s.users.GetByUsername(useroremail)
+	m, err := s.users.GetByUsername(ctx, useroremail)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusUnauthorized,
-				Message: "Invalid username or password",
-			}), governor.ErrOptInner(err))
+			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 		}
-		return "", governor.ErrWithMsg(err, "Failed to get user")
+		return "", kerrors.WithMsg(err, "Failed to get user")
 	}
 	return m.Userid, nil
 }

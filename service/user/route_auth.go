@@ -55,10 +55,10 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 	})
 }
 
-func (m *router) setSessionCookie(c governor.Context, sessionToken string, userid string) {
+func (m *router) setSessionCookie(c governor.Context, sessionID string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "session_token_" + userid,
-		Value:    sessionToken,
+		Value:    sessionID,
 		Path:     m.s.authURL,
 		MaxAge:   int(m.s.refreshTime),
 		HttpOnly: false,
@@ -142,10 +142,7 @@ func (r *reqUserAuth) validCode() error {
 		return err
 	}
 	if len(r.Code) > 0 && len(r.Backup) > 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "May not provide both otp code and backup code",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not provide both otp code and backup code")
 	}
 	return nil
 }
@@ -162,7 +159,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid, err := m.s.GetUseridForLogin(req.Username)
+	userid, err := m.s.GetUseridForLogin(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -180,7 +177,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.Login(userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
+	res, err := m.s.Login(c.Ctx(), userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -188,7 +185,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 
 	m.setAccessCookie(c, res.AccessToken)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
+	m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -217,7 +214,7 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.ExchangeToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := m.s.ExchangeToken(c.Ctx(), ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -226,7 +223,7 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 	m.setAccessCookie(c, res.AccessToken)
 	if res.Refresh {
 		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-		m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
+		m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -249,7 +246,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.RefreshToken(ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := m.s.RefreshToken(c.Ctx(), ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		if errors.Is(err, ErrDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
 			m.rmAccessCookie(c)
@@ -261,7 +258,7 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 
 	m.setAccessCookie(c, res.AccessToken)
 	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-	m.setSessionCookie(c, res.SessionToken, res.Claims.Subject)
+	m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -280,7 +277,7 @@ func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid, err := m.s.Logout(ruser.RefreshToken)
+	userid, err := m.s.Logout(c.Ctx(), ruser.RefreshToken)
 	if err != nil {
 		c.WriteError(err)
 		return

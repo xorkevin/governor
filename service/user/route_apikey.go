@@ -77,10 +77,7 @@ type (
 func (r *reqApikeyID) validUserid() error {
 	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
 	if err != nil || r.Userid != userid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid apikey id",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid apikey id")
 	}
 	return nil
 }
@@ -119,10 +116,7 @@ type (
 func (r *reqApikeyUpdate) validUserid() error {
 	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
 	if err != nil || r.Userid != userid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid apikey id",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid apikey id")
 	}
 	return nil
 }
@@ -196,7 +190,7 @@ func (m *router) checkApikeyValidator(c gate.Context) bool {
 	if err != nil {
 		return false
 	}
-	roles, err := c.Intersect(expected)
+	roles, err := c.Intersect(c.Ctx().Ctx(), expected)
 	if err != nil {
 		return false
 	}

@@ -59,14 +59,6 @@ func (t *userModelTable) GetModelEqUserid(ctx context.Context, d db.SQLExecutor,
 	return m, nil
 }
 
-func (t *userModelTable) UpdModelEqUserid(ctx context.Context, d db.SQLExecutor, m *Model, userid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, username, pass_hash, otp_enabled, otp_secret, otp_backup, email, first_name, last_name, creation_time, failed_login_time, failed_login_count) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) WHERE userid = $13;", m.Userid, m.Username, m.PassHash, m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.Email, m.FirstName, m.LastName, m.CreationTime, m.FailedLoginTime, m.FailedLoginCount, userid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *userModelTable) DelEqUserid(ctx context.Context, d db.SQLExecutor, userid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
@@ -180,4 +172,36 @@ func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d d
 		return nil, err
 	}
 	return res, nil
+}
+
+func (t *userModelTable) UpduserEmailEqUserid(ctx context.Context, d db.SQLExecutor, m *userEmail, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (email) = ROW($1) WHERE userid = $2;", m.Email, userid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *userModelTable) UpduserPassHashEqUserid(ctx context.Context, d db.SQLExecutor, m *userPassHash, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (pass_hash) = ROW($1) WHERE userid = $2;", m.PassHash, userid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *userModelTable) UpduserGenOTPEqUserid(ctx context.Context, d db.SQLExecutor, m *userGenOTP, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (otp_enabled, otp_secret, otp_backup, failed_login_time, failed_login_count) = ROW($1, $2, $3, $4, $5) WHERE userid = $6;", m.OTPEnabled, m.OTPSecret, m.OTPBackup, m.FailedLoginTime, m.FailedLoginCount, userid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *userModelTable) UpduserFailLoginEqUserid(ctx context.Context, d db.SQLExecutor, m *userFailLogin, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (failed_login_time, failed_login_count) = ROW($1, $2) WHERE userid = $3;", m.FailedLoginTime, m.FailedLoginCount, userid)
+	if err != nil {
+		return err
+	}
+	return nil
 }

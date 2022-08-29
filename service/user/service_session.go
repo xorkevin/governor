@@ -1,7 +1,9 @@
 package user
 
 import (
-	"xorkevin.dev/governor"
+	"context"
+
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -19,10 +21,10 @@ type (
 	}
 )
 
-func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGetSessions, error) {
-	m, err := s.sessions.GetUserSessions(userid, limit, offset)
+func (s *service) GetUserSessions(ctx context.Context, userid string, limit, offset int) (*resUserGetSessions, error) {
+	m, err := s.sessions.GetUserSessions(ctx, userid, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user sessions")
+		return nil, kerrors.WithMsg(err, "Failed to get user sessions")
 	}
 	res := make([]resSession, 0, len(m))
 	for _, i := range m {
@@ -41,27 +43,28 @@ func (s *service) GetUserSessions(userid string, limit, offset int) (*resUserGet
 }
 
 func (s *service) killCacheSessions(sessionids []string) {
-	if err := s.kvsessions.Del(sessionids...); err != nil {
+	// must make a best effort to remove cached sessions
+	if err := s.kvsessions.Del(context.Background(), sessionids...); err != nil {
 		s.logger.Error("Failed to delete session keys", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "clearcachesessionids",
+			"actiontype": "user_clear_cache_sessionids",
 		})
 	}
 }
 
 // KillSessions terminates user sessions
-func (s *service) KillSessions(sessionids []string) error {
-	if err := s.sessions.DeleteSessions(sessionids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user sessions")
+func (s *service) KillSessions(ctx context.Context, sessionids []string) error {
+	if err := s.sessions.DeleteSessions(ctx, sessionids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 	s.killCacheSessions(sessionids)
 	return nil
 }
 
 // KillAllSessions terminates all sessions of a user
-func (s *service) KillAllSessions(userid string) error {
-	if err := s.sessions.DeleteUserSessions(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user sessions")
+func (s *service) KillAllSessions(ctx context.Context, userid string) error {
+	if err := s.sessions.DeleteUserSessions(ctx, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 	return nil
 }
