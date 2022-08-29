@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -49,7 +50,7 @@ type (
 	// Gate creates new authenticating middleware
 	Gate interface {
 		Authenticate(v Authorizer, scope string) governor.Middleware
-		Authorize(userid string, roles rank.Rank) (rank.Rank, error)
+		Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
 	}
 
 	// Service is a Gate and governor.Service
@@ -69,7 +70,7 @@ type (
 
 	// Intersector returns roles needed to validate a user
 	Intersector interface {
-		Intersect(roles rank.Rank) (rank.Rank, error)
+		Intersect(ctx context.Context, roles rank.Rank) (rank.Rank, error)
 	}
 
 	// Context holds an auth context
@@ -137,7 +138,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 	s.baseurl = c.BaseURL
 	s.realm = r.GetStr("realm")
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"realm": s.realm,
 	})
 	return nil
@@ -210,8 +211,8 @@ func (r *authctx) Ctx() governor.Context {
 	return r.ctx
 }
 
-func (r *authctx) Intersect(roles rank.Rank) (rank.Rank, error) {
-	k, err := r.s.Authorize(r.userid, roles)
+func (r *authctx) Intersect(ctx context.Context, roles rank.Rank) (rank.Rank, error) {
+	k, err := r.s.Authorize(ctx, r.userid, roles)
 	if err != nil {
 		r.s.logger.Error("Failed to get user roles", map[string]string{
 			"error":      err.Error(),
@@ -251,10 +252,10 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 			c := governor.NewContext(w, r, s.logger)
 			keyid, password, ok := c.BasicAuth()
 			if ok {
-				userid, keyscope, err := s.apikeys.CheckKey(keyid, password)
+				userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
 				if err != nil {
 					if !errors.Is(err, apikey.ErrInvalidKey{}) && !errors.Is(err, apikey.ErrNotFound{}) {
-						c.WriteError(governor.ErrWithMsg(err, "Failed to get apikey"))
+						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
 						return
 					}
 					c.SetHeader(
@@ -266,10 +267,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							"Api key is invalid",
 						),
 					)
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusUnauthorized,
-						Message: "User is not authorized",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 					return
 				}
 				if !token.HasScope(keyscope, scope) {
@@ -283,10 +281,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							"Api key lacks required scope",
 						),
 					)
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusForbidden,
-						Message: "User is forbidden",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
 				if !v(s.authctx(userid, keyscope, c)) {
@@ -299,10 +294,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							"User lacks required permission",
 						),
 					)
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusForbidden,
-						Message: "User is forbidden",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
 				setCtxUserid(c, userid)
@@ -320,10 +312,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 								"Access token is invalid",
 							),
 						)
-						c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-							Status:  http.StatusUnauthorized,
-							Message: "User is not authorized",
-						})))
+						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 						return
 					}
 					isBearer = false
@@ -331,14 +320,11 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 					accessToken, err = getAccessCookie(r)
 					if err != nil {
 						c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, s.realm))
-						c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-							Status:  http.StatusUnauthorized,
-							Message: "User is not authorized",
-						})))
+						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 						return
 					}
 				}
-				validToken, claims := s.tokenizer.Validate(token.KindAccess, accessToken)
+				validToken, claims := s.tokenizer.Validate(c.Ctx(), token.KindAccess, accessToken)
 				if !validToken {
 					if isBearer {
 						c.SetHeader(
@@ -351,10 +337,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							),
 						)
 					}
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusUnauthorized,
-						Message: "User is not authorized",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 					return
 				}
 				if !token.HasScope(claims.Scope, scope) {
@@ -370,10 +353,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							),
 						)
 					}
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusForbidden,
-						Message: "User is forbidden",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
 				if !v(s.authctx(claims.Subject, claims.Scope, c)) {
@@ -388,10 +368,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 							),
 						)
 					}
-					c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-						Status:  http.StatusForbidden,
-						Message: "User is forbidden",
-					})))
+					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
 				setCtxUserid(c, claims.Subject)
@@ -403,8 +380,8 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 }
 
 // Authorize authorizes a user for some given roles
-func (s *service) Authorize(userid string, roles rank.Rank) (rank.Rank, error) {
-	return s.roles.IntersectRoles(userid, roles)
+func (s *service) Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
+	return s.roles.IntersectRoles(ctx, userid, roles)
 }
 
 func checkErrBool(b bool, err error) bool {
@@ -415,13 +392,13 @@ func checkErrBool(b bool, err error) bool {
 }
 
 // wrapIntersector wraps an intersector as an Authorizer
-func wrapIntersector(f func(r Intersector) (bool, error)) Authorizer {
+func wrapIntersector(f func(ctx context.Context, r Intersector) (bool, error)) Authorizer {
 	if f == nil {
 		panic("intersector cannot be nil")
 	}
 
 	return func(c Context) bool {
-		return checkErrBool(f(c))
+		return checkErrBool(f(c.Ctx().Ctx(), c))
 	}
 }
 
@@ -432,8 +409,8 @@ type (
 	}
 )
 
-func (r *authint) Intersect(roles rank.Rank) (rank.Rank, error) {
-	return r.g.Authorize(r.userid, roles)
+func (r *authint) Intersect(ctx context.Context, roles rank.Rank) (rank.Rank, error) {
+	return r.g.Authorize(ctx, r.userid, roles)
 }
 
 func newIntersector(g Gate, userid string) Intersector {
@@ -452,7 +429,7 @@ func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) gov
 	}
 
 	return g.Authenticate(func(c Context) bool {
-		roles, err := c.Intersect(rank.FromSlice([]string{rank.TagUser}))
+		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagUser}))
 		if err != nil {
 			return false
 		}
@@ -475,8 +452,8 @@ func OwnerParam(g Gate, idparam string, scope string) governor.Middleware {
 	}, scope)
 }
 
-func checkAdmin(r Intersector) (bool, error) {
-	roles, err := r.Intersect(rank.FromSlice([]string{rank.TagAdmin}))
+func checkAdmin(ctx context.Context, r Intersector) (bool, error) {
+	roles, err := r.Intersect(ctx, rank.FromSlice([]string{rank.TagAdmin}))
 	if err != nil {
 		return false, err
 	}
@@ -484,8 +461,8 @@ func checkAdmin(r Intersector) (bool, error) {
 }
 
 // AuthAdmin authorizes a user as an admin
-func AuthAdmin(g Gate, userid string) (bool, error) {
-	return checkAdmin(newIntersector(g, userid))
+func AuthAdmin(ctx context.Context, g Gate, userid string) (bool, error) {
+	return checkAdmin(ctx, newIntersector(g, userid))
 }
 
 // Admin is a middleware function to validate if a user is an admin
@@ -493,8 +470,8 @@ func Admin(g Gate, scope string) governor.Middleware {
 	return g.Authenticate(wrapIntersector(checkAdmin), scope)
 }
 
-func checkUser(r Intersector) (bool, error) {
-	roles, err := r.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+func checkUser(ctx context.Context, r Intersector) (bool, error) {
+	roles, err := r.Intersect(ctx, rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
 	if err != nil {
 		return false, err
 	}
@@ -505,8 +482,8 @@ func checkUser(r Intersector) (bool, error) {
 }
 
 // AuthUser authorizes a user as not banned
-func AuthUser(g Gate, userid string) (bool, error) {
-	return checkUser(newIntersector(g, userid))
+func AuthUser(ctx context.Context, g Gate, userid string) (bool, error) {
+	return checkUser(ctx, newIntersector(g, userid))
 }
 
 // User is a middleware function to validate if a user is authenticated and not
@@ -525,7 +502,7 @@ func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope stri
 	}
 
 	return g.Authenticate(func(c Context) bool {
-		roles, err := c.Intersect(rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
 		if err != nil {
 			return false
 		}
@@ -551,12 +528,12 @@ func OwnerOrAdminParam(g Gate, idparam string, scope string) governor.Middleware
 	}, scope)
 }
 
-func checkMod(r Intersector, modtag string, isSelf bool) (bool, error) {
+func checkMod(ctx context.Context, r Intersector, modtag string, isSelf bool) (bool, error) {
 	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
 	if modtag != "" {
 		roleQuery.AddMod(modtag)
 	}
-	roles, err := r.Intersect(roleQuery)
+	roles, err := r.Intersect(ctx, roleQuery)
 	if err != nil {
 		return false, err
 	}
@@ -576,8 +553,8 @@ func checkMod(r Intersector, modtag string, isSelf bool) (bool, error) {
 }
 
 // AuthMod authorizes a user as a mod
-func AuthMod(g Gate, userid string, modtag string) (bool, error) {
-	return checkMod(newIntersector(g, userid), modtag, false)
+func AuthMod(ctx context.Context, g Gate, userid string, modtag string) (bool, error) {
+	return checkMod(ctx, newIntersector(g, userid), modtag, false)
 }
 
 // ModF is a middleware function to validate if the request is made by the
@@ -594,7 +571,7 @@ func ModF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), sc
 		if !ok {
 			return false
 		}
-		return checkErrBool(checkMod(c, modtag, isSelf))
+		return checkErrBool(checkMod(c.Ctx().Ctx(), c, modtag, isSelf))
 	}, scope)
 }
 
@@ -610,12 +587,12 @@ func Mod(g Gate, group string, scope string) governor.Middleware {
 	}, scope)
 }
 
-func checkNoBan(r Intersector, bantag string, isSelf bool) (bool, error) {
+func checkNoBan(ctx context.Context, r Intersector, bantag string, isSelf bool) (bool, error) {
 	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
 	if bantag != "" {
 		roleQuery.AddBan(bantag)
 	}
-	roles, err := r.Intersect(roleQuery)
+	roles, err := r.Intersect(ctx, roleQuery)
 	if err != nil {
 		return false, err
 	}
@@ -635,8 +612,8 @@ func checkNoBan(r Intersector, bantag string, isSelf bool) (bool, error) {
 }
 
 // AuthNoBan authorizes a user as not banned
-func AuthNoBan(g Gate, userid string, bantag string) (bool, error) {
-	return checkNoBan(newIntersector(g, userid), bantag, false)
+func AuthNoBan(ctx context.Context, g Gate, userid string, bantag string) (bool, error) {
+	return checkNoBan(ctx, newIntersector(g, userid), bantag, false)
 }
 
 // NoBanF is a middleware function to validate if the request is made by a user
@@ -653,7 +630,7 @@ func NoBanF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), 
 		if !ok {
 			return false
 		}
-		return checkErrBool(checkNoBan(c, bantag, isSelf))
+		return checkErrBool(checkNoBan(c.Ctx().Ctx(), c, bantag, isSelf))
 	}, scope)
 }
 
@@ -669,12 +646,12 @@ func NoBan(g Gate, group string, scope string) governor.Middleware {
 	}, scope)
 }
 
-func checkMember(r Intersector, tag string, isSelf bool) (bool, error) {
+func checkMember(ctx context.Context, r Intersector, tag string, isSelf bool) (bool, error) {
 	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
 	if tag != "" {
 		roleQuery.AddUsr(tag).AddBan(tag)
 	}
-	roles, err := r.Intersect(roleQuery)
+	roles, err := r.Intersect(ctx, roleQuery)
 	if err != nil {
 		return false, err
 	}
@@ -694,8 +671,8 @@ func checkMember(r Intersector, tag string, isSelf bool) (bool, error) {
 }
 
 // AuthMember authorizes a user as a group member
-func AuthMember(g Gate, userid string, tag string) (bool, error) {
-	return checkMember(newIntersector(g, userid), tag, false)
+func AuthMember(ctx context.Context, g Gate, userid string, tag string) (bool, error) {
+	return checkMember(ctx, newIntersector(g, userid), tag, false)
 }
 
 // MemberF is a middleware function to validate if the request is made by a
@@ -713,7 +690,7 @@ func MemberF(g Gate, idfunc func(governor.Context, string) (string, bool, bool),
 		if !ok {
 			return false
 		}
-		return checkErrBool(checkMember(c, tag, isSelf))
+		return checkErrBool(checkMember(c.Ctx().Ctx(), c, tag, isSelf))
 	}, scope)
 }
 
@@ -729,16 +706,16 @@ func Member(g Gate, group string, scope string) governor.Middleware {
 	}, scope)
 }
 
-func checkSystem(r Intersector) (bool, error) {
-	roles, err := r.Intersect(rank.System())
+func checkSystem(ctx context.Context, r Intersector) (bool, error) {
+	roles, err := r.Intersect(ctx, rank.System())
 	if err != nil {
 		return false, err
 	}
 	return roles.Has(rank.TagSystem), nil
 }
 
-func AuthSystem(g Gate, userid string) (bool, error) {
-	return checkSystem(newIntersector(g, userid))
+func AuthSystem(ctx context.Context, g Gate, userid string) (bool, error) {
+	return checkSystem(ctx, newIntersector(g, userid))
 }
 
 // System is a middleware function to validate if the request is made by a system
