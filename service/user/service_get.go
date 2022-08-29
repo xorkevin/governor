@@ -61,27 +61,24 @@ func getUserFields(m *model.Model, roles []string) *ResUserGet {
 	}
 }
 
-func (s *service) getRoleSummary(userid string) (rank.Rank, error) {
-	roles, err := s.roles.IntersectRoles(userid, s.rolesummary)
+func (s *service) getRoleSummary(ctx context.Context, userid string) (rank.Rank, error) {
+	roles, err := s.roles.IntersectRoles(ctx, userid, s.rolesummary)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
+		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
 	return roles, nil
 }
 
 // GetByIDPublic gets and returns the public fields of the user
-func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
-	m, err := s.users.GetByID(userid)
+func (s *service) GetByIDPublic(ctx context.Context, userid string) (*ResUserGetPublic, error) {
+	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
-	roles, err := s.getRoleSummary(userid)
+	roles, err := s.getRoleSummary(ctx, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -89,18 +86,15 @@ func (s *service) GetByIDPublic(userid string) (*ResUserGetPublic, error) {
 }
 
 // GetByID gets and returns all fields of the user
-func (s *service) GetByID(userid string) (*ResUserGet, error) {
-	m, err := s.users.GetByID(userid)
+func (s *service) GetByID(ctx context.Context, userid string) (*ResUserGet, error) {
+	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
-	roles, err := s.getRoleSummary(userid)
+	roles, err := s.getRoleSummary(ctx, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -108,18 +102,15 @@ func (s *service) GetByID(userid string) (*ResUserGet, error) {
 }
 
 // GetByUsernamePublic gets and returns the public fields of the user
-func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error) {
-	m, err := s.users.GetByUsername(username)
+func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*ResUserGetPublic, error) {
+	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
-	roles, err := s.getRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(ctx, m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -127,18 +118,15 @@ func (s *service) GetByUsernamePublic(username string) (*ResUserGetPublic, error
 }
 
 // GetByUsername gets and returns all fields of the user
-func (s *service) GetByUsername(username string) (*ResUserGet, error) {
-	m, err := s.users.GetByUsername(username)
+func (s *service) GetByUsername(ctx context.Context, username string) (*ResUserGet, error) {
+	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
-	roles, err := s.getRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(ctx, m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -146,18 +134,15 @@ func (s *service) GetByUsername(username string) (*ResUserGet, error) {
 }
 
 // GetByEmail gets and returns all fields of the user
-func (s *service) GetByEmail(email string) (*ResUserGet, error) {
-	m, err := s.users.GetByEmail(email)
+func (s *service) GetByEmail(ctx context.Context, email string) (*ResUserGet, error) {
+	m, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user")
+		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
-	roles, err := s.getRoleSummary(m.Userid)
+	roles, err := s.getRoleSummary(ctx, m.Userid)
 	if err != nil {
 		return nil, err
 	}
@@ -171,10 +156,10 @@ type (
 )
 
 // GetUserRoles returns a list of user roles
-func (s *service) GetUserRoles(userid string, prefix string, amount, offset int) (*resUserRoles, error) {
-	roles, err := s.roles.GetRoles(userid, prefix, amount, offset)
+func (s *service) GetUserRoles(ctx context.Context, userid string, prefix string, amount, offset int) (*resUserRoles, error) {
+	roles, err := s.roles.GetRoles(ctx, userid, prefix, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
+		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
 	return &resUserRoles{
 		Roles: roles.ToSlice(),
@@ -182,10 +167,10 @@ func (s *service) GetUserRoles(userid string, prefix string, amount, offset int)
 }
 
 // GetUserRolesIntersect returns the intersected roles of a user
-func (s *service) GetUserRolesIntersect(userid string, roleset rank.Rank) (*resUserRoles, error) {
-	roles, err := s.roles.IntersectRoles(userid, roleset)
+func (s *service) GetUserRolesIntersect(ctx context.Context, userid string, roleset rank.Rank) (*resUserRoles, error) {
+	roles, err := s.roles.IntersectRoles(ctx, userid, roleset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user roles")
+		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
 	return &resUserRoles{
 		Roles: roles.ToSlice(),
@@ -207,10 +192,10 @@ type (
 )
 
 // GetInfoAll gets and returns info for all users
-func (s *service) GetInfoAll(amount int, offset int) (*ResUserInfoList, error) {
-	infoSlice, err := s.users.GetGroup(amount, offset)
+func (s *service) GetInfoAll(ctx context.Context, amount int, offset int) (*ResUserInfoList, error) {
+	infoSlice, err := s.users.GetGroup(ctx, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 
 	info := make([]ResUserInfo, 0, len(infoSlice))
@@ -230,10 +215,10 @@ func (s *service) GetInfoAll(amount int, offset int) (*ResUserInfoList, error) {
 }
 
 // GetInfoBulk gets and returns info for users
-func (s *service) GetInfoBulk(userids []string) (*ResUserInfoList, error) {
-	infoSlice, err := s.users.GetBulk(userids)
+func (s *service) GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error) {
+	infoSlice, err := s.users.GetBulk(ctx, userids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 
 	info := make([]ResUserInfo, 0, len(infoSlice))
@@ -266,10 +251,10 @@ type (
 )
 
 // GetInfoBulkPublic gets and returns public info for users
-func (s *service) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, error) {
-	infoSlice, err := s.users.GetBulk(userids)
+func (s *service) GetInfoBulkPublic(ctx context.Context, userids []string) (*resUserInfoListPublic, error) {
+	infoSlice, err := s.users.GetBulk(ctx, userids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 
 	info := make([]resUserInfoPublic, 0, len(infoSlice))
@@ -287,16 +272,16 @@ func (s *service) GetInfoBulkPublic(userids []string) (*resUserInfoListPublic, e
 	}, nil
 }
 
-func (s *service) GetInfoUsernamePrefix(prefix string, limit int) (*resUserInfoListPublic, error) {
+func (s *service) GetInfoUsernamePrefix(ctx context.Context, prefix string, limit int) (*resUserInfoListPublic, error) {
 	if len(prefix) == 0 {
 		return &resUserInfoListPublic{
 			Users: []resUserInfoPublic{},
 		}, nil
 	}
 
-	infoSlice, err := s.users.GetByUsernamePrefix(prefix, limit, 0)
+	infoSlice, err := s.users.GetByUsernamePrefix(ctx, prefix, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 
 	info := make([]resUserInfoPublic, 0, len(infoSlice))
@@ -321,10 +306,10 @@ type (
 )
 
 // GetIDsByRole retrieves a list of user ids by role
-func (s *service) GetIDsByRole(role string, amount int, offset int) (*resUserList, error) {
-	userids, err := s.roles.GetByRole(role, amount, offset)
+func (s *service) GetIDsByRole(ctx context.Context, role string, amount int, offset int) (*resUserList, error) {
+	userids, err := s.roles.GetByRole(ctx, role, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 	return &resUserList{
 		Users: userids,
@@ -375,7 +360,7 @@ func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, err
 }
 
 // CheckUsersExist is a fast check to determine if users exist
-func (s *service) CheckUsersExist(userids []string) ([]string, error) {
+func (s *service) CheckUsersExist(ctx context.Context, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
@@ -396,19 +381,20 @@ func (s *service) CheckUsersExist(userids []string) ([]string, error) {
 	res := make([]string, 0, len(userids))
 	dneInCache := userids
 
-	if multiget, err := s.kvusers.Multi(); err != nil {
+	if multiget, err := s.kvusers.Multi(ctx); err != nil {
 		s.logger.Error("Failed to create kvstore multi", map[string]string{
-			"error": err.Error(),
+			"error":      err.Error(),
+			"actiontype": "user_get_cache_exists",
 		})
 	} else {
 		results := make([]kvstore.Resulter, 0, len(userids))
 		for _, i := range userids {
-			results = append(results, multiget.Get(i))
+			results = append(results, multiget.Get(ctx, i))
 		}
-		if err := multiget.Exec(); err != nil {
+		if err := multiget.Exec(ctx); err != nil {
 			s.logger.Error("Failed to get userids from cache", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "getusersexist",
+				"actiontype": "user_get_cache_exists",
 			})
 			goto end
 		}
@@ -418,7 +404,7 @@ func (s *service) CheckUsersExist(userids []string) ([]string, error) {
 				if !errors.Is(err, kvstore.ErrNotFound{}) {
 					s.logger.Error("Failed to get user exists from cache", map[string]string{
 						"error":      err.Error(),
-						"actiontype": "getusersexistresult",
+						"actiontype": "user_get_cache_exists_result",
 					})
 				}
 				dneInCache = append(dneInCache, userids[n])
@@ -435,9 +421,9 @@ end:
 		return res, nil
 	}
 
-	m, err := s.users.GetBulk(dneInCache)
+	m, err := s.users.GetBulk(ctx, dneInCache)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get users")
+		return nil, kerrors.WithMsg(err, "Failed to get users")
 	}
 
 	userExists := map[string]struct{}{}
@@ -446,24 +432,25 @@ end:
 		userExists[i.Userid] = struct{}{}
 	}
 
-	multiset, err := s.kvusers.Multi()
+	multiset, err := s.kvusers.Multi(ctx)
 	if err != nil {
 		s.logger.Error("Failed to create kvstore multi", map[string]string{
-			"error": err.Error(),
+			"error":      err.Error(),
+			"actiontype": "user_set_cache_exists",
 		})
 		return res, nil
 	}
 	for _, i := range dneInCache {
 		if _, ok := userExists[i]; ok {
-			multiset.Set(i, cacheValY, s.userCacheTime)
+			multiset.Set(ctx, i, cacheValY, s.userCacheTime)
 		} else {
-			multiset.Set(i, cacheValN, s.userCacheTime)
+			multiset.Set(ctx, i, cacheValN, s.userCacheTime)
 		}
 	}
-	if err := multiset.Exec(); err != nil {
+	if err := multiset.Exec(ctx); err != nil {
 		s.logger.Error("Failed to set users exist in cache", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "setusersexist",
+			"actiontype": "user_set_cache_exists",
 		})
 	}
 

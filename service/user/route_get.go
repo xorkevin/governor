@@ -28,7 +28,7 @@ func (m *router) getByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByIDPublic(req.Userid)
+	res, err := m.s.GetByIDPublic(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -47,7 +47,7 @@ func (m *router) getByIDPersonal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByID(req.Userid)
+	res, err := m.s.GetByID(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -66,7 +66,7 @@ func (m *router) getByIDPrivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByID(req.Userid)
+	res, err := m.s.GetByID(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -91,7 +91,7 @@ func (m *router) getByUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByUsernamePublic(req.Username)
+	res, err := m.s.GetByUsernamePublic(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -110,7 +110,7 @@ func (m *router) getByUsernamePrivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByUsername(req.Username)
+	res, err := m.s.GetByUsername(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -141,7 +141,7 @@ func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := m.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -163,7 +163,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := m.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -193,16 +193,13 @@ func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
 	roles, err := rank.FromString(req.Roles)
 	if err != nil {
 		if errors.Is(err, rank.ErrInvalidRank{}) {
-			c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid rank string",
-			})))
+			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
+	res, err := m.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -225,16 +222,13 @@ func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Re
 	roles, err := rank.FromString(req.Roles)
 	if err != nil {
 		if errors.Is(err, rank.ErrInvalidRank{}) {
-			c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Invalid rank string",
-			})))
+			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserRolesIntersect(req.Userid, roles)
+	res, err := m.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -263,7 +257,7 @@ func (m *router) getUsersByRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetIDsByRole(req.Role, req.Amount, req.Offset)
+	res, err := m.s.GetIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -289,7 +283,7 @@ func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoAll(req.Amount, req.Offset)
+	res, err := m.s.GetInfoAll(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -313,7 +307,7 @@ func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoBulkPublic(req.Userids)
+	res, err := m.s.GetInfoBulkPublic(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -339,7 +333,7 @@ func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoUsernamePrefix(req.Prefix, req.Amount)
+	res, err := m.s.GetInfoUsernamePrefix(c.Ctx(), req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return

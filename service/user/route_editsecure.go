@@ -31,7 +31,7 @@ func (m *router) putEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateEmail(req.Userid, req.Email, req.Password); err != nil {
+	if err := m.s.UpdateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -58,7 +58,7 @@ func (m *router) putEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.CommitEmail(req.Userid, req.Key, req.Password); err != nil {
+	if err := m.s.CommitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -86,7 +86,7 @@ func (m *router) putPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdatePassword(req.Userid, req.NewPassword, req.OldPassword); err != nil {
+	if err := m.s.UpdatePassword(c.Ctx(), req.Userid, req.NewPassword, req.OldPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -111,7 +111,7 @@ func (m *router) forgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ForgotPassword(req.Username); err != nil {
+	if err := m.s.ForgotPassword(c.Ctx(), req.Username); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -138,7 +138,7 @@ func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ResetPassword(req.Userid, req.Key, req.NewPassword); err != nil {
+	if err := m.s.ResetPassword(c.Ctx(), req.Userid, req.Key, req.NewPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -167,7 +167,7 @@ func (m *router) addOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.AddOTP(req.Userid, req.Alg, req.Digits, req.Password)
+	res, err := m.s.AddOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -195,7 +195,7 @@ func (m *router) commitOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.CommitOTP(req.Userid, req.Code); err != nil {
+	if err := m.s.CommitOTP(c.Ctx(), req.Userid, req.Code); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -216,16 +216,10 @@ func (r *reqOTPCodeBackup) validCode() error {
 		return err
 	}
 	if len(r.Code) == 0 && len(r.Backup) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "OTP code must be provided",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code must be provided")
 	}
 	if len(r.Code) > 0 && len(r.Backup) > 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "May not provide both otp code and backup code",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not provide both otp code and backup code")
 	}
 	return nil
 }
@@ -247,7 +241,7 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	if err := m.s.RemoveOTP(req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
+	if err := m.s.RemoveOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
 		c.WriteError(err)
 		return
 	}
