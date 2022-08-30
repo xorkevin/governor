@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p user -o model_gen.go Model Info userEmail userPassHash userGenOTP userFailLogin
+//go:generate forge model -m Model -p user -o model_gen.go Model Info userProps userEmail userPassHash userGenOTP userFailLogin
 
 const (
 	uidSize       = 16
@@ -42,6 +42,7 @@ type (
 		GetByUsername(ctx context.Context, username string) (*Model, error)
 		GetByEmail(ctx context.Context, email string) (*Model, error)
 		Insert(ctx context.Context, m *Model) error
+		UpdateProps(ctx context.Context, m *Model) error
 		UpdateEmail(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
 		Setup(ctx context.Context) error
@@ -68,6 +69,12 @@ type (
 		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 		FailedLoginTime  int64  `model:"failed_login_time,BIGINT NOT NULL" query:"failed_login_time"`
 		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL" query:"failed_login_count"`
+	}
+
+	userProps struct {
+		Username  string `query:"username;updeq,userid"`
+		FirstName string `query:"first_name"`
+		LastName  string `query:"last_name"`
 	}
 
 	userEmail struct {
@@ -413,6 +420,22 @@ func (r *repo) Insert(ctx context.Context, m *Model) error {
 	}
 	if err := r.table.Insert(ctx, d, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to insert user")
+	}
+	return nil
+}
+
+// UpdateProps updates the user props
+func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserPropsEqUserid(ctx, d, &userProps{
+		Username:  m.Username,
+		FirstName: m.FirstName,
+		LastName:  m.LastName,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update user props")
 	}
 	return nil
 }

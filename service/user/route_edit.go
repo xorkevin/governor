@@ -33,7 +33,7 @@ func (m *router) putUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateUser(userid, req); err != nil {
+	if err := m.s.UpdateUser(c.Ctx(), userid, req); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -65,7 +65,7 @@ func (m *router) patchRank(w http.ResponseWriter, r *http.Request) {
 	editAddRank := rank.FromSlice(req.Add)
 	editRemoveRank := rank.FromSlice(req.Remove)
 
-	if err := m.s.UpdateRank(req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
+	if err := m.s.UpdateRank(c.Ctx(), req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -89,7 +89,7 @@ func (m *router) postAcceptRoleInvitation(w http.ResponseWriter, r *http.Request
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.AcceptRoleInvitation(req.Userid, req.Role); err != nil {
+	if err := m.s.AcceptRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -116,7 +116,7 @@ func (m *router) getRoleInvitations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetRoleInvitations(req.Role, req.Amount, req.Offset)
+	res, err := m.s.GetRoleInvitations(c.Ctx(), req.Role, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -144,7 +144,7 @@ func (m *router) getUserRoleInvitations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	res, err := m.s.GetUserRoleInvitations(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserRoleInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -170,7 +170,7 @@ func (m *router) deleteRoleInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteRoleInvitation(req.Userid, req.Role); err != nil {
+	if err := m.s.DeleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -188,7 +188,7 @@ func (m *router) deleteUserRoleInvitation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := m.s.DeleteRoleInvitation(req.Userid, req.Role); err != nil {
+	if err := m.s.DeleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}

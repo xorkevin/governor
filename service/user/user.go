@@ -49,7 +49,7 @@ type (
 		GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error)
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
-		DeleteRoleInvitations(role string) error
+		DeleteRoleInvitations(ctx context.Context, role string) error
 	}
 
 	// Service is a Users and governor.Service

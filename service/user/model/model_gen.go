@@ -174,6 +174,14 @@ func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d d
 	return res, nil
 }
 
+func (t *userModelTable) UpduserPropsEqUserid(ctx context.Context, d db.SQLExecutor, m *userProps, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (username, first_name, last_name) = ROW($1, $2, $3) WHERE userid = $4;", m.Username, m.FirstName, m.LastName, userid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (t *userModelTable) UpduserEmailEqUserid(ctx context.Context, d db.SQLExecutor, m *userEmail, userid string) error {
 	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (email) = ROW($1) WHERE userid = $2;", m.Email, userid)
 	if err != nil {
