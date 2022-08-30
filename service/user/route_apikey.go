@@ -31,7 +31,7 @@ func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserApikeys(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserApikeys(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -60,7 +60,7 @@ func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateApikey(req.Userid, req.Scope, req.Name, req.Desc)
+	res, err := m.s.CreateApikey(c.Ctx(), req.Userid, req.Scope, req.Name, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -97,7 +97,7 @@ func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteApikey(req.Keyid); err != nil {
+	if err := m.s.DeleteApikey(c.Ctx(), req.Keyid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -139,7 +139,7 @@ func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateApikey(req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
+	if err := m.s.UpdateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -160,7 +160,7 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.RotateApikey(req.Keyid)
+	res, err := m.s.RotateApikey(c.Ctx(), req.Keyid)
 	if err != nil {
 		c.WriteError(err)
 		return

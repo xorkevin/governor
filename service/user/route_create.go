@@ -32,7 +32,7 @@ func (m *router) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateUser(req)
+	res, err := m.s.CreateUser(c.Ctx(), req)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -59,7 +59,7 @@ func (m *router) commitUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CommitUser(req.Userid, req.Key)
+	res, err := m.s.CommitUser(c.Ctx(), req.Userid, req.Key)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -88,7 +88,7 @@ func (m *router) deleteUserSelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUser(req.Userid, req.Username, false, req.Password); err != nil {
+	if err := m.s.DeleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -115,7 +115,7 @@ func (m *router) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUser(req.Userid, req.Username, true, ""); err != nil {
+	if err := m.s.DeleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -140,7 +140,7 @@ func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserApprovals(req.Amount, req.Offset)
+	res, err := m.s.GetUserApprovals(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -159,7 +159,7 @@ func (m *router) approveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ApproveUser(req.Userid); err != nil {
+	if err := m.s.ApproveUser(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -177,7 +177,7 @@ func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUserApproval(req.Userid); err != nil {
+	if err := m.s.DeleteUserApproval(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}

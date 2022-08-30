@@ -1,11 +1,13 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/apikey"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -22,10 +24,10 @@ type (
 	}
 )
 
-func (s *service) GetUserApikeys(userid string, limit, offset int) (*resApikeys, error) {
-	m, err := s.apikeys.GetUserKeys(userid, limit, offset)
+func (s *service) GetUserApikeys(ctx context.Context, userid string, limit, offset int) (*resApikeys, error) {
+	m, err := s.apikeys.GetUserKeys(ctx, userid, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get apikeys")
+		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
 	}
 	res := make([]resApikey, 0, len(m))
 	for _, i := range m {
@@ -49,10 +51,10 @@ type (
 	}
 )
 
-func (s *service) CreateApikey(userid string, scope string, name, desc string) (*resApikeyModel, error) {
-	m, err := s.apikeys.Insert(userid, scope, name, desc)
+func (s *service) CreateApikey(ctx context.Context, userid string, scope string, name, desc string) (*resApikeyModel, error) {
+	m, err := s.apikeys.Insert(ctx, userid, scope, name, desc)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create apikey")
+		return nil, kerrors.WithMsg(err, "Failed to create apikey")
 	}
 	return &resApikeyModel{
 		Keyid: m.Keyid,
@@ -60,16 +62,13 @@ func (s *service) CreateApikey(userid string, scope string, name, desc string) (
 	}, nil
 }
 
-func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
-	m, err := s.apikeys.RotateKey(keyid)
+func (s *service) RotateApikey(ctx context.Context, keyid string) (*resApikeyModel, error) {
+	m, err := s.apikeys.RotateKey(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, apikey.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Apikey not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to rotate apikey")
+		return nil, kerrors.WithMsg(err, "Failed to rotate apikey")
 	}
 	return &resApikeyModel{
 		Keyid: m.Keyid,
@@ -77,28 +76,22 @@ func (s *service) RotateApikey(keyid string) (*resApikeyModel, error) {
 	}, nil
 }
 
-func (s *service) UpdateApikey(keyid string, scope string, name, desc string) error {
-	if err := s.apikeys.UpdateKey(keyid, scope, name, desc); err != nil {
+func (s *service) UpdateApikey(ctx context.Context, keyid string, scope string, name, desc string) error {
+	if err := s.apikeys.UpdateKey(ctx, keyid, scope, name, desc); err != nil {
 		if errors.Is(err, apikey.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Apikey not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to update apikey")
+		return kerrors.WithMsg(err, "Failed to update apikey")
 	}
 	return nil
 }
 
-func (s *service) DeleteApikey(keyid string) error {
-	if err := s.apikeys.DeleteKey(keyid); err != nil {
+func (s *service) DeleteApikey(ctx context.Context, keyid string) error {
+	if err := s.apikeys.DeleteKey(ctx, keyid); err != nil {
 		if errors.Is(err, apikey.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Apikey not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to delete apikey")
+		return kerrors.WithMsg(err, "Failed to delete apikey")
 	}
 	return nil
 }

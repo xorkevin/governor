@@ -2,6 +2,7 @@ package user
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	htmlTemplate "html/template"
@@ -14,6 +15,7 @@ import (
 	"xorkevin.dev/governor/service/mail"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -35,10 +37,6 @@ type (
 	}
 )
 
-const (
-	newUserTemplate = "newuser"
-)
-
 func (e *emailNewUser) Query() queryEmailNewUser {
 	return queryEmailNewUser{
 		Userid:    url.QueryEscape(e.Userid),
@@ -52,7 +50,7 @@ func (e *emailNewUser) Query() queryEmailNewUser {
 func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
 	if err := tpl.Execute(b, e.Query()); err != nil {
-		return governor.ErrWithMsg(err, "Failed executing new user url template")
+		return kerrors.WithMsg(err, "Failed executing new user url template")
 	}
 	e.URL = base + b.String()
 	return nil
@@ -66,49 +64,43 @@ type (
 )
 
 // CreateUser creates a new user and places it into approvals
-func (s *service) CreateUser(ruser reqUserPost) (*resUserUpdate, error) {
-	if _, err := s.users.GetByUsername(ruser.Username); err != nil {
+func (s *service) CreateUser(ctx context.Context, ruser reqUserPost) (*resUserUpdate, error) {
+	if _, err := s.users.GetByUsername(ctx, ruser.Username); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithMsg(err, "Failed to get user")
+			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Username is already taken",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username is already taken")
 	}
 
-	if _, err := s.users.GetByEmail(ruser.Email); err != nil {
+	if _, err := s.users.GetByEmail(ctx, ruser.Email); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithMsg(err, "Failed to get user")
+			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Email is already used by another account",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Email is already used by another account")
 	}
 
 	m, err := s.users.New(ruser.Username, ruser.Password, ruser.Email, ruser.FirstName, ruser.LastName)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create new user request")
+		return nil, kerrors.WithMsg(err, "Failed to create new user request")
 	}
 
 	am := s.approvals.New(m)
 	if s.userApproval {
-		if err := s.approvals.Insert(am); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to create new user request")
+		if err := s.approvals.Insert(ctx, am); err != nil {
+			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
 	} else {
 		code, err := s.approvals.RehashCode(am)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to generate email verification code")
+			return nil, kerrors.WithMsg(err, "Failed to generate email verification code")
 		}
-		if err := s.approvals.Insert(am); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to create new user request")
+		if err := s.approvals.Insert(ctx, am); err != nil {
+			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
-		if err := s.sendNewUserEmail(code, am); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to send new user email")
+		if err := s.sendNewUserEmail(ctx, code, am); err != nil {
+			return nil, kerrors.WithMsg(err, "Failed to send new user email")
 		}
 	}
 
@@ -135,10 +127,10 @@ type (
 	}
 )
 
-func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
-	m, err := s.approvals.GetGroup(limit, offset)
+func (s *service) GetUserApprovals(ctx context.Context, limit, offset int) (*resApprovals, error) {
+	m, err := s.approvals.GetGroup(ctx, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get user requests")
+		return nil, kerrors.WithMsg(err, "Failed to get user requests")
 	}
 	approvals := make([]resApproval, 0, len(m))
 	for _, i := range m {
@@ -158,48 +150,42 @@ func (s *service) GetUserApprovals(limit, offset int) (*resApprovals, error) {
 	}, nil
 }
 
-func (s *service) ApproveUser(userid string) error {
-	m, err := s.approvals.GetByID(userid)
+func (s *service) ApproveUser(ctx context.Context, userid string) error {
+	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User request not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get user request")
+		return kerrors.WithMsg(err, "Failed to get user request")
 	}
 	code, err := s.approvals.RehashCode(m)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate new email verification code")
+		return kerrors.WithMsg(err, "Failed to generate new email verification code")
 	}
-	if err := s.approvals.Update(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to approve user")
+	if err := s.approvals.Update(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to approve user")
 	}
-	if err := s.sendNewUserEmail(code, m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to send account verification email")
+	if err := s.sendNewUserEmail(ctx, code, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to send account verification email")
 	}
 	return nil
 }
 
-func (s *service) DeleteUserApproval(userid string) error {
-	m, err := s.approvals.GetByID(userid)
+func (s *service) DeleteUserApproval(ctx context.Context, userid string) error {
+	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User request not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get user request")
+		return kerrors.WithMsg(err, "Failed to get user request")
 	}
-	if err := s.approvals.Delete(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user request")
+	if err := s.approvals.Delete(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user request")
 	}
 	return nil
 }
 
-func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
+func (s *service) sendNewUserEmail(ctx context.Context, code string, m *approvalmodel.Model) error {
 	emdata := emailNewUser{
 		Userid:    m.Userid,
 		Key:       code,
@@ -207,46 +193,34 @@ func (s *service) sendNewUserEmail(code string, m *approvalmodel.Model) error {
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := emdata.computeURL(s.emailurlbase, s.tplnewuser); err != nil {
-		return governor.ErrWithMsg(err, "Failed to generate account verification email")
+	if err := emdata.computeURL(s.emailurl.base, s.emailurl.newuser); err != nil {
+		return kerrors.WithMsg(err, "Failed to generate account verification email")
 	}
-	if err := s.mailer.Send("", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newUserTemplate), emdata, true); err != nil {
-		return governor.ErrWithMsg(err, "Failed to send account verification email")
+	if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.newuser), emdata, true); err != nil {
+		return kerrors.WithMsg(err, "Failed to send account verification email")
 	}
 	return nil
 }
 
 // CommitUser takes a user from approvals and places it into the user db
-func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) {
-	am, err := s.approvals.GetByID(userid)
+func (s *service) CommitUser(ctx context.Context, userid string, key string) (*resUserUpdate, error) {
+	am, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User request not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get user request")
+		return nil, kerrors.WithMsg(err, "Failed to get user request")
 	}
 	if !am.Approved {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Not approved",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not approved")
 	}
 	if time.Now().Round(0).Unix() > am.CodeTime+s.confirmTime {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Code expired",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Code expired")
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to verify key")
+		return nil, kerrors.WithMsg(err, "Failed to verify key")
 	} else if !ok {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusUnauthorized,
-			Message: "Invalid key",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid key")
 	}
 	m := s.approvals.ToUserModel(am)
 
@@ -259,46 +233,35 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 		CreationTime: m.CreationTime,
 	})
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to encode user props to json")
+		return nil, kerrors.WithMsg(err, "Failed to encode user props to json")
 	}
 
-	if err := s.users.Insert(m); err != nil {
+	if err := s.approvals.Delete(ctx, am); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to clean up user approval")
+	}
+
+	if err := s.users.Insert(ctx, m); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
-			if err := s.approvals.Delete(am); err != nil {
-				s.logger.Error("Failed to clean up user approval", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "commitusercleanup",
-				})
-			}
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Username or email already in use by another account",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Username or email already in use by another account")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to create user")
+		return nil, kerrors.WithMsg(err, "Failed to create user")
 	}
-	if err := s.roles.InsertRoles(m.Userid, rank.BaseUser()); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create user roles")
+	if err := s.roles.InsertRoles(ctx, m.Userid, rank.BaseUser()); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to create user roles")
 	}
 
-	if err := s.events.StreamPublish(s.opts.CreateChannel, b); err != nil {
+	// must make a best effort attempt to publish new user event
+	if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
 		s.logger.Error("Failed to publish new user event", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "publishnewuser",
-		})
-	}
-
-	if err := s.approvals.Delete(am); err != nil {
-		s.logger.Error("Failed to clean up user approval", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "commitusercleanup",
+			"actiontype": "user_publish_create",
 		})
 	}
 
 	s.logger.Info("Created user", map[string]string{
 		"userid":     m.Userid,
 		"username":   m.Username,
-		"actiontype": "commituser",
+		"actiontype": "user_create",
 	})
 
 	s.clearUserExists(userid)
@@ -309,40 +272,28 @@ func (s *service) CommitUser(userid string, key string) (*resUserUpdate, error) 
 	}, nil
 }
 
-func (s *service) DeleteUser(userid string, username string, admin bool, password string) error {
-	m, err := s.users.GetByID(userid)
+func (s *service) DeleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
+	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get user")
+		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
 	if m.Username != username {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Username does not match",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username does not match")
 	}
-	if roles, err := s.roles.IntersectRoles(userid, rank.Rank{"admin": struct{}{}}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to get user roles")
+	if roles, err := s.roles.IntersectRoles(ctx, userid, rank.Rank{"admin": struct{}{}}); err != nil {
+		return kerrors.WithMsg(err, "Failed to get user roles")
 	} else if roles.Has("admin") {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Not allowed to delete admin user",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not allowed to delete admin user")
 	}
 	if !admin {
 		if ok, err := s.users.ValidatePass(password, m); err != nil {
-			return governor.ErrWithMsg(err, "Failed to validate password")
+			return kerrors.WithMsg(err, "Failed to validate password")
 		} else if !ok {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Incorrect password",
-			}))
+			return governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Incorrect password")
 		}
 	}
 
@@ -350,22 +301,22 @@ func (s *service) DeleteUser(userid string, username string, admin bool, passwor
 		Userid: m.Userid,
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode user props to json")
+		return kerrors.WithMsg(err, "Failed to encode user props to json")
 	}
-	if err := s.events.StreamPublish(s.opts.DeleteChannel, j); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish delete user event")
-	}
-
-	if err := s.resets.DeleteByUserid(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user resets")
+	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, j); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish delete user event")
 	}
 
-	if err := s.KillAllSessions(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user sessions")
+	if err := s.resets.DeleteByUserid(ctx, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user resets")
 	}
 
-	if err := s.users.Delete(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user roles")
+	if err := s.KillAllSessions(ctx, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user sessions")
+	}
+
+	if err := s.users.Delete(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user roles")
 	}
 
 	s.clearUserExists(userid)
@@ -373,7 +324,8 @@ func (s *service) DeleteUser(userid string, username string, admin bool, passwor
 }
 
 func (s *service) clearUserExists(userid string) {
-	if err := s.kvusers.Del(userid); err != nil {
+	// must make a best effort to clear user existence cache
+	if err := s.kvusers.Del(context.Background(), userid); err != nil {
 		s.logger.Error("Failed to delete user exists in cache", map[string]string{
 			"error":      err.Error(),
 			"actiontype": "deluserexists",
@@ -385,7 +337,7 @@ func (s *service) clearUserExists(userid string) {
 func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	m := &NewUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode new user props")
+		return nil, kerrors.WithMsg(err, "Failed to decode new user props")
 	}
 	return m, nil
 }
@@ -394,7 +346,7 @@ func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode delete user props")
+		return nil, kerrors.WithMsg(err, "Failed to decode delete user props")
 	}
 	return m, nil
 }
@@ -403,7 +355,7 @@ func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 func DecodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
 	m := &UpdateUserProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode update user props")
+		return nil, kerrors.WithMsg(err, "Failed to decode update user props")
 	}
 	return m, nil
 }

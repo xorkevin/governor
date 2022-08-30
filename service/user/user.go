@@ -43,12 +43,12 @@ const (
 type (
 	// Users is a user management service
 	Users interface {
-		GetByID(userid string) (*ResUserGet, error)
-		GetByUsername(username string) (*ResUserGet, error)
-		GetByEmail(email string) (*ResUserGet, error)
-		GetInfoBulk(userids []string) (*ResUserInfoList, error)
+		GetByID(ctx context.Context, userid string) (*ResUserGet, error)
+		GetByUsername(ctx context.Context, username string) (*ResUserGet, error)
+		GetByEmail(ctx context.Context, email string) (*ResUserGet, error)
+		GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error)
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
-		CheckUsersExist(userids []string) ([]string, error)
+		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
 		DeleteRoleInvitations(role string) error
 	}
 
@@ -71,6 +71,7 @@ type (
 		passreset         string
 		loginratelimit    string
 		otpbackupused     string
+		newuser           string
 	}
 
 	emailURLTpl struct {
@@ -328,6 +329,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("email.tpl.passreset", "passreset")
 	r.SetDefault("email.tpl.loginratelimit", "loginratelimit")
 	r.SetDefault("email.tpl.otpbackupused", "otpbackupused")
+	r.SetDefault("email.tpl.newuser", "newuser")
 	r.SetDefault("email.url.base", "http://localhost:8080")
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
@@ -425,6 +427,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		passreset:         r.GetStr("email.tpl.passreset"),
 		loginratelimit:    r.GetStr("email.tpl.loginratelimit"),
 		otpbackupused:     r.GetStr("email.tpl.otpbackupused"),
+		newuser:           r.GetStr("email.tpl.newuser"),
 	}
 
 	s.emailurl.base = r.GetStr("email.url.base")
@@ -690,7 +693,7 @@ func (s *service) PostSetup(req governor.ReqSetup) error {
 		if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
 			s.logger.Error("Failed to publish new user", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "user_publish_admin_user",
+				"actiontype": "user_publish_create_admin",
 			})
 		}
 
