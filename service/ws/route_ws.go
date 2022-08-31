@@ -58,6 +58,27 @@ func min(a, b time.Duration) time.Duration {
 	return b
 }
 
+// decodeRcvMsg unmarshals json encoded received messages into a struct
+func decodeRcvMsg(b []byte) (string, []byte, error) {
+	m := &rcvMsg{}
+	if err := json.Unmarshal(b, m); err != nil {
+		return "", nil, governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Failed to decode received msg")
+	}
+	return m.Channel, m.Value, nil
+}
+
+// encodeSendMsg marshals sent messages to json
+func encodeSendMsg(channel string, v []byte) ([]byte, error) {
+	b, err := json.Marshal(rcvMsg{
+		Channel: channel,
+		Value:   v,
+	})
+	if err != nil {
+		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode sent msg")
+	}
+	return b, nil
+}
+
 const (
 	ctlChannel = "_ctl_"
 	ctlOpLoc   = "location"
@@ -136,7 +157,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				if err := sub.Close(); err != nil {
 					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
 						"error":      err.Error(),
-						"actiontype": "closewsusersub",
+						"actiontype": "ws_close_user_sub",
 					})
 				}
 			}
@@ -145,13 +166,13 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		delay := 250 * time.Millisecond
 		for {
 			k, err := m.s.events.SubscribeSync(tickCtx, UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(ctx context.Context, topic string, msgdata []byte) {
-				b, err := encodeRcvMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
+				b, err := encodeSendMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
 				if err != nil {
-					conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode msg"))
+					conn.CloseError(err)
 					return
 				}
 				if err := conn.Write(ctx, true, b); err != nil {
-					conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to write msg"))
+					conn.CloseError(err)
 					return
 				}
 			})
@@ -217,6 +238,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	for {
 		t, b, err := conn.Read(tickCtx)
 		if err != nil {
+			conn.CloseError(err)
 			return
 		}
 		if !t {
@@ -225,7 +247,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		}
 		channel, msg, err := decodeRcvMsg(b)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg format"))
+			conn.CloseError(err)
 			return
 		}
 		if channel == "" || len(channel) > 127 {
@@ -302,20 +324,20 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 		}
 		channel, msg, err := decodeRcvMsg(b)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid msg format"))
+			conn.CloseError(err)
 			return
 		}
 		if channel != "echo" {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg channel"))
 			return
 		}
-		res, err := encodeRcvMsg(channel, msg)
+		res, err := encodeSendMsg(channel, msg)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode msg"))
+			conn.CloseError(err)
 			return
 		}
 		if err := conn.Write(c.Ctx(), true, res); err != nil {
-			conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to write msg"))
+			conn.CloseError(err)
 			return
 		}
 	}

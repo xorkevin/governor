@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
@@ -170,7 +171,7 @@ func encodeRcvMsg(channel string, v []byte) ([]byte, error) {
 		Value:   v,
 	})
 	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to encode received msg")
+		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode received msg")
 	}
 	return b, nil
 }

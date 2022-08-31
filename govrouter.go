@@ -459,15 +459,18 @@ func (e *ErrorWS) Error() string {
 	return b.String()
 }
 
-func (w *govws) wrapWSErr(err error, msg string) error {
+func (w *govws) wrapWSErr(err error, status int, reason string) error {
 	var werr websocket.CloseError
 	if errors.As(err, &werr) {
 		return kerrors.WithKind(err, &ErrorWS{
 			Status: int(werr.Code),
 			Reason: werr.Reason,
-		}, msg)
+		}, "Websocket error")
 	}
-	return kerrors.WithMsg(err, msg)
+	return kerrors.WithKind(err, &ErrorWS{
+		Status: status,
+		Reason: reason,
+	}, "Websocket error")
 }
 
 // ErrWS returns a wrapped error with a websocket code
@@ -481,7 +484,7 @@ func ErrWS(err error, status int, reason string) error {
 func (w *govws) Read(ctx context.Context) (bool, []byte, error) {
 	t, b, err := w.conn.Read(ctx)
 	if err != nil {
-		return false, nil, w.wrapWSErr(err, "Failed to read from ws")
+		return false, nil, w.wrapWSErr(err, int(websocket.StatusUnsupportedData), "Failed to read from ws")
 	}
 	return t == websocket.MessageText, b, nil
 }
@@ -494,7 +497,7 @@ func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
 	reqctx, reqcancel := context.WithTimeout(ctx, 5*time.Second)
 	defer reqcancel()
 	if err := w.conn.Write(reqctx, msgtype, b); err != nil {
-		return w.wrapWSErr(err, "Failed to write to ws")
+		return w.wrapWSErr(err, int(websocket.StatusInternalError), "Failed to write to ws")
 	}
 	return nil
 }
@@ -504,7 +507,7 @@ func (w *govws) Close(status int, reason string) {
 		if strings.Contains(strings.ToLower(err.Error()), "already wrote close") {
 			return
 		}
-		err = w.wrapWSErr(err, "Failed to close ws connection")
+		err = w.wrapWSErr(err, int(websocket.StatusInternalError), "Failed to close ws connection")
 		if w.c.l != nil {
 			w.c.l.Warn("Failed to close ws connection", map[string]string{
 				"endpoint": w.c.r.URL.EscapedPath(),
