@@ -3,9 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,39 +14,15 @@ import (
 )
 
 func PresenceChannel(prefix, userid string) string {
-	return fmt.Sprintf("%s.%s", prefix, userid)
+	return prefix + "." + userid
 }
 
-func PresenceChannelAll(prefix string) string {
-	return fmt.Sprintf("%s.>", prefix)
+func UserChannel(prefix, userid string) string {
+	return prefix + "." + userid
 }
 
-func PresenceChannelPrefix(prefix string) string {
-	return fmt.Sprintf("%s.", prefix)
-}
-
-func UserChannel(prefix, userid, channel string) string {
-	return fmt.Sprintf("%s.%s.%s", prefix, userid, channel)
-}
-
-func UserChannelAll(prefix, userid string) string {
-	return fmt.Sprintf("%s.%s.>", prefix, userid)
-}
-
-func UserChannelPrefix(prefix, userid string) string {
-	return fmt.Sprintf("%s.%s.", prefix, userid)
-}
-
-func ServiceChannel(prefix, channel, userid string) string {
-	return fmt.Sprintf("%s.%s.user.%s", prefix, channel, userid)
-}
-
-func ServiceChannelAll(prefix, channel string) string {
-	return fmt.Sprintf("%s.%s.user.>", prefix, channel)
-}
-
-func ServiceChannelPrefix(prefix, channel string) string {
-	return fmt.Sprintf("%s.%s.user.", prefix, channel)
+func ServiceChannel(prefix, channel string) string {
+	return prefix + "." + channel
 }
 
 func min(a, b time.Duration) time.Duration {
@@ -56,27 +30,6 @@ func min(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
-}
-
-// decodeRcvMsg unmarshals json encoded received messages into a struct
-func decodeRcvMsg(b []byte) (string, []byte, error) {
-	m := &rcvMsg{}
-	if err := json.Unmarshal(b, m); err != nil {
-		return "", nil, governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Failed to decode received msg")
-	}
-	return m.Channel, m.Value, nil
-}
-
-// encodeSendMsg marshals sent messages to json
-func encodeSendMsg(channel string, v []byte) ([]byte, error) {
-	b, err := json.Marshal(rcvMsg{
-		Channel: channel,
-		Value:   v,
-	})
-	if err != nil {
-		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode sent msg")
-	}
-	return b, nil
 }
 
 const (
@@ -99,15 +52,16 @@ type (
 	}
 )
 
-func (m *router) sendPresenceUpdate(ctx context.Context, ch, loc string) error {
+func (m *router) sendPresenceUpdate(ctx context.Context, userid, loc string) error {
 	msg, err := json.Marshal(PresenceEventProps{
 		Timestamp: time.Now().Round(0).Unix(),
+		Userid:    userid,
 		Location:  loc,
 	})
 	if err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
 	}
-	if err := m.s.events.Publish(ctx, ch, msg); err != nil {
+	if err := m.s.events.Publish(ctx, m.s.opts.PresenceChannel, msg); err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
 	}
 	return nil
@@ -133,8 +87,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 
 	presenceLocation := ""
 
-	presenceChannel := PresenceChannel(m.s.opts.PresenceChannel, userid)
-	if err := m.sendPresenceUpdate(c.Ctx(), presenceChannel, presenceLocation); err != nil {
+	if err := m.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
 		conn.CloseError(err)
 		return
 	}
@@ -150,7 +103,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		topicPrefix := UserChannelPrefix(m.s.opts.UserSendChannelPrefix, userid)
+		userChannel := UserChannel(m.s.opts.UserSendChannelPrefix, userid)
 		var sub events.SyncSubscription
 		defer func() {
 			if sub != nil {
@@ -165,13 +118,17 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		first := true
 		delay := 250 * time.Millisecond
 		for {
-			k, err := m.s.events.SubscribeSync(tickCtx, UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(ctx context.Context, topic string, msgdata []byte) {
-				b, err := encodeSendMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
+			k, err := m.s.events.SubscribeSync(tickCtx, userChannel, "", func(ctx context.Context, topic string, msgdata []byte) {
+				channel, _, err := decodeResMsg(msgdata)
 				if err != nil {
 					conn.CloseError(err)
 					return
 				}
-				if err := conn.Write(ctx, true, b); err != nil {
+				if channel == "" {
+					conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Malformed sent message"))
+					return
+				}
+				if err := conn.Write(ctx, true, msgdata); err != nil {
 					conn.CloseError(err)
 					return
 				}
@@ -221,7 +178,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			case <-tickCtx.Done():
 				return
 			case <-ticker.C:
-				if err := m.sendPresenceUpdate(tickCtx, presenceChannel, presenceLocation); err != nil {
+				if err := m.sendPresenceUpdate(tickCtx, userid, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
@@ -245,7 +202,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}
-		channel, msg, err := decodeRcvMsg(b)
+		channel, msg, err := decodeClientReqMsg(b)
 		if err != nil {
 			conn.CloseError(err)
 			return
@@ -279,14 +236,19 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if presenceLocation != origLocation {
-				if err := m.sendPresenceUpdate(tickCtx, presenceChannel, presenceLocation); err != nil {
+				if err := m.sendPresenceUpdate(tickCtx, userid, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
 			}
 		} else {
-			if err := m.s.events.Publish(tickCtx, ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel, userid), msg); err != nil {
-				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish service msg"))
+			b, err := encodeReqMsg(userid, msg)
+			if err != nil {
+				conn.CloseError(err)
+				return
+			}
+			if err := m.s.events.Publish(tickCtx, ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
+				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish request msg"))
 				return
 			}
 		}
@@ -322,7 +284,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}
-		channel, msg, err := decodeRcvMsg(b)
+		channel, _, err := decodeClientReqMsg(b)
 		if err != nil {
 			conn.CloseError(err)
 			return
@@ -331,12 +293,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg channel"))
 			return
 		}
-		res, err := encodeSendMsg(channel, msg)
-		if err != nil {
-			conn.CloseError(err)
-			return
-		}
-		if err := conn.Write(c.Ctx(), true, res); err != nil {
+		if err := conn.Write(c.Ctx(), true, b); err != nil {
 			conn.CloseError(err)
 			return
 		}

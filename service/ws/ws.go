@@ -36,18 +36,6 @@ type (
 		s *service
 	}
 
-	// rcvMsg is a received ws msg
-	rcvMsg struct {
-		Channel string          `json:"channel"`
-		Value   json.RawMessage `json:"value"`
-	}
-
-	// SendMsg is a sent msg
-	SendMsg struct {
-		Channel string      `json:"channel"`
-		Value   interface{} `json:"value"`
-	}
-
 	ctxKeyWS struct{}
 
 	Opts struct {
@@ -60,7 +48,32 @@ type (
 
 	PresenceEventProps struct {
 		Timestamp int64  `json:"timestamp"`
+		Userid    string `json:"userid"`
 		Location  string `json:"location"`
+	}
+
+	// responseMsgBytes is a partially decoded response msg to the client
+	responseMsgBytes struct {
+		Channel string          `json:"channel"`
+		Value   json.RawMessage `json:"value"`
+	}
+
+	// responseMsg is a response msg to the client
+	responseMsg struct {
+		Channel string      `json:"channel"`
+		Value   interface{} `json:"value"`
+	}
+
+	// clientRequestMsg is a partially decoded request msg from a client for a service
+	clientRequestMsgBytes struct {
+		Channel string          `json:"channel"`
+		Value   json.RawMessage `json:"value"`
+	}
+
+	// requestMsgBytes is a partially encoded request msg to a service
+	requestMsgBytes struct {
+		Userid string          `json:"userid"`
+		Value  json.RawMessage `json:"value"`
 	}
 )
 
@@ -113,7 +126,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.opts = Opts{
 		PresenceChannel:       s.channelns + ".presence.user",
 		UserSendChannelPrefix: s.channelns + ".send.user",
-		UserRcvChannelPrefix:  s.channelns + ".rcv",
+		UserRcvChannelPrefix:  s.channelns + ".rcv.svc",
 	}
 	SetCtxOpts(inj, s.opts)
 }
@@ -155,23 +168,53 @@ func (s *service) Health() error {
 	return nil
 }
 
-// decodeRcvMsg unmarshals json encoded received messages into a struct
-func decodeRcvMsg(b []byte) (string, []byte, error) {
-	m := &rcvMsg{}
-	if err := json.Unmarshal(b, m); err != nil {
-		return "", nil, kerrors.WithMsg(err, "Failed to decode received msg")
-	}
-	return m.Channel, m.Value, nil
-}
-
-// encodeRcvMsg marshals received messages to json
-func encodeRcvMsg(channel string, v []byte) ([]byte, error) {
-	b, err := json.Marshal(rcvMsg{
+// EncodeResMsg marshals a response message to json
+func EncodeResMsg(channel string, v interface{}) ([]byte, error) {
+	b, err := json.Marshal(responseMsg{
 		Channel: channel,
 		Value:   v,
 	})
 	if err != nil {
-		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode received msg")
+		return nil, kerrors.WithMsg(err, "Failed to encode response msg")
 	}
 	return b, nil
+}
+
+func decodeResMsg(b []byte) (string, []byte, error) {
+	var m responseMsgBytes
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Malformed response msg")
+	}
+	return m.Channel, m.Value, nil
+}
+
+func decodeClientReqMsg(b []byte) (string, []byte, error) {
+	var m clientRequestMsgBytes
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", nil, governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Malformed request msg")
+	}
+	return m.Channel, m.Value, nil
+}
+
+func encodeReqMsg(userid string, v []byte) ([]byte, error) {
+	b, err := json.Marshal(requestMsgBytes{
+		Userid: userid,
+		Value:  v,
+	})
+	if err != nil {
+		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode request msg")
+	}
+	return b, nil
+}
+
+// DecodeReqMsg unmarshals json encoded request messages
+func DecodeReqMsg(b []byte, target interface{}) (string, error) {
+	var m requestMsgBytes
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", kerrors.WithMsg(err, "Failed to decode request msg")
+	}
+	if err := json.Unmarshal(m.Value, target); err != nil {
+		return m.Userid, kerrors.WithMsg(err, "Failed to decode request msg value")
+	}
+	return m.Userid, nil
 }
