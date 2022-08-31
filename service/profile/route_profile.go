@@ -33,7 +33,7 @@ func (m *router) createProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateProfile(req.Userid, req.Email, req.Bio)
+	res, err := m.s.CreateProfile(c.Ctx(), req.Userid, req.Email, req.Bio)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -55,7 +55,7 @@ func (m *router) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateProfile(req.Userid, req.Email, req.Bio); err != nil {
+	if err := m.s.UpdateProfile(c.Ctx(), req.Userid, req.Email, req.Bio); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -85,7 +85,7 @@ func (m *router) updateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateImage(req.Userid, img); err != nil {
+	if err := m.s.UpdateImage(c.Ctx(), req.Userid, img); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -103,7 +103,7 @@ func (m *router) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteProfile(req.Userid); err != nil {
+	if err := m.s.DeleteProfile(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -116,7 +116,7 @@ func (m *router) getOwnProfile(w http.ResponseWriter, r *http.Request) {
 	req := reqProfileGetID{
 		Userid: gate.GetCtxUserid(c),
 	}
-	res, err := m.s.GetProfile(req.Userid)
+	res, err := m.s.GetProfile(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -135,7 +135,7 @@ func (m *router) getProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetProfile(req.Userid)
+	res, err := m.s.GetProfile(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -154,7 +154,7 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, contentType, err := m.s.GetProfileImage(req.Userid)
+	image, contentType, err := m.s.GetProfileImage(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -162,7 +162,7 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := image.Close(); err != nil {
 			m.s.logger.Error("Failed to close profile image", map[string]string{
-				"actiontype": "getprofileimage",
+				"actiontype": "profile_get_image",
 				"error":      err.Error(),
 			})
 		}
@@ -186,7 +186,7 @@ func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetProfilesBulk(req.Userids)
+	res, err := m.s.GetProfilesBulk(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -202,7 +202,7 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatProfileImage(req.Userid)
+	objinfo, err := m.s.StatProfileImage(c.Ctx(), req.Userid)
 	if err != nil {
 		return "", err
 	}

@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -113,12 +114,12 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
-	if err := s.profiles.Setup(); err != nil {
+	if err := s.profiles.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created profile table", nil)
-	if err := s.profileBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init profile image bucket")
+	if err := s.profileBucket.Init(context.Background()); err != nil {
+		return kerrors.WithMsg(err, "Failed to init profile image bucket")
 	}
 	l.Info("Created profile bucket", nil)
 	return nil
@@ -139,7 +140,7 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
 	l.Info("Subscribed to user create queue", nil)
 
@@ -149,7 +150,7 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
@@ -164,24 +165,24 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeNewUserProps(msgdata)
 	if err != nil {
 		return err
 	}
-	if _, err := s.CreateProfile(props.Userid, "", ""); err != nil {
+	if _, err := s.CreateProfile(ctx, props.Userid, "", ""); err != nil {
 		return err
 	}
 	return nil
 }
 
 // UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	props, err := user.DecodeDeleteUserProps(msgdata)
 	if err != nil {
 		return err
 	}
-	if err := s.DeleteProfile(props.Userid); err != nil {
+	if err := s.DeleteProfile(ctx, props.Userid); err != nil {
 		return err
 	}
 	return nil

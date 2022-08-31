@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -28,17 +30,14 @@ type (
 	}
 )
 
-func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, error) {
+func (s *service) CreateProfile(ctx context.Context, userid, email, bio string) (*resProfileUpdate, error) {
 	m := s.profiles.New(userid, email, bio)
 
-	if err := s.profiles.Insert(m); err != nil {
+	if err := s.profiles.Insert(ctx, m); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusConflict,
-				Message: "Profile already created",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Profile already created")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to create profile")
+		return nil, kerrors.WithMsg(err, "Failed to create profile")
 	}
 
 	return &resProfileUpdate{
@@ -46,23 +45,20 @@ func (s *service) CreateProfile(userid, email, bio string) (*resProfileUpdate, e
 	}, nil
 }
 
-func (s *service) UpdateProfile(userid, email, bio string) error {
-	m, err := s.profiles.GetByID(userid)
+func (s *service) UpdateProfile(ctx context.Context, userid, email, bio string) error {
+	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "No profile found with that id",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
-		return governor.ErrWithMsg(err, "Failed to get profile")
+		return kerrors.WithMsg(err, "Failed to get profile")
 	}
 
 	m.Email = email
 	m.Bio = bio
 
-	if err := s.profiles.Update(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update profile")
+	if err := s.profiles.Update(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to update profile")
 	}
 	return nil
 }
@@ -74,16 +70,13 @@ const (
 	thumbQuality = 0
 )
 
-func (s *service) UpdateImage(userid string, img image.Image) error {
-	m, err := s.profiles.GetByID(userid)
+func (s *service) UpdateImage(ctx context.Context, userid string, img image.Image) error {
+	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "No profile found with that id",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
-		return governor.ErrWithMsg(err, "Failed to get profile")
+		return kerrors.WithMsg(err, "Failed to get profile")
 	}
 
 	img.ResizeFill(imgSize, imgSize)
@@ -91,58 +84,52 @@ func (s *service) UpdateImage(userid string, img image.Image) error {
 	thumb.ResizeLimit(thumbSize, thumbSize)
 	thumb64, err := thumb.ToBase64(thumbQuality)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode image thumbnail")
+		return kerrors.WithMsg(err, "Failed to encode image thumbnail")
 	}
 	imgJpeg, err := img.ToJpeg(imgQuality)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode image")
+		return kerrors.WithMsg(err, "Failed to encode image")
 	}
 
-	if err := s.profileDir.Put(userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), nil, imgJpeg); err != nil {
-		return governor.ErrWithMsg(err, "Failed to save profile picture")
+	if err := s.profileDir.Put(ctx, userid, image.MediaTypeJpeg, int64(imgJpeg.Len()), nil, imgJpeg); err != nil {
+		return kerrors.WithMsg(err, "Failed to save profile picture")
 	}
 
 	m.Image = thumb64
-	if err := s.profiles.Update(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update profile")
+	if err := s.profiles.Update(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to update profile")
 	}
 	return nil
 }
 
-func (s *service) DeleteProfile(userid string) error {
-	m, err := s.profiles.GetByID(userid)
+func (s *service) DeleteProfile(ctx context.Context, userid string) error {
+	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "No profile found with that id",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
-		return governor.ErrWithMsg(err, "Failed to get profile")
+		return kerrors.WithMsg(err, "Failed to get profile")
 	}
 
-	if err := s.profileDir.Del(userid); err != nil {
+	if err := s.profileDir.Del(ctx, userid); err != nil {
 		if !errors.Is(err, objstore.ErrNotFound{}) {
-			return governor.ErrWithMsg(err, "Failed to delete profile picture")
+			return kerrors.WithMsg(err, "Failed to delete profile picture")
 		}
 	}
 
-	if err := s.profiles.Delete(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete profile")
+	if err := s.profiles.Delete(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete profile")
 	}
 	return nil
 }
 
-func (s *service) GetProfile(userid string) (*resProfileModel, error) {
-	m, err := s.profiles.GetByID(userid)
+func (s *service) GetProfile(ctx context.Context, userid string) (*resProfileModel, error) {
+	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "No profile found with that id",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get profile")
+		return nil, kerrors.WithMsg(err, "Failed to get profile")
 	}
 	return &resProfileModel{
 		Userid: m.Userid,
@@ -152,38 +139,32 @@ func (s *service) GetProfile(userid string) (*resProfileModel, error) {
 	}, nil
 }
 
-func (s *service) StatProfileImage(userid string) (*objstore.ObjectInfo, error) {
-	objinfo, err := s.profileDir.Stat(userid)
+func (s *service) StatProfileImage(ctx context.Context, userid string) (*objstore.ObjectInfo, error) {
+	objinfo, err := s.profileDir.Stat(ctx, userid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Profile image not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Profile image not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get profile image")
+		return nil, kerrors.WithMsg(err, "Failed to get profile image")
 	}
 	return objinfo, nil
 }
 
-func (s *service) GetProfileImage(userid string) (io.ReadCloser, string, error) {
-	obj, objinfo, err := s.profileDir.Get(userid)
+func (s *service) GetProfileImage(ctx context.Context, userid string) (io.ReadCloser, string, error) {
+	obj, objinfo, err := s.profileDir.Get(ctx, userid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrNotFound{}) {
-			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Profile image not found",
-			}), governor.ErrOptInner(err))
+			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Profile image not found")
 		}
-		return nil, "", governor.ErrWithMsg(err, "Failed to get profile image")
+		return nil, "", kerrors.WithMsg(err, "Failed to get profile image")
 	}
 	return obj, objinfo.ContentType, nil
 }
 
-func (s *service) GetProfilesBulk(userids []string) (*resProfiles, error) {
-	m, err := s.profiles.GetBulk(userids)
+func (s *service) GetProfilesBulk(ctx context.Context, userids []string) (*resProfiles, error) {
+	m, err := s.profiles.GetBulk(ctx, userids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get profiles")
+		return nil, kerrors.WithMsg(err, "Failed to get profiles")
 	}
 
 	res := make([]resProfileModel, 0, len(m))
