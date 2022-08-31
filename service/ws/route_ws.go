@@ -78,24 +78,16 @@ type (
 	}
 )
 
-func (m *router) sendPresenceUpdate(ch, loc string) error {
+func (m *router) sendPresenceUpdate(ctx context.Context, ch, loc string) error {
 	msg, err := json.Marshal(PresenceEventProps{
 		Timestamp: time.Now().Round(0).Unix(),
 		Location:  loc,
 	})
 	if err != nil {
-		return governor.ErrWS(
-			governor.ErrWithMsg(err, "Failed to marshal ws user presence msg"),
-			int(websocket.StatusInternalError),
-			"Failed to encode presence msg",
-		)
+		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
 	}
-	if err := m.s.events.Publish(ch, msg); err != nil {
-		return governor.ErrWS(
-			governor.ErrWithMsg(err, "Failed to publish ws user presence msg"),
-			int(websocket.StatusInternalError),
-			"Failed to publish presence msg",
-		)
+	if err := m.s.events.Publish(ctx, ch, msg); err != nil {
+		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
 	}
 	return nil
 }
@@ -104,15 +96,16 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	userid := gate.GetCtxUserid(c)
 	if userid == "" || len(userid) > 31 {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusUnauthorized,
-			Message: "User is not authorized",
-		})))
+		c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 		return
 	}
 
 	conn, err := c.Websocket()
 	if err != nil {
+		m.s.logger.Warn("Failed to accept WS conn upgrade", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "ws_conn_upgrade",
+		})
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
@@ -120,7 +113,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	presenceLocation := ""
 
 	presenceChannel := PresenceChannel(m.s.opts.PresenceChannel, userid)
-	if err := m.sendPresenceUpdate(presenceChannel, presenceLocation); err != nil {
+	if err := m.sendPresenceUpdate(c.Ctx(), presenceChannel, presenceLocation); err != nil {
 		conn.CloseError(err)
 		return
 	}
@@ -151,29 +144,21 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		first := true
 		delay := 250 * time.Millisecond
 		for {
-			k, err := m.s.events.SubscribeSync(UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(topic string, msgdata []byte) {
+			k, err := m.s.events.SubscribeSync(tickCtx, UserChannelAll(m.s.opts.UserSendChannelPrefix, userid), "", func(ctx context.Context, topic string, msgdata []byte) {
 				b, err := encodeRcvMsg(strings.TrimPrefix(topic, topicPrefix), msgdata)
 				if err != nil {
-					conn.CloseError(governor.ErrWS(
-						governor.ErrWithMsg(err, "Failed to marshal sent json msg"),
-						int(websocket.StatusInternalError),
-						"Failed to encode msg",
-					))
+					conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode msg"))
 					return
 				}
-				if err := conn.Write(c.Ctx(), true, b); err != nil {
-					conn.CloseError(governor.ErrWS(
-						governor.NewError(governor.ErrOptUser),
-						int(websocket.StatusAbnormalClosure),
-						"Failed to write msg",
-					))
+				if err := conn.Write(ctx, true, b); err != nil {
+					conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to write msg"))
 					return
 				}
 			})
 			if err != nil {
 				m.s.logger.Error("Failed to subscribe to ws user msg channels", map[string]string{
 					"error":      err.Error(),
-					"actiontype": "subwsuser",
+					"actiontype": "ws_sub_user",
 				})
 				select {
 				case <-tickCtx.Done():
@@ -193,7 +178,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				if err := k.Close(); err != nil {
 					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
 						"error":      err.Error(),
-						"actiontype": "closewsusersub",
+						"actiontype": "ws_close_user_sub",
 					})
 				}
 			}
@@ -215,7 +200,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			case <-tickCtx.Done():
 				return
 			case <-ticker.C:
-				if err := m.sendPresenceUpdate(presenceChannel, presenceLocation); err != nil {
+				if err := m.sendPresenceUpdate(tickCtx, presenceChannel, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
@@ -224,49 +209,33 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	select {
-	case <-c.Ctx().Done():
+	case <-tickCtx.Done():
 		return
 	case <-subSuccess:
 	}
 
 	for {
-		t, b, err := conn.Read(c.Ctx())
+		t, b, err := conn.Read(tickCtx)
 		if err != nil {
 			return
 		}
 		if !t {
-			conn.CloseError(governor.ErrWS(
-				governor.NewError(governor.ErrOptUser),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg type binary",
-			))
+			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}
 		channel, msg, err := decodeRcvMsg(b)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(
-				governor.ErrWithKind(err, governor.ErrorUser{}, "Failed to decode received msg"),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg format",
-			))
+			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg format"))
 			return
 		}
 		if channel == "" || len(channel) > 127 {
-			conn.CloseError(governor.ErrWS(
-				governor.NewError(governor.ErrOptUser),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg channel",
-			))
+			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg channel"))
 			return
 		}
 		if channel == ctlChannel {
 			o := &ctlOps{}
 			if err := json.Unmarshal(msg, o); err != nil {
-				conn.CloseError(governor.ErrWS(
-					governor.ErrWithKind(err, governor.ErrorUser{}, "Failed to decode ctl ops"),
-					int(websocket.StatusUnsupportedData),
-					"Invalid ctl op format",
-				))
+				conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl op format"))
 				return
 			}
 			origLocation := presenceLocation
@@ -276,19 +245,11 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 					{
 						args := &ctlLocOp{}
 						if err := json.Unmarshal(i.Args, args); err != nil {
-							conn.CloseError(governor.ErrWS(
-								governor.ErrWithKind(err, governor.ErrorUser{}, "Failed to decode ctl loc op"),
-								int(websocket.StatusUnsupportedData),
-								"Invalid ctl loc op format",
-							))
+							conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl loc op format"))
 							return
 						}
 						if len(args.Location) > 127 {
-							conn.CloseError(governor.ErrWS(
-								governor.NewError(governor.ErrOptUser),
-								int(websocket.StatusUnsupportedData),
-								"Invalid location",
-							))
+							conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid location"))
 							return
 						}
 						presenceLocation = args.Location
@@ -296,23 +257,19 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if presenceLocation != origLocation {
-				if err := m.sendPresenceUpdate(presenceChannel, presenceLocation); err != nil {
+				if err := m.sendPresenceUpdate(tickCtx, presenceChannel, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
 			}
 		} else {
-			if err := m.s.events.Publish(ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel, userid), msg); err != nil {
-				conn.CloseError(governor.ErrWS(
-					governor.ErrWithMsg(err, "Failed to publish ws user rcv msg"),
-					int(websocket.StatusInternalError),
-					"Failed to publish msg",
-				))
+			if err := m.s.events.Publish(tickCtx, ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel, userid), msg); err != nil {
+				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish service msg"))
 				return
 			}
 		}
 		select {
-		case <-c.Ctx().Done():
+		case <-tickCtx.Done():
 			return
 		case <-time.After(64 * time.Millisecond):
 		}
@@ -323,8 +280,9 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	conn, err := c.Websocket()
 	if err != nil {
-		m.s.logger.Debug("Failed to accept WS conn", map[string]string{
-			"value": err.Error(),
+		m.s.logger.Warn("Failed to accept WS conn upgrade", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "ws_conn_upgrade",
 		})
 		return
 	}
@@ -339,43 +297,25 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !t {
-			conn.CloseError(governor.ErrWS(
-				governor.NewError(governor.ErrOptUser),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg type binary",
-			))
+			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}
 		channel, msg, err := decodeRcvMsg(b)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(
-				governor.ErrWithKind(err, governor.ErrorUser{}, "Failed to decode received msg"),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg format",
-			))
+			conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid msg format"))
 			return
 		}
 		if channel != "echo" {
-			conn.CloseError(governor.ErrWS(
-				governor.NewError(governor.ErrOptUser),
-				int(websocket.StatusUnsupportedData),
-				"Invalid msg channel",
-			))
+			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg channel"))
 			return
 		}
 		res, err := encodeRcvMsg(channel, msg)
 		if err != nil {
-			conn.CloseError(governor.ErrWS(
-				governor.ErrWithMsg(err, "Failed to marshal sent json msg"),
-				int(websocket.StatusInternalError),
-				"Failed to encode msg",
-			))
+			conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode msg"))
 			return
 		}
 		if err := conn.Write(c.Ctx(), true, res); err != nil {
-			m.s.logger.Debug("WS conn closed", map[string]string{
-				"value": err.Error(),
-			})
+			conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to write msg"))
 			return
 		}
 	}

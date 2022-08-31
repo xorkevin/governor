@@ -7,6 +7,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -157,7 +158,7 @@ func (s *service) Health() error {
 func decodeRcvMsg(b []byte) (string, []byte, error) {
 	m := &rcvMsg{}
 	if err := json.Unmarshal(b, m); err != nil {
-		return "", nil, governor.ErrWithMsg(err, "Failed to decode received msg")
+		return "", nil, kerrors.WithMsg(err, "Failed to decode received msg")
 	}
 	return m.Channel, m.Value, nil
 }
@@ -169,7 +170,7 @@ func encodeRcvMsg(channel string, v []byte) ([]byte, error) {
 		Value:   v,
 	})
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to encode received msg")
+		return nil, kerrors.WithMsg(err, "Failed to encode received msg")
 	}
 	return b, nil
 }

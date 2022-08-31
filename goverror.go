@@ -70,7 +70,7 @@ func ErrWithRes(err error, status int, code string, resmsg string) error {
 		Status:  status,
 		Code:    code,
 		Message: resmsg,
-	}, "Error response")
+	}, "Websocket error response")
 }
 
 // ErrWithUnreachable returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorUnreachable] kind and message
