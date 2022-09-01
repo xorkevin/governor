@@ -12,8 +12,15 @@ import (
 )
 
 type (
+	// PresenceWorkerFunc is a type alias for a presence worker func
+	PresenceWorkerFunc = func(ctx context.Context, props PresenceEventProps)
+	// WorkerFunc is a type alias for a worker func
+	WorkerFunc = func(ctx context.Context, topic string, userid string, msgdata []byte)
 	// WS is a service for managing websocket connections
 	WS interface {
+		SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error)
+		Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error)
+		Publish(ctx context.Context, userid string, channel string, v interface{}) error
 	}
 
 	// Service is the public interface for the websocket service
@@ -29,7 +36,7 @@ type (
 		rolens    string
 		scopens   string
 		channelns string
-		opts      Opts
+		opts      svcOpts
 	}
 
 	router struct {
@@ -38,13 +45,11 @@ type (
 
 	ctxKeyWS struct{}
 
-	Opts struct {
+	svcOpts struct {
 		PresenceChannel       string
 		UserSendChannelPrefix string
 		UserRcvChannelPrefix  string
 	}
-
-	ctxKeyOpts struct{}
 
 	PresenceEventProps struct {
 		Timestamp int64  `json:"timestamp"`
@@ -72,8 +77,9 @@ type (
 
 	// requestMsgBytes is a partially encoded request msg to a service
 	requestMsgBytes struct {
-		Userid string          `json:"userid"`
-		Value  json.RawMessage `json:"value"`
+		Channel string          `json:"channel"`
+		Userid  string          `json:"userid"`
+		Value   json.RawMessage `json:"value"`
 	}
 )
 
@@ -89,18 +95,6 @@ func GetCtxWS(inj governor.Injector) WS {
 // setCtxWS sets a WS service in the context
 func setCtxWS(inj governor.Injector, w WS) {
 	inj.Set(ctxKeyWS{}, w)
-}
-
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new WS service from a context
@@ -123,12 +117,11 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
 	s.channelns = "gov." + name
-	s.opts = Opts{
-		PresenceChannel:       s.channelns + ".presence.user",
+	s.opts = svcOpts{
+		PresenceChannel:       s.channelns + ".presence.loc",
 		UserSendChannelPrefix: s.channelns + ".send.user",
 		UserRcvChannelPrefix:  s.channelns + ".rcv.svc",
 	}
-	SetCtxOpts(inj, s.opts)
 }
 
 func (s *service) router() *router {
@@ -168,8 +161,7 @@ func (s *service) Health() error {
 	return nil
 }
 
-// EncodeResMsg marshals a response message to json
-func EncodeResMsg(channel string, v interface{}) ([]byte, error) {
+func encodeResMsg(channel string, v interface{}) ([]byte, error) {
 	b, err := json.Marshal(responseMsg{
 		Channel: channel,
 		Value:   v,
@@ -196,10 +188,11 @@ func decodeClientReqMsg(b []byte) (string, []byte, error) {
 	return m.Channel, m.Value, nil
 }
 
-func encodeReqMsg(userid string, v []byte) ([]byte, error) {
+func encodeReqMsg(channel string, userid string, v []byte) ([]byte, error) {
 	b, err := json.Marshal(requestMsgBytes{
-		Userid: userid,
-		Value:  v,
+		Channel: channel,
+		Userid:  userid,
+		Value:   v,
 	})
 	if err != nil {
 		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode request msg")
@@ -207,14 +200,75 @@ func encodeReqMsg(userid string, v []byte) ([]byte, error) {
 	return b, nil
 }
 
-// DecodeReqMsg unmarshals json encoded request messages
-func DecodeReqMsg(b []byte, target interface{}) (string, error) {
+func decodeReqMsg(b []byte) (string, string, []byte, error) {
 	var m requestMsgBytes
 	if err := json.Unmarshal(b, &m); err != nil {
-		return "", kerrors.WithMsg(err, "Failed to decode request msg")
+		return "", "", nil, kerrors.WithMsg(err, "Failed to decode request msg")
 	}
-	if err := json.Unmarshal(m.Value, target); err != nil {
-		return m.Userid, kerrors.WithMsg(err, "Failed to decode request msg value")
+	return m.Channel, m.Userid, m.Value, nil
+}
+
+func (s *service) SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error) {
+	presenceChannel := presenceChannelName(s.opts.PresenceChannel, location)
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": presenceChannel,
+		"group":   group,
+	})
+	sub, err := s.events.Subscribe(presenceChannel, group, func(ctx context.Context, topic string, msgdata []byte) {
+		var props PresenceEventProps
+		if err := json.Unmarshal(msgdata, &props); err != nil {
+			l.Error("Invalid presence message", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "ws_decode_presence",
+			})
+			return
+		}
+		worker(ctx, props)
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
 	}
-	return m.Userid, nil
+	return sub, nil
+}
+
+func (s *service) Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error) {
+	if channel == "" {
+		return nil, kerrors.WithMsg(nil, "Channel pattern may not be empty")
+	}
+	svcChannel := serviceChannelName(s.opts.UserRcvChannelPrefix, channel)
+	l := s.logger.WithData(map[string]string{
+		"agent":   "subscriber",
+		"channel": svcChannel,
+		"group":   group,
+	})
+	sub, err := s.events.Subscribe(svcChannel, group, func(ctx context.Context, topic string, msgdata []byte) {
+		channel, userid, v, err := decodeReqMsg(msgdata)
+		if err != nil {
+			l.Error("Failed decoding request message", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "ws_decode_req",
+			})
+			return
+		}
+		worker(ctx, channel, userid, v)
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
+	}
+	return sub, nil
+}
+
+func (s *service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {
+	if userid == "" {
+		return kerrors.WithMsg(nil, "Userid may not be empty")
+	}
+	b, err := encodeResMsg(channel, v)
+	if err != nil {
+		return err
+	}
+	if err := s.events.Publish(ctx, userChannelName(s.opts.UserSendChannelPrefix, userid), b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish to user channel")
+	}
+	return nil
 }

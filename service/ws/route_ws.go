@@ -13,15 +13,18 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-func PresenceChannel(prefix, userid string) string {
+func presenceChannelName(prefix, location string) string {
+	if location == "" {
+		return prefix
+	}
+	return prefix + "." + location
+}
+
+func userChannelName(prefix, userid string) string {
 	return prefix + "." + userid
 }
 
-func UserChannel(prefix, userid string) string {
-	return prefix + "." + userid
-}
-
-func ServiceChannel(prefix, channel string) string {
+func serviceChannelName(prefix, channel string) string {
 	return prefix + "." + channel
 }
 
@@ -61,7 +64,7 @@ func (m *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 	if err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
 	}
-	if err := m.s.events.Publish(ctx, m.s.opts.PresenceChannel, msg); err != nil {
+	if err := m.s.events.Publish(ctx, presenceChannelName(m.s.opts.PresenceChannel, loc), msg); err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
 	}
 	return nil
@@ -103,7 +106,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		userChannel := UserChannel(m.s.opts.UserSendChannelPrefix, userid)
+		userChannel := userChannelName(m.s.opts.UserSendChannelPrefix, userid)
 		var sub events.SyncSubscription
 		defer func() {
 			if sub != nil {
@@ -242,12 +245,12 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			b, err := encodeReqMsg(userid, msg)
+			b, err := encodeReqMsg(channel, userid, msg)
 			if err != nil {
 				conn.CloseError(err)
 				return
 			}
-			if err := m.s.events.Publish(tickCtx, ServiceChannel(m.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
+			if err := m.s.events.Publish(tickCtx, serviceChannelName(m.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
 				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish request msg"))
 				return
 			}
