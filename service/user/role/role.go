@@ -21,6 +21,9 @@ const (
 )
 
 type (
+	// WorkerFunc is a type alias for a role event consumer
+	WorkerFunc = func(ctx context.Context, pinger events.Pinger, props RolesProps) error
+
 	// Roles manages user roles
 	Roles interface {
 		IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
@@ -29,6 +32,8 @@ type (
 		DeleteByRole(ctx context.Context, roleName string, userids []string) error
 		GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error)
 		GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error)
+		StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error)
+		StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
 	// Service is a Roles and governor.Service
@@ -48,7 +53,7 @@ type (
 		events        events.Events
 		logger        governor.Logger
 		streamns      string
-		opts          Opts
+		opts          svcOpts
 		streamsize    int64
 		eventsize     int32
 		roleCacheTime int64
@@ -56,13 +61,11 @@ type (
 
 	ctxKeyRoles struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName    string
 		CreateChannel string
 		DeleteChannel string
 	}
-
-	ctxKeyOpts struct{}
 )
 
 // GetCtxRoles returns a Roles service from the context
@@ -77,18 +80,6 @@ func GetCtxRoles(inj governor.Injector) Roles {
 // setCtxRoles sets a Roles service in the context
 func setCtxRoles(inj governor.Injector, r Roles) {
 	inj.Set(ctxKeyRoles{}, r)
-}
-
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new Roles service from a context
@@ -113,12 +104,11 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	setCtxRoles(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:    streamname,
 		CreateChannel: streamname + ".create",
 		DeleteChannel: streamname + ".delete",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -194,11 +184,38 @@ func (s *service) Health() error {
 	return nil
 }
 
-// DecodeRolesProps unmarshals json encoded roles props into a struct
-func DecodeRolesProps(msgdata []byte) (*RolesProps, error) {
+func decodeRolesProps(msgdata []byte) (*RolesProps, error) {
 	m := &RolesProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode roles props")
 	}
 	return m, nil
+}
+
+func (s *service) StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeRolesProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to role create channel")
+	}
+	return sub, nil
+}
+
+func (s *service) StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeRolesProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to role delete channel")
+	}
+	return sub, nil
 }

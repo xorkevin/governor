@@ -41,7 +41,7 @@ func (s *service) IntersectRoles(ctx context.Context, userid string, roles rank.
 		if err := multiget.Exec(ctx); err != nil {
 			s.logger.Error("Failed to get user roles from cache", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "getroleset",
+				"actiontype": "role_get_roleset",
 			})
 			goto end
 		}
@@ -52,7 +52,7 @@ func (s *service) IntersectRoles(ctx context.Context, userid string, roles rank.
 				if !errors.Is(err, kvstore.ErrNotFound{}) {
 					s.logger.Error("Failed to get user role result from cache", map[string]string{
 						"error":      err.Error(),
-						"actiontype": "getroleresult",
+						"actiontype": "role_get_roleset_result",
 					})
 				}
 				uncachedRoles.AddOne(k)
@@ -95,7 +95,7 @@ end:
 	if err := multiset.Exec(ctx); err != nil {
 		s.logger.Error("Failed to set user roles in cache", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "setroleset",
+			"actiontype": "role_set_roleset",
 		})
 	}
 
@@ -114,10 +114,11 @@ func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 		return kerrors.WithMsg(err, "Failed to create roles")
 	}
 	s.clearCache(userid, roles)
-	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
+	// must make best effort attempt to publish role event
+	if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
 		s.logger.Error("Failed to publish new roles event", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "publishnewroles",
+			"actiontype": "role_publish_new",
 		})
 	}
 	return nil
@@ -135,10 +136,11 @@ func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Ran
 		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
 	s.clearCache(userid, roles)
-	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, b); err != nil {
+	// must make best effort attempt to publish role event
+	if err := s.events.StreamPublish(context.Background(), s.opts.DeleteChannel, b); err != nil {
 		s.logger.Error("Failed to publish delete roles event", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "publishdelroles",
+			"actiontype": "role_publish_del",
 		})
 	}
 	return nil
@@ -174,7 +176,7 @@ func (s *service) clearCache(userid string, roles rank.Rank) {
 	if err := s.kvroleset.Subtree(userid).Del(context.Background(), roles.ToSlice()...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "clearroleset",
+			"actiontype": "role_clear_roleset",
 		})
 	}
 }
@@ -191,7 +193,7 @@ func (s *service) clearCacheRoles(role string, userids []string) {
 	if err := s.kvroleset.Del(context.Background(), args...); err != nil {
 		s.logger.Error("Failed to clear role set from cache", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "clearroleset",
+			"actiontype": "role_clear_roleset",
 		})
 	}
 }
