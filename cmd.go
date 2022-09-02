@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 type (
@@ -150,7 +150,7 @@ func getAdminPromptReq() (*SetupAdmin, error) {
 	}
 
 	fmt.Print("Password: ")
-	passwordBytes, err := terminal.ReadPassword(0)
+	passwordBytes, err := term.ReadPassword(0)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func getAdminPromptReq() (*SetupAdmin, error) {
 	password := string(passwordBytes)
 
 	fmt.Print("Verify password: ")
-	passwordVerifyBytes, err := terminal.ReadPassword(0)
+	passwordVerifyBytes, err := term.ReadPassword(0)
 	if err != nil {
 		return nil, err
 	}
