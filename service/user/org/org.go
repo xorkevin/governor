@@ -41,11 +41,9 @@ type (
 		logger      governor.Logger
 		scopens     string
 		streamns    string
-		opts        Opts
+		opts        svcOpts
 		streamsize  int64
 		eventsize   int32
-		roleopts    role.Opts
-		useropts    user.Opts
 	}
 
 	router struct {
@@ -53,19 +51,16 @@ type (
 		rt governor.Middleware
 	}
 
-	// DeleteOrgProps are properties of a deleted org
-	DeleteOrgProps struct {
+	deleteOrgProps struct {
 		OrgID string `json:"orgid"`
 	}
 
 	ctxKeyOrgs struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName    string
 		DeleteChannel string
 	}
-
-	ctxKeyOpts struct{}
 )
 
 // GetCtxOrgs returns an Orgs service from the context
@@ -82,20 +77,6 @@ func setCtxOrgs(inj governor.Injector, o Orgs) {
 	inj.Set(ctxKeyOrgs{}, o)
 }
 
-// GetCtxOpts returns org Opts from the context
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-// SetCtxOpts sets org Opts in the context
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
-}
-
 // NewCtx creates a new Orgs service from a context
 func NewCtx(inj governor.Injector) Service {
 	orgs := model.GetCtxRepo(inj)
@@ -104,13 +85,11 @@ func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	roleopts := role.GetCtxOpts(inj)
-	useropts := user.GetCtxOpts(inj)
-	return New(orgs, roles, users, ev, ratelimiter, g, roleopts, useropts)
+	return New(orgs, roles, users, ev, ratelimiter, g)
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, roleopts role.Opts, useropts user.Opts) Service {
+func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
 		orgs:        orgs,
 		roles:       roles,
@@ -118,8 +97,6 @@ func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, 
 		events:      ev,
 		ratelimiter: ratelimiter,
 		gate:        g,
-		roleopts:    roleopts,
-		useropts:    useropts,
 	}
 }
 
@@ -128,11 +105,10 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:    streamname,
 		DeleteChannel: streamname + ".delete",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")

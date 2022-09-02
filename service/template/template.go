@@ -16,8 +16,8 @@ import (
 type (
 	// Template is a templating service
 	Template interface {
-		Execute(dst io.Writer, kind string, templateName string, data interface{}) error
-		ExecuteHTML(dst io.Writer, kind string, templateName string, data interface{}) error
+		Execute(dst io.Writer, kind Kind, templateName string, data interface{}) error
+		ExecuteHTML(dst io.Writer, kind Kind, templateName string, data interface{}) error
 	}
 
 	// Service is a Template and governor.Service
@@ -35,9 +35,14 @@ type (
 	ctxKeyTemplate struct{}
 )
 
+type (
+	// Template source kind
+	Kind string
+)
+
 const (
 	// KindLocal indicates a local template
-	KindLocal = "local"
+	KindLocal Kind = "local"
 )
 
 // GetCtxTemplate returns a Template service from the context
@@ -146,7 +151,7 @@ func (e ErrExecute) Error() string {
 }
 
 // Execute executes a template and returns the templated string
-func (s *service) Execute(dst io.Writer, kind string, templateName string, data interface{}) error {
+func (s *service) Execute(dst io.Writer, kind Kind, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
 		if s.tt.Lookup(templateName) == nil {
@@ -162,7 +167,7 @@ func (s *service) Execute(dst io.Writer, kind string, templateName string, data 
 }
 
 // ExecuteHTML executes an html template and returns the templated string
-func (s *service) ExecuteHTML(dst io.Writer, kind string, templateName string, data interface{}) error {
+func (s *service) ExecuteHTML(dst io.Writer, kind Kind, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
 		if s.ht.Lookup(templateName) == nil {

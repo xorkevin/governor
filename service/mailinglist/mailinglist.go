@@ -43,7 +43,7 @@ type (
 		logger       governor.Logger
 		scopens      string
 		streamns     string
-		opts         Opts
+		opts         svcOpts
 		resolver     dns.Resolver
 		server       *smtp.Server
 		port         string
@@ -55,8 +55,6 @@ type (
 		writetimeout time.Duration
 		streamsize   int64
 		eventsize    int32
-		useropts     user.Opts
-		orgopts      org.Opts
 	}
 
 	router struct {
@@ -65,29 +63,13 @@ type (
 
 	ctxKeyMailingList struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName  string
 		MailChannel string
 		SendChannel string
 		DelChannel  string
 	}
-
-	ctxKeyOpts struct{}
 )
-
-// GetCtxOpts returns mailinglist Opts from the context
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-// SetCtxOpts sets mailinglist Opts in the context
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
-}
 
 // GetCtxMailingList returns a MailingList service from the context
 func GetCtxMailingList(inj governor.Injector) MailingList {
@@ -112,13 +94,11 @@ func NewCtx(inj governor.Injector) Service {
 	orgs := org.GetCtxOrgs(inj)
 	g := gate.GetCtxGate(inj)
 	mailer := mail.GetCtxMailer(inj)
-	useropts := user.GetCtxOpts(inj)
-	orgopts := org.GetCtxOpts(inj)
-	return New(lists, obj, ev, users, orgs, mailer, g, useropts, orgopts)
+	return New(lists, obj, ev, users, orgs, mailer, g)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate, useropts user.Opts, orgopts org.Opts) Service {
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
 	return &service{
 		lists:      lists,
 		mailBucket: obj,
@@ -131,8 +111,6 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,
 		}, time.Minute),
-		useropts: useropts,
-		orgopts:  orgopts,
 	}
 }
 
@@ -141,13 +119,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:  streamname,
 		MailChannel: streamname + ".mail",
 		SendChannel: streamname + ".send",
 		DelChannel:  streamname + ".del",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("port", "2525")
 	r.SetDefault("authdomain", "lists.mail.localhost")

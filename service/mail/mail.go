@@ -58,8 +58,8 @@ type (
 
 	// Tpl points to a mail template
 	Tpl struct {
-		Kind string `json:"kind"`
-		Name string `json:"name"`
+		Kind template.Kind `json:"kind"`
+		Name string        `json:"name"`
 	}
 
 	tplData struct {
@@ -146,7 +146,7 @@ type (
 		config          governor.SecretReader
 		logger          governor.Logger
 		streamns        string
-		opts            Opts
+		opts            svcOpts
 		host            string
 		addr            string
 		auth            secretAuth
@@ -169,29 +169,14 @@ type (
 
 	ctxKeyMailer struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName  string
 		MailChannel string
 		GCChannel   string
 	}
-
-	ctxKeyOpts struct{}
 )
 
-// GetCtxOpts returns mail Opts from the context
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-// SetCtxOpts sets mail Opts in the context
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
-}
-
+// TplLocal is a local template source
 func TplLocal(name string) Tpl {
 	return Tpl{
 		Kind: template.KindLocal,
@@ -241,12 +226,11 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	setCtxMailer(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:  streamname,
 		MailChannel: streamname + ".mail",
 		GCChannel:   streamname + ".gc",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")

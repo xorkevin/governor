@@ -47,17 +47,16 @@ type (
 		kvpresence     kvstore.KVStore
 		users          user.Users
 		events         events.Events
+		ws             ws.WS
 		gate           gate.Gate
 		logger         governor.Logger
 		scopens        string
 		channelns      string
 		streamns       string
-		opts           Opts
+		opts           svcOpts
 		streamsize     int64
 		eventsize      int32
 		invitationTime int64
-		wsopts         ws.Opts
-		useropts       user.Opts
 		syschannels    governor.SysChannels
 	}
 
@@ -79,29 +78,13 @@ type (
 
 	ctxKeyConduit struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName           string
 		FriendChannel        string
 		UnfriendChannel      string
 		PresenceQueryChannel string
 	}
-
-	ctxKeyOpts struct{}
 )
-
-// GetCtxOpts returns conduit Opts from the context
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-// SetCtxOpts sets conduit Opts in the context
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
-}
 
 // GetCtxConduit returns a Conduit service from the context
 func GetCtxCourier(inj governor.Injector) Conduit {
@@ -127,9 +110,8 @@ func NewCtx(inj governor.Injector) Service {
 	kv := kvstore.GetCtxKVStore(inj)
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
+	wss := ws.GetCtxWS(inj)
 	g := gate.GetCtxGate(inj)
-	wsopts := ws.GetCtxOpts(inj)
-	useropts := user.GetCtxOpts(inj)
 	return New(
 		friends,
 		invitations,
@@ -139,9 +121,8 @@ func NewCtx(inj governor.Injector) Service {
 		kv,
 		users,
 		ev,
+		wss,
 		g,
-		wsopts,
-		useropts,
 	)
 }
 
@@ -155,9 +136,8 @@ func New(
 	kv kvstore.KVStore,
 	users user.Users,
 	ev events.Events,
+	wss ws.WS,
 	g gate.Gate,
-	wsopts ws.Opts,
-	useropts user.Opts,
 ) Service {
 	return &service{
 		friends:        friends,
@@ -168,10 +148,9 @@ func New(
 		kvpresence:     kv.Subtree("presence"),
 		users:          users,
 		events:         ev,
+		ws:             wss,
 		gate:           g,
 		invitationTime: time72h,
-		wsopts:         wsopts,
-		useropts:       useropts,
 	}
 }
 
@@ -181,13 +160,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.channelns = name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:           streamname,
 		FriendChannel:        streamname + ".friend",
 		UnfriendChannel:      streamname + ".unfriend",
 		PresenceQueryChannel: name + ".presence",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
