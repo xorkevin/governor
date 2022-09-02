@@ -41,6 +41,13 @@ const (
 )
 
 type (
+	// WorkerFuncCreate is a type alias for a new user event consumer
+	WorkerFuncCreate = func(ctx context.Context, pinger events.Pinger, props NewUserProps) error
+	// WorkerFuncDelete is a type alias for a delete user event consumer
+	WorkerFuncDelete = func(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error
+	// WorkerFuncUpdate is a type alias for an update user event consumer
+	WorkerFuncUpdate = func(ctx context.Context, pinger events.Pinger, props UpdateUserProps) error
+
 	// Users is a user management service
 	Users interface {
 		GetByID(ctx context.Context, userid string) (*ResUserGet, error)
@@ -50,6 +57,9 @@ type (
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
 		DeleteRoleInvitations(ctx context.Context, role string) error
+		StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error)
+		StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error)
+		StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
 	// Service is a Users and governor.Service
@@ -114,7 +124,7 @@ type (
 		rolens            string
 		scopens           string
 		streamns          string
-		opts              Opts
+		opts              svcOpts
 		streamsize        int64
 		eventsize         int32
 		baseURL           string
@@ -173,14 +183,12 @@ type (
 
 	ctxKeyUsers struct{}
 
-	Opts struct {
+	svcOpts struct {
 		StreamName    string
 		CreateChannel string
 		DeleteChannel string
 		UpdateChannel string
 	}
-
-	ctxKeyOpts struct{}
 )
 
 // GetCtxUsers returns a Users service from the context
@@ -195,20 +203,6 @@ func GetCtxUsers(inj governor.Injector) Users {
 // setCtxUser sets a Users service in the context
 func setCtxUser(inj governor.Injector, u Users) {
 	inj.Set(ctxKeyUsers{}, u)
-}
-
-// GetCtxOpts returns user Opts from the context
-func GetCtxOpts(inj governor.Injector) Opts {
-	v := inj.Get(ctxKeyOpts{})
-	if v == nil {
-		return Opts{}
-	}
-	return v.(Opts)
-}
-
-// SetCtxOpts sets user Opts in the context
-func SetCtxOpts(inj governor.Injector, o Opts) {
-	inj.Set(ctxKeyOpts{}, o)
 }
 
 // NewCtx creates a new Users service from a context
@@ -298,13 +292,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
-	s.opts = Opts{
+	s.opts = svcOpts{
 		StreamName:    streamname,
 		CreateChannel: streamname + ".create",
 		DeleteChannel: streamname + ".delete",
 		UpdateChannel: streamname + ".update",
 	}
-	SetCtxOpts(inj, s.opts)
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -712,7 +705,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_ROLE_DELETE", s.UserRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.UserRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -722,7 +715,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -772,16 +765,78 @@ func (s *service) Health() error {
 	return nil
 }
 
+func decodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
+	m := &NewUserProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to decode new user props")
+	}
+	return m, nil
+}
+
+func decodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
+	m := &DeleteUserProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to decode delete user props")
+	}
+	return m, nil
+}
+
+func decodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
+	m := &UpdateUserProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to decode update user props")
+	}
+	return m, nil
+}
+
+func (s *service) StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeNewUserProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to user create channel")
+	}
+	return sub, nil
+}
+
+func (s *service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeDeleteUserProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to user delete channel")
+	}
+	return sub, nil
+}
+
+func (s *service) StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UpdateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeUpdateUserProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to user update channel")
+	}
+	return sub, nil
+}
+
 const (
 	roleDeleteBatchSize = 256
 )
 
 // UserRoleDeleteHook deletes the roles of a deleted user
-func (s *service) UserRoleDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := DecodeDeleteUserProps(msgdata)
-	if err != nil {
-		return err
-	}
+func (s *service) UserRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
@@ -808,11 +863,7 @@ const (
 )
 
 // UserApikeyDeleteHook deletes the apikeys of a deleted user
-func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := DecodeDeleteUserProps(msgdata)
-	if err != nil {
-		return err
-	}
+func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err

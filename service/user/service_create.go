@@ -332,30 +332,3 @@ func (s *service) clearUserExists(userid string) {
 		})
 	}
 }
-
-// DecodeNewUserProps unmarshals json encoded new user props into a struct
-func DecodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
-	m := &NewUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode new user props")
-	}
-	return m, nil
-}
-
-// DecodeDeleteUserProps unmarshals json encoded delete user props into a struct
-func DecodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
-	m := &DeleteUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode delete user props")
-	}
-	return m, nil
-}
-
-// DecodeUpdateUserProps unmarshals json encoded update user props into a struct
-func DecodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
-	m := &UpdateUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode update user props")
-	}
-	return m, nil
-}

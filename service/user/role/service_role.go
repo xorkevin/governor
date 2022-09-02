@@ -132,17 +132,13 @@ func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Ran
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode roles props to json")
 	}
+	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish delete roles event")
+	}
 	if err := s.roles.DeleteRoles(ctx, userid, roles); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
 	s.clearCache(userid, roles)
-	// must make best effort attempt to publish role event
-	if err := s.events.StreamPublish(context.Background(), s.opts.DeleteChannel, b); err != nil {
-		s.logger.Error("Failed to publish delete roles event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "role_publish_del",
-		})
-	}
 	return nil
 }
 
