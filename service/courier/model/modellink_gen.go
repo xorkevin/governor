@@ -89,33 +89,6 @@ func (t *linkModelTable) DelHasLinkID(ctx context.Context, d db.SQLExecutor, lin
 	return err
 }
 
-func (t *linkModelTable) GetLinkModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]LinkModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]LinkModel, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT linkid, url, creatorid, creation_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := LinkModel{}
-		if err := rows.Scan(&m.LinkID, &m.URL, &m.CreatorID, &m.CreationTime); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 func (t *linkModelTable) GetLinkModelEqCreatorIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, creatorid string, orderasc bool, limit, offset int) ([]LinkModel, error) {
 	order := "DESC"
 	if orderasc {

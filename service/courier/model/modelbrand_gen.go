@@ -90,33 +90,6 @@ func (t *brandModelTable) DelEqCreatorIDHasBrandID(ctx context.Context, d db.SQL
 	return err
 }
 
-func (t *brandModelTable) GetBrandModelOrdCreationTime(ctx context.Context, d db.SQLExecutor, orderasc bool, limit, offset int) ([]BrandModel, error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]BrandModel, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT creatorid, brandid, creation_time FROM "+t.TableName+" ORDER BY creation_time "+order+" LIMIT $1 OFFSET $2;", limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-		}
-	}()
-	for rows.Next() {
-		m := BrandModel{}
-		if err := rows.Scan(&m.CreatorID, &m.BrandID, &m.CreationTime); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
 func (t *brandModelTable) GetBrandModelEqCreatorIDOrdCreationTime(ctx context.Context, d db.SQLExecutor, creatorid string, orderasc bool, limit, offset int) ([]BrandModel, error) {
 	order := "DESC"
 	if orderasc {

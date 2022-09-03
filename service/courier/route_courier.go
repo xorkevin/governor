@@ -27,7 +27,7 @@ func (m *router) getLink(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	url, err := m.s.GetLinkFast(req.LinkID)
+	url, err := m.s.GetLinkFast(c.Ctx(), req.LinkID)
 	if err != nil {
 		if len(m.s.fallbackLink) > 0 {
 			c.Redirect(http.StatusTemporaryRedirect, m.s.fallbackLink)
@@ -48,7 +48,7 @@ func (m *router) getLinkImage(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetLinkImage(req.LinkID)
+	img, contentType, err := m.s.GetLinkImage(c.Ctx(), req.LinkID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -84,7 +84,7 @@ func (m *router) getLinkGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetLinkGroup(req.CreatorID, req.Amount, req.Offset)
+	res, err := m.s.GetLinkGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -114,7 +114,7 @@ func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateLink(req.CreatorID, req.LinkID, req.URL, req.BrandID)
+	res, err := m.s.CreateLink(c.Ctx(), req.CreatorID, req.LinkID, req.URL, req.BrandID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -139,7 +139,7 @@ func (m *router) deleteLink(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteLink(req.CreatorID, req.LinkID); err != nil {
+	if err := m.s.DeleteLink(c.Ctx(), req.CreatorID, req.LinkID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -163,7 +163,7 @@ func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetBrandImage(req.CreatorID, req.BrandID)
+	img, contentType, err := m.s.GetBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -191,7 +191,7 @@ func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetBrandGroup(req.CreatorID, req.Amount, req.Offset)
+	res, err := m.s.GetBrandGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -223,7 +223,7 @@ func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateBrand(req.CreatorID, req.BrandID, img)
+	res, err := m.s.CreateBrand(c.Ctx(), req.CreatorID, req.BrandID, img)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -242,7 +242,7 @@ func (m *router) deleteBrand(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteBrand(req.CreatorID, req.BrandID); err != nil {
+	if err := m.s.DeleteBrand(c.Ctx(), req.CreatorID, req.BrandID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -257,7 +257,7 @@ func (m *router) getLinkImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatLinkImage(req.LinkID)
+	objinfo, err := m.s.StatLinkImage(c.Ctx(), req.LinkID)
 	if err != nil {
 		return "", err
 	}
@@ -274,7 +274,7 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatBrandImage(req.CreatorID, req.BrandID)
+	objinfo, err := m.s.StatBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
 	if err != nil {
 		return "", err
 	}

@@ -10,13 +10,13 @@ import (
 
 const (
 	lengthCapCreatorID = 31
-	lengthCap          = 63
+	lengthCapID        = 63
 	lengthCapURL       = 2047
 	amountCap          = 255
 )
 
 var (
-	linkRegex = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	idRegex = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 )
 
 func validLinkID(linkid string) error {
@@ -24,60 +24,36 @@ func validLinkID(linkid string) error {
 		return nil
 	}
 	if len(linkid) < 3 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Link id must be longer than 2 characters",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Link id must be longer than 2 characters")
 	}
-	if len(linkid) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Link id must be shorter than 64 characters",
-		}))
+	if len(linkid) > lengthCapID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Link id must be shorter than 64 characters")
 	}
-	if !linkRegex.MatchString(linkid) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Link id can only contain A-Z,a-z,0-9,_,-",
-			Status:  http.StatusBadRequest,
-		}))
+	if !idRegex.MatchString(linkid) {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Link id can only contain A-Z,a-z,0-9,_,-")
 	}
 	return nil
 }
 
 func validhasLinkID(linkid string) error {
 	if len(linkid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Link id must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Link id must be provided")
 	}
-	if len(linkid) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Link id must be shorter than 64 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(linkid) > lengthCapID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Link id must be shorter than 64 characters")
 	}
 	return nil
 }
 
 func validBrandID(brandid string) error {
 	if len(brandid) < 3 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Brand id must be longer than 2 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Brand id must be longer than 2 characters")
 	}
-	if len(brandid) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Brand id must be shorter than 64 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(brandid) > lengthCapID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Brand id must be shorter than 64 characters")
 	}
-	if !linkRegex.MatchString(brandid) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Brand id can only contain a-z,0-9,_,-",
-			Status:  http.StatusBadRequest,
-		}))
+	if !idRegex.MatchString(brandid) {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Brand id can only contain a-z,0-9,_,-")
 	}
 	return nil
 }
@@ -86,75 +62,48 @@ func validhasBrandID(brandid string) error {
 	if len(brandid) == 0 {
 		return nil
 	}
-	if len(brandid) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Brand id must be shorter than 64 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(brandid) > lengthCapID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Brand id must be shorter than 64 characters")
 	}
 	return nil
 }
 
 func validURL(rawurl string) error {
 	if len(rawurl) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Url must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Url must be provided")
 	}
 	if len(rawurl) > lengthCapURL {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Url must be shorter than 2048 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Url must be shorter than 2048 characters")
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Url is invalid",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Url is invalid")
 	}
 	return nil
 }
 
 func validhasCreatorID(creatorid string) error {
 	if len(creatorid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Creator id must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Creator id must be provided")
 	}
 	if len(creatorid) > lengthCapCreatorID {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Creator id must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Creator id must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validAmount(amt int) error {
 	if amt < 1 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be positive",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be positive")
 	}
 	if amt > amountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be less than 256",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be less than 256")
 	}
 	return nil
 }
 
 func validOffset(offset int) error {
 	if offset < 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Offset must not be negative",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Offset must not be negative")
 	}
 	return nil
 }
