@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -111,8 +113,8 @@ func (s *service) GetOpenidConfig() (*resOpenidConfig, error) {
 	}, nil
 }
 
-func (s *service) GetJWKS() (*jose.JSONWebKeySet, error) {
-	return s.tokenizer.GetJWKS(), nil
+func (s *service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
+	return s.tokenizer.GetJWKS(ctx)
 }
 
 const (
@@ -141,7 +143,7 @@ type (
 	}
 )
 
-func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method string, authTime int64) (*resAuthCode, error) {
+func (s *service) AuthCode(ctx context.Context, userid, clientid, scope, nonce, challenge, method string, authTime int64) (*resAuthCode, error) {
 	// sort and filter unknown scopes
 	scope = dedupSSV(scope, map[string]struct{}{
 		oidScopeOpenid:  {},
@@ -150,33 +152,27 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 		oidScopeOffline: {},
 	})
 
-	if _, err := s.getCachedClient(clientid); err != nil {
+	if _, err := s.getCachedClient(ctx, clientid); err != nil {
 		if errors.Is(err, ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "OAuth app not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get oauth app")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 
-	m, err := s.connections.GetByID(userid, clientid)
+	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithMsg(err, "Failed to get oauth app connection")
+			return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
 		}
 		m, code, err := s.connections.New(userid, clientid, scope, nonce, challenge, method, authTime)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to create oauth app connection")
+			return nil, kerrors.WithMsg(err, "Failed to create oauth app connection")
 		}
-		if err := s.connections.Insert(m); err != nil {
+		if err := s.connections.Insert(ctx, m); err != nil {
 			if errors.Is(err, db.ErrUnique{}) {
-				return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusBadRequest,
-					Message: "OAuth app already connected",
-				}), governor.ErrOptInner(err))
+				return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "OAuth app already connected")
 			}
-			return nil, governor.ErrWithMsg(err, "Failed to connect oauth app")
+			return nil, kerrors.WithMsg(err, "Failed to connect oauth app")
 		}
 		return &resAuthCode{
 			Code: userid + keySeparator + code,
@@ -194,10 +190,10 @@ func (s *service) AuthCode(userid, clientid, scope, nonce, challenge, method str
 	m.AccessTime = now
 	code, err := s.connections.RehashCode(m)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to generate auth code")
+		return nil, kerrors.WithMsg(err, "Failed to generate auth code")
 	}
-	if err := s.connections.Update(m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to update oauth app connection")
+	if err := s.connections.Update(ctx, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to update oauth app connection")
 	}
 	return &resAuthCode{
 		Code: userid + keySeparator + code,
@@ -252,11 +248,11 @@ func ssvSet(s string) map[string]struct{} {
 	return scopes
 }
 
-func (s *service) getUserinfoClaims(userid string, scopes map[string]struct{}) (*UserinfoClaims, error) {
+func (s *service) getUserinfoClaims(ctx context.Context, userid string, scopes map[string]struct{}) (*UserinfoClaims, error) {
 	claims := &UserinfoClaims{}
-	user, err := s.users.GetByID(userid)
+	user, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "User not found")
+		return nil, kerrors.WithMsg(err, "User not found")
 	}
 	if _, ok := scopes[oidScopeProfile]; ok {
 		claims.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
@@ -267,13 +263,13 @@ func (s *service) getUserinfoClaims(userid string, scopes map[string]struct{}) (
 			Userid:   user.Userid,
 			Username: user.Username,
 		}
-		bprofile := &bytes.Buffer{}
-		if err := s.tplprofile.Execute(bprofile, data); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed executing profile url template")
+		bprofile := bytes.Buffer{}
+		if err := s.tplprofile.Execute(&bprofile, data); err != nil {
+			return nil, kerrors.WithMsg(err, "Failed executing profile url template")
 		}
-		bpicture := &bytes.Buffer{}
-		if err := s.tplpicture.Execute(bpicture, data); err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed executing profile picture url template")
+		bpicture := bytes.Buffer{}
+		if err := s.tplpicture.Execute(&bpicture, data); err != nil {
+			return nil, kerrors.WithMsg(err, "Failed executing profile picture url template")
 		}
 		claims.Profile = bprofile.String()
 		claims.Picture = bpicture.String()
@@ -285,102 +281,62 @@ func (s *service) getUserinfoClaims(userid string, scopes map[string]struct{}) (
 	return claims, nil
 }
 
-func (s *service) checkClientKey(clientid, key, redirect string) error {
-	m, err := s.getCachedClient(clientid)
+func (s *service) checkClientKey(ctx context.Context, clientid, key, redirect string) error {
+	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusUnauthorized,
-				Code:    oidErrorInvalidClient,
-				Message: "Invalid client",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusUnauthorized, oidErrorInvalidClient, "Invalid client")
 		}
-		return governor.ErrWithMsg(err, "Failed to get oauth app")
+		return kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 	if ok, err := s.apps.ValidateKey(key, m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to validate key")
+		return kerrors.WithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusUnauthorized,
-			Code:    oidErrorInvalidClient,
-			Message: "Invalid client",
-		}))
+		return governor.ErrWithRes(nil, http.StatusUnauthorized, oidErrorInvalidClient, "Invalid client")
 	}
 	if redirect != m.RedirectURI {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidGrant,
-			Message: "Invalid redirect",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid redirect")
 	}
 	return nil
 }
 
-func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifier string) (*resAuthToken, error) {
-	if err := s.checkClientKey(clientid, secret, redirect); err != nil {
+func (s *service) AuthTokenCode(ctx context.Context, clientid, secret, redirect, userid, code, verifier string) (*resAuthToken, error) {
+	if err := s.checkClientKey(ctx, clientid, secret, redirect); err != nil {
 		return nil, err
 	}
-	m, err := s.connections.GetByID(userid, clientid)
+	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Code:    oidErrorInvalidGrant,
-				Message: "Invalid code",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get oauth app connection")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
 	}
 	if ok, err := s.connections.ValidateCode(code, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to validate code")
+		return nil, kerrors.WithMsg(err, "Failed to validate code")
 	} else if !ok {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidGrant,
-			Message: "Invalid code",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code")
 	}
 	switch m.ChallengeMethod {
 	case "":
 		if verifier != "" {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Code:    oidErrorInvalidGrant,
-				Message: "Invalid code verifier",
-			}))
+			return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code verifier")
 		}
 	case oidChallengePlain:
 		if verifier != m.Challenge {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Code:    oidErrorInvalidGrant,
-				Message: "Invalid code verifier",
-			}))
+			return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code verifier")
 		}
 	case oidChallengeS256:
 		h := sha256.Sum256([]byte(verifier))
 		if base64.RawURLEncoding.EncodeToString(h[:]) != m.Challenge {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Code:    oidErrorInvalidGrant,
-				Message: "Invalid code verifier",
-			}))
+			return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code verifier")
 		}
 	default:
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidRequest,
-			Message: "Invalid code challenge method",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid code challenge method")
 	}
 
 	now := time.Now().Round(0).Unix()
 	if now > m.CodeTime+s.codeTime {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidRequest,
-			Message: "Code expired",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Code expired")
 	}
 
 	scopes := ssvSet(m.Scope)
@@ -393,30 +349,26 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	if _, ok := scopes[oidScopeOffline]; ok {
 		key, err = s.connections.RehashKey(m)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to generate oauth session key")
+			return nil, kerrors.WithMsg(err, "Failed to generate oauth session key")
 		}
 	} else {
 		m.KeyHash = ""
 	}
 
-	if err := s.connections.Update(m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to update oauth session")
-	}
-
 	sessionID := "oauth:" + userid + keySeparator + clientid
-	accessToken, _, err := s.tokenizer.Generate(token.KindAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
+	accessToken, _, err := s.tokenizer.Generate(ctx, token.KindAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to generate access token")
+		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
 	var refreshToken string
 	if key != "" {
-		refreshToken, _, err = s.tokenizer.Generate(token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
+		refreshToken, _, err = s.tokenizer.Generate(ctx, token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
 		if err != nil {
-			return nil, governor.ErrWithMsg(err, "Failed to generate refresh token")
+			return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 		}
 	}
 
-	userClaims, err := s.getUserinfoClaims(userid, scopes)
+	userClaims, err := s.getUserinfoClaims(ctx, userid, scopes)
 	if err != nil {
 		return nil, err
 	}
@@ -426,9 +378,13 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 		Azp:            clientid,
 		UserinfoClaims: *userClaims,
 	}
-	idToken, err := s.tokenizer.GenerateExt(token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
+	idToken, err := s.tokenizer.GenerateExt(ctx, token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to generate id token")
+		return nil, kerrors.WithMsg(err, "Failed to generate id token")
+	}
+
+	if err := s.connections.Update(ctx, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to update oauth session")
 	}
 
 	return &resAuthToken{
@@ -441,8 +397,8 @@ func (s *service) AuthTokenCode(clientid, secret, redirect, userid, code, verifi
 	}, nil
 }
 
-func (s *service) Userinfo(userid string, scope string) (*resUserinfo, error) {
-	userClaims, err := s.getUserinfoClaims(userid, ssvSet(scope))
+func (s *service) Userinfo(ctx context.Context, userid string, scope string) (*resUserinfo, error) {
+	userClaims, err := s.getUserinfoClaims(ctx, userid, ssvSet(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -467,10 +423,10 @@ type (
 	}
 )
 
-func (s *service) GetConnections(userid string, amount, offset int) (*resConnections, error) {
-	m, err := s.connections.GetUserConnections(userid, amount, offset)
+func (s *service) GetConnections(ctx context.Context, userid string, amount, offset int) (*resConnections, error) {
+	m, err := s.connections.GetUserConnections(ctx, userid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get oauth app connections")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth app connections")
 	}
 	res := make([]resConnection, 0, len(m))
 	for _, i := range m {
@@ -487,16 +443,13 @@ func (s *service) GetConnections(userid string, amount, offset int) (*resConnect
 	}, nil
 }
 
-func (s *service) GetConnection(userid string, clientid string) (*resConnection, error) {
-	m, err := s.connections.GetByID(userid, clientid)
+func (s *service) GetConnection(ctx context.Context, userid string, clientid string) (*resConnection, error) {
+	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "OAuth app not connected",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not connected")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get oauth app connection")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
 	}
 	return &resConnection{
 		ClientID:     m.ClientID,
@@ -507,25 +460,22 @@ func (s *service) GetConnection(userid string, clientid string) (*resConnection,
 	}, nil
 }
 
-func (s *service) DelConnection(userid string, clientid string) error {
-	if _, err := s.connections.GetByID(userid, clientid); err != nil {
+func (s *service) DelConnection(ctx context.Context, userid string, clientid string) error {
+	if _, err := s.connections.GetByID(ctx, userid, clientid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "OAuth app not connected",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not connected")
 		}
-		return governor.ErrWithMsg(err, "Failed to get oauth app connection")
+		return kerrors.WithMsg(err, "Failed to get oauth app connection")
 	}
-	if err := s.connections.Delete(userid, []string{clientid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete oauth app connection")
+	if err := s.connections.Delete(ctx, userid, []string{clientid}); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete oauth app connection")
 	}
 	return nil
 }
 
-func (s *service) DeleteUserConnections(userid string) error {
-	if err := s.connections.DeleteUserConnections(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user oauth app connections")
+func (s *service) DeleteUserConnections(ctx context.Context, userid string) error {
+	if err := s.connections.DeleteUserConnections(ctx, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user oauth app connections")
 	}
 	return nil
 }

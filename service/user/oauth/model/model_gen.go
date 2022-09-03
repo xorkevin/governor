@@ -107,14 +107,6 @@ func (t *oauthappModelTable) GetModelHasClientIDOrdClientID(ctx context.Context,
 	return res, nil
 }
 
-func (t *oauthappModelTable) UpdModelEqClientID(ctx context.Context, d db.SQLExecutor, m *Model, clientid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9) WHERE clientid = $10;", m.ClientID, m.Name, m.URL, m.RedirectURI, m.Logo, m.KeyHash, m.Time, m.CreationTime, m.CreatorID, clientid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *oauthappModelTable) DelEqClientID(ctx context.Context, d db.SQLExecutor, clientid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE clientid = $1;", clientid)
 	return err
@@ -177,4 +169,20 @@ func (t *oauthappModelTable) GetModelEqCreatorIDOrdCreationTime(ctx context.Cont
 func (t *oauthappModelTable) DelEqCreatorID(ctx context.Context, d db.SQLExecutor, creatorid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE creator_id = $1;", creatorid)
 	return err
+}
+
+func (t *oauthappModelTable) UpdoauthKeyHashEqClientID(ctx context.Context, d db.SQLExecutor, m *oauthKeyHash, clientid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyhash, time) = ROW($1, $2) WHERE clientid = $3;", m.KeyHash, m.Time, clientid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *oauthappModelTable) UpdoauthPropsEqClientID(ctx context.Context, d db.SQLExecutor, m *oauthProps, clientid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, url, redirect_uri, logo) = ROW($1, $2, $3, $4) WHERE clientid = $5;", m.Name, m.URL, m.RedirectURI, m.Logo, clientid)
+	if err != nil {
+		return err
+	}
+	return nil
 }

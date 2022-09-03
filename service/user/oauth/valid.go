@@ -10,7 +10,7 @@ import (
 const (
 	lengthCapClientID = 31
 	lengthCapUserid   = 31
-	lengthCap         = 127
+	lengthCapName     = 127
 	amountCap         = 255
 	lengthCapURL      = 512
 	lengthCapRedirect = 512
@@ -18,58 +18,37 @@ const (
 
 func validhasUserid(userid string) error {
 	if len(userid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Userid must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be provided")
 	}
 	if len(userid) > lengthCapUserid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Userid must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validoptUserid(userid string) error {
 	if len(userid) > lengthCapUserid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Userid must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validhasClientID(clientid string) error {
 	if len(clientid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Client id must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Client id must be provided")
 	}
 	if len(clientid) > lengthCapClientID {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Client id must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Client id must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validhasClientIDs(clientids []string) error {
 	if len(clientids) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "IDs must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "IDs must be provided")
 	}
 	if len(clientids) > amountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Request is too large",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Request is too large")
 	}
 	for _, i := range clientids {
 		if err := validhasClientID(i); err != nil {
@@ -81,42 +60,27 @@ func validhasClientIDs(clientids []string) error {
 
 func validAmount(amt int) error {
 	if amt < 1 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be positive",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be positive")
 	}
 	if amt > amountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be less than 256",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be less than 256")
 	}
 	return nil
 }
 
 func validOffset(offset int) error {
 	if offset < 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Offset must not be negative",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Offset must not be negative")
 	}
 	return nil
 }
 
 func validName(name string) error {
 	if len(name) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Name must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Name must be provided")
 	}
-	if len(name) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Name must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(name) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Name must be shorter than 128 characters")
 	}
 	return nil
 }
@@ -126,38 +90,23 @@ func validURL(rawurl string) error {
 		return nil
 	}
 	if len(rawurl) > lengthCapURL {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "URL must be shorter than 513 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "URL must be shorter than 513 characters")
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "URL is invalid",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "URL is invalid")
 	}
 	return nil
 }
 
 func validRedirect(rawurl string) error {
 	if len(rawurl) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Redirect URI must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Redirect URI must be provided")
 	}
 	if len(rawurl) > lengthCapRedirect {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Redirect URI must be shorter than 513 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Redirect URI must be shorter than 513 characters")
 	}
 	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Fragment != "" {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Redirect URI is invalid",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Redirect URI is invalid")
 	}
 	return nil
 }

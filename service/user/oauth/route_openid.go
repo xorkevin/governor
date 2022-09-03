@@ -10,6 +10,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge validation -o validation_openid_gen.go reqOAuthAuthorize reqOAuthTokenCode reqGetConnectionGroup reqGetConnection
@@ -26,7 +28,7 @@ func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) getJWKS(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	res, err := m.s.GetJWKS()
+	res, err := m.s.GetJWKS(c.Ctx())
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -49,41 +51,29 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidRequest,
-			Message: "Unauthorized",
-		})))
+		c.WriteError(governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
 		return
 	}
 	req := reqOAuthAuthorize{}
 	if err := c.Bind(&req); err != nil {
-		c.WriteError(err)
+		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
 		return
 	}
 	req.Userid = gate.GetCtxUserid(c)
 	if err := req.valid(); err != nil {
-		c.WriteError(err)
+		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
 		return
 	}
 	if req.CodeChallengeMethod == "" && req.CodeChallenge != "" {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidRequest,
-			Message: "No code challenge method provided",
-		})))
+		c.WriteError(governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "No code challenge method provided"))
 		return
 	}
 	if req.CodeChallengeMethod != "" && req.CodeChallenge == "" {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Code:    oidErrorInvalidRequest,
-			Message: "No code challenge provided",
-		})))
+		c.WriteError(governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "No code challenge provided"))
 		return
 	}
 
-	res, err := m.s.AuthCode(req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod, claims.AuthTime)
+	res, err := m.s.AuthCode(c.Ctx(), req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod, claims.AuthTime)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -109,39 +99,47 @@ type (
 )
 
 func (m *router) writeOAuthTokenError(c governor.Context, err error) {
-	var gerr *governor.Error
-	isError := errors.As(err, &gerr)
-
-	if !errors.Is(err, governor.ErrorUser{}) {
-		msg := "non governor error"
-		if isError {
-			msg = gerr.Message
-		}
-		m.s.logger.Error(msg, map[string]string{
-			"endpoint": c.Req().URL.EscapedPath(),
-			"error":    err.Error(),
-		})
-	}
-
 	var rerr *governor.ErrorRes
-	if errors.As(err, &rerr) {
-		if rerr.Status == http.StatusUnauthorized {
-			c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, m.s.realm))
+	if !errors.As(err, &rerr) {
+		rerr = &governor.ErrorRes{
+			Status:  http.StatusInternalServerError,
+			Code:    oidErrorServer,
+			Message: "Internal Server Error",
 		}
-		c.WriteJSON(rerr.Status, resAuthTokenErr{
-			Error: rerr.Code,
-			Desc:  rerr.Message,
-		})
-		return
 	}
 
-	msg := "Internal Server Error"
-	if isError {
-		msg = gerr.Message
+	if !errors.Is(err, governor.ErrorNoLog{}) {
+		msg := "non-kerror"
+		var kerr *kerrors.Error
+		if errors.As(err, &kerr) {
+			msg = kerr.Message
+		}
+		stacktrace := "NONE"
+		var serr *kerrors.StackTrace
+		if errors.As(err, &serr) {
+			stacktrace = serr.StackString()
+		}
+		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
+			m.s.logger.Warn(msg, map[string]string{
+				"endpoint":   c.Req().URL.EscapedPath(),
+				"error":      err.Error(),
+				"stacktrace": stacktrace,
+			})
+		} else {
+			m.s.logger.Error(msg, map[string]string{
+				"endpoint":   c.Req().URL.EscapedPath(),
+				"error":      err.Error(),
+				"stacktrace": stacktrace,
+			})
+		}
 	}
-	c.WriteJSON(http.StatusInternalServerError, resAuthTokenErr{
-		Error: oidErrorServer,
-		Desc:  msg,
+
+	if rerr.Status == http.StatusUnauthorized {
+		c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, m.s.realm))
+	}
+	c.WriteJSON(rerr.Status, resAuthTokenErr{
+		Error: rerr.Code,
+		Desc:  rerr.Message,
 	})
 }
 
@@ -161,42 +159,30 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if user, pass, ok := r.BasicAuth(); ok {
 			if req.ClientID != "" || req.ClientSecret != "" {
-				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusBadRequest,
-					Code:    oidErrorInvalidRequest,
-					Message: "Client secret basic and post used",
-				})))
+				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Client secret basic and post used"))
 				return
 			}
 			var err error
 			req.ClientID, err = url.QueryUnescape(user)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusBadRequest,
-					Code:    oidErrorInvalidRequest,
-					Message: "Invalid client id encoding",
-				})))
+				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client id encoding"))
 				return
 			}
 			req.ClientSecret, err = url.QueryUnescape(pass)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusBadRequest,
-					Code:    oidErrorInvalidRequest,
-					Message: "Invalid client secret encoding",
-				})))
+				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client secret encoding"))
 				return
 			}
 		}
-		if j := strings.SplitN(c.FormValue("code"), keySeparator, 2); len(j) == 2 {
-			req.Userid = j[0]
-			req.Code = j[1]
+		if userid, code, ok := strings.Cut(c.FormValue("code"), keySeparator); ok {
+			req.Userid = userid
+			req.Code = code
 		}
 		if err := req.valid(); err != nil {
 			m.writeOAuthTokenError(c, err)
 			return
 		}
-		res, err := m.s.AuthTokenCode(req.ClientID, req.ClientSecret, req.RedirectURI, req.Userid, req.Code, req.CodeVerifier)
+		res, err := m.s.AuthTokenCode(c.Ctx(), req.ClientID, req.ClientSecret, req.RedirectURI, req.Userid, req.Code, req.CodeVerifier)
 		if err != nil {
 			m.writeOAuthTokenError(c, err)
 			return
@@ -204,11 +190,7 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 		c.WriteJSON(http.StatusOK, res)
 		return
 	}
-	m.writeOAuthTokenError(c, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-		Status:  http.StatusBadRequest,
-		Code:    oidErrorUnsupportedGrant,
-		Message: "Unsupported grant type",
-	})))
+	m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorUnsupportedGrant, "Unsupported grant type"))
 	return
 }
 
@@ -216,10 +198,10 @@ func (m *router) userinfo(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
-		c.WriteError(governor.ErrWithMsg(nil, "No access token claims"))
+		c.WriteError(kerrors.WithMsg(nil, "No access token claims"))
 		return
 	}
-	res, err := m.s.Userinfo(claims.Subject, claims.Scope)
+	res, err := m.s.Userinfo(c.Ctx(), claims.Subject, claims.Scope)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -247,7 +229,7 @@ func (m *router) getConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetConnections(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetConnections(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -273,7 +255,7 @@ func (m *router) getConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetConnection(req.Userid, req.ClientID)
+	res, err := m.s.GetConnection(c.Ctx(), req.Userid, req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -292,7 +274,7 @@ func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DelConnection(req.Userid, req.ClientID); err != nil {
+	if err := m.s.DelConnection(c.Ctx(), req.Userid, req.ClientID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -300,12 +282,11 @@ func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *router) mountOidRoutes(r governor.Router) {
-	scopeAuthorize := m.s.scopens + ".authorize"
 	scopeConnectionRead := m.s.scopens + ".connection:read"
 	scopeConnectionWrite := m.s.scopens + ".connection:write"
 	r.Get("/openid-configuration", m.getOpenidConfig, m.rt)
 	r.Get(jwksRoute, m.getJWKS, m.rt)
-	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, scopeAuthorize), m.rt)
+	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Post(tokenRoute, m.authToken, cachecontrol.ControlNoStore(m.s.logger), m.rt)
 	r.Get(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)
 	r.Post(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)

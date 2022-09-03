@@ -106,7 +106,7 @@ func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*Re
 	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}

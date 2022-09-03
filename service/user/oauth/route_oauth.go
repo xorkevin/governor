@@ -27,7 +27,7 @@ func (m *router) getApp(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetApp(req.ClientID)
+	res, err := m.s.GetApp(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -44,7 +44,7 @@ func (m *router) getAppLogo(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetLogo(req.ClientID)
+	img, contentType, err := m.s.GetLogo(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -80,7 +80,7 @@ func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetApps(req.Amount, req.Offset, req.CreatorID)
+	res, err := m.s.GetApps(c.Ctx(), req.Amount, req.Offset, req.CreatorID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -104,7 +104,7 @@ func (m *router) getAppBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetAppsBulk(req.ClientIDs)
+	res, err := m.s.GetAppsBulk(c.Ctx(), req.ClientIDs)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -134,7 +134,7 @@ func (m *router) createApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateApp(req.Name, req.URL, req.RedirectURI, req.CreatorID)
+	res, err := m.s.CreateApp(c.Ctx(), req.Name, req.URL, req.RedirectURI, req.CreatorID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -164,7 +164,7 @@ func (m *router) updateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateApp(req.ClientID, req.Name, req.URL, req.RedirectURI); err != nil {
+	if err := m.s.UpdateApp(c.Ctx(), req.ClientID, req.Name, req.URL, req.RedirectURI); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -187,7 +187,7 @@ func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateLogo(req.ClientID, img); err != nil {
+	if err := m.s.UpdateLogo(c.Ctx(), req.ClientID, img); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -204,7 +204,7 @@ func (m *router) rotateAppKey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.RotateAppKey(req.ClientID)
+	res, err := m.s.RotateAppKey(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -222,7 +222,7 @@ func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.Delete(req.ClientID); err != nil {
+	if err := m.s.Delete(c.Ctx(), req.ClientID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -238,15 +238,13 @@ func (m *router) getAppLogoCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatLogo(req.ClientID)
+	objinfo, err := m.s.StatLogo(c.Ctx(), req.ClientID)
 	if err != nil {
 		return "", err
 	}
 
 	return objinfo.ETag, nil
 }
-
-const ()
 
 func (m *router) mountAppRoutes(r governor.Router) {
 	scopeAppRead := m.s.scopens + ".app:read"

@@ -17,6 +17,7 @@ import (
 	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
 	"xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -70,7 +71,6 @@ type (
 		epjwks       string
 		tplprofile   *htmlTemplate.Template
 		tplpicture   *htmlTemplate.Template
-		useropts     user.Opts
 	}
 
 	router struct {
@@ -106,8 +106,7 @@ func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	useropts := user.GetCtxOpts(inj)
-	return New(apps, connections, tokenizer, kv, obj, users, ev, ratelimiter, g, useropts)
+	return New(apps, connections, tokenizer, kv, obj, users, ev, ratelimiter, g)
 }
 
 // New returns a new Apikey
@@ -121,7 +120,6 @@ func New(
 	ev events.Events,
 	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
-	useropts user.Opts,
 ) Service {
 	return &service{
 		apps:         apps,
@@ -138,7 +136,6 @@ func New(
 		accessTime:   time5m,
 		refreshTime:  time7d,
 		keyCacheTime: time24h,
-		useropts:     useropts,
 	}
 }
 
@@ -172,25 +169,25 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse code time")
+		return kerrors.WithMsg(err, "Failed to parse code time")
 	} else {
 		s.codeTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse access time")
+		return kerrors.WithMsg(err, "Failed to parse access time")
 	} else {
 		s.accessTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse refresh time")
+		return kerrors.WithMsg(err, "Failed to parse refresh time")
 	} else {
 		s.refreshTime = int64(t / time.Second)
 	}
 
 	if t, err := time.ParseDuration(r.GetStr("keycache")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse key cache time")
+		return kerrors.WithMsg(err, "Failed to parse key cache time")
 	} else {
 		s.keyCacheTime = int64(t / time.Second)
 	}
@@ -204,17 +201,17 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.epjwks = base + jwksRoute
 
 	if t, err := htmlTemplate.New("epprofile").Parse(r.GetStr("epprofile")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse profile url template")
+		return kerrors.WithMsg(err, "Failed to parse profile url template")
 	} else {
 		s.tplprofile = t
 	}
 	if t, err := htmlTemplate.New("eppicture").Parse(r.GetStr("eppicture")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse profile picture url template")
+		return kerrors.WithMsg(err, "Failed to parse profile picture url template")
 	} else {
 		s.tplpicture = t
 	}
 
-	l.Info("loaded config", map[string]string{
+	l.Info("Loaded config", map[string]string{
 		"codetime (s)":           strconv.FormatInt(s.codeTime, 10),
 		"accesstime (s)":         strconv.FormatInt(s.accessTime, 10),
 		"refreshtime (s)":        strconv.FormatInt(s.refreshTime, 10),
@@ -241,18 +238,18 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.apps.Setup(); err != nil {
+	if err := s.apps.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created oauthapps table", nil)
 
-	if err := s.connections.Setup(); err != nil {
+	if err := s.connections.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created oauthconnections table", nil)
 
-	if err := s.oauthBucket.Init(); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init oauth bucket")
+	if err := s.oauthBucket.Init(context.Background()); err != nil {
+		return kerrors.WithMsg(err, "Failed to init oauth bucket")
 	}
 	l.Info("Created oauth bucket", nil)
 	return nil
@@ -267,13 +264,13 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
 	return nil
@@ -287,12 +284,8 @@ func (s *service) Health() error {
 }
 
 // UserDeleteHook deletes the oauth connections of a deleted user
-func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeDeleteUserProps(msgdata)
-	if err != nil {
-		return err
-	}
-	if err := s.DeleteUserConnections(props.Userid); err != nil {
+func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+	if err := s.DeleteUserConnections(ctx, props.Userid); err != nil {
 		return err
 	}
 	return nil

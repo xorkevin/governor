@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -8,9 +9,10 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p oauthapp -o model_gen.go Model
+//go:generate forge model -m Model -p oauthapp -o model_gen.go Model oauthKeyHash oauthProps
 
 const (
 	uidSize = 16
@@ -22,19 +24,19 @@ type (
 	Repo interface {
 		New(name, url, redirectURI, creatorID string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
-		RehashKey(m *Model) (string, error)
-		GetByID(clientid string) (*Model, error)
-		GetApps(limit, offset int, creatorid string) ([]Model, error)
-		GetBulk(clientids []string) ([]Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		DeleteCreatorApps(creatorid string) error
-		Delete(m *Model) error
-		Setup() error
+		RehashKey(ctx context.Context, m *Model) (string, error)
+		GetByID(ctx context.Context, clientid string) (*Model, error)
+		GetApps(ctx context.Context, limit, offset int, creatorid string) ([]Model, error)
+		GetBulk(ctx context.Context, clientids []string) ([]Model, error)
+		Insert(ctx context.Context, m *Model) error
+		UpdateProps(ctx context.Context, m *Model) error
+		DeleteCreatorApps(ctx context.Context, creatorid string) error
+		Delete(ctx context.Context, m *Model) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *oauthappModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -42,7 +44,7 @@ type (
 
 	// Model is the db OAuth app model
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|arr;updeq,clientid;deleq,clientid"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|arr;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
 		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
@@ -51,6 +53,18 @@ type (
 		Time         int64  `model:"time,BIGINT NOT NULL" query:"time"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creator_id" query:"creation_time;getgroup;getgroupeq,creator_id"`
 		CreatorID    string `model:"creator_id,VARCHAR(31) NOT NULL" query:"creator_id;deleq,creator_id"`
+	}
+
+	oauthKeyHash struct {
+		KeyHash string `query:"keyhash;updeq,clientid"`
+		Time    int64  `query:"time"`
+	}
+
+	oauthProps struct {
+		Name        string `query:"name;updeq,clientid"`
+		URL         string `query:"url"`
+		RedirectURI string `query:"redirect_uri"`
+		Logo        string `query:"logo"`
 	}
 
 	ctxKeyRepo struct{}
@@ -88,7 +102,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &oauthappModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -98,18 +114,18 @@ func New(database db.Database, table string) Repo {
 func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, error) {
 	mUID, err := uid.New(uidSize)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to create new uid")
+		return nil, "", kerrors.WithMsg(err, "Failed to create new uid")
 	}
 	clientid := mUID.Base64()
 
 	key, err := uid.New(keySize)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to create oauth client secret")
+		return nil, "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}
 	keystr := key.Base64()
 	hash, err := r.hasher.Hash(keystr)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to hash oauth client secret")
+		return nil, "", kerrors.WithMsg(err, "Failed to hash oauth client secret")
 	}
 
 	now := time.Now().Round(0).Unix()
@@ -128,121 +144,136 @@ func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, er
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 	ok, err := r.verifier.Verify(key, m.KeyHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify key")
+		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
 	return ok, nil
 }
 
-func (r *repo) RehashKey(m *Model) (string, error) {
+func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 	key, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create oauth client secret")
+		return "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}
 	keystr := key.Base64()
 	keyhash, err := r.hasher.Hash(keystr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash oauth client secret")
+		return "", kerrors.WithMsg(err, "Failed to hash oauth client secret")
+	}
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return "", err
 	}
 	now := time.Now().Round(0).Unix()
+	if err := r.table.UpdoauthKeyHashEqClientID(ctx, d, &oauthKeyHash{
+		KeyHash: keyhash,
+		Time:    now,
+	}, m.ClientID); err != nil {
+		return "", kerrors.WithMsg(err, "Failed to update oauth client app")
+	}
 	m.KeyHash = keyhash
 	m.Time = now
 	return keystr, nil
 }
 
-func (r *repo) GetByID(clientid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, clientid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := oauthappModelGetModelEqClientID(d, r.table, clientid)
+	m, err := r.table.GetModelEqClientID(ctx, d, clientid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get OAuth app")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 	return m, nil
 }
 
-func (r *repo) GetApps(limit, offset int, creatorid string) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetApps(ctx context.Context, limit, offset int, creatorid string) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if creatorid == "" {
-		m, err := oauthappModelGetModelOrdCreationTime(d, r.table, false, limit, offset)
+		m, err := r.table.GetModelOrdCreationTime(ctx, d, false, limit, offset)
 		if err != nil {
-			return nil, db.WrapErr(err, "Failed to get OAuth apps")
+			return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 		}
 		return m, nil
 	}
-	m, err := oauthappModelGetModelEqCreatorIDOrdCreationTime(d, r.table, creatorid, false, limit, offset)
+	m, err := r.table.GetModelEqCreatorIDOrdCreationTime(ctx, d, creatorid, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get OAuth apps")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 	}
 	return m, nil
 }
 
-func (r *repo) GetBulk(clientids []string) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetBulk(ctx context.Context, clientids []string) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := oauthappModelGetModelHasClientIDOrdClientID(d, r.table, clientids, true, len(clientids), 0)
+	m, err := r.table.GetModelHasClientIDOrdClientID(ctx, d, clientids, true, len(clientids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get OAuth apps")
+		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert OAuth app config")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert oauth app")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelUpdModelEqClientID(d, r.table, m, m.ClientID); err != nil {
-		return db.WrapErr(err, "Failed to update OAuth app config")
+	if err := r.table.UpdoauthPropsEqClientID(ctx, d, &oauthProps{
+		Name:        m.Name,
+		URL:         m.URL,
+		RedirectURI: m.RedirectURI,
+		Logo:        m.Logo,
+	}, m.ClientID); err != nil {
+		return kerrors.WithMsg(err, "Failed to update oauth app")
 	}
 	return nil
 }
 
-func (r *repo) Delete(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelDelEqClientID(d, r.table, m.ClientID); err != nil {
-		return db.WrapErr(err, "Failed to delete OAuth app")
+	if err := r.table.DelEqClientID(ctx, d, m.ClientID); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete oauth app")
 	}
 	return nil
 }
 
-func (r *repo) DeleteCreatorApps(creatorid string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteCreatorApps(ctx context.Context, creatorid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelDelEqCreatorID(d, r.table, creatorid); err != nil {
-		return db.WrapErr(err, "Failed to delete OAuth apps")
+	if err := r.table.DelEqCreatorID(ctx, d, creatorid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete oauth apps")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := oauthappModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup OAuth app model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup oauth app model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

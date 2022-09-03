@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p connection -o model_gen.go Model
@@ -24,17 +26,17 @@ type (
 		RehashCode(m *Model) (string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
-		GetByID(userid, clientid string) (*Model, error)
-		GetUserConnections(userid string, limit, offset int) ([]Model, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		Delete(userid string, clientids []string) error
-		DeleteUserConnections(userid string) error
-		Setup() error
+		GetByID(ctx context.Context, userid, clientid string) (*Model, error)
+		GetUserConnections(ctx context.Context, userid string, limit, offset int) ([]Model, error)
+		Insert(ctx context.Context, m *Model) error
+		Update(ctx context.Context, m *Model) error
+		Delete(ctx context.Context, userid string, clientids []string) error
+		DeleteUserConnections(ctx context.Context, userid string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table    string
+		table    *connectionModelTable
 		db       db.Database
 		hasher   hunter2.Hasher
 		verifier *hunter2.Verifier
@@ -91,7 +93,9 @@ func New(database db.Database, table string) Repo {
 	verifier.RegisterHash(hasher)
 
 	return &repo{
-		table:    table,
+		table: &connectionModelTable{
+			TableName: table,
+		},
 		db:       database,
 		hasher:   hasher,
 		verifier: verifier,
@@ -101,12 +105,12 @@ func New(database db.Database, table string) Repo {
 func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string, authTime int64) (*Model, string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to create OAuth authorization code")
+		return nil, "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return nil, "", governor.ErrWithMsg(err, "Failed to hash OAuth authorization code")
+		return nil, "", kerrors.WithMsg(err, "Failed to hash oauth authorization code")
 	}
 
 	now := time.Now().Round(0).Unix()
@@ -131,7 +135,7 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	}
 	ok, err := r.verifier.Verify(code, m.CodeHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify code")
+		return false, kerrors.WithMsg(err, "Failed to verify code")
 	}
 	return ok, nil
 }
@@ -139,12 +143,12 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 func (r *repo) RehashCode(m *Model) (string, error) {
 	code, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create OAuth authorization code")
+		return "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
 	codestr := code.Base64()
 	codehash, err := r.hasher.Hash(codestr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash OAuth authorization code")
+		return "", kerrors.WithMsg(err, "Failed to hash oauth authorization code")
 	}
 	m.CodeHash = codehash
 	return codestr, nil
@@ -156,7 +160,7 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 	}
 	ok, err := r.verifier.Verify(key, m.KeyHash)
 	if err != nil {
-		return false, governor.ErrWithMsg(err, "Failed to verify key")
+		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
 	return ok, nil
 }
@@ -164,92 +168,92 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 func (r *repo) RehashKey(m *Model) (string, error) {
 	key, err := uid.New(keySize)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to create OAuth session key")
+		return "", kerrors.WithMsg(err, "Failed to create oauth session key")
 	}
 	keystr := key.Base64()
 	keyhash, err := r.hasher.Hash(keystr)
 	if err != nil {
-		return "", governor.ErrWithMsg(err, "Failed to hash OAuth session key")
+		return "", kerrors.WithMsg(err, "Failed to hash oauth session key")
 	}
 	m.KeyHash = keyhash
 	return keystr, nil
 }
 
-func (r *repo) GetByID(userid, clientid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid, clientid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := connectionModelGetModelEqUseridEqClientID(d, r.table, userid, clientid)
+	m, err := r.table.GetModelEqUseridEqClientID(ctx, d, userid, clientid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get connected OAuth app")
+		return nil, kerrors.WithMsg(err, "Failed to get connected oauth app")
 	}
 	return m, nil
 }
 
-func (r *repo) GetUserConnections(userid string, limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetUserConnections(ctx context.Context, userid string, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := connectionModelGetModelEqUseridOrdAccessTime(d, r.table, userid, false, limit, offset)
+	m, err := r.table.GetModelEqUseridOrdAccessTime(ctx, d, userid, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get connected OAuth apps")
+		return nil, kerrors.WithMsg(err, "Failed to get connected oauth apps")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := connectionModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to add connected OAuth app")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to add connected oauth app")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Update(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := connectionModelUpdModelEqUseridEqClientID(d, r.table, m, m.Userid, m.ClientID); err != nil {
-		return db.WrapErr(err, "Failed to update connected OAuth app")
+	if err := r.table.UpdModelEqUseridEqClientID(ctx, d, m, m.Userid, m.ClientID); err != nil {
+		return kerrors.WithMsg(err, "Failed to update connected oauth app")
 	}
 	return nil
 }
 
-func (r *repo) Delete(userid string, clientids []string) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, userid string, clientids []string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := connectionModelDelEqUseridHasClientID(d, r.table, userid, clientids); err != nil {
-		return db.WrapErr(err, "Failed to delete connected OAuth app")
+	if err := r.table.DelEqUseridHasClientID(ctx, d, userid, clientids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete connected oauth app")
 	}
 	return nil
 }
 
-func (r *repo) DeleteUserConnections(userid string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteUserConnections(ctx context.Context, userid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := connectionModelDelEqUserid(d, r.table, userid); err != nil {
-		return db.WrapErr(err, "Failed to delete connected OAuth apps")
+	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete connected oauth apps")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := connectionModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup OAuth connection model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup oauth connection model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
