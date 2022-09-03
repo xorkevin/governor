@@ -30,13 +30,12 @@ type (
 		profiles      model.Repo
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
-		events        events.Events
+		users         user.Users
 		ratelimiter   ratelimit.Ratelimiter
 		gate          gate.Gate
 		logger        governor.Logger
 		scopens       string
 		streamns      string
-		useropts      user.Opts
 	}
 
 	router struct {
@@ -65,23 +64,21 @@ func setCtxProfiles(inj governor.Injector, p Profiles) {
 func NewCtx(inj governor.Injector) Service {
 	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
-	ev := events.GetCtxEvents(inj)
+	users := user.GetCtxUsers(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
-	useropts := user.GetCtxOpts(inj)
-	return New(profiles, obj, ev, ratelimiter, g, useropts)
+	return New(profiles, obj, users, ratelimiter, g)
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate, useropts user.Opts) Service {
+func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
 		profiles:      profiles,
 		profileBucket: obj,
 		profileDir:    obj.Subdir("profileimage"),
-		events:        ev,
+		users:         users,
 		ratelimiter:   ratelimiter,
 		gate:          g,
-		useropts:      useropts,
 	}
 }
 
@@ -134,7 +131,7 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.CreateChannel, s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -144,7 +141,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user create queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -165,11 +162,7 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeNewUserProps(msgdata)
-	if err != nil {
-		return err
-	}
+func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
 	if _, err := s.CreateProfile(ctx, props.Userid, "", ""); err != nil {
 		return err
 	}
@@ -177,11 +170,7 @@ func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, topi
 }
 
 // UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeDeleteUserProps(msgdata)
-	if err != nil {
-		return err
-	}
+func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.DeleteProfile(ctx, props.Userid); err != nil {
 		return err
 	}
