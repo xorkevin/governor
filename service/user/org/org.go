@@ -2,12 +2,12 @@ package org
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
@@ -16,13 +16,18 @@ import (
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 type (
+	// WorkerFuncDelete is a type alias for a delete org event consumer
+	WorkerFuncDelete = func(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error
+
 	// Orgs is an organization management service
 	Orgs interface {
-		GetByID(orgid string) (*ResOrg, error)
-		GetByName(name string) (*ResOrg, error)
+		GetByID(ctx context.Context, orgid string) (*ResOrg, error)
+		GetByName(ctx context.Context, name string) (*ResOrg, error)
+		StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
 	// Service is an Orgs and governor.Service
@@ -51,7 +56,8 @@ type (
 		rt governor.Middleware
 	}
 
-	deleteOrgProps struct {
+	// DeleteOrgProps are properties of a deleted org
+	DeleteOrgProps struct {
 		OrgID string `json:"orgid"`
 	}
 
@@ -130,11 +136,11 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid stream size")
+		return kerrors.WithMsg(err, "Invalid stream size")
 	}
 	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
-		return governor.ErrWithMsg(err, "Invalid msg size")
+		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
 
@@ -155,17 +161,17 @@ func (s *service) Setup(req governor.ReqSetup) error {
 		"phase": "setup",
 	})
 
-	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
 		MaxMsgSize: s.eventsize,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init org stream")
+		return kerrors.WithMsg(err, "Failed to init org stream")
 	}
 	l.Info("Created org stream", nil)
 
-	if err := s.orgs.Setup(); err != nil {
+	if err := s.orgs.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created userorgs table", nil)
@@ -182,43 +188,43 @@ func (s *service) Start(ctx context.Context) error {
 		"phase": "start",
 	})
 
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, s.streamns+"_WORKER_ROLE_DELETE", s.OrgRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.OrgRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to org delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
 	l.Info("Subscribed to org delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.roleopts.StreamName, s.roleopts.CreateChannel, s.streamns+"_WORKER_USER_ROLE_CREATE", s.UserRoleCreate, events.StreamConsumerOpts{
+	if _, err := s.roles.StreamSubscribeCreate(s.streamns+"_WORKER_USER_ROLE_CREATE", s.UserRoleCreate, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user role create queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user role create queue")
 	}
 	l.Info("Subscribed to user role create queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.roleopts.StreamName, s.roleopts.DeleteChannel, s.streamns+"_WORKER_USER_ROLE_DELETE", s.UserRoleDelete, events.StreamConsumerOpts{
+	if _, err := s.roles.StreamSubscribeDelete(s.streamns+"_WORKER_USER_ROLE_DELETE", s.UserRoleDelete, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user role delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user role delete queue")
 	}
 	l.Info("Subscribed to user role delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.UpdateChannel, s.streamns+"_WORKER_USER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_USER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user update queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}
 	l.Info("Subscribed to user update queue", nil)
 
@@ -232,56 +238,74 @@ func (s *service) Health() error {
 	return nil
 }
 
+func decodeDeleteOrgProps(msgdata []byte) (*DeleteOrgProps, error) {
+	m := &DeleteOrgProps{}
+	if err := json.Unmarshal(msgdata, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to decode delete org props")
+	}
+	return m, nil
+}
+
+func (s *service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+		props, err := decodeDeleteOrgProps(msgdata)
+		if err != nil {
+			return err
+		}
+		return worker(ctx, pinger, *props)
+	}, streamopts)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to subscribe to user delete channel")
+	}
+	return sub, nil
+}
+
 const (
 	roleDeleteBatchSize = 256
 )
 
 // OrgRoleDeleteHook deletes the roles of a deleted org
-func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := DecodeDeleteOrgProps(msgdata)
-	if err != nil {
-		return err
-	}
+func (s *service) OrgRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error {
 	orgrole := rank.ToOrgName(props.OrgID)
 	usrOrgrole := rank.ToUsrName(orgrole)
 	modOrgrole := rank.ToModName(orgrole)
-	if err := s.users.DeleteRoleInvitations(modOrgrole); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete role mod invitations")
+	if err := s.users.DeleteRoleInvitations(ctx, modOrgrole); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete role mod invitations")
 	}
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		userids, err := s.roles.GetByRole(modOrgrole, roleDeleteBatchSize, 0)
+		userids, err := s.roles.GetByRole(ctx, modOrgrole, roleDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get role mods")
+			return kerrors.WithMsg(err, "Failed to get role mods")
 		}
 		if len(userids) == 0 {
 			break
 		}
-		if err := s.roles.DeleteByRole(modOrgrole, userids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete role mods")
+		if err := s.roles.DeleteByRole(ctx, modOrgrole, userids); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete role mods")
 		}
 		if len(userids) < roleDeleteBatchSize {
 			break
 		}
 	}
-	if err := s.users.DeleteRoleInvitations(usrOrgrole); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete role user invitations")
+	if err := s.users.DeleteRoleInvitations(ctx, usrOrgrole); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete role user invitations")
 	}
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		userids, err := s.roles.GetByRole(usrOrgrole, roleDeleteBatchSize, 0)
+		userids, err := s.roles.GetByRole(ctx, usrOrgrole, roleDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get role users")
+			return kerrors.WithMsg(err, "Failed to get role users")
 		}
 		if len(userids) == 0 {
 			break
 		}
-		if err := s.roles.DeleteByRole(usrOrgrole, userids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete role users")
+		if err := s.roles.DeleteByRole(ctx, usrOrgrole, userids); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete role users")
 		}
 		if len(userids) < roleDeleteBatchSize {
 			break
@@ -290,18 +314,13 @@ func (s *service) OrgRoleDeleteHook(pinger events.Pinger, topic string, msgdata 
 	return nil
 }
 
-func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := role.DecodeRolesProps(msgdata)
+func (s *service) UserRoleCreate(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
+	u, err := s.users.GetByID(ctx, props.Userid)
 	if err != nil {
-		return err
-	}
-
-	u, err := s.users.GetByID(props.Userid)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, user.ErrNotFound{}) {
 			return nil
 		}
-		return governor.ErrWithMsg(err, "Failed to get user")
+		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
 	allorgids := map[string]struct{}{}
@@ -326,9 +345,9 @@ func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []b
 		orgids = append(orgids, k)
 	}
 
-	m, err := s.orgs.GetOrgs(orgids)
+	m, err := s.orgs.GetOrgs(ctx, orgids)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get orgs")
+		return kerrors.WithMsg(err, "Failed to get orgs")
 	}
 
 	members := make([]*model.MemberModel, 0, len(memberorgids))
@@ -352,22 +371,17 @@ func (s *service) UserRoleCreate(pinger events.Pinger, topic string, msgdata []b
 		}
 	}
 
-	if err := s.orgs.AddMembers(members); err != nil {
-		return governor.ErrWithMsg(err, "Failed to add org members")
+	if err := s.orgs.AddMembers(ctx, members); err != nil {
+		return kerrors.WithMsg(err, "Failed to add org members")
 	}
-	if err := s.orgs.AddMods(mods); err != nil {
-		return governor.ErrWithMsg(err, "Failed to add org mods")
+	if err := s.orgs.AddMods(ctx, mods); err != nil {
+		return kerrors.WithMsg(err, "Failed to add org mods")
 	}
 
 	return nil
 }
 
-func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := role.DecodeRolesProps(msgdata)
-	if err != nil {
-		return err
-	}
-
+func (s *service) UserRoleDelete(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
 	memberorgids := make([]string, 0, len(props.Roles))
 	modorgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
@@ -380,24 +394,20 @@ func (s *service) UserRoleDelete(pinger events.Pinger, topic string, msgdata []b
 			continue
 		}
 	}
-	if err := s.orgs.RmMembers(props.Userid, memberorgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove org members")
+	if err := s.orgs.RmMembers(ctx, props.Userid, memberorgids); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove org members")
 	}
-	if err := s.orgs.RmMods(props.Userid, modorgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove org mods")
+	if err := s.orgs.RmMods(ctx, props.Userid, modorgids); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove org mods")
 	}
 
 	return nil
 }
 
 // UserUpdateHook updates a user name
-func (s *service) UserUpdateHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeUpdateUserProps(msgdata)
-	if err != nil {
-		return err
-	}
-	if err := s.orgs.UpdateUsername(props.Userid, props.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update member username")
+func (s *service) UserUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+	if err := s.orgs.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
+		return kerrors.WithMsg(err, "Failed to update member username")
 	}
 	return nil
 }

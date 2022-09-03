@@ -10,7 +10,7 @@ import (
 const (
 	lengthCapUserid = 31
 	lengthCapOrgID  = 31
-	lengthCap       = 127
+	lengthCapName   = 127
 	amountCap       = 255
 )
 
@@ -20,106 +20,67 @@ var (
 
 func validhasOrgid(orgid string) error {
 	if len(orgid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org id must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org id must be provided")
 	}
 	if len(orgid) > lengthCapOrgID {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org id must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org id must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validName(name string) error {
 	if len(name) < 3 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name must be longer than 2 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name must be longer than 2 characters")
 	}
-	if len(name) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(name) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name must be shorter than 128 characters")
 	}
 	if !orgRegex.MatchString(name) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name contains invalid characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name contains invalid characters")
 	}
 	return nil
 }
 
 func validDisplay(display string) error {
 	if len(display) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org display name must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org display name must be provided")
 	}
-	if len(display) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org display name must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(display) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org display name must be shorter than 128 characters")
 	}
 	return nil
 }
 
 func validDesc(desc string) error {
-	if len(desc) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org description must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(desc) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org description must be shorter than 128 characters")
 	}
 	return nil
 }
 
 func validhasName(name string) error {
 	if len(name) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name must be provided")
 	}
-	if len(name) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(name) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name must be shorter than 128 characters")
 	}
 	return nil
 }
 
 func validoptName(name string) error {
-	if len(name) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Org name must be shorter than 128 characters",
-			Status:  http.StatusBadRequest,
-		}))
+	if len(name) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Org name must be shorter than 128 characters")
 	}
 	return nil
 }
 
 func validhasOrgids(orgids []string) error {
 	if len(orgids) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "IDs must be provided",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "IDs must be provided")
 	}
 	if len(orgids) > amountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Request is too large",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Request is too large")
 	}
 	for _, i := range orgids {
 		if err := validhasOrgid(i); err != nil {
@@ -131,52 +92,34 @@ func validhasOrgids(orgids []string) error {
 
 func validhasUserid(userid string) error {
 	if len(userid) == 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Userid must be provided",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be provided")
 	}
 	if len(userid) > lengthCapUserid {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Userid must be shorter than 32 characters",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be shorter than 32 characters")
 	}
 	return nil
 }
 
 func validoptUsername(username string) error {
-	if len(username) > lengthCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Username must be shorter than 128 characters",
-		}))
+	if len(username) > lengthCapName {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be shorter than 128 characters")
 	}
 	return nil
 }
 
 func validAmount(amt int) error {
 	if amt < 1 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be positive",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be positive")
 	}
 	if amt > amountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Amount must be less than 256",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be less than 256")
 	}
 	return nil
 }
 
 func validOffset(offset int) error {
 	if offset < 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Message: "Offset must not be negative",
-			Status:  http.StatusBadRequest,
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Offset must not be negative")
 	}
 	return nil
 }

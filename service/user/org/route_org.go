@@ -6,6 +6,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 )
 
@@ -56,7 +57,7 @@ func (m *router) getOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByID(req.OrgID)
+	res, err := m.s.GetByID(c.Ctx(), req.OrgID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -74,7 +75,7 @@ func (m *router) getOrgByName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByName(req.Name)
+	res, err := m.s.GetByName(c.Ctx(), req.Name)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -92,7 +93,7 @@ func (m *router) getOrgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetOrgs(req.OrgIDs)
+	res, err := m.s.GetOrgs(c.Ctx(), req.OrgIDs)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -115,14 +116,14 @@ func (m *router) getOrgMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Mods {
-		res, err := m.s.GetOrgMods(req.OrgID, req.Prefix, req.Amount, req.Offset)
+		res, err := m.s.GetOrgMods(c.Ctx(), req.OrgID, req.Prefix, req.Amount, req.Offset)
 		if err != nil {
 			c.WriteError(err)
 			return
 		}
 		c.WriteJSON(http.StatusOK, res)
 	} else {
-		res, err := m.s.GetOrgMembers(req.OrgID, req.Prefix, req.Amount, req.Offset)
+		res, err := m.s.GetOrgMembers(c.Ctx(), req.OrgID, req.Prefix, req.Amount, req.Offset)
 		if err != nil {
 			c.WriteError(err)
 			return
@@ -146,14 +147,14 @@ func (m *router) getUserOrgs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Mods {
-		res, err := m.s.GetUserMods(req.Userid, req.Prefix, req.Amount, req.Offset)
+		res, err := m.s.GetUserMods(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 		if err != nil {
 			c.WriteError(err)
 			return
 		}
 		c.WriteJSON(http.StatusOK, res)
 	} else {
-		res, err := m.s.GetUserOrgs(req.Userid, req.Prefix, req.Amount, req.Offset)
+		res, err := m.s.GetUserOrgs(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 		if err != nil {
 			c.WriteError(err)
 			return
@@ -173,7 +174,7 @@ func (m *router) getAllOrgs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetAllOrgs(req.Amount, req.Offset)
+	res, err := m.s.GetAllOrgs(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -202,7 +203,7 @@ func (m *router) createOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateOrg(req.Userid, req.Display, req.Desc)
+	res, err := m.s.CreateOrg(c.Ctx(), req.Userid, req.Display, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -232,7 +233,7 @@ func (m *router) updateOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateOrg(req.OrgID, req.Name, req.Display, req.Desc); err != nil {
+	if err := m.s.UpdateOrg(c.Ctx(), req.OrgID, req.Name, req.Display, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -249,7 +250,7 @@ func (m *router) deleteOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteOrg(req.OrgID); err != nil {
+	if err := m.s.DeleteOrg(c.Ctx(), req.OrgID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -273,7 +274,7 @@ func (m *router) mountRoute(r governor.Router) {
 	r.Get("/id/{id}/member", m.getOrgMembers, m.rt)
 	r.Get("/search", m.getUserOrgs, gate.User(m.s.gate, scopeOrgRead), m.rt)
 	r.Get("", m.getAllOrgs, m.rt)
-	r.Post("", m.createOrg, gate.User(m.s.gate, scopeOrgWrite), m.rt)
+	r.Post("", m.createOrg, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
 	r.Put("/id/{id}", m.updateOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite), m.rt)
-	r.Delete("/id/{id}", m.deleteOrg, gate.ModF(m.s.gate, m.orgMember, scopeOrgWrite), m.rt)
+	r.Delete("/id/{id}", m.deleteOrg, gate.ModF(m.s.gate, m.orgMember, token.ScopeForbidden), m.rt)
 }
