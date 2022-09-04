@@ -11,41 +11,13 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListMsg reqListThread reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
+//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListThread reqListMsg reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
 
 type (
 	reqCreatorLists struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		Amount    int    `valid:"amount" json:"-"`
 		Offset    int    `valid:"offset" json:"-"`
-	}
-
-	reqUserLists struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Amount int    `valid:"amount" json:"-"`
-		Offset int    `valid:"offset" json:"-"`
-	}
-
-	reqList struct {
-		Listid string `valid:"listid,has" json:"-"`
-	}
-
-	reqListMsgs struct {
-		Listid string `valid:"listid,has" json:"-"`
-		Amount int    `valid:"amount" json:"-"`
-		Offset int    `valid:"offset" json:"-"`
-	}
-
-	reqListMsg struct {
-		Listid string `valid:"listid,has" json:"-"`
-		Msgid  string `valid:"msgid,has" json:"-"`
-	}
-
-	reqListThread struct {
-		Listid   string `valid:"listid,has" json:"-"`
-		Threadid string `valid:"msgid,has" json:"-"`
-		Amount   int    `valid:"amount" json:"-"`
-		Offset   int    `valid:"offset" json:"-"`
 	}
 
 	reqListMembers struct {
@@ -107,13 +79,21 @@ func (m *router) getCreatorLists(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetCreatorLists(req.CreatorID, req.Amount, req.Offset)
+	res, err := m.s.GetCreatorLists(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
+
+type (
+	reqUserLists struct {
+		Userid string `valid:"userid,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
 
 func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
@@ -126,13 +106,19 @@ func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestLists(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetLatestLists(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
+
+type (
+	reqList struct {
+		Listid string `valid:"listid,has" json:"-"`
+	}
+)
 
 func (m *router) getList(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
@@ -143,13 +129,21 @@ func (m *router) getList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetList(req.Listid)
+	res, err := m.s.GetList(c.Ctx(), req.Listid)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
+
+type (
+	reqListMsgs struct {
+		Listid string `valid:"listid,has" json:"-"`
+		Amount int    `valid:"amount" json:"-"`
+		Offset int    `valid:"offset" json:"-"`
+	}
+)
 
 func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
@@ -162,7 +156,7 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestMsgs(req.Listid, req.Amount, req.Offset)
+	res, err := m.s.GetLatestMsgs(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -181,7 +175,7 @@ func (m *router) getListThreads(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestThreads(req.Listid, req.Amount, req.Offset)
+	res, err := m.s.GetLatestThreads(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -189,14 +183,20 @@ func (m *router) getListThreads(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+type (
+	reqListThread struct {
+		Listid   string `valid:"listid,has" json:"-"`
+		Threadid string `valid:"msgid,has" json:"-"`
+		Amount   int    `valid:"amount" json:"-"`
+		Offset   int    `valid:"offset" json:"-"`
+	}
+)
+
 func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	threadid, err := url.QueryUnescape(c.Param("threadid"))
 	if err != nil {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid msg id",
-		})))
+		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
 		return
 	}
 	req := reqListThread{
@@ -209,7 +209,7 @@ func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetThreadMsgs(req.Listid, req.Threadid, req.Amount, req.Offset)
+	res, err := m.s.GetThreadMsgs(c.Ctx(), req.Listid, req.Threadid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -217,14 +217,18 @@ func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+type (
+	reqListMsg struct {
+		Listid string `valid:"listid,has" json:"-"`
+		Msgid  string `valid:"msgid,has" json:"-"`
+	}
+)
+
 func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid msg id",
-		})))
+		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
 		return
 	}
 	req := reqListMsg{
@@ -236,7 +240,7 @@ func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetMsg(req.Listid, req.Msgid)
+	res, err := m.s.GetMsg(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -248,10 +252,7 @@ func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
-		c.WriteError(governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid msg id",
-		})))
+		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
 		return
 	}
 	req := reqListMsg{
@@ -263,7 +264,7 @@ func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, contentType, err := m.s.GetMsgContent(req.Listid, req.Msgid)
+	msg, contentType, err := m.s.GetMsgContent(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -271,8 +272,8 @@ func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := msg.Close(); err != nil {
 			m.s.logger.Error("Failed to close msg content", map[string]string{
-				"actiontype": "getlistmsg",
 				"error":      err.Error(),
+				"actiontype": "mailinglist_close_msg_content",
 			})
 		}
 	}()
@@ -282,10 +283,7 @@ func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
 func (m *router) getListMsgCC(c governor.Context) (string, error) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
-		return "", (governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Invalid msg id",
-		})))
+		return "", governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id")
 	}
 	req := reqListMsg{
 		Listid: c.Param("listid"),
@@ -295,7 +293,7 @@ func (m *router) getListMsgCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatMsg(req.Listid, req.Msgid)
+	objinfo, err := m.s.StatMsg(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		return "", err
 	}
@@ -314,7 +312,7 @@ func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetListMembers(req.Listid, req.Amount, req.Offset)
+	res, err := m.s.GetListMembers(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -332,7 +330,7 @@ func (m *router) getListMemberIDs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetListMemberIDs(req.Listid, req.Userids)
+	res, err := m.s.GetListMemberIDs(c.Ctx(), req.Listid, req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -352,7 +350,7 @@ func (m *router) createList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateList(req.CreatorID, req.Listname, req.Name, req.Desc, req.SenderPolicy, req.MemberPolicy)
+	res, err := m.s.CreateList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.SenderPolicy, req.MemberPolicy)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -373,7 +371,7 @@ func (m *router) updateList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateList(req.CreatorID, req.Listname, req.Name, req.Desc, req.Archive, req.SenderPolicy, req.MemberPolicy); err != nil {
+	if err := m.s.UpdateList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.Archive, req.SenderPolicy, req.MemberPolicy); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -391,7 +389,7 @@ func (m *router) subList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.Subscribe(req.CreatorID, req.Listname, req.Userid); err != nil {
+	if err := m.s.Subscribe(c.Ctx(), req.CreatorID, req.Listname, req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -409,7 +407,7 @@ func (m *router) unsubList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveListMembers(req.CreatorID, req.Listname, []string{req.Userid}); err != nil {
+	if err := m.s.RemoveListMembers(c.Ctx(), req.CreatorID, req.Listname, []string{req.Userid}); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -429,7 +427,7 @@ func (m *router) updateListMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveListMembers(req.CreatorID, req.Listname, req.Remove); err != nil {
+	if err := m.s.RemoveListMembers(c.Ctx(), req.CreatorID, req.Listname, req.Remove); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -446,7 +444,7 @@ func (m *router) deleteList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteList(req.CreatorID, req.Listname); err != nil {
+	if err := m.s.DeleteList(c.Ctx(), req.CreatorID, req.Listname); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -466,7 +464,7 @@ func (m *router) deleteMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteMsgs(req.CreatorID, req.Listname, req.Msgids); err != nil {
+	if err := m.s.DeleteMsgs(c.Ctx(), req.CreatorID, req.Listname, req.Msgids); err != nil {
 		c.WriteError(err)
 		return
 	}
