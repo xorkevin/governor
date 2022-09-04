@@ -3,7 +3,6 @@ package mailinglist
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -202,54 +201,40 @@ func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error,
 	}
 }
 
-const (
-	smtpIDRandSize = 16
-)
-
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
+	l := s.logger.WithData(map[string]string{
+		"cmd":  "mail",
+		"from": from,
+	})
 	addr, err := emmail.ParseAddress(from)
 	if err != nil {
-		s.logger.Warn("Failed to parse smtp from addr", map[string]string{
-			"cmd":   "mail",
+		l.Warn("Failed to parse smtp from addr", map[string]string{
 			"error": err.Error(),
-			"from":  from,
 		})
 		return errSMTPFromAddr
 	}
-	addrParts := strings.Split(addr.Address, "@")
-	if len(addrParts) != 2 {
-		s.logger.Warn("Failed to parse smtp from addr parts", map[string]string{
-			"cmd":  "mail",
-			"from": from,
-		})
+	localPart, domain, ok := strings.Cut(addr.Address, "@")
+	if !ok {
+		l.Warn("Failed to parse smtp from addr parts", nil)
 		return errSMTPFromAddr
 	}
-	if localPart := addrParts[0]; localPart == "" {
-		s.logger.Warn("Failed to parse smtp from addr parts", map[string]string{
-			"cmd":  "mail",
-			"from": from,
-		})
+	if localPart == "" {
+		l.Warn("Failed to parse smtp from addr parts", nil)
 		return errSMTPFromAddr
 	}
-	domain := addrParts[1]
 	if domain == "" {
-		s.logger.Warn("Failed to parse smtp from addr parts", map[string]string{
-			"cmd":  "mail",
-			"from": from,
-		})
+		l.Warn("Failed to parse smtp from addr parts", nil)
 		return errSMTPFromAddr
 	}
 	result, spfErr, err := s.checkSPF(domain, from)
 	if err != nil {
-		s.logger.Warn("Failed smtp from addr spf check", map[string]string{
-			"cmd":        "mail",
-			"from":       from,
+		l.Warn("Failed smtp from addr spf check", map[string]string{
 			"error":      spfErr.Error(),
 			"spf_result": string(result),
 		})
 		return err
 	}
-	s.from = from
+	s.from = addr.Address
 	s.fromDomain = domain
 	s.fromSPF = result
 	return nil
@@ -273,127 +258,93 @@ func (s *smtpSession) Rcpt(to string) error {
 		})
 		return errSMTPSeq
 	}
+	l := s.logger.WithData(map[string]string{
+		"cmd":  "to",
+		"from": s.from,
+		"to":   to,
+	})
 	if s.rcptTo != "" {
-		s.logger.Warn("Failed smtp rcpt count", map[string]string{
-			"cmd":    "to",
-			"from":   s.from,
-			"to":     to,
+		l.Warn("Failed smtp rcpt count", map[string]string{
 			"rcptTo": s.rcptTo,
 		})
 		return errSMTPRcptCount
 	}
 	addr, err := emmail.ParseAddress(to)
 	if err != nil {
-		s.logger.Warn("Failed to parse smtp to addr", map[string]string{
-			"cmd":   "to",
+		l.Warn("Failed to parse smtp to addr", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"to":    to,
 		})
 		return errSMTPRcptAddr
 	}
-	addrParts := strings.Split(addr.Address, "@")
-	if len(addrParts) != 2 {
-		s.logger.Warn("Failed to parse smtp to addr parts", map[string]string{
-			"cmd":  "to",
-			"from": s.from,
-			"to":   to,
-		})
+	localPart, domain, ok := strings.Cut(addr.Address, "@")
+	if !ok {
+		l.Warn("Failed to parse smtp to addr parts", nil)
 		return errSMTPRcptAddr
 	}
-	mailboxParts := strings.Split(addrParts[0], mailboxKeySeparator)
-	domain := addrParts[1]
-	if len(mailboxParts) != 2 {
-		s.logger.Warn("Failed to parse smtp to addr parts", map[string]string{
-			"cmd":  "to",
-			"from": s.from,
-			"to":   to,
-		})
+	listCreator, listname, ok := strings.Cut(localPart, mailboxKeySeparator)
+	if !ok {
+		l.Warn("Failed to parse smtp to addr parts", nil)
 		return errSMTPMailbox
 	}
-	listCreator := mailboxParts[0]
-	listname := mailboxParts[1]
-	if domain != s.service.usrdomain && domain != s.service.orgdomain {
-		s.logger.Warn("Invalid smtp to domain", map[string]string{
-			"cmd":  "to",
-			"from": s.from,
-			"to":   to,
-		})
+	isOrg := domain == s.service.orgdomain
+	if domain != s.service.usrdomain && !isOrg {
+		l.Warn("Invalid smtp to domain", nil)
 		return errSMTPSystem
 	}
-	isOrg := domain == s.service.orgdomain
 
 	var listCreatorID string
 	if isOrg {
-		creator, err := s.service.orgs.GetByName(listCreator)
+		creator, err := s.service.orgs.GetByName(context.Background(), listCreator)
 		if err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
-				s.logger.Warn("Owner org not found", map[string]string{
-					"cmd":   "to",
+				l.Warn("Owner org not found", map[string]string{
 					"error": err.Error(),
-					"from":  s.from,
-					"to":    to,
 				})
 				return errSMTPMailbox
 			}
-			s.logger.Error("Failed to get owner org by name", map[string]string{
-				"cmd":   "to",
+			l.Error("Failed to get owner org by name", map[string]string{
 				"error": err.Error(),
-				"from":  s.from,
-				"to":    to,
 			})
 			return errSMTPBase
 		}
 		listCreatorID = rank.ToOrgName(creator.OrgID)
 	} else {
-		creator, err := s.service.users.GetByUsername(listCreator)
+		creator, err := s.service.users.GetByUsername(context.Background(), listCreator)
 		if err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
-				s.logger.Warn("Owner user not found", map[string]string{
-					"cmd":   "to",
+				l.Warn("Owner user not found", map[string]string{
 					"error": err.Error(),
-					"from":  s.from,
-					"to":    to,
 				})
 				return errSMTPMailbox
 			}
-			s.logger.Error("Failed to get owner user by name", map[string]string{
-				"cmd":   "to",
+			l.Error("Failed to get owner user by name", map[string]string{
 				"error": err.Error(),
-				"from":  s.from,
-				"to":    to,
 			})
 			return errSMTPBase
 		}
 		listCreatorID = creator.Userid
 	}
 
-	list, err := s.service.lists.GetList(listCreatorID, listname)
+	l = l.WithData(map[string]string{
+		"owner": listCreatorID,
+	})
+
+	list, err := s.service.lists.GetList(context.Background(), listCreatorID, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			s.logger.Warn("Mailbox not found", map[string]string{
-				"cmd":   "to",
+			l.Warn("Mailbox not found", map[string]string{
 				"error": err.Error(),
-				"from":  s.from,
-				"to":    to,
-				"owner": listCreatorID,
 			})
 			return errSMTPMailbox
 		}
-		s.logger.Error("Failed to get mailbox", map[string]string{
-			"cmd":   "to",
+		l.Error("Failed to get mailbox", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"to":    to,
-			"owner": listCreatorID,
 		})
 		return errSMTPBase
 	}
 
 	if list.Archive {
-		s.logger.Warn("Mailbox is archived", map[string]string{
-			"cmd":  "to",
-			"from": s.from,
+		l.Warn("Mailbox is archived", map[string]string{
 			"list": list.ListID,
 		})
 		return errSMTPMailboxDisabled
@@ -412,7 +363,9 @@ const (
 	headerFrom                  = "From"
 	headerInReplyTo             = "In-Reply-To"
 	headerAuthenticationResults = "Authentication-Results"
+	headerReceivedSPF           = "Received-SPF"
 	headerReceived              = "Received"
+	headerReturnPath            = "Return-Path"
 	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
 )
 
@@ -425,177 +378,102 @@ func (s *smtpSession) isAligned(a, b string) bool {
 }
 
 func (s *smtpSession) checkListPolicy(senderid string, msgid string) error {
+	l := s.logger.WithData(map[string]string{
+		"cmd":    "data",
+		"from":   s.from,
+		"list":   s.rcptList,
+		"msgid":  msgid,
+		"sender": senderid,
+		"policy": s.senderPolicy,
+	})
 	switch s.senderPolicy {
 	case listSenderPolicyOwner:
 		if s.isOrg {
-			if ok, err := gate.AuthMember(s.service.gate, senderid, s.rcptOwner); err != nil {
-				s.logger.Error("Failed to auth org member", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
+			if ok, err := gate.AuthMember(context.Background(), s.service.gate, senderid, s.rcptOwner); err != nil {
+				l.Error("Failed to auth org member", map[string]string{
+					"error": err.Error(),
 				})
 				return errSMTPBase
 			} else if !ok {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
-				})
+				l.Warn("Not allowed to send", nil)
 				return errSMTPAuthSend
 			}
 		} else {
 			if senderid != s.rcptOwner {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
-				})
+				l.Warn("Not allowed to send", nil)
 				return errSMTPAuthSend
 			}
-			if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
-				s.logger.Error("Failed to auth user", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
+			if ok, err := gate.AuthUser(context.Background(), s.service.gate, senderid); err != nil {
+				l.Error("Failed to auth user", map[string]string{
+					"error": err.Error(),
 				})
 				return errSMTPBase
 			} else if !ok {
-				s.logger.Warn("Not allowed to send", map[string]string{
-					"cmd":    "to",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
-				})
+				l.Warn("Not allowed to send", nil)
 				return errSMTPAuthSend
 			}
 		}
 	case listSenderPolicyMember:
-		if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
-			s.logger.Error("Failed to auth user", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": senderid,
-				"policy": s.senderPolicy,
+		if ok, err := gate.AuthUser(context.Background(), s.service.gate, senderid); err != nil {
+			l.Error("Failed to auth user", map[string]string{
+				"error": err.Error(),
 			})
 			return errSMTPBase
 		} else if !ok {
-			s.logger.Warn("Not allowed to send", map[string]string{
-				"cmd":    "to",
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": senderid,
-				"policy": s.senderPolicy,
-			})
+			l.Warn("Not allowed to send", nil)
 			return errSMTPAuthSend
 		}
-		if _, err := s.service.lists.GetMember(s.rcptList, senderid); err != nil {
+		if _, err := s.service.lists.GetMember(context.Background(), s.rcptList, senderid); err != nil {
 			if errors.Is(err, db.ErrNotFound{}) {
-				s.logger.Warn("List member not found", map[string]string{
-					"cmd":    "to",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": senderid,
-					"policy": s.senderPolicy,
+				l.Warn("List member not found", map[string]string{
+					"error": err.Error(),
 				})
 				return errSMTPAuthSend
 			}
-			s.logger.Error("Failed to get list member", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": senderid,
-				"policy": s.senderPolicy,
+			l.Error("Failed to get list member", map[string]string{
+				"error": err.Error(),
 			})
 			return errSMTPBase
 		}
 	case listSenderPolicyUser:
-		if ok, err := gate.AuthUser(s.service.gate, senderid); err != nil {
-			s.logger.Error("Failed to auth user", map[string]string{
-				"cmd":    "to",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": senderid,
-				"policy": s.senderPolicy,
+		if ok, err := gate.AuthUser(context.Background(), s.service.gate, senderid); err != nil {
+			l.Error("Failed to auth user", map[string]string{
+				"error": err.Error(),
 			})
 			return errSMTPBase
 		} else if !ok {
-			s.logger.Warn("Not allowed to send", map[string]string{
-				"cmd":    "to",
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": senderid,
-				"policy": s.senderPolicy,
-			})
+			l.Warn("Not allowed to send", nil)
 			return errSMTPAuthSend
 		}
 	default:
-		s.logger.Warn("Invalid mailbox sender policy", map[string]string{
-			"cmd":    "to",
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": senderid,
-			"policy": s.senderPolicy,
-		})
+		l.Warn("Invalid mailbox sender policy", nil)
 		return errSMTPMailboxConfig
 	}
 	return nil
 }
 
 func (s *smtpSession) Data(r io.Reader) error {
+	l := s.logger.WithData(map[string]string{
+		"cmd":  "data",
+		"from": s.from,
+		"list": s.rcptList,
+	})
 	if s.from == "" || s.rcptTo == "" {
-		s.logger.Warn("Failed smtp command sequence", map[string]string{
-			"cmd":  "data",
-			"from": s.from,
-			"list": s.rcptList,
-		})
+		l.Warn("Failed smtp command sequence", nil)
 		return errSMTPSeq
 	}
 
-	b := bytes.Buffer{}
-	if _, err := io.Copy(&b, r); err != nil {
-		s.logger.Warn("Failed to read smtp data", map[string]string{
-			"cmd":   "data",
+	b := &bytes.Buffer{}
+	if _, err := io.Copy(b, r); err != nil {
+		l.Warn("Failed to read smtp data", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
 		})
 		return errSMTPBaseExists
 	}
 	m, err := message.Read(bytes.NewReader(b.Bytes()))
 	if err != nil {
-		s.logger.Warn("Failed to parse smtp data", map[string]string{
-			"cmd":   "data",
+		l.Warn("Failed to parse smtp data", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
 		})
 		return errMailBody
 	}
@@ -605,111 +483,77 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 	msgid, err := headers.MessageID()
 	if err != nil || msgid == "" {
-		s.logger.Warn("Failed to parse mail msgid", map[string]string{
-			"cmd":   "data",
+		l.Warn("Failed to parse mail msgid", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
 		})
 		return errMailBody
 	}
+
+	l = l.WithData(map[string]string{
+		"msgid": msgid,
+	})
+
 	contentType, _, err := headers.ContentType()
 	if err != nil {
-		s.logger.Warn("Failed to parse mail content type", map[string]string{
-			"cmd":   "data",
+		l.Warn("Failed to parse mail content type", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
 		})
 		return errMailBody
 	}
 
 	fromAddrs, err := headers.AddressList(headerFrom)
 	if err != nil || len(fromAddrs) == 0 {
-		s.logger.Warn("Failed to parse mail header from", map[string]string{
-			"cmd":   "data",
+		l.Warn("Failed to parse mail header from", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
 		})
 		return errMailBody
 	}
 	if len(fromAddrs) != 1 {
-		s.logger.Warn("Invalid mail header from", map[string]string{
-			"cmd":   "data",
+		l.Warn("Invalid mail header from", map[string]string{
 			"error": err.Error(),
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
 		})
 		return errSPFAlignment
 	}
 	fromAddr := fromAddrs[0].Address
-	fromAddrParts := strings.Split(fromAddr, "@")
-	if len(fromAddrParts) != 2 {
-		s.logger.Warn("Failed to parse mail header from to parts", map[string]string{
-			"cmd":   "data",
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
-		})
+	localPart, fromAddrDomain, ok := strings.Cut(fromAddr, "@")
+	if !ok {
+		l.Warn("Failed to parse mail header from to parts", nil)
 		return errMailBody
 	}
-	if localPart := fromAddrParts[0]; localPart == "" {
-		s.logger.Warn("Failed to parse mail header from to parts", map[string]string{
-			"cmd":   "data",
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
-		})
+	if localPart == "" {
+		l.Warn("Failed to parse mail header from to parts", nil)
 		return errMailBody
 	}
-	fromAddrDomain := fromAddrParts[1]
 	if fromAddrDomain == "" {
-		s.logger.Warn("Failed to parse mail header from to parts", map[string]string{
-			"cmd":   "data",
-			"from":  s.from,
-			"list":  s.rcptList,
-			"msgid": msgid,
-		})
+		l.Warn("Failed to parse mail header from to parts", nil)
 		return errMailBody
 	}
+
 	if !s.isAligned(s.fromDomain, fromAddrDomain) {
-		s.logger.Warn("Failed spf alignment", map[string]string{
-			"cmd":         "data",
-			"from":        s.from,
-			"list":        s.rcptList,
-			"msgid":       msgid,
+		l.Warn("Failed spf alignment", map[string]string{
 			"sender_addr": fromAddr,
 		})
 		return errSPFAlignment
 	}
 
-	sender, err := s.service.users.GetByEmail(fromAddr)
+	sender, err := s.service.users.GetByEmail(context.Background(), fromAddr)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			s.logger.Warn("Sender user not found", map[string]string{
-				"cmd":         "to",
+			l.Warn("Sender user not found", map[string]string{
 				"error":       err.Error(),
-				"from":        s.from,
-				"list":        s.rcptList,
-				"msgid":       msgid,
 				"sender_addr": fromAddr,
 			})
 			return errSMTPAuthSend
 		}
-		s.logger.Error("Failed to get sender user by email", map[string]string{
-			"cmd":         "to",
-			"error":       err.Error(),
-			"from":        s.from,
-			"list":        s.rcptList,
-			"msgid":       msgid,
-			"sender_addr": fromAddr,
+		l.Error("Failed to get sender user by email", map[string]string{
+			"error": err.Error(),
 		})
 		return errSMTPBase
 	}
+
+	l = l.WithData(map[string]string{
+		"sender": sender.Userid,
+	})
 
 	if err := s.checkListPolicy(sender.Userid, msgid); err != nil {
 		return err
@@ -732,7 +576,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		LookupTXT: func(domain string) ([]string, error) {
 			return s.service.resolver.LookupTXT(context.Background(), domain)
 		},
-		MaxVerifications: 0, // unlimited
+		MaxVerifications: 0, // unlimited number of dkim signature verifications
 	})
 	if dkimErr != nil {
 		dkimResults = nil
@@ -741,7 +585,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	authResults := make([]authres.Result, 0, 3+len(dkimResults))
 	spfReason := ""
 	if s.fromSPF != authres.ResultNone {
-		spfReason = fmt.Sprintf("%s designates %s as a permitted sender", s.from, s.srcip.String())
+		spfReason = fmt.Sprintf("%s: domain of %s designates %s as permitted sender", s.service.authdomain, s.from, s.srcip.String())
 	}
 	authResults = append(authResults, &authres.SPFResult{
 		Value:  s.fromSPF,
@@ -751,17 +595,14 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if dkimErr != nil {
 		authResults = append(authResults, &authres.DKIMResult{
 			Value:  authres.ResultNeutral,
-			Reason: "failed processing dkim signature",
+			Reason: "failed validating dkim signature",
 		})
 	} else if len(dkimResults) == 0 {
 		authResults = append(authResults, &authres.DKIMResult{
 			Value: authres.ResultNone,
 		})
 	}
-	strictDKIMAlignment := false
-	if dmarcErr == nil {
-		strictDKIMAlignment = dmarcRec.DKIMAlignment == dmarc.AlignmentStrict
-	}
+	strictDKIMAlignment := dmarcErr == nil && dmarcRec.DKIMAlignment == dmarc.AlignmentStrict
 	var alignedDKIM *dkim.Verification
 	for _, i := range dkimResults {
 		var res authres.ResultValue = authres.ResultPass
@@ -805,12 +646,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		var res authres.ResultValue = authres.ResultPass
 		if !dmarcPassSPF && alignedDKIM == nil {
 			if dmarcRec.Policy != dmarc.PolicyNone {
-				s.logger.Warn("Failed spf alignment", map[string]string{
-					"cmd":    "data",
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
+				l.Warn("Failed spf alignment", map[string]string{
 					"policy": string(dmarcRec.Policy),
 				})
 				return errDMARCPolicy
@@ -824,17 +660,14 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
+	m.Header.Add(headerReceivedSPF, spfReason)
 	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", msgid, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
+	m.Header.Set(headerReturnPath, (&emmail.Address{Address: s.from}).String())
 
-	mb := bytes.Buffer{}
-	if err := m.WriteTo(&mb); err != nil {
-		s.logger.Error("Failed to write mail msg", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
+	mb := &bytes.Buffer{}
+	if err := m.WriteTo(mb); err != nil {
+		l.Error("Failed to write mail msg", map[string]string{
+			"error": err.Error(),
 		})
 		return errSMTPBaseExists
 	}
@@ -845,65 +678,40 @@ func (s *smtpSession) Data(r io.Reader) error {
 		From:   s.from,
 	})
 	if err != nil {
-		s.logger.Error("Failed to encode list event to json", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
+		l.Error("Failed to encode list event to json", map[string]string{
+			"error": err.Error(),
 		})
 		return errSMTPBaseExists
 	}
 
-	if msg, err := s.service.lists.GetMsg(s.rcptList, msgid); err != nil {
+	if msg, err := s.service.lists.GetMsg(context.Background(), s.rcptList, msgid); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			s.logger.Error("Failed to get list msg", map[string]string{
-				"cmd":    "data",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
+			l.Error("Failed to get list msg", map[string]string{
+				"error": err.Error(),
 			})
 			return errSMTPBaseExists
 		}
 	} else {
 		// mail already exists for this list
 		if !msg.Processed {
-			if err := s.service.events.StreamPublish(s.service.opts.MailChannel, j); err != nil {
-				s.logger.Error("Failed to publish list event", map[string]string{
-					"cmd":    "data",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
+			if err := s.service.events.StreamPublish(context.Background(), s.service.opts.MailChannel, j); err != nil {
+				l.Error("Failed to publish list event", map[string]string{
+					"error": err.Error(),
 				})
 				return errSMTPBaseExists
 			}
-			if err := s.service.lists.MarkMsgProcessed(s.rcptList, msgid); err != nil {
-				s.logger.Error("Failed to mark list message processed", map[string]string{
-					"cmd":    "data",
-					"error":  err.Error(),
-					"from":   s.from,
-					"list":   s.rcptList,
-					"msgid":  msgid,
-					"sender": sender.Userid,
+			if err := s.service.lists.MarkMsgProcessed(context.Background(), s.rcptList, msgid); err != nil {
+				l.Error("Failed to mark list message processed", map[string]string{
+					"error": err.Error(),
 				})
 			}
 		}
 		return nil
 	}
 
-	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(base64.RawURLEncoding.EncodeToString([]byte(msgid)), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
-		s.logger.Error("Failed to store mail msg", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
+	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(context.Background(), s.service.encodeMsgid(msgid), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
+		l.Error("Failed to store mail msg", map[string]string{
+			"error": err.Error(),
 		})
 		return errSMTPBaseExists
 	}
@@ -923,48 +731,27 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if inReplyTo, err := headers.MsgIDList(headerInReplyTo); err == nil && len(inReplyTo) == 1 {
 		msg.InReplyTo = inReplyTo[0]
 	}
-	if err := s.service.lists.InsertMsg(msg); err != nil {
+	if err := s.service.lists.InsertMsg(context.Background(), msg); err != nil {
 		if !errors.Is(err, db.ErrUnique{}) {
-			s.logger.Error("Failed to add list msg", map[string]string{
-				"cmd":    "data",
-				"error":  err.Error(),
-				"from":   s.from,
-				"list":   s.rcptList,
-				"msgid":  msgid,
-				"sender": sender.Userid,
+			l.Error("Failed to add list msg", map[string]string{
+				"error": err.Error(),
 			})
 			return errSMTPBaseExists
 		}
 		// message has already been sent for this list
 	}
-	if err := s.service.events.StreamPublish(s.service.opts.MailChannel, j); err != nil {
-		s.logger.Error("Failed to publish list event", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
+	if err := s.service.events.StreamPublish(context.Background(), s.service.opts.MailChannel, j); err != nil {
+		l.Error("Failed to publish list event", map[string]string{
+			"error": err.Error(),
 		})
 		return errSMTPBaseExists
 	}
-	if err := s.service.lists.MarkMsgProcessed(s.rcptList, msgid); err != nil {
-		s.logger.Error("Failed to mark list message processed", map[string]string{
-			"cmd":    "data",
-			"error":  err.Error(),
-			"from":   s.from,
-			"list":   s.rcptList,
-			"msgid":  msgid,
-			"sender": sender.Userid,
+	if err := s.service.lists.MarkMsgProcessed(context.Background(), s.rcptList, msgid); err != nil {
+		l.Error("Failed to mark list message processed", map[string]string{
+			"error": err.Error(),
 		})
 	}
-	s.logger.Debug("Received mail", map[string]string{
-		"cmd":    "data",
-		"from":   s.from,
-		"list":   s.rcptList,
-		"msgid":  msgid,
-		"sender": sender.Userid,
-	})
+	l.Debug("Received mail", nil)
 	return nil
 }
 
