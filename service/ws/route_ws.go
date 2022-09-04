@@ -278,9 +278,7 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 	for {
 		t, b, err := conn.Read(c.Ctx())
 		if err != nil {
-			m.s.logger.Debug("WS conn closed", map[string]string{
-				"value": err.Error(),
-			})
+			conn.CloseError(err)
 			return
 		}
 		if !t {

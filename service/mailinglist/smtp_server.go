@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	gomail "net/mail"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/util/uid"
 )
 
 var (
@@ -169,6 +171,7 @@ type smtpSession struct {
 	logger       governor.Logger
 	srcip        net.IP
 	helo         string
+	id           string
 	from         string
 	fromDomain   string
 	fromSPF      authres.ResultValue
@@ -201,39 +204,63 @@ func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error,
 	}
 }
 
+const (
+	mailidRandSize = 16
+)
+
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
+	u, err := uid.NewSnowflake(mailidRandSize)
+	if err != nil {
+		s.logger.Error("Failed to generate mail id", map[string]string{
+			"cmd":      "mail",
+			"mailfrom": from,
+			"error":    err.Error(),
+		})
+		return errSMTPBase
+	}
+	id := u.Base32()
 	l := s.logger.WithData(map[string]string{
-		"cmd":  "mail",
-		"from": from,
+		"cmd": "mail",
+		"id":  id,
 	})
-	addr, err := emmail.ParseAddress(from)
+	addr, err := gomail.ParseAddress(from)
 	if err != nil {
 		l.Warn("Failed to parse smtp from addr", map[string]string{
-			"error": err.Error(),
+			"mailfrom": from,
+			"error":    err.Error(),
 		})
 		return errSMTPFromAddr
 	}
 	localPart, domain, ok := strings.Cut(addr.Address, "@")
 	if !ok {
-		l.Warn("Failed to parse smtp from addr parts", nil)
+		l.Warn("Failed to parse smtp from addr parts", map[string]string{
+			"mailfrom": from,
+		})
 		return errSMTPFromAddr
 	}
 	if localPart == "" {
-		l.Warn("Failed to parse smtp from addr parts", nil)
+		l.Warn("Failed to parse smtp from addr parts", map[string]string{
+			"mailfrom": from,
+		})
 		return errSMTPFromAddr
 	}
 	if domain == "" {
-		l.Warn("Failed to parse smtp from addr parts", nil)
+		l.Warn("Failed to parse smtp from addr parts", map[string]string{
+			"mailfrom": from,
+		})
 		return errSMTPFromAddr
 	}
+	// DMARC requires checking RFC5321.MailFrom identity and not RFC5321.HELO
 	result, spfErr, err := s.checkSPF(domain, from)
 	if err != nil {
 		l.Warn("Failed smtp from addr spf check", map[string]string{
-			"error":      spfErr.Error(),
+			"from":       addr.Address,
 			"spf_result": string(result),
+			"error":      spfErr.Error(),
 		})
 		return err
 	}
+	s.id = id
 	s.from = addr.Address
 	s.fromDomain = domain
 	s.fromSPF = result
@@ -260,6 +287,7 @@ func (s *smtpSession) Rcpt(to string) error {
 	}
 	l := s.logger.WithData(map[string]string{
 		"cmd":  "to",
+		"id":   s.id,
 		"from": s.from,
 		"to":   to,
 	})
@@ -269,7 +297,7 @@ func (s *smtpSession) Rcpt(to string) error {
 		})
 		return errSMTPRcptCount
 	}
-	addr, err := emmail.ParseAddress(to)
+	addr, err := gomail.ParseAddress(to)
 	if err != nil {
 		l.Warn("Failed to parse smtp to addr", map[string]string{
 			"error": err.Error(),
@@ -365,7 +393,6 @@ const (
 	headerAuthenticationResults = "Authentication-Results"
 	headerReceivedSPF           = "Received-SPF"
 	headerReceived              = "Received"
-	headerReturnPath            = "Return-Path"
 	headerReceivedTimeFormat    = "Mon, 02 Jan 2006 15:04:05 -0700 (MST)"
 )
 
@@ -380,6 +407,7 @@ func (s *smtpSession) isAligned(a, b string) bool {
 func (s *smtpSession) checkListPolicy(senderid string, msgid string) error {
 	l := s.logger.WithData(map[string]string{
 		"cmd":    "data",
+		"id":     s.id,
 		"from":   s.from,
 		"list":   s.rcptList,
 		"msgid":  msgid,
@@ -455,6 +483,7 @@ func (s *smtpSession) checkListPolicy(senderid string, msgid string) error {
 func (s *smtpSession) Data(r io.Reader) error {
 	l := s.logger.WithData(map[string]string{
 		"cmd":  "data",
+		"id":   s.id,
 		"from": s.from,
 		"list": s.rcptList,
 	})
@@ -583,9 +612,18 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 
 	authResults := make([]authres.Result, 0, 3+len(dkimResults))
-	spfReason := ""
-	if s.fromSPF != authres.ResultNone {
+	var spfReason string
+	var spfHeader string
+	switch s.fromSPF {
+	case authres.ResultPass:
 		spfReason = fmt.Sprintf("%s: domain of %s designates %s as permitted sender", s.service.authdomain, s.from, s.srcip.String())
+		spfHeader = fmt.Sprintf("pass (%s) client-ip=%s; envelope-from=%s; helo=%s; receiver=%s; identity=%s;", spfReason, s.srcip.String(), s.from, s.helo, s.service.authdomain, "mailfrom")
+	case authres.ResultNeutral:
+		spfReason = fmt.Sprintf("%s: %s is neither permitted nor denied by domain of %s", s.service.authdomain, s.srcip.String(), s.from)
+		spfHeader = fmt.Sprintf("neutral (%s) client-ip=%s; envelope-from=%s; helo=%s; receiver=%s; identity=%s;", spfReason, s.srcip.String(), s.from, s.helo, s.service.authdomain, "mailfrom")
+	default:
+		spfReason = fmt.Sprintf("%s: domain of %s does not designate permitted sender hosts", s.service.authdomain, s.from)
+		spfHeader = fmt.Sprintf("none (%s) client-ip=%s; envelope-from=%s; helo=%s; receiver=%s; identity=%s;", spfReason, s.srcip.String(), s.from, s.helo, s.service.authdomain, "mailfrom")
 	}
 	authResults = append(authResults, &authres.SPFResult{
 		Value:  s.fromSPF,
@@ -660,9 +698,8 @@ func (s *smtpSession) Data(r io.Reader) error {
 		})
 	}
 	m.Header.Add(headerAuthenticationResults, authres.Format(s.service.authdomain, authResults))
-	m.Header.Add(headerReceivedSPF, spfReason)
-	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTP", msgid, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
-	m.Header.Set(headerReturnPath, (&emmail.Address{Address: s.from}).String())
+	m.Header.Add(headerReceivedSPF, spfHeader)
+	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTPS", s.id, s.rcptTo, time.Now().Round(0).UTC().Format(headerReceivedTimeFormat)))
 
 	mb := &bytes.Buffer{}
 	if err := m.WriteTo(mb); err != nil {
@@ -675,7 +712,6 @@ func (s *smtpSession) Data(r io.Reader) error {
 	j, err := json.Marshal(mailmsg{
 		ListID: s.rcptList,
 		MsgID:  msgid,
-		From:   s.from,
 	})
 	if err != nil {
 		l.Error("Failed to encode list event to json", map[string]string{
@@ -738,7 +774,9 @@ func (s *smtpSession) Data(r io.Reader) error {
 			})
 			return errSMTPBaseExists
 		}
-		// message has already been sent for this list
+		// Message has already been added for this list, but not guaranteed to be
+		// sent yet, hence must continue with publishing the event and marking
+		// message as processed.
 	}
 	if err := s.service.events.StreamPublish(context.Background(), s.service.opts.MailChannel, j); err != nil {
 		l.Error("Failed to publish list event", map[string]string{
@@ -751,11 +789,12 @@ func (s *smtpSession) Data(r io.Reader) error {
 			"error": err.Error(),
 		})
 	}
-	l.Debug("Received mail", nil)
+	l.Info("Received mail", nil)
 	return nil
 }
 
 func (s *smtpSession) Reset() {
+	s.id = ""
 	s.from = ""
 	s.fromDomain = ""
 	s.fromSPF = ""

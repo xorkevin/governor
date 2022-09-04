@@ -583,13 +583,11 @@ type (
 	mailmsg struct {
 		ListID string `json:"listid"`
 		MsgID  string `json:"msgid"`
-		From   string `json:"from"`
 	}
 
 	sendmsg struct {
 		ListID string `json:"listid"`
 		MsgID  string `json:"msgid"`
-		From   string `json:"from"`
 	}
 
 	// ErrMailEvent is returned when the msgqueue mail message is malformed
@@ -609,7 +607,6 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 	j, err := json.Marshal(sendmsg{
 		ListID: emmsg.ListID,
 		MsgID:  emmsg.MsgID,
-		From:   emmsg.From,
 	})
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail send message")
@@ -798,7 +795,7 @@ func (s *service) sendSubscriber(ctx context.Context, pinger events.Pinger, topi
 			for _, i := range recipients.Users {
 				rcpts = append(rcpts, i.Email)
 			}
-			if err := s.mailer.FwdStream(ctx, emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+			if err := s.mailer.FwdStream(ctx, "", rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
 				return kerrors.WithMsg(err, "Failed to send mail message")
 			}
 		}
