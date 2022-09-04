@@ -103,14 +103,6 @@ func (t *listModelTable) GetListModelHasListIDOrdListID(ctx context.Context, d d
 	return res, nil
 }
 
-func (t *listModelTable) UpdListModelEqListID(ctx context.Context, d db.SQLExecutor, m *ListModel, listid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (listid, creatorid, listname, name, description, archive, sender_policy, member_policy, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE listid = $11;", m.ListID, m.CreatorID, m.Listname, m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, m.LastUpdated, m.CreationTime, listid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *listModelTable) DelEqListID(ctx context.Context, d db.SQLExecutor, listid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE listid = $1;", listid)
 	return err
@@ -146,6 +138,14 @@ func (t *listModelTable) GetListModelEqCreatorIDOrdLastUpdated(ctx context.Conte
 		return nil, err
 	}
 	return res, nil
+}
+
+func (t *listModelTable) UpdlistPropsEqListID(ctx context.Context, d db.SQLExecutor, m *listProps, listid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, description, archive, sender_policy, member_policy) = ROW($1, $2, $3, $4, $5) WHERE listid = $6;", m.Name, m.Description, m.Archive, m.SenderPolicy, m.MemberPolicy, listid)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *listModelTable) UpdlistLastUpdatedEqListID(ctx context.Context, d db.SQLExecutor, m *listLastUpdated, listid string) error {

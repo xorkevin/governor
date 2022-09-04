@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m ListModel -p list -o modellist_gen.go ListModel listLastUpdated
+//go:generate forge model -m ListModel -p list -o modellist_gen.go ListModel listProps listLastUpdated
 //go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel listLastUpdated
 //go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
 //go:generate forge model -m SentMsgModel -p sentmsg -o modelsentmsg_gen.go SentMsgModel
@@ -80,7 +80,7 @@ type (
 
 	// ListModel is the db mailing list model
 	ListModel struct {
-		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|arr;updeq,listid;deleq,listid"`
+		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|arr;deleq,listid"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid;deleq,creatorid"`
 		Listname     string `model:"listname,VARCHAR(127) NOT NULL" query:"listname"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
@@ -90,6 +90,14 @@ type (
 		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL" query:"member_policy"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+	}
+
+	listProps struct {
+		Name         string `query:"name;updeq,listid"`
+		Description  string `query:"description"`
+		Archive      bool   `query:"archive"`
+		SenderPolicy string `query:"sender_policy"`
+		MemberPolicy string `query:"member_policy"`
 	}
 
 	// MemberModel is the db mailing list member model
@@ -292,7 +300,13 @@ func (r *repo) UpdateList(ctx context.Context, m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLists.UpdListModelEqListID(ctx, d, m, m.ListID); err != nil {
+	if err := r.tableLists.UpdlistPropsEqListID(ctx, d, &listProps{
+		Name:         m.Name,
+		Description:  m.Description,
+		Archive:      m.Archive,
+		SenderPolicy: m.SenderPolicy,
+		MemberPolicy: m.MemberPolicy,
+	}, m.ListID); err != nil {
 		return kerrors.WithMsg(err, "Failed to update list")
 	}
 	return nil
@@ -775,9 +789,9 @@ func (r *repo) InsertTree(ctx context.Context, m *TreeModel) error {
 	return nil
 }
 
-func (t *treeModelTable) InsertTreeEdges(ctx context.Context, d db.SQLExecutor, listid, msgid, parentid string) error {
+func (t *treeModelTable) InsertTreeParentClosures(ctx context.Context, d db.SQLExecutor, listid, msgid, parentid string) error {
 	if _, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+t.TableName+" p INNER JOIN "+t.TableName+" c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;", listid, parentid, msgid); err != nil {
-		return kerrors.WithMsg(err, "Failed to insert tree edge")
+		return err
 	}
 	return nil
 }
@@ -787,7 +801,7 @@ func (r *repo) InsertTreeEdge(ctx context.Context, listid, msgid, parentid strin
 	if err != nil {
 		return err
 	}
-	if err := r.tableTree.InsertTreeEdges(ctx, d, listid, msgid, parentid); err != nil {
+	if err := r.tableTree.InsertTreeParentClosures(ctx, d, listid, msgid, parentid); err != nil {
 		return kerrors.WithMsg(err, "Failed to insert tree edge")
 	}
 	return nil

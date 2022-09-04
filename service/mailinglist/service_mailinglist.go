@@ -2,6 +2,7 @@ package mailinglist
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -31,16 +33,13 @@ type (
 	}
 )
 
-func (s *service) CreateList(creatorid string, listname string, name, desc string, senderPolicy, memberPolicy string) (*resList, error) {
+func (s *service) CreateList(ctx context.Context, creatorid string, listname string, name, desc string, senderPolicy, memberPolicy string) (*resList, error) {
 	list := s.lists.NewList(creatorid, listname, name, desc, senderPolicy, memberPolicy)
-	if err := s.lists.InsertList(list); err != nil {
+	if err := s.lists.InsertList(ctx, list); err != nil {
 		if errors.Is(err, db.ErrUnique{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "List id already taken",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "List id already taken")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to create list")
+		return nil, kerrors.WithMsg(err, "Failed to create list")
 	}
 	return &resList{
 		ListID:       list.ListID,
@@ -56,178 +55,136 @@ func (s *service) CreateList(creatorid string, listname string, name, desc strin
 	}, nil
 }
 
-func (s *service) UpdateList(creatorid string, listname string, name, desc string, archive bool, senderPolicy, memberPolicy string) error {
-	m, err := s.lists.GetList(creatorid, listname)
+func (s *service) UpdateList(ctx context.Context, creatorid string, listname string, name, desc string, archive bool, senderPolicy, memberPolicy string) error {
+	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
 	m.Name = name
 	m.Description = desc
 	m.Archive = archive
 	m.SenderPolicy = senderPolicy
 	m.MemberPolicy = memberPolicy
-	if err := s.lists.UpdateList(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
+	if err := s.lists.UpdateList(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to update list")
 	}
 	return nil
 }
 
-func (s *service) checkUsersExist(userids []string) error {
-	ids, err := s.users.CheckUsersExist(userids)
+func (s *service) checkUsersExist(ctx context.Context, userids []string) error {
+	ids, err := s.users.CheckUsersExist(ctx, userids)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to users exist check")
+		return kerrors.WithMsg(err, "Failed to users exist check")
 	}
 	if len(ids) != len(userids) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "User does not exist",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "User does not exist")
 	}
 	return nil
 }
 
-func (s *service) Subscribe(creatorid string, listname string, userid string) error {
-	m, err := s.lists.GetList(creatorid, listname)
+func (s *service) Subscribe(ctx context.Context, creatorid string, listname string, userid string) error {
+	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
 	isOrg := rank.IsValidOrgName(creatorid)
 	switch m.MemberPolicy {
 	case listMemberPolicyOwner:
 		if isOrg {
-			if ok, err := gate.AuthMember(s.gate, userid, creatorid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to get user membership")
+			if ok, err := gate.AuthMember(ctx, s.gate, userid, creatorid); err != nil {
+				return kerrors.WithMsg(err, "Failed to get user membership")
 			} else if !ok {
-				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusForbidden,
-					Message: "Not a member of the org",
-				}))
+				return governor.ErrWithRes(nil, http.StatusForbidden, "", "Not the list owner")
 			}
 		} else {
 			if userid != creatorid {
-				return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-					Status:  http.StatusForbidden,
-					Message: "Not the list owner",
-				}))
+				return governor.ErrWithRes(nil, http.StatusForbidden, "", "Not the list owner")
 			}
 		}
 	case listMemberPolicyUser:
 	default:
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusConflict,
-			Message: "Invalid list member policy",
-		}))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid list member policy")
 	}
-	if members, err := s.lists.GetListMembers(m.ListID, []string{userid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to get list members")
+	if members, err := s.lists.GetListMembers(ctx, m.ListID, []string{userid}); err != nil {
+		return kerrors.WithMsg(err, "Failed to get list members")
 	} else if len(members) != 0 {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "List member already added",
-		}), governor.ErrOptInner(err))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "List member already added")
 	}
-	if count, err := s.lists.GetMembersCount(m.ListID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to get list members count")
+	if count, err := s.lists.GetMembersCount(ctx, m.ListID); err != nil {
+		return kerrors.WithMsg(err, "Failed to get list members count")
 	} else if count+1 > mailingListMemberAmountCap {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "May not have more than 255 list members",
-		}), governor.ErrOptInner(err))
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not have more than 255 list members")
 	}
 
-	if err := s.checkUsersExist([]string{userid}); err != nil {
+	if err := s.checkUsersExist(ctx, []string{userid}); err != nil {
 		return err
 	}
 
 	members := s.lists.AddMembers(m, []string{userid})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list")
+		return kerrors.WithMsg(err, "Failed to update list")
 	}
-	if err := s.lists.InsertMembers(members); err != nil {
-		return governor.ErrWithMsg(err, "Failed to add list members")
+	if err := s.lists.InsertMembers(ctx, members); err != nil {
+		return kerrors.WithMsg(err, "Failed to add list members")
 	}
 	return nil
 }
 
-func (s *service) RemoveListMembers(creatorid string, listname string, userids []string) error {
-	m, err := s.lists.GetList(creatorid, listname)
+func (s *service) RemoveListMembers(ctx context.Context, creatorid string, listname string, userids []string) error {
+	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
-	if members, err := s.lists.GetListMembers(m.ListID, userids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to get list members")
+	if members, err := s.lists.GetListMembers(ctx, m.ListID, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to get list members")
 	} else if len(members) != len(userids) {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusNotFound,
-			Message: "List member does not exist",
-		}), governor.ErrOptInner(err))
+		return governor.ErrWithRes(err, http.StatusNotFound, "", "List member does not exist")
 	}
-	if err := s.lists.DeleteMembers(m.ListID, userids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove list members")
+	if err := s.lists.DeleteMembers(ctx, m.ListID, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove list members")
 	}
 	return nil
 }
 
-func (s *service) DeleteList(creatorid string, listname string) error {
-	m, err := s.lists.GetList(creatorid, listname)
+func (s *service) DeleteList(ctx context.Context, creatorid string, listname string) error {
+	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
 	j, err := json.Marshal(delmsg{
 		ListID: m.ListID,
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode list delete message")
+		return kerrors.WithMsg(err, "Failed to encode list delete message")
 	}
-	if err := s.events.StreamPublish(s.opts.DelChannel, j); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish list delete event")
+	if err := s.events.StreamPublish(ctx, s.opts.DelChannel, j); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish list delete event")
 	}
-	if err := s.lists.DeleteListTrees(m.ListID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete list trees")
-	}
-	if err := s.lists.DeleteListMembers(m.ListID); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete list members")
-	}
-	if err := s.lists.DeleteList(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete list")
+	if err := s.lists.DeleteList(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete list")
 	}
 	return nil
 }
 
-func (s *service) GetList(listid string) (*resList, error) {
-	m, err := s.lists.GetListByID(listid)
+func (s *service) GetList(ctx context.Context, listid string) (*resList, error) {
+	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
 	return &resList{
 		ListID:       m.ListID,
@@ -249,19 +206,16 @@ type (
 	}
 )
 
-func (s *service) GetListMembers(listid string, amount, offset int) (*resListMemberIDs, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetListMembers(ctx context.Context, listid string, amount, offset int) (*resListMemberIDs, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	members, err := s.lists.GetMembers(listid, amount, offset)
+	members, err := s.lists.GetMembers(ctx, listid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+		return nil, kerrors.WithMsg(err, "Failed to get list members")
 	}
 	ids := make([]string, 0, len(members))
 	for _, i := range members {
@@ -272,19 +226,16 @@ func (s *service) GetListMembers(listid string, amount, offset int) (*resListMem
 	}, nil
 }
 
-func (s *service) GetListMemberIDs(listid string, userids []string) (*resListMemberIDs, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetListMemberIDs(ctx context.Context, listid string, userids []string) (*resListMemberIDs, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	members, err := s.lists.GetListMembers(listid, userids)
+	members, err := s.lists.GetListMembers(ctx, listid, userids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get list members")
+		return nil, kerrors.WithMsg(err, "Failed to get list members")
 	}
 	ids := make([]string, 0, len(members))
 	for _, i := range members {
@@ -301,14 +252,10 @@ type (
 	}
 )
 
-func (s *service) GetLists(listids []string) (*resLists, error) {
-	m, err := s.lists.GetLists(listids)
+func (s *service) GetLists(ctx context.Context, listids []string) (*resLists, error) {
+	m, err := s.lists.GetLists(ctx, listids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get lists")
-	}
-	vlistids := make([]string, 0, len(m))
-	for _, i := range m {
-		vlistids = append(vlistids, i.ListID)
+		return nil, kerrors.WithMsg(err, "Failed to get lists")
 	}
 	lists := make([]resList, 0, len(m))
 	for _, i := range m {
@@ -330,14 +277,10 @@ func (s *service) GetLists(listids []string) (*resLists, error) {
 	}, nil
 }
 
-func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLists, error) {
-	m, err := s.lists.GetCreatorLists(creatorid, amount, offset)
+func (s *service) GetCreatorLists(ctx context.Context, creatorid string, amount, offset int) (*resLists, error) {
+	m, err := s.lists.GetCreatorLists(ctx, creatorid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
-	}
-	listids := make([]string, 0, len(m))
-	for _, i := range m {
-		listids = append(listids, i.ListID)
+		return nil, kerrors.WithMsg(err, "Failed to get latest lists")
 	}
 	lists := make([]resList, 0, len(m))
 	for _, i := range m {
@@ -359,41 +302,42 @@ func (s *service) GetCreatorLists(creatorid string, amount, offset int) (*resLis
 	}, nil
 }
 
-func (s *service) GetLatestLists(userid string, amount, offset int) (*resLists, error) {
-	m, err := s.lists.GetLatestLists(userid, amount, offset)
+func (s *service) GetLatestLists(ctx context.Context, userid string, amount, offset int) (*resLists, error) {
+	m, err := s.lists.GetLatestLists(ctx, userid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest lists")
+		return nil, kerrors.WithMsg(err, "Failed to get latest lists")
 	}
 	listids := make([]string, 0, len(m))
 	for _, i := range m {
 		listids = append(listids, i.ListID)
 	}
-	return s.GetLists(listids)
+	return s.GetLists(ctx, listids)
 }
 
-func (s *service) DeleteMsgs(creatorid string, listname string, msgids []string) error {
-	m, err := s.lists.GetList(creatorid, listname)
+func (s *service) encodeMsgid(msgid string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(msgid))
+}
+
+func (s *service) DeleteMsgs(ctx context.Context, creatorid string, listname string, msgids []string) error {
+	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
 	for _, i := range msgids {
-		if err := s.rcvMailDir.Subdir(m.ListID).Del(base64.RawURLEncoding.EncodeToString([]byte(i))); err != nil {
+		if err := s.rcvMailDir.Subdir(m.ListID).Del(ctx, s.encodeMsgid(i)); err != nil {
 			if !errors.Is(err, objstore.ErrNotFound{}) {
-				return governor.ErrWithMsg(err, "Failed to delete msg content")
+				return kerrors.WithMsg(err, "Failed to delete msg content")
 			}
 		}
 	}
-	if err := s.lists.DeleteSentMsgLogs(m.ListID, msgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+	if err := s.lists.DeleteSentMsgLogs(ctx, m.ListID, msgids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete sent message logs")
 	}
-	if err := s.lists.DeleteMsgs(m.ListID, msgids); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete messages")
+	if err := s.lists.DeleteMsgs(ctx, m.ListID, msgids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete messages")
 	}
 	return nil
 }
@@ -418,25 +362,19 @@ type (
 	}
 )
 
-func (s *service) GetMsg(listid, msgid string) (*resMsg, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetMsg(ctx context.Context, listid, msgid string) (*resMsg, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetMsg(listid, msgid)
+	m, err := s.lists.GetMsg(ctx, listid, msgid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Message not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Message not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get message")
+		return nil, kerrors.WithMsg(err, "Failed to get message")
 	}
 	return &resMsg{
 		ListID:       m.ListID,
@@ -453,19 +391,16 @@ func (s *service) GetMsg(listid, msgid string) (*resMsg, error) {
 	}, nil
 }
 
-func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetLatestMsgs(ctx context.Context, listid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetListMsgs(listid, amount, offset)
+	m, err := s.lists.GetListMsgs(ctx, listid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get messages")
+		return nil, kerrors.WithMsg(err, "Failed to get messages")
 	}
 	msgs := make([]resMsg, 0, len(m))
 	for _, i := range m {
@@ -488,19 +423,16 @@ func (s *service) GetLatestMsgs(listid string, amount, offset int) (*resMsgs, er
 	}, nil
 }
 
-func (s *service) GetLatestThreads(listid string, amount, offset int) (*resMsgs, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetLatestThreads(ctx context.Context, listid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetListThreads(listid, amount, offset)
+	m, err := s.lists.GetListThreads(ctx, listid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get threads")
+		return nil, kerrors.WithMsg(err, "Failed to get threads")
 	}
 	msgs := make([]resMsg, 0, len(m))
 	for _, i := range m {
@@ -523,19 +455,16 @@ func (s *service) GetLatestThreads(listid string, amount, offset int) (*resMsgs,
 	}, nil
 }
 
-func (s *service) GetThreadMsgs(listid, threadid string, amount, offset int) (*resMsgs, error) {
-	if _, err := s.lists.GetListByID(listid); err != nil {
+func (s *service) GetThreadMsgs(ctx context.Context, listid, threadid string, amount, offset int) (*resMsgs, error) {
+	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetListThread(listid, threadid, amount, offset)
+	m, err := s.lists.GetListThread(ctx, listid, threadid, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get thread")
+		return nil, kerrors.WithMsg(err, "Failed to get thread")
 	}
 	msgs := make([]resMsg, 0, len(m))
 	for _, i := range m {
@@ -558,50 +487,38 @@ func (s *service) GetThreadMsgs(listid, threadid string, amount, offset int) (*r
 	}, nil
 }
 
-func (s *service) StatMsg(listid, msgid string) (*objstore.ObjectInfo, error) {
-	m, err := s.lists.GetListByID(listid)
+func (s *service) StatMsg(ctx context.Context, listid, msgid string) (*objstore.ObjectInfo, error) {
+	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get list")
+		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
-	objinfo, err := s.rcvMailDir.Subdir(m.ListID).Stat(base64.RawURLEncoding.EncodeToString([]byte(msgid)))
+	objinfo, err := s.rcvMailDir.Subdir(m.ListID).Stat(ctx, s.encodeMsgid(msgid))
 	if err != nil {
 		if errors.Is(err, objstore.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Msg content not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Msg content not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get msg content")
+		return nil, kerrors.WithMsg(err, "Failed to get msg content")
 	}
 	return objinfo, nil
 }
 
-func (s *service) GetMsgContent(listid, msgid string) (io.ReadCloser, string, error) {
-	m, err := s.lists.GetListByID(listid)
+func (s *service) GetMsgContent(ctx context.Context, listid, msgid string) (io.ReadCloser, string, error) {
+	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "List not found",
-			}), governor.ErrOptInner(err))
+			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
-		return nil, "", governor.ErrWithMsg(err, "Failed to get list")
+		return nil, "", kerrors.WithMsg(err, "Failed to get list")
 	}
-	obj, objinfo, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(msgid)))
+	obj, objinfo, err := s.rcvMailDir.Subdir(m.ListID).Get(ctx, s.encodeMsgid(msgid))
 	if err != nil {
 		if errors.Is(err, objstore.ErrNotFound{}) {
-			return nil, "", governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Msg content not found",
-			}), governor.ErrOptInner(err))
+			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Msg content not found")
 		}
-		return nil, "", governor.ErrWithMsg(err, "Failed to get msg content")
+		return nil, "", kerrors.WithMsg(err, "Failed to get msg content")
 	}
 	return obj, objinfo.ContentType, nil
 }
@@ -616,37 +533,44 @@ const (
 	msgDeleteBatchSize = 256
 )
 
-func (s *service) deleteSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	msg := &delmsg{}
-	if err := json.Unmarshal(msgdata, msg); err != nil {
-		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode list delete message")
+func (s *service) deleteSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	var msg delmsg
+	if err := json.Unmarshal(msgdata, &msg); err != nil {
+		return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode list delete message")
+	}
+
+	if err := s.lists.DeleteListMembers(ctx, msg.ListID); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete list members")
+	}
+	if err := s.lists.DeleteListTrees(ctx, msg.ListID); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete list trees")
 	}
 
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		msgs, err := s.lists.GetListMsgs(msg.ListID, msgDeleteBatchSize, 0)
+		msgs, err := s.lists.GetListMsgs(ctx, msg.ListID, msgDeleteBatchSize, 0)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get list messages")
+			return kerrors.WithMsg(err, "Failed to get list messages")
 		}
 		if len(msgs) == 0 {
 			break
 		}
 		msgids := make([]string, 0, len(msgs))
 		for _, i := range msgs {
-			if err := s.rcvMailDir.Subdir(i.ListID).Del(base64.RawURLEncoding.EncodeToString([]byte(i.Msgid))); err != nil {
+			if err := s.rcvMailDir.Subdir(i.ListID).Del(ctx, s.encodeMsgid(i.Msgid)); err != nil {
 				if !errors.Is(err, objstore.ErrNotFound{}) {
-					return governor.ErrWithMsg(err, "Failed to delete msg content")
+					return kerrors.WithMsg(err, "Failed to delete msg content")
 				}
 			}
 			msgids = append(msgids, i.Msgid)
 		}
-		if err := s.lists.DeleteSentMsgLogs(msg.ListID, msgids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+		if err := s.lists.DeleteSentMsgLogs(ctx, msg.ListID, msgids); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete sent message logs")
 		}
-		if err := s.lists.DeleteMsgs(msg.ListID, msgids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete list messages")
+		if err := s.lists.DeleteMsgs(ctx, msg.ListID, msgids); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete list messages")
 		}
 		if len(msgs) < msgDeleteBatchSize {
 			break
@@ -676,83 +600,10 @@ func (e ErrMailEvent) Error() string {
 	return "Malformed mail message"
 }
 
-func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	emmsg := &mailmsg{}
-	if err := json.Unmarshal(msgdata, emmsg); err != nil {
-		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
-	}
-
-	ml, err := s.lists.GetListByID(emmsg.ListID)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			s.logger.Error("List not found", map[string]string{
-				"actiontype": "getmaillist",
-				"error":      err.Error(),
-			})
-			return nil
-		}
-		return governor.ErrWithMsg(err, "Failed to get list")
-	}
-	m, err := s.lists.GetMsg(emmsg.ListID, emmsg.MsgID)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			s.logger.Error("Msg not found", map[string]string{
-				"actiontype": "getmailmsg",
-				"error":      err.Error(),
-			})
-			return nil
-		}
-		return governor.ErrWithMsg(err, "Failed to get list msg")
-	}
-	if !m.Processed {
-		if err := s.lists.MarkMsgProcessed(m.ListID, m.Msgid); err != nil {
-			return governor.ErrWithMsg(err, "Failed to mark list msg")
-		}
-	}
-	if err := s.lists.InsertTree(s.lists.NewTree(m.ListID, m.Msgid, m.CreationTime)); err != nil {
-		if !errors.Is(err, db.ErrUnique{}) {
-			return governor.ErrWithMsg(err, "Failed to insert list thread tree")
-		}
-	}
-	threadid := m.Msgid
-	if m.InReplyTo != "" {
-		if p, err := s.lists.GetMsg(m.ListID, m.InReplyTo); err != nil {
-			if !errors.Is(err, db.ErrNotFound{}) {
-				return governor.ErrWithMsg(err, "Failed to get list msg parent")
-			}
-			// parent not found
-		} else {
-			// parent exists
-			// A messages parent may not be updated, so all messages must be in the
-			// form of a tree, and will not form a more general DAG.
-			if err := s.lists.InsertTreeEdge(m.ListID, m.Msgid, p.Msgid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to insert list thread edge")
-			}
-
-			threadid = p.Msgid
-			if k := p.ThreadID; k != "" {
-				threadid = k
-			}
-			if err := s.lists.UpdateMsgParent(m.ListID, m.Msgid, p.Msgid, threadid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to update list msg parent")
-			}
-		}
-	}
-	// thread updates must occur before children updates since thread updates are
-	// culled by non thread children
-	if err := s.lists.InsertTreeChildren(m.ListID, m.Msgid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to insert list thread children")
-	}
-	if err := s.lists.UpdateMsgThread(m.ListID, m.Msgid, threadid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list msg thread")
-	}
-	if err := s.lists.UpdateMsgChildren(m.ListID, m.Msgid, threadid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update list msg children")
-	}
-	if m.CreationTime > ml.CreationTime {
-		if err := s.lists.UpdateListLastUpdated(m.ListID, m.CreationTime); err != nil {
-			return governor.ErrWithMsg(err, "Failed to update list last updated")
-		}
+func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	var emmsg mailmsg
+	if err := json.Unmarshal(msgdata, &emmsg); err != nil {
+		return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode mail message")
 	}
 
 	j, err := json.Marshal(sendmsg{
@@ -761,10 +612,95 @@ func (s *service) mailSubscriber(pinger events.Pinger, topic string, msgdata []b
 		From:   emmsg.From,
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode mail send message")
+		return kerrors.WithMsg(err, "Failed to encode mail send message")
 	}
-	if err := s.events.StreamPublish(s.opts.SendChannel, j); err != nil {
-		return governor.ErrWithMsg(err, "Failed to publish mail send event")
+
+	ml, err := s.lists.GetListByID(ctx, emmsg.ListID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("List not found", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "mailinglist_get_list",
+			})
+			return nil
+		}
+		return kerrors.WithMsg(err, "Failed to get list")
+	}
+	m, err := s.lists.GetMsg(ctx, emmsg.ListID, emmsg.MsgID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			s.logger.Error("Msg not found", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "mailinglist_get_msg",
+			})
+			return nil
+		}
+		return kerrors.WithMsg(err, "Failed to get list msg")
+	}
+	if !m.Processed {
+		if err := s.lists.MarkMsgProcessed(ctx, m.ListID, m.Msgid); err != nil {
+			return kerrors.WithMsg(err, "Failed to mark list msg")
+		}
+	}
+	// In a closure table, every node must also point to itself with depth 0, so
+	// insert a node that does that.
+	if err := s.lists.InsertTree(ctx, s.lists.NewTree(m.ListID, m.Msgid, m.CreationTime)); err != nil {
+		if !errors.Is(err, db.ErrUnique{}) {
+			return kerrors.WithMsg(err, "Failed to insert list thread tree")
+		}
+	}
+	threadid := m.Msgid
+	if m.InReplyTo != "" {
+		if p, err := s.lists.GetMsg(ctx, m.ListID, m.InReplyTo); err != nil {
+			if !errors.Is(err, db.ErrNotFound{}) {
+				return kerrors.WithMsg(err, "Failed to get list msg parent")
+			}
+			// parent not found
+		} else {
+			// parent exists
+
+			// A message's parent may not be updated, so all messages must be in the
+			// form of a tree, and will not form a more general DAG.
+
+			// Add parent closures for the message
+			if err := s.lists.InsertTreeEdge(ctx, m.ListID, m.Msgid, p.Msgid); err != nil {
+				return kerrors.WithMsg(err, "Failed to insert list thread edge")
+			}
+
+			threadid = p.Msgid
+			if p.ThreadID != "" {
+				threadid = p.ThreadID
+			}
+			if err := s.lists.UpdateMsgParent(ctx, m.ListID, m.Msgid, p.Msgid, threadid); err != nil {
+				return kerrors.WithMsg(err, "Failed to update list msg parent")
+			}
+		}
+	}
+	// Update any children closures for the message if they exist. This depends
+	// on the messages table not having been updated for any message with the
+	// current message as its parent. Thus this must occur before updating
+	// message parents.
+	if err := s.lists.InsertTreeChildren(ctx, m.ListID, m.Msgid); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert list thread children")
+	}
+	// Like updating children closures, this depends on the messages table not
+	// having been updated for any message with the current message as its
+	// parent. Thus this must occur before updating message parents.
+	if err := s.lists.UpdateMsgThread(ctx, m.ListID, m.Msgid, threadid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update list msg thread")
+	}
+	// Finally, update the message's direct children's parents and threads
+	if err := s.lists.UpdateMsgChildren(ctx, m.ListID, m.Msgid, threadid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update list msg children")
+	}
+	if m.CreationTime > ml.CreationTime {
+		if err := s.lists.UpdateListLastUpdated(ctx, m.ListID, m.CreationTime); err != nil {
+			return kerrors.WithMsg(err, "Failed to update list last updated")
+		}
+	}
+
+	if err := s.events.StreamPublish(ctx, s.opts.SendChannel, j); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail send event")
 	}
 	return nil
 }
@@ -773,69 +709,69 @@ const (
 	mailingListSendBatchSize = 256
 )
 
-func (s *service) sendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	emmsg := &sendmsg{}
-	if err := json.Unmarshal(msgdata, emmsg); err != nil {
-		return governor.ErrWithKind(err, ErrMailEvent{}, "Failed to decode mail message")
+func (s *service) sendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	var emmsg sendmsg
+	if err := json.Unmarshal(msgdata, &emmsg); err != nil {
+		return kerrors.WithKind(err, ErrMailEvent{}, "Failed to decode mail message")
 	}
 
-	if _, err := s.lists.GetListByID(emmsg.ListID); err != nil {
+	if _, err := s.lists.GetListByID(ctx, emmsg.ListID); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("List not found", map[string]string{
-				"actiontype": "getmaillist",
 				"error":      err.Error(),
+				"actiontype": "mailinglist_get_list",
 			})
 			return nil
 		}
-		return governor.ErrWithMsg(err, "Failed to get list")
+		return kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetMsg(emmsg.ListID, emmsg.MsgID)
+	m, err := s.lists.GetMsg(ctx, emmsg.ListID, emmsg.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
 			s.logger.Error("Msg not found", map[string]string{
-				"actiontype": "getmailmsg",
 				"error":      err.Error(),
+				"actiontype": "mailinglist_get_msg",
 			})
 			return nil
 		}
-		return governor.ErrWithMsg(err, "Failed to get list msg")
+		return kerrors.WithMsg(err, "Failed to get list msg")
 	}
-	if m.Sent {
-		if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+	if m.Sent || m.Deleted {
+		if err := s.lists.DeleteSentMsgLogs(ctx, m.ListID, []string{m.Msgid}); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete sent message logs")
 		}
 		return nil
 	}
 
-	mb := bytes.Buffer{}
+	mb := &bytes.Buffer{}
 	if err := func() error {
-		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(base64.RawURLEncoding.EncodeToString([]byte(m.Msgid)))
+		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(ctx, s.encodeMsgid(m.Msgid))
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get msg content")
+			return kerrors.WithMsg(err, "Failed to get msg content")
 		}
 		defer func() {
 			if err := obj.Close(); err != nil {
 				s.logger.Error("Failed to close msg content", map[string]string{
-					"actiontype": "getlistmsg",
 					"error":      err.Error(),
+					"actiontype": "mailinglist_close_msg_content",
 				})
 			}
 		}()
-		if _, err := io.Copy(&mb, obj); err != nil {
-			return governor.ErrWithMsg(err, "Failed to read msg content")
+		if _, err := io.Copy(mb, obj); err != nil {
+			return kerrors.WithMsg(err, "Failed to read msg content")
 		}
 		return nil
 	}(); err != nil {
 		if errors.Is(err, objstore.ErrNotFound{}) {
 			s.logger.Error("Msg content not found", map[string]string{
-				"actiontype": "getlistmsgcontent",
 				"error":      err.Error(),
+				"actiontype": "mailinglist_get_msg_content",
 			})
-			if err := s.lists.MarkMsgSent(m.ListID, m.Msgid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to mark list message sent")
+			if err := s.lists.MarkMsgSent(ctx, m.ListID, m.Msgid); err != nil {
+				return kerrors.WithMsg(err, "Failed to mark list message sent")
 			}
-			if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
-				return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+			if err := s.lists.DeleteSentMsgLogs(ctx, m.ListID, []string{m.Msgid}); err != nil {
+				return kerrors.WithMsg(err, "Failed to delete sent message logs")
 			}
 			return nil
 		}
@@ -843,42 +779,42 @@ func (s *service) sendSubscriber(pinger events.Pinger, topic string, msgdata []b
 	}
 
 	for {
-		if err := pinger.Ping(); err != nil {
+		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		userids, err := s.lists.GetUnsentMsgs(emmsg.ListID, emmsg.MsgID, mailingListSendBatchSize)
+		userids, err := s.lists.GetUnsentMsgs(ctx, emmsg.ListID, emmsg.MsgID, mailingListSendBatchSize)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get unsent messages")
+			return kerrors.WithMsg(err, "Failed to get unsent messages")
 		}
 		if len(userids) == 0 {
 			break
 		}
-		recipients, err := s.users.GetInfoBulk(userids)
+		recipients, err := s.users.GetInfoBulk(ctx, userids)
 		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get list member users")
+			return kerrors.WithMsg(err, "Failed to get list member users")
 		}
 		if len(recipients.Users) > 0 {
 			rcpts := make([]string, 0, len(recipients.Users))
 			for _, i := range recipients.Users {
 				rcpts = append(rcpts, i.Email)
 			}
-			if err := s.mailer.FwdStream(emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
-				return governor.ErrWithMsg(err, "Failed to send mail message")
+			if err := s.mailer.FwdStream(ctx, emmsg.From, rcpts, int64(mb.Len()), bytes.NewReader(mb.Bytes()), false); err != nil {
+				return kerrors.WithMsg(err, "Failed to send mail message")
 			}
 		}
-		if err := s.lists.LogSentMsg(emmsg.ListID, emmsg.MsgID, userids); err != nil {
-			return governor.ErrWithMsg(err, "Failed to log sent mail messages")
+		if err := s.lists.LogSentMsg(ctx, emmsg.ListID, emmsg.MsgID, userids); err != nil {
+			return kerrors.WithMsg(err, "Failed to log sent mail messages")
 		}
 		if len(userids) < mailingListSendBatchSize {
 			break
 		}
 	}
 
-	if err := s.lists.MarkMsgSent(m.ListID, m.Msgid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to mark list message sent")
+	if err := s.lists.MarkMsgSent(ctx, m.ListID, m.Msgid); err != nil {
+		return kerrors.WithMsg(err, "Failed to mark list message sent")
 	}
-	if err := s.lists.DeleteSentMsgLogs(m.ListID, []string{m.Msgid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete sent message logs")
+	if err := s.lists.DeleteSentMsgLogs(ctx, m.ListID, []string{m.Msgid}); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete sent message logs")
 	}
 	return nil
 }
