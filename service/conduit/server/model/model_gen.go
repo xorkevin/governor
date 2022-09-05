@@ -59,15 +59,15 @@ func (t *serverModelTable) GetModelEqServerID(ctx context.Context, d db.SQLExecu
 	return m, nil
 }
 
-func (t *serverModelTable) UpdModelEqServerID(ctx context.Context, d db.SQLExecutor, m *Model, serverid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (serverid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5) WHERE serverid = $6;", m.ServerID, m.Name, m.Desc, m.Theme, m.CreationTime, serverid)
+func (t *serverModelTable) DelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1;", serverid)
+	return err
+}
+
+func (t *serverModelTable) UpdserverPropsEqServerID(ctx context.Context, d db.SQLExecutor, m *serverProps, serverid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, desc, theme) = ROW($1, $2, $3) WHERE serverid = $4;", m.Name, m.Desc, m.Theme, serverid)
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func (t *serverModelTable) DelEqServerID(ctx context.Context, d db.SQLExecutor, serverid string) error {
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1;", serverid)
-	return err
 }

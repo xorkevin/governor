@@ -118,14 +118,6 @@ func (t *channelModelTable) GetChannelModelEqServerIDLikeChannelIDOrdChannelID(c
 	return res, nil
 }
 
-func (t *channelModelTable) UpdChannelModelEqServerIDEqChannelID(ctx context.Context, d db.SQLExecutor, m *ChannelModel, serverid string, channelid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (serverid, channelid, chatid, name, desc, theme, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE serverid = $8 AND channelid = $9;", m.ServerID, m.ChannelID, m.Chatid, m.Name, m.Desc, m.Theme, m.CreationTime, serverid, channelid)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *channelModelTable) DelEqServerIDHasChannelID(ctx context.Context, d db.SQLExecutor, serverid string, channelid []string) error {
 	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(channelid))
@@ -142,4 +134,12 @@ func (t *channelModelTable) DelEqServerIDHasChannelID(ctx context.Context, d db.
 	}
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE serverid = $1 AND channelid IN (VALUES "+placeholderschannelid+");", args...)
 	return err
+}
+
+func (t *channelModelTable) UpdchannelPropsEqServerIDEqChannelID(ctx context.Context, d db.SQLExecutor, m *channelProps, serverid string, channelid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, desc, theme) = ROW($1, $2, $3) WHERE serverid = $4 AND channelid = $5;", m.Name, m.Desc, m.Theme, serverid, channelid)
+	if err != nil {
+		return err
+	}
+	return nil
 }
