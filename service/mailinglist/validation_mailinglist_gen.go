@@ -48,16 +48,6 @@ func (r reqListMsgs) valid() error {
 	return nil
 }
 
-func (r reqListMsg) valid() error {
-	if err := validhasListid(r.Listid); err != nil {
-		return err
-	}
-	if err := validhasMsgid(r.Msgid); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r reqListThread) valid() error {
 	if err := validhasListid(r.Listid); err != nil {
 		return err
@@ -69,6 +59,16 @@ func (r reqListThread) valid() error {
 		return err
 	}
 	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqListMsg) valid() error {
+	if err := validhasListid(r.Listid); err != nil {
+		return err
+	}
+	if err := validhasMsgid(r.Msgid); err != nil {
 		return err
 	}
 	return nil

@@ -1,27 +1,29 @@
 package model
 
 import (
+	"context"
 	"errors"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p friend -o model_gen.go Model friendUsername
 
 type (
 	Repo interface {
-		GetByID(userid1, userid2 string) (*Model, error)
-		GetFriends(userid string, prefix string, limit, offset int) ([]Model, error)
-		GetFriendsByID(userid string, userids []string) ([]Model, error)
-		Insert(userid1, userid2 string, username1, username2 string) error
-		Remove(userid1, userid2 string) error
-		UpdateUsername(userid, username string) error
-		Setup() error
+		GetByID(ctx context.Context, userid1, userid2 string) (*Model, error)
+		GetFriends(ctx context.Context, userid string, prefix string, limit, offset int) ([]Model, error)
+		GetFriendsByID(ctx context.Context, userid string, userids []string) ([]Model, error)
+		Insert(ctx context.Context, userid1, userid2 string, username1, username2 string) error
+		Remove(ctx context.Context, userid1, userid2 string) error
+		UpdateUsername(ctx context.Context, userid, username string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table string
+		table *friendModelTable
 		db    db.Database
 	}
 
@@ -64,63 +66,66 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 func New(database db.Database, table string) Repo {
 	return &repo{
-		table: table,
-		db:    database,
+		table: &friendModelTable{
+			TableName: table,
+		},
+		db: database,
 	}
 }
 
-func (r *repo) GetByID(userid1, userid2 string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, userid1, userid2 string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := friendModelGetModelEqUserid1EqUserid2(d, r.table, userid1, userid2)
+	m, err := r.table.GetModelEqUserid1EqUserid2(ctx, d, userid1, userid2)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get friend")
+		return nil, kerrors.WithMsg(err, "Failed to get friend")
 	}
 	return m, nil
 }
 
-func (r *repo) GetFriends(userid string, prefix string, limit, offset int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetFriends(ctx context.Context, userid string, prefix string, limit, offset int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if prefix == "" {
-		m, err := friendModelGetModelEqUserid1OrdUsername(d, r.table, userid, true, limit, offset)
+		m, err := r.table.GetModelEqUserid1OrdUsername(ctx, d, userid, true, limit, offset)
 		if err != nil {
-			return nil, db.WrapErr(err, "Failed to get friends")
+			return nil, kerrors.WithMsg(err, "Failed to get friends")
 		}
 		return m, nil
 	}
-	m, err := friendModelGetModelEqUserid1LikeUsernameOrdUsername(d, r.table, userid, prefix+"%", true, limit, offset)
+	m, err := r.table.GetModelEqUserid1LikeUsernameOrdUsername(ctx, d, userid, prefix+"%", true, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get friends")
+		return nil, kerrors.WithMsg(err, "Failed to get friends")
 	}
 	return m, nil
 }
 
-func (r *repo) GetFriendsByID(userid string, userids []string) ([]Model, error) {
+func (r *repo) GetFriendsByID(ctx context.Context, userid string, userids []string) ([]Model, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
-	d, err := r.db.DB()
+
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := friendModelGetModelEqUserid1HasUserid2OrdUserid2(d, r.table, userid, userids, true, len(userids), 0)
+	m, err := r.table.GetModelEqUserid1HasUserid2OrdUserid2(ctx, d, userid, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get friends")
+		return nil, kerrors.WithMsg(err, "Failed to get friends")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(userid1, userid2 string, username1, username2 string) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, userid1, userid2 string, username1, username2 string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := friendModelInsertBulk(d, r.table, []*Model{
+	if err := r.table.InsertBulk(ctx, d, []*Model{
 		{
 			Userid1:  userid1,
 			Userid2:  userid2,
@@ -132,42 +137,49 @@ func (r *repo) Insert(userid1, userid2 string, username1, username2 string) erro
 			Username: username1,
 		},
 	}, false); err != nil {
-		return db.WrapErr(err, "Failed to add friend")
+		return kerrors.WithMsg(err, "Failed to add friend")
 	}
 	return nil
 }
 
-func (r *repo) Remove(userid1, userid2 string) error {
-	d, err := r.db.DB()
-	if err != nil {
+func (t *friendModelTable) DelFriendPairs(ctx context.Context, d db.SQLExecutor, userid1, userid2 string) error {
+	if _, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE (userid_1 = $1 AND userid_2 = $2) OR (userid_1 = $2 AND userid_2 = $1);", userid1, userid2); err != nil {
 		return err
-	}
-	if _, err := d.Exec("DELETE FROM "+r.table+" WHERE (userid_1 = $1 AND userid_2 = $2) OR (userid_1 = $2 AND userid_2 = $1);", userid1, userid2); err != nil {
-		return db.WrapErr(err, "Failed to remove friend")
 	}
 	return nil
 }
 
-func (r *repo) UpdateUsername(userid, username string) error {
-	d, err := r.db.DB()
+func (r *repo) Remove(ctx context.Context, userid1, userid2 string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := friendModelUpdfriendUsernameEqUserid2(d, r.table, &friendUsername{
+	if err := r.table.DelFriendPairs(ctx, d, userid1, userid2); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove friend")
+	}
+	return nil
+}
+
+func (r *repo) UpdateUsername(ctx context.Context, userid, username string) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpdfriendUsernameEqUserid2(ctx, d, &friendUsername{
 		Username: username,
 	}, userid); err != nil {
-		return db.WrapErr(err, "Failed to update username")
+		return kerrors.WithMsg(err, "Failed to update username")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := friendModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup friend model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup friend model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
