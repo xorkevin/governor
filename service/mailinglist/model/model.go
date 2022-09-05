@@ -36,7 +36,6 @@ type (
 		GetMembers(ctx context.Context, listid string, limit, offset int) ([]MemberModel, error)
 		GetListsMembers(ctx context.Context, listids []string, limit int) ([]MemberModel, error)
 		GetListMembers(ctx context.Context, listid string, userids []string) ([]MemberModel, error)
-		GetMembersCount(ctx context.Context, listid string) (int, error)
 		GetLatestLists(ctx context.Context, userid string, limit, offset int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
 		InsertMembers(ctx context.Context, m []*MemberModel) error
@@ -406,26 +405,6 @@ func (r *repo) GetListMembers(ctx context.Context, listid string, userids []stri
 		return nil, kerrors.WithMsg(err, "Failed to get list members")
 	}
 	return m, nil
-}
-
-func (t *memberModelTable) CountEqListid(ctx context.Context, d db.SQLExecutor, listid string) (int, error) {
-	var count int
-	if err := d.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+t.TableName+" WHERE listid = $1;", listid).Scan(&count); err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-func (r *repo) GetMembersCount(ctx context.Context, listid string) (int, error) {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return 0, err
-	}
-	count, err := r.tableMembers.CountEqListid(ctx, d, listid)
-	if err != nil {
-		return 0, kerrors.WithMsg(err, "Failed to get list members count")
-	}
-	return count, nil
 }
 
 func (r *repo) GetLatestLists(ctx context.Context, userid string, limit, offset int) ([]MemberModel, error) {

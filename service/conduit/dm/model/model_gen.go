@@ -67,14 +67,6 @@ func (t *dmModelTable) GetModelEqUserid1EqUserid2(ctx context.Context, d db.SQLE
 	return m, nil
 }
 
-func (t *dmModelTable) UpdModelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, m *Model, userid1 string, userid2 string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid_1, userid_2, chatid, name, theme, last_updated, creation_time) = ROW($1, $2, $3, $4, $5, $6, $7) WHERE userid_1 = $8 AND userid_2 = $9;", m.Userid1, m.Userid2, m.Chatid, m.Name, m.Theme, m.LastUpdated, m.CreationTime, userid1, userid2)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (t *dmModelTable) DelEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid_1 = $1 AND userid_2 = $2;", userid1, userid2)
 	return err
@@ -126,6 +118,14 @@ func (t *dmModelTable) GetModelHasChatidOrdLastUpdated(ctx context.Context, d db
 		return nil, err
 	}
 	return res, nil
+}
+
+func (t *dmModelTable) UpddmPropsEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, m *dmProps, userid1 string, userid2 string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, theme) = ROW($1, $2) WHERE userid_1 = $3 AND userid_2 = $4;", m.Name, m.Theme, userid1, userid2)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *dmModelTable) UpddmLastUpdatedEqUserid1EqUserid2(ctx context.Context, d db.SQLExecutor, m *dmLastUpdated, userid1 string, userid2 string) error {

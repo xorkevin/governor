@@ -116,11 +116,6 @@ func (s *service) Subscribe(ctx context.Context, creatorid string, listname stri
 	} else if len(members) != 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "List member already added")
 	}
-	if count, err := s.lists.GetMembersCount(ctx, m.ListID); err != nil {
-		return kerrors.WithMsg(err, "Failed to get list members count")
-	} else if count+1 > mailingListMemberAmountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not have more than 255 list members")
-	}
 
 	if err := s.checkUsersExist(ctx, []string{userid}); err != nil {
 		return err

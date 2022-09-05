@@ -268,13 +268,12 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 }
 
 const (
-	mailingListMemberAmountCap = 255
-	mailboxKeySeparator        = "."
-	listSenderPolicyOwner      = "owner"
-	listSenderPolicyMember     = "member"
-	listSenderPolicyUser       = "user"
-	listMemberPolicyOwner      = "owner"
-	listMemberPolicyUser       = "user"
+	mailboxKeySeparator    = "."
+	listSenderPolicyOwner  = "owner"
+	listSenderPolicyMember = "member"
+	listSenderPolicyUser   = "user"
+	listMemberPolicyOwner  = "owner"
+	listMemberPolicyUser   = "user"
 )
 
 func (s *smtpSession) Rcpt(to string) error {
