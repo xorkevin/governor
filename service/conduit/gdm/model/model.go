@@ -1,12 +1,16 @@
 package model
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge model -m Model -p gdm -o model_gen.go Model modelLastUpdated
@@ -38,9 +42,9 @@ type (
 	}
 
 	repo struct {
-		table        string
-		tableMembers string
-		tableAssoc   string
+		table        *gdmModelTable
+		tableMembers *memberModelTable
+		tableAssoc   *assocModelTable
 		db           db.Database
 	}
 
@@ -100,10 +104,16 @@ func NewCtx(inj governor.Injector, table, tableMembers, tableAssoc string) Repo 
 
 func New(database db.Database, table, tableMembers, tableAssoc string) Repo {
 	return &repo{
-		table:        table,
-		tableMembers: tableMembers,
-		tableAssoc:   tableAssoc,
-		db:           database,
+		table: &gdmModelTable{
+			TableName: table,
+		},
+		tableMembers: &memberModelTable{
+			TableName: tableMembers,
+		},
+		tableAssoc: &assocModelTable{
+			TableName: tableAssoc,
+		},
+		db: database,
 	}
 }
 
@@ -111,7 +121,7 @@ func New(database db.Database, table, tableMembers, tableAssoc string) Repo {
 func (r *repo) New(name string, theme string) (*Model, error) {
 	u, err := uid.New(chatUIDSize)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
+		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}
 	now := time.Now().Round(0)
 	return &Model{
@@ -124,36 +134,36 @@ func (r *repo) New(name string, theme string) (*Model, error) {
 }
 
 // GetByID returns a group chat by id
-func (r *repo) GetByID(chatid string) (*Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetByID(ctx context.Context, chatid string) (*Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := gdmModelGetModelEqChatid(d, r.table, chatid)
+	m, err := r.table.GetModelEqChatid(ctx, d, chatid)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat")
+		return nil, kerrors.WithMsg(err, "Failed to get group chat")
 	}
 	return m, nil
 }
 
 // GetLatest returns latest group chats for a user
-func (r *repo) GetLatest(userid string, before int64, limit int) ([]string, error) {
-	d, err := r.db.DB()
+func (r *repo) GetLatest(ctx context.Context, userid string, before int64, limit int) ([]string, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var m []MemberModel
 	if before == 0 {
 		var err error
-		m, err = memberModelGetMemberModelEqUseridOrdLastUpdated(d, r.tableMembers, userid, false, limit, 0)
+		m, err = r.tableMembers.GetMemberModelEqUseridOrdLastUpdated(ctx, d, userid, false, limit, 0)
 		if err != nil {
-			return nil, db.WrapErr(err, "Failed to get latest group chats")
+			return nil, kerrors.WithMsg(err, "Failed to get latest group chats")
 		}
 	} else {
 		var err error
-		m, err = memberModelGetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(d, r.tableMembers, userid, before, false, limit, 0)
+		m, err = r.tableMembers.GetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(ctx, d, userid, before, false, limit, 0)
 		if err != nil {
-			return nil, db.WrapErr(err, "Failed to get latest group chats")
+			return nil, kerrors.WithMsg(err, "Failed to get latest group chats")
 		}
 	}
 	res := make([]string, 0, len(m))
@@ -164,35 +174,35 @@ func (r *repo) GetLatest(userid string, before int64, limit int) ([]string, erro
 }
 
 // GetChats returns gets group chats by id
-func (r *repo) GetChats(chatids []string) ([]Model, error) {
+func (r *repo) GetChats(ctx context.Context, chatids []string) ([]Model, error) {
 	if len(chatids) == 0 {
 		return nil, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := gdmModelGetModelHasChatidOrdChatid(d, r.table, chatids, true, len(chatids), 0)
+	m, err := r.table.GetModelHasChatidOrdChatid(ctx, d, chatids, true, len(chatids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chats")
+		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
 	return m, nil
 }
 
 // GetMembers returns gets group chat members
-func (r *repo) GetMembers(chatid string, userids []string) ([]string, error) {
+func (r *repo) GetMembers(ctx context.Context, chatid string, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqChatidHasUseridOrdUserid(d, r.tableMembers, chatid, userids, true, len(userids), 0)
+	m, err := r.tableMembers.GetMemberModelEqChatidHasUseridOrdUserid(ctx, d, chatid, userids, true, len(userids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat members")
+		return nil, kerrors.WithMsg(err, "Failed to get group chat members")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -202,34 +212,35 @@ func (r *repo) GetMembers(chatid string, userids []string) ([]string, error) {
 }
 
 // GetChatsMembers returns gets group chats members
-func (r *repo) GetChatsMembers(chatids []string, limit int) ([]MemberModel, error) {
+func (r *repo) GetChatsMembers(ctx context.Context, chatids []string, limit int) ([]MemberModel, error) {
 	if len(chatids) == 0 {
 		return nil, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelHasChatidOrdChatid(d, r.tableMembers, chatids, true, limit, 0)
+	m, err := r.tableMembers.GetMemberModelHasChatidOrdChatid(ctx, d, chatids, true, limit, 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chat members")
+		return nil, kerrors.WithMsg(err, "Failed to get group chat members")
 	}
 	return m, nil
 }
 
-func (r *repo) GetUserChats(userid string, chatids []string) ([]string, error) {
+// GetUserChats returns a user's chats
+func (r *repo) GetUserChats(ctx context.Context, userid string, chatids []string) ([]string, error) {
 	if len(chatids) == 0 {
 		return nil, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := memberModelGetMemberModelEqUseridHasChatidOrdChatid(d, r.tableMembers, userid, chatids, true, len(chatids), 0)
+	m, err := r.tableMembers.GetMemberModelEqUseridHasChatidOrdChatid(ctx, d, userid, chatids, true, len(chatids), 0)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chats")
+		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -238,28 +249,36 @@ func (r *repo) GetUserChats(userid string, chatids []string) ([]string, error) {
 	return res, nil
 }
 
-// GetMembersCount returns the count of group chat members
-func (r *repo) GetMembersCount(chatid string) (int, error) {
+func (t *memberModelTable) CountMembersEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) (int, error) {
 	var count int
-	d, err := r.db.DB()
+	if err := d.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+t.TableName+" WHERE chatid = $1;", chatid).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetMembersCount returns the count of group chat members
+func (r *repo) GetMembersCount(ctx context.Context, chatid string) (int, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return 0, err
 	}
-	if err := d.QueryRow("SELECT COUNT(*) FROM "+r.tableMembers+" WHERE chatid = $1;", chatid).Scan(&count); err != nil {
-		return 0, db.WrapErr(err, "Failed to get group chat members count")
+	count, err := r.tableMembers.CountMembersEqChatid(ctx, d, chatid)
+	if err != nil {
+		return 0, kerrors.WithMsg(err, "Failed to get group chat members count")
 	}
 	return count, nil
 }
 
 // GetAssocs returns user associated chats
-func (r *repo) GetAssocs(userid1, userid2 string, limit, offset int) ([]string, error) {
-	d, err := r.db.DB()
+func (r *repo) GetAssocs(ctx context.Context, userid1, userid2 string, limit, offset int) ([]string, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := assocModelGetAssocModelEqUserid1EqUserid2OrdLastUpdated(d, r.tableAssoc, userid1, userid2, false, limit, offset)
+	m, err := r.tableAssoc.GetAssocModelEqUserid1EqUserid2OrdLastUpdated(ctx, d, userid1, userid2, false, limit, offset)
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get group chats")
+		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -268,57 +287,61 @@ func (r *repo) GetAssocs(userid1, userid2 string, limit, offset int) ([]string, 
 	return res, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+// Insert inserts a group chat
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := gdmModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert group chat")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert group chat")
 	}
 	return nil
 }
 
-func (r *repo) Update(m *Model) error {
-	d, err := r.db.DB()
+// Update updates a group chat
+func (r *repo) Update(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := gdmModelUpdModelEqChatid(d, r.table, m, m.Chatid); err != nil {
-		return db.WrapErr(err, "Failed to update group chat")
+	if err := r.table.UpdModelEqChatid(ctx, d, m, m.Chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update group chat")
 	}
 	return nil
 }
 
-func (r *repo) UpdateLastUpdated(chatid string, t int64) error {
-	d, err := r.db.DB()
+// UpdateLastUpdated updates a group chat last updated time
+func (r *repo) UpdateLastUpdated(ctx context.Context, chatid string, t int64) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := gdmModelUpdmodelLastUpdatedEqChatid(d, r.table, &modelLastUpdated{
+	if err := r.table.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		return db.WrapErr(err, "Failed to update group chat last updated")
+		return kerrors.WithMsg(err, "Failed to update group chat last updated")
 	}
-	if err := memberModelUpdmodelLastUpdatedEqChatid(d, r.tableMembers, &modelLastUpdated{
+	if err := r.tableMembers.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		return db.WrapErr(err, "Failed to update group chat last updated")
+		return kerrors.WithMsg(err, "Failed to update group chat last updated")
 	}
-	if err := assocModelUpdmodelLastUpdatedEqChatid(d, r.tableAssoc, &modelLastUpdated{
+	if err := r.tableAssoc.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
-		return db.WrapErr(err, "Failed to update group chat last updated")
+		return kerrors.WithMsg(err, "Failed to update group chat last updated")
 	}
 	return nil
 }
 
-func (r *repo) AddMembers(chatid string, userids []string) (int64, error) {
+// AddMembers adds members to a chat
+func (r *repo) AddMembers(ctx context.Context, chatid string, userids []string) (int64, error) {
 	if len(userids) == 0 {
 		return 0, nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -331,75 +354,88 @@ func (r *repo) AddMembers(chatid string, userids []string) (int64, error) {
 			LastUpdated: now,
 		})
 	}
-	if err := memberModelInsertBulk(d, r.tableMembers, members, false); err != nil {
-		return 0, db.WrapErr(err, "Failed to add group chat members")
+	if err := r.tableMembers.InsertBulk(ctx, d, members, false); err != nil {
+		return 0, kerrors.WithMsg(err, "Failed to add group chat members")
 	}
-	for _, i := range userids {
-		if _, err := d.Exec("INSERT INTO "+r.tableAssoc+" (chatid, userid_1, userid_2, last_updated) SELECT chatid, $2::VARCHAR, userid, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 UNION ALL SELECT chatid, userid, $2::VARCHAR, last_updated FROM "+r.tableMembers+" WHERE chatid = $1 AND userid <> $2 ON CONFLICT DO NOTHING;", chatid, i); err != nil {
-			return 0, db.WrapErr(err, "Failed to add group chat associations")
+
+	args := make([]interface{}, 0, len(userids)+1)
+	args = append(args, chatid)
+	var placeholdersid string
+	{
+		paramCount := 1
+		placeholders := make([]string, 0, len(userids))
+		for _, i := range userids {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
 		}
+		placeholdersid = strings.Join(placeholders, ", ")
+	}
+
+	if _, err := d.ExecContext(ctx, "INSERT INTO "+r.tableAssoc.TableName+" (chatid, userid_1, userid_2, last_updated) SELECT a.chatid, a.userid, b.userid, a.last_updated FROM "+r.tableMembers.TableName+" a INNER JOIN "+r.tableMembers.TableName+" b ON a.chatid = b.chatid WHERE a.chatid = $1 AND a.userid <> b.userid AND a.userid IN (VALUES "+placeholdersid+") UNION ALL SELECT a.chatid, a.userid, b.userid, a.last_updated FROM "+r.tableMembers.TableName+" a INNER JOIN "+r.tableMembers.TableName+" b ON a.chatid = b.chatid WHERE a.chatid = $1 AND a.userid <> b.userid AND b.userid IN (VALUES "+placeholdersid+") ON CONFLICT DO NOTHING;", args...); err != nil {
+		return 0, kerrors.WithMsg(err, "Failed to add group chat associations")
 	}
 	return now, nil
 }
 
-func (r *repo) RmMembers(chatid string, userids []string) error {
+func (r *repo) RmMembers(ctx context.Context, chatid string, userids []string) error {
 	if len(userids) == 0 {
 		return nil
 	}
 
-	d, err := r.db.DB()
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := assocModelDelEqChatidHasUserid1(d, r.tableAssoc, chatid, userids); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat associations")
+	if err := r.tableAssoc.DelEqChatidHasUserid1(ctx, d, chatid, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat associations")
 	}
-	if err := assocModelDelEqChatidHasUserid2(d, r.tableAssoc, chatid, userids); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat associations")
+	if err := r.tableAssoc.DelEqChatidHasUserid2(ctx, d, chatid, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat associations")
 	}
-	if err := memberModelDelEqChatidHasUserid(d, r.tableMembers, chatid, userids); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat members")
+	if err := r.tableMembers.DelEqChatidHasUserid(ctx, d, chatid, userids); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
 	return nil
 }
 
-func (r *repo) Delete(chatid string) error {
-	d, err := r.db.DB()
+func (r *repo) Delete(ctx context.Context, chatid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := assocModelDelEqChatid(d, r.tableAssoc, chatid); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat members")
+	if err := r.tableAssoc.DelEqChatid(ctx, d, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
-	if err := memberModelDelEqChatid(d, r.tableMembers, chatid); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat members")
+	if err := r.tableMembers.DelEqChatid(ctx, d, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
-	if err := gdmModelDelEqChatid(d, r.table, chatid); err != nil {
-		return db.WrapErr(err, "Failed to delete group chat")
+	if err := r.table.DelEqChatid(ctx, d, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat")
 	}
 	return nil
 }
 
 // Setup creates new chat, member, and msg tables
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := gdmModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup gdm model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup gdm model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := memberModelSetup(d, r.tableMembers); err != nil {
-		err = db.WrapErr(err, "Failed to setup gdm member model")
+	if err := r.tableMembers.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup gdm member model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
 	}
-	if err := assocModelSetup(d, r.tableAssoc); err != nil {
-		err = db.WrapErr(err, "Failed to setup gdm assoc model")
+	if err := r.tableAssoc.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup gdm assoc model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}

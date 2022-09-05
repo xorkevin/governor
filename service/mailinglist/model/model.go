@@ -650,7 +650,7 @@ func (r *repo) GetUnsentMsgs(ctx context.Context, listid, msgid string, limit in
 		return nil, err
 	}
 	res := make([]string, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT m.userid FROM "+r.tableMembers.TableName+" m LEFT JOIN "+r.tableSent.TableName+" s ON m.userid = s.userid AND s.listid = $2 AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;", limit, listid, msgid)
+	rows, err := d.QueryContext(ctx, "SELECT m.userid FROM "+r.tableMembers.TableName+" m LEFT JOIN "+r.tableSent.TableName+" s ON m.listid = s.listid AND m.userid = s.userid AND s.msgid = $3 WHERE m.listid = $2 AND s.msgid IS NULL LIMIT $1;", limit, listid, msgid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get unsent list messages")
 	}
@@ -769,7 +769,7 @@ func (r *repo) InsertTree(ctx context.Context, m *TreeModel) error {
 }
 
 func (t *treeModelTable) InsertTreeParentClosures(ctx context.Context, d db.SQLExecutor, listid, msgid, parentid string) error {
-	if _, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+t.TableName+" p INNER JOIN "+t.TableName+" c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;", listid, parentid, msgid); err != nil {
+	if _, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+t.TableName+" p INNER JOIN "+t.TableName+" c ON p.listid = c.listid WHERE p.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;", listid, parentid, msgid); err != nil {
 		return err
 	}
 	return nil
@@ -791,7 +791,7 @@ func (r *repo) InsertTreeChildren(ctx context.Context, listid, msgid string) err
 	if err != nil {
 		return err
 	}
-	if _, err := d.ExecContext(ctx, "INSERT INTO "+r.tableTree.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+r.tableTree.TableName+" p INNER JOIN "+r.tableTree.TableName+" c ON p.listid = $1 AND c.listid = $1 AND p.msgid = $2 AND c.parent_id IN (SELECT msgid FROM "+r.tableMsgs.TableName+" WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2) ON CONFLICT DO NOTHING;", listid, msgid); err != nil {
+	if _, err := d.ExecContext(ctx, "INSERT INTO "+r.tableTree.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+r.tableTree.TableName+" p INNER JOIN "+r.tableTree.TableName+" c ON p.listid = c.listid WHERE p.listid = $1 AND p.msgid = $2 AND c.parent_id IN (SELECT msgid FROM "+r.tableMsgs.TableName+" WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2) ON CONFLICT DO NOTHING;", listid, msgid); err != nil {
 		return kerrors.WithMsg(err, "Failed to insert tree children edges")
 	}
 	return nil
