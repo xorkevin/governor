@@ -112,6 +112,14 @@ func (t *gdmModelTable) DelEqChatid(ctx context.Context, d db.SQLExecutor, chati
 	return err
 }
 
+func (t *gdmModelTable) UpdgdmPropsEqChatid(ctx context.Context, d db.SQLExecutor, m *gdmProps, chatid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name, theme) = ROW($1, $2) WHERE chatid = $3;", m.Name, m.Theme, chatid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (t *gdmModelTable) UpdmodelLastUpdatedEqChatid(ctx context.Context, d db.SQLExecutor, m *modelLastUpdated, chatid string) error {
 	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (last_updated) = ROW($1) WHERE chatid = $2;", m.LastUpdated, chatid)
 	if err != nil {

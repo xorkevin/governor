@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p gdm -o model_gen.go Model modelLastUpdated
+//go:generate forge model -m Model -p gdm -o model_gen.go Model gdmProps modelLastUpdated
 //go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel modelLastUpdated
 //go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel modelLastUpdated
 
@@ -24,21 +24,21 @@ const (
 type (
 	Repo interface {
 		New(name string, theme string) (*Model, error)
-		GetByID(chatid string) (*Model, error)
-		GetLatest(userid string, before int64, limit int) ([]string, error)
-		GetChats(chatids []string) ([]Model, error)
-		GetMembers(chatid string, userids []string) ([]string, error)
-		GetChatsMembers(chatids []string, limit int) ([]MemberModel, error)
-		GetUserChats(userid string, chatids []string) ([]string, error)
-		GetMembersCount(chatid string) (int, error)
-		GetAssocs(userid1, userid2 string, limit, offset int) ([]string, error)
-		Insert(m *Model) error
-		Update(m *Model) error
-		UpdateLastUpdated(chatid string, t int64) error
-		AddMembers(chatid string, userids []string) (int64, error)
-		RmMembers(chatid string, userids []string) error
-		Delete(chatid string) error
-		Setup() error
+		GetByID(ctx context.Context, chatid string) (*Model, error)
+		GetLatest(ctx context.Context, userid string, before int64, limit int) ([]string, error)
+		GetChats(ctx context.Context, chatids []string) ([]Model, error)
+		GetMembers(ctx context.Context, chatid string, userids []string) ([]string, error)
+		GetChatsMembers(ctx context.Context, chatids []string, limit int) ([]MemberModel, error)
+		GetUserChats(ctx context.Context, userid string, chatids []string) ([]string, error)
+		GetMembersCount(ctx context.Context, chatid string) (int, error)
+		GetAssocs(ctx context.Context, userid1, userid2 string, limit, offset int) ([]string, error)
+		Insert(ctx context.Context, m *Model) error
+		UpdateProps(ctx context.Context, m *Model) error
+		UpdateLastUpdated(ctx context.Context, chatid string, t int64) error
+		AddMembers(ctx context.Context, chatid string, userids []string) (int64, error)
+		RmMembers(ctx context.Context, chatid string, userids []string) error
+		Delete(ctx context.Context, chatid string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
@@ -55,6 +55,11 @@ type (
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+	}
+
+	gdmProps struct {
+		Name  string `query:"name;updeq,chatid"`
+		Theme string `query:"theme"`
 	}
 
 	modelLastUpdated struct {
@@ -299,13 +304,16 @@ func (r *repo) Insert(ctx context.Context, m *Model) error {
 	return nil
 }
 
-// Update updates a group chat
-func (r *repo) Update(ctx context.Context, m *Model) error {
+// UpdateProps updates a group chat
+func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqChatid(ctx, d, m, m.Chatid); err != nil {
+	if err := r.table.UpdgdmPropsEqChatid(ctx, d, &gdmProps{
+		Name:  m.Name,
+		Theme: m.Theme,
+	}, m.Chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update group chat")
 	}
 	return nil

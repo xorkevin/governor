@@ -1,12 +1,14 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -18,15 +20,15 @@ const (
 type (
 	Repo interface {
 		New(chatid string, userid string, kind string, value string) (*Model, error)
-		GetMsgs(chatid string, kind string, msgid string, limit int) ([]Model, error)
-		Insert(m *Model) error
-		DeleteMsgs(chatid string, msgids []string) error
-		DeleteChatMsgs(chatid string) error
-		Setup() error
+		GetMsgs(ctx context.Context, chatid string, kind string, msgid string, limit int) ([]Model, error)
+		Insert(ctx context.Context, m *Model) error
+		EraseMsgs(ctx context.Context, chatid string, msgids []string) error
+		DeleteChatMsgs(ctx context.Context, chatid string) error
+		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		table string
+		table *msgModelTable
 		db    db.Database
 	}
 
@@ -72,15 +74,17 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 func New(database db.Database, table string) Repo {
 	return &repo{
-		table: table,
-		db:    database,
+		table: &msgModelTable{
+			TableName: table,
+		},
+		db: database,
 	}
 }
 
 func (r *repo) New(chatid string, userid string, kind string, value string) (*Model, error) {
 	u, err := uid.NewSnowflake(msgUIDRandSize)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create new uid")
+		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}
 	return &Model{
 		Chatid: chatid,
@@ -92,76 +96,77 @@ func (r *repo) New(chatid string, userid string, kind string, value string) (*Mo
 	}, nil
 }
 
-func (r *repo) GetMsgs(chatid string, kind string, msgid string, limit int) ([]Model, error) {
-	d, err := r.db.DB()
+func (r *repo) GetMsgs(ctx context.Context, chatid string, kind string, msgid string, limit int) ([]Model, error) {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var m []Model
 	if kind == "" {
 		if msgid == "" {
-			m, err = msgModelGetModelEqChatidOrdMsgid(d, r.table, chatid, false, limit, 0)
+			m, err = r.table.GetModelEqChatidOrdMsgid(ctx, d, chatid, false, limit, 0)
 		} else {
-			m, err = msgModelGetModelEqChatidLtMsgidOrdMsgid(d, r.table, chatid, msgid, false, limit, 0)
+			m, err = r.table.GetModelEqChatidLtMsgidOrdMsgid(ctx, d, chatid, msgid, false, limit, 0)
 		}
 	} else {
 		if msgid == "" {
-			m, err = msgModelGetModelEqChatidEqKindOrdMsgid(d, r.table, chatid, kind, false, limit, 0)
+			m, err = r.table.GetModelEqChatidEqKindOrdMsgid(ctx, d, chatid, kind, false, limit, 0)
 		} else {
-			m, err = msgModelGetModelEqChatidEqKindLtMsgidOrdMsgid(d, r.table, chatid, kind, msgid, false, limit, 0)
+			m, err = r.table.GetModelEqChatidEqKindLtMsgidOrdMsgid(ctx, d, chatid, kind, msgid, false, limit, 0)
 		}
 	}
 	if err != nil {
-		return nil, db.WrapErr(err, "Failed to get chat msgs")
+		return nil, kerrors.WithMsg(err, "Failed to get chat msgs")
 	}
 	return m, nil
 }
 
-func (r *repo) Insert(m *Model) error {
-	d, err := r.db.DB()
+func (r *repo) Insert(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := msgModelInsert(d, r.table, m); err != nil {
-		return db.WrapErr(err, "Failed to insert chat msg")
+	if err := r.table.Insert(ctx, d, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to insert chat msg")
 	}
 	return nil
 }
 
-func (r *repo) DeleteMsgs(chatid string, msgids []string) error {
+func (r *repo) EraseMsgs(ctx context.Context, chatid string, msgids []string) error {
 	if len(msgids) == 0 {
 		return nil
 	}
-	d, err := r.db.DB()
+
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := msgModelUpdmsgValueEqChatidHasMsgid(d, r.table, &msgValue{
+	if err := r.table.UpdmsgValueEqChatidHasMsgid(ctx, d, &msgValue{
 		Value: "",
 	}, chatid, msgids); err != nil {
-		return db.WrapErr(err, "Failed to delete chat msgs")
+		return kerrors.WithMsg(err, "Failed to erase chat msgs")
 	}
 	return nil
 }
 
-func (r *repo) DeleteChatMsgs(chatid string) error {
-	d, err := r.db.DB()
+func (r *repo) DeleteChatMsgs(ctx context.Context, chatid string) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := msgModelDelEqChatid(d, r.table, chatid); err != nil {
-		return db.WrapErr(err, "Failed to delete chat msgs")
+	if err := r.table.DelEqChatid(ctx, d, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete chat msgs")
 	}
 	return nil
 }
 
-func (r *repo) Setup() error {
-	d, err := r.db.DB()
+func (r *repo) Setup(ctx context.Context) error {
+	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := msgModelSetup(d, r.table); err != nil {
-		err = db.WrapErr(err, "Failed to setup chat msg model")
+	if err := r.table.Setup(ctx, d); err != nil {
+		err = kerrors.WithMsg(err, "Failed to setup chat msg model")
 		if !errors.Is(err, db.ErrAuthz{}) {
 			return err
 		}
