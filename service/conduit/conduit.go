@@ -82,6 +82,8 @@ type (
 		FriendChannel        string
 		UnfriendChannel      string
 		PresenceQueryChannel string
+		DMMsgChannel         string
+		DMSettingsChannel    string
 	}
 )
 
@@ -164,6 +166,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 		FriendChannel:        streamname + ".friend",
 		UnfriendChannel:      streamname + ".unfriend",
 		PresenceQueryChannel: name + ".presence",
+		DMMsgChannel:         name + ".chat.dm.msg",
+		DMSettingsChannel:    name + ".chat.dm.settings",
 	}
 
 	r.SetDefault("streamsize", "200M")
@@ -268,7 +272,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to unfriend queue", nil)
 
-	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -278,7 +282,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user create queue", nil)
 
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -288,7 +292,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
-	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_UPDATE", s.userUpdateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -298,17 +302,17 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	l.Info("Subscribed to user update queue", nil)
 
-	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.FriendInvitationGCHook); err != nil {
+	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
-	if _, err := s.ws.SubscribePresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.PresenceHandler); err != nil {
+	if _, err := s.ws.SubscribePresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.presenceHandler); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to ws presence channel")
 	}
 	l.Info("Subscribed to ws presence channel", nil)
 
-	if _, err := s.ws.Subscribe(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.PresenceQueryHandler); err != nil {
+	if _, err := s.ws.Subscribe(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.presenceQueryHandler); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to ws presence query channel")
 	}
 	l.Info("Subscribed to ws presence query channel", nil)
@@ -323,8 +327,7 @@ func (s *service) Health() error {
 	return nil
 }
 
-// UserCreateHook creates a new user name
-func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+func (s *service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
 	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
@@ -335,8 +338,7 @@ const (
 	chatDeleteBatchSize = 256
 )
 
-// UserDeleteHook deletes user associated chats
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.invitations.DeleteByUser(ctx, props.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user invitations")
 	}
@@ -383,15 +385,14 @@ func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-// UserUpdateHook updates a user name
-func (s *service) UserUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+func (s *service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
 	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
 	return nil
 }
 
-func (s *service) FriendInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
+func (s *service) friendInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,

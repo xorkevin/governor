@@ -19,10 +19,10 @@ type (
 	}
 )
 
-func (s *service) GetFriends(userid string, prefix string, limit, offset int) (*resFriends, error) {
-	m, err := s.friends.GetFriends(userid, prefix, limit, offset)
+func (s *service) GetFriends(ctx context.Context, userid string, prefix string, limit, offset int) (*resFriends, error) {
+	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+		return nil, kerrors.WithMsg(err, "Failed to search friends")
 	}
 	res := make([]string, 0, len(m))
 	for _, i := range m {
@@ -44,10 +44,10 @@ type (
 	}
 )
 
-func (s *service) SearchFriends(userid string, prefix string, limit int) (*resFriendSearches, error) {
-	m, err := s.friends.GetFriends(userid, prefix, limit, 0)
+func (s *service) SearchFriends(ctx context.Context, userid string, prefix string, limit int) (*resFriendSearches, error) {
+	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+		return nil, kerrors.WithMsg(err, "Failed to search friends")
 	}
 	res := make([]resFriendSearch, 0, len(m))
 	for _, i := range m {
@@ -61,88 +61,70 @@ func (s *service) SearchFriends(userid string, prefix string, limit int) (*resFr
 	}, nil
 }
 
-func (s *service) RemoveFriend(userid1, userid2 string) error {
-	if _, err := s.friends.GetByID(userid1, userid2); err != nil {
+func (s *service) RemoveFriend(ctx context.Context, userid1, userid2 string) error {
+	if _, err := s.friends.GetByID(ctx, userid1, userid2); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusBadRequest,
-				Message: "Not friends",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Friend not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get friends")
+		return kerrors.WithMsg(err, "Failed to get friends")
 	}
 	b, err := json.Marshal(unfriendProps{
 		Userid: userid1,
 		Other:  userid2,
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode unfriend props to json")
+		return kerrors.WithMsg(err, "Failed to encode unfriend props to json")
 	}
-	if err := s.friends.Remove(userid1, userid2); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove friend")
+	if err := s.events.StreamPublish(ctx, s.opts.UnfriendChannel, b); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish unfriend event")
 	}
-	if err := s.events.StreamPublish(s.opts.UnfriendChannel, b); err != nil {
-		s.logger.Error("Failed to publish unfriend event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "publishunfriend",
-		})
+	if err := s.friends.Remove(ctx, userid1, userid2); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove friend")
 	}
 	return nil
 }
 
-func (s *service) InviteFriend(userid string, invitedBy string) error {
-	if _, err := s.friends.GetByID(userid, invitedBy); err != nil {
+func (s *service) InviteFriend(ctx context.Context, userid string, invitedBy string) error {
+	if _, err := s.friends.GetByID(ctx, userid, invitedBy); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return governor.ErrWithMsg(err, "Failed to search friends")
+			return kerrors.WithMsg(err, "Failed to search friends")
 		}
 	} else {
-		return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusBadRequest,
-			Message: "Already friends",
-		}))
+		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Already friends")
 	}
 	now := time.Now().Round(0).Unix()
-	if err := s.invitations.DeleteByID(userid, invitedBy); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove friend invitation")
+	if err := s.invitations.DeleteByID(ctx, userid, invitedBy); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove friend invitation")
 	}
-	if err := s.invitations.Insert(userid, invitedBy, now); err != nil {
-		return governor.ErrWithMsg(err, "Failed to add friend invitation")
+	if err := s.invitations.Insert(ctx, userid, invitedBy, now); err != nil {
+		return kerrors.WithMsg(err, "Failed to add friend invitation")
 	}
 	return nil
 }
 
-func (s *service) AcceptFriendInvitation(userid, inviter string) error {
-	m, err := s.users.GetByID(userid)
+func (s *service) AcceptFriendInvitation(ctx context.Context, userid, inviter string) error {
+	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get user")
+		return kerrors.WithMsg(err, "Failed to get user")
 	}
-	m2, err := s.users.GetByID(inviter)
+	m2, err := s.users.GetByID(ctx, inviter)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "User not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get user")
+		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
-	if _, err := s.invitations.GetByID(userid, inviter, after); err != nil {
+	if _, err := s.invitations.GetByID(ctx, userid, inviter, after); err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "Friend invitation not found",
-			}), governor.ErrOptInner(err))
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "Friend invitation not found")
 		}
-		return governor.ErrWithMsg(err, "Failed to get friend invitation")
+		return kerrors.WithMsg(err, "Failed to get friend invitation")
 	}
 
 	b, err := json.Marshal(friendProps{
@@ -150,27 +132,28 @@ func (s *service) AcceptFriendInvitation(userid, inviter string) error {
 		InvitedBy: m2.Userid,
 	})
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to encode friend props to json")
+		return kerrors.WithMsg(err, "Failed to encode friend props to json")
 	}
 
-	if err := s.invitations.DeleteByID(userid, inviter); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete friend invitation")
+	if err := s.invitations.DeleteByID(ctx, userid, inviter); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete friend invitation")
 	}
-	if err := s.friends.Insert(m.Userid, m2.Userid, m.Username, m2.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to add friend")
+	if err := s.friends.Insert(ctx, m.Userid, m2.Userid, m.Username, m2.Username); err != nil {
+		return kerrors.WithMsg(err, "Failed to add friend")
 	}
-	if err := s.events.StreamPublish(s.opts.FriendChannel, b); err != nil {
+	// must make best effort attempt to publish friend event
+	if err := s.events.StreamPublish(context.Background(), s.opts.FriendChannel, b); err != nil {
 		s.logger.Error("Failed to publish friend event", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "publishfriend",
+			"actiontype": "conduit_publish_friend",
 		})
 	}
 	return nil
 }
 
-func (s *service) DeleteFriendInvitation(userid, inviter string) error {
-	if err := s.invitations.DeleteByID(userid, inviter); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete friend invitation")
+func (s *service) DeleteFriendInvitation(ctx context.Context, userid, inviter string) error {
+	if err := s.invitations.DeleteByID(ctx, userid, inviter); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete friend invitation")
 	}
 	return nil
 }
@@ -187,13 +170,13 @@ type (
 	}
 )
 
-func (s *service) GetUserFriendInvitations(userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *service) GetUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
-	m, err := s.invitations.GetByUser(userid, after, amount, offset)
+	m, err := s.invitations.GetByUser(ctx, userid, after, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get friend invitations")
+		return nil, kerrors.WithMsg(err, "Failed to get friend invitations")
 	}
 	res := make([]resFriendInvitation, 0, len(m))
 	for _, i := range m {
@@ -208,13 +191,13 @@ func (s *service) GetUserFriendInvitations(userid string, amount, offset int) (*
 	}, nil
 }
 
-func (s *service) GetInvitedFriendInvitations(userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *service) GetInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
-	m, err := s.invitations.GetByInviter(userid, after, amount, offset)
+	m, err := s.invitations.GetByInviter(ctx, userid, after, amount, offset)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get friend invitations")
+		return nil, kerrors.WithMsg(err, "Failed to get friend invitations")
 	}
 	res := make([]resFriendInvitation, 0, len(m))
 	for _, i := range m {

@@ -1,41 +1,35 @@
 package conduit
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/dm/model"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/ws"
+	"xorkevin.dev/kerrors"
 )
 
 func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		s.logger.Error("Failed to marshal dm msg json", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "marshaldmmsgjson",
-		})
-		return
-	}
-	present, err := s.getPresence(locDM, userids)
+
+	present, err := s.getPresence(context.Background(), s.logger, locDM, userids)
 	if err != nil {
 		s.logger.Error("Failed to get presence", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "dmmsgeventgetpresence",
+			"actiontype": "conduit_get_dm_presence",
 		})
 		return
 	}
+	// must make a best effort attempt to publish dm msg event
 	for _, i := range present {
-		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.msg"), b); err != nil {
+		if err := s.ws.Publish(context.Background(), i, s.opts.DMMsgChannel, v); err != nil {
 			s.logger.Error("Failed to publish dm msg event", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "publishdmmsg",
+				"actiontype": "conduit_publish_dm_msg",
 			})
 		}
 	}
@@ -45,27 +39,20 @@ func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		s.logger.Error("Failed to marshal dm settings json", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "marshaldmsettingsjson",
-		})
-		return
-	}
-	present, err := s.getPresence(locDM, userids)
+
+	present, err := s.getPresence(context.Background(), s.logger, locDM, userids)
 	if err != nil {
 		s.logger.Error("Failed to get presence", map[string]string{
 			"error":      err.Error(),
-			"actiontype": "dmsettingseventgetpresence",
+			"actiontype": "conduit_get_dm_presence",
 		})
 		return
 	}
 	for _, i := range present {
-		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, i, s.channelns+".chat.dm.settings"), b); err != nil {
+		if err := s.ws.Publish(context.Background(), i, s.opts.DMSettingsChannel, v); err != nil {
 			s.logger.Error("Failed to publish dm settings event", map[string]string{
 				"error":      err.Error(),
-				"actiontype": "publishdmsettings",
+				"actiontype": "conduit_publish_dm_settings",
 			})
 		}
 	}
@@ -75,22 +62,16 @@ const (
 	chatMsgKindTxt = "t"
 )
 
-func (s *service) getDMByChatid(userid string, chatid string) (*model.Model, error) {
-	m, err := s.dms.GetByChatID(chatid)
+func (s *service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
+	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-				Status:  http.StatusNotFound,
-				Message: "DM not found",
-			}), governor.ErrOptInner(err))
+			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "DM not found")
 		}
-		return nil, governor.ErrWithMsg(err, "Failed to get dm")
+		return nil, kerrors.WithMsg(err, "Failed to get dm")
 	}
 	if m.Userid1 != userid && m.Userid2 != userid {
-		return nil, governor.NewError(governor.ErrOptUser, governor.ErrOptRes(governor.ErrorRes{
-			Status:  http.StatusNotFound,
-			Message: "DM not found",
-		}))
+		return nil, governor.ErrWithRes(nil, http.StatusNotFound, "", "DM not found")
 	}
 	return m, nil
 }
@@ -101,15 +82,15 @@ type (
 	}
 )
 
-func (s *service) UpdateDM(userid string, chatid string, name, theme string) error {
-	m, err := s.getDMByChatid(userid, chatid)
+func (s *service) UpdateDM(ctx context.Context, userid string, chatid string, name, theme string) error {
+	m, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return err
 	}
 	m.Name = name
 	m.Theme = theme
-	if err := s.dms.Update(m); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update dm")
+	if err := s.dms.UpdateProps(ctx, m); err != nil {
+		return kerrors.WithMsg(err, "Failed to update dm")
 	}
 	s.publishDMSettingsEvent([]string{m.Userid1, m.Userid2}, resDMID{
 		Chatid: m.Chatid,
@@ -139,14 +120,10 @@ func useridDiff(a, b, c string) string {
 	return b
 }
 
-func (s *service) GetLatestDMs(userid string, before int64, limit int) (*resDMs, error) {
-	chatids, err := s.dms.GetLatest(userid, before, limit)
+func (s *service) GetLatestDMs(ctx context.Context, userid string, before int64, limit int) (*resDMs, error) {
+	m, err := s.dms.GetLatest(ctx, userid, before, limit)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get latest dms")
-	}
-	m, err := s.dms.GetChats(chatids)
-	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get dms")
+		return nil, kerrors.WithMsg(err, "Failed to get latest dms")
 	}
 	res := make([]resDM, 0, len(m))
 	for _, i := range m {
@@ -164,10 +141,10 @@ func (s *service) GetLatestDMs(userid string, before int64, limit int) (*resDMs,
 	}, nil
 }
 
-func (s *service) GetDMs(userid string, chatids []string) (*resDMs, error) {
-	m, err := s.dms.GetChats(chatids)
+func (s *service) GetDMs(ctx context.Context, userid string, chatids []string) (*resDMs, error) {
+	m, err := s.dms.GetChats(ctx, chatids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get dms")
+		return nil, kerrors.WithMsg(err, "Failed to get dms")
 	}
 	res := make([]resDM, 0, len(m))
 	for _, i := range m {
@@ -201,10 +178,10 @@ type (
 	}
 )
 
-func (s *service) SearchDMs(userid string, prefix string, limit int) (*resDMSearches, error) {
-	m, err := s.friends.GetFriends(userid, prefix, limit, 0)
+func (s *service) SearchDMs(ctx context.Context, userid string, prefix string, limit int) (*resDMSearches, error) {
+	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to search friends")
+		return nil, kerrors.WithMsg(err, "Failed to search friends")
 	}
 	usernames := map[string]string{}
 	userids := make([]string, 0, len(m))
@@ -212,9 +189,9 @@ func (s *service) SearchDMs(userid string, prefix string, limit int) (*resDMSear
 		userids = append(userids, i.Userid2)
 		usernames[i.Userid2] = i.Username
 	}
-	chatInfo, err := s.dms.GetByUser(userid, userids)
+	chatInfo, err := s.dms.GetByUser(ctx, userid, userids)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get dms")
+		return nil, kerrors.WithMsg(err, "Failed to get dms")
 	}
 	res := make([]resDMSearch, 0, len(chatInfo))
 	for _, i := range chatInfo {
@@ -242,20 +219,20 @@ type (
 	}
 )
 
-func (s *service) CreateDMMsg(userid string, chatid string, kind string, value string) (*resMsg, error) {
-	dm, err := s.getDMByChatid(userid, chatid)
+func (s *service) CreateDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
+	dm, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return nil, err
 	}
 	m, err := s.msgs.New(chatid, userid, kind, value)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to create new dm msg")
+		return nil, kerrors.WithMsg(err, "Failed to create new dm msg")
 	}
-	if err := s.msgs.Insert(m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to send new dm msg")
+	if err := s.msgs.Insert(ctx, m); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to send new dm msg")
 	}
-	if err := s.dms.UpdateLastUpdated(dm.Userid1, dm.Userid2, m.Timems); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to update dm last updated")
+	if err := s.dms.UpdateLastUpdated(ctx, dm.Userid1, dm.Userid2, m.Timems); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to update dm last updated")
 	}
 	res := resMsg{
 		Chatid: m.Chatid,
@@ -275,13 +252,13 @@ type (
 	}
 )
 
-func (s *service) GetDMMsgs(userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
-	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+func (s *service) GetDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return nil, err
 	}
-	m, err := s.msgs.GetMsgs(chatid, kind, before, limit)
+	m, err := s.msgs.GetMsgs(ctx, chatid, kind, before, limit)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to get dm msgs")
+		return nil, kerrors.WithMsg(err, "Failed to get dm msgs")
 	}
 	res := make([]resMsg, 0, len(m))
 	for _, i := range m {
@@ -299,12 +276,12 @@ func (s *service) GetDMMsgs(userid string, chatid string, kind string, before st
 	}, nil
 }
 
-func (s *service) DelDMMsg(userid string, chatid string, msgid string) error {
-	if _, err := s.getDMByChatid(userid, chatid); err != nil {
+func (s *service) DelDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
+	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return err
 	}
-	if err := s.msgs.DeleteMsgs(chatid, []string{msgid}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete dm msg")
+	if err := s.msgs.EraseMsgs(ctx, chatid, []string{msgid}); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete dm msg")
 	}
 	// TODO: emit msg delete event
 	return nil

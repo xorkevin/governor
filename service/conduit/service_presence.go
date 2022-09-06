@@ -17,7 +17,7 @@ const (
 	locGDM = "gdm"
 )
 
-func (s *service) PresenceHandler(ctx context.Context, props ws.PresenceEventProps) {
+func (s *service) presenceHandler(ctx context.Context, props ws.PresenceEventProps) {
 	l := s.logger.WithData(map[string]string{
 		"agent":    "subscriber",
 		"location": props.Location,
@@ -82,7 +82,7 @@ type (
 	}
 )
 
-func (s *service) PresenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) {
+func (s *service) presenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.opts.PresenceQueryChannel,

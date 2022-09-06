@@ -24,7 +24,7 @@ type (
 		New(userid1, userid2 string) (*Model, error)
 		GetByID(ctx context.Context, userid1, userid2 string) (*Model, error)
 		GetByChatID(ctx context.Context, chatid string) (*Model, error)
-		GetLatest(ctx context.Context, userid string, before int64, limit int) ([]string, error)
+		GetLatest(ctx context.Context, userid string, before int64, limit int) ([]Model, error)
 		GetByUser(ctx context.Context, userid string, userids []string) ([]DMInfo, error)
 		GetChats(ctx context.Context, chatids []string) ([]Model, error)
 		Insert(ctx context.Context, m *Model) error
@@ -152,9 +152,9 @@ func (r *repo) GetByChatID(ctx context.Context, chatid string) (*Model, error) {
 	return m, nil
 }
 
-func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, limit int) ([]string, error) {
-	res := make([]string, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT chatid FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) ORDER BY last_updated DESC LIMIT $1;", limit, userid)
+func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, limit int) ([]Model, error) {
+	res := make([]Model, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) ORDER BY last_updated DESC LIMIT $1;", limit, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -163,11 +163,11 @@ func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLE
 		}
 	}()
 	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
+		m := Model{}
+		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}
-		res = append(res, s)
+		res = append(res, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -175,9 +175,9 @@ func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLE
 	return res, nil
 }
 
-func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, before int64, limit int) ([]string, error) {
-	res := make([]string, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT chatid FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) AND last_updated < $3 ORDER BY last_updated DESC LIMIT $1;", limit, userid, before)
+func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, before int64, limit int) ([]Model, error) {
+	res := make([]Model, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) AND last_updated < $3 ORDER BY last_updated DESC LIMIT $1;", limit, userid, before)
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +186,11 @@ func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d
 		}
 	}()
 	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
+		m := Model{}
+		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}
-		res = append(res, s)
+		res = append(res, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -198,7 +198,7 @@ func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d
 	return res, nil
 }
 
-func (r *repo) GetLatest(ctx context.Context, userid string, before int64, limit int) ([]string, error) {
+func (r *repo) GetLatest(ctx context.Context, userid string, before int64, limit int) ([]Model, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
