@@ -42,16 +42,12 @@ import (
 	"xorkevin.dev/governor/service/ws"
 )
 
-var (
-	// GitHash is the git hash to be passed in at compile time
-	GitHash string
-)
-
 func main() {
+	vcsinfo := governor.ReadVCSBuildInfo()
 	opts := governor.Opts{
 		Version: governor.Version{
-			Num:  "v0.3",
-			Hash: GitHash,
+			Num:  vcsinfo.ModVersion,
+			Hash: vcsinfo.VCSStr(),
 		},
 		Appname:       "governor",
 		Description:   "Governor is a web server with user and auth capabilities",

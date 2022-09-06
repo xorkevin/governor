@@ -77,7 +77,7 @@ dc-devdown: ## Destroy docker-compose resources
 ## APP BUILD
 
 BIN_NAME=governor
-MAIN_PATH=cmd/main.go
+MAIN_PATH=./cmd
 BIN_DIR=./bin
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
@@ -88,7 +88,7 @@ clean: ## Remove build artifacts
 
 build: ## Build app
 	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s -X main.GitHash=$$(git rev-parse --verify HEAD)" -o $(BIN_PATH) $(MAIN_PATH)
+	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
 
 ## DOCKER
 
