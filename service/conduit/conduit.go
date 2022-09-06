@@ -84,6 +84,8 @@ type (
 		PresenceQueryChannel string
 		DMMsgChannel         string
 		DMSettingsChannel    string
+		GDMMsgChannel        string
+		GDMSettingsChannel   string
 	}
 )
 
@@ -168,6 +170,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 		PresenceQueryChannel: name + ".presence",
 		DMMsgChannel:         name + ".chat.dm.msg",
 		DMSettingsChannel:    name + ".chat.dm.settings",
+		GDMMsgChannel:        name + ".chat.gdm.msg",
+		GDMSettingsChannel:   name + ".chat.gdm.settings",
 	}
 
 	r.SetDefault("streamsize", "200M")
