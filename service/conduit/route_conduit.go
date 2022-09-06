@@ -9,7 +9,11 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_conduit_gen.go reqGetFriends reqSearchFriends reqRmFriend reqAcceptFriendInvitation reqDelFriendInvitation reqGetFriendInvitations reqGetLatestChats reqGetChats reqUpdateDM reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel reqCreateChannelMsg reqGetChannelMsgs reqDelChannelMsg
+//go:generate forge validation -o validation_friend_gen.go reqGetFriends reqSearchFriends reqRmFriend reqFriendInvitation reqGetFriendInvitations
+//go:generate forge validation -o validation_chat_gen.go reqGetLatestChats reqGetChats reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence
+//go:generate forge validation -o validation_dm_gen.go reqUpdateDM
+//go:generate forge validation -o validation_gdm_gen.go reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember
+//go:generate forge validation -o validation_server_gen.go reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel reqCreateChannelMsg reqGetChannelMsgs reqDelChannelMsg
 
 type (
 	reqGetFriends struct {
@@ -32,7 +36,7 @@ func (m *router) getFriends(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetFriends(req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := m.s.GetFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -59,7 +63,7 @@ func (m *router) searchFriends(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchFriends(req.Userid, req.Prefix, req.Amount)
+	res, err := m.s.SearchFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -84,7 +88,7 @@ func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveFriend(req.Userid1, req.Userid2); err != nil {
+	if err := m.s.RemoveFriend(c.Ctx(), req.Userid1, req.Userid2); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -92,7 +96,7 @@ func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
 }
 
 type (
-	reqAcceptFriendInvitation struct {
+	reqFriendInvitation struct {
 		Userid    string `valid:"userid,has" json:"-"`
 		InvitedBy string `valid:"userid,has" json:"-"`
 	}
@@ -100,7 +104,7 @@ type (
 
 func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqAcceptFriendInvitation{
+	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
 	}
@@ -108,7 +112,7 @@ func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.InviteFriend(req.Userid, req.InvitedBy); err != nil {
+	if err := m.s.InviteFriend(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -117,7 +121,7 @@ func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
 
 func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqAcceptFriendInvitation{
+	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
 	}
@@ -125,23 +129,16 @@ func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) 
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.AcceptFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+	if err := m.s.AcceptFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-type (
-	reqDelFriendInvitation struct {
-		Userid    string `valid:"userid,has" json:"-"`
-		InvitedBy string `valid:"userid,has" json:"-"`
-	}
-)
-
 func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqDelFriendInvitation{
+	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
 	}
@@ -149,7 +146,7 @@ func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Reque
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+	if err := m.s.DeleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -158,7 +155,7 @@ func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Reque
 
 func (m *router) deleteInvitedFriendInvitation(w http.ResponseWriter, r *http.Request) {
 	c := governor.NewContext(w, r, m.s.logger)
-	req := reqDelFriendInvitation{
+	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
 	}
@@ -166,7 +163,7 @@ func (m *router) deleteInvitedFriendInvitation(w http.ResponseWriter, r *http.Re
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteFriendInvitation(req.Userid, req.InvitedBy); err != nil {
+	if err := m.s.DeleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -192,7 +189,7 @@ func (m *router) getInvitations(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserFriendInvitations(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetUserFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -211,7 +208,7 @@ func (m *router) getInvited(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetInvitedFriendInvitations(req.Userid, req.Amount, req.Offset)
+	res, err := m.s.GetInvitedFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -238,7 +235,7 @@ func (m *router) getLatestDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestDMs(req.Userid, req.Before, req.Amount)
+	res, err := m.s.GetLatestDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -263,7 +260,7 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetDMs(req.Userid, req.Chatids)
+	res, err := m.s.GetDMs(c.Ctx(), req.Userid, req.Chatids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -282,7 +279,7 @@ func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchDMs(req.Userid, req.Prefix, req.Amount)
+	res, err := m.s.SearchDMs(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -312,7 +309,7 @@ func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateDM(req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
+	if err := m.s.UpdateDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -341,7 +338,7 @@ func (m *router) createDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateDMMsg(req.Userid, req.Chatid, req.Kind, req.Value)
+	res, err := m.s.CreateDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -372,7 +369,7 @@ func (m *router) getDMMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetDMMsgs(req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
+	res, err := m.s.GetDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -399,7 +396,7 @@ func (m *router) deleteDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DelDMMsg(req.Userid, req.Chatid, req.Msgid); err != nil {
+	if err := m.s.DelDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -424,7 +421,7 @@ func (m *router) getLatestGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestGDMs(req.Userid, req.Before, req.Amount)
+	res, err := m.s.GetLatestGDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -442,7 +439,7 @@ func (m *router) getGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetGDMs(req.Userid, req.Chatids)
+	res, err := m.s.GetGDMs(c.Ctx(), req.Userid, req.Chatids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -471,7 +468,7 @@ func (m *router) searchGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchGDMs(req.Userid1, req.Userid2, req.Amount, req.Offset)
+	res, err := m.s.SearchGDMs(c.Ctx(), req.Userid1, req.Userid2, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -503,7 +500,7 @@ func (m *router) createGDM(w http.ResponseWriter, r *http.Request) {
 	members := make([]string, len(req.Members)+1)
 	members[0] = req.Userid
 	copy(members[1:], req.Members)
-	res, err := m.s.CreateGDM(req.Name, req.Theme, members)
+	res, err := m.s.CreateGDM(c.Ctx(), req.Name, req.Theme, members)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -533,7 +530,7 @@ func (m *router) updateGDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateGDM(req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
+	if err := m.s.UpdateGDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -557,7 +554,7 @@ func (m *router) deleteGDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteGDM(req.Userid, req.Chatid); err != nil {
+	if err := m.s.DeleteGDM(c.Ctx(), req.Userid, req.Chatid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -577,7 +574,7 @@ func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateGDMMsg(req.Userid, req.Chatid, req.Kind, req.Value)
+	res, err := m.s.CreateGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -598,7 +595,7 @@ func (m *router) getGDMMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetGDMMsgs(req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
+	res, err := m.s.GetGDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -617,7 +614,7 @@ func (m *router) deleteGDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DelGDMMsg(req.Userid, req.Chatid, req.Msgid); err != nil {
+	if err := m.s.DelGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -645,7 +642,7 @@ func (m *router) addGDMMember(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.AddGDMMembers(req.Userid, req.Chatid, req.Members); err != nil {
+	if err := m.s.AddGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -665,7 +662,7 @@ func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RmGDMMembers(req.Userid, req.Chatid, req.Members); err != nil {
+	if err := m.s.RmGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -687,7 +684,7 @@ func (m *router) getServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetServer(req.ServerID)
+	res, err := m.s.GetServer(c.Ctx(), req.ServerID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -716,7 +713,7 @@ func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateServer(req.ServerID, req.Name, req.Desc, req.Theme)
+	res, err := m.s.CreateServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -736,7 +733,7 @@ func (m *router) updateServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateServer(req.ServerID, req.Name, req.Desc, req.Theme); err != nil {
+	if err := m.s.UpdateServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -760,7 +757,7 @@ func (m *router) getChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannel(req.ServerID, req.ChannelID)
+	res, err := m.s.GetChannel(c.Ctx(), req.ServerID, req.ChannelID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -787,7 +784,7 @@ func (m *router) getChannels(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannels(req.ServerID, "", req.Amount, req.Offset)
+	res, err := m.s.GetChannels(c.Ctx(), req.ServerID, "", req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -814,7 +811,7 @@ func (m *router) searchChannels(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannels(req.ServerID, req.Prefix, req.Amount, 0)
+	res, err := m.s.GetChannels(c.Ctx(), req.ServerID, req.Prefix, req.Amount, 0)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -844,7 +841,7 @@ func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChannel(req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme)
+	res, err := m.s.CreateChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -875,7 +872,7 @@ func (m *router) updateChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateChannel(req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme); err != nil {
+	if err := m.s.UpdateChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -892,7 +889,7 @@ func (m *router) deleteChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteChannel(req.ServerID, req.ChannelID); err != nil {
+	if err := m.s.DeleteChannel(c.Ctx(), req.ServerID, req.ChannelID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -923,7 +920,7 @@ func (m *router) createChannelMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChannelMsg(req.ServerID, req.ChannelID, req.Userid, req.Kind, req.Value)
+	res, err := m.s.CreateChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Userid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -954,7 +951,7 @@ func (m *router) getChannelMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannelMsgs(req.ServerID, req.ChannelID, req.Kind, req.Before, req.Amount)
+	res, err := m.s.GetChannelMsgs(c.Ctx(), req.ServerID, req.ChannelID, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -981,7 +978,7 @@ func (m *router) deleteChannelMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteChannelMsg(req.ServerID, req.ChannelID, req.Msgid); err != nil {
+	if err := m.s.DeleteChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
