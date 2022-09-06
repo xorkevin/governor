@@ -178,6 +178,7 @@ type (
 	tagSum struct {
 		limit   int64
 		periods []kvstore.IntResulter
+		end     int64
 	}
 )
 
@@ -217,6 +218,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 					sums = append(sums, tagSum{
 						limit:   i.Params.Limit,
 						periods: periods,
+						end:     (t + 1) * i.Params.Period,
 					})
 				}
 				if err := multiget.Exec(c.Ctx()); err != nil {
@@ -242,7 +244,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 						sum += k
 					}
 					if sum > i.limit {
-						c.WriteStatus(http.StatusTooManyRequests)
+						c.WriteError(governor.ErrWithTooManyRequests(nil, time.Unix(i.end, 0).UTC(), "", "Hit rate limit"))
 						return
 					}
 				}

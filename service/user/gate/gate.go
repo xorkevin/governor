@@ -192,12 +192,8 @@ func getAuthHeader(c governor.Context) (string, error) {
 	if authHeader == "" {
 		return "", errAuthNotFound{}
 	}
-	h := strings.SplitN(authHeader, " ", 2)
-	if len(h) != 2 || h[0] != "Bearer" || len(h[1]) == 0 {
-		return "", errInvalidHeader{}
-	}
-	token := h[1]
-	if token == "" {
+	scheme, token, ok := strings.Cut(authHeader, " ")
+	if !ok || scheme != "Bearer" || token == "" {
 		return "", errInvalidHeader{}
 	}
 	return token, nil

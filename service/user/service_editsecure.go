@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	htmlTemplate "html/template"
 	"net/http"
 	"net/url"
@@ -499,7 +498,7 @@ func (s *service) checkLoginRatelimit(ctx context.Context, m *model.Model) error
 	cliff := m.FailedLoginTime + k
 	now := time.Now().Round(0).Unix()
 	if now < cliff {
-		return governor.ErrWithRes(nil, http.StatusTooManyRequests, "", fmt.Sprintf("Failed login too many times. Try again after %s.", time.Unix(cliff, 0).UTC()))
+		return governor.ErrWithTooManyRequests(nil, time.Unix(cliff, 0).UTC(), "", "Failed login too many times")
 	}
 	return nil
 }

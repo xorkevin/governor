@@ -201,16 +201,16 @@ func FromString(rankStr string) (Rank, error) {
 
 // SplitTag splits a tag into a prefix and tag name
 func SplitTag(key string) (string, string, error) {
-	k := strings.SplitN(key, rankSeparator, 2)
-	if len(k) != 2 {
+	prefix, tag, ok := strings.Cut(key, rankSeparator)
+	if !ok {
 		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
-	switch k[0] {
+	switch prefix {
 	case TagModPrefix, TagUserPrefix, TagBanPrefix:
 	default:
 		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
 	}
-	return k[0], k[1], nil
+	return prefix, tag, nil
 }
 
 // ToOrgName creates a new org name from a string
