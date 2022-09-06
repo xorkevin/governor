@@ -26,6 +26,7 @@ func (s *service) presenceHandler(ctx context.Context, props ws.PresenceEventPro
 	})
 	subloc := strings.TrimPrefix(props.Location, s.channelns+".")
 	switch subloc {
+	// TODO handle server and channel presence
 	case locDM, locGDM:
 	default:
 		return
