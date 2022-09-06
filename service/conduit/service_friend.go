@@ -1,6 +1,7 @@
 package conduit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -69,7 +71,7 @@ func (s *service) RemoveFriend(userid1, userid2 string) error {
 		}
 		return governor.ErrWithMsg(err, "Failed to get friends")
 	}
-	b, err := json.Marshal(UnfriendProps{
+	b, err := json.Marshal(unfriendProps{
 		Userid: userid1,
 		Other:  userid2,
 	})
@@ -143,7 +145,7 @@ func (s *service) AcceptFriendInvitation(userid, inviter string) error {
 		return governor.ErrWithMsg(err, "Failed to get friend invitation")
 	}
 
-	b, err := json.Marshal(FriendProps{
+	b, err := json.Marshal(friendProps{
 		Userid:    m.Userid,
 		InvitedBy: m2.Userid,
 	})
@@ -227,60 +229,62 @@ func (s *service) GetInvitedFriendInvitations(userid string, amount, offset int)
 	}, nil
 }
 
-func (s *service) friendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	msg, err := DecodeFriendProps(msgdata)
+func (s *service) friendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	msg, err := decodeFriendProps(msgdata)
 	if err != nil {
 		return err
 	}
 	m, err := s.dms.New(msg.InvitedBy, msg.Userid)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to create new dm")
+		return kerrors.WithMsg(err, "Failed to create new dm")
 	}
-	if err := s.dms.Insert(m); err != nil {
+	if err := s.dms.Insert(ctx, m); err != nil {
 		if !errors.Is(err, db.ErrUnique{}) {
-			return governor.ErrWithMsg(err, "Failed to insert new dm")
+			return kerrors.WithMsg(err, "Failed to insert new dm")
 		}
 	}
 	return nil
 }
 
-func (s *service) unfriendSubscriber(pinger events.Pinger, topic string, msgdata []byte) error {
-	msg, err := DecodeUnfriendProps(msgdata)
+func (s *service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+	msg, err := decodeUnfriendProps(msgdata)
 	if err != nil {
 		return err
 	}
-	m, err := s.dms.GetByID(msg.Userid, msg.Other)
+	m, err := s.dms.GetByID(ctx, msg.Userid, msg.Other)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound{}) {
+			// TODO: emit dm delete event
 			return nil
 		}
-		return governor.ErrWithMsg(err, "Failed to get dm")
+		return kerrors.WithMsg(err, "Failed to get dm")
 	}
-	if err := s.msgs.DeleteChatMsgs(m.Chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+	if err := s.msgs.DeleteChatMsgs(ctx, m.Chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete dm msgs")
 	}
-	if err := s.dms.Delete(msg.Userid, msg.Other); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete dm")
+	if err := s.dms.Delete(ctx, msg.Userid, msg.Other); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete dm")
 	}
 	// TODO: emit dm delete event
 	return nil
 }
 
-func (s *service) rmFriend(userid1, userid2 string) error {
-	if m, err := s.dms.GetByID(userid1, userid2); err != nil {
+func (s *service) rmFriend(ctx context.Context, userid1, userid2 string) error {
+	if m, err := s.dms.GetByID(ctx, userid1, userid2); err != nil {
 		if !errors.Is(err, db.ErrNotFound{}) {
-			return governor.ErrWithMsg(err, "Failed to get dm")
+			return kerrors.WithMsg(err, "Failed to get dm")
 		}
 	} else {
-		if err := s.msgs.DeleteChatMsgs(m.Chatid); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete dm msgs")
+		if err := s.msgs.DeleteChatMsgs(ctx, m.Chatid); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete dm msgs")
 		}
-		if err := s.dms.Delete(userid1, userid2); err != nil {
-			return governor.ErrWithMsg(err, "Failed to delete dm")
+		if err := s.dms.Delete(ctx, userid1, userid2); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete dm")
 		}
 	}
-	if err := s.friends.Remove(userid1, userid2); err != nil {
-		return governor.ErrWithMsg(err, "Failed to remove friend")
+	// TODO: emit dm delete event
+	if err := s.friends.Remove(ctx, userid1, userid2); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove friend")
 	}
 	return nil
 }

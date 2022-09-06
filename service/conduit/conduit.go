@@ -19,6 +19,7 @@ import (
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/ws"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -64,14 +65,12 @@ type (
 		s *service
 	}
 
-	// FriendProps are properties of a friend event
-	FriendProps struct {
+	friendProps struct {
 		Userid    string `json:"userid"`
 		InvitedBy string `json:"invited_by"`
 	}
 
-	// UnfriendProps are properties of an unfriend event
-	UnfriendProps struct {
+	unfriendProps struct {
 		Userid string `json:"userid"`
 		Other  string `json:"other"`
 	}
@@ -185,7 +184,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	})
 
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
-		return governor.ErrWithMsg(err, "Failed to parse role invitation time")
+		return kerrors.WithMsg(err, "Failed to parse role invitation time")
 	} else {
 		s.invitationTime = int64(t / time.Second)
 	}
@@ -208,33 +207,33 @@ func (s *service) Setup(req governor.ReqSetup) error {
 	l := s.logger.WithData(map[string]string{
 		"phase": "setup",
 	})
-	if err := s.friends.Setup(); err != nil {
+	if err := s.friends.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created conduit friend table", nil)
-	if err := s.invitations.Setup(); err != nil {
+	if err := s.invitations.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created conduit friend invitation table", nil)
-	if err := s.dms.Setup(); err != nil {
+	if err := s.dms.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created conduit dm table", nil)
-	if err := s.gdms.Setup(); err != nil {
+	if err := s.gdms.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created conduit gdm tables", nil)
-	if err := s.msgs.Setup(); err != nil {
+	if err := s.msgs.Setup(context.Background()); err != nil {
 		return err
 	}
 	l.Info("Created conduit msg table", nil)
-	if err := s.events.InitStream(s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
 		MaxMsgSize: s.eventsize,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to init conduit stream")
+		return kerrors.WithMsg(err, "Failed to init conduit stream")
 	}
 	l.Info("Created conduit stream", nil)
 	return nil
@@ -255,7 +254,7 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to friend queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to friend queue")
 	}
 	l.Info("Subscribed to friend queue", nil)
 
@@ -265,52 +264,52 @@ func (s *service) Start(ctx context.Context) error {
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to unfriend queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to unfriend queue")
 	}
 	l.Info("Subscribed to unfriend queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.CreateChannel, s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user create queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
 	l.Info("Subscribed to user create queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.DeleteChannel, s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user delete queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	l.Info("Subscribed to user delete queue", nil)
 
-	if _, err := s.events.StreamSubscribe(s.useropts.StreamName, s.useropts.UpdateChannel, s.streamns+"_WORKER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
 		MaxRequests: 32,
 	}); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to user update queue")
+		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}
 	l.Info("Subscribed to user update queue", nil)
 
 	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.FriendInvitationGCHook); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to gov sys gc channel")
+		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	l.Info("Subscribed to gov sys gc channel", nil)
 
-	if _, err := s.events.Subscribe(ws.PresenceChannelAll(s.wsopts.PresenceChannel), s.streamns+"_WORKER_PRESENCE", s.PresenceHandler); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to ws presence channel")
+	if _, err := s.ws.SubscribePresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.PresenceHandler); err != nil {
+		return kerrors.WithMsg(err, "Failed to subscribe to ws presence channel")
 	}
 	l.Info("Subscribed to ws presence channel", nil)
 
-	if _, err := s.events.Subscribe(ws.ServiceChannelAll(s.wsopts.UserRcvChannelPrefix, s.opts.PresenceQueryChannel), s.streamns+"_PRESENCE_QUERY", s.PresenceQueryHandler); err != nil {
-		return governor.ErrWithMsg(err, "Failed to subscribe to ws presence query channel")
+	if _, err := s.ws.Subscribe(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.PresenceQueryHandler); err != nil {
+		return kerrors.WithMsg(err, "Failed to subscribe to ws presence query channel")
 	}
 	l.Info("Subscribed to ws presence query channel", nil)
 
@@ -325,39 +324,74 @@ func (s *service) Health() error {
 }
 
 // UserCreateHook creates a new user name
-func (s *service) UserCreateHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeNewUserProps(msgdata)
-	if err != nil {
-		return err
-	}
-	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update friends username")
+func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
+		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
 	return nil
 }
 
-// UserDeleteHook deletes a user name
-func (s *service) UserDeleteHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeDeleteUserProps(msgdata)
-	if err != nil {
-		return err
+const (
+	chatDeleteBatchSize = 256
+)
+
+// UserDeleteHook deletes user associated chats
+func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+	if err := s.invitations.DeleteByUser(ctx, props.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user invitations")
 	}
-	return s.userDeleteHook(pinger, props.Userid)
+	for {
+		if err := pinger.Ping(ctx); err != nil {
+			return err
+		}
+		chatids, err := s.gdms.GetLatest(ctx, props.Userid, 0, chatDeleteBatchSize)
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to get user chats")
+		}
+		if len(chatids) == 0 {
+			break
+		}
+		for _, i := range chatids {
+			if err := s.rmGDMUser(ctx, i, props.Userid); err != nil {
+				return kerrors.WithMsg(err, "Failed to delete group chat")
+			}
+		}
+		if len(chatids) < chatDeleteBatchSize {
+			break
+		}
+	}
+	for {
+		if err := pinger.Ping(ctx); err != nil {
+			return err
+		}
+		friends, err := s.friends.GetFriends(ctx, props.Userid, "", chatDeleteBatchSize, 0)
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to get user friends")
+		}
+		if len(friends) == 0 {
+			break
+		}
+		for _, i := range friends {
+			if err := s.rmFriend(ctx, props.Userid, i.Userid2); err != nil {
+				return kerrors.WithMsg(err, "Failed to remove friend")
+			}
+		}
+		if len(friends) < chatDeleteBatchSize {
+			break
+		}
+	}
+	return nil
 }
 
 // UserUpdateHook updates a user name
-func (s *service) UserUpdateHook(pinger events.Pinger, topic string, msgdata []byte) error {
-	props, err := user.DecodeUpdateUserProps(msgdata)
-	if err != nil {
-		return err
-	}
-	if err := s.friends.UpdateUsername(props.Userid, props.Username); err != nil {
-		return governor.ErrWithMsg(err, "Failed to update friends username")
+func (s *service) UserUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
+		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
 	return nil
 }
 
-func (s *service) FriendInvitationGCHook(topic string, msgdata []byte) {
+func (s *service) FriendInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
 		"channel": s.syschannels.GC,
@@ -368,79 +402,25 @@ func (s *service) FriendInvitationGCHook(topic string, msgdata []byte) {
 		l.Error(err.Error(), nil)
 		return
 	}
-	if err := s.invitations.DeleteBefore(props.Timestamp - time72h); err != nil {
+	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		l.Error(err.Error(), nil)
 		return
 	}
 	l.Debug("GC friend invitations", nil)
 }
 
-// DecodeFriendProps unmarshals json encoded friend props into a struct
-func DecodeFriendProps(msgdata []byte) (*FriendProps, error) {
-	m := &FriendProps{}
+func decodeFriendProps(msgdata []byte) (*friendProps, error) {
+	m := &friendProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode friend props")
+		return nil, kerrors.WithMsg(err, "Failed to decode friend props")
 	}
 	return m, nil
 }
 
-// DecodeUnfriendProps unmarshals json encoded unfriend props into a struct
-func DecodeUnfriendProps(msgdata []byte) (*UnfriendProps, error) {
-	m := &UnfriendProps{}
+func decodeUnfriendProps(msgdata []byte) (*unfriendProps, error) {
+	m := &unfriendProps{}
 	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to decode unfriend props")
+		return nil, kerrors.WithMsg(err, "Failed to decode unfriend props")
 	}
 	return m, nil
-}
-
-const (
-	chatDeleteBatchSize = 256
-)
-
-// userDeleteHook deletes the chats of a deleted user
-func (s *service) userDeleteHook(pinger events.Pinger, userid string) error {
-	if err := s.invitations.DeleteByUser(userid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete user invitations")
-	}
-	for {
-		if err := pinger.Ping(); err != nil {
-			return err
-		}
-		chatids, err := s.gdms.GetLatest(userid, 0, chatDeleteBatchSize)
-		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user chats")
-		}
-		if len(chatids) == 0 {
-			break
-		}
-		for _, i := range chatids {
-			if err := s.rmGDMUser(i, userid); err != nil {
-				return governor.ErrWithMsg(err, "Failed to delete group chat")
-			}
-		}
-		if len(chatids) < chatDeleteBatchSize {
-			break
-		}
-	}
-	for {
-		if err := pinger.Ping(); err != nil {
-			return err
-		}
-		friends, err := s.friends.GetFriends(userid, "", chatDeleteBatchSize, 0)
-		if err != nil {
-			return governor.ErrWithMsg(err, "Failed to get user friends")
-		}
-		if len(friends) == 0 {
-			break
-		}
-		for _, i := range friends {
-			if err := s.rmFriend(userid, i.Userid2); err != nil {
-				return governor.ErrWithMsg(err, "Failed to remove friend")
-			}
-		}
-		if len(friends) < chatDeleteBatchSize {
-			break
-		}
-	}
-	return nil
 }

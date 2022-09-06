@@ -1,6 +1,7 @@
 package conduit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/conduit/gdm/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/ws"
+	"xorkevin.dev/kerrors"
 )
 
 func (s *service) publishGDMMsgEvent(chatid string, v interface{}) {
@@ -361,23 +363,32 @@ func (s *service) DeleteGDM(userid string, chatid string) error {
 	return nil
 }
 
-func (s *service) rmGDMUser(chatid string, userid string) error {
-	count, err := s.gdms.GetMembersCount(chatid)
+func (s *service) rmGDMUser(ctx context.Context, chatid string, userid string) error {
+	// TODO use transaction to maintain member count
+	count, err := s.gdms.GetMembersCount(ctx, chatid)
 	if err != nil {
-		return governor.ErrWithMsg(err, "Failed to get group chat members count")
+		return kerrors.WithMsg(err, "Failed to get group chat members count")
 	}
 	if count > 3 {
-		if err := s.gdms.RmMembers(chatid, []string{userid}); err != nil {
-			return governor.ErrWithMsg(err, "Failed to remove user from group chat")
+		if err := s.gdms.RmMembers(ctx, chatid, []string{userid}); err != nil {
+			return kerrors.WithMsg(err, "Failed to remove user from group chat")
 		}
 		return nil
 	}
-	if err := s.msgs.DeleteChatMsgs(chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete group chat messages")
+	if _, err := s.gdms.GetByID(ctx, chatid); err != nil {
+		if errors.Is(err, db.ErrNotFound{}) {
+			// TODO: emit gdm delete event
+			return nil
+		}
+		return kerrors.WithMsg(err, "Failed to get gdm")
 	}
-	if err := s.gdms.Delete(chatid); err != nil {
-		return governor.ErrWithMsg(err, "Failed to delete group chat")
+	if err := s.msgs.DeleteChatMsgs(ctx, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat messages")
 	}
+	if err := s.gdms.Delete(ctx, chatid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete group chat")
+	}
+	// TODO emit gdm delete event
 	return nil
 }
 

@@ -1,12 +1,15 @@
 package conduit
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/ws"
+	"xorkevin.dev/kerrors"
 )
 
 const (
@@ -14,67 +17,59 @@ const (
 	locGDM = "gdm"
 )
 
-func (s *service) PresenceHandler(topic string, msgdata []byte) {
+func (s *service) PresenceHandler(ctx context.Context, props ws.PresenceEventProps) {
 	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": ws.PresenceChannelAll(s.wsopts.PresenceChannel),
-		"group":   s.streamns + "_WORKER_PRESENCE",
+		"agent":    "subscriber",
+		"location": props.Location,
+		"group":    s.streamns + "_WORKER_PRESENCE",
+		"userid":   props.Userid,
 	})
-	userid := strings.TrimPrefix(topic, ws.PresenceChannelPrefix(s.wsopts.PresenceChannel))
-	if userid == "" || len(userid) > lengthCapUserid {
-		l.Error("Invalid userid", nil)
-		return
-	}
-	req := &ws.PresenceEventProps{}
-	if err := json.Unmarshal(msgdata, &req); err != nil {
-		l.Error("Invalid presence event msg format", map[string]string{
-			"error":  err.Error(),
-			"userid": userid,
-		})
-		return
-	}
-	if !strings.HasPrefix(req.Location, s.channelns+".") {
-		return
-	}
-	subloc := strings.TrimPrefix(req.Location, s.channelns+".")
+	subloc := strings.TrimPrefix(props.Location, s.channelns+".")
 	switch subloc {
 	case locDM, locGDM:
 	default:
 		return
 	}
-	if err := s.kvpresence.Set(userid, subloc, 60); err != nil {
+	if err := s.kvpresence.Set(ctx, props.Userid, subloc, 60); err != nil {
 		l.Error("Failed to set presence", map[string]string{
-			"error":  err.Error(),
-			"userid": userid,
+			"error":      err.Error(),
+			"actiontype": "conduit_set_presence",
 		})
 		return
 	}
 }
 
-func (s *service) getPresence(loc string, userids []string) ([]string, error) {
+func (s *service) getPresence(ctx context.Context, l governor.Logger, loc string, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
 
 	kvres := make([]kvstore.Resulter, 0, len(userids))
-	mget, err := s.kvpresence.Multi()
+	mget, err := s.kvpresence.Multi(ctx)
 	if err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to begin kv multi")
+		return nil, kerrors.WithMsg(err, "Failed to begin kv multi")
 	}
 	for _, i := range userids {
-		kvres = append(kvres, mget.Get(i))
+		kvres = append(kvres, mget.Get(ctx, i))
 	}
-	if err := mget.Exec(); err != nil {
-		return nil, governor.ErrWithMsg(err, "Failed to exec kv multi")
+	if err := mget.Exec(ctx); err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to exec kv multi")
 	}
 
 	res := make([]string, 0, len(kvres))
 	for n, i := range kvres {
 		k, err := i.Result()
 		if err != nil {
+			if !errors.Is(err, kvstore.ErrNotFound{}) {
+				l.Error("Failed to get presence result", map[string]string{
+					"error":      err.Error(),
+					"actiontype": "conduit_get_presence_result",
+				})
+			}
 			continue
 		}
-		if loc == "" || k == loc {
+		// right angle means get all locations
+		if loc == ">" || k == loc {
 			res = append(res, userids[n])
 		}
 	}
@@ -87,73 +82,72 @@ type (
 	}
 )
 
-func (s *service) PresenceQueryHandler(topic string, msgdata []byte) {
+func (s *service) PresenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) {
 	l := s.logger.WithData(map[string]string{
 		"agent":   "subscriber",
-		"channel": ws.ServiceChannelAll(s.wsopts.UserRcvChannelPrefix, s.opts.PresenceQueryChannel),
+		"channel": s.opts.PresenceQueryChannel,
 		"group":   s.streamns + "_PRESENCE_QUERY",
+		"userid":  userid,
 	})
-	userid := strings.TrimPrefix(topic, ws.ServiceChannelPrefix(s.wsopts.UserRcvChannelPrefix, s.opts.PresenceQueryChannel))
-	req := reqGetPresence{}
+	var req reqGetPresence
 	if err := json.Unmarshal(msgdata, &req); err != nil {
+		l.Warn("Invalid get presence request", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "conduit_decode_presence_req",
+		})
 		return
 	}
 	req.Userid = userid
 	if err := req.valid(); err != nil {
-		return
-	}
-
-	m, err := s.friends.GetFriendsByID(req.Userid, req.Userids)
-	if err != nil {
-		l.Error("Failed to get user friends", map[string]string{
-			"error": err.Error(),
+		l.Warn("Invalid get presence request", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "conduit_validate_presence_req",
 		})
 		return
 	}
+
+	m, err := s.friends.GetFriendsByID(ctx, req.Userid, req.Userids)
+	if err != nil {
+		l.Error("Failed to get user friends", map[string]string{
+			"error":      err.Error(),
+			"actiontype": "conduit_get_presence_friends",
+		})
+		return
+	}
+
+	if len(m) == 0 {
+		if err := s.ws.Publish(ctx, req.Userid, s.opts.PresenceQueryChannel, resPresence{
+			Userids: []string{},
+		}); err != nil {
+			l.Error("Failed to publish presence res event", map[string]string{
+				"error":      err.Error(),
+				"actiontype": "conduit_publish_presence_res",
+			})
+			return
+		}
+		return
+	}
+
 	userids := make([]string, 0, len(m))
 	for _, i := range m {
 		userids = append(userids, i.Userid2)
 	}
 
-	if len(userids) == 0 {
-		b, err := json.Marshal(resPresence{
-			Userids: userids,
-		})
-		if err != nil {
-			l.Error("Failed to marshal presence res json", map[string]string{
-				"error": err.Error(),
-			})
-			return
-		}
-		if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, req.Userid, s.channelns+".presence"), b); err != nil {
-			l.Error("Failed to publish presence res event", map[string]string{
-				"error": err.Error(),
-			})
-			return
-		}
-		return
-	}
-
-	res, err := s.getPresence("", userids)
+	res, err := s.getPresence(ctx, l, "", userids)
 	if err != nil {
 		l.Error("Failed to get presence", map[string]string{
-			"error": err.Error(),
+			"error":      err.Error(),
+			"actiontype": "conduit_get_presence",
 		})
 		return
 	}
 
-	b, err := json.Marshal(resPresence{
+	if err := s.ws.Publish(ctx, req.Userid, s.opts.PresenceQueryChannel, resPresence{
 		Userids: res,
-	})
-	if err != nil {
-		l.Error("Failed to marshal presence res json", map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-	if err := s.events.Publish(ws.UserChannel(s.wsopts.UserSendChannelPrefix, req.Userid, s.channelns+".presence"), b); err != nil {
+	}); err != nil {
 		l.Error("Failed to publish presence res event", map[string]string{
-			"error": err.Error(),
+			"error":      err.Error(),
+			"actiontype": "conduit_publish_presence_res",
 		})
 		return
 	}
