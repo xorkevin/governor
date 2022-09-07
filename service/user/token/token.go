@@ -2,21 +2,15 @@ package token
 
 import (
 	"context"
-	"crypto"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/crypto/blake2b"
-	_ "golang.org/x/crypto/blake2b" // depends on registering blake2b hash
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
 )
 
@@ -79,7 +73,7 @@ type (
 	tokenSigner struct {
 		signer    jose.Signer
 		keySigner jose.Signer
-		keys      *signingKeys
+		keys      *hunter2.SigningKeyring
 		jwks      []jose.JSONWebKey
 	}
 
@@ -259,166 +253,26 @@ type (
 	}
 )
 
-type (
-	signingKey interface {
-		Alg() string
-		ID() string
-		Private() crypto.PrivateKey
-		Public() crypto.PublicKey
-	}
-
-	signingKeys struct {
-		keys map[string]signingKey
-	}
-)
-
-func (s *signingKeys) Register(k signingKey) {
-	s.keys[k.ID()] = k
-}
-
-func (s *signingKeys) Get(id string) signingKey {
-	k, ok := s.keys[id]
-	if !ok {
-		return nil
-	}
-	return k
-}
-
-func signingKeyID(params string) string {
-	k := blake2b.Sum256([]byte(params))
-	return base64.RawURLEncoding.EncodeToString(k[:])
-}
-
-const (
-	signingAlgHS512 = "hs512"
-	signingAlgRS256 = "rs256"
-)
-
-func signingKeyFromParams(params string) (signingKey, error) {
-	id, _, _ := strings.Cut(strings.TrimPrefix(params, "$"), "$")
-	switch id {
-	case signingAlgHS512:
-		return hs512FromParams(params)
-	case signingAlgRS256:
-		return rs256FromParams(params)
-	default:
-		return nil, kerrors.WithMsg(nil, "Not supported")
-	}
-}
-
-type (
-	hs512Key struct {
-		kid string
-		key []byte
-	}
-)
-
-func (k *hs512Key) Alg() string {
-	return signingAlgHS512
-}
-
-func (k *hs512Key) ID() string {
-	return k.kid
-}
-
-func (k *hs512Key) Private() crypto.PrivateKey {
-	return k.key
-}
-
-func (k *hs512Key) Public() crypto.PublicKey {
-	return k.key
-}
-
-func hs512FromParams(params string) (*hs512Key, error) {
-	b := strings.Split(strings.TrimPrefix(params, "$"), "$")
-	if len(b) != 2 || b[0] != signingAlgHS512 {
-		return nil, kerrors.WithMsg(nil, "Invalid params format")
-	}
-	key, err := base64.RawURLEncoding.DecodeString(b[1])
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Invalid hs512 key")
-	}
-	return &hs512Key{
-		kid: signingKeyID(params),
-		key: key,
-	}, nil
-}
-
-type (
-	rs256Key struct {
-		kid string
-		key *rsa.PrivateKey
-		pub crypto.PublicKey
-	}
-)
-
-func (k *rs256Key) Alg() string {
-	return signingAlgRS256
-}
-
-func (k *rs256Key) ID() string {
-	return k.kid
-}
-
-func (k *rs256Key) Private() crypto.PrivateKey {
-	return k.key
-}
-
-func (k *rs256Key) Public() crypto.PublicKey {
-	return k.pub
-}
-
-const (
-	rsaPrivateBlockType = "PRIVATE KEY"
-)
-
-func rs256FromParams(params string) (*rs256Key, error) {
-	b := strings.Split(strings.TrimPrefix(params, "$"), "$")
-	if len(b) != 2 || b[0] != signingAlgRS256 {
-		return nil, kerrors.WithMsg(nil, "Invalid params format")
-	}
-	pemBlock, rest := pem.Decode([]byte(b[1]))
-	if pemBlock == nil || pemBlock.Type != rsaPrivateBlockType || len(rest) != 0 {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid rsakey pem")
-	}
-	rawKey, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
-	if err != nil {
-		return nil, kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid pkcs8 rsa key")
-	}
-	key, ok := rawKey.(*rsa.PrivateKey)
-	if !ok {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Invalid created pkcs8 rsa key")
-	}
-	key.Precompute()
-	return &rs256Key{
-		kid: signingKeyID(params),
-		key: key,
-		pub: key.Public(),
-	}, nil
-}
-
 func (s *service) refreshSecrets(ctx context.Context) error {
 	var tokenSecrets secretToken
 	if err := s.config.GetSecret(ctx, "tokensecret", int64(s.keyrefresh), &tokenSecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid token secret")
 	}
-	var khs512 signingKey
-	var krs256 signingKey
-	keys := &signingKeys{
-		keys: map[string]signingKey{},
-	}
+	keys := hunter2.NewSigningKeyring()
+	var khs512 hunter2.SigningKey
+	var krs256 hunter2.SigningKey
 	var jwks []jose.JSONWebKey
 	for _, i := range tokenSecrets.Secrets {
-		k, err := signingKeyFromParams(i)
+		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
 			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid key param")
 		}
 		switch k.Alg() {
-		case signingAlgHS512:
+		case hunter2.SigningAlgHS512:
 			if khs512 == nil {
 				khs512 = k
 			}
-		case signingAlgRS256:
+		case hunter2.SigningAlgRS256:
 			jwks = append(jwks, jose.JSONWebKey{
 				Algorithm: "RS256",
 				KeyID:     k.ID(),
@@ -434,7 +288,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 			// change in signing keys
 			return nil
 		}
-		keys.Register(k)
+		keys.RegisterSigningKey(k)
 	}
 	if khs512 == nil || krs256 == nil {
 		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No token keys present")
@@ -464,7 +318,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		"hs512kid":   s.hs512id,
 		"rs256kid":   s.rs256id,
 		"numjwks":    strconv.Itoa(len(jwks)),
-		"numother":   strconv.Itoa(len(tokenSecrets.Secrets) - len(jwks)),
+		"numother":   strconv.Itoa(keys.Size() - len(jwks)),
 	})
 	return nil
 }
@@ -638,8 +492,8 @@ func (s *service) Validate(ctx context.Context, kind Kind, tokenString string) (
 		})
 		return false, nil
 	}
-	key := signer.keys.Get(token.Headers[0].KeyID)
-	if key == nil {
+	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	if !ok {
 		return false, nil
 	}
 	claims := &Claims{}
@@ -677,8 +531,8 @@ func (s *service) GetClaims(ctx context.Context, kind Kind, tokenString string) 
 		})
 		return false, nil
 	}
-	key := signer.keys.Get(token.Headers[0].KeyID)
-	if key == nil {
+	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	if !ok {
 		return false, nil
 	}
 	claims := &Claims{}
@@ -714,8 +568,8 @@ func (s *service) GetClaimsExt(ctx context.Context, kind Kind, tokenString strin
 		})
 		return false, nil
 	}
-	key := signer.keys.Get(token.Headers[0].KeyID)
-	if key == nil {
+	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	if !ok {
 		return false, nil
 	}
 	if claims == nil {

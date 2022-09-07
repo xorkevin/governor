@@ -448,7 +448,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	s.logger.Info("Refreshed mailkey with new keys", map[string]string{
 		"actiontype":      "mail_refresh_key",
 		"kid":             s.maildataCipher.cipher.ID(),
-		"nummaildatakeys": strconv.Itoa(len(maildataSecrets.Keys)),
+		"nummaildatakeys": strconv.Itoa(decrypter.Size()),
 	})
 	return nil
 }

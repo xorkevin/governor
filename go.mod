@@ -3,7 +3,7 @@ module xorkevin.dev/governor
 go 1.19
 
 require (
-	blitiri.com.ar/go/spf v1.5.0
+	blitiri.com.ar/go/spf v1.5.1
 	github.com/boombuler/barcode v1.0.1
 	github.com/emersion/go-message v0.16.0
 	github.com/emersion/go-msgauth v0.6.6
@@ -13,22 +13,21 @@ require (
 	github.com/go-chi/cors v1.2.1
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/hashicorp/vault/api v1.7.2
-	github.com/lib/pq v1.10.6
-	github.com/minio/minio-go/v7 v7.0.34
+	github.com/lib/pq v1.10.7
+	github.com/minio/minio-go/v7 v7.0.36
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nats-io/jsm.go v0.0.33
 	github.com/nats-io/nats.go v1.16.0
-	github.com/rs/zerolog v1.27.0
+	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.5.0
-	github.com/spf13/viper v1.12.0
+	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.8.0
-	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
-	golang.org/x/image v0.0.0-20220722155232-062f8c9fd539
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
+	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69
+	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/yaml.v3 v3.0.1
 	nhooyr.io/websocket v1.8.7
-	xorkevin.dev/hunter2 v0.1.7
+	xorkevin.dev/hunter2 v0.1.9
 	xorkevin.dev/kerrors v0.0.0-20220821055222-17bd595b40cd
 )
 
@@ -83,7 +82,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/xid v1.4.0 // indirect
@@ -93,8 +92,9 @@ require (
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/subosito/gotenv v1.3.0 // indirect
+	github.com/subosito/gotenv v1.4.1 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 	golang.org/x/text v0.3.7 // indirect
@@ -102,6 +102,6 @@ require (
 	google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd // indirect
 	google.golang.org/grpc v1.46.2 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
-	gopkg.in/ini.v1 v1.66.6 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

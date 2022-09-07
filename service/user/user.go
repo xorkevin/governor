@@ -570,7 +570,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	s.logger.Info("Refreshed otp secrets with new secrets", map[string]string{
 		"actiontype": "user_refresh_otp_secrets",
 		"kid":        s.otpCipher.cipher.ID(),
-		"numotpkeys": strconv.Itoa(len(otpsecrets.Keys)),
+		"numotpkeys": strconv.Itoa(decrypter.Size()),
 	})
 	return nil
 }
