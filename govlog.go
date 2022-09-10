@@ -2,26 +2,38 @@ package governor
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
+	"xorkevin.dev/kerrors"
+)
+
+type (
+	// LogLevel is a log level
+	LogLevel int
 )
 
 const (
-	LogLevelDebug = iota
+	LogLevelDebug LogLevel = iota
 	LogLevelInfo
 	LogLevelWarn
 	LogLevelError
 )
 
-func envToLevel(e string) int {
-	switch e {
+func logLevelFromString(s string) LogLevel {
+	switch s {
 	case "DEBUG":
 		return LogLevelDebug
 	case "INFO":
@@ -35,8 +47,23 @@ func envToLevel(e string) int {
 	}
 }
 
-func envToLogOutput(e string) io.Writer {
-	switch e {
+func (l LogLevel) String() string {
+	switch l {
+	case LogLevelDebug:
+		return "DEBUG"
+	case LogLevelInfo:
+		return "INFO"
+	case LogLevelWarn:
+		return "WARN"
+	case LogLevelError:
+		return "ERROR"
+	default:
+		return "UNSET"
+	}
+}
+
+func logOutputFromString(s string) io.Writer {
+	switch s {
 	case "STDOUT":
 		return os.Stdout
 	default:
@@ -69,56 +96,122 @@ func (w *SyncWriter) Write(p []byte) (int, error) {
 
 type (
 	JSONLogWriter struct {
-		W io.Writer
+		FieldLevel      string
+		FieldTime       string
+		FieldTimeUnix   string
+		FieldTimeUnixUS string
+		FieldCaller     string
+		FieldPath       string
+		FieldMsg        string
+		W               io.Writer
 	}
 )
 
 func NewJSONLogWriter(w io.Writer) *JSONLogWriter {
 	return &JSONLogWriter{
-		W: w,
+		FieldLevel:      "level",
+		FieldTime:       "time",
+		FieldTimeUnix:   "unixtime",
+		FieldTimeUnixUS: "unixtimeus",
+		FieldCaller:     "caller",
+		FieldPath:       "path",
+		FieldMsg:        "msg",
+		W:               w,
+	}
+}
+
+func (w *JSONLogWriter) Log(level LogLevel, t time.Time, caller *LogFrame, path string, msg string, fields LogFields) {
+	timestr := t.Format(time.RFC3339Nano)
+	unixtime := t.Unix()
+	unixtimeus := t.UnixMicro()
+	callerstr := ""
+	if caller != nil {
+		callerstr = fmt.Sprintf("%s %s:%d", caller.Function, caller.File, caller.Line)
+	}
+	allFields := LogFields{
+		w.FieldLevel:      level,
+		w.FieldTime:       timestr,
+		w.FieldTimeUnix:   unixtime,
+		w.FieldTimeUnixUS: unixtimeus,
+		w.FieldCaller:     callerstr,
+		w.FieldPath:       path,
+		w.FieldMsg:        msg,
+	}
+	mergeLogFields(allFields, fields)
+	b, err := json.Marshal(allFields)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	if _, err := w.W.Write(b); err != nil {
+		log.Println(err)
 	}
 }
 
 type (
 	// Logger writes logs with context
 	Logger interface {
-		Debug(ctx context.Context, msg string, labels, annotations map[string]interface{})
-		Info(ctx context.Context, msg string, labels, annotations map[string]interface{})
-		Warn(ctx context.Context, msg string, labels, annotations map[string]interface{})
-		Error(ctx context.Context, msg string, labels, annotations map[string]interface{})
-		Err(ctx context.Context, err error, labels, annotations map[string]interface{})
-		Sublogger(module string, labels, annotations map[string]interface{}) Logger
+		Log(ctx context.Context, level LogLevel, skip int, msg string, fields LogFields)
 	}
 
 	// LogWriter is a log service adapter
 	LogWriter interface {
+		Log(level LogLevel, t time.Time, caller *LogFrame, path string, msg string, fields LogFields)
 	}
 
-	// LogLabels are searchable features of a log
-	LogLabels map[string]interface{}
+	// LogFrame is a logger caller frame
+	LogFrame struct {
+		Function string
+		File     string
+		Line     int
+		PC       uintptr
+	}
 
-	// LogAnnotations are non-searchable features of a log
-	LogAnnotations map[string]interface{}
+	// LogFields is associated data
+	LogFields map[string]interface{}
 
 	// KLogger is a context logger that writes logs to a [LogWriter]
 	KLogger struct {
-		MinLevel    int
-		LogWriter   LogWriter
-		Path        string
-		Labels      LogLabels
-		Annotations LogAnnotations
+		minLevel  LogLevel
+		logWriter LogWriter
+		path      string
+		fields    LogFields
+		parent    *KLogger
 	}
 
 	LoggerOpt = func(l *KLogger)
+
+	ctxKeyLogFields struct{}
+
+	ctxLogFields struct {
+		fields LogFields
+		parent *ctxLogFields
+	}
 )
 
+func getCtxLogFields(ctx context.Context) *ctxLogFields {
+	if ctx == nil {
+		return nil
+	}
+	v := ctx.Value(ctxKeyLogFields{})
+	if v == nil {
+		return nil
+	}
+	return v.(*ctxLogFields)
+}
+
+func setCtxLogFields(ctx context.Context, fields *ctxLogFields) context.Context {
+	return context.WithValue(ctx, ctxKeyLogFields{}, fields)
+}
+
+// NewLogger creates a new [*KLogger]
 func NewLogger(opts ...LoggerOpt) *KLogger {
 	l := &KLogger{
-		MinLevel:    LogLevelInfo,
-		LogWriter:   NewJSONLogWriter(NewSyncWriter(os.Stdout)),
-		Path:        "root",
-		Labels:      LogLabels{},
-		Annotations: LogAnnotations{},
+		minLevel:  LogLevelInfo,
+		logWriter: NewJSONLogWriter(NewSyncWriter(os.Stdout)),
+		path:      "",
+		fields:    nil,
+		parent:    nil,
 	}
 	for _, i := range opts {
 		i(l)
@@ -126,7 +219,132 @@ func NewLogger(opts ...LoggerOpt) *KLogger {
 	return l
 }
 
-func levelToZerologLevel(level int) zerolog.Level {
+func LogOptMinLevel(level LogLevel) LoggerOpt {
+	return func(l *KLogger) {
+		l.minLevel = level
+	}
+}
+
+func LogOptMinLevelStr(level string) LoggerOpt {
+	return func(l *KLogger) {
+		l.minLevel = logLevelFromString(level)
+	}
+}
+
+func LogOptWriter(w LogWriter) LoggerOpt {
+	return func(l *KLogger) {
+		l.logWriter = w
+	}
+}
+
+func LogOptPath(path string) LoggerOpt {
+	return func(l *KLogger) {
+		l.path = path
+	}
+}
+
+func LogOptFields(fields LogFields) LoggerOpt {
+	return func(l *KLogger) {
+		l.fields = fields
+	}
+}
+
+func mergeLogFields(dest, from LogFields) {
+	for k, v := range from {
+		if _, ok := dest[k]; !ok {
+			dest[k] = v
+		}
+	}
+}
+
+func (l *KLogger) buildPath(s *strings.Builder) {
+	if l.parent != nil {
+		l.parent.buildPath(s)
+	}
+	if l.path != "" {
+		s.WriteByte('.')
+		s.WriteString(l.path)
+	}
+}
+
+func (l *KLogger) Log(ctx context.Context, level LogLevel, skip int, msg string, fields LogFields) {
+	if level < l.minLevel {
+		return
+	}
+
+	t := time.Now().UTC().Round(0)
+
+	var caller *LogFrame
+	callers := [1]uintptr{}
+	if n := runtime.Callers(1+skip, callers[:]); n > 0 {
+		frame, _ := runtime.CallersFrames(callers[:]).Next()
+		caller = &LogFrame{
+			Function: frame.Function,
+			File:     frame.File,
+			Line:     frame.Line,
+			PC:       frame.PC,
+		}
+	}
+
+	allFields := LogFields{}
+	mergeLogFields(allFields, fields)
+	for f := getCtxLogFields(ctx); f != nil; f = f.parent {
+		mergeLogFields(allFields, f.fields)
+	}
+	for k := l; k != nil; k = k.parent {
+		mergeLogFields(allFields, k.fields)
+	}
+	path := strings.Builder{}
+	l.buildPath(&path)
+	l.logWriter.Log(level, t, caller, path.String(), msg, allFields)
+}
+
+func Sublogger(l *KLogger, path string, fields LogFields) *KLogger {
+	return &KLogger{
+		minLevel:  l.minLevel,
+		logWriter: l.logWriter,
+		path:      path,
+		fields:    fields,
+		parent:    l,
+	}
+}
+
+func LogDebug(l Logger, ctx context.Context, msg string, fields LogFields) {
+	l.Log(ctx, LogLevelDebug, 1, msg, fields)
+}
+
+func LogInfo(l Logger, ctx context.Context, msg string, fields LogFields) {
+	l.Log(ctx, LogLevelInfo, 1, msg, fields)
+}
+
+func LogWarn(l Logger, ctx context.Context, msg string, fields LogFields) {
+	l.Log(ctx, LogLevelWarn, 1, msg, fields)
+}
+
+func LogError(l Logger, ctx context.Context, msg string, fields LogFields) {
+	l.Log(ctx, LogLevelError, 1, msg, fields)
+}
+
+func LogErr(l Logger, ctx context.Context, err error, fields LogFields) {
+	msg := "plain-error"
+	var kerr *kerrors.Error
+	if errors.As(err, &kerr) {
+		msg = kerr.Message
+	}
+	stacktrace := "NONE"
+	var serr *kerrors.StackTrace
+	if errors.As(err, &serr) {
+		stacktrace = serr.StackString()
+	}
+	allFields := LogFields{
+		"error":      err.Error(),
+		"stacktrace": stacktrace,
+	}
+	mergeLogFields(allFields, fields)
+	l.Log(ctx, LogLevelError, 1, msg, fields)
+}
+
+func levelToZerologLevel(level LogLevel) zerolog.Level {
 	switch level {
 	case LogLevelDebug:
 		return zerolog.DebugLevel
