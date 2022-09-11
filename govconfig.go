@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,8 +69,7 @@ type (
 		appname       string
 		version       Version
 		showBanner    bool
-		logLevel      int
-		logOutput     io.Writer
+		logLevel      string
 		maxReqSize    string
 		maxHeaderSize string
 		maxConnRead   string
@@ -152,7 +150,7 @@ func (r rewriteRule) String() string {
 
 func newConfig(opts Opts) *Config {
 	v := viper.New()
-	v.SetDefault("mode", "INFO")
+	v.SetDefault("loglevel", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
 	v.SetDefault("banner", true)
 	v.SetDefault("port", "8080")
@@ -221,8 +219,7 @@ func (c *Config) init() error {
 		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read in config")
 	}
 	c.showBanner = c.config.GetBool("banner")
-	c.logLevel = envToLevel(c.config.GetString("mode"))
-	c.logOutput = envToLogOutput(c.config.GetString("logoutput"))
+	c.logLevel = c.config.GetString("loglevel")
 	c.maxReqSize = c.config.GetString("maxreqsize")
 	c.maxHeaderSize = c.config.GetString("maxheadersize")
 	c.maxConnRead = c.config.GetString("maxconnread")
@@ -488,11 +485,6 @@ func (c *Config) getSecret(ctx context.Context, key string, seconds int64, targe
 
 func (c *Config) invalidateSecret(key string) {
 	delete(c.vaultCache, key)
-}
-
-// IsDebug returns if the configuration is in debug mode
-func (c *Config) IsDebug() bool {
-	return c.logLevel == levelDebug
 }
 
 type (

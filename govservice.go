@@ -3,7 +3,6 @@ package governor
 import (
 	"context"
 	"crypto/subtle"
-	"fmt"
 	"net/http"
 
 	"xorkevin.dev/governor/service/state"
@@ -35,11 +34,11 @@ type (
 	Service interface {
 		Register(name string, inj Injector, r ConfigRegistrar, jr JobRegistrar)
 		Init(ctx context.Context, c Config, r ConfigReader, l Logger, m Router) error
-		Setup(req ReqSetup) error
-		PostSetup(req ReqSetup) error
+		Setup(ctx context.Context, req ReqSetup) error
+		PostSetup(ctx context.Context, req ReqSetup) error
 		Start(ctx context.Context) error
 		Stop(ctx context.Context)
-		Health() error
+		Health(ctx context.Context) error
 	}
 
 	serviceOpt struct {
@@ -87,9 +86,6 @@ func (s *Server) setFirstSetupRun(v bool) {
 }
 
 func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
 	if !s.hasFirstSetupRun() {
 		m, err := s.state.Get(ctx)
 		if err != nil {
@@ -118,33 +114,35 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 	}
 	rsetup.Secret = ""
 
-	// To avoid partial setup, no context is passed beyond this point
+	// To avoid partial setup, no request context is passed beyond this point
 
-	l.Info("Setup all services begin", nil)
+	ctx = LogExtendCtx(context.Background(), ctx, nil)
+
+	LogInfo(s.log, ctx, "Setup all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Setup(rsetup); err != nil {
-			l.Error(fmt.Sprintf("Setup service %s failed", i.name), map[string]string{
-				"service": i.name,
-				"error":   err.Error(),
+		if err := i.r.Setup(ctx, rsetup); err != nil {
+			err := kerrors.WithMsg(err, "Setup service failed")
+			LogErr(s.log, ctx, err, LogFields{
+				"gov.service": i.name,
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("Setup service %s", i.name), map[string]string{
-			"service": i.name,
+		LogInfo(s.log, ctx, "Setup service success", LogFields{
+			"gov.service": i.name,
 		})
 	}
 
-	l.Info("Running PostSetup for all services", nil)
+	LogInfo(s.log, ctx, "Running postsetup for all services", nil)
 	for _, i := range s.services {
-		if err := i.r.PostSetup(rsetup); err != nil {
-			l.Error(fmt.Sprintf("Post setup service %s failed", i.name), map[string]string{
-				"service": i.name,
-				"error":   err.Error(),
+		if err := i.r.PostSetup(ctx, rsetup); err != nil {
+			err := kerrors.WithMsg(err, "Post setup service failed")
+			LogErr(s.log, ctx, err, LogFields{
+				"gov.service": i.name,
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("Done post setup service %s", i.name), map[string]string{
-			"service": i.name,
+		LogInfo(s.log, ctx, "Post setup service success", LogFields{
+			"gov.service": i.name,
 		})
 	}
 
@@ -153,21 +151,20 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 			Version: s.config.version.Num,
 			VHash:   s.config.version.Hash,
 		}); err != nil {
-			l.Error("Setup state service failed", map[string]string{
-				"error": err.Error(),
-			})
+			err := kerrors.WithMsg(err, "Setup state service failed")
+			LogErr(s.log, ctx, err, nil)
 			return ErrWithRes(err, http.StatusInternalServerError, "", "Failed to set state")
 		}
 		s.setFirstSetupRun(true)
 	}
-	l.Info("Setup all services complete", nil)
+	LogInfo(s.log, ctx, "Setup all services complete", nil)
 	return nil
 }
 
-func (s *Server) checkHealthServices() []error {
-	k := []error{}
+func (s *Server) checkHealthServices(ctx context.Context) []error {
+	var k []error
 	for _, i := range s.services {
-		if err := i.r.Health(); err != nil {
+		if err := i.r.Health(ctx); err != nil {
 			k = append(k, err)
 		}
 	}
@@ -175,59 +172,50 @@ func (s *Server) checkHealthServices() []error {
 }
 
 func (s *Server) initServices(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-	l.Info("Init all services begin", nil)
+	LogInfo(s.log, ctx, "Init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.logger.Subtree(i.name), s.router(s.config.BaseURL+i.url)); err != nil {
-			l.Error(fmt.Sprintf("Init service %s failed", i.name), map[string]string{
-				"service": i.name,
-				"error":   err.Error(),
+		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.log.Sublogger(i.name, LogFields{"gov.service": i.name}), s.router(s.config.BaseURL+i.url)); err != nil {
+			err := kerrors.WithMsg(err, "Init service failed")
+			LogErr(s.log, ctx, err, LogFields{
+				"gov.service": i.name,
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("Init service %s", i.name), map[string]string{
-			"service": i.name,
+		LogInfo(s.log, ctx, "Init service success", LogFields{
+			"gov.service": i.name,
 		})
 	}
-	l.Info("Init all services complete", nil)
+	LogInfo(s.log, ctx, "Init all services complete", nil)
 	return nil
 }
 
 func (s *Server) startServices(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-	l.Info("Start all services begin", nil)
+	LogInfo(s.log, ctx, "Start all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Start(ctx); err != nil {
-			l.Error(fmt.Sprintf("Start service %s failed", i.name), map[string]string{
-				"service": i.name,
-				"error":   err.Error(),
+			err := kerrors.WithMsg(err, "Start service failed")
+			LogErr(s.log, ctx, err, LogFields{
+				"gov.service": i.name,
 			})
 			return err
 		}
-		l.Info(fmt.Sprintf("Start service %s", i.name), map[string]string{
-			"service": i.name,
+		LogInfo(s.log, ctx, "Start service success", LogFields{
+			"gov.service": i.name,
 		})
 	}
-	l.Info("Start all services complete", nil)
+	LogInfo(s.log, ctx, "Start all services complete", nil)
 	return nil
 }
 
 func (s *Server) stopServices(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
-	l.Info("Stop all services begin", nil)
+	LogInfo(s.log, ctx, "Stop all services begin", nil)
 	sl := len(s.services)
 	for n := range s.services {
 		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
-		l.Info(fmt.Sprintf("Stop service %s", i.name), map[string]string{
-			"service": i.name,
+		LogInfo(s.log, ctx, "Stop service", LogFields{
+			"gov.service": i.name,
 		})
 	}
-	l.Info("Stop all services complete", nil)
+	LogInfo(s.log, ctx, "Stop all services complete", nil)
 }

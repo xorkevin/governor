@@ -1,7 +1,7 @@
 {{ $ns := .Vars.kube.namespace -}}
 {{ $svc := .Vars.kube.service.name -}}
 {{ $nssvc := printf "%s-%s" $ns $svc -}}
-mode: DEBUG
+loglevel: DEBUG
 logoutput: STDOUT
 port: 8080
 baseurl: /api

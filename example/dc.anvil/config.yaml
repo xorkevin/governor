@@ -1,4 +1,4 @@
-mode: DEBUG
+loglevel: DEBUG
 logoutput: STDOUT
 port: 8080
 baseurl: /api

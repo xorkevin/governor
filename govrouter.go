@@ -155,6 +155,7 @@ type (
 		Ctx() context.Context
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
+		LogFields(fields LogFields)
 		Req() *http.Request
 		Res() http.ResponseWriter
 		R() (http.ResponseWriter, *http.Request)
@@ -384,6 +385,10 @@ func (c *govcontext) Get(key interface{}) interface{} {
 
 func (c *govcontext) Set(key, value interface{}) {
 	c.ctx = context.WithValue(c.Ctx(), key, value)
+}
+
+func (c *govcontext) LogFields(fields LogFields) {
+	c.ctx = LogWithFields(c.Ctx(), fields)
 }
 
 func (c *govcontext) Req() *http.Request {

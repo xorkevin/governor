@@ -58,7 +58,7 @@ type (
 
 func (s *Server) initSetup(m Router) {
 	m.Post("", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.logger)
+		c := NewContext(w, r, s.log)
 		var req ReqSetup
 		if err := c.Bind(&req); err != nil {
 			c.WriteError(err)
@@ -68,6 +68,9 @@ func (s *Server) initSetup(m Router) {
 			c.WriteError(err)
 			return
 		}
+		c.LogFields(LogFields{
+			"gov.service.phase": "setup",
+		})
 		if err := s.setupServices(c.Ctx(), req); err != nil {
 			c.WriteError(err)
 			return

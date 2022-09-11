@@ -30,9 +30,11 @@ const (
 	LogLevelInfo
 	LogLevelWarn
 	LogLevelError
+	LogLevelNone
 )
 
-func logLevelFromString(s string) LogLevel {
+// LogLevelFromString creates a log level from a string
+func LogLevelFromString(s string) LogLevel {
 	switch s {
 	case "DEBUG":
 		return LogLevelDebug
@@ -42,11 +44,14 @@ func logLevelFromString(s string) LogLevel {
 		return LogLevelWarn
 	case "ERROR":
 		return LogLevelError
+	case "NONE":
+		return LogLevelNone
 	default:
 		return LogLevelInfo
 	}
 }
 
+// String implements [fmt.Stringer]
 func (l LogLevel) String() string {
 	switch l {
 	case LogLevelDebug:
@@ -57,6 +62,8 @@ func (l LogLevel) String() string {
 		return "WARN"
 	case LogLevelError:
 		return "ERROR"
+	case LogLevelNone:
+		return "NONE"
 	default:
 		return "UNSET"
 	}
@@ -95,6 +102,7 @@ func (w *SyncWriter) Write(p []byte) (int, error) {
 }
 
 type (
+	// JSONLogWriter writes logs in json format
 	JSONLogWriter struct {
 		FieldLevel      string
 		FieldTime       string
@@ -107,6 +115,7 @@ type (
 	}
 )
 
+// NewJSONLogWriter creates a new [*JSONLogWriter]
 func NewJSONLogWriter(w io.Writer) *JSONLogWriter {
 	return &JSONLogWriter{
 		FieldLevel:      "level",
@@ -120,6 +129,7 @@ func NewJSONLogWriter(w io.Writer) *JSONLogWriter {
 	}
 }
 
+// Log implements [LogWriter]
 func (w *JSONLogWriter) Log(level LogLevel, t time.Time, caller *LogFrame, path string, msg string, fields LogFields) {
 	timestr := t.Format(time.RFC3339Nano)
 	unixtime := t.Unix()
@@ -149,9 +159,14 @@ func (w *JSONLogWriter) Log(level LogLevel, t time.Time, caller *LogFrame, path 
 }
 
 type (
+	// LogFunc returns a log message and fields
+	LogFunc = func() (msg string, fields LogFields)
+
 	// Logger writes logs with context
 	Logger interface {
 		Log(ctx context.Context, level LogLevel, skip int, msg string, fields LogFields)
+		LogF(ctx context.Context, level LogLevel, skip int, fn LogFunc)
+		Sublogger(path string, fields LogFields) Logger
 	}
 
 	// LogWriter is a log service adapter
@@ -179,6 +194,7 @@ type (
 		parent    *KLogger
 	}
 
+	// LoggerOpt is an options function for [NewLogger]
 	LoggerOpt = func(l *KLogger)
 
 	ctxKeyLogFields struct{}
@@ -204,8 +220,22 @@ func setCtxLogFields(ctx context.Context, fields *ctxLogFields) context.Context 
 	return context.WithValue(ctx, ctxKeyLogFields{}, fields)
 }
 
-// NewLogger creates a new [*KLogger]
-func NewLogger(opts ...LoggerOpt) *KLogger {
+func LogWithFields(ctx context.Context, fields LogFields) context.Context {
+	return setCtxLogFields(ctx, &ctxLogFields{
+		fields: fields,
+		parent: getCtxLogFields(ctx),
+	})
+}
+
+func LogExtendCtx(dest, ctx context.Context, fields LogFields) context.Context {
+	return setCtxLogFields(dest, &ctxLogFields{
+		fields: fields,
+		parent: getCtxLogFields(ctx),
+	})
+}
+
+// NewLogger creates a new [Logger]
+func NewLogger(opts ...LoggerOpt) Logger {
 	l := &KLogger{
 		minLevel:  LogLevelInfo,
 		logWriter: NewJSONLogWriter(NewSyncWriter(os.Stdout)),
@@ -227,7 +257,7 @@ func LogOptMinLevel(level LogLevel) LoggerOpt {
 
 func LogOptMinLevelStr(level string) LoggerOpt {
 	return func(l *KLogger) {
-		l.minLevel = logLevelFromString(level)
+		l.minLevel = LogLevelFromString(level)
 	}
 }
 
@@ -267,6 +297,7 @@ func (l *KLogger) buildPath(s *strings.Builder) {
 	}
 }
 
+// Log implements [Logger]
 func (l *KLogger) Log(ctx context.Context, level LogLevel, skip int, msg string, fields LogFields) {
 	if level < l.minLevel {
 		return
@@ -299,7 +330,18 @@ func (l *KLogger) Log(ctx context.Context, level LogLevel, skip int, msg string,
 	l.logWriter.Log(level, t, caller, path.String(), msg, allFields)
 }
 
-func Sublogger(l *KLogger, path string, fields LogFields) *KLogger {
+// LogF implements [Logger]
+func (l *KLogger) LogF(ctx context.Context, level LogLevel, skip int, fn LogFunc) {
+	if level < l.minLevel {
+		return
+	}
+
+	msg, fields := fn()
+	l.Log(ctx, level, 1+skip, msg, fields)
+}
+
+// Sublogger creates a new sublogger
+func (l *KLogger) Sublogger(path string, fields LogFields) Logger {
 	return &KLogger{
 		minLevel:  l.minLevel,
 		logWriter: l.logWriter,
@@ -313,16 +355,32 @@ func LogDebug(l Logger, ctx context.Context, msg string, fields LogFields) {
 	l.Log(ctx, LogLevelDebug, 1, msg, fields)
 }
 
+func LogDebugF(l Logger, ctx context.Context, fn LogFunc) {
+	l.LogF(ctx, LogLevelDebug, 1, fn)
+}
+
 func LogInfo(l Logger, ctx context.Context, msg string, fields LogFields) {
 	l.Log(ctx, LogLevelInfo, 1, msg, fields)
+}
+
+func LogInfoF(l Logger, ctx context.Context, fn LogFunc) {
+	l.LogF(ctx, LogLevelInfo, 1, fn)
 }
 
 func LogWarn(l Logger, ctx context.Context, msg string, fields LogFields) {
 	l.Log(ctx, LogLevelWarn, 1, msg, fields)
 }
 
+func LogWarnF(l Logger, ctx context.Context, fn LogFunc) {
+	l.LogF(ctx, LogLevelWarn, 1, fn)
+}
+
 func LogError(l Logger, ctx context.Context, msg string, fields LogFields) {
 	l.Log(ctx, LogLevelError, 1, msg, fields)
+}
+
+func LogErrorF(l Logger, ctx context.Context, fn LogFunc) {
+	l.LogF(ctx, LogLevelError, 1, fn)
 }
 
 func LogErr(l Logger, ctx context.Context, err error, fields LogFields) {
