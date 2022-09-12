@@ -205,7 +205,7 @@ func (s *smtpSession) checkSPF(domain, from string) (authres.ResultValue, error,
 }
 
 const (
-	mailidRandSize = 16
+	mailidRandSize = 8
 )
 
 func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {

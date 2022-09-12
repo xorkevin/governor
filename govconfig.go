@@ -16,6 +16,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
 
@@ -70,6 +71,7 @@ type (
 		version       Version
 		showBanner    bool
 		logLevel      string
+		logOutput     string
 		maxReqSize    string
 		maxHeaderSize string
 		maxConnRead   string
@@ -83,6 +85,7 @@ type (
 		Port          string
 		BaseURL       string
 		Hostname      string
+		Instance      string
 		SysChannels   SysChannels
 	}
 
@@ -214,12 +217,17 @@ func (e ErrVault) Error() string {
 	return "Failed vault request"
 }
 
+const (
+	instanceIDRandSize = 8
+)
+
 func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
 		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read in config")
 	}
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = c.config.GetString("loglevel")
+	c.logOutput = c.config.GetString("logoutput")
 	c.maxReqSize = c.config.GetString("maxreqsize")
 	c.maxHeaderSize = c.config.GetString("maxheadersize")
 	c.maxConnRead = c.config.GetString("maxconnread")
@@ -245,8 +253,13 @@ func (c *Config) init() error {
 	var err error
 	c.Hostname, err = os.Hostname()
 	if err != nil {
+		return kerrors.WithMsg(err, "Failed to get hostname")
+	}
+	u, err := uid.NewSnowflake(instanceIDRandSize)
+	if err != nil {
 		return err
 	}
+	c.Instance = u.Base32()
 	if err := c.initsecrets(); err != nil {
 		return err
 	}

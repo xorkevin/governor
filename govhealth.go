@@ -18,12 +18,12 @@ type (
 
 func (s *Server) initHealth(m Router) {
 	m.Get("/live", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log)
+		c := NewContext(w, r, s.log.Logger)
 		c.WriteStatus(http.StatusOK)
 	})
 
 	m.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log)
+		c := NewContext(w, r, s.log.Logger)
 		t := time.Now().Round(0).Unix()
 		errs := s.checkHealthServices(c.Ctx())
 		errReslist := make([]healthErrRes, 0, len(errs))
@@ -43,7 +43,7 @@ func (s *Server) initHealth(m Router) {
 	})
 
 	m.Get("/version", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log)
+		c := NewContext(w, r, s.log.Logger)
 		c.WriteString(http.StatusOK, s.config.version.String())
 	})
 }

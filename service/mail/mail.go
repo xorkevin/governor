@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	mailUIDRandSize = 16
+	mailUIDRandSize = 8
 )
 
 const (

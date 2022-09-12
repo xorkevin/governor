@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/cors"
 	"nhooyr.io/websocket"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -129,6 +130,7 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 type (
 	// Context is an http request and writer wrapper
 	Context interface {
+		LReqID() string
 		RealIP() net.IP
 		Param(key string) string
 		Query(key string) string
@@ -155,7 +157,7 @@ type (
 		Ctx() context.Context
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
-		LogFields(fields LogFields)
+		LogFields(fields klog.Fields)
 		Req() *http.Request
 		Res() http.ResponseWriter
 		R() (http.ResponseWriter, *http.Request)
@@ -167,18 +169,22 @@ type (
 		r     *http.Request
 		query url.Values
 		ctx   context.Context
-		l     Logger
+		log   *klog.LevelLogger
 	}
 )
 
 // NewContext creates a Context
-func NewContext(w http.ResponseWriter, r *http.Request, l Logger) Context {
+func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) Context {
 	return &govcontext{
 		w:     w,
 		r:     r,
 		query: r.URL.Query(),
-		l:     l,
+		log:   klog.NewLevelLogger(log),
 	}
+}
+
+func (c *govcontext) LReqID() string {
+	return getCtxLocalReqID(c.r.Context())
 }
 
 func (c *govcontext) RealIP() net.IP {
@@ -321,40 +327,25 @@ func (c *govcontext) Redirect(status int, url string) {
 func (c *govcontext) WriteString(status int, text string) {
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
-	if _, err := c.w.Write([]byte(text)); err != nil {
-		if c.l != nil {
-			c.l.Error("Failed to write string bytes", map[string]string{
-				"endpoint": c.r.URL.EscapedPath(),
-				"error":    err.Error(),
-			})
-		}
+	if _, err := io.WriteString(c.w, text); err != nil {
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write string bytes"), nil)
 	}
 }
 
 func (c *govcontext) WriteJSON(status int, body interface{}) {
-	b := &bytes.Buffer{}
-	e := json.NewEncoder(b)
+	b := bytes.Buffer{}
+	e := json.NewEncoder(&b)
 	e.SetEscapeHTML(false)
 	if err := e.Encode(body); err != nil {
-		if c.l != nil {
-			c.l.Error("Failed to write json", map[string]string{
-				"endpoint": c.r.URL.EscapedPath(),
-				"error":    err.Error(),
-			})
-		}
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json"), nil)
 		http.Error(c.w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
 
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
-	if _, err := c.w.Write(b.Bytes()); err != nil {
-		if c.l != nil {
-			c.l.Error("Failed to write json bytes", map[string]string{
-				"endpoint": c.r.URL.EscapedPath(),
-				"error":    err.Error(),
-			})
-		}
+	if _, err := io.Copy(c.w, &b); err != nil {
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json bytes"), nil)
 	}
 }
 
@@ -362,12 +353,7 @@ func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
 	c.w.Header().Set("Content-Type", contentType)
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
-		if c.l != nil {
-			c.l.Error("Failed to write file", map[string]string{
-				"endpoint": c.r.URL.EscapedPath(),
-				"error":    err.Error(),
-			})
-		}
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write file"), nil)
 		return
 	}
 }
@@ -387,8 +373,8 @@ func (c *govcontext) Set(key, value interface{}) {
 	c.ctx = context.WithValue(c.Ctx(), key, value)
 }
 
-func (c *govcontext) LogFields(fields LogFields) {
-	c.ctx = LogWithFields(c.Ctx(), fields)
+func (c *govcontext) LogFields(fields klog.Fields) {
+	c.ctx = klog.WithFields(c.Ctx(), fields)
 }
 
 func (c *govcontext) Req() *http.Request {
@@ -513,12 +499,7 @@ func (w *govws) Close(status int, reason string) {
 			return
 		}
 		err = w.wrapWSErr(err, int(websocket.StatusInternalError), "Failed to close ws connection")
-		if w.c.l != nil {
-			w.c.l.Warn("Failed to close ws connection", map[string]string{
-				"endpoint": w.c.r.URL.EscapedPath(),
-				"error":    err.Error(),
-			})
-		}
+		w.c.log.WarnErr(w.c.Ctx(), kerrors.WithMsg(err, "Failed to close ws connection"), nil)
 	}
 }
 
@@ -532,31 +513,11 @@ func (w *govws) CloseError(err error) {
 		}
 	}
 
-	if w.c.l != nil && !errors.Is(err, ErrorNoLog{}) {
-		msg := "non-kerror error"
-		var kerr *kerrors.Error
-		if errors.As(err, &kerr) {
-			msg = kerr.Message
-		} else if isError {
-			msg = werr.Reason
-		}
-		stacktrace := "NONE"
-		var serr *kerrors.StackTrace
-		if errors.As(err, &serr) {
-			stacktrace = serr.StackString()
-		}
+	if !errors.Is(err, ErrorNoLog{}) {
 		if werr.Status != int(websocket.StatusInternalError) {
-			w.c.l.Warn(msg, map[string]string{
-				"endpoint":   w.c.r.URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			w.c.log.WarnErr(w.c.Ctx(), err, nil)
 		} else {
-			w.c.l.Error(msg, map[string]string{
-				"endpoint":   w.c.r.URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			w.c.log.Err(w.c.Ctx(), err, nil)
 		}
 	}
 
@@ -568,7 +529,7 @@ func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// ContentLength of -1 is unknown
 			if r.ContentLength > limit {
-				c := NewContext(w, r, s.logger)
+				c := NewContext(w, r, s.log.Logger)
 				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
 				return
 			}

@@ -118,29 +118,11 @@ func (c *govcontext) WriteError(err error) {
 		}
 	}
 
-	if c.l != nil && !errors.Is(err, ErrorNoLog{}) {
-		msg := "non-kerror"
-		var kerr *kerrors.Error
-		if errors.As(err, &kerr) {
-			msg = kerr.Message
-		}
-		stacktrace := "NONE"
-		var serr *kerrors.StackTrace
-		if errors.As(err, &serr) {
-			stacktrace = serr.StackString()
-		}
+	if !errors.Is(err, ErrorNoLog{}) {
 		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
-			c.l.Warn(msg, map[string]string{
-				"endpoint":   c.r.URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			c.log.WarnErr(c.Ctx(), err, nil)
 		} else {
-			c.l.Error(msg, map[string]string{
-				"endpoint":   c.r.URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			c.log.Err(c.Ctx(), err, nil)
 		}
 	}
 

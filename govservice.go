@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor/service/state"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -33,7 +34,7 @@ type (
 	// Start, is run. Stop runs when the server begins the shutdown process.
 	Service interface {
 		Register(name string, inj Injector, r ConfigRegistrar, jr JobRegistrar)
-		Init(ctx context.Context, c Config, r ConfigReader, l Logger, m Router) error
+		Init(ctx context.Context, c Config, r ConfigReader, l klog.Logger, m Router) error
 		Setup(ctx context.Context, req ReqSetup) error
 		PostSetup(ctx context.Context, req ReqSetup) error
 		Start(ctx context.Context) error
@@ -116,32 +117,32 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 
 	// To avoid partial setup, no request context is passed beyond this point
 
-	ctx = LogExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
 
-	LogInfo(s.log, ctx, "Setup all services begin", nil)
+	s.log.Info(ctx, "Setup all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Setup(ctx, rsetup); err != nil {
 			err := kerrors.WithMsg(err, "Setup service failed")
-			LogErr(s.log, ctx, err, LogFields{
+			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.name,
 			})
 			return err
 		}
-		LogInfo(s.log, ctx, "Setup service success", LogFields{
+		s.log.Info(ctx, "Setup service success", klog.Fields{
 			"gov.service": i.name,
 		})
 	}
 
-	LogInfo(s.log, ctx, "Running postsetup for all services", nil)
+	s.log.Info(ctx, "Running postsetup for all services", nil)
 	for _, i := range s.services {
 		if err := i.r.PostSetup(ctx, rsetup); err != nil {
 			err := kerrors.WithMsg(err, "Post setup service failed")
-			LogErr(s.log, ctx, err, LogFields{
+			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.name,
 			})
 			return err
 		}
-		LogInfo(s.log, ctx, "Post setup service success", LogFields{
+		s.log.Info(ctx, "Post setup service success", klog.Fields{
 			"gov.service": i.name,
 		})
 	}
@@ -152,12 +153,12 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 			VHash:   s.config.version.Hash,
 		}); err != nil {
 			err := kerrors.WithMsg(err, "Setup state service failed")
-			LogErr(s.log, ctx, err, nil)
+			s.log.Err(ctx, err, nil)
 			return ErrWithRes(err, http.StatusInternalServerError, "", "Failed to set state")
 		}
 		s.setFirstSetupRun(true)
 	}
-	LogInfo(s.log, ctx, "Setup all services complete", nil)
+	s.log.Info(ctx, "Setup all services complete", nil)
 	return nil
 }
 
@@ -172,50 +173,50 @@ func (s *Server) checkHealthServices(ctx context.Context) []error {
 }
 
 func (s *Server) initServices(ctx context.Context) error {
-	LogInfo(s.log, ctx, "Init all services begin", nil)
+	s.log.Info(ctx, "Init all services begin", nil)
 	for _, i := range s.services {
-		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.log.Sublogger(i.name, LogFields{"gov.service": i.name}), s.router(s.config.BaseURL+i.url)); err != nil {
+		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), s.log.Logger.Sublogger(i.name, klog.Fields{"gov.service": i.name}), s.router(s.config.BaseURL+i.url)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
-			LogErr(s.log, ctx, err, LogFields{
+			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.name,
 			})
 			return err
 		}
-		LogInfo(s.log, ctx, "Init service success", LogFields{
+		s.log.Info(ctx, "Init service success", klog.Fields{
 			"gov.service": i.name,
 		})
 	}
-	LogInfo(s.log, ctx, "Init all services complete", nil)
+	s.log.Info(ctx, "Init all services complete", nil)
 	return nil
 }
 
 func (s *Server) startServices(ctx context.Context) error {
-	LogInfo(s.log, ctx, "Start all services begin", nil)
+	s.log.Info(ctx, "Start all services begin", nil)
 	for _, i := range s.services {
 		if err := i.r.Start(ctx); err != nil {
 			err := kerrors.WithMsg(err, "Start service failed")
-			LogErr(s.log, ctx, err, LogFields{
+			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.name,
 			})
 			return err
 		}
-		LogInfo(s.log, ctx, "Start service success", LogFields{
+		s.log.Info(ctx, "Start service success", klog.Fields{
 			"gov.service": i.name,
 		})
 	}
-	LogInfo(s.log, ctx, "Start all services complete", nil)
+	s.log.Info(ctx, "Start all services complete", nil)
 	return nil
 }
 
 func (s *Server) stopServices(ctx context.Context) {
-	LogInfo(s.log, ctx, "Stop all services begin", nil)
+	s.log.Info(ctx, "Stop all services begin", nil)
 	sl := len(s.services)
 	for n := range s.services {
 		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
-		LogInfo(s.log, ctx, "Stop service", LogFields{
+		s.log.Info(ctx, "Stop service", klog.Fields{
 			"gov.service": i.name,
 		})
 	}
-	LogInfo(s.log, ctx, "Stop all services complete", nil)
+	s.log.Info(ctx, "Stop all services complete", nil)
 }

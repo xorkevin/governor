@@ -3,6 +3,8 @@ package governor
 import (
 	"net/http"
 	"net/mail"
+
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -58,7 +60,7 @@ type (
 
 func (s *Server) initSetup(m Router) {
 	m.Post("", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log)
+		c := NewContext(w, r, s.log.Logger)
 		var req ReqSetup
 		if err := c.Bind(&req); err != nil {
 			c.WriteError(err)
@@ -68,7 +70,7 @@ func (s *Server) initSetup(m Router) {
 			c.WriteError(err)
 			return
 		}
-		c.LogFields(LogFields{
+		c.LogFields(klog.Fields{
 			"gov.service.phase": "setup",
 		})
 		if err := s.setupServices(c.Ctx(), req); err != nil {
