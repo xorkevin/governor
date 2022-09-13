@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -145,7 +144,7 @@ const (
 	reqIDUnusedCounterSize = 1
 	reqIDTotalCounterSize  = reqIDCounterSize + reqIDUnusedCounterSize
 	reqIDSize              = reqIDTimeSize + reqIDCounterSize
-	reqIDCounterModulus    = 1 << (8 * reqIDCounterSize)
+	reqIDCounterMask       = (uint32(1) << (8 * reqIDCounterSize)) - 1
 	reqIDCounterShift      = 8 * reqIDUnusedCounterSize
 )
 
@@ -159,12 +158,8 @@ func (s *Server) lreqID(count uint32) string {
 	b := [reqIDTotalTimeSize + reqIDTotalCounterSize]byte{}
 	now := uint64(time.Now().Round(0).UnixMilli())
 	binary.BigEndian.PutUint64(b[:reqIDTotalTimeSize], now)
-	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], (count%reqIDCounterModulus)<<reqIDCounterShift)
-	return fmt.Sprintf(
-		"%s-%s",
-		s.config.Instance,
-		base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize:reqIDUnusedTimeSize+reqIDSize]),
-	)
+	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], (count&reqIDCounterMask)<<reqIDCounterShift)
+	return s.config.Instance + "-" + base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize:reqIDUnusedTimeSize+reqIDSize])
 }
 
 type (
@@ -182,11 +177,11 @@ func (w *govResponseWriter) WriteHeader(status int) {
 func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 	reqcount := atomic.Uint32{}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lreqid := s.lreqID(reqcount.Add(1))
 		c := NewContext(w, r, s.log.Logger)
+		lreqid := s.lreqID(reqcount.Add(1))
 		c.Set(ctxKeyLocalReqID{}, lreqid)
 		var forwarded string
-		if ip := getCtxKeyMiddlewareRealIP(r.Context()); ip != nil {
+		if ip := c.RealIP(); ip != nil {
 			forwarded = ip.String()
 		}
 		c.LogFields(klog.Fields{
@@ -206,9 +201,9 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			duration := time.Since(start)
 			route := chi.RouteContext(r.Context()).RoutePattern()
 			s.log.Info(c.Ctx(), "WS close", klog.Fields{
-				"http.ws":       true,
-				"http.route":    route,
-				"http.duration": duration.Milliseconds(),
+				"http.ws":          true,
+				"http.route":       route,
+				"http.duration_ms": duration.Milliseconds(),
 			})
 		} else {
 			start := time.Now()
@@ -216,14 +211,14 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 				ResponseWriter: w,
 				status:         0,
 			}
-			next.ServeHTTP(w2, r)
+			next.ServeHTTP(w2, c.Req())
 			duration := time.Since(start)
-			route := chi.RouteContext(r.Context()).RoutePattern()
+			route := chi.RouteContext(c.Ctx()).RoutePattern()
 			s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
-				"http.ws":      false,
-				"http.route":   route,
-				"http.status":  w2.status,
-				"http.latency": duration.Microseconds(),
+				"http.ws":         false,
+				"http.route":      route,
+				"http.status":     w2.status,
+				"http.latency_us": duration.Microseconds(),
 			})
 		}
 	})

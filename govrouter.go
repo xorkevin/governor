@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -188,7 +189,7 @@ func (c *govcontext) LReqID() string {
 }
 
 func (c *govcontext) RealIP() net.IP {
-	if ip := getCtxKeyMiddlewareRealIP(c.r.Context()); ip != nil {
+	if ip := getCtxMiddlewareRealIP(c.r.Context()); ip != nil {
 		return ip
 	}
 	host, _, err := net.SplitHostPort(c.r.RemoteAddr)
@@ -612,7 +613,7 @@ func realIPMiddleware(proxies []net.IPNet) Middleware {
 	}
 }
 
-func getCtxKeyMiddlewareRealIP(ctx context.Context) net.IP {
+func getCtxMiddlewareRealIP(ctx context.Context) net.IP {
 	k := ctx.Value(ctxKeyMiddlewareRealIP{})
 	if k == nil {
 		return nil
@@ -675,15 +676,35 @@ func reqIsWS(r *http.Request) bool {
 	return false
 }
 
-func compressorMiddleware() Middleware {
-	return func(next http.Handler) http.Handler {
-		compressor := middleware.Compress(gzip.DefaultCompression)(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if reqIsWS(r) {
-				next.ServeHTTP(w, r)
-			} else {
-				compressor.ServeHTTP(w, r)
+func compressorMiddleware(next http.Handler) http.Handler {
+	compressor := middleware.Compress(gzip.DefaultCompression)(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if reqIsWS(r) {
+			next.ServeHTTP(w, r)
+		} else {
+			compressor.ServeHTTP(w, r)
+		}
+	})
+}
+
+func (s *Server) recovererMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := NewContext(w, r, s.log.Logger)
+		defer func() {
+			if re := recover(); re != nil {
+				if re == http.ErrAbortHandler {
+					// may not recover http.ErrAbortHandler so re-panic the error
+					panic(re)
+				}
+
+				s.log.Error(r.Context(), "Panicked in http handler", klog.Fields{
+					"recovered":  re,
+					"stacktrace": debug.Stack(),
+				})
+
+				c.WriteError(ErrWithRes(kerrors.WithMsg(nil, "Panicked in http handler"), http.StatusInternalServerError, "", "Internal Server Error"))
 			}
-		})
-	}
+		}()
+		next.ServeHTTP(c.R())
+	})
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"xorkevin.dev/governor/service/state"
 	"xorkevin.dev/governor/util/bytefmt"
@@ -170,10 +169,10 @@ func (s *Server) init(ctx context.Context) error {
 		})
 	}
 
-	i.Use(compressorMiddleware())
+	i.Use(compressorMiddleware)
 	s.log.Info(ctx, "Init middleware gzip", nil)
 
-	i.Use(middleware.Recoverer)
+	i.Use(s.recovererMiddleware)
 	s.log.Info(ctx, "Init middleware recoverer", nil)
 
 	s.initSetup(s.router(s.config.BaseURL + "/setupz"))
