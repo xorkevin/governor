@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -72,6 +73,7 @@ type (
 		showBanner    bool
 		logLevel      string
 		logOutput     string
+		logWriter     io.Writer
 		maxReqSize    string
 		maxHeaderSize string
 		maxConnRead   string

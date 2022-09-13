@@ -32,6 +32,8 @@ func logOutputFromString(s string) io.Writer {
 	switch s {
 	case "STDOUT":
 		return os.Stdout
+	case "TEST":
+		return nil
 	default:
 		return os.Stdout
 	}
@@ -68,7 +70,11 @@ func newZerologSerializer(c Config) klog.Serializer {
 	zerolog.MessageFieldName = "msg"
 	zerolog.ErrorFieldName = "error"
 	zerolog.ErrorStackFieldName = "stacktrace"
-	var w io.Writer = klog.NewSyncWriter(logOutputFromString(c.logOutput))
+	w := logOutputFromString(c.logOutput)
+	if w == nil {
+		w = c.logWriter
+	}
+	w = klog.NewSyncWriter(w)
 	if c.logLevel == klog.LevelDebug.String() {
 		w = zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
 			w.Out = w
@@ -192,14 +198,14 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			"http.forwarded": forwarded,
 			"http.lreqid":    lreqid,
 		})
-		if reqIsWS(r) {
-			s.log.Info(r.Context(), "WS open", klog.Fields{
+		if reqIsWS(c.Req()) {
+			s.log.Info(c.Ctx(), "WS open", klog.Fields{
 				"ws": true,
 			})
 			start := time.Now()
 			next.ServeHTTP(c.R())
 			duration := time.Since(start)
-			route := chi.RouteContext(r.Context()).RoutePattern()
+			route := chi.RouteContext(c.Ctx()).RoutePattern()
 			s.log.Info(c.Ctx(), "WS close", klog.Fields{
 				"http.ws":          true,
 				"http.route":       route,

@@ -175,9 +175,9 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(s.recovererMiddleware)
 	s.log.Info(ctx, "Init middleware recoverer", nil)
 
-	s.initSetup(s.router(s.config.BaseURL + "/setupz"))
+	s.initSetup(s.router(s.config.BaseURL+"/setupz", s.log.Logger))
 	s.log.Info(ctx, "Init setup routes", nil)
-	s.initHealth(s.router(s.config.BaseURL + "/healthz"))
+	s.initHealth(s.router(s.config.BaseURL+"/healthz", s.log.Logger))
 	s.log.Info(ctx, "Init health routes", nil)
 
 	if err := s.initServices(ctx); err != nil {

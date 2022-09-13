@@ -8,10 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/kerrors"
@@ -54,7 +52,7 @@ func TestError(t *testing.T) {
 				Body:     `{"ping":"pong"}`,
 				Status:   http.StatusInternalServerError,
 				Res:      `{"code":"err_code_890","message":"test error response message"}`,
-				Level:    "error",
+				Level:    "ERROR",
 				LogMsg:   "Error response",
 				LogError: "Error response [(500) test error response message [err_code_890]]: %!(STACKTRACE): test root error",
 			},
@@ -65,7 +63,7 @@ func TestError(t *testing.T) {
 				Body:     `{"ping":"pong"}`,
 				Status:   http.StatusBadRequest,
 				Res:      `{"code":"test_err_code","message":"test error"}`,
-				Level:    "warn",
+				Level:    "WARN",
 				LogMsg:   "some message",
 				LogError: "some message: Error response [(400) test error [test_err_code]]: %!(STACKTRACE): test struct err",
 			},
@@ -76,8 +74,8 @@ func TestError(t *testing.T) {
 				Body:     `{"ping":"pong"}`,
 				Status:   http.StatusInternalServerError,
 				Res:      `{"message":"Internal Server Error"}`,
-				Level:    "error",
-				LogMsg:   "non-kerror",
+				Level:    "ERROR",
+				LogMsg:   "plain-error",
 				LogError: "Plain error",
 				NoTrace:  true,
 			},
@@ -97,15 +95,16 @@ func TestError(t *testing.T) {
 
 				assert := require.New(t)
 
-				logbuf := &bytes.Buffer{}
+				logbuf := bytes.Buffer{}
 				l := newLogger(Config{
-					logLevel:  envToLevel("INFO"),
-					logOutput: logbuf,
+					logLevel:  "INFO",
+					logOutput: "TEST",
+					logWriter: &logbuf,
 				})
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
 				req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 				rec := httptest.NewRecorder()
-				c := NewContext(rec, req, l)
+				c := NewContext(rec, req, l.Logger)
 				c.WriteError(tc.Err)
 				assert.Equal(tc.Status, rec.Code)
 				assert.Equal(tc.Res, strings.TrimSpace(rec.Body.String()))
@@ -114,35 +113,27 @@ func TestError(t *testing.T) {
 					return
 				}
 
-				logjson := struct {
+				var j struct {
 					Level      string `json:"level"`
-					Module     string `json:"module"`
-					Endpoint   string `json:"endpoint"`
+					Unixtime   int64  `json:"unixtime"`
 					Msg        string `json:"msg"`
 					Error      string `json:"error"`
 					StackTrace string `json:"stacktrace"`
-					Time       string `json:"time"`
-					UnixTime   string `json:"unixtime"`
-				}{}
-				assert.NoError(json.Unmarshal(logbuf.Bytes(), &logjson))
-				assert.Equal(tc.Level, logjson.Level)
-				assert.Equal("root", logjson.Module)
-				assert.Equal(tc.Path, logjson.Endpoint)
-				assert.Equal(tc.LogMsg, logjson.Msg)
-				if tc.NoTrace {
-					assert.Equal(tc.LogError, logjson.Error)
-					assert.Equal("NONE", logjson.StackTrace)
-				} else {
-					assert.Regexp(stackRegex, logjson.Error)
-					assert.Equal(tc.LogError, stackRegex.ReplaceAllString(logjson.Error, "%!(STACKTRACE)"))
-					assert.Regexp(fullStackRegex, logjson.StackTrace)
 				}
-				ti, err := time.Parse(time.RFC3339, logjson.Time)
-				assert.NoError(err)
-				assert.True(ti.After(time.Unix(0, 0)))
-				ut, err := strconv.ParseInt(logjson.UnixTime, 10, 64)
-				assert.NoError(err)
-				assert.True(time.Unix(ut, 0).After(time.Unix(0, 0)))
+				d := json.NewDecoder(&logbuf)
+				assert.NoError(d.Decode(&j))
+				assert.Equal(tc.Level, j.Level)
+				assert.True(j.Unixtime > 0)
+				assert.Equal(tc.LogMsg, j.Msg)
+				if tc.NoTrace {
+					assert.Equal(tc.LogError, j.Error)
+					assert.Equal("NONE", j.StackTrace)
+				} else {
+					assert.Regexp(stackRegex, j.Error)
+					assert.Equal(tc.LogError, stackRegex.ReplaceAllString(j.Error, "%!(STACKTRACE)"))
+					assert.Regexp(fullStackRegex, j.StackTrace)
+				}
+				assert.False(d.More())
 			})
 		}
 	})

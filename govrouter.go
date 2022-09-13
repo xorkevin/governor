@@ -34,87 +34,94 @@ type (
 	// Router adds route handlers to the server
 	Router interface {
 		Group(path string) Router
+		Method(method string, path string, fn http.HandlerFunc, mw ...Middleware)
 		Get(path string, fn http.HandlerFunc, mw ...Middleware)
 		Post(path string, fn http.HandlerFunc, mw ...Middleware)
 		Put(path string, fn http.HandlerFunc, mw ...Middleware)
 		Patch(path string, fn http.HandlerFunc, mw ...Middleware)
 		Delete(path string, fn http.HandlerFunc, mw ...Middleware)
 		Any(path string, fn http.HandlerFunc, mw ...Middleware)
+		NotFound(fn http.HandlerFunc, mw ...Middleware)
+		MethodNotAllowed(fn http.HandlerFunc, mw ...Middleware)
+		MethodCtx(method string, path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		GetCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		PostCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		PutCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		PatchCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		DeleteCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		AnyCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
+		NotFoundCtx(fn HandlerFunc, mw ...MiddlewareCtx)
+		MethodNotAllowedCtx(fn HandlerFunc, mw ...MiddlewareCtx)
 	}
 
 	govrouter struct {
-		r chi.Router
+		r    chi.Router
+		log  klog.Logger
+		path string
 	}
 
+	// HandlerFunc is a type alias for a router handler with Context
+	HandlerFunc = func(c Context)
 	// Middleware is a type alias for Router middleware
 	Middleware = func(next http.Handler) http.Handler
+	// MiddlewareCtx is a type alias for Router middleware with Context
+	MiddlewareCtx = func(next HandlerFunc) HandlerFunc
 )
 
-func (s *Server) router(path string) Router {
+func (s *Server) router(path string, l klog.Logger) Router {
 	return &govrouter{
 		r: s.i.Route(path, func(r chi.Router) {}),
+		log: l.Sublogger("router", klog.Fields{
+			"gov.router.path": path,
+		}),
+		path: path,
 	}
 }
 
 func (r *govrouter) Group(path string) Router {
+	cpath := r.path + path
 	return &govrouter{
 		r: r.r.Route(path, func(r chi.Router) {}),
+		log: r.log.Sublogger("", klog.Fields{
+			"gov.router.path": cpath,
+		}),
+		path: cpath,
 	}
+}
+
+func (r *govrouter) method(method string, path string, fn http.HandlerFunc, mw []Middleware) {
+	if path == "" {
+		path = "/"
+	}
+	k := r.r
+	if len(mw) > 0 {
+		k = r.r.With(mw...)
+	}
+	k.MethodFunc(method, path, fn)
+}
+
+func (r *govrouter) Method(method string, path string, fn http.HandlerFunc, mw ...Middleware) {
+	r.method(method, path, fn, mw)
 }
 
 func (r *govrouter) Get(path string, fn http.HandlerFunc, mw ...Middleware) {
-	if path == "" {
-		path = "/"
-	}
-	k := r.r
-	if l := len(mw); l > 0 {
-		k = r.r.With(mw...)
-	}
-	k.Get(path, fn)
+	r.method(http.MethodGet, path, fn, mw)
 }
 
 func (r *govrouter) Post(path string, fn http.HandlerFunc, mw ...Middleware) {
-	if path == "" {
-		path = "/"
-	}
-	k := r.r
-	if l := len(mw); l > 0 {
-		k = r.r.With(mw...)
-	}
-	k.Post(path, fn)
+	r.method(http.MethodPost, path, fn, mw)
 }
 
 func (r *govrouter) Put(path string, fn http.HandlerFunc, mw ...Middleware) {
-	if path == "" {
-		path = "/"
-	}
-	k := r.r
-	if l := len(mw); l > 0 {
-		k = r.r.With(mw...)
-	}
-	k.Put(path, fn)
+	r.method(http.MethodPut, path, fn, mw)
 }
 
 func (r *govrouter) Patch(path string, fn http.HandlerFunc, mw ...Middleware) {
-	if path == "" {
-		path = "/"
-	}
-	k := r.r
-	if l := len(mw); l > 0 {
-		k = r.r.With(mw...)
-	}
-	k.Patch(path, fn)
+	r.method(http.MethodPatch, path, fn, mw)
 }
 
 func (r *govrouter) Delete(path string, fn http.HandlerFunc, mw ...Middleware) {
-	if path == "" {
-		path = "/"
-	}
-	k := r.r
-	if l := len(mw); l > 0 {
-		k = r.r.With(mw...)
-	}
-	k.Delete(path, fn)
+	r.method(http.MethodDelete, path, fn, mw)
 }
 
 func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
@@ -122,10 +129,102 @@ func (r *govrouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 		path = "/"
 	}
 	k := r.r
-	if l := len(mw); l > 0 {
+	if len(mw) > 0 {
 		k = r.r.With(mw...)
 	}
 	k.HandleFunc(path, fn)
+}
+
+func (r *govrouter) NotFound(fn http.HandlerFunc, mw ...Middleware) {
+	k := r.r
+	if len(mw) > 0 {
+		k = r.r.With(mw...)
+	}
+	k.NotFound(fn)
+}
+
+func (r *govrouter) MethodNotAllowed(fn http.HandlerFunc, mw ...Middleware) {
+	k := r.r
+	if len(mw) > 0 {
+		k = r.r.With(mw...)
+	}
+	k.MethodNotAllowed(fn)
+}
+
+func (r *govrouter) chainMiddlewareCtx(fn HandlerFunc, mw []MiddlewareCtx) HandlerFunc {
+	for i := len(mw) - 1; i >= 0; i-- {
+		fn = mw[i](fn)
+	}
+	return fn
+}
+
+func (r *govrouter) toHTTPHandler(fn HandlerFunc, log klog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c := NewContext(w, r, log)
+		fn(c)
+	}
+}
+
+func (r *govrouter) methodCtx(method string, path string, fn HandlerFunc, mw []MiddlewareCtx) {
+	l := r.log.Sublogger("", klog.Fields{
+		"gov.router.path": r.path + path,
+	})
+	if path == "" {
+		path = "/"
+	}
+	fn = r.chainMiddlewareCtx(fn, mw)
+	r.r.MethodFunc(method, path, r.toHTTPHandler(fn, l))
+}
+
+func (r *govrouter) MethodCtx(method string, path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(method, path, fn, mw)
+}
+
+func (r *govrouter) GetCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(http.MethodGet, path, fn, mw)
+}
+
+func (r *govrouter) PostCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(http.MethodPost, path, fn, mw)
+}
+
+func (r *govrouter) PutCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(http.MethodPut, path, fn, mw)
+}
+
+func (r *govrouter) PatchCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(http.MethodPatch, path, fn, mw)
+}
+
+func (r *govrouter) DeleteCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	r.methodCtx(http.MethodDelete, path, fn, mw)
+}
+
+func (r *govrouter) AnyCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+	l := r.log.Sublogger("", klog.Fields{
+		"gov.router.path": r.path + path,
+	})
+	if path == "" {
+		path = "/"
+	}
+	fn = r.chainMiddlewareCtx(fn, mw)
+	r.r.HandleFunc(path, r.toHTTPHandler(fn, l))
+}
+
+func (r *govrouter) NotFoundCtx(fn HandlerFunc, mw ...MiddlewareCtx) {
+	l := r.log.Sublogger("", klog.Fields{
+		"gov.router.notfound": true,
+	})
+	fn = r.chainMiddlewareCtx(fn, mw)
+	r.r.NotFound(r.toHTTPHandler(fn, l))
+}
+
+func (r *govrouter) MethodNotAllowedCtx(fn HandlerFunc, mw ...MiddlewareCtx) {
+	l := r.log.Sublogger("", klog.Fields{
+		"gov.router.methodnotallowed": true,
+	})
+	fn = r.chainMiddlewareCtx(fn, mw)
+	r.r.MethodNotAllowed(r.toHTTPHandler(fn, l))
 }
 
 type (
@@ -185,11 +284,11 @@ func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) Context
 }
 
 func (c *govcontext) LReqID() string {
-	return getCtxLocalReqID(c.r.Context())
+	return getCtxLocalReqID(c.Ctx())
 }
 
 func (c *govcontext) RealIP() net.IP {
-	if ip := getCtxMiddlewareRealIP(c.r.Context()); ip != nil {
+	if ip := getCtxMiddlewareRealIP(c.Ctx()); ip != nil {
 		return ip
 	}
 	host, _, err := net.SplitHostPort(c.r.RemoteAddr)
@@ -200,7 +299,7 @@ func (c *govcontext) RealIP() net.IP {
 }
 
 func (c *govcontext) Param(key string) string {
-	return chi.URLParam(c.r, key)
+	return chi.URLParam(c.Req(), key)
 }
 
 func (c *govcontext) Query(key string) string {
@@ -322,7 +421,7 @@ func (c *govcontext) WriteStatus(status int) {
 }
 
 func (c *govcontext) Redirect(status int, url string) {
-	http.Redirect(c.w, c.r, url, status)
+	http.Redirect(c.Res(), c.Req(), url, status)
 }
 
 func (c *govcontext) WriteString(status int, text string) {
@@ -409,7 +508,7 @@ type (
 )
 
 func (c *govcontext) Websocket() (Websocket, error) {
-	conn, err := websocket.Accept(c.w, c.r, &websocket.AcceptOptions{
+	conn, err := websocket.Accept(c.Res(), c.Req(), &websocket.AcceptOptions{
 		Subprotocols:    []string{WSProtocolVersion},
 		CompressionMode: websocket.CompressionContextTakeover,
 	})

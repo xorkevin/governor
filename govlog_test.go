@@ -2,65 +2,19 @@ package governor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
+	"xorkevin.dev/klog"
 )
 
-func TestEnvToLevel(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		Env   string
-		Level int
-	}{
-		{
-			Env:   "DEBUG",
-			Level: levelDebug,
-		},
-		{
-			Env:   "INFO",
-			Level: levelInfo,
-		},
-		{
-			Env:   "WARN",
-			Level: levelWarn,
-		},
-		{
-			Env:   "ERROR",
-			Level: levelError,
-		},
-		{
-			Env:   "FATAL",
-			Level: levelFatal,
-		},
-		{
-			Env:   "PANIC",
-			Level: levelPanic,
-		},
-		{
-			Env:   "bogus",
-			Level: levelInfo,
-		},
-	} {
-		tc := tc
-		t.Run(tc.Env, func(t *testing.T) {
-			t.Parallel()
-
-			assert := require.New(t)
-			assert.Equal(tc.Level, envToLevel(tc.Env))
-		})
-	}
-}
-
-func TestEnvToLogOutput(t *testing.T) {
+func TestLogOutputFromString(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -72,6 +26,10 @@ func TestEnvToLogOutput(t *testing.T) {
 			Writer: os.Stdout,
 		},
 		{
+			Env:    "TEST",
+			Writer: nil,
+		},
+		{
 			Env:    "bogus",
 			Writer: os.Stdout,
 		},
@@ -81,7 +39,7 @@ func TestEnvToLogOutput(t *testing.T) {
 			t.Parallel()
 
 			assert := require.New(t)
-			assert.Equal(tc.Writer, envToLogOutput(tc.Env))
+			assert.Equal(tc.Writer, logOutputFromString(tc.Env))
 		})
 	}
 }
@@ -91,38 +49,28 @@ func TestLevelToZerologLevel(t *testing.T) {
 
 	for _, tc := range []struct {
 		Test  string
-		Level int
+		Level klog.Level
 		Zero  zerolog.Level
 	}{
 		{
 			Test:  "DEBUG",
-			Level: levelDebug,
+			Level: klog.LevelDebug,
 			Zero:  zerolog.DebugLevel,
 		},
 		{
 			Test:  "INFO",
-			Level: levelInfo,
+			Level: klog.LevelInfo,
 			Zero:  zerolog.InfoLevel,
 		},
 		{
 			Test:  "WARN",
-			Level: levelWarn,
+			Level: klog.LevelWarn,
 			Zero:  zerolog.WarnLevel,
 		},
 		{
 			Test:  "ERROR",
-			Level: levelError,
+			Level: klog.LevelError,
 			Zero:  zerolog.ErrorLevel,
-		},
-		{
-			Test:  "FATAL",
-			Level: levelFatal,
-			Zero:  zerolog.FatalLevel,
-		},
-		{
-			Test:  "PANIC",
-			Level: levelPanic,
-			Zero:  zerolog.PanicLevel,
 		},
 		{
 			Test:  "bogus",
@@ -140,45 +88,20 @@ func TestLevelToZerologLevel(t *testing.T) {
 	}
 }
 
-func TestLogger(t *testing.T) {
+func TestZerologLogger(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		Test    string
-		Env     string
-		Subtree []string
-		Data    map[string]string
-		Count   int
+		Test   string
+		Level  string
+		Fields klog.Fields
 	}{
 		{
-			Test:  "ignores debug logs at the info level",
-			Env:   "INFO",
-			Count: 3,
-		},
-		{
-			Test:  "ignores info logs at the warn level",
-			Env:   "WARN",
-			Count: 2,
-		},
-		{
-			Test:  "ignores warn logs at the error level",
-			Env:   "ERROR",
-			Count: 1,
-		},
-		{
-			Test:    "logs in a subtree",
-			Env:     "INFO",
-			Subtree: []string{"test", "subtree"},
-			Count:   3,
-		},
-		{
-			Test:    "logs additional data",
-			Env:     "INFO",
-			Subtree: []string{"subtree"},
-			Data: map[string]string{
+			Test:  "logs fields",
+			Level: "INFO",
+			Fields: klog.Fields{
 				"some_test_field": "some test value",
 			},
-			Count: 3,
 		},
 	} {
 		tc := tc
@@ -189,65 +112,38 @@ func TestLogger(t *testing.T) {
 
 			logbuf := bytes.Buffer{}
 			l := newLogger(Config{
-				logLevel:  envToLevel(tc.Env),
-				logOutput: &logbuf,
+				logLevel:  tc.Level,
+				logOutput: "TEST",
+				logWriter: &logbuf,
 			})
 
-			modulename := "root"
-			if len(tc.Subtree) != 0 {
-				modulename = strings.Join(tc.Subtree, ".")
-				for _, i := range tc.Subtree {
-					l = l.Subtree(i)
-				}
+			l.Logger.Sublogger("sublog", nil).Log(context.Background(), klog.LevelInfo, 1, "test message 1", tc.Fields)
+
+			d := json.NewDecoder(&logbuf)
+			var j struct {
+				Level      string `json:"level"`
+				Time       string `json:"time"`
+				Unixtime   int64  `json:"unixtime"`
+				UnixtimeUS int64  `json:"unixtimeus"`
+				Caller     string `json:"caller"`
+				Path       string `json:"path"`
+				Msg        string `json:"msg"`
+				TestField  string `json:"some_test_field"`
 			}
+			assert.NoError(d.Decode(&j))
 
-			if len(tc.Data) != 0 {
-				l = l.WithData(tc.Data)
-			}
-
-			l.Debug("test message 0", map[string]string{
-				"test_field": "test value 0",
-			})
-			l.Info("test message 1", map[string]string{
-				"test_field": "test value 1",
-			})
-			l.Warn("test message 2", map[string]string{
-				"test_field": "test value 2",
-			})
-			l.Error("test message 3", map[string]string{
-				"test_field": "test value 3",
-			})
-			total := 4
-			s := strings.Split(strings.TrimSpace(logbuf.String()), "\n")
-			assert.Len(s, tc.Count)
-
-			offset := total - tc.Count
-			for n, i := range s {
-				msgnum := strconv.Itoa(offset + n)
-				logjson := struct {
-					Level     string `json:"level"`
-					Module    string `json:"module"`
-					Msg       string `json:"msg"`
-					Time      string `json:"time"`
-					UnixTime  string `json:"unixtime"`
-					TestField string `json:"test_field"`
-				}{}
-				assert.NoError(json.Unmarshal([]byte(i), &logjson))
-				assert.Equal(modulename, logjson.Module)
-				assert.Equal("test message "+msgnum, logjson.Msg)
-				ti, err := time.Parse(time.RFC3339, logjson.Time)
-				assert.NoError(err)
-				assert.True(ti.After(time.Unix(0, 0)))
-				ut, err := strconv.ParseInt(logjson.UnixTime, 10, 64)
-				assert.NoError(err)
-				assert.True(time.Unix(ut, 0).After(time.Unix(0, 0)))
-				assert.Equal("test value "+msgnum, logjson.TestField)
-				jsonmap := map[string]string{}
-				assert.NoError(json.Unmarshal([]byte(i), &jsonmap))
-				for k, v := range tc.Data {
-					assert.Equal(v, jsonmap[k])
-				}
-			}
+			assert.Equal(klog.LevelInfo.String(), j.Level)
+			ti, err := time.Parse(time.RFC3339Nano, j.Time)
+			assert.NoError(err)
+			assert.True(ti.After(time.Unix(0, 0)))
+			assert.Equal(ti.Unix(), j.Unixtime)
+			assert.Equal(ti.UnixMicro(), j.UnixtimeUS)
+			assert.Contains(j.Caller, "xorkevin.dev/governor.TestZerologLogger")
+			assert.Contains(j.Caller, "xorkevin.dev/governor/govlog_test.go")
+			assert.Equal(".sublog", j.Path)
+			assert.Equal("test message 1", j.Msg)
+			assert.Equal("some test value", j.TestField)
+			assert.False(d.More())
 		})
 	}
 }
