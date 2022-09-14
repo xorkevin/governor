@@ -58,9 +58,9 @@ type (
 	}
 )
 
-func (s *Server) initSetup(m Router) {
-	m.Post("", func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log.Logger)
+func (s *Server) initSetup(r Router) {
+	m := NewMethodRouter(r)
+	m.PostCtx("", func(c Context) {
 		var req ReqSetup
 		if err := c.Bind(&req); err != nil {
 			c.WriteError(err)
