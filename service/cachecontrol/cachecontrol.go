@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -39,16 +40,10 @@ func etagToValue(etag string) string {
 	return fmt.Sprintf(`W/"%s"`, etag)
 }
 
-// Control creates a middleware function to cache the response
-func Control(l governor.Logger, public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
-	if maxage < 0 {
-		panic("maxage cannot be negative")
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c := governor.NewContext(w, r, l)
-
+// ControlCtx creates a middleware function to cache the response
+func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.MiddlewareCtx {
+	return func(next governor.Handler) governor.Handler {
+		return governor.HandlerFunc(func(c governor.Context) {
 			etag := ""
 			if etagfunc != nil {
 				tag, err := etagfunc(c)
@@ -80,18 +75,25 @@ func Control(l governor.Logger, public bool, directives Directives, maxage int64
 				c.SetHeader(etagHeader, etag)
 			}
 
-			next.ServeHTTP(c.R())
+			next.ServeHTTPCtx(c)
 		})
 	}
 }
 
+// Control creates a middleware function to cache the response
+func Control(log klog.Logger, public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
+	return governor.MiddlewareFromCtx(log, ControlCtx(public, directives, maxage, etagfunc))
+}
+
+// ControlNoStoreCtx creates a middleware function to deny caching responses
+func ControlNoStoreCtx(next governor.Handler) governor.Handler {
+	return governor.HandlerFunc(func(c governor.Context) {
+		c.SetHeader(ccHeader, string(DirNoStore))
+		next.ServeHTTPCtx(c)
+	})
+}
+
 // ControlNoStore creates a middleware function to deny caching responses
-func ControlNoStore(l governor.Logger) governor.Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c := governor.NewContext(w, r, l)
-			c.SetHeader(ccHeader, string(DirNoStore))
-			next.ServeHTTP(c.R())
-		})
-	}
+func ControlNoStore(log klog.Logger) governor.Middleware {
+	return governor.MiddlewareFromCtx(log, ControlNoStoreCtx)
 }

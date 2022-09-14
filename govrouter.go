@@ -124,7 +124,8 @@ func chainMiddlewareCtx(h Handler, mw []MiddlewareCtx) Handler {
 	return h
 }
 
-func toMiddleware(mw []MiddlewareCtx, log klog.Logger) Middleware {
+// MiddlewareFromCtx creates [Middleware] from one or more [MiddlewareCtx]
+func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 	return func(next http.Handler) http.Handler {
 		return toHTTPHandler(chainMiddlewareCtx(HandlerFunc(func(c Context) {
 			next.ServeHTTP(c.Res(), c.Req())
@@ -139,7 +140,7 @@ func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	})
 	sr := r.r.Route(path, func(r chi.Router) {})
 	if len(mw) > 0 {
-		sr = sr.With(toMiddleware(mw, l))
+		sr = sr.With(MiddlewareFromCtx(l, mw...))
 	}
 	return &govrouter{
 		r:    sr,

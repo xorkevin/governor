@@ -15,6 +15,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/fileloader"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -125,17 +126,15 @@ var (
 )
 
 // LoadImage returns an image file from a Context
-func LoadImage(l governor.Logger, c governor.Context, formField string) (Image, error) {
-	file, mediaType, _, err := fileloader.LoadOpenFile(l, c, formField, allowedMediaTypes)
+func LoadImage(c governor.Context, formField string) (Image, error) {
+	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, allowedMediaTypes)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid image file")
 	}
+	l := klog.NewLevelLogger(c.Log())
 	defer func() {
 		if err := file.Close(); err != nil {
-			l.Error("Failed to close open file on request", map[string]string{
-				"actiontype": "image_load_close_file",
-				"error":      err.Error(),
-			})
+			l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"), nil)
 		}
 	}()
 	switch mediaType {

@@ -53,6 +53,7 @@ type (
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
 		LogFields(fields klog.Fields)
+		Log() klog.Logger
 		Req() *http.Request
 		Res() http.ResponseWriter
 		R() (http.ResponseWriter, *http.Request)
@@ -276,6 +277,10 @@ func (c *govcontext) Set(key, value interface{}) {
 
 func (c *govcontext) LogFields(fields klog.Fields) {
 	c.SetCtx(klog.WithFields(c.Ctx(), fields))
+}
+
+func (c *govcontext) Log() klog.Logger {
+	return c.log.Logger
 }
 
 func (c *govcontext) Req() *http.Request {

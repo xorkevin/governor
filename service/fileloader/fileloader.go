@@ -7,6 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -25,19 +26,17 @@ func (e ErrUnsupportedMIME) Error() string {
 }
 
 // LoadOpenFile returns an open file from a Context
-func LoadOpenFile(l governor.Logger, c governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
+func LoadOpenFile(c governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {
 		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidFile{}, "Invalid file format"), http.StatusBadRequest, "", "Invalid file format")
 	}
+	l := klog.NewLevelLogger(c.Log())
 	shouldClose := true
 	defer func() {
 		if shouldClose {
 			if err := file.Close(); err != nil {
-				l.Error("Failed to close open file on request", map[string]string{
-					"actiontype": "fileloader_close_file",
-					"error":      err.Error(),
-				})
+				l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"), nil)
 			}
 		}
 	}()
