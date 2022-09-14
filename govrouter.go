@@ -8,23 +8,23 @@ import (
 )
 
 type (
-	// Handler responds to an HTTP request with Context
-	Handler interface {
+	// RouteHandler responds to an HTTP request with Context
+	RouteHandler interface {
 		ServeHTTPCtx(c Context)
 	}
 
-	// HandlerFunc adapts a function as a [Handler]
-	HandlerFunc func(c Context)
+	// RouteHandlerFunc adapts a function as a [RouteHandler]
+	RouteHandlerFunc func(c Context)
 
 	// Middleware is a type alias for [Router] middleware
 	Middleware = func(next http.Handler) http.Handler
 
 	// MiddlewareCtx is a type alias for [Router] middleware with Context
-	MiddlewareCtx = func(next Handler) Handler
+	MiddlewareCtx = func(next RouteHandler) RouteHandler
 )
 
-// ServeHTTPCtx implements [Handler]
-func (f HandlerFunc) ServeHTTPCtx(c Context) {
+// ServeHTTPCtx implements [RouteHandler]
+func (f RouteHandlerFunc) ServeHTTPCtx(c Context) {
 	f(c)
 }
 
@@ -37,9 +37,9 @@ type (
 		MethodNotAllowed(fn http.Handler, mw ...Middleware)
 
 		GroupCtx(path string, mw ...MiddlewareCtx) Router
-		MethodCtx(method string, path string, fn Handler, mw ...MiddlewareCtx)
-		NotFoundCtx(fn Handler, mw ...MiddlewareCtx)
-		MethodNotAllowedCtx(fn Handler, mw ...MiddlewareCtx)
+		MethodCtx(method string, path string, fn RouteHandler, mw ...MiddlewareCtx)
+		NotFoundCtx(fn RouteHandler, mw ...MiddlewareCtx)
+		MethodNotAllowedCtx(fn RouteHandler, mw ...MiddlewareCtx)
 	}
 
 	govrouter struct {
@@ -111,13 +111,13 @@ func (r *govrouter) MethodNotAllowed(h http.Handler, mw ...Middleware) {
 	k.MethodNotAllowed(toHTTPHandlerFunc(h))
 }
 
-func toHTTPHandler(h Handler, log klog.Logger) http.Handler {
+func toHTTPHandler(h RouteHandler, log klog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTPCtx(NewContext(w, r, log))
 	})
 }
 
-func chainMiddlewareCtx(h Handler, mw []MiddlewareCtx) Handler {
+func chainMiddlewareCtx(h RouteHandler, mw []MiddlewareCtx) RouteHandler {
 	for i := len(mw) - 1; i >= 0; i-- {
 		h = mw[i](h)
 	}
@@ -127,7 +127,7 @@ func chainMiddlewareCtx(h Handler, mw []MiddlewareCtx) Handler {
 // MiddlewareFromCtx creates [Middleware] from one or more [MiddlewareCtx]
 func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 	return func(next http.Handler) http.Handler {
-		return toHTTPHandler(chainMiddlewareCtx(HandlerFunc(func(c Context) {
+		return toHTTPHandler(chainMiddlewareCtx(RouteHandlerFunc(func(c Context) {
 			next.ServeHTTP(c.Res(), c.Req())
 		}), mw), log)
 	}
@@ -149,7 +149,7 @@ func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	}
 }
 
-func (r *govrouter) MethodCtx(method string, path string, h Handler, mw ...MiddlewareCtx) {
+func (r *govrouter) MethodCtx(method string, path string, h RouteHandler, mw ...MiddlewareCtx) {
 	lmethod := method
 	if lmethod == "" {
 		lmethod = "ANY"
@@ -160,13 +160,13 @@ func (r *govrouter) MethodCtx(method string, path string, h Handler, mw ...Middl
 	})))
 }
 
-func (r *govrouter) NotFoundCtx(h Handler, mw ...MiddlewareCtx) {
+func (r *govrouter) NotFoundCtx(h RouteHandler, mw ...MiddlewareCtx) {
 	r.NotFound(toHTTPHandler(chainMiddlewareCtx(h, mw), r.log.Sublogger("", klog.Fields{
 		"gov.router.notfound": true,
 	})))
 }
 
-func (r *govrouter) MethodNotAllowedCtx(h Handler, mw ...MiddlewareCtx) {
+func (r *govrouter) MethodNotAllowedCtx(h RouteHandler, mw ...MiddlewareCtx) {
 	r.MethodNotAllowed(toHTTPHandler(chainMiddlewareCtx(h, mw), r.log.Sublogger("", klog.Fields{
 		"gov.router.methodnotallowed": true,
 	})))
@@ -210,26 +210,26 @@ func (r *MethodRouter) Any(path string, fn http.HandlerFunc, mw ...Middleware) {
 	r.Router.Method("", path, fn, mw...)
 }
 
-func (r *MethodRouter) GetCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) GetCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx(http.MethodGet, path, fn, mw...)
 }
 
-func (r *MethodRouter) PostCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) PostCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx(http.MethodPost, path, fn, mw...)
 }
 
-func (r *MethodRouter) PutCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) PutCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx(http.MethodPut, path, fn, mw...)
 }
 
-func (r *MethodRouter) PatchCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) PatchCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx(http.MethodPatch, path, fn, mw...)
 }
 
-func (r *MethodRouter) DeleteCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) DeleteCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx(http.MethodDelete, path, fn, mw...)
 }
 
-func (r *MethodRouter) AnyCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx) {
+func (r *MethodRouter) AnyCtx(path string, fn RouteHandlerFunc, mw ...MiddlewareCtx) {
 	r.Router.MethodCtx("", path, fn, mw...)
 }

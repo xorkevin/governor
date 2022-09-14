@@ -66,7 +66,7 @@ func (c *Client) Init() error {
 		c.config.SetConfigFile(file)
 	}
 	if err := c.config.ReadInConfig(); err != nil {
-		return kerrors.WithKind(err, ErrInvalidConfig{}, "Failed to read in config")
+		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read in config")
 	}
 	c.addr = c.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.GetString("timeout")); err == nil {
@@ -76,23 +76,23 @@ func (c *Client) Init() error {
 }
 
 type (
-	// ErrInvalidClientReq is returned when the client request could not be made
-	ErrInvalidClientReq struct{}
-	// ErrInvalidServerRes is returned on an invalid server response
-	ErrInvalidServerRes struct{}
-	// ErrServerRes is a returned server error
-	ErrServerRes struct{}
+	// ErrorInvalidClientReq is returned when the client request could not be made
+	ErrorInvalidClientReq struct{}
+	// ErrorInvalidServerRes is returned on an invalid server response
+	ErrorInvalidServerRes struct{}
+	// ErrorServerRes is a returned server error
+	ErrorServerRes struct{}
 )
 
-func (e ErrInvalidClientReq) Error() string {
+func (e ErrorInvalidClientReq) Error() string {
 	return "Invalid client request"
 }
 
-func (e ErrInvalidServerRes) Error() string {
+func (e ErrorInvalidServerRes) Error() string {
 	return "Invalid server response"
 }
 
-func (e ErrServerRes) Error() string {
+func (e ErrorServerRes) Error() string {
 	return "Error server response"
 }
 
@@ -102,7 +102,7 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 	if data != nil {
 		b := &bytes.Buffer{}
 		if err := json.NewEncoder(b).Encode(data); err != nil {
-			return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Failed to encode body to json")
+			return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed to encode body to json")
 		}
 		body = b
 	}
@@ -111,21 +111,21 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 		req.Header.Add("Content-Type", "application/json")
 	}
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Malformed request")
+		return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Malformed request")
 	}
 	res, err := c.httpc.Do(req)
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrInvalidClientReq{}, "Failed request")
+		return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed request")
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= http.StatusBadRequest {
 		var errres ErrorRes
 		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
-			return 0, kerrors.WithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
+			return 0, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
 		}
-		return res.StatusCode, kerrors.WithKind(nil, ErrServerRes{}, errres.Message)
+		return res.StatusCode, kerrors.WithKind(nil, ErrorServerRes{}, errres.Message)
 	} else if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-		return 0, kerrors.WithKind(err, ErrInvalidServerRes{}, "Failed decoding response")
+		return 0, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
 	}
 	return res.StatusCode, nil
 }
@@ -135,12 +135,12 @@ func isStatusOK(status int) bool {
 }
 
 // Setup sends a setup request to the server
-func (c *Client) Setup(req ReqSetup) (*ResponseSetup, error) {
-	res := &ResponseSetup{}
+func (c *Client) Setup(req ReqSetup) (*ResSetup, error) {
+	res := &ResSetup{}
 	if status, err := c.Request("POST", "/setupz", req, res); err != nil {
 		return nil, err
 	} else if !isStatusOK(status) {
-		return nil, kerrors.WithKind(nil, ErrServerRes{}, "Non success response")
+		return nil, kerrors.WithKind(nil, ErrorServerRes{}, "Non success response")
 	}
 	return res, nil
 }

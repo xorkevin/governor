@@ -39,7 +39,7 @@ type (
 		SetCookie(cookie *http.Cookie)
 		BasicAuth() (string, string, bool)
 		ReadAllBody() ([]byte, error)
-		Bind(i interface{}) error
+		Bind(i interface{}, allowUnknown bool) error
 		FormValue(key string) string
 		FormFile(key string) (multipart.File, *multipart.FileHeader, error)
 		WriteStatus(status int)
@@ -185,7 +185,7 @@ func (c *govcontext) ReadAllBody() ([]byte, error) {
 	return data, nil
 }
 
-func (c *govcontext) Bind(i interface{}) error {
+func (c *govcontext) Bind(i interface{}, allowUnknown bool) error {
 	// ContentLength of -1 is unknown
 	if c.Req().ContentLength == 0 {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Empty request body")
@@ -196,17 +196,24 @@ func (c *govcontext) Bind(i interface{}) error {
 	}
 	switch mediaType {
 	case "application/json":
-		data, err := c.ReadAllBody()
-		if err != nil {
-			return err
+		d := json.NewDecoder(c.Req().Body)
+		if !allowUnknown {
+			d.DisallowUnknownFields()
 		}
-		if err := json.Unmarshal(data, i); err != nil {
+		if err := d.Decode(i); err != nil {
+			// magic error string from encoding/json
+			if strings.Contains(err.Error(), "json: unknown field") {
+				return ErrWithRes(err, http.StatusBadRequest, "", "Unknown field")
+			}
 			return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
 		}
+		if d.More() {
+			return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
+		}
+		return nil
 	default:
 		return ErrWithRes(nil, http.StatusUnsupportedMediaType, "", "Unsupported media type")
 	}
-	return nil
 }
 
 func (c *govcontext) FormValue(key string) string {

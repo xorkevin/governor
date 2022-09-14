@@ -42,8 +42,8 @@ func etagToValue(etag string) string {
 
 // ControlCtx creates a middleware function to cache the response
 func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.MiddlewareCtx {
-	return func(next governor.Handler) governor.Handler {
-		return governor.HandlerFunc(func(c governor.Context) {
+	return func(next governor.RouteHandler) governor.RouteHandler {
+		return governor.RouteHandlerFunc(func(c governor.Context) {
 			etag := ""
 			if etagfunc != nil {
 				tag, err := etagfunc(c)
@@ -86,8 +86,8 @@ func Control(log klog.Logger, public bool, directives Directives, maxage int64, 
 }
 
 // ControlNoStoreCtx creates a middleware function to deny caching responses
-func ControlNoStoreCtx(next governor.Handler) governor.Handler {
-	return governor.HandlerFunc(func(c governor.Context) {
+func ControlNoStoreCtx(next governor.RouteHandler) governor.RouteHandler {
+	return governor.RouteHandlerFunc(func(c governor.Context) {
 		c.SetHeader(ccHeader, string(DirNoStore))
 		next.ServeHTTPCtx(c)
 	})

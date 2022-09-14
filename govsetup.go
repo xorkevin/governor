@@ -52,8 +52,8 @@ func (r *ReqSetup) valid() error {
 }
 
 type (
-	// ResponseSetup is the response to a setup request
-	ResponseSetup struct {
+	// ResSetup is the response to a setup request
+	ResSetup struct {
 		Version string `json:"version"`
 	}
 )
@@ -62,7 +62,7 @@ func (s *Server) initSetup(r Router) {
 	m := NewMethodRouter(r)
 	m.PostCtx("", func(c Context) {
 		var req ReqSetup
-		if err := c.Bind(&req); err != nil {
+		if err := c.Bind(&req, false); err != nil {
 			c.WriteError(err)
 			return
 		}
@@ -78,7 +78,7 @@ func (s *Server) initSetup(r Router) {
 			return
 		}
 
-		c.WriteJSON(http.StatusCreated, &ResponseSetup{
+		c.WriteJSON(http.StatusCreated, &ResSetup{
 			Version: s.config.version.Num,
 		})
 	})
