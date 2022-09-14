@@ -33,7 +33,7 @@ const (
 type (
 	// Router adds route handlers to the server
 	Router interface {
-		Group(path string) Router
+		Group(path string, mw ...Middleware) Router
 		Method(method string, path string, fn http.HandlerFunc, mw ...Middleware)
 		Get(path string, fn http.HandlerFunc, mw ...Middleware)
 		Post(path string, fn http.HandlerFunc, mw ...Middleware)
@@ -43,6 +43,7 @@ type (
 		Any(path string, fn http.HandlerFunc, mw ...Middleware)
 		NotFound(fn http.HandlerFunc, mw ...Middleware)
 		MethodNotAllowed(fn http.HandlerFunc, mw ...Middleware)
+		GroupCtx(path string, mw ...MiddlewareCtx) Router
 		MethodCtx(method string, path string, fn HandlerFunc, mw ...MiddlewareCtx)
 		GetCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
 		PostCtx(path string, fn HandlerFunc, mw ...MiddlewareCtx)
@@ -78,10 +79,14 @@ func (s *Server) router(path string, l klog.Logger) Router {
 	}
 }
 
-func (r *govrouter) Group(path string) Router {
+func (r *govrouter) Group(path string, mw ...Middleware) Router {
 	cpath := r.path + path
+	sr := r.r.Route(path, func(r chi.Router) {})
+	if len(mw) > 0 {
+		sr = sr.With(mw...)
+	}
 	return &govrouter{
-		r: r.r.Route(path, func(r chi.Router) {}),
+		r: sr,
 		log: r.log.Sublogger("", klog.Fields{
 			"gov.router.path": cpath,
 		}),
@@ -158,10 +163,36 @@ func (r *govrouter) chainMiddlewareCtx(fn HandlerFunc, mw []MiddlewareCtx) Handl
 	return fn
 }
 
+func (r *govrouter) toHTTPMiddleware(mw []MiddlewareCtx, log klog.Logger) Middleware {
+	return func(next http.Handler) http.Handler {
+		fn := r.chainMiddlewareCtx(func(c Context) {
+			next.ServeHTTP(c.Res(), c.Req())
+		}, mw)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fn(NewContext(w, r, log))
+		})
+	}
+}
+
+func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
+	cpath := r.path + path
+	l := r.log.Sublogger("", klog.Fields{
+		"gov.router.path": cpath,
+	})
+	sr := r.r.Route(path, func(r chi.Router) {})
+	if len(mw) > 0 {
+		sr = sr.With(r.toHTTPMiddleware(mw, l))
+	}
+	return &govrouter{
+		r:    sr,
+		log:  l,
+		path: cpath,
+	}
+}
+
 func (r *govrouter) toHTTPHandler(fn HandlerFunc, log klog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, log)
-		fn(c)
+		fn(NewContext(w, r, log))
 	}
 }
 
@@ -255,6 +286,7 @@ type (
 		WriteFile(status int, contentType string, r io.Reader)
 		WriteError(err error)
 		Ctx() context.Context
+		SetCtx(ctx context.Context)
 		Get(key interface{}) interface{}
 		Set(key, value interface{})
 		LogFields(fields klog.Fields)
@@ -265,21 +297,22 @@ type (
 	}
 
 	govcontext struct {
-		w     http.ResponseWriter
-		r     *http.Request
-		query url.Values
-		ctx   context.Context
-		log   *klog.LevelLogger
+		w        http.ResponseWriter
+		r        *http.Request
+		query    url.Values
+		rawquery string
+		log      *klog.LevelLogger
 	}
 )
 
 // NewContext creates a Context
 func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) Context {
 	return &govcontext{
-		w:     w,
-		r:     r,
-		query: r.URL.Query(),
-		log:   klog.NewLevelLogger(log),
+		w:        w,
+		r:        r,
+		query:    r.URL.Query(),
+		rawquery: r.URL.RawQuery,
+		log:      klog.NewLevelLogger(log),
 	}
 }
 
@@ -291,7 +324,7 @@ func (c *govcontext) RealIP() net.IP {
 	if ip := getCtxMiddlewareRealIP(c.Ctx()); ip != nil {
 		return ip
 	}
-	host, _, err := net.SplitHostPort(c.r.RemoteAddr)
+	host, _, err := net.SplitHostPort(c.Req().RemoteAddr)
 	if err != nil {
 		return nil
 	}
@@ -303,11 +336,15 @@ func (c *govcontext) Param(key string) string {
 }
 
 func (c *govcontext) Query(key string) string {
+	if u := c.Req().URL; u.RawQuery != c.rawquery {
+		c.query = u.Query()
+		c.rawquery = u.RawQuery
+	}
 	return c.query.Get(key)
 }
 
 func (c *govcontext) QueryDef(key string, def string) string {
-	v := c.query.Get(key)
+	v := c.Query(key)
 	if v == "" {
 		return def
 	}
@@ -315,7 +352,7 @@ func (c *govcontext) QueryDef(key string, def string) string {
 }
 
 func (c *govcontext) QueryInt(key string, def int) int {
-	s := c.query.Get(key)
+	s := c.Query(key)
 	if s == "" {
 		return def
 	}
@@ -327,7 +364,7 @@ func (c *govcontext) QueryInt(key string, def int) int {
 }
 
 func (c *govcontext) QueryInt64(key string, def int64) int64 {
-	s := c.query.Get(key)
+	s := c.Query(key)
 	if s == "" {
 		return def
 	}
@@ -339,7 +376,7 @@ func (c *govcontext) QueryInt64(key string, def int64) int64 {
 }
 
 func (c *govcontext) QueryBool(key string) bool {
-	s := c.query.Get(key)
+	s := c.Query(key)
 	switch s {
 	case "t", "true", "y", "yes", "1":
 		return true
@@ -349,7 +386,7 @@ func (c *govcontext) QueryBool(key string) bool {
 }
 
 func (c *govcontext) Header(key string) string {
-	return c.r.Header.Get(key)
+	return c.Req().Header.Get(key)
 }
 
 func (c *govcontext) SetHeader(key, value string) {
@@ -361,7 +398,7 @@ func (c *govcontext) AddHeader(key, value string) {
 }
 
 func (c *govcontext) Cookie(key string) (*http.Cookie, error) {
-	return c.r.Cookie(key)
+	return c.Req().Cookie(key)
 }
 
 func (c *govcontext) SetCookie(cookie *http.Cookie) {
@@ -369,11 +406,11 @@ func (c *govcontext) SetCookie(cookie *http.Cookie) {
 }
 
 func (c *govcontext) BasicAuth() (string, string, bool) {
-	return c.r.BasicAuth()
+	return c.Req().BasicAuth()
 }
 
 func (c *govcontext) ReadAllBody() ([]byte, error) {
-	data, err := io.ReadAll(c.r.Body)
+	data, err := io.ReadAll(c.Req().Body)
 	if err != nil {
 		var rerr *http.MaxBytesError
 		if errors.As(err, &rerr) {
@@ -386,10 +423,10 @@ func (c *govcontext) ReadAllBody() ([]byte, error) {
 
 func (c *govcontext) Bind(i interface{}) error {
 	// ContentLength of -1 is unknown
-	if c.r.ContentLength == 0 {
+	if c.Req().ContentLength == 0 {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Empty request body")
 	}
-	mediaType, _, err := mime.ParseMediaType(c.r.Header.Get("Content-Type"))
+	mediaType, _, err := mime.ParseMediaType(c.Req().Header.Get("Content-Type"))
 	if err != nil {
 		return ErrWithRes(err, http.StatusBadRequest, "", "Invalid mime type")
 	}
@@ -409,11 +446,11 @@ func (c *govcontext) Bind(i interface{}) error {
 }
 
 func (c *govcontext) FormValue(key string) string {
-	return c.r.FormValue(key)
+	return c.Req().FormValue(key)
 }
 
 func (c *govcontext) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	return c.r.FormFile(key)
+	return c.Req().FormFile(key)
 }
 
 func (c *govcontext) WriteStatus(status int) {
@@ -459,10 +496,11 @@ func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
 }
 
 func (c *govcontext) Ctx() context.Context {
-	if c.ctx == nil {
-		return c.r.Context()
-	}
-	return c.ctx
+	return c.r.Context()
+}
+
+func (c *govcontext) SetCtx(ctx context.Context) {
+	c.r = c.r.WithContext(ctx)
 }
 
 func (c *govcontext) Get(key interface{}) interface{} {
@@ -470,17 +508,14 @@ func (c *govcontext) Get(key interface{}) interface{} {
 }
 
 func (c *govcontext) Set(key, value interface{}) {
-	c.ctx = context.WithValue(c.Ctx(), key, value)
+	c.SetCtx(context.WithValue(c.Ctx(), key, value))
 }
 
 func (c *govcontext) LogFields(fields klog.Fields) {
-	c.ctx = klog.WithFields(c.Ctx(), fields)
+	c.SetCtx(klog.WithFields(c.Ctx(), fields))
 }
 
 func (c *govcontext) Req() *http.Request {
-	if c.ctx != nil {
-		return c.r.WithContext(c.ctx)
-	}
 	return c.r
 }
 

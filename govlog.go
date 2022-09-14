@@ -191,10 +191,10 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			forwarded = ip.String()
 		}
 		c.LogFields(klog.Fields{
-			"http.host":      r.Host,
-			"http.method":    r.Method,
-			"http.reqpath":   r.URL.EscapedPath(),
-			"http.remote":    r.RemoteAddr,
+			"http.host":      c.Req().Host,
+			"http.method":    c.Req().Method,
+			"http.reqpath":   c.Req().URL.EscapedPath(),
+			"http.remote":    c.Req().RemoteAddr,
 			"http.forwarded": forwarded,
 			"http.lreqid":    lreqid,
 		})
