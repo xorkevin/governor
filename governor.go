@@ -175,6 +175,10 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(s.recovererMiddleware)
 	s.log.Info(ctx, "Init middleware recoverer", nil)
 
+	s.log.Info(ctx, "Secrets source", klog.Fields{
+		"gov.secrets.source": s.config.vault.Info(),
+	})
+
 	s.initSetup(s.router(s.config.BaseURL+"/setupz", s.log.Logger))
 	s.log.Info(ctx, "Init setup routes", nil)
 	s.initHealth(s.router(s.config.BaseURL+"/healthz", s.log.Logger))
@@ -253,6 +257,7 @@ func (s *Server) Start() error {
 		maxConnIdle = t
 	}
 	s.log.Info(ctx, "Init http server with configuration", klog.Fields{
+		"http.server.addr":          ":" + s.config.Port,
 		"http.server.maxheadersize": strconv.Itoa(maxHeaderSize),
 		"http.server.maxconnread":   maxConnRead.String(),
 		"http.server.maxconnheader": maxConnHeader.String(),
@@ -269,16 +274,11 @@ func (s *Server) Start() error {
 		MaxHeaderBytes:    maxHeaderSize,
 	}
 	if s.config.showBanner {
-		fmt.Printf("%s\n%s: %s\nhostname: %s\ninstance: %s\nhttp server listening on :%s\nsecrets loaded from %s\n",
+		fmt.Printf("%s\n",
 			fmt.Sprintf(banner, s.config.version.Num),
-			s.config.appname,
-			s.config.version.String(),
-			s.config.Hostname,
-			s.config.Instance,
-			s.config.Port,
-			s.config.vault.Info(),
 		)
 	}
+	s.log.Info(ctx, "Starting server", nil)
 	go func() {
 		defer cancel()
 		if err := srv.ListenAndServe(); err != nil {

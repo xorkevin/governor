@@ -810,5 +810,5 @@ xorkevin.dev/hunter2 v0.1.9 h1:r6xEnaKf+Kif9t7quF1Gr6eZgUBEQdM8E3EnHHQibw0=
 xorkevin.dev/hunter2 v0.1.9/go.mod h1:p+wsEyCvrP/o5y3GwxMO30fPnDAUYRaaf44CeA9uPCU=
 xorkevin.dev/kerrors v0.1.1 h1:17bweDCfnbE3sl/ycNG4nX2OgZL7zBEDy3rWVUqj35c=
 xorkevin.dev/kerrors v0.1.1/go.mod h1:SgGRcV/kiI3QJC6gF1eKc5V5Ui8kqR8yiko40fMKl30=
-xorkevin.dev/klog v0.0.0-20220912084954-c3e50392275f h1:9/vnWfUFJObi9nFKqhztE3fzd6qA/NJmOa+zAlBZ4Ds=
-xorkevin.dev/klog v0.0.0-20220912084954-c3e50392275f/go.mod h1:f/acVDozp/NTGRJRtjvHyUxZsQ42TfXT0XQo6lB2gAU=
+xorkevin.dev/klog v0.0.0-20220915083448-1b364cbaa1f9 h1:akw3mKoZdNSvK0soa0ivZOnnx7mz5Q4jPflB7d6KK3M=
+xorkevin.dev/klog v0.0.0-20220915083448-1b364cbaa1f9/go.mod h1:f/acVDozp/NTGRJRtjvHyUxZsQ42TfXT0XQo6lB2gAU=

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/klog"
 )
@@ -40,50 +39,6 @@ func TestLogOutputFromString(t *testing.T) {
 
 			assert := require.New(t)
 			assert.Equal(tc.Writer, logOutputFromString(tc.Env))
-		})
-	}
-}
-
-func TestLevelToZerologLevel(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		Test  string
-		Level klog.Level
-		Zero  zerolog.Level
-	}{
-		{
-			Test:  "DEBUG",
-			Level: klog.LevelDebug,
-			Zero:  zerolog.DebugLevel,
-		},
-		{
-			Test:  "INFO",
-			Level: klog.LevelInfo,
-			Zero:  zerolog.InfoLevel,
-		},
-		{
-			Test:  "WARN",
-			Level: klog.LevelWarn,
-			Zero:  zerolog.WarnLevel,
-		},
-		{
-			Test:  "ERROR",
-			Level: klog.LevelError,
-			Zero:  zerolog.ErrorLevel,
-		},
-		{
-			Test:  "bogus",
-			Level: 123,
-			Zero:  zerolog.InfoLevel,
-		},
-	} {
-		tc := tc
-		t.Run(tc.Test, func(t *testing.T) {
-			t.Parallel()
-
-			assert := require.New(t)
-			assert.Equal(tc.Zero, levelToZerologLevel(tc.Level))
 		})
 	}
 }

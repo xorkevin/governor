@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -41,29 +42,17 @@ func logOutputFromString(s string) io.Writer {
 
 type (
 	zerologSerializer struct {
-		log *zerolog.Logger
+		log     *zerolog.Logger
+		isDebug bool
 	}
 )
 
-func levelToZerologLevel(level klog.Level) zerolog.Level {
-	switch level {
-	case klog.LevelDebug:
-		return zerolog.DebugLevel
-	case klog.LevelInfo:
-		return zerolog.InfoLevel
-	case klog.LevelWarn:
-		return zerolog.WarnLevel
-	case klog.LevelError:
-		return zerolog.ErrorLevel
-	case klog.LevelNone:
-		return zerolog.Disabled
-	default:
-		return zerolog.InfoLevel
-	}
-}
-
 func newZerologSerializer(c Config) klog.Serializer {
 	zerolog.LevelFieldName = "level"
+	zerolog.LevelDebugValue = klog.LevelDebug.String()
+	zerolog.LevelInfoValue = klog.LevelInfo.String()
+	zerolog.LevelWarnValue = klog.LevelWarn.String()
+	zerolog.LevelErrorValue = klog.LevelError.String()
 	zerolog.TimestampFieldName = "time"
 	zerolog.TimeFieldFormat = time.RFC3339Nano
 	zerolog.CallerFieldName = "caller"
@@ -75,14 +64,16 @@ func newZerologSerializer(c Config) klog.Serializer {
 		w = c.logWriter
 	}
 	w = klog.NewSyncWriter(w)
-	if c.logLevel == klog.LevelDebug.String() {
-		w = zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
-			w.Out = w
+	isDebug := c.logLevel == klog.LevelDebug.String()
+	if isDebug {
+		w = zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {
+			cw.Out = w
 		})
 	}
-	l := zerolog.New(w).Level(levelToZerologLevel(klog.LevelFromString(c.logLevel)))
+	l := zerolog.New(w)
 	return &zerologSerializer{
-		log: &l,
+		log:     &l,
+		isDebug: isDebug,
 	}
 }
 
@@ -90,24 +81,40 @@ var (
 	reservedLogFields = map[string]struct{}{
 		"level":      {},
 		"time":       {},
-		"unixtime":   {},
 		"unixtimeus": {},
 		"caller":     {},
 		"path":       {},
 		"msg":        {},
 	}
+	noDebugLogFields = map[string]struct{}{
+		"gov.appname":  {},
+		"gov.version":  {},
+		"gov.hostname": {},
+		"gov.instance": {},
+	}
 )
 
 func (s *zerologSerializer) Log(level klog.Level, t time.Time, caller *klog.Frame, path string, msg string, fields klog.Fields) {
 	timestr := t.Format(time.RFC3339Nano)
-	unixtime := t.Unix()
 	unixtimeus := t.UnixMicro()
 	callerstr := ""
 	if caller != nil {
-		callerstr = caller.String()
+		if s.isDebug {
+			callerstr = fmt.Sprintf("%s:%d", caller.File, caller.Line)
+		} else {
+			callerstr = caller.String()
+		}
+	}
+	if path == "" {
+		path = "."
 	}
 	for k := range reservedLogFields {
 		delete(fields, k)
+	}
+	if s.isDebug && msg != "Starting server" {
+		for k := range noDebugLogFields {
+			delete(fields, k)
+		}
 	}
 	e := s.log.Info()
 	switch level {
@@ -120,11 +127,12 @@ func (s *zerologSerializer) Log(level klog.Level, t time.Time, caller *klog.Fram
 	case klog.LevelError:
 		e = s.log.Error()
 	}
-	e.Str("level", level.String()).
-		Str("time", timestr).
-		Int64("unixtime", unixtime).
-		Int64("unixtimeus", unixtimeus).
-		Str("caller", callerstr).
+	e = e.Str("level", level.String()).
+		Str("time", timestr)
+	if !s.isDebug {
+		e = e.Int64("unixtimeus", unixtimeus)
+	}
+	e.Str("caller", callerstr).
 		Str("path", path).
 		Fields(map[string]interface{}(fields)).
 		Msg(msg)
