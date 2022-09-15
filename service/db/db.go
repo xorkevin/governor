@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -42,7 +43,7 @@ type (
 		auth       pgAuth
 		connopts   string
 		config     governor.SecretReader
-		logger     governor.Logger
+		log        *klog.LevelLogger
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
@@ -147,22 +148,22 @@ func wrapDBErr(err error, fallbackmsg string) error {
 	return kerrors.WithMsg(err, fallbackmsg)
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
 	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", r.GetStr("dbname"), r.GetStr("host"), r.GetStr("port"), r.GetStr("sslmode"))
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("Loaded config", map[string]string{
-		"connopts":   s.connopts,
-		"hbinterval": strconv.Itoa(s.hbinterval),
-		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"db.connopts":   s.connopts,
+		"db.hbinterval": strconv.Itoa(s.hbinterval),
+		"db.hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -179,7 +180,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeClient()
+			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
@@ -201,10 +202,7 @@ func (s *service) handlePing(ctx context.Context) {
 	var err error
 	// Check db auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
-		s.logger.Error("Failed to create db client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "db_create_client",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create db client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a db client,
 	// if there is a db client then ping the db. This allows vault to be
@@ -220,19 +218,15 @@ func (s *service) handlePing(ctx context.Context) {
 	// Failed a heartbeat
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to ping db", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "db_ping",
-			"connection": s.connopts,
-			"username":   s.auth.Username,
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping db"), klog.Fields{
+			"db.connopts": s.connopts,
+			"db.username": s.auth.Username,
 		})
 		return
 	}
-	s.logger.Error("Failed max pings to db", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "db_ping",
-		"connection": s.connopts,
-		"username":   s.auth.Username,
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to db"), klog.Fields{
+		"db.connopts": s.connopts,
+		"db.username": s.auth.Username,
 	})
 	s.asqldb.Store(nil)
 	s.ready.Store(false)
@@ -254,13 +248,13 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if auth.Username == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
 	}
 	if auth == s.auth {
 		return s.sqldb, nil
 	}
 
-	s.closeClient()
+	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 
 	opts := fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts)
 	client, err := sql.Open("postgres", opts)
@@ -273,49 +267,45 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 	}
 
 	s.sqldb = &sqldb{
-		logger: s.logger,
+		log:    s.log,
 		client: client,
 	}
 	s.asqldb.Store(s.sqldb)
 	s.auth = auth
 	s.ready.Store(true)
 	s.hbfailed = 0
-	s.logger.Info("Established connection to db", map[string]string{
-		"actiontype": "db_conn",
-		"connopts":   s.connopts,
-		"username":   s.auth.Username,
+	s.log.Info(ctx, "Established connection to db", klog.Fields{
+		"db.connopts": s.connopts,
+		"db.username": s.auth.Username,
 	})
 	return s.sqldb, nil
 }
 
-func (s *service) closeClient() {
+func (s *service) closeClient(ctx context.Context) {
 	if s.sqldb == nil {
 		return
 	}
 	s.asqldb.Store(nil)
 	if err := s.sqldb.Close(); err != nil {
-		s.logger.Error("Failed to close db client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "db_close",
-			"connection": s.connopts,
-			"username":   s.auth.Username,
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"), klog.Fields{
+			"db.connopts": s.connopts,
+			"db.username": s.auth.Username,
 		})
 	} else {
-		s.logger.Info("Closed db client", map[string]string{
-			"actiontype": "db_close_ok",
-			"connection": s.connopts,
-			"username":   s.auth.Username,
+		s.log.Info(ctx, "Closed db client", klog.Fields{
+			"db.connopts": s.connopts,
+			"db.username": s.auth.Username,
 		})
 	}
 	s.sqldb = nil
 	s.auth = pgAuth{}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) PostSetup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -324,21 +314,15 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "db_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrConn{}, "DB service not ready")
 	}
@@ -403,13 +387,14 @@ type (
 	}
 
 	sqldb struct {
-		logger governor.Logger
+		log    *klog.LevelLogger
 		client *sql.DB
 	}
 
 	sqlrows struct {
-		logger governor.Logger
-		rows   *sql.Rows
+		log  *klog.LevelLogger
+		ctx  context.Context
+		rows *sql.Rows
 	}
 
 	sqlrow struct {
@@ -433,8 +418,9 @@ func (s *sqldb) QueryContext(ctx context.Context, query string, args ...interfac
 		return nil, wrapDBErr(err, "Failed executing query")
 	}
 	return &sqlrows{
-		logger: s.logger,
-		rows:   rows,
+		log:  s.log,
+		ctx:  klog.ExtendCtx(context.Background(), ctx, nil),
+		rows: rows,
 	}, nil
 }
 
@@ -486,10 +472,7 @@ func (r *sqlrows) Err() error {
 func (r *sqlrows) Close() error {
 	if err := r.rows.Close(); err != nil {
 		err := wrapDBErr(err, "Failed closing rows")
-		r.logger.Error("Failed closing rows", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "db_close_rows",
-		})
+		r.log.Err(r.ctx, kerrors.WithMsg(err, "Failed closing rows"), nil)
 		return err
 	}
 	return nil
