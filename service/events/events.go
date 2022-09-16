@@ -12,6 +12,7 @@ import (
 	jsadvisory "github.com/nats-io/jsm.go/api/jetstream/advisory"
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -95,6 +96,7 @@ type (
 		client          *natsClient
 		aclient         *atomic.Pointer[natsClient]
 		clientname      string
+		instance        string
 		auth            secretAuth
 		addr            string
 		config          governor.SecretReader
@@ -114,6 +116,7 @@ type (
 		apirefresh      int
 		apisecret       secretAPI
 		aapisecret      *atomic.Pointer[secretAPI]
+		reqcount        *atomic.Uint32
 	}
 
 	router struct {
@@ -143,6 +146,7 @@ type (
 	}
 
 	syncSubscription struct {
+		s       *service
 		channel string
 		group   string
 		worker  WorkerFunc
@@ -205,6 +209,7 @@ func New() Service {
 		canary:     canary,
 		hbfailed:   0,
 		aapisecret: &atomic.Pointer[secretAPI]{},
+		reqcount:   &atomic.Uint32{},
 	}
 }
 
@@ -257,6 +262,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 	s.clientname = c.Hostname + "-" + c.Instance
+	s.instance = c.Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.hbinterval = r.GetInt("hbinterval")
@@ -285,7 +291,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.done = done
 
 	sr := s.router()
-	sr.mountRoutes(m)
+	sr.mountRoutes(governor.NewMethodRouter(m))
 	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
@@ -631,6 +637,10 @@ func (s *service) rmSub(sub *subscription, stream *streamSubscription) {
 	}
 }
 
+func (s *service) lreqID() string {
+	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
+}
+
 // Publish publishes to a channel
 func (s *service) Publish(ctx context.Context, channel string, msgdata []byte) error {
 	client, err := s.getClient(ctx)
@@ -694,6 +704,7 @@ func (s *subscription) ok() bool {
 func (s *subscription) subscriber(msg *nats.Msg) {
 	ctx := klog.WithFields(s.ctx, klog.Fields{
 		"events.subject": msg.Subject,
+		"events.lreqid":  s.s.lreqID(),
 	})
 	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
@@ -728,6 +739,7 @@ func (s *service) SubscribeSync(ctx context.Context, channel, group string, work
 		"events.group":   group,
 	})
 	sub := &syncSubscription{
+		s:       s,
 		channel: channel,
 		group:   group,
 		worker:  worker,
@@ -765,6 +777,7 @@ func (s *syncSubscription) init(client *nats.Conn, canary <-chan struct{}) error
 func (s *syncSubscription) subscriber(msg *nats.Msg) {
 	ctx := klog.WithFields(s.ctx, klog.Fields{
 		"events.subject": msg.Subject,
+		"events.lreqid":  s.s.lreqID(),
 	})
 	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
@@ -900,6 +913,17 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 		for _, msg := range msgs {
 			msgctx := klog.WithFields(ctx, klog.Fields{
 				"events.subject": msg.Subject,
+				"events.lreqid":  s.s.lreqID(),
+			})
+			meta, err := msg.Metadata()
+			if err != nil {
+				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed getting message metadata"), nil)
+			}
+			msgctx = klog.WithFields(msgctx, klog.Fields{
+				"events.msg.stream":    meta.Stream,
+				"events.msg.consumer":  meta.Consumer,
+				"events.msg.seqnum":    meta.Sequence.Stream,
+				"events.msg.delivered": meta.NumDelivered,
 			})
 			if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
 				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), nil)

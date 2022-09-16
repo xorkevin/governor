@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -45,7 +46,7 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), nil, &buf))
+			assert.NoError(msgToBytes(nil, context.Background(), tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), nil, &buf))
 			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)
@@ -108,7 +109,7 @@ func TestBuildMail(t *testing.T) {
 			assert := require.New(t)
 
 			buf := bytes.Buffer{}
-			assert.NoError(msgToBytes(nil, tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), strings.NewReader(tc.HtmlBody), &buf))
+			assert.NoError(msgToBytes(nil, context.Background(), tc.MsgID, tc.From, tc.To, strings.NewReader(tc.Subject), strings.NewReader(tc.Body), strings.NewReader(tc.HtmlBody), &buf))
 			t.Log(buf.String())
 			m, err := gomail.ReadMessage(bytes.NewBuffer(buf.Bytes()))
 			assert.NoError(err)

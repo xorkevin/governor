@@ -15,9 +15,7 @@ type (
 	}
 )
 
-func (m *router) publishEvent(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-
+func (m *router) publishEvent(c governor.Context) {
 	username, password, ok := c.BasicAuth()
 	if !ok || username != "system" {
 		c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
@@ -53,6 +51,6 @@ func (m *router) publishEvent(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusOK)
 }
 
-func (m *router) mountRoutes(r governor.Router) {
-	r.Post("/publish", m.publishEvent)
+func (m *router) mountRoutes(r *governor.MethodRouter) {
+	r.PostCtx("/publish", m.publishEvent)
 }

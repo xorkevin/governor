@@ -78,7 +78,6 @@ func TestZerologLogger(t *testing.T) {
 			var j struct {
 				Level      string `json:"level"`
 				Time       string `json:"time"`
-				Unixtime   int64  `json:"unixtime"`
 				UnixtimeUS int64  `json:"unixtimeus"`
 				Caller     string `json:"caller"`
 				Path       string `json:"path"`
@@ -91,7 +90,6 @@ func TestZerologLogger(t *testing.T) {
 			ti, err := time.Parse(time.RFC3339Nano, j.Time)
 			assert.NoError(err)
 			assert.True(ti.After(time.Unix(0, 0)))
-			assert.Equal(ti.Unix(), j.Unixtime)
 			assert.Equal(ti.UnixMicro(), j.UnixtimeUS)
 			assert.Contains(j.Caller, "xorkevin.dev/governor.TestZerologLogger")
 			assert.Contains(j.Caller, "xorkevin.dev/governor/govlog_test.go")

@@ -2,8 +2,6 @@ package governor
 
 import (
 	"context"
-	"encoding/base32"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/klog"
 )
 
@@ -150,30 +149,8 @@ func getCtxLocalReqID(ctx context.Context) string {
 	return v.(string)
 }
 
-const (
-	reqIDUnusedTimeSize    = 3
-	reqIDTimeSize          = 5
-	reqIDTotalTimeSize     = reqIDUnusedTimeSize + reqIDTimeSize
-	reqIDCounterSize       = 3
-	reqIDUnusedCounterSize = 1
-	reqIDTotalCounterSize  = reqIDCounterSize + reqIDUnusedCounterSize
-	reqIDSize              = reqIDTimeSize + reqIDCounterSize
-	reqIDCounterMask       = (uint32(1) << (8 * reqIDCounterSize)) - 1
-	reqIDCounterShift      = 8 * reqIDUnusedCounterSize
-)
-
-var (
-	base32RawHexEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
-)
-
 func (s *Server) lreqID(count uint32) string {
-	// id looks like:
-	// reqIDUnusedTimeSize | reqIDTimeSize | reqIDCounterSize | reqIDUnusedCounterSize
-	b := [reqIDTotalTimeSize + reqIDTotalCounterSize]byte{}
-	now := uint64(time.Now().Round(0).UnixMilli())
-	binary.BigEndian.PutUint64(b[:reqIDTotalTimeSize], now)
-	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], (count&reqIDCounterMask)<<reqIDCounterShift)
-	return s.config.Instance + "-" + base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize:reqIDUnusedTimeSize+reqIDSize])
+	return s.config.Instance + "-" + uid.ReqID(count)
 }
 
 type (

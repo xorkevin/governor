@@ -115,7 +115,7 @@ func TestError(t *testing.T) {
 
 				var j struct {
 					Level      string `json:"level"`
-					Unixtime   int64  `json:"unixtime"`
+					UnixtimeUS int64  `json:"unixtimeus"`
 					Msg        string `json:"msg"`
 					Error      string `json:"error"`
 					StackTrace string `json:"stacktrace"`
@@ -123,7 +123,7 @@ func TestError(t *testing.T) {
 				d := json.NewDecoder(&logbuf)
 				assert.NoError(d.Decode(&j))
 				assert.Equal(tc.Level, j.Level)
-				assert.True(j.Unixtime > 0)
+				assert.True(j.UnixtimeUS > 0)
 				assert.Equal(tc.LogMsg, j.Msg)
 				if tc.NoTrace {
 					assert.Equal(tc.LogError, j.Error)

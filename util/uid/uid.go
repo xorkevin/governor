@@ -110,3 +110,25 @@ var (
 func (s *Snowflake) Base32() string {
 	return strings.ToLower(base32RawHexEncoding.EncodeToString(s.u))
 }
+
+const (
+	reqIDUnusedTimeSize    = 3
+	reqIDTimeSize          = 5
+	reqIDTotalTimeSize     = reqIDUnusedTimeSize + reqIDTimeSize
+	reqIDCounterSize       = 3
+	reqIDUnusedCounterSize = 1
+	reqIDTotalCounterSize  = reqIDCounterSize + reqIDUnusedCounterSize
+	reqIDSize              = reqIDTimeSize + reqIDCounterSize
+	reqIDCounterMask       = (uint32(1) << (8 * reqIDCounterSize)) - 1
+	reqIDCounterShift      = 8 * reqIDUnusedCounterSize
+)
+
+func ReqID(count uint32) string {
+	// id looks like:
+	// reqIDUnusedTimeSize | reqIDTimeSize | reqIDCounterSize | reqIDUnusedCounterSize
+	b := [reqIDTotalTimeSize + reqIDTotalCounterSize]byte{}
+	now := uint64(time.Now().Round(0).UnixMilli())
+	binary.BigEndian.PutUint64(b[:reqIDTotalTimeSize], now)
+	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], (count&reqIDCounterMask)<<reqIDCounterShift)
+	return base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize : reqIDUnusedTimeSize+reqIDSize])
+}
