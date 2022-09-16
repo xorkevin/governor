@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,11 +13,12 @@ import (
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
 	// WorkerFunc is a type alias for a subscriber handler
-	WorkerFunc = func(ctx context.Context, topic string, msgdata []byte)
+	WorkerFunc = func(ctx context.Context, topic string, msgdata []byte) error
 
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
 	StreamWorkerFunc = func(ctx context.Context, pinger Pinger, topic string, msgdata []byte) error
@@ -98,7 +98,7 @@ type (
 		auth            secretAuth
 		addr            string
 		config          governor.SecretReader
-		logger          governor.Logger
+		log             *klog.LevelLogger
 		ops             chan getOp
 		subops          chan subOp
 		secretops       chan getSecretOp
@@ -136,7 +136,7 @@ type (
 		channel string
 		group   string
 		worker  WorkerFunc
-		logger  governor.Logger
+		log     *klog.LevelLogger
 		sub     *nats.Subscription
 		ctx     context.Context
 		cancel  context.CancelFunc
@@ -146,7 +146,7 @@ type (
 		channel string
 		group   string
 		worker  WorkerFunc
-		logger  governor.Logger
+		log     *klog.LevelLogger
 		sub     *nats.Subscription
 		canary  <-chan struct{}
 		ctx     context.Context
@@ -160,7 +160,7 @@ type (
 		group   string
 		opts    StreamConsumerOpts
 		worker  StreamWorkerFunc
-		logger  governor.Logger
+		log     *klog.LevelLogger
 		cancel  context.CancelFunc
 		done    <-chan struct{}
 	}
@@ -221,23 +221,23 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 }
 
 type (
-	// ErrConn is returned on a connection error
-	ErrConn struct{}
-	// ErrClient is returned for unknown client errors
-	ErrClient struct{}
-	// ErrInvalidStreamMsg is returned for invalid stream messages
-	ErrInvalidStreamMsg struct{}
+	// ErrorConn is returned on a connection error
+	ErrorConn struct{}
+	// ErrorClient is returned for unknown client errors
+	ErrorClient struct{}
+	// ErrorInvalidStreamMsg is returned for invalid stream messages
+	ErrorInvalidStreamMsg struct{}
 )
 
-func (e ErrConn) Error() string {
+func (e ErrorConn) Error() string {
 	return "Events connection error"
 }
 
-func (e ErrClient) Error() string {
+func (e ErrorClient) Error() string {
 	return "Events client error"
 }
 
-func (e ErrInvalidStreamMsg) Error() string {
+func (e ErrorInvalidStreamMsg) Error() string {
 	return "Events invalid stream message"
 }
 
@@ -253,14 +253,10 @@ type (
 	}
 )
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname
+	s.clientname = c.Hostname + "-" + c.Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.hbinterval = r.GetInt("hbinterval")
@@ -272,12 +268,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.apirefresh = r.GetInt("apirefresh")
 
-	l.Info("Loaded config", map[string]string{
-		"addr":            s.addr,
-		"hbinterval":      strconv.Itoa(s.hbinterval),
-		"hbmaxfail":       strconv.Itoa(s.hbmaxfail),
-		"minpullduration": r.GetStr("minpullduration"),
-		"apirefresh":      strconv.Itoa(s.apirefresh),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"events.addr":            s.addr,
+		"events.hbinterval":      s.hbinterval,
+		"events.hbmaxfail":       s.hbmaxfail,
+		"events.minpullduration": r.GetStr("minpullduration"),
+		"events.apirefresh":      s.apirefresh,
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -286,7 +286,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	l.Info("Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
@@ -297,7 +297,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeClient()
+			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
@@ -344,10 +344,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 func (s *service) handlePing(ctx context.Context) {
 	// Check client auth expiry, and reinit client if about to be expired
 	if _, err := s.handleGetClient(ctx); err != nil {
-		s.logger.Error("Failed to create events client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "events_create_client",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then check the canary. This allows vault to be
@@ -363,7 +360,7 @@ func (s *service) handlePing(ctx context.Context) {
 			s.config.InvalidateSecret("auth")
 		default:
 			s.ready.Store(true)
-			s.updateSubs(s.client)
+			s.updateSubs(ctx, s.client)
 		}
 	}
 	err := s.refreshApiSecret(ctx)
@@ -373,16 +370,10 @@ func (s *service) handlePing(ctx context.Context) {
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to refresh api secret", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "events_refresh_api_secret",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh api secret"), nil)
 		return
 	}
-	s.logger.Error("Failed max refresh attempts", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "events_refresh_api_secret",
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
 	s.aapisecret.Store(nil)
 	s.hbfailed = 0
 }
@@ -393,14 +384,12 @@ func (s *service) refreshApiSecret(ctx context.Context) error {
 		return kerrors.WithMsg(err, "Invalid api secret")
 	}
 	if apisecret.Secret == "" {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty api secret")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty api secret")
 	}
 	if apisecret != s.apisecret {
 		s.apisecret = apisecret
 		s.aapisecret.Store(&apisecret)
-		s.logger.Info("Refreshed api secret with new secret", map[string]string{
-			"actiontype": "events_refresh_api_secret",
-		})
+		s.log.Info(ctx, "Refreshed api secret with new secret", nil)
 	}
 	return nil
 }
@@ -439,23 +428,20 @@ func (s *service) getApiSecret(ctx context.Context) (string, error) {
 	}
 }
 
-func (s *service) updateSubs(client *natsClient) {
+func (s *service) updateSubs(ctx context.Context, client *natsClient) {
 	for k := range s.subs {
 		if k.ok() {
 			continue
 		}
 		if err := k.init(client.client); err != nil {
-			s.logger.Error("Failed to subscribe to channel", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "events_create_sub",
-				"channel":    k.channel,
-				"group":      k.group,
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to channel"), klog.Fields{
+				"events.channel": k.channel,
+				"events.group":   k.group,
 			})
 		} else {
-			s.logger.Info("Subscribed to channel", map[string]string{
-				"actiontype": "events_create_sub_ok",
-				"channel":    k.channel,
-				"group":      k.group,
+			s.log.Info(ctx, "Subscribed to channel", klog.Fields{
+				"events.channel": k.channel,
+				"events.group":   k.group,
 			})
 		}
 	}
@@ -464,32 +450,28 @@ func (s *service) updateSubs(client *natsClient) {
 			continue
 		}
 		if err := k.init(client.stream); err != nil {
-			s.logger.Error("Failed to subscribe to stream", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "events_create_stream_sub",
-				"channel":    k.channel,
-				"group":      k.group,
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to stream"), klog.Fields{
+				"events.channel": k.channel,
+				"events.group":   k.group,
 			})
 		} else {
-			s.logger.Info("Subscribed to stream", map[string]string{
-				"actiontype": "events_create_stream_sub_ok",
-				"channel":    k.channel,
-				"group":      k.group,
+			s.log.Info(ctx, "Subscribed to stream", klog.Fields{
+				"events.channel": k.channel,
+				"events.group":   k.group,
 			})
 		}
 	}
 }
 
-func (s *service) deinitSubs() {
+func (s *service) deinitSubs(ctx context.Context) {
 	for k := range s.subs {
 		if !k.ok() {
 			continue
 		}
 		k.deinit()
-		s.logger.Info("Closed subscription", map[string]string{
-			"actiontype": "events_close_sub_ok",
-			"channel":    k.channel,
-			"group":      k.group,
+		s.log.Info(ctx, "Closed subscription", klog.Fields{
+			"events.channel": k.channel,
+			"events.group":   k.group,
 		})
 	}
 	for k := range s.streamSubs {
@@ -497,10 +479,9 @@ func (s *service) deinitSubs() {
 			continue
 		}
 		k.deinit()
-		s.logger.Info("Closed stream subscription", map[string]string{
-			"actiontype": "events_close_stream_sub_ok",
-			"channel":    k.channel,
-			"group":      k.group,
+		s.log.Info(ctx, "Closed stream subscription", klog.Fields{
+			"events.channel": k.channel,
+			"events.group":   k.group,
 		})
 	}
 }
@@ -517,13 +498,13 @@ func (s *service) handleGetClient(ctx context.Context) (*natsClient, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if secret.Password == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
 	}
 	if secret == s.auth {
 		return s.client, nil
 	}
 
-	s.closeClient()
+	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 
 	canary := make(chan struct{})
 	conn, err := nats.Connect(fmt.Sprintf("nats://%s", s.addr),
@@ -534,21 +515,18 @@ func (s *service) handleGetClient(ctx context.Context) (*natsClient, error) {
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			close(canary)
-			errmsg := "nil err"
 			if err != nil {
-				errmsg = err.Error()
+				s.log.Err(ctx, kerrors.WithMsg(err, "Lost connection to events"), nil)
+			} else {
+				s.log.Info(ctx, "Disconnected from events", nil)
 			}
-			s.logger.Error("Lost connection to events", map[string]string{
-				"error":      errmsg,
-				"actiontype": "events_ping",
-			})
 		}))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to connect to events")
+		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to connect to events")
 	}
 	stream, err := conn.JetStream()
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to connect to events jetstream")
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to connect to events jetstream")
 	}
 
 	s.client = &natsClient{
@@ -560,21 +538,20 @@ func (s *service) handleGetClient(ctx context.Context) (*natsClient, error) {
 	s.auth = secret
 	s.ready.Store(true)
 	s.canary = canary
-	s.logger.Info("Established connection to event stream", map[string]string{
-		"addr": s.addr,
+	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
+		"events.addr": s.addr,
 	})
 	return s.client, nil
 }
 
-func (s *service) closeClient() {
+func (s *service) closeClient(ctx context.Context) {
 	if s.client != nil && !s.client.client.IsClosed() {
 		s.client.client.Close()
-		s.logger.Info("Closed events connection", map[string]string{
-			"actiontype": "events_close_ok",
-			"address":    s.addr,
+		s.log.Info(ctx, "Closed events connection", klog.Fields{
+			"events.addr": s.addr,
 		})
 	}
-	s.deinitSubs()
+	s.deinitSubs(klog.ExtendCtx(context.Background(), ctx, nil))
 }
 
 func (s *service) getClient(ctx context.Context) (*natsClient, error) {
@@ -602,11 +579,11 @@ func (s *service) getClient(ctx context.Context) (*natsClient, error) {
 	}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) PostSetup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -615,23 +592,17 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "events_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, ErrConn{}, "Events service not ready")
+		return kerrors.WithKind(nil, ErrorConn{}, "Events service not ready")
 	}
 	return nil
 }
@@ -667,27 +638,29 @@ func (s *service) Publish(ctx context.Context, channel string, msgdata []byte) e
 		return err
 	}
 	if err := client.client.Publish(channel, msgdata); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to publish message to channel")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to channel")
 	}
 	return nil
 }
 
 // Subscribe subscribes to a channel
 func (s *service) Subscribe(channel, group string, worker WorkerFunc) (Subscription, error) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": channel,
-		"group":   group,
-	})
 	subctx, cancel := context.WithCancel(context.Background())
+	subctx = klog.WithFields(subctx, klog.Fields{
+		"events.channel": channel,
+		"events.group":   group,
+	})
 	sub := &subscription{
 		s:       s,
 		channel: channel,
 		group:   group,
 		worker:  worker,
-		logger:  l,
-		ctx:     subctx,
-		cancel:  cancel,
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
+			"events.channel": channel,
+			"events.group":   group,
+		})),
+		ctx:    subctx,
+		cancel: cancel,
 	}
 	s.addSub(sub, nil)
 	return sub, nil
@@ -697,13 +670,13 @@ func (s *subscription) init(client *nats.Conn) error {
 	if s.group == "" {
 		sub, err := client.Subscribe(s.channel, s.subscriber)
 		if err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create subscription to channel")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel")
 		}
 		s.sub = sub
 	} else {
 		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
 		if err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create subscription to channel as queue group")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel as queue group")
 		}
 		s.sub = sub
 	}
@@ -719,7 +692,12 @@ func (s *subscription) ok() bool {
 }
 
 func (s *subscription) subscriber(msg *nats.Msg) {
-	s.worker(s.ctx, msg.Subject, msg.Data)
+	ctx := klog.WithFields(s.ctx, klog.Fields{
+		"events.subject": msg.Subject,
+	})
+	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
+	}
 }
 
 // Close closes the subscription
@@ -733,7 +711,7 @@ func (s *subscription) Close() error {
 		return nil
 	}
 	if err := s.sub.Drain(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to close subscription to channel")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
 	}
 	return nil
 }
@@ -744,19 +722,21 @@ func (s *service) SubscribeSync(ctx context.Context, channel, group string, work
 	if err != nil {
 		return nil, err
 	}
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": channel,
-		"group":   group,
-	})
 	subctx, cancel := context.WithCancel(context.Background())
+	subctx = klog.WithFields(subctx, klog.Fields{
+		"events.channel": channel,
+		"events.group":   group,
+	})
 	sub := &syncSubscription{
 		channel: channel,
 		group:   group,
 		worker:  worker,
-		logger:  l,
-		ctx:     subctx,
-		cancel:  cancel,
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("syncsubscriber", klog.Fields{
+			"events.channel": channel,
+			"events.group":   group,
+		})),
+		ctx:    subctx,
+		cancel: cancel,
 	}
 	if err := sub.init(client.client, client.canary); err != nil {
 		return nil, err
@@ -768,13 +748,13 @@ func (s *syncSubscription) init(client *nats.Conn, canary <-chan struct{}) error
 	if s.group == "" {
 		sub, err := client.Subscribe(s.channel, s.subscriber)
 		if err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create subscription to channel")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel")
 		}
 		s.sub = sub
 	} else {
 		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
 		if err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create subscription to channel as queue group")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel as queue group")
 		}
 		s.sub = sub
 	}
@@ -783,7 +763,12 @@ func (s *syncSubscription) init(client *nats.Conn, canary <-chan struct{}) error
 }
 
 func (s *syncSubscription) subscriber(msg *nats.Msg) {
-	s.worker(s.ctx, msg.Subject, msg.Data)
+	ctx := klog.WithFields(s.ctx, klog.Fields{
+		"events.subject": msg.Subject,
+	})
+	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
+	}
 }
 
 // Done closes the subscription
@@ -798,7 +783,7 @@ func (s *syncSubscription) Close() error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to close subscription to channel")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
 	}
 	return nil
 }
@@ -810,19 +795,13 @@ func (s *service) StreamPublish(ctx context.Context, channel string, msgdata []b
 		return err
 	}
 	if _, err := client.stream.Publish(channel, msgdata, nats.Context(ctx)); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to publish message to stream")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to stream")
 	}
 	return nil
 }
 
 // StreamSubscribe subscribes to a stream
 func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"stream":  stream,
-		"channel": channel,
-		"group":   group,
-	})
 	done := make(chan struct{})
 	close(done)
 	sub := &streamSubscription{
@@ -832,8 +811,12 @@ func (s *service) StreamSubscribe(stream, channel, group string, worker StreamWo
 		group:   group,
 		opts:    opts,
 		worker:  worker,
-		logger:  l,
-		done:    done,
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("streamsubscriber", klog.Fields{
+			"events.stream":  stream,
+			"events.channel": channel,
+			"events.group":   group,
+		})),
+		done: done,
 	}
 	s.addSub(nil, sub)
 	return sub, nil
@@ -860,9 +843,14 @@ func (s *streamSubscription) init(client nats.JetStream) error {
 		args...,
 	)
 	if err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to create subscription to stream as queue group")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to stream as queue group")
 	}
 	subctx, cancel := context.WithCancel(context.Background())
+	subctx = klog.WithFields(subctx, klog.Fields{
+		"events.stream":  s.stream,
+		"events.channel": s.channel,
+		"events.group":   s.group,
+	})
 	done := make(chan struct{})
 	go s.subscriber(subctx, sub, done)
 	s.cancel = cancel
@@ -904,26 +892,20 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 		msgs, err := s.fetch(ctx, sub)
 		if err != nil {
 			if !errors.Is(err, context.DeadlineExceeded) {
-				s.logger.Error("Failed obtaining messages", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "events_fetch_stream_msgs",
-				})
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed obtaining messages"), nil)
 				return
 			}
 			continue
 		}
 		for _, msg := range msgs {
-			if err := s.worker(ctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
-				s.logger.Error("Failed executing worker", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "events_exec_stream_worker",
-				})
+			msgctx := klog.WithFields(ctx, klog.Fields{
+				"events.subject": msg.Subject,
+			})
+			if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
+				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
 			} else {
 				if err := msg.Ack(); err != nil {
-					s.logger.Error("Failed to ack message", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "events_ack_stream_msg",
-					})
+					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
 				}
 			}
 		}
@@ -948,7 +930,7 @@ func (s *streamSubscription) Close() error {
 
 func (p *pinger) Ping(ctx context.Context) error {
 	if err := p.msg.InProgress(nats.Context(ctx)); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to ping in progress")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to ping in progress")
 	}
 	return nil
 }
@@ -973,14 +955,14 @@ func (s *service) InitStream(ctx context.Context, name string, subjects []string
 	}
 	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to get stream")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
 		}
 		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create stream")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create stream")
 		}
 	} else {
 		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to update stream")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to update stream")
 		}
 	}
 	return nil
@@ -994,11 +976,11 @@ func (s *service) DeleteStream(ctx context.Context, name string) error {
 	}
 	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to get stream")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
 		}
 	} else {
 		if err := client.stream.DeleteStream(name, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to delete stream")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
 		}
 	}
 	return nil
@@ -1012,11 +994,11 @@ func (s *service) DeleteConsumer(ctx context.Context, stream, consumer string) e
 	}
 	if _, err := client.stream.ConsumerInfo(stream, consumer, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to get consumer")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to get consumer")
 		}
 	} else {
 		if err := client.stream.DeleteConsumer(stream, consumer, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to delete consumer")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete consumer")
 		}
 	}
 	return nil
@@ -1032,14 +1014,14 @@ func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, grou
 	return s.StreamSubscribe(stream, channelMaxDelivery(targetStream, targetConsumer), group, func(ctx context.Context, pinger Pinger, topic string, msgdata []byte) error {
 		schemaType, advmsg, err := jsmapi.ParseMessage(msgdata)
 		if err != nil {
-			return kerrors.WithKind(err, ErrInvalidStreamMsg{}, "Failed to parse dead letter queue message with unknown type")
+			return kerrors.WithKind(err, ErrorInvalidStreamMsg{}, "Failed to parse dead letter queue message with unknown type")
 		}
 		jse, ok := advmsg.(*jsadvisory.ConsumerDeliveryExceededAdvisoryV1)
 		if !ok {
-			return kerrors.WithKind(nil, ErrInvalidStreamMsg{}, fmt.Sprintf("Failed to parse dead letter queue message with type: %s", schemaType))
+			return kerrors.WithKind(nil, ErrorInvalidStreamMsg{}, fmt.Sprintf("Failed to parse dead letter queue message with type: %s", schemaType))
 		}
 		if jse.Stream != targetStream || jse.Consumer != targetConsumer {
-			return kerrors.WithKind(nil, ErrInvalidStreamMsg{}, fmt.Sprintf("Invalid target stream and consumer: %s, %s", jse.Stream, jse.Consumer))
+			return kerrors.WithKind(nil, ErrorInvalidStreamMsg{}, fmt.Sprintf("Invalid target stream and consumer: %s, %s", jse.Stream, jse.Consumer))
 		}
 		client, err := s.getClient(ctx)
 		if err != nil {
@@ -1047,7 +1029,7 @@ func (s *service) DLQSubscribe(targetStream, targetConsumer string, stream, grou
 		}
 		msg, err := client.stream.GetMsg(targetStream, jse.StreamSeq, nats.Context(ctx))
 		if err != nil {
-			return kerrors.WithKind(err, ErrClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
+			return kerrors.WithKind(err, ErrorClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
 		}
 		return worker(ctx, pinger, msg.Subject, msg.Data)
 	}, opts)

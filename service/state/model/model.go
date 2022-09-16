@@ -96,7 +96,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 func (r *repo) Get(ctx context.Context) (*state.Model, error) {
 	m, err := r.GetModel(ctx)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) || errors.Is(err, db.ErrUndefinedTable{}) {
+		if errors.Is(err, db.ErrorNotFound{}) || errors.Is(err, db.ErrorUndefinedTable{}) {
 			return &state.Model{
 				Setup: false,
 			}, nil
@@ -130,7 +130,7 @@ func (r *repo) Setup(ctx context.Context, req state.ReqSetup) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup state model")
-		if !errors.Is(err, db.ErrAuthz{}) {
+		if !errors.Is(err, db.ErrorAuthz{}) {
 			return err
 		}
 	}

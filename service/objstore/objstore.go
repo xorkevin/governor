@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -52,7 +52,7 @@ type (
 		sslmode    bool
 		location   string
 		config     governor.SecretReader
-		logger     governor.Logger
+		log        *klog.LevelLogger
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
@@ -123,34 +123,30 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 }
 
 type (
-	// ErrConn is returned on an objstore connection error
-	ErrConn struct{}
-	// ErrClient is returned for unknown client errors
-	ErrClient struct{}
-	// ErrNotFound is returned when an object is not found
-	ErrNotFound struct{}
+	// ErrorConn is returned on an objstore connection error
+	ErrorConn struct{}
+	// ErrorClient is returned for unknown client errors
+	ErrorClient struct{}
+	// ErrorNotFound is returned when an object is not found
+	ErrorNotFound struct{}
 )
 
-func (e ErrConn) Error() string {
+func (e ErrorConn) Error() string {
 	return "Objstore connection error"
 }
 
-func (e ErrClient) Error() string {
+func (e ErrorClient) Error() string {
 	return "Objstore client error"
 }
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "Object not found"
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname
+	s.clientname = c.Hostname + "-" + c.Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.sslmode = r.GetBool("sslmode")
@@ -158,12 +154,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("Loaded config", map[string]string{
-		"addr":       s.addr,
-		"sslmode":    strconv.FormatBool(s.sslmode),
-		"location":   s.location,
-		"hbinterval": strconv.Itoa(s.hbinterval),
-		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"obj.addr":       s.addr,
+		"obj.sslmode":    s.sslmode,
+		"obj.location":   s.location,
+		"obj.hbinterval": s.hbinterval,
+		"obj.hbmaxfail":  s.hbmaxfail,
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -202,10 +202,7 @@ func (s *service) handlePing(ctx context.Context) {
 	var err error
 	// Check client auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
-		s.logger.Error("Failed to create objstore client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "objstore_create_client",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create objstore client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
@@ -220,19 +217,15 @@ func (s *service) handlePing(ctx context.Context) {
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to ping objstore", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "objstore_ping",
-			"address":    s.addr,
-			"username":   s.auth.Username,
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping objstore"), klog.Fields{
+			"obj.addr":     s.addr,
+			"obj.username": s.auth.Username,
 		})
 		return
 	}
-	s.logger.Warn("Failed max pings to objstore", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "objstore_ping",
-		"address":    s.addr,
-		"username":   s.auth.Username,
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to objstore"), klog.Fields{
+		"obj.addr":     s.addr,
+		"obj.username": s.auth.Username,
 	})
 	s.aclient.Store(nil)
 	s.ready.Store(false)
@@ -254,7 +247,7 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if auth.Username == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
 	}
 	if auth == s.auth {
 		return s.client, nil
@@ -267,11 +260,11 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 		Secure: s.sslmode,
 	})
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to create objstore client")
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create objstore client")
 	}
 	if err := s.clientPing(ctx, client); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping objstore")
+		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping objstore")
 	}
 
 	s.client = client
@@ -279,10 +272,9 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 	s.auth = auth
 	s.ready.Store(false)
 	s.hbfailed = 0
-	s.logger.Info("Established connection to objstore", map[string]string{
-		"actiontype": "objstore_conn",
-		"addr":       s.addr,
-		"username":   s.auth.Username,
+	s.log.Info(ctx, "Established connection to objstore", klog.Fields{
+		"obj.addr":     s.addr,
+		"obj.username": s.auth.Username,
 	})
 	return s.client, nil
 }
@@ -293,11 +285,11 @@ func (s *service) closeClient() {
 	s.auth = minioauth{}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) PostSetup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -306,23 +298,17 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "objstore_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, ErrConn{}, "Objstore service not ready")
+		return kerrors.WithKind(nil, ErrorConn{}, "Objstore service not ready")
 	}
 	return nil
 }
@@ -355,7 +341,7 @@ func (s *service) getClient(ctx context.Context) (*minio.Client, error) {
 func (s *service) clientPing(ctx context.Context, client *minio.Client) error {
 	if _, err := client.GetBucketLocation(ctx, "healthcheck-probe-"+s.clientname); err != nil {
 		if minio.ToErrorResponse(err).StatusCode != http.StatusNotFound {
-			return kerrors.WithKind(err, ErrConn{}, "Failed to ping objstore")
+			return kerrors.WithKind(err, ErrorConn{}, "Failed to ping objstore")
 		}
 	}
 	return nil
@@ -386,9 +372,9 @@ func (s *service) DelBucket(ctx context.Context, name string) error {
 	}
 	if err := client.RemoveBucket(ctx, name); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return kerrors.WithKind(err, ErrNotFound{}, "Failed to get bucket")
+			return kerrors.WithKind(err, ErrorNotFound{}, "Failed to get bucket")
 		}
-		return kerrors.WithKind(err, ErrClient{}, "Failed to remove bucket")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to remove bucket")
 	}
 	return nil
 }
@@ -439,13 +425,13 @@ func (b *bucket) Init(ctx context.Context) error {
 	}
 	exists, err := client.BucketExists(ctx, b.name)
 	if err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to get bucket")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to get bucket")
 	}
 	if !exists {
 		if err := client.MakeBucket(ctx, b.name, minio.MakeBucketOptions{
 			Region: b.location,
 		}); err != nil {
-			return kerrors.WithKind(err, ErrClient{}, "Failed to create bucket")
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create bucket")
 		}
 	}
 	return nil
@@ -464,9 +450,9 @@ func (b *bucket) Stat(ctx context.Context, name string) (*ObjectInfo, error) {
 	info, err := client.StatObject(ctx, b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return nil, kerrors.WithKind(err, ErrNotFound{}, "Failed to find object")
+			return nil, kerrors.WithKind(err, ErrorNotFound{}, "Failed to find object")
 		}
-		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to stat object")
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to stat object")
 	}
 	return &ObjectInfo{
 		Size:         info.Size,
@@ -486,13 +472,13 @@ func (b *bucket) Get(ctx context.Context, name string) (io.ReadCloser, *ObjectIn
 	obj, err := client.GetObject(ctx, b.name, name, minio.GetObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return nil, nil, kerrors.WithKind(err, ErrNotFound{}, "Failed to find object")
+			return nil, nil, kerrors.WithKind(err, ErrorNotFound{}, "Failed to find object")
 		}
-		return nil, nil, kerrors.WithKind(err, ErrClient{}, "Failed to get object")
+		return nil, nil, kerrors.WithKind(err, ErrorClient{}, "Failed to get object")
 	}
 	info, err := obj.Stat()
 	if err != nil {
-		return nil, nil, kerrors.WithKind(err, ErrClient{}, "Failed to stat object")
+		return nil, nil, kerrors.WithKind(err, ErrorClient{}, "Failed to stat object")
 	}
 	return obj, &ObjectInfo{
 		Size:         info.Size,
@@ -510,7 +496,7 @@ func (b *bucket) Put(ctx context.Context, name string, contentType string, size 
 		return err
 	}
 	if _, err := client.PutObject(ctx, b.name, name, object, size, minio.PutObjectOptions{ContentType: contentType, UserMetadata: userMeta}); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to save object to bucket")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to save object to bucket")
 	}
 	return nil
 }
@@ -523,9 +509,9 @@ func (b *bucket) Del(ctx context.Context, name string) error {
 	}
 	if err := client.RemoveObject(ctx, b.name, name, minio.RemoveObjectOptions{}); err != nil {
 		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
-			return kerrors.WithKind(err, ErrNotFound{}, "Failed to find object")
+			return kerrors.WithKind(err, ErrorNotFound{}, "Failed to find object")
 		}
-		return kerrors.WithKind(err, ErrClient{}, "Failed to remove object")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to remove object")
 	}
 	return nil
 }

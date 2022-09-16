@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -92,57 +91,57 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 }
 
 type (
-	// ErrConn is returned on a db connection error
-	ErrConn struct{}
-	// ErrClient is returned for unknown client errors
-	ErrClient struct{}
-	// ErrNotFound is returned when a row is not found
-	ErrNotFound struct{}
-	// ErrUnique is returned when a unique constraint is violated
-	ErrUnique struct{}
-	// ErrUndefinedTable is returned when a table does not exist yet
-	ErrUndefinedTable struct{}
-	// ErrAuthz is returned when not authorized
-	ErrAuthz struct{}
+	// ErrorConn is returned on a db connection error
+	ErrorConn struct{}
+	// ErrorClient is returned for unknown client errors
+	ErrorClient struct{}
+	// ErrorNotFound is returned when a row is not found
+	ErrorNotFound struct{}
+	// ErrorUnique is returned when a unique constraint is violated
+	ErrorUnique struct{}
+	// ErrorUndefinedTable is returned when a table does not exist yet
+	ErrorUndefinedTable struct{}
+	// ErrorAuthz is returned when not authorized
+	ErrorAuthz struct{}
 )
 
-func (e ErrConn) Error() string {
+func (e ErrorConn) Error() string {
 	return "DB connection error"
 }
 
-func (e ErrClient) Error() string {
+func (e ErrorClient) Error() string {
 	return "DB client error"
 }
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "Row not found"
 }
 
-func (e ErrUnique) Error() string {
+func (e ErrorUnique) Error() string {
 	return "Unique constraint violated"
 }
 
-func (e ErrUndefinedTable) Error() string {
+func (e ErrorUndefinedTable) Error() string {
 	return "Undefined table"
 }
 
-func (e ErrAuthz) Error() string {
+func (e ErrorAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
 func wrapDBErr(err error, fallbackmsg string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return kerrors.WithKind(err, ErrNotFound{}, "Not found")
+		return kerrors.WithKind(err, ErrorNotFound{}, "Not found")
 	}
 	perr := &pq.Error{}
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return kerrors.WithKind(err, ErrUnique{}, "Unique constraint violated")
+			return kerrors.WithKind(err, ErrorUnique{}, "Unique constraint violated")
 		case "42P01": // undefined_table
-			return kerrors.WithKind(err, ErrUndefinedTable{}, "Table not defined")
+			return kerrors.WithKind(err, ErrorUndefinedTable{}, "Table not defined")
 		case "42501": // insufficient_privilege
-			return kerrors.WithKind(err, ErrAuthz{}, "Unauthorized")
+			return kerrors.WithKind(err, ErrorAuthz{}, "Unauthorized")
 		}
 	}
 	return kerrors.WithMsg(err, fallbackmsg)
@@ -158,8 +157,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"db.connopts":   s.connopts,
-		"db.hbinterval": strconv.Itoa(s.hbinterval),
-		"db.hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+		"db.hbinterval": s.hbinterval,
+		"db.hbmaxfail":  s.hbmaxfail,
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -259,11 +258,11 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 	opts := fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts)
 	client, err := sql.Open("postgres", opts)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrClient{}, "Failed to init db conn")
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to init db conn")
 	}
 	if err := client.PingContext(ctx); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping db")
+		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping db")
 	}
 
 	s.sqldb = &sqldb{
@@ -324,7 +323,7 @@ func (s *service) Stop(ctx context.Context) {
 
 func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, ErrConn{}, "DB service not ready")
+		return kerrors.WithKind(nil, ErrorConn{}, "DB service not ready")
 	}
 	return nil
 }

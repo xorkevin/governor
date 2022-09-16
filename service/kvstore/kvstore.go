@@ -12,6 +12,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -90,7 +91,7 @@ type (
 		addr       string
 		dbname     int
 		config     governor.SecretReader
-		logger     governor.Logger
+		log        *klog.LevelLogger
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
@@ -160,38 +161,34 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 }
 
 type (
-	// ErrConn is returned on a kvstore connection error
-	ErrConn struct{}
-	// ErrClient is returned for unknown client errors
-	ErrClient struct{}
-	// ErrNotFound is returned when a key is not found
-	ErrNotFound struct{}
-	// ErrVal is returned for invalid value errors
-	ErrVal struct{}
+	// ErrorConn is returned on a kvstore connection error
+	ErrorConn struct{}
+	// ErrorClient is returned for unknown client errors
+	ErrorClient struct{}
+	// ErrorNotFound is returned when a key is not found
+	ErrorNotFound struct{}
+	// ErrorVal is returned for invalid value errors
+	ErrorVal struct{}
 )
 
-func (e ErrConn) Error() string {
+func (e ErrorConn) Error() string {
 	return "KVStore connection error"
 }
 
-func (e ErrClient) Error() string {
+func (e ErrorClient) Error() string {
 	return "KVStore client error"
 }
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "Key not found"
 }
 
-func (e ErrVal) Error() string {
+func (e ErrorVal) Error() string {
 	return "Invalid value"
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
@@ -199,11 +196,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbinterval = r.GetInt("hbinterval")
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	l.Info("Loaded config", map[string]string{
-		"addr":       s.addr,
-		"dbname":     strconv.Itoa(s.dbname),
-		"hbinterval": strconv.Itoa(s.hbinterval),
-		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"kv.addr":       s.addr,
+		"kv.dbname":     strconv.Itoa(s.dbname),
+		"kv.hbinterval": s.hbinterval,
+		"kv.hbmaxfail":  s.hbmaxfail,
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -220,7 +221,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeClient()
+			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
@@ -242,10 +243,7 @@ func (s *service) handlePing(ctx context.Context) {
 	var err error
 	// Check client auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
-		s.logger.Error("Failed to create kvstore client", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "kvstore_create_client",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
@@ -260,19 +258,15 @@ func (s *service) handlePing(ctx context.Context) {
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to ping kvstore", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "kvstore_ping",
-			"address":    s.addr,
-			"dbname":     strconv.Itoa(s.dbname),
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping kvstore"), klog.Fields{
+			"kv.addr":   s.addr,
+			"kv.dbname": strconv.Itoa(s.dbname),
 		})
 		return
 	}
-	s.logger.Error("Failed max pings to kvstore", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "kvstore_ping",
-		"address":    s.addr,
-		"dbname":     strconv.Itoa(s.dbname),
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to kvstore"), klog.Fields{
+		"kv.addr":   s.addr,
+		"kv.dbname": strconv.Itoa(s.dbname),
 	})
 	s.aclient.Store(nil)
 	s.ready.Store(false)
@@ -293,13 +287,13 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
 	if secret.Password == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Empty auth")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
 	}
 	if secret == s.auth {
 		return s.client, nil
 	}
 
-	s.closeClient()
+	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     s.addr,
@@ -308,7 +302,7 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	})
 	if _, err := client.Ping(ctx).Result(); err != nil {
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrConn{}, "Failed to ping kvstore")
+		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping kvstore")
 	}
 
 	s.client = client
@@ -316,42 +310,38 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	s.auth = secret
 	s.ready.Store(true)
 	s.hbfailed = 0
-	s.logger.Info("Established connection to kvstore", map[string]string{
-		"actiontype": "kvstore_conn",
-		"addr":       s.addr,
-		"dbname":     strconv.Itoa(s.dbname),
+	s.log.Info(ctx, "Established connection to kvstore", klog.Fields{
+		"kv.addr":   s.addr,
+		"kv.dbname": strconv.Itoa(s.dbname),
 	})
 	return s.client, nil
 }
 
-func (s *service) closeClient() {
+func (s *service) closeClient(ctx context.Context) {
 	if s.client == nil {
 		return
 	}
 	s.aclient.Store(nil)
 	if err := s.client.Close(); err != nil {
-		s.logger.Error("Failed to close kvstore connection", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "kvstore_close",
-			"address":    s.addr,
-			"dbname":     strconv.Itoa(s.dbname),
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"), klog.Fields{
+			"kv.addr":   s.addr,
+			"kv.dbname": strconv.Itoa(s.dbname),
 		})
 	} else {
-		s.logger.Info("Closed kvstore connection", map[string]string{
-			"actiontype": "kvstore_close_ok",
-			"address":    s.addr,
-			"dbname":     strconv.Itoa(s.dbname),
+		s.log.Info(ctx, "Closed kvstore connection", klog.Fields{
+			"kv.addr":   s.addr,
+			"kv.dbname": strconv.Itoa(s.dbname),
 		})
 	}
 	s.client = nil
 	s.auth = secretAuth{}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) PostSetup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -360,23 +350,17 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "kvstore_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, ErrConn{}, "KVStore service not ready")
+		return kerrors.WithKind(nil, ErrorConn{}, "KVStore service not ready")
 	}
 	return nil
 }
@@ -412,7 +396,7 @@ func (s *service) Ping(ctx context.Context) error {
 		return err
 	}
 	if _, err := client.Ping(ctx).Result(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to ping kvstore")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to ping kvstore")
 	}
 	return nil
 }
@@ -425,9 +409,9 @@ func (s *service) Get(ctx context.Context, key string) (string, error) {
 	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return "", kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return "", kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -440,13 +424,13 @@ func (s *service) GetInt(ctx context.Context, key string) (int64, error) {
 	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrVal{}, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrorVal{}, "Invalid int value")
 	}
 	return num, nil
 }
@@ -457,7 +441,7 @@ func (s *service) Set(ctx context.Context, key, val string, seconds int64) error
 		return err
 	}
 	if err := client.Set(ctx, key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to set key")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to set key")
 	}
 	return nil
 }
@@ -473,7 +457,7 @@ func (s *service) Del(ctx context.Context, key ...string) error {
 	}
 
 	if err := client.Del(ctx, key...).Err(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to delete key")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to delete key")
 	}
 	return nil
 }
@@ -485,7 +469,7 @@ func (s *service) Incr(ctx context.Context, key string, delta int64) (int64, err
 	}
 	val, err := client.IncrBy(ctx, key, delta).Result()
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to incr key")
+		return 0, kerrors.WithKind(err, ErrorClient{}, "Failed to incr key")
 	}
 	return val, nil
 }
@@ -496,7 +480,7 @@ func (s *service) Expire(ctx context.Context, key string, seconds int64) error {
 		return err
 	}
 	if err := client.Expire(ctx, key, time.Duration(seconds)*time.Second).Err(); err != nil {
-		return kerrors.WithKind(err, ErrClient{}, "Failed to set expire key")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to set expire key")
 	}
 	return nil
 }
@@ -599,7 +583,7 @@ func (t *baseMulti) Subtree(prefix string) Multi {
 func (t *baseMulti) Exec(ctx context.Context) error {
 	if _, err := t.base.Exec(ctx); err != nil {
 		if !errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrNotFound{}, "Failed to execute multi")
+			return kerrors.WithKind(err, ErrorNotFound{}, "Failed to execute multi")
 		}
 	}
 	return nil
@@ -730,9 +714,9 @@ func (r *resulter) Result() (string, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return "", kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return "", kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -747,9 +731,9 @@ func (r *intCmdResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -764,13 +748,13 @@ func (r *intResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return 0, kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrVal{}, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrorVal{}, "Invalid int value")
 	}
 	return num, nil
 }
@@ -785,9 +769,9 @@ func (r *boolCmdResulter) Result() (bool, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return false, kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return false, kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return false, kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return false, kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return val, nil
 }
@@ -801,9 +785,9 @@ type (
 func (r *statusCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return nil
 }
@@ -817,9 +801,9 @@ type (
 func (r *intCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrNotFound{}, "Key not found")
+			return kerrors.WithKind(err, ErrorNotFound{}, "Key not found")
 		}
-		return kerrors.WithKind(err, ErrClient{}, "Failed to get key")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to get key")
 	}
 	return nil
 }
