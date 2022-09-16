@@ -706,8 +706,18 @@ func (s *subscription) subscriber(msg *nats.Msg) {
 		"events.subject": msg.Subject,
 		"events.lreqid":  s.s.lreqID(),
 	})
+	s.log.Info(ctx, "Received msg", nil)
+	start := time.Now()
 	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
+		duration := time.Since(start)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
+			"events.duration_ms": duration.Milliseconds(),
+		})
+	} else {
+		duration := time.Since(start)
+		s.log.Info(ctx, "Handled msg", klog.Fields{
+			"events.duration_ms": duration.Milliseconds(),
+		})
 	}
 }
 
@@ -779,8 +789,18 @@ func (s *syncSubscription) subscriber(msg *nats.Msg) {
 		"events.subject": msg.Subject,
 		"events.lreqid":  s.s.lreqID(),
 	})
+	s.log.Info(ctx, "Received msg", nil)
+	start := time.Now()
 	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
+		duration := time.Since(start)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
+			"events.duration_ms": duration.Milliseconds(),
+		})
+	} else {
+		duration := time.Since(start)
+		s.log.Info(ctx, "Handled msg", klog.Fields{
+			"events.duration_ms": duration.Milliseconds(),
+		})
 	}
 }
 
@@ -925,12 +945,22 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 				"events.msg.seqnum":    meta.Sequence.Stream,
 				"events.msg.delivered": meta.NumDelivered,
 			})
+			s.log.Info(msgctx, "Received msg", nil)
+			start := time.Now()
 			if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
-				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), nil)
+				duration := time.Since(start)
+				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
+					"events.duration_ms": duration.Milliseconds(),
+				})
 			} else {
+				duration := time.Since(start)
+				s.log.Info(msgctx, "Handled msg", klog.Fields{
+					"events.duration_ms": duration.Milliseconds(),
+				})
 				if err := msg.Ack(); err != nil {
 					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
 				}
+				s.log.Info(msgctx, "Acked msg", nil)
 			}
 		}
 		now := time.Now()

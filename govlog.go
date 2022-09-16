@@ -197,6 +197,9 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 				"http.duration_ms": duration.Milliseconds(),
 			})
 		} else {
+			s.log.Info(c.Ctx(), "HTTP request", klog.Fields{
+				"http.ws": false,
+			})
 			start := time.Now()
 			w2 := &govResponseWriter{
 				ResponseWriter: w,
