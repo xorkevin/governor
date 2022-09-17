@@ -14,6 +14,7 @@ import (
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -51,7 +52,7 @@ type (
 		roles         model.Repo
 		kvroleset     kvstore.KVStore
 		events        events.Events
-		logger        governor.Logger
+		log           *klog.LevelLogger
 		streamns      string
 		opts          svcOpts
 		streamsize    int64
@@ -100,7 +101,7 @@ func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRoles(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
@@ -115,11 +116,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("rolecache", "24h")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -137,39 +135,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.roleCacheTime = int64(t / time.Second)
 	}
 
-	l.Info("Loaded config", map[string]string{
-		"stream size (bytes)": r.GetStr("streamsize"),
-		"event size (bytes)":  r.GetStr("eventsize"),
-		"rolecache (s)":       strconv.FormatInt(s.roleCacheTime, 10),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"role.stream.size": r.GetStr("streamsize"),
+		"role.event.size":  r.GetStr("eventsize"),
+		"role.cache":       strconv.FormatInt(s.roleCacheTime, 10),
 	})
 
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init roles stream")
-	}
-	l.Info("Created roles stream", nil)
-
-	if err := s.roles.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created userrole table", nil)
-
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
 	return nil
 }
 
@@ -180,7 +151,26 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init roles stream")
+	}
+	s.log.Info(ctx, "Created roles stream", nil)
+
+	if err := s.roles.Setup(context.Background()); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userrole table", nil)
+
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 

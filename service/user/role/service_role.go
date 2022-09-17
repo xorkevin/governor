@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -30,30 +31,22 @@ func (s *service) IntersectRoles(ctx context.Context, userid string, roles rank.
 	uncachedRoles := roles
 
 	if multiget, err := userkv.Multi(ctx); err != nil {
-		s.logger.Error("Failed to create kvstore multi", map[string]string{
-			"error": err.Error(),
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
 	} else {
 		resget := make(map[string]kvstore.Resulter, roles.Len())
 		for _, i := range roles.ToSlice() {
 			resget[i] = multiget.Get(ctx, i)
 		}
 		if err := multiget.Exec(ctx); err != nil {
-			s.logger.Error("Failed to get user roles from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "role_get_roleset",
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user roles from cache"), nil)
 			goto end
 		}
 		uncachedRoles = rank.Rank{}
 		for k, v := range resget {
 			v, err := v.Result()
 			if err != nil {
-				if !errors.Is(err, kvstore.ErrNotFound{}) {
-					s.logger.Error("Failed to get user role result from cache", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "role_get_roleset_result",
-					})
+				if !errors.Is(err, kvstore.ErrorNotFound{}) {
+					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user role result from cache"), nil)
 				}
 				uncachedRoles.AddOne(k)
 			} else {
@@ -80,9 +73,7 @@ end:
 
 	multiset, err := userkv.Multi(ctx)
 	if err != nil {
-		s.logger.Error("Failed to create kvstore multi", map[string]string{
-			"error": err.Error(),
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
 		return res, nil
 	}
 	for _, i := range uncachedRoles.ToSlice() {
@@ -93,10 +84,7 @@ end:
 		}
 	}
 	if err := multiset.Exec(ctx); err != nil {
-		s.logger.Error("Failed to set user roles in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "role_set_roleset",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set user roles in cache"), nil)
 	}
 
 	return res, nil
@@ -113,13 +101,11 @@ func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 	if err := s.roles.InsertRoles(ctx, userid, roles); err != nil {
 		return kerrors.WithMsg(err, "Failed to create roles")
 	}
-	s.clearCache(userid, roles)
-	// must make best effort attempt to publish role event
-	if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
-		s.logger.Error("Failed to publish new roles event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "role_publish_new",
-		})
+	// must make a best effort to clear the cache and publish role event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, userid, roles)
+	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new roles event"), nil)
 	}
 	return nil
 }
@@ -138,7 +124,9 @@ func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Ran
 	if err := s.roles.DeleteRoles(ctx, userid, roles); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete roles")
 	}
-	s.clearCache(userid, roles)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, userid, roles)
 	return nil
 }
 
@@ -149,7 +137,9 @@ func (s *service) DeleteByRole(ctx context.Context, roleName string, userids []s
 	if err := s.roles.DeleteByRole(ctx, roleName, userids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete role users")
 	}
-	s.clearCacheRoles(roleName, userids)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCacheRoles(ctx, roleName, userids)
 	return nil
 }
 
@@ -164,20 +154,16 @@ func (s *service) GetByRole(ctx context.Context, roleName string, amount, offset
 	return s.roles.GetByRole(ctx, roleName, amount, offset)
 }
 
-func (s *service) clearCache(userid string, roles rank.Rank) {
+func (s *service) clearCache(ctx context.Context, userid string, roles rank.Rank) {
 	if len(roles) == 0 {
 		return
 	}
-	// must make a best effort to clear the cache
-	if err := s.kvroleset.Subtree(userid).Del(context.Background(), roles.ToSlice()...); err != nil {
-		s.logger.Error("Failed to clear role set from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "role_clear_roleset",
-		})
+	if err := s.kvroleset.Subtree(userid).Del(ctx, roles.ToSlice()...); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear role set from cache"), nil)
 	}
 }
 
-func (s *service) clearCacheRoles(role string, userids []string) {
+func (s *service) clearCacheRoles(ctx context.Context, role string, userids []string) {
 	if len(userids) == 0 {
 		return
 	}
@@ -185,11 +171,7 @@ func (s *service) clearCacheRoles(role string, userids []string) {
 	for _, i := range userids {
 		args = append(args, s.kvroleset.Subkey(i, role))
 	}
-	// must make a best effort to clear the cache
-	if err := s.kvroleset.Del(context.Background(), args...); err != nil {
-		s.logger.Error("Failed to clear role set from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "role_clear_roleset",
-		})
+	if err := s.kvroleset.Del(ctx, args...); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear role set from cache"), nil)
 	}
 }

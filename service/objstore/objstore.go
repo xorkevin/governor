@@ -285,10 +285,6 @@ func (s *service) closeClient() {
 	s.auth = minioauth{}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	return nil
-}
-
 func (s *service) Start(ctx context.Context) error {
 	return nil
 }
@@ -300,6 +296,10 @@ func (s *service) Stop(ctx context.Context) {
 	case <-ctx.Done():
 		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
+}
+
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	return nil
 }
 
 func (s *service) Health(ctx context.Context) error {

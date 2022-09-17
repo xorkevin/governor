@@ -478,23 +478,6 @@ func (s *service) getCipher(ctx context.Context) (*maildataCipher, error) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.mailBucket.Init(ctx); err != nil {
-		return kerrors.WithMsg(err, "Failed to init mail bucket")
-	}
-	s.log.Info(ctx, "Created mail bucket", nil)
-	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init mail stream")
-	}
-	s.log.Info(ctx, "Created mail stream", nil)
-	return nil
-}
-
 func (s *service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
@@ -526,6 +509,23 @@ func (s *service) Stop(ctx context.Context) {
 	case <-ctx.Done():
 		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
+}
+
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.mailBucket.Init(ctx); err != nil {
+		return kerrors.WithMsg(err, "Failed to init mail bucket")
+	}
+	s.log.Info(ctx, "Created mail bucket", nil)
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init mail stream")
+	}
+	s.log.Info(ctx, "Created mail stream", nil)
+	return nil
 }
 
 func (s *service) Health(ctx context.Context) error {
