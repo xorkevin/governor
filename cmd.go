@@ -63,7 +63,6 @@ The server first runs all init procedures for all services before starting.`,
 		DisableAutoGenTag: true,
 	}
 
-	var setupFirst bool
 	var setupSecret string
 	setupCmd := &cobra.Command{
 		Use:   "setup",
@@ -73,16 +72,7 @@ The server first runs all init procedures for all services before starting.`,
 Calls the server setup endpoint.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			req := ReqSetup{
-				First:  setupFirst,
 				Secret: setupSecret,
-			}
-			if setupFirst {
-				var err error
-				req.Admin, err = getAdminPromptReq()
-				if err != nil {
-					fmt.Println(err)
-					os.Exit(1)
-				}
 			}
 			if err := req.valid(); err != nil {
 				fmt.Println(err)
@@ -104,7 +94,6 @@ Calls the server setup endpoint.`,
 		},
 		DisableAutoGenTag: true,
 	}
-	setupCmd.PersistentFlags().BoolVar(&setupFirst, "first", false, "first time setup")
 	setupCmd.PersistentFlags().StringVar(&setupSecret, "secret", "", "setup secret")
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
@@ -122,7 +111,17 @@ func (c *Cmd) Execute() {
 	}
 }
 
-func getAdminPromptReq() (*SetupAdmin, error) {
+type (
+	ReqAddAdmin struct {
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		Email     string `json:"email"`
+		Firstname string `json:"first_name"`
+		Lastname  string `json:"last_name"`
+	}
+)
+
+func getAdminPromptReq() (*ReqAddAdmin, error) {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("First name: ")
@@ -168,7 +167,7 @@ func getAdminPromptReq() (*SetupAdmin, error) {
 		return nil, errors.New("Passwords do not match")
 	}
 
-	return &SetupAdmin{
+	return &ReqAddAdmin{
 		Username:  strings.TrimSpace(username),
 		Password:  password,
 		Email:     strings.TrimSpace(email),

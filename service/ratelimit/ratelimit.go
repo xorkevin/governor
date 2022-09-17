@@ -3,7 +3,6 @@ package ratelimit
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -12,11 +11,13 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
 	// Ratelimiter creates new ratelimiting middleware
 	Ratelimiter interface {
+		RatelimitCtx(tagger Tagger) governor.MiddlewareCtx
 		Ratelimit(tagger Tagger) governor.Middleware
 		Subtree(prefix string) Ratelimiter
 		Base() governor.Middleware
@@ -30,7 +31,7 @@ type (
 
 	service struct {
 		tags       kvstore.KVStore
-		logger     governor.Logger
+		log        *klog.LevelLogger
 		paramsBase Params
 		paramsAuth Params
 	}
@@ -130,11 +131,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	})
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	if err := r.Unmarshal("params.base", &s.paramsBase); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse base ratelimit params")
@@ -143,19 +141,15 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return kerrors.WithMsg(err, "Failed to parse auth ratelimit params")
 	}
 
-	l.Info("Loaded config", map[string]string{
-		"params base": s.paramsBase.String(),
-		"params auth": s.paramsAuth.String(),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"ratelimit.params.base": s.paramsBase.String(),
+		"ratelimit.params.auth": s.paramsAuth.String(),
 	})
 
 	return nil
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -166,7 +160,7 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -182,27 +176,22 @@ type (
 	}
 )
 
-func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c := governor.NewContext(w, r, s.logger)
+func (s *service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.MiddlewareCtx {
+	return func(next governor.RouteHandler) governor.RouteHandler {
+		return governor.RouteHandlerFunc(func(c governor.Context) {
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
 				multiget, err := kv.Tx(c.Ctx())
 				if err != nil {
-					s.logger.Error("Failed to create kvstore multi", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "ratelimit_create_tags_query",
-					})
+					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
 					goto end
 				}
 				sums := make([]tagSum, 0, len(tags))
 				for _, i := range tags {
 					if i.Params.Period <= 0 {
-						s.logger.Error("Invalid ratelimit period", map[string]string{
-							"error":      "Ratelimit period",
-							"actiontype": "ratelimit_query_tags",
+						s.log.Error(c.Ctx(), "Invalid ratelimit period", klog.Fields{
+							"ratelimit.tag.period": i.Params.Period,
 						})
 						continue
 					}
@@ -222,10 +211,7 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 					})
 				}
 				if err := multiget.Exec(c.Ctx()); err != nil {
-					s.logger.Error("Failed to get tags from cache", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "ratelimit_get_tags",
-					})
+					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tags from cache"), nil)
 					goto end
 				}
 				for _, i := range sums {
@@ -233,11 +219,8 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 					for _, j := range i.periods {
 						k, err := j.Result()
 						if err != nil {
-							if !errors.Is(err, kvstore.ErrNotFound{}) {
-								s.logger.Error("Failed to get tag from cache", map[string]string{
-									"error":      err.Error(),
-									"actiontype": "ratelimit_get_tag_result",
-								})
+							if !errors.Is(err, kvstore.ErrorNotFound{}) {
+								s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"), nil)
 							}
 							continue
 						}
@@ -250,13 +233,17 @@ func (s *service) rlimit(kv kvstore.KVStore, tagger Tagger) governor.Middleware 
 				}
 			}
 		end:
-			next.ServeHTTP(c.R())
+			next.ServeHTTPCtx(c)
 		})
 	}
 }
 
+func (s *service) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
+	return s.rlimitCtx(s.tags, tagger)
+}
+
 func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
-	return s.rlimit(s.tags, tagger)
+	return governor.MiddlewareFromCtx(s.log.Logger, s.RatelimitCtx(tagger))
 }
 
 func (s *service) Subtree(prefix string) Ratelimiter {
@@ -282,8 +269,12 @@ type (
 	}
 )
 
+func (t *tree) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
+	return t.base.rlimitCtx(t.kv, tagger)
+}
+
 func (t *tree) Ratelimit(tagger Tagger) governor.Middleware {
-	return t.base.rlimit(t.kv, tagger)
+	return governor.MiddlewareFromCtx(t.base.log.Logger, t.RatelimitCtx(tagger))
 }
 
 func (t *tree) Subtree(prefix string) Ratelimiter {

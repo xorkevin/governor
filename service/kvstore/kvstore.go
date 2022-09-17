@@ -341,10 +341,6 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) PostSetup(ctx context.Context, req governor.ReqSetup) error {
-	return nil
-}
-
 func (s *service) Start(ctx context.Context) error {
 	return nil
 }

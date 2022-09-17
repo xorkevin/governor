@@ -10,12 +10,10 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"xorkevin.dev/governor/service/state"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -39,30 +37,24 @@ type (
 
 	// Server is a governor server to which services may be registered
 	Server struct {
-		services      []serviceDef
-		inj           Injector
-		config        *Config
-		state         state.State
-		log           *klog.LevelLogger
-		i             chi.Router
-		flags         Flags
-		firstSetupRun bool
-		mu            *sync.RWMutex
+		services []serviceDef
+		inj      Injector
+		config   *Config
+		log      *klog.LevelLogger
+		i        chi.Router
+		flags    Flags
 	}
 )
 
 // New creates a new Server
-func New(opts Opts, stateService state.State) *Server {
+func New(opts Opts) *Server {
 	return &Server{
 		services: []serviceDef{},
 		inj:      newInjector(context.Background()),
 		config:   newConfig(opts),
-		state:    stateService,
 		flags: Flags{
 			ConfigFile: "",
 		},
-		firstSetupRun: false,
-		mu:            &sync.RWMutex{},
 	}
 }
 

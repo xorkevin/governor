@@ -20,7 +20,6 @@ import (
 	"xorkevin.dev/governor/service/profile"
 	profilemodel "xorkevin.dev/governor/service/profile/model"
 	"xorkevin.dev/governor/service/ratelimit"
-	statemodel "xorkevin.dev/governor/service/state/model"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/apikey"
@@ -44,7 +43,8 @@ import (
 
 func main() {
 	vcsinfo := governor.ReadVCSBuildInfo()
-	opts := governor.Opts{
+
+	gov := governor.New(governor.Opts{
 		Version: governor.Version{
 			Num:  vcsinfo.ModVersion,
 			Hash: vcsinfo.VCSStr(),
@@ -55,14 +55,9 @@ func main() {
 		ClientDefault: "client",
 		ClientPrefix:  "govc",
 		EnvPrefix:     "gov",
-	}
+	})
 
-	dbService := db.New()
-	stateService := statemodel.New(dbService, "govstate")
-
-	gov := governor.New(opts, stateService)
-
-	gov.Register("database", "/null/db", dbService)
+	gov.Register("database", "/null/db", db.New())
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
 	gov.Register("events", "/events", events.New())

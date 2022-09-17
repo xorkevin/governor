@@ -2,7 +2,6 @@ package token
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -95,7 +95,7 @@ type (
 		issuer     string
 		audience   string
 		config     governor.SecretReader
-		logger     governor.Logger
+		log        *klog.LevelLogger
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
@@ -146,23 +146,19 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("signerrefresh", 60)
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Token issuer is not set")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token issuer is not set")
 	}
 	s.issuer = issuer
 
 	audience := r.GetStr("audience")
 	if audience == "" {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Token audience is not set")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token audience is not set")
 	}
 	s.audience = audience
 
@@ -170,12 +166,16 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 	s.keyrefresh = r.GetInt("keyrefresh")
 
-	l.Info("Loaded config", map[string]string{
-		"issuer":     issuer,
-		"audience":   audience,
-		"hbinterval": strconv.Itoa(s.hbinterval),
-		"hbmaxfail":  strconv.Itoa(s.hbmaxfail),
-		"keyrefresh": strconv.Itoa(s.keyrefresh),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"token.issuer":     issuer,
+		"token.audience":   audience,
+		"token.hbinterval": s.hbinterval,
+		"token.hbmaxfail":  s.hbmaxfail,
+		"token.keyrefresh": s.keyrefresh,
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -218,32 +218,26 @@ func (s *service) handlePing(ctx context.Context) {
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to refresh token keys", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "token_refresh_keys",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh token keys"), nil)
 		return
 	}
-	s.logger.Error("Failed max refresh attempts", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "token_refresh_keys",
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
 	s.ready.Store(false)
 	s.hbfailed = 0
 }
 
 type (
-	// ErrSigner is returned when failing to create a signer
-	ErrSigner struct{}
-	// ErrGenerate is returned when failing to generate a token
-	ErrGenerate struct{}
+	// ErrorSigner is returned when failing to create a signer
+	ErrorSigner struct{}
+	// ErrorGenerate is returned when failing to generate a token
+	ErrorGenerate struct{}
 )
 
-func (e ErrSigner) Error() string {
+func (e ErrorSigner) Error() string {
 	return "Error creating signer"
 }
 
-func (e ErrGenerate) Error() string {
+func (e ErrorGenerate) Error() string {
 	return "Error generating token"
 }
 
@@ -265,7 +259,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	for _, i := range tokenSecrets.Secrets {
 		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid key param")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgHS512:
@@ -291,17 +285,17 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		keys.RegisterSigningKey(k)
 	}
 	if khs512 == nil || krs256 == nil {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No token keys present")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
 	}
 
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
 	if err != nil {
-		return kerrors.WithKind(err, ErrSigner{}, "Failed to create new jwt HS512 signer")
+		return kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
 	}
 
 	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
 	if err != nil {
-		return kerrors.WithKind(err, ErrSigner{}, "Failed to create new jwt RS256 signer")
+		return kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
 	}
 
 	s.hs512id = khs512.ID()
@@ -313,12 +307,11 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		jwks:      jwks,
 	}
 
-	s.logger.Info("Refreshed token keys with new keys", map[string]string{
-		"actiontype": "token_refresh_keys",
-		"hs512kid":   s.hs512id,
-		"rs256kid":   s.rs256id,
-		"numjwks":    strconv.Itoa(len(jwks)),
-		"numother":   strconv.Itoa(keys.Size() - len(jwks)),
+	s.log.Info(ctx, "Refreshed token keys with new keys", klog.Fields{
+		"token.hs512kid": s.hs512id,
+		"token.rs256kid": s.rs256id,
+		"token.numjwks":  len(jwks),
+		"token.numother": keys.Size() - len(jwks),
 	})
 	return nil
 }
@@ -358,11 +351,7 @@ func (s *service) getSigner(ctx context.Context) (*tokenSigner, error) {
 	}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -371,23 +360,17 @@ func (s *service) Start(ctx context.Context) error {
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "token_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "Token service not ready")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token service not ready")
 	}
 	return nil
 }
@@ -427,7 +410,7 @@ func (s *service) Generate(ctx context.Context, kind Kind, userid string, durati
 	}
 	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", nil, kerrors.WithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
+		return "", nil, kerrors.WithKind(err, ErrorGenerate{}, "Failed to generate a new jwt token")
 	}
 	return token, &claims, nil
 }
@@ -454,7 +437,7 @@ func (s *service) GenerateExt(ctx context.Context, kind Kind, issuer string, use
 	}
 	token, err := jwt.Signed(signer.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", kerrors.WithKind(err, ErrGenerate{}, "Failed to generate a new jwt token")
+		return "", kerrors.WithKind(err, ErrorGenerate{}, "Failed to generate a new jwt token")
 	}
 	return token, nil
 }
@@ -486,10 +469,7 @@ func (s *service) Validate(ctx context.Context, kind Kind, tokenString string) (
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get signer keys", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "token_get_keys",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
 	key, ok := signer.keys.Get(token.Headers[0].KeyID)
@@ -525,10 +505,7 @@ func (s *service) GetClaims(ctx context.Context, kind Kind, tokenString string) 
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get signer keys", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "token_get_keys",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
 	key, ok := signer.keys.Get(token.Headers[0].KeyID)
@@ -562,10 +539,7 @@ func (s *service) GetClaimsExt(ctx context.Context, kind Kind, tokenString strin
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.logger.Error("Failed to get signer keys", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "token_get_keys",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
 	key, ok := signer.keys.Get(token.Headers[0].KeyID)
