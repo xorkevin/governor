@@ -2,7 +2,6 @@ package governor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,14 +51,9 @@ type (
 		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error)
 	}
 
-	// System event channels
+	// SysChannels are for system events
 	SysChannels struct {
 		GC string
-	}
-
-	// SysEventTimestampProps
-	SysEventTimestampProps struct {
-		Timestamp int64 `json:"timestamp"`
 	}
 
 	// Config is the server configuration including those from a config file and
@@ -74,6 +68,8 @@ type (
 		logLevel      string
 		logOutput     string
 		logWriter     io.Writer
+		addr          string
+		BaseURL       string
 		maxReqSize    string
 		maxHeaderSize string
 		maxConnRead   string
@@ -84,11 +80,9 @@ type (
 		allowpaths    []*corsPathRule
 		rewrite       []*rewriteRule
 		proxies       []string
-		Port          string
-		BaseURL       string
+		SysChannels   SysChannels
 		Hostname      string
 		Instance      string
-		SysChannels   SysChannels
 	}
 
 	corsPathRule struct {
@@ -158,7 +152,7 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("loglevel", "INFO")
 	v.SetDefault("logoutput", "STDOUT")
 	v.SetDefault("banner", true)
-	v.SetDefault("port", "8080")
+	v.SetDefault("addr", ":8080")
 	v.SetDefault("baseurl", "/")
 	v.SetDefault("maxreqsize", "2M")
 	v.SetDefault("maxheadersize", "1M")
@@ -195,7 +189,7 @@ func newConfig(opts Opts) *Config {
 		version:    opts.Version,
 		vaultCache: map[string]vaultSecret{},
 		SysChannels: SysChannels{
-			GC: opts.Appname + "." + "sys.gc",
+			GC: opts.Appname + ".sys.gc",
 		},
 	}
 }
@@ -230,6 +224,8 @@ func (c *Config) init() error {
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = c.config.GetString("loglevel")
 	c.logOutput = c.config.GetString("logoutput")
+	c.addr = c.config.GetString("port")
+	c.BaseURL = c.config.GetString("baseurl")
 	c.maxReqSize = c.config.GetString("maxreqsize")
 	c.maxHeaderSize = c.config.GetString("maxheadersize")
 	c.maxConnRead = c.config.GetString("maxconnread")
@@ -250,8 +246,6 @@ func (c *Config) init() error {
 	}
 	c.rewrite = rewrite
 	c.proxies = c.config.GetStringSlice("proxies")
-	c.Port = c.config.GetString("port")
-	c.BaseURL = c.config.GetString("baseurl")
 	var err error
 	c.Hostname, err = os.Hostname()
 	if err != nil {
@@ -612,13 +606,4 @@ func (c *Config) reader(opt serviceOpt) ConfigReader {
 		serviceOpt: opt,
 		c:          c,
 	}
-}
-
-// DecodeSysEventTimestampProps unmarshals json encoded sys event timestamp props
-func DecodeSysEventTimestampProps(msgdata []byte) (*SysEventTimestampProps, error) {
-	m := &SysEventTimestampProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode sys event timestamp props")
-	}
-	return m, nil
 }

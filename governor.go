@@ -257,7 +257,7 @@ func (s *Server) Start() error {
 		maxConnIdle = t
 	}
 	s.log.Info(ctx, "Init http server with configuration", klog.Fields{
-		"http.server.addr":          ":" + s.config.Port,
+		"http.server.addr":          s.config.addr,
 		"http.server.maxheadersize": strconv.Itoa(maxHeaderSize),
 		"http.server.maxconnread":   maxConnRead.String(),
 		"http.server.maxconnheader": maxConnHeader.String(),
@@ -265,7 +265,7 @@ func (s *Server) Start() error {
 		"http.server.maxconnidle":   maxConnIdle.String(),
 	})
 	srv := http.Server{
-		Addr:              ":" + s.config.Port,
+		Addr:              s.config.addr,
 		Handler:           s.i,
 		ReadTimeout:       maxConnRead,
 		ReadHeaderTimeout: maxConnHeader,

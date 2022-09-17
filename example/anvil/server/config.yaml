@@ -3,7 +3,7 @@
 {{ $nssvc := printf "%s-%s" $ns $svc -}}
 loglevel: DEBUG
 logoutput: STDOUT
-port: 8080
+addr: ':8080'
 baseurl: /api
 maxreqsize: 2M
 maxheadersize: 1M
