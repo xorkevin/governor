@@ -43,8 +43,7 @@ import (
 
 func main() {
 	vcsinfo := governor.ReadVCSBuildInfo()
-
-	gov := governor.New(governor.Opts{
+	opts := governor.Opts{
 		Version: governor.Version{
 			Num:  vcsinfo.ModVersion,
 			Hash: vcsinfo.VCSStr(),
@@ -55,7 +54,9 @@ func main() {
 		ClientDefault: "client",
 		ClientPrefix:  "govc",
 		EnvPrefix:     "gov",
-	})
+	}
+
+	gov := governor.New(opts)
 
 	gov.Register("database", "/null/db", db.New())
 	gov.Register("kvstore", "/null/kv", kvstore.New())

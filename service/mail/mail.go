@@ -223,7 +223,7 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailer(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname

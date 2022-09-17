@@ -116,7 +116,7 @@ func New(kv kvstore.KVStore) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRootRL(inj, s)
 
 	r.SetDefault("params.base", map[string]interface{}{

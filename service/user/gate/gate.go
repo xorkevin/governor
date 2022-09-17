@@ -13,6 +13,7 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -49,6 +50,7 @@ func setCtxClaims(c governor.Context, claims *token.Claims) {
 type (
 	// Gate creates new authenticating middleware
 	Gate interface {
+		AuthenticateCtx(v Authorizer, scope string) governor.MiddlewareCtx
 		Authenticate(v Authorizer, scope string) governor.Middleware
 		Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
 	}
@@ -65,7 +67,7 @@ type (
 		tokenizer token.Tokenizer
 		baseurl   string
 		realm     string
-		logger    governor.Logger
+		log       *klog.LevelLogger
 	}
 
 	// Intersector returns roles needed to validate a user
@@ -125,30 +127,23 @@ func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) Se
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxGate(inj, s)
 
 	r.SetDefault("realm", "governor")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.baseurl = c.BaseURL
 	s.realm = r.GetStr("realm")
-	l.Info("Loaded config", map[string]string{
-		"realm": s.realm,
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"gate.realm": s.realm,
 	})
 	return nil
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
@@ -159,7 +154,7 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -176,8 +171,8 @@ func (e errAuthNotFound) Error() string {
 	return "Auth not found"
 }
 
-func getAccessCookie(r *http.Request) (string, error) {
-	cookie, err := r.Cookie("access_token")
+func getAccessCookie(c governor.Context) (string, error) {
+	cookie, err := c.Cookie("access_token")
 	if err != nil {
 		return "", err
 	}
@@ -210,10 +205,7 @@ func (r *authctx) Ctx() governor.Context {
 func (r *authctx) Intersect(ctx context.Context, roles rank.Rank) (rank.Rank, error) {
 	k, err := r.s.Authorize(ctx, r.userid, roles)
 	if err != nil {
-		r.s.logger.Error("Failed to get user roles", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "authgetroles",
-		})
+		r.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user roles"), nil)
 		return nil, err
 	}
 	return k, nil
@@ -237,15 +229,10 @@ const (
 	oauthErrorInsufficientScope = "insufficient_scope"
 )
 
-// Authenticate builds a middleware function to validate tokens and set claims
-func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
-	if v == nil {
-		panic("authorizer cannot be nil")
-	}
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			c := governor.NewContext(w, r, s.logger)
+// AuthenticateCtx builds a middleware function to validate tokens and set claims
+func (s *service) AuthenticateCtx(v Authorizer, scope string) governor.MiddlewareCtx {
+	return func(next governor.RouteHandler) governor.RouteHandler {
+		return governor.RouteHandlerFunc(func(c governor.Context) {
 			keyid, password, ok := c.BasicAuth()
 			if ok {
 				userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
@@ -313,7 +300,7 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 					}
 					isBearer = false
 					var err error
-					accessToken, err = getAccessCookie(r)
+					accessToken, err = getAccessCookie(c)
 					if err != nil {
 						c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, s.realm))
 						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
@@ -370,9 +357,14 @@ func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
 				setCtxUserid(c, claims.Subject)
 				setCtxClaims(c, claims)
 			}
-			next.ServeHTTP(c.R())
+			next.ServeHTTPCtx(c)
 		})
 	}
+}
+
+// Authenticate builds a middleware function to validate tokens and set claims
+func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
+	return governor.MiddlewareFromCtx(s.log.Logger, s.AuthenticateCtx(v, scope))
 }
 
 // Authorize authorizes a user for some given roles
@@ -419,12 +411,12 @@ func newIntersector(g Gate, userid string) Intersector {
 // Owner is a middleware function to validate if a user owns the resource
 //
 // idfunc should return true if the resource is owned by the given user
-func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.Middleware {
+func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c Context) bool {
+	return g.AuthenticateCtx(func(c Context) bool {
 		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagUser}))
 		if err != nil {
 			return false
@@ -438,7 +430,7 @@ func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) gov
 
 // OwnerParam is a middleware function to validate if a url param is the given
 // userid
-func OwnerParam(g Gate, idparam string, scope string) governor.Middleware {
+func OwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -462,8 +454,8 @@ func AuthAdmin(ctx context.Context, g Gate, userid string) (bool, error) {
 }
 
 // Admin is a middleware function to validate if a user is an admin
-func Admin(g Gate, scope string) governor.Middleware {
-	return g.Authenticate(wrapIntersector(checkAdmin), scope)
+func Admin(g Gate, scope string) governor.MiddlewareCtx {
+	return g.AuthenticateCtx(wrapIntersector(checkAdmin), scope)
 }
 
 func checkUser(ctx context.Context, r Intersector) (bool, error) {
@@ -484,20 +476,20 @@ func AuthUser(ctx context.Context, g Gate, userid string) (bool, error) {
 
 // User is a middleware function to validate if a user is authenticated and not
 // banned
-func User(g Gate, scope string) governor.Middleware {
-	return g.Authenticate(wrapIntersector(checkUser), scope)
+func User(g Gate, scope string) governor.MiddlewareCtx {
+	return g.AuthenticateCtx(wrapIntersector(checkUser), scope)
 }
 
 // OwnerOrAdmin is a middleware function to validate if the request is made by
 // the resource owner or an admin
 //
 // idfunc should return true if the resource is owned by the given user
-func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.Middleware {
+func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c Context) bool {
+	return g.AuthenticateCtx(func(c Context) bool {
 		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
 		if err != nil {
 			return false
@@ -514,7 +506,7 @@ func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope stri
 
 // OwnerOrAdminParam is a middleware function to validate if a url param is the
 // given userid or if the user is an admin
-func OwnerOrAdminParam(g Gate, idparam string, scope string) governor.Middleware {
+func OwnerOrAdminParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
@@ -557,12 +549,12 @@ func AuthMod(ctx context.Context, g Gate, userid string, modtag string) (bool, e
 // moderator of a group or an admin
 //
 // idfunc should return the group of the resource
-func ModF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.Middleware {
+func ModF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c Context) bool {
+	return g.AuthenticateCtx(func(c Context) bool {
 		modtag, isSelf, ok := idfunc(c.Ctx(), c.Userid())
 		if !ok {
 			return false
@@ -573,7 +565,7 @@ func ModF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), sc
 
 // Mod is a middleware function to validate if the request is made by a
 // moderator of the group or an admin
-func Mod(g Gate, group string, scope string) governor.Middleware {
+func Mod(g Gate, group string, scope string) governor.MiddlewareCtx {
 	if group == "" {
 		panic("group cannot be empty")
 	}
@@ -616,12 +608,12 @@ func AuthNoBan(ctx context.Context, g Gate, userid string, bantag string) (bool,
 // not banned from the group
 //
 // idfunc should return the group of the resource
-func NoBanF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.Middleware {
+func NoBanF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c Context) bool {
+	return g.AuthenticateCtx(func(c Context) bool {
 		bantag, isSelf, ok := idfunc(c.Ctx(), c.Userid())
 		if !ok {
 			return false
@@ -632,7 +624,7 @@ func NoBanF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), 
 
 // NoBan is a middleware function to validate if the request is made by a
 // user not banned from the group
-func NoBan(g Gate, group string, scope string) governor.Middleware {
+func NoBan(g Gate, group string, scope string) governor.MiddlewareCtx {
 	if group == "" {
 		panic("group cannot be empty")
 	}
@@ -676,12 +668,12 @@ func AuthMember(ctx context.Context, g Gate, userid string, tag string) (bool, e
 //
 // idfunc should return the group of the resource and whether the resource is owned by self
 // allowSelf allows the self group
-func MemberF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.Middleware {
+func MemberF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 
-	return g.Authenticate(func(c Context) bool {
+	return g.AuthenticateCtx(func(c Context) bool {
 		tag, isSelf, ok := idfunc(c.Ctx(), c.Userid())
 		if !ok {
 			return false
@@ -692,7 +684,7 @@ func MemberF(g Gate, idfunc func(governor.Context, string) (string, bool, bool),
 
 // Member is a middleware function to validate if the request is made by a
 // member of a group and check if the user is banned from the group
-func Member(g Gate, group string, scope string) governor.Middleware {
+func Member(g Gate, group string, scope string) governor.MiddlewareCtx {
 	if group == "" {
 		panic("group cannot be empty")
 	}
@@ -715,6 +707,6 @@ func AuthSystem(ctx context.Context, g Gate, userid string) (bool, error) {
 }
 
 // System is a middleware function to validate if the request is made by a system
-func System(g Gate, scope string) governor.Middleware {
-	return g.Authenticate(wrapIntersector(checkSystem), scope)
+func System(g Gate, scope string) governor.MiddlewareCtx {
+	return g.AuthenticateCtx(wrapIntersector(checkSystem), scope)
 }

@@ -39,7 +39,7 @@ func (c *Cmd) initCmd(opts Opts) {
 		Long: opts.Description + `
 
 It is built on the governor microservice framework which handles config
-management, logging, health checks, setup procedures, jobs, authentication, db,
+management, logging, health checks, setup procedures, authentication, db,
 caching, object storage, emailing, message queues and more.`,
 		Version:           opts.Version.String(),
 		DisableAutoGenTag: true,
