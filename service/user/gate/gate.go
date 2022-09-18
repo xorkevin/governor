@@ -32,6 +32,9 @@ func GetCtxUserid(c governor.Context) string {
 
 func setCtxUserid(c governor.Context, userid string) {
 	c.Set(ctxKeyUserid{}, userid)
+	c.LogFields(klog.Fields{
+		"gate.userid": userid,
+	})
 }
 
 // GetCtxClaims returns token claims from the context
@@ -237,7 +240,7 @@ func (s *service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 			if ok {
 				userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
 				if err != nil {
-					if !errors.Is(err, apikey.ErrInvalidKey{}) && !errors.Is(err, apikey.ErrNotFound{}) {
+					if !errors.Is(err, apikey.ErrorInvalidKey{}) && !errors.Is(err, apikey.ErrorNotFound{}) {
 						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
 						return
 					}

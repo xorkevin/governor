@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	// ErrFmt is returned when failing to parse human byte representations
-	ErrFmt = errors.New("Invalid byte format")
+	// ErrorFmt is returned when failing to parse human byte representations
+	ErrorFmt = errors.New("Invalid byte format")
 )
 
 // Byte constants for every 2^(10*n) bytes
@@ -29,13 +29,13 @@ func ToBytes(s string) (int64, error) {
 	i := strings.IndexFunc(s, unicode.IsLetter)
 
 	if i < 0 {
-		return 0, ErrFmt
+		return 0, ErrorFmt
 	}
 
 	bytesString, multiple := s[:i], s[i:]
 	bytes, err := strconv.ParseInt(bytesString, 10, 64)
 	if err != nil || bytes < 0 {
-		return 0, ErrFmt
+		return 0, ErrorFmt
 	}
 
 	switch multiple {
@@ -52,6 +52,6 @@ func ToBytes(s string) (int64, error) {
 	case "B":
 		return bytes, nil
 	default:
-		return 0, ErrFmt
+		return 0, ErrorFmt
 	}
 }

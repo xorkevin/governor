@@ -2,27 +2,28 @@ package apikey
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
-	// ErrNotFound is returned when an apikey is not found
-	ErrNotFound struct{}
-	// ErrInvalidKey is returned when an apikey is invalid
-	ErrInvalidKey struct{}
+	// ErrorNotFound is returned when an apikey is not found
+	ErrorNotFound struct{}
+	// ErrorInvalidKey is returned when an apikey is invalid
+	ErrorInvalidKey struct{}
 )
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "Apikey not found"
 }
 
-func (e ErrInvalidKey) Error() string {
+func (e ErrorInvalidKey) Error() string {
 	return "Invalid apikey"
 }
 
@@ -47,21 +48,15 @@ func (s *service) GetUserKeys(ctx context.Context, userid string, limit, offset 
 
 func (s *service) getKeyHash(ctx context.Context, keyid string) (string, string, error) {
 	if result, err := s.kvkey.Get(ctx, keyid); err != nil {
-		if !errors.Is(err, kvstore.ErrNotFound{}) {
-			s.logger.Error("Failed to get apikey key from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "getcacheapikey",
-			})
+		if !errors.Is(err, kvstore.ErrorNotFound{}) {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get apikey key from cache"), nil)
 		}
 	} else if result == cacheValTombstone {
-		return "", "", kerrors.WithKind(nil, ErrNotFound{}, "Apikey not found")
+		return "", "", kerrors.WithKind(nil, ErrorNotFound{}, "Apikey not found")
 	} else {
-		kvVal := keyhashKVVal{}
-		if err := json.Unmarshal([]byte(result), &kvVal); err != nil {
-			s.logger.Error("Failed to decode apikey from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "getcacheapikeydecode",
-			})
+		var kvVal keyhashKVVal
+		if err := kjson.Unmarshal([]byte(result), &kvVal); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to decode apikey from cache"), nil)
 		} else {
 			return kvVal.Hash, kvVal.Scope, nil
 		}
@@ -69,31 +64,22 @@ func (s *service) getKeyHash(ctx context.Context, keyid string) (string, string,
 
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			if err := s.kvkey.Set(ctx, keyid, cacheValTombstone, s.scopeCacheTime); err != nil {
-				s.logger.Error("Failed to set apikey key in cache", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "setcacheapikey",
-				})
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
 			}
-			return "", "", kerrors.WithKind(err, ErrNotFound{}, "Apikey not found")
+			return "", "", kerrors.WithKind(err, ErrorNotFound{}, "Apikey not found")
 		}
 		return "", "", kerrors.WithMsg(err, "Failed to get apikey")
 	}
 
-	if kvVal, err := json.Marshal(keyhashKVVal{
+	if kvVal, err := kjson.Marshal(keyhashKVVal{
 		Hash:  m.KeyHash,
 		Scope: m.Scope,
 	}); err != nil {
-		s.logger.Error("Failed to marshal json for apikey", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "cacheapikeyencode",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal json for apikey"), nil)
 	} else if err := s.kvkey.Set(ctx, keyid, string(kvVal), s.scopeCacheTime); err != nil {
-		s.logger.Error("Failed to set apikey key in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "setcacheapikey",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
 	}
 
 	return m.KeyHash, m.Scope, nil
@@ -102,7 +88,7 @@ func (s *service) getKeyHash(ctx context.Context, keyid string) (string, string,
 func (s *service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
 	userid, err := model.ParseIDUserid(keyid)
 	if err != nil {
-		return "", "", kerrors.WithKind(err, ErrInvalidKey{}, "Invalid key")
+		return "", "", kerrors.WithKind(err, ErrorInvalidKey{}, "Invalid key")
 	}
 
 	keyhash, keyscope, err := s.getKeyHash(ctx, keyid)
@@ -116,7 +102,7 @@ func (s *service) CheckKey(ctx context.Context, keyid, key string) (string, stri
 	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return "", "", kerrors.WithKind(err, ErrInvalidKey{}, "Invalid key")
+		return "", "", kerrors.WithKind(err, ErrorInvalidKey{}, "Invalid key")
 	}
 	return userid, keyscope, nil
 }
@@ -137,7 +123,9 @@ func (s *service) Insert(ctx context.Context, userid string, scope string, name,
 	if err := s.apikeys.Insert(ctx, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey")
 	}
-	s.clearCache(m.Keyid)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
 		Key:   key,
@@ -147,8 +135,8 @@ func (s *service) Insert(ctx context.Context, userid string, scope string, name,
 func (s *service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, kerrors.WithKind(err, ErrNotFound{}, "Apikey not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, kerrors.WithKind(err, ErrorNotFound{}, "Apikey not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -156,7 +144,9 @@ func (s *service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel,
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to rotate apikey")
 	}
-	s.clearCache(m.Keyid)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
 		Key:   key,
@@ -166,8 +156,8 @@ func (s *service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel,
 func (s *service) UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return kerrors.WithKind(err, ErrNotFound{}, "Apikey not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return kerrors.WithKind(err, ErrorNotFound{}, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -177,22 +167,26 @@ func (s *service) UpdateKey(ctx context.Context, keyid string, scope string, nam
 	if err := s.apikeys.UpdateProps(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to update apikey")
 	}
-	s.clearCache(m.Keyid)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, m.Keyid)
 	return nil
 }
 
 func (s *service) DeleteKey(ctx context.Context, keyid string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return kerrors.WithKind(err, ErrNotFound{}, "Apikey not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return kerrors.WithKind(err, ErrorNotFound{}, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")
 	}
 	if err := s.apikeys.Delete(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete apikey")
 	}
-	s.clearCache(m.Keyid)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, m.Keyid)
 	return nil
 }
 
@@ -203,16 +197,14 @@ func (s *service) DeleteKeys(ctx context.Context, keyids []string) error {
 	if err := s.apikeys.DeleteKeys(ctx, keyids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete apikeys")
 	}
-	s.clearCache(keyids...)
+	// must make a best effort to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, keyids...)
 	return nil
 }
 
-func (s *service) clearCache(keyids ...string) {
-	// must make a best effort to clear the cache
+func (s *service) clearCache(ctx context.Context, keyids ...string) {
 	if err := s.kvkey.Del(context.Background(), keyids...); err != nil {
-		s.logger.Error("Failed to clear keys from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "clearcacheapikey",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear keys from cache"), nil)
 	}
 }

@@ -3,7 +3,6 @@ package mail
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +20,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
@@ -596,7 +596,7 @@ func (e ErrorSendMail) Error() string {
 
 func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	var emmsg mailmsg
-	if err := json.Unmarshal(msgdata, &emmsg); err != nil {
+	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail message")
 	}
 
@@ -728,7 +728,7 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 				}
 			}
 			emdata := map[string]string{}
-			if err := json.Unmarshal([]byte(data.Emdata), &emdata); err != nil {
+			if err := kjson.Unmarshal([]byte(data.Emdata), &emdata); err != nil {
 				return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail data")
 			}
 
@@ -775,7 +775,7 @@ func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 
 	var gcpath []byte
 	if msgpath != "" {
-		b, err := json.Marshal(mailgcmsg{
+		b, err := kjson.Marshal(mailgcmsg{
 			MsgPath: msgpath,
 		})
 		if err != nil {
@@ -913,7 +913,7 @@ func genMsgID(msgiddomain string) (string, error) {
 
 func (s *service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	var gcmsg mailgcmsg
-	if err := json.Unmarshal(msgdata, &gcmsg); err != nil {
+	if err := kjson.Unmarshal(msgdata, &gcmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail gc message")
 	}
 	if err := s.sendMailDir.Del(ctx, gcmsg.MsgPath); err != nil {
@@ -935,7 +935,7 @@ func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 		return err
 	}
 
-	databytes, err := json.Marshal(emdata)
+	databytes, err := kjson.Marshal(emdata)
 	if err != nil {
 		return kerrors.WithKind(err, ErrorInvalidMail{}, "Failed to encode email data to JSON")
 	}
@@ -973,7 +973,7 @@ func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 		},
 	}
 
-	b, err := json.Marshal(msg)
+	b, err := kjson.Marshal(msg)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
@@ -1069,7 +1069,7 @@ func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		},
 	}
 
-	b, err := json.Marshal(msg)
+	b, err := kjson.Marshal(msg)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
@@ -1152,7 +1152,7 @@ func (s *service) FwdStream(ctx context.Context, retpath string, to []string, si
 		},
 	}
 
-	b, err := json.Marshal(msg)
+	b, err := kjson.Marshal(msg)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}

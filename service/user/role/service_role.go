@@ -2,10 +2,10 @@ package role
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -91,7 +91,7 @@ end:
 }
 
 func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
-	b, err := json.Marshal(RolesProps{
+	b, err := kjson.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})
@@ -111,7 +111,7 @@ func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 }
 
 func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
-	b, err := json.Marshal(RolesProps{
+	b, err := kjson.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})

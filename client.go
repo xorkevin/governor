@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 )
 
@@ -100,11 +101,11 @@ func (e ErrorServerRes) Error() string {
 func (c *Client) Request(method, path string, data interface{}, response interface{}) (int, error) {
 	var body io.Reader
 	if data != nil {
-		b := &bytes.Buffer{}
-		if err := json.NewEncoder(b).Encode(data); err != nil {
+		b, err := kjson.Marshal(data)
+		if err != nil {
 			return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed to encode body to json")
 		}
-		body = b
+		body = bytes.NewReader(b)
 	}
 	req, err := http.NewRequest(method, c.addr+path, body)
 	if body != nil {

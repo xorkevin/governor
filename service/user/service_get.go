@@ -14,10 +14,10 @@ import (
 )
 
 type (
-	ErrNotFound struct{}
+	ErrorNotFound struct{}
 )
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "User not found"
 }
 
@@ -73,7 +73,7 @@ func (s *service) getRoleSummary(ctx context.Context, userid string) (rank.Rank,
 func (s *service) GetByIDPublic(ctx context.Context, userid string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -89,8 +89,8 @@ func (s *service) GetByIDPublic(ctx context.Context, userid string) (*ResUserGet
 func (s *service) GetByID(ctx context.Context, userid string) (*ResUserGet, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
@@ -105,7 +105,7 @@ func (s *service) GetByID(ctx context.Context, userid string) (*ResUserGet, erro
 func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -121,8 +121,8 @@ func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*Re
 func (s *service) GetByUsername(ctx context.Context, username string) (*ResUserGet, error) {
 	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
@@ -137,8 +137,8 @@ func (s *service) GetByUsername(ctx context.Context, username string) (*ResUserG
 func (s *service) GetByEmail(ctx context.Context, email string) (*ResUserGet, error) {
 	m, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound{}, "User not found"), http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
@@ -324,7 +324,7 @@ const (
 // CheckUserExists is a fast check to determine if a user exists
 func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, error) {
 	if v, err := s.kvusers.Get(ctx, userid); err != nil {
-		if !errors.Is(err, kvstore.ErrNotFound{}) {
+		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.logger.Error("Failed to get user exists from cache", map[string]string{
 				"error":      err.Error(),
 				"actiontype": "user_get_cache_exists",
@@ -339,7 +339,7 @@ func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, err
 
 	exists := true
 	if _, err := s.users.GetByID(ctx, userid); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return false, kerrors.WithMsg(err, "Failed to get user")
 		}
 		exists = false
@@ -401,7 +401,7 @@ func (s *service) CheckUsersExist(ctx context.Context, userids []string) ([]stri
 		dneInCache = make([]string, 0, len(userids))
 		for n, i := range results {
 			if v, err := i.Result(); err != nil {
-				if !errors.Is(err, kvstore.ErrNotFound{}) {
+				if !errors.Is(err, kvstore.ErrorNotFound{}) {
 					s.logger.Error("Failed to get user exists from cache", map[string]string{
 						"error":      err.Error(),
 						"actiontype": "user_get_cache_exists_result",
@@ -462,7 +462,7 @@ func (s *service) GetUseridForLogin(ctx context.Context, useroremail string) (st
 	if isEmail(useroremail) {
 		m, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {
-			if errors.Is(err, db.ErrNotFound{}) {
+			if errors.Is(err, db.ErrorNotFound{}) {
 				return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 			}
 			return "", kerrors.WithMsg(err, "Failed to get user")
@@ -471,7 +471,7 @@ func (s *service) GetUseridForLogin(ctx context.Context, useroremail string) (st
 	}
 	m, err := s.users.GetByUsername(ctx, useroremail)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 		}
 		return "", kerrors.WithMsg(err, "Failed to get user")

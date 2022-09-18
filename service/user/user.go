@@ -2,15 +2,14 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 	htmlTemplate "html/template"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/ratelimit"
@@ -24,9 +23,11 @@ import (
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -120,7 +121,7 @@ type (
 		otpCipher         *otpCipher
 		aotpCipher        *atomic.Pointer[otpCipher]
 		config            governor.SecretReader
-		logger            governor.Logger
+		log               *klog.LevelLogger
 		rolens            string
 		scopens           string
 		streamns          string
@@ -286,7 +287,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxUser(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -345,12 +346,8 @@ type (
 	}
 )
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
-
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
 	var err error
@@ -446,37 +443,41 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.syschannels = c.SysChannels
 
-	l.Info("Loaded config", map[string]string{
-		"stream size (bytes)":      r.GetStr("streamsize"),
-		"event size (bytes)":       r.GetStr("eventsize"),
-		"accesstime (s)":           strconv.FormatInt(s.accessTime, 10),
-		"refreshtime (s)":          strconv.FormatInt(s.refreshTime, 10),
-		"refreshcache (s)":         strconv.FormatInt(s.refreshCacheTime, 10),
-		"confirmtime (s)":          strconv.FormatInt(s.confirmTime, 10),
-		"passwordreset":            strconv.FormatBool(s.passwordReset),
-		"passwordresettime (s)":    strconv.FormatInt(s.passwordResetTime, 10),
-		"passresetdelay (s)":       strconv.FormatInt(s.passResetDelay, 10),
-		"invitationtime (s)":       strconv.FormatInt(s.invitationTime, 10),
-		"usercachetime (s)":        strconv.FormatInt(s.userCacheTime, 10),
-		"newloginemail":            strconv.FormatBool(s.newLoginEmail),
-		"passwordminsize":          strconv.Itoa(s.passwordMinSize),
-		"userapproval":             strconv.FormatBool(s.userApproval),
-		"otpissuer":                s.otpIssuer,
-		"rolesummary":              s.rolesummary.String(),
-		"tplnameemailchange":       s.tplname.emailchange,
-		"tplnameemailchangenotify": s.tplname.emailchangenotify,
-		"tplnamepasschange":        s.tplname.passchange,
-		"tplnameforgotpass":        s.tplname.forgotpass,
-		"tplnamepassreset":         s.tplname.passreset,
-		"tplnameloginratelimit":    s.tplname.loginratelimit,
-		"tplnameotpbackupused":     s.tplname.otpbackupused,
-		"emailurlbase":             s.emailurl.base,
-		"tplemailchange":           r.GetStr("email.url.emailchange"),
-		"tplforgotpass":            r.GetStr("email.url.forgotpass"),
-		"tplnewuser":               r.GetStr("email.url.newuser"),
-		"hbinterval":               strconv.Itoa(s.hbinterval),
-		"hbmaxfail":                strconv.Itoa(s.hbmaxfail),
-		"otprefresh":               strconv.Itoa(s.otprefresh),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"user.stream.size":               r.GetStr("streamsize"),
+		"user.event.size":                r.GetStr("eventsize"),
+		"user.auth.accesstime":           s.accessTime,
+		"user.auth.refreshtime":          s.refreshTime,
+		"user.auth.refreshcache":         s.refreshCacheTime,
+		"user.confirmtime":               s.confirmTime,
+		"user.passwordresetallowed":      s.passwordReset,
+		"user.passwordresettime":         s.passwordResetTime,
+		"user.passresetdelay":            s.passResetDelay,
+		"user.invitationtime":            s.invitationTime,
+		"user.cachetime":                 s.userCacheTime,
+		"user.newlogin.email":            s.newLoginEmail,
+		"user.passwordminsize":           s.passwordMinSize,
+		"user.approvalrequired":          s.userApproval,
+		"user.otpissuer":                 s.otpIssuer,
+		"user.rolesummary":               s.rolesummary.String(),
+		"user.tplname.emailchange":       s.tplname.emailchange,
+		"user.tplname.emailchangenotify": s.tplname.emailchangenotify,
+		"user.tplname.passchange":        s.tplname.passchange,
+		"user.tplname.forgotpass":        s.tplname.forgotpass,
+		"user.tplname.passreset":         s.tplname.passreset,
+		"user.tplname.loginratelimit":    s.tplname.loginratelimit,
+		"user.tplname.otpbackupused":     s.tplname.otpbackupused,
+		"user.emailurlbase":              s.emailurl.base,
+		"user.tpl.emailchange":           r.GetStr("email.url.emailchange"),
+		"user.tpl.forgotpass":            r.GetStr("email.url.forgotpass"),
+		"user.tpl.newuser":               r.GetStr("email.url.newuser"),
+		"user.hbinterval":                s.hbinterval,
+		"user.hbmaxfail":                 s.hbmaxfail,
+		"user.otprefresh":                s.otprefresh,
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
 	})
 
 	done := make(chan struct{})
@@ -487,7 +488,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	sr.mountRoute(m.Group("/user"))
 	sr.mountAuth(m.Group(authRoutePrefix))
 	sr.mountApikey(m.Group("/apikey"))
-	l.Info("Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
@@ -524,16 +525,10 @@ func (s *service) handlePing(ctx context.Context) {
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.logger.Warn("Failed to refresh otp secrets", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_refresh_otp_secrets",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh otp secrets"), nil)
 		return
 	}
-	s.logger.Error("Failed max refresh attempts", map[string]string{
-		"error":      err.Error(),
-		"actiontype": "user_refresh_otp_secrets",
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
 	s.ready.Store(false)
 	s.hbfailed = 0
 }
@@ -544,14 +539,14 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		return kerrors.WithMsg(err, "Invalid otpkey secrets")
 	}
 	if len(otpsecrets.Keys) == 0 {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "No otpkey present")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No otpkey present")
 	}
 	decrypter := hunter2.NewDecrypter()
 	var cipher hunter2.Cipher
 	for n, i := range otpsecrets.Keys {
 		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid cipher param")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid cipher param")
 		}
 		if n == 0 {
 			if s.otpCipher != nil && s.otpCipher.cipher.ID() == c.ID() {
@@ -567,10 +562,9 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 		decrypter: decrypter,
 	}
 	s.aotpCipher.Store(s.otpCipher)
-	s.logger.Info("Refreshed otp secrets with new secrets", map[string]string{
-		"actiontype": "user_refresh_otp_secrets",
+	s.log.Info(ctx, "Refreshed otp secrets with new secrets", klog.Fields{
 		"kid":        s.otpCipher.cipher.ID(),
-		"numotpkeys": strconv.Itoa(decrypter.Size()),
+		"numotpkeys": decrypter.Size(),
 	})
 	return nil
 }
@@ -610,101 +604,48 @@ func (s *service) getCipher(ctx context.Context) (*otpCipher, error) {
 	}
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
+func (s *service) AddAdmin(ctx context.Context, req governor.ReqAddAdmin) error {
+	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
+	if err != nil {
+		return err
+	}
+
+	b, err := kjson.Marshal(NewUserProps{
+		Userid:       madmin.Userid,
+		Username:     madmin.Username,
+		Email:        madmin.Email,
+		FirstName:    madmin.FirstName,
+		LastName:     madmin.LastName,
+		CreationTime: madmin.CreationTime,
 	})
-
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init user stream")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to encode admin user props to json")
 	}
-	l.Info("Created user stream", nil)
 
-	if err := s.users.Setup(context.Background()); err != nil {
+	if err := s.users.Insert(ctx, madmin); err != nil {
 		return err
 	}
-	l.Info("Created user table", nil)
 
-	if err := s.sessions.Setup(context.Background()); err != nil {
+	// must make best effort to add roles and publish new user event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+
+	if err := s.roles.InsertRoles(ctx, madmin.Userid, rank.Admin()); err != nil {
 		return err
 	}
-	l.Info("Created usersessions table", nil)
 
-	if err := s.approvals.Setup(context.Background()); err != nil {
-		return err
+	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user"), nil)
 	}
-	l.Info("Created userapprovals table", nil)
 
-	if err := s.invitations.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created userroleinvitations table", nil)
-
-	if err := s.resets.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created userresets table", nil)
-
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "postsetup",
+	s.log.Info(ctx, "Added admin", klog.Fields{
+		"username": madmin.Username,
+		"userid":   madmin.Userid,
 	})
-
-	if a := req.Admin; req.First && a != nil {
-		madmin, err := s.users.New(a.Username, a.Password, a.Email, a.Firstname, a.Lastname)
-		if err != nil {
-			return err
-		}
-
-		b, err := json.Marshal(NewUserProps{
-			Userid:       madmin.Userid,
-			Username:     madmin.Username,
-			Email:        madmin.Email,
-			FirstName:    madmin.FirstName,
-			LastName:     madmin.LastName,
-			CreationTime: madmin.CreationTime,
-		})
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to encode admin user props to json")
-		}
-
-		if err := s.users.Insert(context.Background(), madmin); err != nil {
-			return err
-		}
-		if err := s.roles.InsertRoles(context.Background(), madmin.Userid, rank.Admin()); err != nil {
-			return err
-		}
-
-		if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
-			s.logger.Error("Failed to publish new user", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "user_publish_create_admin",
-			})
-		}
-
-		l.Info("Created admin from setup", map[string]string{
-			"actiontype": "user_create_admin",
-			"username":   madmin.Username,
-			"userid":     madmin.Userid,
-		})
-	}
 
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.UserRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -713,7 +654,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -723,51 +664,85 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
-	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
+	sysEvents := sysevent.New(s.syschannels, s.events)
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
-	l.Info("Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_RESET_GC", s.UserResetGCHook); err != nil {
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_RESET_GC", s.UserResetGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
-	l.Info("Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.UserInvitationGCHook); err != nil {
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.UserInvitationGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
-	l.Info("Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	select {
 	case <-s.done:
 		return
 	case <-ctx.Done():
-		l.Warn("Failed to stop", map[string]string{
-			"error":      ctx.Err().Error(),
-			"actiontype": "user_stop",
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init user stream")
+	}
+	s.log.Info(ctx, "Created user stream", nil)
+
+	if err := s.users.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created user table", nil)
+
+	if err := s.sessions.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created usersessions table", nil)
+
+	if err := s.approvals.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userapprovals table", nil)
+
+	if err := s.invitations.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userroleinvitations table", nil)
+
+	if err := s.resets.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userresets table", nil)
+
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig{}, "User service not ready")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "User service not ready")
 	}
 	return nil
 }
 
 func decodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 	m := &NewUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode new user props")
 	}
 	return m, nil
@@ -775,7 +750,7 @@ func decodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
 
 func decodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 	m := &DeleteUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode delete user props")
 	}
 	return m, nil
@@ -783,7 +758,7 @@ func decodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
 
 func decodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
 	m := &UpdateUserProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode update user props")
 	}
 	return m, nil
@@ -889,56 +864,26 @@ func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 	return nil
 }
 
-func (s *service) UserApprovalGCHook(ctx context.Context, topic string, msgdata []byte) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": s.syschannels.GC,
-		"group":   s.streamns + "_WORKER_APPROVAL_GC",
-	})
-	props, err := governor.DecodeSysEventTimestampProps(msgdata)
-	if err != nil {
-		l.Error(err.Error(), nil)
-		return
-	}
+func (s *service) UserApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.approvals.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
-		l.Error(err.Error(), nil)
-		return
+		return kerrors.WithMsg(err, "Failed to GC approvals")
 	}
-	l.Debug("GC user approvals", nil)
+	s.log.Info(ctx, "GC user approvals", nil)
+	return nil
 }
 
-func (s *service) UserResetGCHook(ctx context.Context, topic string, msgdata []byte) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": s.syschannels.GC,
-		"group":   s.streamns + "_WORKER_RESET_GC",
-	})
-	props, err := governor.DecodeSysEventTimestampProps(msgdata)
-	if err != nil {
-		l.Error(err.Error(), nil)
-		return
-	}
+func (s *service) UserResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.resets.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
-		l.Error(err.Error(), nil)
-		return
+		return kerrors.WithMsg(err, "Failed to GC resets")
 	}
-	l.Debug("GC user resets", nil)
+	s.log.Info(ctx, "GC user resets", nil)
+	return nil
 }
 
-func (s *service) UserInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": s.syschannels.GC,
-		"group":   s.streamns + "_WORKER_INVITATION_GC",
-	})
-	props, err := governor.DecodeSysEventTimestampProps(msgdata)
-	if err != nil {
-		l.Error(err.Error(), nil)
-		return
-	}
+func (s *service) UserInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
-		l.Error(err.Error(), nil)
-		return
+		return kerrors.WithMsg(err, "Failed to GC inviations")
 	}
-	l.Debug("GC user invitations", nil)
+	s.log.Info(ctx, "GC user invitations", nil)
+	return nil
 }

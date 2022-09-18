@@ -177,11 +177,11 @@ func FromSlice(rankSlice []string) Rank {
 }
 
 type (
-	// ErrInvalidRank is returned when a rank is invalid
-	ErrInvalidRank struct{}
+	// ErrorInvalidRank is returned when a rank is invalid
+	ErrorInvalidRank struct{}
 )
 
-func (e ErrInvalidRank) Error() string {
+func (e ErrorInvalidRank) Error() string {
 	return "Invalid rank"
 }
 
@@ -193,7 +193,7 @@ func FromString(rankStr string) (Rank, error) {
 	rankSlice := strings.Split(rankStr, ",")
 	for _, i := range rankSlice {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+			return Rank{}, kerrors.WithKind(nil, ErrorInvalidRank{}, "Illegal rank string")
 		}
 	}
 	return FromSlice(rankSlice), nil
@@ -203,12 +203,12 @@ func FromString(rankStr string) (Rank, error) {
 func SplitTag(key string) (string, string, error) {
 	prefix, tag, ok := strings.Cut(key, rankSeparator)
 	if !ok {
-		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+		return "", "", kerrors.WithKind(nil, ErrorInvalidRank{}, "Illegal rank string")
 	}
 	switch prefix {
 	case TagModPrefix, TagUserPrefix, TagBanPrefix:
 	default:
-		return "", "", kerrors.WithKind(nil, ErrInvalidRank{}, "Illegal rank string")
+		return "", "", kerrors.WithKind(nil, ErrorInvalidRank{}, "Illegal rank string")
 	}
 	return prefix, tag, nil
 }

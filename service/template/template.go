@@ -74,7 +74,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 }
 
 const (
-	tplNoMatchErrSubstring = "pattern matches no files"
+	tplNoMatchErrorSubstring = "pattern matches no files"
 )
 
 func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
@@ -82,7 +82,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	templateDir := os.DirFS(r.GetStr("dir"))
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
 	if err != nil {
-		if strings.Contains(err.Error(), tplNoMatchErrSubstring) {
+		if strings.Contains(err.Error(), tplNoMatchErrorSubstring) {
 			s.log.Warn(ctx, "No txt templates loaded", klog.Fields{
 				"tpl.local.txtfile.pattern": r.GetStr("txtglob"),
 			})
@@ -94,7 +94,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.tt = tt
 	ht, err := htmlTemplate.ParseFS(templateDir, r.GetStr("htmlglob"))
 	if err != nil {
-		if strings.Contains(err.Error(), tplNoMatchErrSubstring) {
+		if strings.Contains(err.Error(), tplNoMatchErrorSubstring) {
 			s.log.Warn(ctx, "No html templates loaded", klog.Fields{
 				"tpl.local.htmlfile.pattern": r.GetStr("htmlglob"),
 			})

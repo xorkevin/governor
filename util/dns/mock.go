@@ -29,17 +29,17 @@ type (
 )
 
 type (
-	// ErrNotFound is returned when a record is not found
-	ErrNotFound struct{}
-	// ErrInvalid is returned when a record is invalid
-	ErrInvalid struct{}
+	// ErrorNotFound is returned when a record is not found
+	ErrorNotFound struct{}
+	// ErrorInvalid is returned when a record is invalid
+	ErrorInvalid struct{}
 )
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "DNS record not found"
 }
 
-func (e ErrInvalid) Error() string {
+func (e ErrorInvalid) Error() string {
 	return "DNS record is invalid"
 }
 
@@ -75,13 +75,13 @@ func NewMockResolverFromFile(s string) (Resolver, error) {
 }
 
 func (r *MockResolver) LookupAddr(ctx context.Context, addr string) ([]string, error) {
-	return nil, ErrNotFound{}
+	return nil, ErrorNotFound{}
 }
 
 func (r *MockResolver) LookupCNAME(ctx context.Context, host string) (cname string, err error) {
 	z, ok := r.Zones[FQDN(host)]
 	if !ok {
-		return "", ErrNotFound{}
+		return "", ErrorNotFound{}
 	}
 	return z.CNAME, nil
 }
@@ -90,13 +90,13 @@ func (r *MockResolver) targetZone(name string) (MockZone, error) {
 	name = FQDN(name)
 	z, ok := r.Zones[name]
 	if !ok {
-		return MockZone{}, ErrNotFound{}
+		return MockZone{}, ErrorNotFound{}
 	}
 	for z.CNAME != "" {
 		name = z.CNAME
 		z, ok = r.Zones[name]
 		if !ok {
-			return MockZone{}, ErrNotFound{}
+			return MockZone{}, ErrorNotFound{}
 		}
 	}
 	return z, nil
@@ -111,7 +111,7 @@ func (r *MockResolver) LookupHost(ctx context.Context, host string) ([]string, e
 	res = append(res, z.A...)
 	res = append(res, z.AAAA...)
 	if len(res) == 0 {
-		return nil, ErrNotFound{}
+		return nil, ErrorNotFound{}
 	}
 	return res, err
 }
@@ -125,7 +125,7 @@ func (r *MockResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPA
 	for _, i := range addrs {
 		ip := net.ParseIP(i)
 		if ip == nil {
-			return nil, fmt.Errorf("%w: invalid IP %s", ErrInvalid{}, i)
+			return nil, fmt.Errorf("%w: invalid IP %s", ErrorInvalid{}, i)
 		}
 		res = append(res, net.IPAddr{IP: ip})
 	}

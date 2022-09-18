@@ -2,7 +2,6 @@ package role
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/role/model"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -176,7 +176,7 @@ func (s *service) Health(ctx context.Context) error {
 
 func decodeRolesProps(msgdata []byte) (*RolesProps, error) {
 	m := &RolesProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode roles props")
 	}
 	return m, nil

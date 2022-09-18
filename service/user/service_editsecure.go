@@ -15,6 +15,7 @@ import (
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -69,7 +70,7 @@ func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) e
 // UpdateEmail creates a pending user email update
 func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail string, password string) error {
 	if _, err := s.users.GetByEmail(ctx, newEmail); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -77,7 +78,7 @@ func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail strin
 	}
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -94,7 +95,7 @@ func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail strin
 	needInsert := false
 	mr, err := s.resets.GetByID(ctx, m.Userid, kindResetEmail)
 	if err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 		needInsert = true
@@ -133,7 +134,7 @@ func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail strin
 func (s *service) CommitEmail(ctx context.Context, userid string, key string, password string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetEmail)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "New email verification expired")
 		}
 		return kerrors.WithMsg(err, "Failed to get email reset request")
@@ -150,7 +151,7 @@ func (s *service) CommitEmail(ctx context.Context, userid string, key string, pa
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -170,7 +171,7 @@ func (s *service) CommitEmail(ctx context.Context, userid string, key string, pa
 	}
 
 	if err = s.users.UpdateEmail(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Email is already in use by another account")
 		}
 		return kerrors.WithMsg(err, "Failed to update email")
@@ -182,11 +183,9 @@ func (s *service) CommitEmail(ctx context.Context, userid string, key string, pa
 		Username:  m.Username,
 	}
 	// must make a best effort attempt to send the email
-	if err := s.mailer.SendTpl(context.Background(), "", mail.Addr{}, []mail.Addr{{Address: oldEmail, Name: m.FirstName}}, mail.TplLocal(s.tplname.emailchangenotify), emdatanotify, false); err != nil {
-		s.logger.Error("Failed to send old email change notification", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_email_oldmail",
-		})
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: oldEmail, Name: m.FirstName}}, mail.TplLocal(s.tplname.emailchangenotify), emdatanotify, false); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send old email change notification"), nil)
 	}
 	return nil
 }
@@ -245,7 +244,7 @@ func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) er
 func (s *service) UpdatePassword(ctx context.Context, userid string, newPassword string, oldPassword string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -265,11 +264,9 @@ func (s *service) UpdatePassword(ctx context.Context, userid string, newPassword
 		Username:  m.Username,
 	}
 	// must make best effort attempt to send the email
-	if err := s.mailer.SendTpl(context.Background(), "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.passchange), emdata, false); err != nil {
-		s.logger.Error("Failed to send password change notification email", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_update_password_email",
-		})
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.passchange), emdata, false); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send password change notification email"), nil)
 	}
 	return nil
 }
@@ -284,7 +281,7 @@ func (s *service) ForgotPassword(ctx context.Context, useroremail string) error 
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {
-			if errors.Is(err, db.ErrNotFound{}) {
+			if errors.Is(err, db.ErrorNotFound{}) {
 				// prevent email scanning for unauthorized users
 				return nil
 			}
@@ -294,7 +291,7 @@ func (s *service) ForgotPassword(ctx context.Context, useroremail string) error 
 	} else {
 		mu, err := s.users.GetByUsername(ctx, useroremail)
 		if err != nil {
-			if errors.Is(err, db.ErrNotFound{}) {
+			if errors.Is(err, db.ErrorNotFound{}) {
 				return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 			}
 			return kerrors.WithMsg(err, "Failed to get user")
@@ -305,16 +302,15 @@ func (s *service) ForgotPassword(ctx context.Context, useroremail string) error 
 	needInsert := false
 	mr, err := s.resets.GetByID(ctx, m.Userid, kindResetPass)
 	if err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetPass)
 	} else {
 		if time.Now().Round(0).Unix() < mr.CodeTime+s.passResetDelay {
-			s.logger.Warn("Forgot password called prior to delay end", map[string]string{
-				"actiontype": "resetpassworddelay",
-				"userid":     m.Userid,
+			s.log.Warn(ctx, "Forgot password called prior to delay end", klog.Fields{
+				"userid": m.Userid,
 			})
 			return nil
 		}
@@ -353,7 +349,7 @@ func (s *service) ForgotPassword(ctx context.Context, useroremail string) error 
 func (s *service) ResetPassword(ctx context.Context, userid string, key string, newPassword string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetPass)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Password reset expired")
 		}
 		return kerrors.WithMsg(err, "Failed to get password reset request")
@@ -370,7 +366,7 @@ func (s *service) ResetPassword(ctx context.Context, userid string, key string, 
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -390,11 +386,9 @@ func (s *service) ResetPassword(ctx context.Context, userid string, key string, 
 		Username:  m.Username,
 	}
 	// must make best effort attempt to send the email
-	if err := s.mailer.SendTpl(context.Background(), "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.passreset), emdata, false); err != nil {
-		s.logger.Error("Failed to send password change notification email", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_email_reset_password",
-		})
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.passreset), emdata, false); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send password change notification email"), nil)
 	}
 	return nil
 }
@@ -430,7 +424,7 @@ type (
 func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits int, password string) (*resAddOTP, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -462,7 +456,7 @@ func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits 
 func (s *service) CommitOTP(ctx context.Context, userid string, code string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -504,10 +498,11 @@ func (s *service) checkLoginRatelimit(ctx context.Context, m *model.Model) error
 }
 
 type (
-	ErrAuthenticate struct{}
+	// ErrorAuthenticate is returned when failing to authenticate
+	ErrorAuthenticate struct{}
 )
 
-func (e ErrAuthenticate) Error() string {
+func (e ErrorAuthenticate) Error() string {
 	return "Failed authenticating"
 }
 
@@ -520,7 +515,7 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 		if ok, err := s.users.ValidateOTPBackup(cipher.decrypter, m, backup); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp backup code")
 		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, ErrAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
+			return governor.ErrWithRes(kerrors.WithKind(nil, ErrorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
 		}
 
 		emdata := emailOTPBackupUsed{
@@ -532,19 +527,14 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 			UserAgent: useragent,
 		}
 		// must make best effort attempt to send the email
-		if err := s.mailer.SendTpl(context.Background(), "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.otpbackupused), emdata, false); err != nil {
-			s.logger.Error("Failed to send otp backup used email", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "user_email_otp_backup_used",
-			})
+		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.otpbackupused), emdata, false); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp backup used email"), nil)
 		}
 	} else {
 		if _, err := s.kvotpcodes.Get(ctx, s.kvotpcodes.Subkey(m.Userid, code)); err != nil {
-			if !errors.Is(err, kvstore.ErrNotFound{}) {
-				s.logger.Error("Failed to get user used otp code", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "getuserotpcode",
-				})
+			if !errors.Is(err, kvstore.ErrorNotFound{}) {
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user used otp code"), nil)
 			}
 		} else {
 			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code already used")
@@ -556,34 +546,26 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 		if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp code")
 		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, ErrAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")
+			return governor.ErrWithRes(kerrors.WithKind(nil, ErrorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")
 		}
 	}
 	return nil
 }
 
-func (s *service) markOTPCode(userid string, code string) {
-	// must make a best effort to mark otp code as used
-	if err := s.kvotpcodes.Set(context.Background(), s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
-		s.logger.Error("Failed to mark otp code as used", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "markuserotpcode",
-		})
+func (s *service) markOTPCode(ctx context.Context, userid string, code string) {
+	if err := s.kvotpcodes.Set(ctx, s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark otp code as used"), nil)
 	}
 }
 
-func (s *service) incrLoginFailCount(m *model.Model, ipaddr, useragent string) {
-	// must make a best effort to increment login failures
+func (s *service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr, useragent string) {
 	m.FailedLoginTime = time.Now().Round(0).Unix()
 	if m.FailedLoginCount < 0 {
 		m.FailedLoginCount = 0
 	}
 	m.FailedLoginCount += 1
-	if err := s.users.UpdateLoginFailed(context.Background(), m); err != nil {
-		s.logger.Error("Failed to update login failure count", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_incr_login_fail_count",
-		})
+	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to update login failure count"), nil)
 	}
 
 	if m.FailedLoginCount%8 == 0 {
@@ -595,24 +577,17 @@ func (s *service) incrLoginFailCount(m *model.Model, ipaddr, useragent string) {
 			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC3339),
 			UserAgent: useragent,
 		}
-		if err := s.mailer.SendTpl(context.Background(), "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.loginratelimit), emdata, false); err != nil {
-			s.logger.Error("Failed to send otp ratelimit email", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "user_email_login_ratelimit",
-			})
+		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.loginratelimit), emdata, false); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp ratelimit email"), nil)
 		}
 	}
 }
 
-func (s *service) resetLoginFailCount(m *model.Model) {
-	// must make a best effort to reset login failures
+func (s *service) resetLoginFailCount(ctx context.Context, m *model.Model) {
 	m.FailedLoginTime = 0
 	m.FailedLoginCount = 0
 	if err := s.users.UpdateLoginFailed(context.Background(), m); err != nil {
-		s.logger.Error("Failed to reset login failure count", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_reset_login_fail_count",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to reset login failure count"), nil)
 	}
 }
 
@@ -620,7 +595,7 @@ func (s *service) resetLoginFailCount(m *model.Model) {
 func (s *service) RemoveOTP(ctx context.Context, userid string, code string, backup string, password string, ipaddr, useragent string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")

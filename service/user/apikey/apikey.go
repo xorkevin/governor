@@ -2,13 +2,13 @@ package apikey
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/model"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -36,7 +36,7 @@ type (
 	service struct {
 		apikeys        model.Repo
 		kvkey          kvstore.KVStore
-		logger         governor.Logger
+		log            *klog.LevelLogger
 		scopeCacheTime int64
 	}
 
@@ -73,17 +73,14 @@ func New(apikeys model.Repo, kv kvstore.KVStore) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxApikeys(inj, s)
 
 	r.SetDefault("scopecache", "24h")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse scope cache time")
@@ -91,27 +88,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.scopeCacheTime = int64(t / time.Second)
 	}
 
-	l.Info("loaded config", map[string]string{
-		"scopecache (s)": strconv.FormatInt(s.scopeCacheTime, 10),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"apikey.scopecache": s.scopeCacheTime,
 	})
 
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-
-	if err := s.apikeys.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("created userapikeys table", nil)
-
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
 	return nil
 }
 
@@ -122,6 +102,15 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.apikeys.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userapikeys table", nil)
+
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }

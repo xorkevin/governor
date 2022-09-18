@@ -6,13 +6,13 @@ import (
 )
 
 type (
-	healthErrRes struct {
+	healthErrorRes struct {
 		Message string `json:"message"`
 	}
 
 	healthRes struct {
-		Time int64          `json:"time"`
-		Errs []healthErrRes `json:"errs"`
+		Time int64            `json:"time"`
+		Errs []healthErrorRes `json:"errs"`
 	}
 )
 
@@ -25,9 +25,9 @@ func (s *Server) initHealth(r Router) {
 	m.GetCtx("/ready", func(c Context) {
 		t := time.Now().Round(0).Unix()
 		errs := s.checkHealthServices(c.Ctx())
-		errReslist := make([]healthErrRes, 0, len(errs))
+		errReslist := make([]healthErrorRes, 0, len(errs))
 		for _, i := range errs {
-			errReslist = append(errReslist, healthErrRes{
+			errReslist = append(errReslist, healthErrorRes{
 				Message: i.Error(),
 			})
 		}
