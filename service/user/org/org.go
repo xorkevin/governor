@@ -17,6 +17,7 @@ import (
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -43,7 +44,7 @@ type (
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
-		logger      governor.Logger
+		log         *klog.LevelLogger
 		scopens     string
 		streamns    string
 		opts        svcOpts
@@ -53,7 +54,7 @@ type (
 
 	router struct {
 		s  *service
-		rt governor.Middleware
+		rt governor.MiddlewareCtx
 	}
 
 	// DeleteOrgProps are properties of a deleted org
@@ -106,7 +107,7 @@ func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, 
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOrgs(inj, s)
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
@@ -123,15 +124,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 func (s *service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.Base(),
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -144,51 +142,20 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.eventsize = int32(eventsize)
 
-	l.Info("Loaded config", map[string]string{
-		"stream size (bytes)": r.GetStr("streamsize"),
-		"event size (bytes)":  r.GetStr("eventsize"),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"org.stream.size": r.GetStr("streamsize"),
+		"org.event.size":  r.GetStr("eventsize"),
 	})
 
 	sr := s.router()
 	sr.mountRoute(m)
-	l.Info("Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes", nil)
 
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init org stream")
-	}
-	l.Info("Created org stream", nil)
-
-	if err := s.orgs.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created userorgs table", nil)
-
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
-	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.OrgRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.orgRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -196,9 +163,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
-	l.Info("Subscribed to org delete queue", nil)
+	s.log.Info(ctx, "Subscribed to org delete queue", nil)
 
-	if _, err := s.roles.StreamSubscribeCreate(s.streamns+"_WORKER_USER_ROLE_CREATE", s.UserRoleCreate, events.StreamConsumerOpts{
+	if _, err := s.roles.StreamSubscribeCreate(s.streamns+"_WORKER_USER_ROLE_CREATE", s.userRoleCreate, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -206,9 +173,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user role create queue")
 	}
-	l.Info("Subscribed to user role create queue", nil)
+	s.log.Info(ctx, "Subscribed to user role create queue", nil)
 
-	if _, err := s.roles.StreamSubscribeDelete(s.streamns+"_WORKER_USER_ROLE_DELETE", s.UserRoleDelete, events.StreamConsumerOpts{
+	if _, err := s.roles.StreamSubscribeDelete(s.streamns+"_WORKER_USER_ROLE_DELETE", s.userRoleDelete, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -216,9 +183,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user role delete queue")
 	}
-	l.Info("Subscribed to user role delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user role delete queue", nil)
 
-	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_USER_UPDATE", s.UserUpdateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_USER_UPDATE", s.userUpdateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -226,7 +193,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}
-	l.Info("Subscribed to user update queue", nil)
+	s.log.Info(ctx, "Subscribed to user update queue", nil)
 
 	return nil
 }
@@ -234,7 +201,26 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init org stream")
+	}
+	s.log.Info(ctx, "Created org stream", nil)
+
+	if err := s.orgs.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created userorgs table", nil)
+
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -264,8 +250,7 @@ const (
 	roleDeleteBatchSize = 256
 )
 
-// OrgRoleDeleteHook deletes the roles of a deleted org
-func (s *service) OrgRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error {
+func (s *service) orgRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error {
 	orgrole := rank.ToOrgName(props.OrgID)
 	usrOrgrole := rank.ToUsrName(orgrole)
 	modOrgrole := rank.ToModName(orgrole)
@@ -314,10 +299,10 @@ func (s *service) OrgRoleDeleteHook(ctx context.Context, pinger events.Pinger, p
 	return nil
 }
 
-func (s *service) UserRoleCreate(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
+func (s *service) userRoleCreate(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
 	u, err := s.users.GetByID(ctx, props.Userid)
 	if err != nil {
-		if errors.Is(err, user.ErrNotFound{}) {
+		if errors.Is(err, user.ErrorNotFound{}) {
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -381,7 +366,7 @@ func (s *service) UserRoleCreate(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-func (s *service) UserRoleDelete(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
+func (s *service) userRoleDelete(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
 	memberorgids := make([]string, 0, len(props.Roles))
 	modorgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
@@ -404,8 +389,7 @@ func (s *service) UserRoleDelete(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-// UserUpdateHook updates a user name
-func (s *service) UserUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+func (s *service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
 	if err := s.orgs.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update member username")
 	}

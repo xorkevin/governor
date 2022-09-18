@@ -14,10 +14,10 @@ import (
 )
 
 type (
-	ErrNotFound struct{}
+	ErrorNotFound struct{}
 )
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "Org not found"
 }
 
@@ -47,8 +47,8 @@ type (
 func (s *service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "Org not found"), http.StatusNotFound, "", "Org not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound{}, "Org not found"), http.StatusNotFound, "", "Org not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -64,8 +64,8 @@ func (s *service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 func (s *service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
 	m, err := s.orgs.GetByName(ctx, name)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound{}, "Org not found"), http.StatusNotFound, "", "Org not found")
+		if errors.Is(err, db.ErrorNotFound{}) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound{}, "Org not found"), http.StatusNotFound, "", "Org not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -78,7 +78,7 @@ func (s *service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
 	}, nil
 }
 
-func (s *service) GetOrgs(ctx context.Context, orgids []string) (*resOrgs, error) {
+func (s *service) getOrgs(ctx context.Context, orgids []string) (*resOrgs, error) {
 	m, err := s.orgs.GetOrgs(ctx, orgids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
@@ -98,7 +98,7 @@ func (s *service) GetOrgs(ctx context.Context, orgids []string) (*resOrgs, error
 	}, nil
 }
 
-func (s *service) GetAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, error) {
+func (s *service) getAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, error) {
 	m, err := s.orgs.GetAllOrgs(ctx, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
@@ -118,7 +118,7 @@ func (s *service) GetAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, 
 	}, nil
 }
 
-func (s *service) GetOrgMembers(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
+func (s *service) getOrgMembers(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
 	m, err := s.orgs.GetOrgMembers(ctx, orgid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org members")
@@ -135,7 +135,7 @@ func (s *service) GetOrgMembers(ctx context.Context, orgid string, prefix string
 	}, nil
 }
 
-func (s *service) GetOrgMods(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
+func (s *service) getOrgMods(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
 	m, err := s.orgs.GetOrgMods(ctx, orgid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org mods")
@@ -180,7 +180,7 @@ func (s *service) getOrgsByID(ctx context.Context, orgids []string) (*resOrgs, e
 	}, nil
 }
 
-func (s *service) GetUserOrgs(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
+func (s *service) getUserOrgs(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
 	orgids, err := s.orgs.GetUserOrgs(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user orgs")
@@ -188,7 +188,7 @@ func (s *service) GetUserOrgs(ctx context.Context, userid string, prefix string,
 	return s.getOrgsByID(ctx, orgids)
 }
 
-func (s *service) GetUserMods(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
+func (s *service) getUserMods(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
 	orgids, err := s.orgs.GetUserMods(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user mod orgs")
@@ -196,13 +196,13 @@ func (s *service) GetUserMods(ctx context.Context, userid string, prefix string,
 	return s.getOrgsByID(ctx, orgids)
 }
 
-func (s *service) CreateOrg(ctx context.Context, userid, displayName, desc string) (*ResOrg, error) {
+func (s *service) createOrg(ctx context.Context, userid, displayName, desc string) (*ResOrg, error) {
 	m, err := s.orgs.New(displayName, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create org")
 	}
 	if err := s.orgs.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Org name must be unique")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to insert org")
@@ -220,10 +220,10 @@ func (s *service) CreateOrg(ctx context.Context, userid, displayName, desc strin
 	}, nil
 }
 
-func (s *service) UpdateOrg(ctx context.Context, orgid, name, displayName, desc string) error {
+func (s *service) updateOrg(ctx context.Context, orgid, name, displayName, desc string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Org not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get org")
@@ -233,7 +233,7 @@ func (s *service) UpdateOrg(ctx context.Context, orgid, name, displayName, desc 
 	m.DisplayName = displayName
 	m.Desc = desc
 	if err := s.orgs.Update(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Org name must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update org")
@@ -246,10 +246,10 @@ func (s *service) UpdateOrg(ctx context.Context, orgid, name, displayName, desc 
 	return nil
 }
 
-func (s *service) DeleteOrg(ctx context.Context, orgid string) error {
+func (s *service) deleteOrg(ctx context.Context, orgid string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Org not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get org")

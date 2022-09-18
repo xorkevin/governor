@@ -3,7 +3,6 @@ package oauth
 import (
 	"context"
 	htmlTemplate "html/template"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -55,7 +55,7 @@ type (
 		events       events.Events
 		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
-		logger       governor.Logger
+		log          *klog.LevelLogger
 		rolens       string
 		scopens      string
 		streamns     string
@@ -139,7 +139,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOAuth(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -162,11 +162,8 @@ func (s *service) router() *router {
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse code time")
@@ -211,60 +208,30 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.tplpicture = t
 	}
 
-	l.Info("Loaded config", map[string]string{
-		"codetime (s)":           strconv.FormatInt(s.codeTime, 10),
-		"accesstime (s)":         strconv.FormatInt(s.accessTime, 10),
-		"refreshtime (s)":        strconv.FormatInt(s.refreshTime, 10),
-		"keycache (s)":           strconv.FormatInt(s.keyCacheTime, 10),
-		"issuer":                 s.issuer,
-		"authorization_endpoint": s.epauth,
-		"token_endpoint":         s.eptoken,
-		"userinfo_endpoint":      s.epuserinfo,
-		"jwks_uri":               s.epjwks,
-		"profile_endpoint":       r.GetStr("epprofile"),
-		"picture_endpoint":       r.GetStr("eppicture"),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"oauth.codetime":               s.codeTime,
+		"oauth.accesstime":             s.accessTime,
+		"oauth.refreshtime":            s.refreshTime,
+		"oauth.keycache":               s.keyCacheTime,
+		"oauth.issuer":                 s.issuer,
+		"oauth.authorization_endpoint": s.epauth,
+		"oauth.token_endpoint":         s.eptoken,
+		"oauth.userinfo_endpoint":      s.epuserinfo,
+		"oauth.jwks_uri":               s.epjwks,
+		"oauth.profile_endpoint":       r.GetStr("epprofile"),
+		"oauth.picture_endpoint":       r.GetStr("eppicture"),
 	})
 
 	sr := s.router()
 	sr.mountOidRoutes(m)
 	sr.mountAppRoutes(m.Group("/app"))
-	l.Info("Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes", nil)
 
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-
-	if err := s.apps.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created oauthapps table", nil)
-
-	if err := s.connections.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created oauthconnections table", nil)
-
-	if err := s.oauthBucket.Init(context.Background()); err != nil {
-		return kerrors.WithMsg(err, "Failed to init oauth bucket")
-	}
-	l.Info("Created oauth bucket", nil)
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -272,19 +239,37 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.apps.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created oauthapps table", nil)
+
+	if err := s.connections.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created oauthconnections table", nil)
+
+	if err := s.oauthBucket.Init(ctx); err != nil {
+		return kerrors.WithMsg(err, "Failed to init oauth bucket")
+	}
+	s.log.Info(ctx, "Created oauth bucket", nil)
+
 	return nil
 }
 
-// UserDeleteHook deletes the oauth connections of a deleted user
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *service) Health(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.DeleteUserConnections(ctx, props.Userid); err != nil {
 		return err
 	}

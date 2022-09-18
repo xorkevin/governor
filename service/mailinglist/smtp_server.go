@@ -24,6 +24,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
+	"xorkevin.dev/klog"
 )
 
 var (
@@ -131,7 +132,7 @@ var (
 
 type smtpBackend struct {
 	service *service
-	logger  governor.Logger
+	log     *klog.LevelLogger
 }
 
 func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {

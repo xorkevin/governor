@@ -19,6 +19,7 @@ import (
 	"xorkevin.dev/governor/util/dns"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -41,7 +42,7 @@ type (
 		orgs         org.Orgs
 		mailer       mail.Mailer
 		gate         gate.Gate
-		logger       governor.Logger
+		log          *klog.LevelLogger
 		scopens      string
 		streamns     string
 		opts         svcOpts
@@ -115,7 +116,7 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailingList(inj, s)
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
@@ -145,28 +146,25 @@ func (s *service) router() *router {
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	s.port = r.GetStr("port")
 	s.authdomain = r.GetStr("authdomain")
 	s.usrdomain = r.GetStr("usrdomain")
 	s.orgdomain = r.GetStr("orgdomain")
 	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
-		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid mail max message size")
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mail max message size")
 	} else {
 		s.maxmsgsize = int(limit)
 	}
 	if t, err := time.ParseDuration(r.GetStr("readtimeout")); err != nil {
-		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid read timeout for mail server")
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid read timeout for mail server")
 	} else {
 		s.readtimeout = t
 	}
 	if t, err := time.ParseDuration(r.GetStr("writetimeout")); err != nil {
-		return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid write timeout for mail server")
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid write timeout for mail server")
 	} else {
 		s.writetimeout = t
 	}
@@ -175,10 +173,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 		var err error
 		s.resolver, err = dns.NewMockResolverFromFile(src)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrInvalidConfig{}, "Invalid mockdns source")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mockdns source")
 		}
-		l.Info("Use mockdns", map[string]string{
-			"source": src,
+		s.log.Info(ctx, "Use mockdns", klog.Fields{
+			"mailinglist.mockdns.source": src,
 		})
 	}
 
@@ -193,30 +191,32 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.eventsize = int32(eventsize)
 
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"mailinglist.smtp.port":    s.port,
+		"mailinglist.authdomain":   s.authdomain,
+		"mailinglist.usrdomain":    s.usrdomain,
+		"mailinglist.orgdomain":    s.orgdomain,
+		"mailinglist.maxmsgsize":   r.GetStr("maxmsgsize"),
+		"mailinglist.readtimeout":  r.GetStr("readtimeout"),
+		"mailinglist.writetimeout": r.GetStr("writetimeout"),
+		"mailinglist.stream.size":  r.GetStr("streamsize"),
+		"mailinglist.event.size":   r.GetStr("eventsize"),
+	})
+
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.service.phase": "run",
+	})
+
 	s.server = s.createSMTPServer()
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil {
-			s.logger.Info("Shutting down mailing list SMTP server", map[string]string{
-				"error": err.Error(),
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down mailinglist SMTP server"), nil)
 		}
 	}()
 
-	l.Info("Loaded config", map[string]string{
-		"port":                s.port,
-		"authdomain":          r.GetStr("authdomain"),
-		"usrdomain":           r.GetStr("usrdomain"),
-		"orgdomain":           r.GetStr("orgdomain"),
-		"maxmsgsize (bytes)":  r.GetStr("maxmsgsize"),
-		"read timeout":        r.GetStr("readtimeout"),
-		"write timeout":       r.GetStr("writetimeout"),
-		"stream size (bytes)": r.GetStr("streamsize"),
-		"event size (bytes)":  r.GetStr("eventsize"),
-	})
-
 	sr := s.router()
 	sr.mountRoutes(m)
-	l.Info("Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes", nil)
 
 	return nil
 }
@@ -224,9 +224,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 func (s *service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service: s,
-		logger: s.logger.WithData(map[string]string{
-			"agent": "mailinglist_smtp_server",
-		}),
+		log:     klog.NewLevelLogger(s.log.Logger.Sublogger("smtpserver", nil)),
 	}
 	server := smtp.NewServer(be)
 	server.Addr = ":" + s.port
@@ -239,39 +237,7 @@ func (s *service) createSMTPServer() *smtp.Server {
 	return server
 }
 
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-	if err := s.lists.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created mailing list tables", nil)
-	if err := s.mailBucket.Init(context.Background()); err != nil {
-		return kerrors.WithMsg(err, "Failed to init mail bucket")
-	}
-	l.Info("Created mail bucket", nil)
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init mail stream")
-	}
-	l.Info("Created mail stream", nil)
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
-	return nil
-}
-
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
@@ -280,7 +246,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
 	}
-	l.Info("Subscribed to mail queue", nil)
+	s.log.Info(ctx, "Subscribed to mail queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.SendChannel, s.streamns+"SEND_WORKER", s.sendSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
@@ -290,7 +256,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail send queue")
 	}
-	l.Info("Subscribed to send queue", nil)
+	s.log.Info(ctx, "Subscribed to send queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DelChannel, s.streamns+"_DEL_WORKER", s.deleteSubscriber, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -300,9 +266,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to list delete queue")
 	}
-	l.Info("Subscribed to list delete queue", nil)
+	s.log.Info(ctx, "Subscribed to list delete queue", nil)
 
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -310,9 +276,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
-	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.OrgDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -320,33 +286,48 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
-	l.Info("Subscribed to org delete queue", nil)
+	s.log.Info(ctx, "Subscribed to org delete queue", nil)
 
 	return nil
 }
 
 func (s *service) Stop(ctx context.Context) {
-	l := s.logger.WithData(map[string]string{
-		"phase": "stop",
-	})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		if err := s.server.Close(); err != nil {
-			l.Error("Shutdown mailing list SMTP server error", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "mailinglist_close_smtp_server",
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Shutdown mailing list SMTP server error"), nil)
 		}
 	}()
 	select {
 	case <-done:
 	case <-ctx.Done():
-		l.Warn("Failed to stop", nil)
+		s.log.Err(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.lists.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created mailing list tables", nil)
+	if err := s.mailBucket.Init(ctx); err != nil {
+		return kerrors.WithMsg(err, "Failed to init mail bucket")
+	}
+	s.log.Info(ctx, "Created mail bucket", nil)
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init mail stream")
+	}
+	s.log.Info(ctx, "Created mail stream", nil)
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -354,17 +335,14 @@ const (
 	listDeleteBatchSize = 256
 )
 
-// UserDeleteHook deletes the roles of a deleted user
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	return s.creatorDeleteHook(ctx, pinger, props.Userid)
 }
 
-// OrgDeleteHook deletes the roles of a deleted org
-func (s *service) OrgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
+func (s *service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
 	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
 }
 
-// creatorDeleteHook deletes the mailinglists of a deleted creator
 func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
