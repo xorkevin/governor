@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel reqGetProfiles
@@ -20,10 +21,9 @@ type (
 	}
 )
 
-func (m *router) createProfile(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqProfileModel{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createProfile(c governor.Context) {
+	var req reqProfileModel
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -33,7 +33,7 @@ func (m *router) createProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateProfile(c.Ctx(), req.Userid, req.Email, req.Bio)
+	res, err := s.s.createProfile(c.Ctx(), req.Userid, req.Email, req.Bio)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -42,10 +42,9 @@ func (m *router) createProfile(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (m *router) updateProfile(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqProfileModel{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateProfile(c governor.Context) {
+	var req reqProfileModel
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -55,7 +54,7 @@ func (m *router) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateProfile(c.Ctx(), req.Userid, req.Email, req.Bio); err != nil {
+	if err := s.s.updateProfile(c.Ctx(), req.Userid, req.Email, req.Bio); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -69,9 +68,8 @@ type (
 	}
 )
 
-func (m *router) updateImage(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	img, err := image.LoadImage(m.s.logger, c, "image")
+func (s *router) updateImage(c governor.Context) {
+	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -85,7 +83,7 @@ func (m *router) updateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateImage(c.Ctx(), req.Userid, img); err != nil {
+	if err := s.s.updateImage(c.Ctx(), req.Userid, img); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -93,8 +91,7 @@ func (m *router) updateImage(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteProfile(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteProfile(c governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -103,7 +100,7 @@ func (m *router) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteProfile(c.Ctx(), req.Userid); err != nil {
+	if err := s.s.deleteProfile(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -111,12 +108,11 @@ func (m *router) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) getOwnProfile(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getOwnProfile(c governor.Context) {
 	req := reqProfileGetID{
 		Userid: gate.GetCtxUserid(c),
 	}
-	res, err := m.s.GetProfile(c.Ctx(), req.Userid)
+	res, err := s.s.getProfile(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -125,8 +121,7 @@ func (m *router) getOwnProfile(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getProfile(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getProfile(c governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -135,7 +130,7 @@ func (m *router) getProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetProfile(c.Ctx(), req.Userid)
+	res, err := s.s.getProfile(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -144,8 +139,7 @@ func (m *router) getProfile(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getProfileImage(c governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -154,17 +148,14 @@ func (m *router) getProfileImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, contentType, err := m.s.GetProfileImage(c.Ctx(), req.Userid)
+	image, contentType, err := s.s.getProfileImage(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	defer func() {
 		if err := image.Close(); err != nil {
-			m.s.logger.Error("Failed to close profile image", map[string]string{
-				"actiontype": "profile_get_image",
-				"error":      err.Error(),
-			})
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close profile image"), nil)
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, image)
@@ -176,8 +167,7 @@ type (
 	}
 )
 
-func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getProfilesBulk(c governor.Context) {
 	req := reqGetProfiles{
 		Userids: strings.Split(c.Query("ids"), ","),
 	}
@@ -186,7 +176,7 @@ func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetProfilesBulk(c.Ctx(), req.Userids)
+	res, err := s.s.getProfilesBulk(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -194,7 +184,7 @@ func (m *router) getProfilesBulk(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getProfileImageCC(c governor.Context) (string, error) {
+func (s *router) getProfileImageCC(c governor.Context) (string, error) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -202,7 +192,7 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatProfileImage(c.Ctx(), req.Userid)
+	objinfo, err := s.s.statProfileImage(c.Ctx(), req.Userid)
 	if err != nil {
 		return "", err
 	}
@@ -210,15 +200,16 @@ func (m *router) getProfileImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) mountProfileRoutes(r governor.Router) {
-	scopeProfileRead := m.s.scopens + ":read"
-	scopeProfileWrite := m.s.scopens + ":write"
-	r.Post("", m.createProfile, gate.User(m.s.gate, scopeProfileWrite), m.rt)
-	r.Put("", m.updateProfile, gate.User(m.s.gate, scopeProfileWrite), m.rt)
-	r.Put("/image", m.updateImage, gate.User(m.s.gate, scopeProfileWrite), m.rt)
-	r.Delete("/id/{id}", m.deleteProfile, gate.OwnerOrAdminParam(m.s.gate, "id", scopeProfileWrite), m.rt)
-	r.Get("", m.getOwnProfile, gate.User(m.s.gate, scopeProfileRead), m.rt)
-	r.Get("/id/{id}", m.getProfile, m.rt)
-	r.Get("/id/{id}/image", m.getProfileImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getProfileImageCC), m.rt)
-	r.Get("/ids", m.getProfilesBulk, m.rt)
+func (s *router) mountProfileRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeProfileRead := s.s.scopens + ":read"
+	scopeProfileWrite := s.s.scopens + ":write"
+	m.PostCtx("", s.createProfile, gate.User(s.s.gate, scopeProfileWrite), s.rt)
+	m.PutCtx("", s.updateProfile, gate.User(s.s.gate, scopeProfileWrite), s.rt)
+	m.PutCtx("/image", s.updateImage, gate.User(s.s.gate, scopeProfileWrite), s.rt)
+	m.DeleteCtx("/id/{id}", s.deleteProfile, gate.OwnerOrAdminParam(s.s.gate, "id", scopeProfileWrite), s.rt)
+	m.GetCtx("", s.getOwnProfile, gate.User(s.s.gate, scopeProfileRead), s.rt)
+	m.GetCtx("/id/{id}", s.getProfile, s.rt)
+	m.GetCtx("/id/{id}/image", s.getProfileImage, cachecontrol.ControlCtx(true, nil, 60, s.getProfileImageCC), s.rt)
+	m.GetCtx("/ids", s.getProfilesBulk, s.rt)
 }

@@ -7,6 +7,7 @@ import (
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
@@ -32,17 +33,19 @@ type (
 	}
 
 	service struct {
-		events    events.Events
-		gate      gate.Gate
-		log       *klog.LevelLogger
-		rolens    string
-		scopens   string
-		channelns string
-		opts      svcOpts
+		events      events.Events
+		ratelimiter ratelimit.Ratelimiter
+		gate        gate.Gate
+		log         *klog.LevelLogger
+		rolens      string
+		scopens     string
+		channelns   string
+		opts        svcOpts
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.MiddlewareCtx
 	}
 
 	ctxKeyWS struct{}
@@ -103,14 +106,16 @@ func setCtxWS(inj governor.Injector, w WS) {
 func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
-	return New(ev, g)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
+	return New(ev, ratelimiter, g)
 }
 
 // New creates a new WS service
-func New(ev events.Events, g gate.Gate) Service {
+func New(ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
-		events: ev,
-		gate:   g,
+		events:      ev,
+		ratelimiter: ratelimiter,
+		gate:        g,
 	}
 }
 
@@ -128,7 +133,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 

@@ -649,7 +649,7 @@ func (s *service) AddAdmin(ctx context.Context, req governor.ReqAddAdmin) error 
 }
 
 func (s *service) Start(ctx context.Context) error {
-	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.UserRoleDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.userRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -659,7 +659,7 @@ func (s *service) Start(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
-	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.UserApikeyDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.userApikeyDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -670,17 +670,17 @@ func (s *service) Start(ctx context.Context) error {
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	sysEvents := sysevent.New(s.syschannels, s.events)
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_APPROVAL_GC", s.UserApprovalGCHook); err != nil {
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_APPROVAL_GC", s.userApprovalGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_RESET_GC", s.UserResetGCHook); err != nil {
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_RESET_GC", s.userResetGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.UserInvitationGCHook); err != nil {
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.userInvitationGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
@@ -813,8 +813,7 @@ const (
 	roleDeleteBatchSize = 256
 )
 
-// UserRoleDeleteHook deletes the roles of a deleted user
-func (s *service) UserRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
+func (s *service) userRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
@@ -840,8 +839,7 @@ const (
 	apikeyDeleteBatchSize = 256
 )
 
-// UserApikeyDeleteHook deletes the apikeys of a deleted user
-func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
+func (s *service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
@@ -867,7 +865,7 @@ func (s *service) UserApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 	return nil
 }
 
-func (s *service) UserApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *service) userApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.approvals.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC approvals")
 	}
@@ -875,7 +873,7 @@ func (s *service) UserApprovalGCHook(ctx context.Context, props sysevent.Timesta
 	return nil
 }
 
-func (s *service) UserResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *service) userResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.resets.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC resets")
 	}
@@ -883,7 +881,7 @@ func (s *service) UserResetGCHook(ctx context.Context, props sysevent.TimestampP
 	return nil
 }
 
-func (s *service) UserInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *service) userInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC inviations")
 	}

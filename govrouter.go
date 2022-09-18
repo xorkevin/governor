@@ -61,7 +61,12 @@ func (s *Server) router(path string, l klog.Logger) Router {
 
 func (r *govrouter) Group(path string, mw ...Middleware) Router {
 	cpath := r.path + path
-	sr := r.r.Route(path, func(r chi.Router) {})
+	var sr chi.Router
+	if path == "" {
+		sr = r.r.Group(func(r chi.Router) {})
+	} else {
+		sr = r.r.Route(path, func(r chi.Router) {})
+	}
 	if len(mw) > 0 {
 		sr = sr.With(mw...)
 	}
@@ -138,7 +143,12 @@ func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	l := r.log.Sublogger("", klog.Fields{
 		"gov.router.path": cpath,
 	})
-	sr := r.r.Route(path, func(r chi.Router) {})
+	var sr chi.Router
+	if path == "" {
+		sr = r.r.Group(func(r chi.Router) {})
+	} else {
+		sr = r.r.Route(path, func(r chi.Router) {})
+	}
 	if len(mw) > 0 {
 		sr = sr.With(MiddlewareFromCtx(l, mw...))
 	}

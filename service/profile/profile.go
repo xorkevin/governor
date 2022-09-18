@@ -13,6 +13,7 @@ import (
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -33,14 +34,14 @@ type (
 		users         user.Users
 		ratelimiter   ratelimit.Ratelimiter
 		gate          gate.Gate
-		logger        governor.Logger
+		log           *klog.LevelLogger
 		scopens       string
 		streamns      string
 	}
 
 	router struct {
 		s  *service
-		rt governor.Middleware
+		rt governor.MiddlewareCtx
 	}
 
 	ctxKeyProfiles struct{}
@@ -82,8 +83,9 @@ func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxProfiles(inj, s)
+
 	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 }
@@ -91,47 +93,21 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 func (s *service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.Base(),
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	sr := s.router()
 	sr.mountProfileRoutes(m)
-	l.Info("Mounted http routes", nil)
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-	if err := s.profiles.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created profile table", nil)
-	if err := s.profileBucket.Init(context.Background()); err != nil {
-		return kerrors.WithMsg(err, "Failed to init profile image bucket")
-	}
-	l.Info("Created profile bucket", nil)
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
-	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.UserCreateHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -139,9 +115,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
-	l.Info("Subscribed to user create queue", nil)
+	s.log.Info(ctx, "Subscribed to user create queue", nil)
 
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -149,7 +125,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	return nil
 }
@@ -157,21 +133,31 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.profiles.Setup(context.Background()); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created profile table", nil)
+	if err := s.profileBucket.Init(ctx); err != nil {
+		return kerrors.WithMsg(err, "Failed to init profile image bucket")
+	}
+	s.log.Info(ctx, "Created profile bucket", nil)
 	return nil
 }
 
-// UserCreateHook creates a new profile for a new user
-func (s *service) UserCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
-	if _, err := s.CreateProfile(ctx, props.Userid, "", ""); err != nil {
+func (s *service) Health(ctx context.Context) error {
+	return nil
+}
+
+func (s *service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+	if _, err := s.createProfile(ctx, props.Userid, "", ""); err != nil {
 		return err
 	}
 	return nil
 }
 
-// UserDeleteHook deletes the profile of a deleted user
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
-	if err := s.DeleteProfile(ctx, props.Userid); err != nil {
+func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+	if err := s.deleteProfile(ctx, props.Userid); err != nil {
 		return err
 	}
 	return nil

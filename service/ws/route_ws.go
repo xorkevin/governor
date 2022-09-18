@@ -284,6 +284,6 @@ func (s *router) echo(c governor.Context) {
 func (s *router) mountRoutes(r governor.Router) {
 	m := governor.NewMethodRouter(r)
 	scopeWS := s.s.scopens + ".ws"
-	m.AnyCtx("", s.ws, gate.User(s.s.gate, scopeWS))
-	m.AnyCtx("/echo", s.echo, gate.Member(s.s.gate, s.s.rolens, scopeWS))
+	m.AnyCtx("", s.ws, gate.User(s.s.gate, scopeWS), s.rt)
+	m.AnyCtx("/echo", s.echo, gate.Member(s.s.gate, s.s.rolens, scopeWS), s.rt)
 }
