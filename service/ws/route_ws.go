@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"sync"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 func presenceChannelName(prefix, location string) string {
@@ -55,7 +55,7 @@ type (
 	}
 )
 
-func (m *router) sendPresenceUpdate(ctx context.Context, userid, loc string) error {
+func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) error {
 	msg, err := json.Marshal(PresenceEventProps{
 		Timestamp: time.Now().Round(0).Unix(),
 		Userid:    userid,
@@ -64,33 +64,25 @@ func (m *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 	if err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
 	}
-	if err := m.s.events.Publish(ctx, presenceChannelName(m.s.opts.PresenceChannel, loc), msg); err != nil {
+	if err := s.s.events.Publish(ctx, presenceChannelName(s.s.opts.PresenceChannel, loc), msg); err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
 	}
 	return nil
 }
 
-func (m *router) ws(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) ws(c governor.Context) {
 	userid := gate.GetCtxUserid(c)
-	if userid == "" || len(userid) > 31 {
-		c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
-		return
-	}
 
 	conn, err := c.Websocket()
 	if err != nil {
-		m.s.logger.Warn("Failed to accept WS conn upgrade", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "ws_conn_upgrade",
-		})
+		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
 
 	presenceLocation := ""
 
-	if err := m.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
+	if err := s.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
 		conn.CloseError(err)
 		return
 	}
@@ -98,7 +90,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
 
-	tickCtx, tickCancel := context.WithCancel(c.Ctx())
+	ctx, tickCancel := context.WithCancel(c.Ctx())
 	defer tickCancel()
 
 	subSuccess := make(chan struct{})
@@ -106,43 +98,38 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		userChannel := userChannelName(m.s.opts.UserSendChannelPrefix, userid)
+		userChannel := userChannelName(s.s.opts.UserSendChannelPrefix, userid)
 		var sub events.SyncSubscription
 		defer func() {
 			if sub != nil {
 				if err := sub.Close(); err != nil {
-					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "ws_close_user_sub",
-					})
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
 				}
 			}
 		}()
 		first := true
 		delay := 250 * time.Millisecond
 		for {
-			k, err := m.s.events.SubscribeSync(tickCtx, userChannel, "", func(ctx context.Context, topic string, msgdata []byte) {
+			k, err := s.s.events.SubscribeSync(ctx, userChannel, "", func(ctx context.Context, topic string, msgdata []byte) error {
 				channel, _, err := decodeResMsg(msgdata)
 				if err != nil {
 					conn.CloseError(err)
-					return
+					return nil
 				}
 				if channel == "" {
 					conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Malformed sent message"))
-					return
+					return nil
 				}
 				if err := conn.Write(ctx, true, msgdata); err != nil {
 					conn.CloseError(err)
-					return
+					return nil
 				}
+				return nil
 			})
 			if err != nil {
-				m.s.logger.Error("Failed to subscribe to ws user msg channels", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "ws_sub_user",
-				})
+				s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
 				select {
-				case <-tickCtx.Done():
+				case <-ctx.Done():
 					return
 				case <-time.After(delay):
 					delay *= min(delay*2, 15*time.Second)
@@ -157,14 +144,11 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 			}
 			if k != nil {
 				if err := k.Close(); err != nil {
-					m.s.logger.Error("Failed to close ws user event subscription", map[string]string{
-						"error":      err.Error(),
-						"actiontype": "ws_close_user_sub",
-					})
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
 				}
 			}
 			select {
-			case <-tickCtx.Done():
+			case <-ctx.Done():
 				return
 			case <-sub.Done():
 			}
@@ -178,10 +162,10 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 		defer ticker.Stop()
 		for {
 			select {
-			case <-tickCtx.Done():
+			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := m.sendPresenceUpdate(tickCtx, userid, presenceLocation); err != nil {
+				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
@@ -190,13 +174,13 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	select {
-	case <-tickCtx.Done():
+	case <-ctx.Done():
 		return
 	case <-subSuccess:
 	}
 
 	for {
-		t, b, err := conn.Read(tickCtx)
+		t, b, err := conn.Read(ctx)
 		if err != nil {
 			conn.CloseError(err)
 			return
@@ -239,7 +223,7 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if presenceLocation != origLocation {
-				if err := m.sendPresenceUpdate(tickCtx, userid, presenceLocation); err != nil {
+				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
 					conn.CloseError(err)
 					return
 				}
@@ -250,27 +234,23 @@ func (m *router) ws(w http.ResponseWriter, r *http.Request) {
 				conn.CloseError(err)
 				return
 			}
-			if err := m.s.events.Publish(tickCtx, serviceChannelName(m.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
+			if err := s.s.events.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
 				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish request msg"))
 				return
 			}
 		}
 		select {
-		case <-tickCtx.Done():
+		case <-ctx.Done():
 			return
 		case <-time.After(64 * time.Millisecond):
 		}
 	}
 }
 
-func (m *router) echo(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) echo(c governor.Context) {
 	conn, err := c.Websocket()
 	if err != nil {
-		m.s.logger.Warn("Failed to accept WS conn upgrade", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "ws_conn_upgrade",
-		})
+		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
@@ -301,8 +281,9 @@ func (m *router) echo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *router) mountRoutes(r governor.Router) {
-	scopeWS := m.s.scopens + ".ws"
-	r.Any("", m.ws, gate.User(m.s.gate, scopeWS))
-	r.Any("/echo", m.echo, gate.Member(m.s.gate, m.s.rolens, scopeWS))
+func (s *router) mountRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeWS := s.s.scopens + ".ws"
+	m.AnyCtx("", s.ws, gate.User(s.s.gate, scopeWS))
+	m.AnyCtx("/echo", s.echo, gate.Member(s.s.gate, s.s.rolens, scopeWS))
 }

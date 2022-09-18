@@ -158,12 +158,8 @@ func (r Rank) Intersect(other Rank) Rank {
 // Union returns the union between Ranks
 func (r Rank) Union(other Rank) Rank {
 	union := Rank{}
-	for k := range r {
-		union[k] = struct{}{}
-	}
-	for k := range other {
-		union[k] = struct{}{}
-	}
+	union.Add(r)
+	union.Add(other)
 	return union
 }
 

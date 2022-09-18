@@ -8,14 +8,16 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
 	// PresenceWorkerFunc is a type alias for a presence worker func
-	PresenceWorkerFunc = func(ctx context.Context, props PresenceEventProps)
+	PresenceWorkerFunc = func(ctx context.Context, props PresenceEventProps) error
 	// WorkerFunc is a type alias for a worker func
-	WorkerFunc = func(ctx context.Context, topic string, userid string, msgdata []byte)
+	WorkerFunc = func(ctx context.Context, topic string, userid string, msgdata []byte) error
 	// WS is a service for managing websocket connections
 	WS interface {
 		SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error)
@@ -32,7 +34,7 @@ type (
 	service struct {
 		events    events.Events
 		gate      gate.Gate
-		logger    governor.Logger
+		log       *klog.LevelLogger
 		rolens    string
 		scopens   string
 		channelns string
@@ -112,7 +114,7 @@ func New(ev events.Events, g gate.Gate) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxWS(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -130,23 +132,12 @@ func (s *service) router() *router {
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	l.Info("Mounted http routes", nil)
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
@@ -157,12 +148,16 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
 func encodeResMsg(channel string, v interface{}) ([]byte, error) {
-	b, err := json.Marshal(responseMsg{
+	b, err := kjson.Marshal(responseMsg{
 		Channel: channel,
 		Value:   v,
 	})
@@ -174,7 +169,7 @@ func encodeResMsg(channel string, v interface{}) ([]byte, error) {
 
 func decodeResMsg(b []byte) (string, []byte, error) {
 	var m responseMsgBytes
-	if err := json.Unmarshal(b, &m); err != nil {
+	if err := kjson.Unmarshal(b, &m); err != nil {
 		return "", nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Malformed response msg")
 	}
 	return m.Channel, m.Value, nil
@@ -182,14 +177,14 @@ func decodeResMsg(b []byte) (string, []byte, error) {
 
 func decodeClientReqMsg(b []byte) (string, []byte, error) {
 	var m clientRequestMsgBytes
-	if err := json.Unmarshal(b, &m); err != nil {
+	if err := kjson.Unmarshal(b, &m); err != nil {
 		return "", nil, governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Malformed request msg")
 	}
 	return m.Channel, m.Value, nil
 }
 
 func encodeReqMsg(channel string, userid string, v []byte) ([]byte, error) {
-	b, err := json.Marshal(requestMsgBytes{
+	b, err := kjson.Marshal(requestMsgBytes{
 		Channel: channel,
 		Userid:  userid,
 		Value:   v,
@@ -202,7 +197,7 @@ func encodeReqMsg(channel string, userid string, v []byte) ([]byte, error) {
 
 func decodeReqMsg(b []byte) (string, string, []byte, error) {
 	var m requestMsgBytes
-	if err := json.Unmarshal(b, &m); err != nil {
+	if err := kjson.Unmarshal(b, &m); err != nil {
 		return "", "", nil, kerrors.WithMsg(err, "Failed to decode request msg")
 	}
 	return m.Channel, m.Userid, m.Value, nil
@@ -210,21 +205,12 @@ func decodeReqMsg(b []byte) (string, string, []byte, error) {
 
 func (s *service) SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error) {
 	presenceChannel := presenceChannelName(s.opts.PresenceChannel, location)
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": presenceChannel,
-		"group":   group,
-	})
-	sub, err := s.events.Subscribe(presenceChannel, group, func(ctx context.Context, topic string, msgdata []byte) {
+	sub, err := s.events.Subscribe(presenceChannel, group, func(ctx context.Context, topic string, msgdata []byte) error {
 		var props PresenceEventProps
-		if err := json.Unmarshal(msgdata, &props); err != nil {
-			l.Error("Invalid presence message", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "ws_decode_presence",
-			})
-			return
+		if err := kjson.Unmarshal(msgdata, &props); err != nil {
+			return kerrors.WithMsg(err, "Invalid presence message")
 		}
-		worker(ctx, props)
+		return worker(ctx, props)
 	})
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
@@ -237,21 +223,12 @@ func (s *service) Subscribe(channel, group string, worker WorkerFunc) (events.Su
 		return nil, kerrors.WithMsg(nil, "Channel pattern may not be empty")
 	}
 	svcChannel := serviceChannelName(s.opts.UserRcvChannelPrefix, channel)
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": svcChannel,
-		"group":   group,
-	})
-	sub, err := s.events.Subscribe(svcChannel, group, func(ctx context.Context, topic string, msgdata []byte) {
+	sub, err := s.events.Subscribe(svcChannel, group, func(ctx context.Context, topic string, msgdata []byte) error {
 		channel, userid, v, err := decodeReqMsg(msgdata)
 		if err != nil {
-			l.Error("Failed decoding request message", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "ws_decode_req",
-			})
-			return
+			return kerrors.WithMsg(err, "Failed decoding request message")
 		}
-		worker(ctx, channel, userid, v)
+		return worker(ctx, channel, userid, v)
 	})
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
