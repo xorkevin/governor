@@ -420,7 +420,7 @@ func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) gov
 	}
 
 	return g.AuthenticateCtx(func(c Context) bool {
-		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagUser}))
+		roles, err := c.Intersect(c.Ctx().Ctx(), rank.Rank{}.AddUser())
 		if err != nil {
 			return false
 		}
@@ -444,7 +444,7 @@ func OwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
 }
 
 func checkAdmin(ctx context.Context, r Intersector) (bool, error) {
-	roles, err := r.Intersect(ctx, rank.FromSlice([]string{rank.TagAdmin}))
+	roles, err := r.Intersect(ctx, rank.Rank{}.AddAdmin())
 	if err != nil {
 		return false, err
 	}
@@ -462,7 +462,7 @@ func Admin(g Gate, scope string) governor.MiddlewareCtx {
 }
 
 func checkUser(ctx context.Context, r Intersector) (bool, error) {
-	roles, err := r.Intersect(ctx, rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+	roles, err := r.Intersect(ctx, rank.Rank{}.AddAdmin().AddUser())
 	if err != nil {
 		return false, err
 	}
@@ -493,7 +493,7 @@ func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope stri
 	}
 
 	return g.AuthenticateCtx(func(c Context) bool {
-		roles, err := c.Intersect(c.Ctx().Ctx(), rank.FromSlice([]string{rank.TagAdmin, rank.TagUser}))
+		roles, err := c.Intersect(c.Ctx().Ctx(), rank.Rank{}.AddAdmin().AddUser())
 		if err != nil {
 			return false
 		}
@@ -520,7 +520,7 @@ func OwnerOrAdminParam(g Gate, idparam string, scope string) governor.Middleware
 }
 
 func checkMod(ctx context.Context, r Intersector, modtag string, isSelf bool) (bool, error) {
-	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
+	roleQuery := rank.Rank{}.AddAdmin().AddUser()
 	if modtag != "" {
 		roleQuery.AddMod(modtag)
 	}
@@ -579,7 +579,7 @@ func Mod(g Gate, group string, scope string) governor.MiddlewareCtx {
 }
 
 func checkNoBan(ctx context.Context, r Intersector, bantag string, isSelf bool) (bool, error) {
-	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
+	roleQuery := rank.Rank{}.AddAdmin().AddUser()
 	if bantag != "" {
 		roleQuery.AddBan(bantag)
 	}
@@ -638,7 +638,7 @@ func NoBan(g Gate, group string, scope string) governor.MiddlewareCtx {
 }
 
 func checkMember(ctx context.Context, r Intersector, tag string, isSelf bool) (bool, error) {
-	roleQuery := rank.FromSlice([]string{rank.TagAdmin, rank.TagUser})
+	roleQuery := rank.Rank{}.AddAdmin().AddUser()
 	if tag != "" {
 		roleQuery.AddUsr(tag).AddBan(tag)
 	}

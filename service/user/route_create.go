@@ -20,10 +20,9 @@ type (
 	}
 )
 
-func (m *router) createUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserPost{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createUser(c governor.Context) {
+	var req reqUserPost
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -32,7 +31,7 @@ func (m *router) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateUser(c.Ctx(), req)
+	res, err := s.s.CreateUser(c.Ctx(), req)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -47,10 +46,9 @@ type (
 	}
 )
 
-func (m *router) commitUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserPostConfirm{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) commitUser(c governor.Context) {
+	var req reqUserPostConfirm
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -59,7 +57,7 @@ func (m *router) commitUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CommitUser(c.Ctx(), req.Userid, req.Key)
+	res, err := s.s.CommitUser(c.Ctx(), req.Userid, req.Key)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -75,10 +73,9 @@ type (
 	}
 )
 
-func (m *router) deleteUserSelf(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserDeleteSelf{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) deleteUserSelf(c governor.Context) {
+	var req reqUserDeleteSelf
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -88,7 +85,7 @@ func (m *router) deleteUserSelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
+	if err := s.s.DeleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -102,10 +99,9 @@ type (
 	}
 )
 
-func (m *router) deleteUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserDelete{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) deleteUser(c governor.Context) {
+	var req reqUserDelete
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -115,7 +111,7 @@ func (m *router) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
+	if err := s.s.DeleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -129,8 +125,7 @@ type (
 	}
 )
 
-func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserApprovals(c governor.Context) {
 	req := reqGetUserApprovals{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -140,7 +135,7 @@ func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserApprovals(c.Ctx(), req.Amount, req.Offset)
+	res, err := s.s.GetUserApprovals(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -149,8 +144,7 @@ func (m *router) getUserApprovals(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) approveUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) approveUser(c governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -159,7 +153,7 @@ func (m *router) approveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ApproveUser(c.Ctx(), req.Userid); err != nil {
+	if err := s.s.ApproveUser(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -167,8 +161,7 @@ func (m *router) approveUser(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteUserApproval(c governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -177,7 +170,7 @@ func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DeleteUserApproval(c.Ctx(), req.Userid); err != nil {
+	if err := s.s.DeleteUserApproval(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -185,15 +178,15 @@ func (m *router) deleteUserApproval(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) mountCreate(r governor.Router) {
-	scopeApprovalRead := m.s.scopens + ".approval:read"
-	scopeApprovalWrite := m.s.scopens + ".approval:write"
-	scopeAdminAccount := m.s.scopens + ".admin.account:delete"
-	r.Post("", m.createUser, m.rt)
-	r.Post("/confirm", m.commitUser, m.rt)
-	r.Get("/approvals", m.getUserApprovals, gate.Member(m.s.gate, m.s.rolens, scopeApprovalRead), m.rt)
-	r.Post("/approvals/id/{id}", m.approveUser, gate.Member(m.s.gate, m.s.rolens, scopeApprovalWrite), m.rt)
-	r.Delete("/approvals/id/{id}", m.deleteUserApproval, gate.Member(m.s.gate, m.s.rolens, scopeApprovalWrite), m.rt)
-	r.Delete("", m.deleteUserSelf, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Delete("/id/{id}", m.deleteUser, gate.Admin(m.s.gate, scopeAdminAccount), m.rt)
+func (s *router) mountCreate(m *governor.MethodRouter) {
+	scopeApprovalRead := s.s.scopens + ".approval:read"
+	scopeApprovalWrite := s.s.scopens + ".approval:write"
+	scopeAdminAccount := s.s.scopens + ".admin.account:delete"
+	m.PostCtx("", s.createUser, s.rt)
+	m.PostCtx("/confirm", s.commitUser, s.rt)
+	m.GetCtx("/approvals", s.getUserApprovals, gate.Member(s.s.gate, s.s.rolens, scopeApprovalRead), s.rt)
+	m.PostCtx("/approvals/id/{id}", s.approveUser, gate.Member(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
+	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, gate.Member(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
+	m.DeleteCtx("", s.deleteUserSelf, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.DeleteCtx("/id/{id}", s.deleteUser, gate.Admin(s.s.gate, scopeAdminAccount), s.rt)
 }

@@ -20,6 +20,7 @@ type (
 		RatelimitCtx(tagger Tagger) governor.MiddlewareCtx
 		Ratelimit(tagger Tagger) governor.Middleware
 		Subtree(prefix string) Ratelimiter
+		BaseCtx() governor.MiddlewareCtx
 		Base() governor.Middleware
 	}
 
@@ -253,13 +254,17 @@ func (s *service) Subtree(prefix string) Ratelimiter {
 	}
 }
 
-func (s *service) Base() governor.Middleware {
+func (s *service) BaseCtx() governor.MiddlewareCtx {
 	return Compose(
 		s,
 		IPAddress("ip", s.paramsBase),
 		Userid("id", s.paramsBase),
 		UseridIPAddress("id_ip", s.paramsAuth),
 	)
+}
+
+func (s *service) Base() governor.Middleware {
+	return governor.MiddlewareFromCtx(s.log.Logger, s.BaseCtx())
 }
 
 type (
@@ -284,13 +289,17 @@ func (t *tree) Subtree(prefix string) Ratelimiter {
 	}
 }
 
+func (t *tree) BaseCtx() governor.MiddlewareCtx {
+	return t.base.BaseCtx()
+}
+
 func (t *tree) Base() governor.Middleware {
 	return t.base.Base()
 }
 
 // Compose composes rate limit taggers
-func Compose(r Ratelimiter, taggers ...Tagger) governor.Middleware {
-	return r.Ratelimit(func(c governor.Context) []Tag {
+func Compose(r Ratelimiter, taggers ...Tagger) governor.MiddlewareCtx {
+	return r.RatelimitCtx(func(c governor.Context) []Tag {
 		var tags []Tag
 		for _, i := range taggers {
 			tags = append(tags, i(c)...)

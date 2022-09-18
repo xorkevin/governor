@@ -16,6 +16,7 @@ import (
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 // CreateUser creates a new user and places it into approvals
 func (s *service) CreateUser(ctx context.Context, ruser reqUserPost) (*resUserUpdate, error) {
 	if _, err := s.users.GetByUsername(ctx, ruser.Username); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -74,7 +75,7 @@ func (s *service) CreateUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 	}
 
 	if _, err := s.users.GetByEmail(ctx, ruser.Email); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -153,7 +154,7 @@ func (s *service) GetUserApprovals(ctx context.Context, limit, offset int) (*res
 func (s *service) ApproveUser(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user request")
@@ -174,7 +175,7 @@ func (s *service) ApproveUser(ctx context.Context, userid string) error {
 func (s *service) DeleteUserApproval(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user request")
@@ -206,7 +207,7 @@ func (s *service) sendNewUserEmail(ctx context.Context, code string, m *approval
 func (s *service) CommitUser(ctx context.Context, userid string, key string) (*resUserUpdate, error) {
 	am, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user request")
@@ -241,7 +242,7 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 	}
 
 	if err := s.users.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Username or email already in use by another account")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create user")
@@ -252,19 +253,17 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 
 	// must make a best effort attempt to publish new user event
 	if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
-		s.logger.Error("Failed to publish new user event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "user_publish_create",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"), nil)
 	}
 
-	s.logger.Info("Created user", map[string]string{
-		"userid":     m.Userid,
-		"username":   m.Username,
-		"actiontype": "user_create",
+	s.log.Info(ctx, "Created user", klog.Fields{
+		"userid":   m.Userid,
+		"username": m.Username,
 	})
 
-	s.clearUserExists(userid)
+	// must make a best effort to clear user existence cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearUserExists(ctx, userid)
 
 	return &resUserUpdate{
 		Userid:   m.Userid,
@@ -275,7 +274,7 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 func (s *service) DeleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -319,16 +318,14 @@ func (s *service) DeleteUser(ctx context.Context, userid string, username string
 		return kerrors.WithMsg(err, "Failed to delete user roles")
 	}
 
-	s.clearUserExists(userid)
+	// must make a best effort to clear user existence cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearUserExists(ctx, userid)
 	return nil
 }
 
-func (s *service) clearUserExists(userid string) {
-	// must make a best effort to clear user existence cache
-	if err := s.kvusers.Del(context.Background(), userid); err != nil {
-		s.logger.Error("Failed to delete user exists in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "deluserexists",
-		})
+func (s *service) clearUserExists(ctx context.Context, userid string) {
+	if err := s.kvusers.Del(ctx, userid); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete user exists in cache"), nil)
 	}
 }

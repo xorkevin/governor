@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2"
 )
 
@@ -185,17 +184,7 @@ func validhasToken(token string) error {
 
 func validRank(rankSlice []string) error {
 	if len(rankSlice) > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide less than 26 roles")
-	}
-	return nil
-}
-
-func validRankStr(rankString string) error {
-	if len(rankString) > lengthCapLarge {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Rank string must be shorter than 4096 characters")
-	}
-	if _, err := rank.FromString(rankString); err != nil {
-		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string")
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide less than 256 roles")
 	}
 	return nil
 }

@@ -4,10 +4,11 @@ import (
 	"xorkevin.dev/governor"
 )
 
-func (m *router) mountRoute(r governor.Router) {
-	m.mountGet(r)
-	m.mountSession(r)
-	m.mountCreate(r)
-	m.mountEdit(r)
-	m.mountEditSecure(r)
+func (s *router) mountRoute(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	s.mountGet(m)
+	s.mountSession(m)
+	s.mountCreate(m)
+	s.mountEdit(m)
+	s.mountEditSecure(m)
 }

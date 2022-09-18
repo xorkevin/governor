@@ -18,8 +18,7 @@ type (
 	}
 )
 
-func (m *router) getSessions(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getSessions(c governor.Context) {
 	req := reqGetUserSessions{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -29,7 +28,7 @@ func (m *router) getSessions(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserSessions(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.GetUserSessions(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -57,10 +56,9 @@ func (r *reqUserRmSessions) validUserid() error {
 	return nil
 }
 
-func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserRmSessions{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) killSessions(c governor.Context) {
+	var req reqUserRmSessions
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -74,16 +72,16 @@ func (m *router) killSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.KillSessions(c.Ctx(), req.SessionIDs); err != nil {
+	if err := s.s.KillSessions(c.Ctx(), req.SessionIDs); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) mountSession(r governor.Router) {
-	scopeSessionRead := m.s.scopens + ".session:read"
-	scopeSessionWrite := m.s.scopens + ".session:write"
-	r.Get("/sessions", m.getSessions, gate.User(m.s.gate, scopeSessionRead), m.rt)
-	r.Delete("/sessions", m.killSessions, gate.User(m.s.gate, scopeSessionWrite), m.rt)
+func (s *router) mountSession(m *governor.MethodRouter) {
+	scopeSessionRead := s.s.scopens + ".session:read"
+	scopeSessionWrite := s.s.scopens + ".session:write"
+	m.GetCtx("/sessions", s.getSessions, gate.User(s.s.gate, scopeSessionRead), s.rt)
+	m.DeleteCtx("/sessions", s.killSessions, gate.User(s.s.gate, scopeSessionWrite), s.rt)
 }

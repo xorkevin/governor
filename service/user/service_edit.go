@@ -11,12 +11,13 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 func (s *service) UpdateUser(ctx context.Context, userid string, ruser reqUserPut) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -33,18 +34,16 @@ func (s *service) UpdateUser(ctx context.Context, userid string, ruser reqUserPu
 		return kerrors.WithMsg(err, "Failed to encode update user props to json")
 	}
 	if err = s.users.UpdateProps(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Username must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update user")
 	}
 	if updUsername {
 		// must make a best effort to publish username update
-		if err := s.events.StreamPublish(context.Background(), s.opts.UpdateChannel, b); err != nil {
-			s.logger.Error("Failed to publish update user props event", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "user_publish_update_props",
-			})
+		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+		if err := s.events.StreamPublish(ctx, s.opts.UpdateChannel, b); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"), nil)
 		}
 	}
 	return nil
@@ -65,7 +64,7 @@ func (s *service) UpdateRank(ctx context.Context, userid string, updaterid strin
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -81,24 +80,22 @@ func (s *service) UpdateRank(ctx context.Context, userid string, updaterid strin
 	editAddRank.Remove(currentRoles)
 
 	if editAddRank.Has(rank.TagAdmin) {
-		s.logger.Info("Invite add admin role", map[string]string{
-			"userid":     m.Userid,
-			"username":   m.Username,
-			"actiontype": "user_invite_role_admin",
+		s.log.Info(ctx, "Invite add admin role", klog.Fields{
+			"userid":   m.Userid,
+			"username": m.Username,
 		})
 	}
 	if editRemoveRank.Has(rank.TagAdmin) {
-		s.logger.Info("Remove admin role", map[string]string{
-			"userid":     m.Userid,
-			"username":   m.Username,
-			"actiontype": "user_remove_role_admin",
+		s.log.Info(ctx, "Remove admin role", klog.Fields{
+			"userid":   m.Userid,
+			"username": m.Username,
 		})
 	}
 
 	now := time.Now().Round(0).Unix()
 
 	if editAddRank.Has(rank.TagUser) {
-		userRole := rank.Rank{}.AddOne(rank.TagUser)
+		userRole := rank.Rank{}.AddUser()
 		editAddRank.Remove(userRole)
 		if err := s.roles.InsertRoles(ctx, m.Userid, userRole); err != nil {
 			return kerrors.WithMsg(err, "Failed to update user roles")
@@ -206,7 +203,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 func (s *service) AcceptRoleInvitation(ctx context.Context, userid, role string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -217,16 +214,15 @@ func (s *service) AcceptRoleInvitation(ctx context.Context, userid, role string)
 
 	inv, err := s.invitations.GetByID(ctx, userid, role, after)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Role invitation not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get role invitation")
 	}
 	if inv.Role == rank.TagAdmin {
-		s.logger.Info("Add admin role", map[string]string{
-			"userid":     m.Userid,
-			"username":   m.Username,
-			"actiontype": "user_add_role_admin",
+		s.log.Info(ctx, "Add admin role", klog.Fields{
+			"userid":   m.Userid,
+			"username": m.Username,
 		})
 	}
 	if err := s.invitations.DeleteByID(ctx, userid, role); err != nil {

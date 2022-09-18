@@ -158,7 +158,7 @@ type (
 
 	router struct {
 		s  *service
-		rt governor.Middleware
+		rt governor.MiddlewareCtx
 	}
 
 	// NewUserProps are properties of a newly created user
@@ -336,7 +336,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 func (s *service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.Base(),
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
@@ -407,7 +407,10 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.passwordMinSize = r.GetInt("passwordminsize")
 	s.userApproval = r.GetBool("userapproval")
 	s.otpIssuer = r.GetStr("otpissuer")
-	s.rolesummary = rank.FromSlice(r.GetStrSlice("rolesummary"))
+	s.rolesummary, err = rank.FromSlice(r.GetStrSlice("rolesummary"))
+	if err != nil {
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid rank for role summary")
+	}
 
 	s.tplname = tplName{
 		emailchange:       r.GetStr("email.tpl.emailchange"),
@@ -485,9 +488,9 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.done = done
 
 	sr := s.router()
-	sr.mountRoute(m.Group("/user"))
-	sr.mountAuth(m.Group(authRoutePrefix))
-	sr.mountApikey(m.Group("/apikey"))
+	sr.mountRoute(m.GroupCtx("/user"))
+	sr.mountAuth(m.GroupCtx(authRoutePrefix, sr.rt))
+	sr.mountApikey(m.GroupCtx("/apikey"))
 	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }

@@ -20,8 +20,7 @@ type (
 	}
 )
 
-func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserApikeys(c governor.Context) {
 	req := reqGetUserApikeys{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -31,7 +30,7 @@ func (m *router) getUserApikeys(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserApikeys(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.GetUserApikeys(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -48,10 +47,9 @@ type (
 	}
 )
 
-func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqApikeyPost{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createApikey(c governor.Context) {
+	var req reqApikeyPost
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -60,7 +58,7 @@ func (m *router) createApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateApikey(c.Ctx(), req.Userid, req.Scope, req.Name, req.Desc)
+	res, err := s.s.CreateApikey(c.Ctx(), req.Userid, req.Scope, req.Name, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -83,8 +81,7 @@ func (r *reqApikeyID) validUserid() error {
 	return nil
 }
 
-func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteApikey(c governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
@@ -97,7 +94,7 @@ func (m *router) deleteApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteApikey(c.Ctx(), req.Keyid); err != nil {
+	if err := s.s.DeleteApikey(c.Ctx(), req.Keyid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -122,10 +119,9 @@ func (r *reqApikeyUpdate) validUserid() error {
 	return nil
 }
 
-func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqApikeyUpdate{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateApikey(c governor.Context) {
+	var req reqApikeyUpdate
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -139,15 +135,14 @@ func (m *router) updateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
+	if err := s.s.UpdateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) rotateApikey(c governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
@@ -160,7 +155,7 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.RotateApikey(c.Ctx(), req.Keyid)
+	res, err := s.s.RotateApikey(c.Ctx(), req.Keyid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -170,14 +165,14 @@ func (m *router) rotateApikey(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqApikeyCheck struct {
-		Roles string `valid:"rankStr"`
-		Scope string `valid:"scope"`
+		Roles []string `valid:"rank"`
+		Scope string   `valid:"scope"`
 	}
 )
 
-func (m *router) checkApikeyValidator(c gate.Context) bool {
+func (s *router) checkApikeyValidator(c gate.Context) bool {
 	req := reqApikeyCheck{
-		Roles: c.Ctx().Query("roles"),
+		Roles: rank.SplitString(c.Ctx().Query("roles")),
 		Scope: c.Ctx().Query("scope"),
 	}
 	if err := req.valid(); err != nil {
@@ -187,7 +182,8 @@ func (m *router) checkApikeyValidator(c gate.Context) bool {
 	if !c.HasScope(req.Scope) {
 		return false
 	}
-	expected, err := rank.FromString(req.Roles)
+
+	expected, err := rank.FromSlice(req.Roles)
 	if err != nil {
 		return false
 	}
@@ -207,20 +203,20 @@ type (
 	}
 )
 
-func (m *router) checkApikey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) checkApikey(c governor.Context) {
 	c.WriteJSON(http.StatusOK, resApikeyOK{
 		Message: "OK",
 	})
 }
 
-func (m *router) mountApikey(r governor.Router) {
-	scopeApikeyRead := m.s.scopens + ".apikey:read"
-	scopeApikeyWrite := m.s.scopens + ".apikey:write"
-	r.Get("", m.getUserApikeys, gate.User(m.s.gate, scopeApikeyRead), m.rt)
-	r.Post("", m.createApikey, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Put("/id/{id}", m.updateApikey, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Put("/id/{id}/rotate", m.rotateApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
-	r.Delete("/id/{id}", m.deleteApikey, gate.User(m.s.gate, scopeApikeyWrite), m.rt)
-	r.Any("/check", m.checkApikey, m.s.gate.Authenticate(m.checkApikeyValidator, ""), m.rt)
+func (s *router) mountApikey(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeApikeyRead := s.s.scopens + ".apikey:read"
+	scopeApikeyWrite := s.s.scopens + ".apikey:write"
+	m.GetCtx("", s.getUserApikeys, gate.User(s.s.gate, scopeApikeyRead), s.rt)
+	m.PostCtx("", s.createApikey, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/id/{id}", s.updateApikey, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/id/{id}/rotate", s.rotateApikey, gate.User(s.s.gate, scopeApikeyWrite), s.rt)
+	m.DeleteCtx("/id/{id}", s.deleteApikey, gate.User(s.s.gate, scopeApikeyWrite), s.rt)
+	m.AnyCtx("/check", s.checkApikey, s.s.gate.AuthenticateCtx(s.checkApikeyValidator, ""), s.rt)
 }

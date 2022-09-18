@@ -18,8 +18,7 @@ type (
 	}
 )
 
-func (m *router) getByID(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getByID(c governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -28,7 +27,7 @@ func (m *router) getByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByIDPublic(c.Ctx(), req.Userid)
+	res, err := s.s.GetByIDPublic(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -37,8 +36,7 @@ func (m *router) getByID(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getByIDPersonal(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getByIDPersonal(c governor.Context) {
 	req := reqUserGetID{
 		Userid: gate.GetCtxUserid(c),
 	}
@@ -47,7 +45,7 @@ func (m *router) getByIDPersonal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByID(c.Ctx(), req.Userid)
+	res, err := s.s.GetByID(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -56,8 +54,7 @@ func (m *router) getByIDPersonal(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getByIDPrivate(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getByIDPrivate(c governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -66,7 +63,7 @@ func (m *router) getByIDPrivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByID(c.Ctx(), req.Userid)
+	res, err := s.s.GetByID(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -81,8 +78,7 @@ type (
 	}
 )
 
-func (m *router) getByUsername(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getByUsername(c governor.Context) {
 	req := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -91,7 +87,7 @@ func (m *router) getByUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByUsernamePublic(c.Ctx(), req.Username)
+	res, err := s.s.GetByUsernamePublic(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -100,8 +96,7 @@ func (m *router) getByUsername(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getByUsernamePrivate(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getByUsernamePrivate(c governor.Context) {
 	req := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -110,7 +105,7 @@ func (m *router) getByUsernamePrivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetByUsername(c.Ctx(), req.Username)
+	res, err := s.s.GetByUsername(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -128,8 +123,7 @@ type (
 	}
 )
 
-func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserRoles(c governor.Context) {
 	req := reqGetUserRoles{
 		Userid: c.Param("id"),
 		Prefix: c.Query("prefix"),
@@ -141,7 +135,7 @@ func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -150,8 +144,7 @@ func (m *router) getUserRoles(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserRolesPersonal(c governor.Context) {
 	req := reqGetUserRoles{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -163,7 +156,7 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -174,32 +167,31 @@ func (m *router) getUserRolesPersonal(w http.ResponseWriter, r *http.Request) {
 
 type (
 	reqGetUserRolesIntersect struct {
-		Userid string `valid:"userid,has" json:"-"`
-		Roles  string `valid:"rankStr" json:"-"`
+		Userid string   `valid:"userid,has" json:"-"`
+		Roles  []string `valid:"rank" json:"-"`
 	}
 )
 
-func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserRolesIntersect(c governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: c.Param("id"),
-		Roles:  c.Query("roles"),
+		Roles:  rank.SplitString(c.Query("roles")),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	roles, err := rank.FromString(req.Roles)
+	roles, err := rank.FromSlice(req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank{}) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
+	res, err := s.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -208,27 +200,26 @@ func (m *router) getUserRolesIntersect(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getUserRolesIntersectPersonal(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserRolesIntersectPersonal(c governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: gate.GetCtxUserid(c),
-		Roles:  c.Query("roles"),
+		Roles:  rank.SplitString(c.Query("roles")),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	roles, err := rank.FromString(req.Roles)
+	roles, err := rank.FromSlice(req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank{}) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
+	res, err := s.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -245,8 +236,7 @@ type (
 	}
 )
 
-func (m *router) getUsersByRole(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUsersByRole(c governor.Context) {
 	req := reqGetRoleUser{
 		Role:   c.Param("role"),
 		Amount: c.QueryInt("amount", -1),
@@ -257,7 +247,7 @@ func (m *router) getUsersByRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
+	res, err := s.s.GetIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -272,8 +262,7 @@ type (
 	}
 )
 
-func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getAllUserInfo(c governor.Context) {
 	req := reqGetUserBulk{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -283,7 +272,7 @@ func (m *router) getAllUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoAll(c.Ctx(), req.Amount, req.Offset)
+	res, err := s.s.GetInfoAll(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -297,8 +286,7 @@ type (
 	}
 )
 
-func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getUserInfoBulkPublic(c governor.Context) {
 	req := reqGetUsers{
 		Userids: strings.Split(c.Query("ids"), ","),
 	}
@@ -307,7 +295,7 @@ func (m *router) getUserInfoBulkPublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoBulkPublic(c.Ctx(), req.Userids)
+	res, err := s.s.GetInfoBulkPublic(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -322,8 +310,7 @@ type (
 	}
 )
 
-func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) searchUsers(c governor.Context) {
 	req := reqSearchUsers{
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
@@ -333,7 +320,7 @@ func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetInfoUsernamePrefix(c.Ctx(), req.Prefix, req.Amount)
+	res, err := s.s.GetInfoUsernamePrefix(c.Ctx(), req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -341,20 +328,20 @@ func (m *router) searchUsers(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) mountGet(r governor.Router) {
-	scopeAccountRead := m.s.scopens + ".account:read"
-	scopeAdminRead := m.s.scopens + ".admin:read"
-	r.Get("/id/{id}", m.getByID, m.rt)
-	r.Get("", m.getByIDPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
-	r.Get("/roles", m.getUserRolesPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
-	r.Get("/roleint", m.getUserRolesIntersectPersonal, gate.User(m.s.gate, scopeAccountRead), m.rt)
-	r.Get("/id/{id}/private", m.getByIDPrivate, gate.Admin(m.s.gate, scopeAdminRead), m.rt)
-	r.Get("/id/{id}/roles", m.getUserRoles, m.rt)
-	r.Get("/id/{id}/roleint", m.getUserRolesIntersect, m.rt)
-	r.Get("/name/{username}", m.getByUsername, m.rt)
-	r.Get("/name/{username}/private", m.getByUsernamePrivate, gate.Admin(m.s.gate, scopeAdminRead), m.rt)
-	r.Get("/role/{role}", m.getUsersByRole, m.rt)
-	r.Get("/all", m.getAllUserInfo, gate.Admin(m.s.gate, scopeAdminRead), m.rt)
-	r.Get("/ids", m.getUserInfoBulkPublic, m.rt)
-	r.Get("/search", m.searchUsers, m.rt)
+func (s *router) mountGet(m *governor.MethodRouter) {
+	scopeAccountRead := s.s.scopens + ".account:read"
+	scopeAdminRead := s.s.scopens + ".admin:read"
+	m.GetCtx("/id/{id}", s.getByID, s.rt)
+	m.GetCtx("", s.getByIDPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/roles", s.getUserRolesPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/roleint", s.getUserRolesIntersectPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/id/{id}/private", s.getByIDPrivate, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("/id/{id}/roles", s.getUserRoles, s.rt)
+	m.GetCtx("/id/{id}/roleint", s.getUserRolesIntersect, s.rt)
+	m.GetCtx("/name/{username}", s.getByUsername, s.rt)
+	m.GetCtx("/name/{username}/private", s.getByUsernamePrivate, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("/role/{role}", s.getUsersByRole, s.rt)
+	m.GetCtx("/all", s.getAllUserInfo, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("/ids", s.getUserInfoBulkPublic, s.rt)
+	m.GetCtx("/search", s.searchUsers, s.rt)
 }

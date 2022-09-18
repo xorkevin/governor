@@ -9,31 +9,31 @@ import (
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
-func (m *router) setAccessCookie(c governor.Context, accessToken string) {
+func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
-		Path:     m.s.baseURL,
-		MaxAge:   int(m.s.accessTime) - 5,
+		Path:     s.s.baseURL,
+		MaxAge:   int(s.s.accessTime) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-func (m *router) setRefreshCookie(c governor.Context, refreshToken string, userid string) {
+func (s *router) setRefreshCookie(c governor.Context, refreshToken string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     m.s.authURL,
-		MaxAge:   int(m.s.refreshTime) - 5,
+		Path:     s.s.authURL,
+		MaxAge:   int(s.s.refreshTime) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     m.s.authURL + "/id/" + userid,
-		MaxAge:   int(m.s.refreshTime) - 5,
+		Path:     s.s.authURL + "/id/" + userid,
+		MaxAge:   int(s.s.refreshTime) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -41,7 +41,7 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Name:     "userid",
 		Value:    userid,
 		Path:     "/",
-		MaxAge:   int(m.s.refreshTime) - 5,
+		MaxAge:   int(s.s.refreshTime) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -49,18 +49,18 @@ func (m *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Name:     "userid_" + userid,
 		Value:    userid,
 		Path:     "/",
-		MaxAge:   int(m.s.refreshTime) - 5,
+		MaxAge:   int(s.s.refreshTime) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-func (m *router) setSessionCookie(c governor.Context, sessionID string, userid string) {
+func (s *router) setSessionCookie(c governor.Context, sessionID string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "session_token_" + userid,
 		Value:    sessionID,
-		Path:     m.s.authURL,
-		MaxAge:   int(m.s.refreshTime),
+		Path:     s.s.authURL,
+		MaxAge:   int(s.s.refreshTime),
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -91,27 +91,27 @@ func getSessionCookie(c governor.Context, userid string) (string, bool) {
 	return cookie.Value, true
 }
 
-func (m *router) rmAccessCookie(c governor.Context) {
+func (s *router) rmAccessCookie(c governor.Context) {
 	c.SetCookie(&http.Cookie{
 		Name:   "access_token",
 		Value:  "invalid",
 		MaxAge: -1,
-		Path:   m.s.baseURL,
+		Path:   s.s.baseURL,
 	})
 }
 
-func (m *router) rmRefreshCookie(c governor.Context, userid string) {
+func (s *router) rmRefreshCookie(c governor.Context, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:   "refresh_token",
 		Value:  "invalid",
 		MaxAge: -1,
-		Path:   m.s.authURL,
+		Path:   s.s.authURL,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:   "refresh_token",
 		Value:  "invalid",
 		MaxAge: -1,
-		Path:   m.s.authURL + "/id/" + userid,
+		Path:   s.s.authURL + "/id/" + userid,
 	})
 	c.SetCookie(&http.Cookie{
 		Name:   "userid",
@@ -147,10 +147,9 @@ func (r *reqUserAuth) validCode() error {
 	return nil
 }
 
-func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserAuth{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) loginUser(c governor.Context) {
+	var req reqUserAuth
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -159,7 +158,7 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid, err := m.s.GetUseridForLogin(c.Ctx(), req.Username)
+	userid, err := s.s.GetUseridForLogin(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -177,15 +176,15 @@ func (m *router) loginUser(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.Login(c.Ctx(), userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.Login(c.Ctx(), userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
-	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-	m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
+	s.setAccessCookie(c, res.AccessToken)
+	s.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+	s.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
@@ -196,16 +195,15 @@ type (
 	}
 )
 
-func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	ruser := reqRefreshToken{}
+func (s *router) exchangeToken(c governor.Context) {
+	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
-		ruser.RefreshToken = t
-	} else if err := c.Bind(&ruser); err != nil {
+		req.RefreshToken = t
+	} else if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -214,30 +212,29 @@ func (m *router) exchangeToken(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.ExchangeToken(c.Ctx(), ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.ExchangeToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
+	s.setAccessCookie(c, res.AccessToken)
 	if res.Refresh {
-		m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-		m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
+		s.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+		s.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	ruser := reqRefreshToken{}
+func (s *router) refreshToken(c governor.Context) {
+	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
-		ruser.RefreshToken = t
-	} else if err := c.Bind(&ruser); err != nil {
+		req.RefreshToken = t
+	} else if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -246,54 +243,54 @@ func (m *router) refreshToken(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := m.s.RefreshToken(c.Ctx(), ruser.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.RefreshToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
-		if errors.Is(err, ErrDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
-			m.rmAccessCookie(c)
-			m.rmRefreshCookie(c, res.Claims.Subject)
+		if errors.Is(err, ErrorDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
+			s.rmAccessCookie(c)
+			s.rmRefreshCookie(c, res.Claims.Subject)
 		}
 		c.WriteError(err)
 		return
 	}
 
-	m.setAccessCookie(c, res.AccessToken)
-	m.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
-	m.setSessionCookie(c, res.SessionID, res.Claims.Subject)
+	s.setAccessCookie(c, res.AccessToken)
+	s.setRefreshCookie(c, res.RefreshToken, res.Claims.Subject)
+	s.setSessionCookie(c, res.SessionID, res.Claims.Subject)
 
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) logoutUser(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	ruser := reqRefreshToken{}
+func (s *router) logoutUser(c governor.Context) {
+	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
-		ruser.RefreshToken = t
-	} else if err := c.Bind(&ruser); err != nil {
+		req.RefreshToken = t
+	} else if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
-	if err := ruser.valid(); err != nil {
+	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	userid, err := m.s.Logout(c.Ctx(), ruser.RefreshToken)
+	userid, err := s.s.Logout(c.Ctx(), req.RefreshToken)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	m.rmAccessCookie(c)
-	m.rmRefreshCookie(c, userid)
+	s.rmAccessCookie(c)
+	s.rmRefreshCookie(c, userid)
 
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) mountAuth(r governor.Router) {
-	r.Post("/login", m.loginUser, m.rt)
-	r.Post("/exchange", m.exchangeToken, m.rt)
-	r.Post("/refresh", m.refreshToken, m.rt)
-	r.Post("/id/{id}/exchange", m.exchangeToken, m.rt)
-	r.Post("/id/{id}/refresh", m.refreshToken, m.rt)
-	r.Post("/logout", m.logoutUser, m.rt)
+func (s *router) mountAuth(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	m.PostCtx("/login", s.loginUser)
+	m.PostCtx("/exchange", s.exchangeToken)
+	m.PostCtx("/refresh", s.refreshToken)
+	m.PostCtx("/id/{id}/exchange", s.exchangeToken)
+	m.PostCtx("/id/{id}/refresh", s.refreshToken)
+	m.PostCtx("/logout", s.logoutUser)
 }

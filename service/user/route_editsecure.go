@@ -18,10 +18,9 @@ type (
 	}
 )
 
-func (m *router) putEmail(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserPutEmail{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) putEmail(c governor.Context) {
+	var req reqUserPutEmail
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -31,7 +30,7 @@ func (m *router) putEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
+	if err := s.s.UpdateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -46,10 +45,9 @@ type (
 	}
 )
 
-func (m *router) putEmailVerify(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserPutEmailVerify{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) putEmailVerify(c governor.Context) {
+	var req reqUserPutEmailVerify
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -58,7 +56,7 @@ func (m *router) putEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.CommitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
+	if err := s.s.CommitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -73,10 +71,9 @@ type (
 	}
 )
 
-func (m *router) putPassword(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUserPutPassword{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) putPassword(c governor.Context) {
+	var req reqUserPutPassword
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -86,7 +83,7 @@ func (m *router) putPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdatePassword(c.Ctx(), req.Userid, req.NewPassword, req.OldPassword); err != nil {
+	if err := s.s.UpdatePassword(c.Ctx(), req.Userid, req.NewPassword, req.OldPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -99,10 +96,9 @@ type (
 	}
 )
 
-func (m *router) forgotPassword(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqForgotPassword{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) forgotPassword(c governor.Context) {
+	var req reqForgotPassword
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -111,7 +107,7 @@ func (m *router) forgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ForgotPassword(c.Ctx(), req.Username); err != nil {
+	if err := s.s.ForgotPassword(c.Ctx(), req.Username); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -126,10 +122,9 @@ type (
 	}
 )
 
-func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqForgotPasswordReset{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) forgotPasswordReset(c governor.Context) {
+	var req reqForgotPasswordReset
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -138,7 +133,7 @@ func (m *router) forgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.ResetPassword(c.Ctx(), req.Userid, req.Key, req.NewPassword); err != nil {
+	if err := s.s.ResetPassword(c.Ctx(), req.Userid, req.Key, req.NewPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -154,10 +149,9 @@ type (
 	}
 )
 
-func (m *router) addOTP(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqAddOTP{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) addOTP(c governor.Context) {
+	var req reqAddOTP
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -167,7 +161,7 @@ func (m *router) addOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.AddOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
+	res, err := s.s.AddOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -182,10 +176,9 @@ type (
 	}
 )
 
-func (m *router) commitOTP(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqOTPCode{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) commitOTP(c governor.Context) {
+	var req reqOTPCode
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -195,7 +188,7 @@ func (m *router) commitOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.CommitOTP(c.Ctx(), req.Userid, req.Code); err != nil {
+	if err := s.s.CommitOTP(c.Ctx(), req.Userid, req.Code); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -224,10 +217,9 @@ func (r *reqOTPCodeBackup) validCode() error {
 	return nil
 }
 
-func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqOTPCodeBackup{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) removeOTP(c governor.Context) {
+	var req reqOTPCodeBackup
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -241,20 +233,20 @@ func (m *router) removeOTP(w http.ResponseWriter, r *http.Request) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	if err := m.s.RemoveOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
+	if err := s.s.RemoveOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) mountEditSecure(r governor.Router) {
-	r.Put("/email", m.putEmail, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Put("/email/verify", m.putEmailVerify, m.rt)
-	r.Put("/password", m.putPassword, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Put("/password/forgot", m.forgotPassword, m.rt)
-	r.Put("/password/forgot/reset", m.forgotPasswordReset, m.rt)
-	r.Put("/otp", m.addOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Put("/otp/verify", m.commitOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Delete("/otp", m.removeOTP, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
+func (s *router) mountEditSecure(m *governor.MethodRouter) {
+	m.PutCtx("/email", s.putEmail, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/email/verify", s.putEmailVerify, s.rt)
+	m.PutCtx("/password", s.putPassword, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/password/forgot", s.forgotPassword, s.rt)
+	m.PutCtx("/password/forgot/reset", s.forgotPasswordReset, s.rt)
+	m.PutCtx("/otp", s.addOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/otp/verify", s.commitOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.DeleteCtx("/otp", s.removeOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
 }

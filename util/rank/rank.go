@@ -115,6 +115,21 @@ func (r Rank) AddOne(tag string) Rank {
 	return r
 }
 
+// AddUser adds a user tag
+func (r Rank) AddUser() Rank {
+	return r.AddOne(TagUser)
+}
+
+// AddAdmin adds an admin tag
+func (r Rank) AddAdmin() Rank {
+	return r.AddOne(TagAdmin)
+}
+
+// AddSystem adds a system tag
+func (r Rank) AddSystem() Rank {
+	return r.AddOne(TagSystem)
+}
+
 // Add adds a rank
 func (r Rank) Add(other Rank) {
 	for k := range other {
@@ -164,18 +179,6 @@ const (
 	PrefixModOrg = "mod.org."
 )
 
-// FromSlice creates a new Rank from a list of strings
-func FromSlice(rankSlice []string) Rank {
-	if len(rankSlice) == 0 {
-		return Rank{}
-	}
-	r := make(Rank, len(rankSlice))
-	for _, i := range rankSlice {
-		r[i] = struct{}{}
-	}
-	return r
-}
-
 type (
 	// ErrorInvalidRank is returned when a rank is invalid
 	ErrorInvalidRank struct{}
@@ -185,18 +188,27 @@ func (e ErrorInvalidRank) Error() string {
 	return "Invalid rank"
 }
 
-// FromString creates a new Rank from a string
-func FromString(rankStr string) (Rank, error) {
-	if len(rankStr) == 0 {
+// FromSlice creates a new Rank from a list of strings
+func FromSlice(rankSlice []string) (Rank, error) {
+	if len(rankSlice) == 0 {
 		return Rank{}, nil
 	}
-	rankSlice := strings.Split(rankStr, ",")
+	r := make(Rank, len(rankSlice))
 	for _, i := range rankSlice {
 		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
-			return Rank{}, kerrors.WithKind(nil, ErrorInvalidRank{}, "Illegal rank string")
+			return Rank{}, kerrors.WithKind(nil, ErrorInvalidRank{}, "Invalid rank")
 		}
+		r[i] = struct{}{}
 	}
-	return FromSlice(rankSlice), nil
+	return r, nil
+}
+
+// SplitString creates a new Rank slice from a string
+func SplitString(rankStr string) []string {
+	if len(rankStr) == 0 {
+		return nil
+	}
+	return strings.Split(rankStr, ",")
 }
 
 // SplitTag splits a tag into a prefix and tag name

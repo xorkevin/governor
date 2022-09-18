@@ -311,7 +311,9 @@ func (s *service) Logout(ctx context.Context, refreshToken string) (string, erro
 	if err := s.sessions.Delete(ctx, sm); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to delete session")
 	}
-	s.killCacheSessions([]string{claims.ID})
+	// must make a best effort to remove cached sessions
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.killCacheSessions(ctx, []string{claims.ID})
 
 	return claims.Subject, nil
 }
