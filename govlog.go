@@ -93,9 +93,8 @@ var (
 	}
 )
 
-func (s *zerologSerializer) Log(level klog.Level, t time.Time, caller *klog.Frame, path string, msg string, fields klog.Fields) {
+func (s *zerologSerializer) Log(level klog.Level, t, mt time.Time, caller *klog.Frame, path string, msg string, fields klog.Fields) {
 	timestr := t.Format(time.RFC3339Nano)
-	unixtimeus := t.UnixMicro()
 	callerstr := ""
 	if caller != nil {
 		if s.isDebug {
@@ -129,7 +128,12 @@ func (s *zerologSerializer) Log(level klog.Level, t time.Time, caller *klog.Fram
 	e = e.Str("level", level.String()).
 		Str("time", timestr)
 	if !s.isDebug {
+		unixtimeus := t.UnixMicro()
+		monotimestr := t.Format(time.RFC3339Nano)
+		monounixtimeus := t.UnixMicro()
 		e = e.Int64("unixtimeus", unixtimeus)
+		e = e.Str("monotime", monotimestr)
+		e = e.Int64("monounixtimeus", monounixtimeus)
 	}
 	e.Str("caller", callerstr).
 		Str("path", path).

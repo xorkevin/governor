@@ -76,13 +76,15 @@ func TestZerologLogger(t *testing.T) {
 
 			d := json.NewDecoder(&logbuf)
 			var j struct {
-				Level      string `json:"level"`
-				Time       string `json:"time"`
-				UnixtimeUS int64  `json:"unixtimeus"`
-				Caller     string `json:"caller"`
-				Path       string `json:"path"`
-				Msg        string `json:"msg"`
-				TestField  string `json:"some_test_field"`
+				Level          string `json:"level"`
+				Time           string `json:"time"`
+				UnixtimeUS     int64  `json:"unixtimeus"`
+				MonoTime       string `json:"monotime"`
+				MonoUnixtimeUS int64  `json:"monounixtimeus"`
+				Caller         string `json:"caller"`
+				Path           string `json:"path"`
+				Msg            string `json:"msg"`
+				TestField      string `json:"some_test_field"`
 			}
 			assert.NoError(d.Decode(&j))
 
@@ -91,6 +93,10 @@ func TestZerologLogger(t *testing.T) {
 			assert.NoError(err)
 			assert.True(ti.After(time.Unix(0, 0)))
 			assert.Equal(ti.UnixMicro(), j.UnixtimeUS)
+			mt, err := time.Parse(time.RFC3339Nano, j.MonoTime)
+			assert.NoError(err)
+			assert.True(mt.After(time.Unix(0, 0)))
+			assert.Equal(mt.UnixMicro(), j.MonoUnixtimeUS)
 			assert.Contains(j.Caller, "xorkevin.dev/governor.TestZerologLogger")
 			assert.Contains(j.Caller, "xorkevin.dev/governor/govlog_test.go")
 			assert.Equal(".sublog", j.Path)
