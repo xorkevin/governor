@@ -10,6 +10,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 )
 
@@ -56,7 +57,7 @@ type (
 )
 
 func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) error {
-	msg, err := json.Marshal(PresenceEventProps{
+	msg, err := kjson.Marshal(PresenceEventProps{
 		Timestamp: time.Now().Round(0).Unix(),
 		Userid:    userid,
 		Location:  loc,
@@ -199,8 +200,8 @@ func (s *router) ws(c governor.Context) {
 			return
 		}
 		if channel == ctlChannel {
-			o := &ctlOps{}
-			if err := json.Unmarshal(msg, o); err != nil {
+			var o ctlOps
+			if err := kjson.Unmarshal(msg, &o); err != nil {
 				conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl op format"))
 				return
 			}
@@ -210,7 +211,7 @@ func (s *router) ws(c governor.Context) {
 				case ctlOpLoc:
 					{
 						args := &ctlLocOp{}
-						if err := json.Unmarshal(i.Args, args); err != nil {
+						if err := kjson.Unmarshal(i.Args, args); err != nil {
 							conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl loc op format"))
 							return
 						}

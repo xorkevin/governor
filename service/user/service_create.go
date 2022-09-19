@@ -3,7 +3,6 @@ package user
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	htmlTemplate "html/template"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/mail"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -225,7 +225,7 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 	}
 	m := s.approvals.ToUserModel(am)
 
-	b, err := json.Marshal(NewUserProps{
+	b, err := kjson.Marshal(NewUserProps{
 		Userid:       m.Userid,
 		Username:     m.Username,
 		Email:        m.Email,
@@ -296,7 +296,7 @@ func (s *service) DeleteUser(ctx context.Context, userid string, username string
 		}
 	}
 
-	j, err := json.Marshal(DeleteUserProps{
+	j, err := kjson.Marshal(DeleteUserProps{
 		Userid: m.Userid,
 	})
 	if err != nil {

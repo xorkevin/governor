@@ -2,7 +2,6 @@ package org
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"xorkevin.dev/governor/service/user/org/model"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/util/bytefmt"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -226,7 +226,7 @@ func (s *service) Health(ctx context.Context) error {
 
 func decodeDeleteOrgProps(msgdata []byte) (*DeleteOrgProps, error) {
 	m := &DeleteOrgProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode delete org props")
 	}
 	return m, nil

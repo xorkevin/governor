@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -13,15 +12,17 @@ import (
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/oauth/model"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
-	// ErrNotFound is returned when an apikey is not found
-	ErrNotFound struct{}
+	// ErrorNotFound is returned when an apikey is not found
+	ErrorNotFound struct{}
 )
 
-func (e ErrNotFound) Error() string {
+func (e ErrorNotFound) Error() string {
 	return "OAuth app not found"
 }
 
@@ -45,7 +46,7 @@ type (
 	}
 )
 
-func (s *service) GetApps(ctx context.Context, limit, offset int, creatorid string) (*resApps, error) {
+func (s *service) getApps(ctx context.Context, limit, offset int, creatorid string) (*resApps, error) {
 	m, err := s.apps.GetApps(ctx, limit, offset, creatorid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
@@ -67,7 +68,7 @@ func (s *service) GetApps(ctx context.Context, limit, offset int, creatorid stri
 	}, nil
 }
 
-func (s *service) GetAppsBulk(ctx context.Context, clientids []string) (*resApps, error) {
+func (s *service) getAppsBulk(ctx context.Context, clientids []string) (*resApps, error) {
 	m, err := s.apps.GetBulk(ctx, clientids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
@@ -91,21 +92,15 @@ func (s *service) GetAppsBulk(ctx context.Context, clientids []string) (*resApps
 
 func (s *service) getCachedClient(ctx context.Context, clientid string) (*model.Model, error) {
 	if clientstr, err := s.kvclient.Get(ctx, clientid); err != nil {
-		if !errors.Is(err, kvstore.ErrNotFound{}) {
-			s.logger.Error("Failed to get oauth client from cache", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "oauth_get_cache_client",
-			})
+		if !errors.Is(err, kvstore.ErrorNotFound{}) {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"), nil)
 		}
 	} else if clientstr == cacheValTombstone {
-		return nil, kerrors.WithKind(err, ErrNotFound{}, "OAuth app not found")
+		return nil, kerrors.WithKind(err, ErrorNotFound{}, "OAuth app not found")
 	} else {
 		cm := &model.Model{}
-		if err := json.Unmarshal([]byte(clientstr), cm); err != nil {
-			s.logger.Error("Malformed oauth client cache json", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "oauth_unmarshal_client_json",
-			})
+		if err := kjson.Unmarshal([]byte(clientstr), cm); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Malformed oauth client cache json"), nil)
 		} else {
 			return cm, nil
 		}
@@ -113,28 +108,19 @@ func (s *service) getCachedClient(ctx context.Context, clientid string) (*model.
 
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCacheTime); err != nil {
-				s.logger.Error("Failed to set oauth client in cache", map[string]string{
-					"error":      err.Error(),
-					"actiontype": "oauth_set_cache_client",
-				})
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
 			}
-			return nil, kerrors.WithKind(err, ErrNotFound{}, "OAuth app not found")
+			return nil, kerrors.WithKind(err, ErrorNotFound{}, "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 
-	if clientbytes, err := json.Marshal(m); err != nil {
-		s.logger.Error("Failed to marshal client to json", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "oauth_marshal_client_json",
-		})
+	if clientbytes, err := kjson.Marshal(m); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal client to json"), nil)
 	} else if err := s.kvclient.Set(ctx, clientid, string(clientbytes), s.keyCacheTime); err != nil {
-		s.logger.Error("Failed to set oauth client in cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "oauth_set_cache_client",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
 	}
 
 	return m, nil
@@ -147,7 +133,7 @@ type (
 	}
 )
 
-func (s *service) CreateApp(ctx context.Context, name, url, redirectURI, creatorID string) (*resCreate, error) {
+func (s *service) createApp(ctx context.Context, name, url, redirectURI, creatorID string) (*resCreate, error) {
 	m, key, err := s.apps.New(name, url, redirectURI, creatorID)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create oauth app")
@@ -161,10 +147,10 @@ func (s *service) CreateApp(ctx context.Context, name, url, redirectURI, creator
 	}, nil
 }
 
-func (s *service) RotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
+func (s *service) rotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -173,17 +159,19 @@ func (s *service) RotateAppKey(ctx context.Context, clientid string) (*resCreate
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to rotate client key")
 	}
-	s.clearCache(clientid)
+	// must make a best effort attempt to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, clientid)
 	return &resCreate{
 		ClientID: clientid,
 		Key:      key,
 	}, nil
 }
 
-func (s *service) UpdateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
+func (s *service) updateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -194,7 +182,9 @@ func (s *service) UpdateApp(ctx context.Context, clientid string, name, url, red
 	if err := s.apps.UpdateProps(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to update oauth app")
 	}
-	s.clearCache(clientid)
+	// must make a best effort attempt to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, clientid)
 	return nil
 }
 
@@ -204,10 +194,10 @@ const (
 	thumbQuality = 0
 )
 
-func (s *service) UpdateLogo(ctx context.Context, clientid string, img image.Image) error {
+func (s *service) updateLogo(ctx context.Context, clientid string, img image.Image) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -232,21 +222,23 @@ func (s *service) UpdateLogo(ctx context.Context, clientid string, img image.Ima
 	if err := s.apps.UpdateProps(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to update oauth app")
 	}
-	s.clearCache(clientid)
+	// must make a best effort attempt to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, clientid)
 	return nil
 }
 
-func (s *service) Delete(ctx context.Context, clientid string) error {
+func (s *service) deleteApp(ctx context.Context, clientid string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 
 	if err := s.logoImgDir.Del(ctx, clientid); err != nil {
-		if !errors.Is(err, objstore.ErrNotFound{}) {
+		if !errors.Is(err, objstore.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Unable to delete app logo")
 		}
 	}
@@ -254,14 +246,16 @@ func (s *service) Delete(ctx context.Context, clientid string) error {
 	if err := s.apps.Delete(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete oauth app")
 	}
-	s.clearCache(clientid)
+	// must make a best effort attempt to clear the cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.clearCache(ctx, clientid)
 	return nil
 }
 
-func (s *service) GetApp(ctx context.Context, clientid string) (*resApp, error) {
+func (s *service) getApp(ctx context.Context, clientid string) (*resApp, error) {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, ErrNotFound{}) {
+		if errors.Is(err, ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -277,10 +271,10 @@ func (s *service) GetApp(ctx context.Context, clientid string) (*resApp, error) 
 	}, nil
 }
 
-func (s *service) StatLogo(ctx context.Context, clientid string) (*objstore.ObjectInfo, error) {
+func (s *service) statLogo(ctx context.Context, clientid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.logoImgDir.Stat(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app logo not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app logo")
@@ -288,10 +282,10 @@ func (s *service) StatLogo(ctx context.Context, clientid string) (*objstore.Obje
 	return objinfo, nil
 }
 
-func (s *service) GetLogo(ctx context.Context, clientid string) (io.ReadCloser, string, error) {
+func (s *service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.logoImgDir.Get(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound{}) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app logo not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get app logo")
@@ -299,12 +293,8 @@ func (s *service) GetLogo(ctx context.Context, clientid string) (io.ReadCloser, 
 	return obj, objinfo.ContentType, nil
 }
 
-func (s *service) clearCache(clientid string) {
-	// must make a best effort attempt to clear the cache
-	if err := s.kvclient.Del(context.Background(), clientid); err != nil {
-		s.logger.Error("Failed to clear oauth client from cache", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "oauth_clear_cache_client",
-		})
+func (s *service) clearCache(ctx context.Context, clientid string) {
+	if err := s.kvclient.Del(ctx, clientid); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear oauth client from cache"), nil)
 	}
 }

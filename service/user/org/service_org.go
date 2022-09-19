@@ -2,13 +2,13 @@ package org
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/user/org/model"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 )
@@ -254,7 +254,7 @@ func (s *service) deleteOrg(ctx context.Context, orgid string) error {
 		}
 		return kerrors.WithMsg(err, "Failed to get org")
 	}
-	b, err := json.Marshal(DeleteOrgProps{
+	b, err := kjson.Marshal(DeleteOrgProps{
 		OrgID: m.OrgID,
 	})
 	if err != nil {

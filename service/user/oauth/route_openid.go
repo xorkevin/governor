@@ -16,9 +16,8 @@ import (
 
 //go:generate forge validation -o validation_openid_gen.go reqOAuthAuthorize reqOAuthTokenCode reqGetConnectionGroup reqGetConnection
 
-func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	res, err := m.s.GetOpenidConfig()
+func (s *router) getOpenidConfig(c governor.Context) {
+	res, err := s.s.getOpenidConfig()
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -26,9 +25,8 @@ func (m *router) getOpenidConfig(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getJWKS(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	res, err := m.s.GetJWKS(c.Ctx())
+func (s *router) getJWKS(c governor.Context) {
+	res, err := s.s.getJWKS(c.Ctx())
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -47,15 +45,14 @@ type (
 	}
 )
 
-func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) authCode(c governor.Context) {
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
 		c.WriteError(governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
 		return
 	}
-	req := reqOAuthAuthorize{}
-	if err := c.Bind(&req); err != nil {
+	var req reqOAuthAuthorize
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
 		return
 	}
@@ -73,7 +70,7 @@ func (m *router) authCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.AuthCode(c.Ctx(), req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod, claims.AuthTime)
+	res, err := s.s.authCode(c.Ctx(), req.Userid, req.ClientID, req.Scope, req.Nonce, req.CodeChallenge, req.CodeChallengeMethod, claims.AuthTime)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -98,7 +95,7 @@ type (
 	}
 )
 
-func (m *router) writeOAuthTokenError(c governor.Context, err error) {
+func (s *router) writeOAuthTokenError(c governor.Context, err error) {
 	var rerr *governor.ErrorRes
 	if !errors.As(err, &rerr) {
 		rerr = &governor.ErrorRes{
@@ -109,33 +106,15 @@ func (m *router) writeOAuthTokenError(c governor.Context, err error) {
 	}
 
 	if !errors.Is(err, governor.ErrorNoLog{}) {
-		msg := "non-kerror"
-		var kerr *kerrors.Error
-		if errors.As(err, &kerr) {
-			msg = kerr.Message
-		}
-		stacktrace := "NONE"
-		var serr *kerrors.StackTrace
-		if errors.As(err, &serr) {
-			stacktrace = serr.StackString()
-		}
 		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
-			m.s.logger.Warn(msg, map[string]string{
-				"endpoint":   c.Req().URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			s.s.log.WarnErr(c.Ctx(), err, nil)
 		} else {
-			m.s.logger.Error(msg, map[string]string{
-				"endpoint":   c.Req().URL.EscapedPath(),
-				"error":      err.Error(),
-				"stacktrace": stacktrace,
-			})
+			s.s.log.Err(c.Ctx(), err, nil)
 		}
 	}
 
 	if rerr.Status == http.StatusUnauthorized {
-		c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, m.s.realm))
+		c.SetHeader("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, s.s.realm))
 	}
 	c.WriteJSON(rerr.Status, resAuthTokenErr{
 		Error: rerr.Code,
@@ -143,11 +122,10 @@ func (m *router) writeOAuthTokenError(c governor.Context, err error) {
 	})
 }
 
-func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) authToken(c governor.Context) {
 	grantType := c.FormValue("grant_type")
 	if err := validOidGrantType(grantType); err != nil {
-		m.writeOAuthTokenError(c, err)
+		s.writeOAuthTokenError(c, err)
 		return
 	}
 	if grantType == oidGrantTypeCode {
@@ -157,20 +135,20 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 			RedirectURI:  c.FormValue("redirect_uri"),
 			CodeVerifier: c.FormValue("code_verifier"),
 		}
-		if user, pass, ok := r.BasicAuth(); ok {
+		if user, pass, ok := c.BasicAuth(); ok {
 			if req.ClientID != "" || req.ClientSecret != "" {
-				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Client secret basic and post used"))
+				s.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Client secret basic and post used"))
 				return
 			}
 			var err error
 			req.ClientID, err = url.QueryUnescape(user)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client id encoding"))
+				s.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client id encoding"))
 				return
 			}
 			req.ClientSecret, err = url.QueryUnescape(pass)
 			if err != nil {
-				m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client secret encoding"))
+				s.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid client secret encoding"))
 				return
 			}
 		}
@@ -179,29 +157,28 @@ func (m *router) authToken(w http.ResponseWriter, r *http.Request) {
 			req.Code = code
 		}
 		if err := req.valid(); err != nil {
-			m.writeOAuthTokenError(c, err)
+			s.writeOAuthTokenError(c, err)
 			return
 		}
-		res, err := m.s.AuthTokenCode(c.Ctx(), req.ClientID, req.ClientSecret, req.RedirectURI, req.Userid, req.Code, req.CodeVerifier)
+		res, err := s.s.authTokenCode(c.Ctx(), req.ClientID, req.ClientSecret, req.RedirectURI, req.Userid, req.Code, req.CodeVerifier)
 		if err != nil {
-			m.writeOAuthTokenError(c, err)
+			s.writeOAuthTokenError(c, err)
 			return
 		}
 		c.WriteJSON(http.StatusOK, res)
 		return
 	}
-	m.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorUnsupportedGrant, "Unsupported grant type"))
+	s.writeOAuthTokenError(c, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorUnsupportedGrant, "Unsupported grant type"))
 	return
 }
 
-func (m *router) userinfo(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) userinfo(c governor.Context) {
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
 		c.WriteError(kerrors.WithMsg(nil, "No access token claims"))
 		return
 	}
-	res, err := m.s.Userinfo(c.Ctx(), claims.Subject, claims.Scope)
+	res, err := s.s.userinfo(c.Ctx(), claims.Subject, claims.Scope)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -217,8 +194,7 @@ type (
 	}
 )
 
-func (m *router) getConnections(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getConnections(c governor.Context) {
 	req := reqGetConnectionGroup{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -229,7 +205,7 @@ func (m *router) getConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetConnections(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getConnections(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -244,8 +220,7 @@ type (
 	}
 )
 
-func (m *router) getConnection(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getConnection(c governor.Context) {
 	req := reqGetConnection{
 		Userid:   gate.GetCtxUserid(c),
 		ClientID: c.Param("id"),
@@ -255,7 +230,7 @@ func (m *router) getConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetConnection(c.Ctx(), req.Userid, req.ClientID)
+	res, err := s.s.getConnection(c.Ctx(), req.Userid, req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -263,8 +238,7 @@ func (m *router) getConnection(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) delConnection(c governor.Context) {
 	req := reqGetConnection{
 		Userid:   gate.GetCtxUserid(c),
 		ClientID: c.Param("id"),
@@ -274,23 +248,24 @@ func (m *router) delConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.DelConnection(c.Ctx(), req.Userid, req.ClientID); err != nil {
+	if err := s.s.delConnection(c.Ctx(), req.Userid, req.ClientID); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) mountOidRoutes(r governor.Router) {
-	scopeConnectionRead := m.s.scopens + ".connection:read"
-	scopeConnectionWrite := m.s.scopens + ".connection:write"
-	r.Get("/openid-configuration", m.getOpenidConfig, m.rt)
-	r.Get(jwksRoute, m.getJWKS, m.rt)
-	r.Post("/auth/code", m.authCode, gate.User(m.s.gate, token.ScopeForbidden), m.rt)
-	r.Post(tokenRoute, m.authToken, cachecontrol.ControlNoStore(m.s.logger), m.rt)
-	r.Get(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)
-	r.Post(userinfoRoute, m.userinfo, gate.User(m.s.gate, oidScopeOpenid), m.rt)
-	r.Get("/connection", m.getConnections, gate.User(m.s.gate, scopeConnectionRead), m.rt)
-	r.Get("/connection/id/{id}", m.getConnection, gate.User(m.s.gate, scopeConnectionRead), m.rt)
-	r.Delete("/connection/id/{id}", m.delConnection, gate.User(m.s.gate, scopeConnectionWrite), m.rt)
+func (s *router) mountOidRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeConnectionRead := s.s.scopens + ".connection:read"
+	scopeConnectionWrite := s.s.scopens + ".connection:write"
+	m.GetCtx("/openid-configuration", s.getOpenidConfig, s.rt)
+	m.GetCtx(jwksRoute, s.getJWKS, s.rt)
+	m.PostCtx("/auth/code", s.authCode, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PostCtx(tokenRoute, s.authToken, cachecontrol.ControlNoStoreCtx, s.rt)
+	m.GetCtx(userinfoRoute, s.userinfo, gate.User(s.s.gate, oidScopeOpenid), s.rt)
+	m.PostCtx(userinfoRoute, s.userinfo, gate.User(s.s.gate, oidScopeOpenid), s.rt)
+	m.GetCtx("/connection", s.getConnections, gate.User(s.s.gate, scopeConnectionRead), s.rt)
+	m.GetCtx("/connection/id/{id}", s.getConnection, gate.User(s.s.gate, scopeConnectionRead), s.rt)
+	m.DeleteCtx("/connection/id/{id}", s.delConnection, gate.User(s.s.gate, scopeConnectionWrite), s.rt)
 }

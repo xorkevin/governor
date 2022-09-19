@@ -75,7 +75,7 @@ type (
 
 	router struct {
 		s  *service
-		rt governor.Middleware
+		rt governor.MiddlewareCtx
 	}
 
 	ctxKeyOAuth struct{}
@@ -158,7 +158,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 func (s *service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.Base(),
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *service) Health(ctx context.Context) error {
 }
 
 func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
-	if err := s.DeleteUserConnections(ctx, props.Userid); err != nil {
+	if err := s.deleteUserConnections(ctx, props.Userid); err != nil {
 		return err
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListThread reqListMsg reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
@@ -68,8 +69,7 @@ type (
 	}
 )
 
-func (m *router) getCreatorLists(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getCreatorLists(c governor.Context) {
 	req := reqCreatorLists{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -79,7 +79,7 @@ func (m *router) getCreatorLists(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetCreatorLists(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
+	res, err := s.s.getCreatorLists(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -95,8 +95,7 @@ type (
 	}
 )
 
-func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getPersonalLists(c governor.Context) {
 	req := reqUserLists{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -106,7 +105,7 @@ func (m *router) getPersonalLists(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestLists(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getLatestLists(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -120,8 +119,7 @@ type (
 	}
 )
 
-func (m *router) getList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getList(c governor.Context) {
 	req := reqList{
 		Listid: c.Param("listid"),
 	}
@@ -129,7 +127,7 @@ func (m *router) getList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetList(c.Ctx(), req.Listid)
+	res, err := s.s.getList(c.Ctx(), req.Listid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -145,8 +143,7 @@ type (
 	}
 )
 
-func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListMsgs(c governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -156,7 +153,7 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestMsgs(c.Ctx(), req.Listid, req.Amount, req.Offset)
+	res, err := s.s.getLatestMsgs(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -164,8 +161,7 @@ func (m *router) getListMsgs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getListThreads(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListThreads(c governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -175,7 +171,7 @@ func (m *router) getListThreads(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestThreads(c.Ctx(), req.Listid, req.Amount, req.Offset)
+	res, err := s.s.getLatestThreads(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -192,8 +188,7 @@ type (
 	}
 )
 
-func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListThread(c governor.Context) {
 	threadid, err := url.QueryUnescape(c.Param("threadid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -209,7 +204,7 @@ func (m *router) getListThread(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetThreadMsgs(c.Ctx(), req.Listid, req.Threadid, req.Amount, req.Offset)
+	res, err := s.s.getThreadMsgs(c.Ctx(), req.Listid, req.Threadid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -224,8 +219,7 @@ type (
 	}
 )
 
-func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListMsg(c governor.Context) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -240,7 +234,7 @@ func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetMsg(c.Ctx(), req.Listid, req.Msgid)
+	res, err := s.s.getMsg(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -248,8 +242,7 @@ func (m *router) getListMsg(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListMsgContent(c governor.Context) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -264,23 +257,20 @@ func (m *router) getListMsgContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, contentType, err := m.s.GetMsgContent(c.Ctx(), req.Listid, req.Msgid)
+	msg, contentType, err := s.s.getMsgContent(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	defer func() {
 		if err := msg.Close(); err != nil {
-			m.s.logger.Error("Failed to close msg content", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "mailinglist_close_msg_content",
-			})
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close msg content"), nil)
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, msg)
 }
 
-func (m *router) getListMsgCC(c governor.Context) (string, error) {
+func (s *router) getListMsgCC(c governor.Context) (string, error) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		return "", governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id")
@@ -293,7 +283,7 @@ func (m *router) getListMsgCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatMsg(c.Ctx(), req.Listid, req.Msgid)
+	objinfo, err := s.s.statMsg(c.Ctx(), req.Listid, req.Msgid)
 	if err != nil {
 		return "", err
 	}
@@ -301,8 +291,7 @@ func (m *router) getListMsgCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListMembers(c governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -312,7 +301,7 @@ func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetListMembers(c.Ctx(), req.Listid, req.Amount, req.Offset)
+	res, err := s.s.getListMembers(c.Ctx(), req.Listid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -320,8 +309,7 @@ func (m *router) getListMembers(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getListMemberIDs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getListMemberIDs(c governor.Context) {
 	req := reqListMembers{
 		Listid:  c.Param("listid"),
 		Userids: strings.Split(c.Query("ids"), ","),
@@ -330,7 +318,7 @@ func (m *router) getListMemberIDs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetListMemberIDs(c.Ctx(), req.Listid, req.Userids)
+	res, err := s.s.getListMemberIDs(c.Ctx(), req.Listid, req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -338,10 +326,9 @@ func (m *router) getListMemberIDs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) createList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateList{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createList(c governor.Context) {
+	var req reqCreateList
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -350,7 +337,7 @@ func (m *router) createList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.SenderPolicy, req.MemberPolicy)
+	res, err := s.s.createList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.SenderPolicy, req.MemberPolicy)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -358,10 +345,9 @@ func (m *router) createList(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (m *router) updateList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdateList{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateList(c governor.Context) {
+	var req reqUpdateList
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -371,15 +357,14 @@ func (m *router) updateList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.Archive, req.SenderPolicy, req.MemberPolicy); err != nil {
+	if err := s.s.updateList(c.Ctx(), req.CreatorID, req.Listname, req.Name, req.Desc, req.Archive, req.SenderPolicy, req.MemberPolicy); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) subList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) subList(c governor.Context) {
 	req := reqSub{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -389,15 +374,14 @@ func (m *router) subList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.Subscribe(c.Ctx(), req.CreatorID, req.Listname, req.Userid); err != nil {
+	if err := s.s.subscribe(c.Ctx(), req.CreatorID, req.Listname, req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) unsubList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) unsubList(c governor.Context) {
 	req := reqSub{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -407,17 +391,16 @@ func (m *router) unsubList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveListMembers(c.Ctx(), req.CreatorID, req.Listname, []string{req.Userid}); err != nil {
+	if err := s.s.removeListMembers(c.Ctx(), req.CreatorID, req.Listname, []string{req.Userid}); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) updateListMembers(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdListMembers{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateListMembers(c governor.Context) {
+	var req reqUpdListMembers
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -427,15 +410,14 @@ func (m *router) updateListMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveListMembers(c.Ctx(), req.CreatorID, req.Listname, req.Remove); err != nil {
+	if err := s.s.removeListMembers(c.Ctx(), req.CreatorID, req.Listname, req.Remove); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteList(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteList(c governor.Context) {
 	req := reqListID{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -444,17 +426,16 @@ func (m *router) deleteList(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteList(c.Ctx(), req.CreatorID, req.Listname); err != nil {
+	if err := s.s.deleteList(c.Ctx(), req.CreatorID, req.Listname); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqMsgIDs{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) deleteMsgs(c governor.Context) {
+	var req reqMsgIDs
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -464,14 +445,14 @@ func (m *router) deleteMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteMsgs(c.Ctx(), req.CreatorID, req.Listname, req.Msgids); err != nil {
+	if err := s.s.deleteMsgs(c.Ctx(), req.CreatorID, req.Listname, req.Msgids); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) listOwner(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) listOwner(c governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false
@@ -485,7 +466,7 @@ func (m *router) listOwner(c governor.Context, userid string) (string, bool, boo
 	return creatorid, false, true
 }
 
-func (m *router) listNoBan(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) listNoBan(c governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false
@@ -499,25 +480,26 @@ func (m *router) listNoBan(c governor.Context, userid string) (string, bool, boo
 	return creatorid, false, true
 }
 
-func (m *router) mountRoutes(r governor.Router) {
-	scopeMailinglistRead := m.s.scopens + ":read"
-	scopeMailinglistWrite := m.s.scopens + ":write"
-	scopeMailinglistSubWrite := m.s.scopens + ".sub:write"
-	r.Post("/c/{creatorid}", m.createList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Get("/c/{creatorid}/latest", m.getCreatorLists)
-	r.Get("/latest", m.getPersonalLists, gate.User(m.s.gate, scopeMailinglistRead))
-	r.Put("/c/{creatorid}/list/{listname}", m.updateList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Patch("/c/{creatorid}/list/{listname}/sub", m.subList, gate.NoBanF(m.s.gate, m.listNoBan, scopeMailinglistSubWrite))
-	r.Patch("/c/{creatorid}/list/{listname}/unsub", m.unsubList, gate.User(m.s.gate, scopeMailinglistSubWrite))
-	r.Delete("/c/{creatorid}/list/{listname}/msgs", m.deleteMsgs, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Patch("/c/{creatorid}/list/{listname}/member", m.updateListMembers, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Delete("/c/{creatorid}/list/{listname}", m.deleteList, gate.MemberF(m.s.gate, m.listOwner, scopeMailinglistWrite))
-	r.Get("/l/{listid}", m.getList)
-	r.Get("/l/{listid}/msgs", m.getListMsgs)
-	r.Get("/l/{listid}/threads", m.getListThreads)
-	r.Get("/l/{listid}/threads/id/{threadid}/msgs", m.getListThread)
-	r.Get("/l/{listid}/msgs/id/{msgid}", m.getListMsg)
-	r.Get("/l/{listid}/msgs/id/{msgid}/content", m.getListMsgContent, cachecontrol.Control(m.s.logger, true, nil, 60, m.getListMsgCC))
-	r.Get("/l/{listid}/member", m.getListMembers)
-	r.Get("/l/{listid}/member/ids", m.getListMemberIDs)
+func (s *router) mountRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeMailinglistRead := s.s.scopens + ":read"
+	scopeMailinglistWrite := s.s.scopens + ":write"
+	scopeMailinglistSubWrite := s.s.scopens + ".sub:write"
+	m.PostCtx("/c/{creatorid}", s.createList, gate.MemberF(s.s.gate, s.listOwner, scopeMailinglistWrite), s.rt)
+	m.GetCtx("/c/{creatorid}/latest", s.getCreatorLists, s.rt)
+	m.GetCtx("/latest", s.getPersonalLists, gate.User(s.s.gate, scopeMailinglistRead), s.rt)
+	m.PutCtx("/c/{creatorid}/list/{listname}", s.updateList, gate.MemberF(s.s.gate, s.listOwner, scopeMailinglistWrite), s.rt)
+	m.PatchCtx("/c/{creatorid}/list/{listname}/sub", s.subList, gate.NoBanF(s.s.gate, s.listNoBan, scopeMailinglistSubWrite), s.rt)
+	m.PatchCtx("/c/{creatorid}/list/{listname}/unsub", s.unsubList, gate.User(s.s.gate, scopeMailinglistSubWrite), s.rt)
+	m.DeleteCtx("/c/{creatorid}/list/{listname}/msgs", s.deleteMsgs, gate.MemberF(s.s.gate, s.listOwner, scopeMailinglistWrite), s.rt)
+	m.PatchCtx("/c/{creatorid}/list/{listname}/member", s.updateListMembers, gate.MemberF(s.s.gate, s.listOwner, scopeMailinglistWrite), s.rt)
+	m.DeleteCtx("/c/{creatorid}/list/{listname}", s.deleteList, gate.MemberF(s.s.gate, s.listOwner, scopeMailinglistWrite), s.rt)
+	m.GetCtx("/l/{listid}", s.getList, s.rt)
+	m.GetCtx("/l/{listid}/msgs", s.getListMsgs, s.rt)
+	m.GetCtx("/l/{listid}/threads", s.getListThreads, s.rt)
+	m.GetCtx("/l/{listid}/threads/id/{threadid}/msgs", s.getListThread, s.rt)
+	m.GetCtx("/l/{listid}/msgs/id/{msgid}", s.getListMsg, s.rt)
+	m.GetCtx("/l/{listid}/msgs/id/{msgid}/content", s.getListMsgContent, cachecontrol.ControlCtx(true, nil, 60, s.getListMsgCC), s.rt)
+	m.GetCtx("/l/{listid}/member", s.getListMembers, s.rt)
+	m.GetCtx("/l/{listid}/member/ids", s.getListMemberIDs, s.rt)
 }

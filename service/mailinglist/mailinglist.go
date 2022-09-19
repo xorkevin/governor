@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist/model"
 	"xorkevin.dev/governor/service/objstore"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org"
@@ -41,6 +42,7 @@ type (
 		users        user.Users
 		orgs         org.Orgs
 		mailer       mail.Mailer
+		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
 		log          *klog.LevelLogger
 		scopens      string
@@ -60,7 +62,8 @@ type (
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.MiddlewareCtx
 	}
 
 	ctxKeyMailingList struct{}
@@ -94,22 +97,24 @@ func NewCtx(inj governor.Injector) Service {
 	ev := events.GetCtxEvents(inj)
 	users := user.GetCtxUsers(inj)
 	orgs := org.GetCtxOrgs(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	mailer := mail.GetCtxMailer(inj)
-	return New(lists, obj, ev, users, orgs, mailer, g)
+	return New(lists, obj, ev, users, orgs, mailer, ratelimiter, g)
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, g gate.Gate) Service {
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
 	return &service{
-		lists:      lists,
-		mailBucket: obj,
-		rcvMailDir: obj.Subdir("rcvmail"),
-		events:     ev,
-		users:      users,
-		orgs:       orgs,
-		mailer:     mailer,
-		gate:       g,
+		lists:       lists,
+		mailBucket:  obj,
+		rcvMailDir:  obj.Subdir("rcvmail"),
+		events:      ev,
+		users:       users,
+		orgs:        orgs,
+		mailer:      mailer,
+		ratelimiter: ratelimiter,
+		gate:        g,
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,
 		}, time.Minute),
@@ -142,7 +147,8 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
@@ -348,7 +354,7 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		lists, err := s.GetCreatorLists(ctx, creatorid, listDeleteBatchSize, 0)
+		lists, err := s.getCreatorLists(ctx, creatorid, listDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user mailinglists")
 		}
@@ -356,7 +362,7 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 			break
 		}
 		for _, i := range lists.Lists {
-			if err := s.DeleteList(ctx, i.CreatorID, i.Listname); err != nil {
+			if err := s.deleteList(ctx, i.CreatorID, i.Listname); err != nil {
 				return kerrors.WithMsg(err, "Failed to delete list")
 			}
 		}

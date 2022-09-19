@@ -1,11 +1,11 @@
 package conduit
 
 import (
-	"encoding/json"
 	"net/http"
 	"regexp"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/kjson"
 )
 
 const (
@@ -106,7 +106,7 @@ func validTheme(theme string) error {
 	if len(theme) > lengthCapTheme {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme must be shorter than 4096 characters")
 	}
-	if err := json.Unmarshal([]byte(theme), &struct{}{}); err != nil {
+	if err := kjson.Unmarshal([]byte(theme), &struct{}{}); err != nil {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme is invalid JSON")
 	}
 	return nil

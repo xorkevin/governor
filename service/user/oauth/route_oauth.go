@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor/service/cachecontrol"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetAppGroup reqGetAppBulk reqAppPost reqAppPut
@@ -18,8 +19,7 @@ type (
 	}
 )
 
-func (m *router) getApp(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getApp(c governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -27,7 +27,7 @@ func (m *router) getApp(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetApp(c.Ctx(), req.ClientID)
+	res, err := s.s.getApp(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -35,8 +35,7 @@ func (m *router) getApp(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getAppLogo(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getAppLogo(c governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -44,17 +43,14 @@ func (m *router) getAppLogo(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetLogo(c.Ctx(), req.ClientID)
+	img, contentType, err := s.s.getLogo(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("Failed to close app logo", map[string]string{
-				"actiontype": "getapplogo",
-				"error":      err.Error(),
-			})
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close app logo"), nil)
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)
@@ -68,8 +64,7 @@ type (
 	}
 )
 
-func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getAppGroup(c governor.Context) {
 	req := reqGetAppGroup{
 		CreatorID: c.Query("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -80,7 +75,7 @@ func (m *router) getAppGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetApps(c.Ctx(), req.Amount, req.Offset, req.CreatorID)
+	res, err := s.s.getApps(c.Ctx(), req.Amount, req.Offset, req.CreatorID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -94,8 +89,7 @@ type (
 	}
 )
 
-func (m *router) getAppBulk(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getAppBulk(c governor.Context) {
 	req := reqGetAppBulk{
 		ClientIDs: strings.Split(c.Query("ids"), ","),
 	}
@@ -104,7 +98,7 @@ func (m *router) getAppBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetAppsBulk(c.Ctx(), req.ClientIDs)
+	res, err := s.s.getAppsBulk(c.Ctx(), req.ClientIDs)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -121,10 +115,9 @@ type (
 	}
 )
 
-func (m *router) createApp(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqAppPost{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createApp(c governor.Context) {
+	var req reqAppPost
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -134,7 +127,7 @@ func (m *router) createApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateApp(c.Ctx(), req.Name, req.URL, req.RedirectURI, req.CreatorID)
+	res, err := s.s.createApp(c.Ctx(), req.Name, req.URL, req.RedirectURI, req.CreatorID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -151,10 +144,9 @@ type (
 	}
 )
 
-func (m *router) updateApp(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqAppPut{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateApp(c governor.Context) {
+	var req reqAppPut
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -164,16 +156,15 @@ func (m *router) updateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateApp(c.Ctx(), req.ClientID, req.Name, req.URL, req.RedirectURI); err != nil {
+	if err := s.s.updateApp(c.Ctx(), req.ClientID, req.Name, req.URL, req.RedirectURI); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	img, err := image.LoadImage(m.s.logger, c, "image")
+func (s *router) updateAppLogo(c governor.Context) {
+	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -187,7 +178,7 @@ func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.UpdateLogo(c.Ctx(), req.ClientID, img); err != nil {
+	if err := s.s.updateLogo(c.Ctx(), req.ClientID, img); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -195,8 +186,7 @@ func (m *router) updateAppLogo(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) rotateAppKey(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) rotateAppKey(c governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -204,7 +194,7 @@ func (m *router) rotateAppKey(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.RotateAppKey(c.Ctx(), req.ClientID)
+	res, err := s.s.rotateAppKey(c.Ctx(), req.ClientID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -212,8 +202,7 @@ func (m *router) rotateAppKey(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteApp(c governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -222,7 +211,7 @@ func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := m.s.Delete(c.Ctx(), req.ClientID); err != nil {
+	if err := s.s.deleteApp(c.Ctx(), req.ClientID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -230,7 +219,7 @@ func (m *router) deleteApp(w http.ResponseWriter, r *http.Request) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) getAppLogoCC(c governor.Context) (string, error) {
+func (s *router) getAppLogoCC(c governor.Context) (string, error) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -238,7 +227,7 @@ func (m *router) getAppLogoCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatLogo(c.Ctx(), req.ClientID)
+	objinfo, err := s.s.statLogo(c.Ctx(), req.ClientID)
 	if err != nil {
 		return "", err
 	}
@@ -246,16 +235,17 @@ func (m *router) getAppLogoCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) mountAppRoutes(r governor.Router) {
-	scopeAppRead := m.s.scopens + ".app:read"
-	scopeAppWrite := m.s.scopens + ".app:write"
-	r.Get("/id/{clientid}", m.getApp, m.rt)
-	r.Get("/id/{clientid}/image", m.getAppLogo, cachecontrol.Control(m.s.logger, true, nil, 60, m.getAppLogoCC), m.rt)
-	r.Get("", m.getAppGroup, gate.Member(m.s.gate, m.s.rolens, scopeAppRead), m.rt)
-	r.Get("/ids", m.getAppBulk, m.rt)
-	r.Post("", m.createApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
-	r.Put("/id/{clientid}", m.updateApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
-	r.Put("/id/{clientid}/image", m.updateAppLogo, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
-	r.Put("/id/{clientid}/rotate", m.rotateAppKey, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
-	r.Delete("/id/{clientid}", m.deleteApp, gate.Member(m.s.gate, m.s.rolens, scopeAppWrite), m.rt)
+func (s *router) mountAppRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeAppRead := s.s.scopens + ".app:read"
+	scopeAppWrite := s.s.scopens + ".app:write"
+	m.GetCtx("/id/{clientid}", s.getApp, s.rt)
+	m.GetCtx("/id/{clientid}/image", s.getAppLogo, cachecontrol.ControlCtx(true, nil, 60, s.getAppLogoCC), s.rt)
+	m.GetCtx("", s.getAppGroup, gate.Member(s.s.gate, s.s.rolens, scopeAppRead), s.rt)
+	m.GetCtx("/ids", s.getAppBulk, s.rt)
+	m.PostCtx("", s.createApp, gate.Member(s.s.gate, s.s.rolens, scopeAppWrite), s.rt)
+	m.PutCtx("/id/{clientid}", s.updateApp, gate.Member(s.s.gate, s.s.rolens, scopeAppWrite), s.rt)
+	m.PutCtx("/id/{clientid}/image", s.updateAppLogo, gate.Member(s.s.gate, s.s.rolens, scopeAppWrite), s.rt)
+	m.PutCtx("/id/{clientid}/rotate", s.rotateAppKey, gate.Member(s.s.gate, s.s.rolens, scopeAppWrite), s.rt)
+	m.DeleteCtx("/id/{clientid}", s.deleteApp, gate.Member(s.s.gate, s.s.rolens, scopeAppWrite), s.rt)
 }

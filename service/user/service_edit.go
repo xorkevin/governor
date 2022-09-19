@@ -2,13 +2,13 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -26,7 +26,7 @@ func (s *service) UpdateUser(ctx context.Context, userid string, ruser reqUserPu
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
-	b, err := json.Marshal(UpdateUserProps{
+	b, err := kjson.Marshal(UpdateUserProps{
 		Userid:   m.Userid,
 		Username: m.Username,
 	})
