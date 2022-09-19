@@ -119,7 +119,6 @@ const (
 	reqIDUnusedCounterSize = 1
 	reqIDTotalCounterSize  = reqIDCounterSize + reqIDUnusedCounterSize
 	reqIDSize              = reqIDTimeSize + reqIDCounterSize
-	reqIDCounterMask       = (uint32(1) << (8 * reqIDCounterSize)) - 1
 	reqIDCounterShift      = 8 * reqIDUnusedCounterSize
 )
 
@@ -129,6 +128,6 @@ func ReqID(count uint32) string {
 	b := [reqIDTotalTimeSize + reqIDTotalCounterSize]byte{}
 	now := uint64(time.Now().Round(0).UnixMilli())
 	binary.BigEndian.PutUint64(b[:reqIDTotalTimeSize], now)
-	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], (count&reqIDCounterMask)<<reqIDCounterShift)
-	return base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize : reqIDUnusedTimeSize+reqIDSize])
+	binary.BigEndian.PutUint32(b[reqIDTotalTimeSize:], count<<reqIDCounterShift)
+	return strings.ToLower(base32RawHexEncoding.EncodeToString(b[reqIDUnusedTimeSize : reqIDUnusedTimeSize+reqIDSize]))
 }
