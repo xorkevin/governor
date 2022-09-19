@@ -62,8 +62,7 @@ func (e ErrorUnreachable) Error() string {
 }
 
 const (
-	retryAfterHeader           = "Retry-After"
-	retryAfterHeaderTimeFormat = "Mon, 02 Jan 2006 15:04:05 MST"
+	retryAfterHeader = "Retry-After"
 )
 
 type (
@@ -80,7 +79,7 @@ func (e *ErrorTooManyRequests) Error() string {
 
 // RetryAfterTime returns the earliest time at which the request may be retried
 func (e *ErrorTooManyRequests) RetryAfterTime() string {
-	return e.RetryAfter.Format(retryAfterHeaderTimeFormat)
+	return e.RetryAfter.UTC().Format(time.RFC1123)
 }
 
 // ErrWithNoLog returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorNoLog] kind and message

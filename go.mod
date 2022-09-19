@@ -28,8 +28,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.1.9
-	xorkevin.dev/kerrors v0.1.1
-	xorkevin.dev/klog v0.0.0-20220915083448-1b364cbaa1f9
+	xorkevin.dev/kerrors v0.1.3
+	xorkevin.dev/klog v0.0.0-20220919094828-066af8ede7d5
 )
 
 require (
