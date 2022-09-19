@@ -29,6 +29,7 @@ type (
 func New(c governor.SysChannels, ev events.Events) *SystemEvents {
 	return &SystemEvents{
 		SysChannels: c,
+		Events:      ev,
 	}
 }
 

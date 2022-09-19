@@ -87,7 +87,11 @@ func main() {
 	}
 	gov.Register("token", "/null/token", token.New())
 	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
-	gov.Register("ws", "/ws", ws.NewCtx(gov.Injector()))
+	{
+		inj := gov.Injector()
+		ratelimit.NewSubtreeInCtx(inj, "ws")
+		gov.Register("ws", "/ws", ws.NewCtx(inj))
+	}
 	{
 		inj := gov.Injector()
 		usermodel.NewInCtx(inj, "users")
@@ -137,12 +141,14 @@ func main() {
 		gdmmodel.NewInCtx(inj, "gdms", "gdmmembers", "gdmassocs")
 		msgmodel.NewInCtx(inj, "chatmsgs")
 		kvstore.NewSubtreeInCtx(inj, "conduit")
+		ratelimit.NewSubtreeInCtx(inj, "conduit")
 		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
 	}
 	{
 		inj := gov.Injector()
 		mailinglistmodel.NewInCtx(inj, "mailinglists", "mailinglistmembers", "mailinglistmsgs", "mailinglistsentmsgs", "mailinglisttree")
 		objstore.NewBucketInCtx(inj, "mailinglist")
+		ratelimit.NewSubtreeInCtx(inj, "mailinglist")
 		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}
 

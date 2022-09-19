@@ -224,7 +224,7 @@ func (c *Config) init() error {
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = c.config.GetString("loglevel")
 	c.logOutput = c.config.GetString("logoutput")
-	c.addr = c.config.GetString("port")
+	c.addr = c.config.GetString("addr")
 	c.BaseURL = c.config.GetString("baseurl")
 	c.maxReqSize = c.config.GetString("maxreqsize")
 	c.maxHeaderSize = c.config.GetString("maxheadersize")
