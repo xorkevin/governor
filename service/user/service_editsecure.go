@@ -586,7 +586,7 @@ func (s *service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr
 func (s *service) resetLoginFailCount(ctx context.Context, m *model.Model) {
 	m.FailedLoginTime = 0
 	m.FailedLoginCount = 0
-	if err := s.users.UpdateLoginFailed(context.Background(), m); err != nil {
+	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to reset login failure count"), nil)
 	}
 }

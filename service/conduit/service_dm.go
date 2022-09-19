@@ -23,7 +23,7 @@ func (s *service) publishDMMsgEvent(ctx context.Context, userids []string, v int
 		return
 	}
 	for _, i := range present {
-		if err := s.ws.Publish(context.Background(), i, s.opts.DMMsgChannel, v); err != nil {
+		if err := s.ws.Publish(ctx, i, s.opts.DMMsgChannel, v); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm msg event"), nil)
 		}
 	}

@@ -133,7 +133,7 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.profiles.Setup(context.Background()); err != nil {
+	if err := s.profiles.Setup(ctx); err != nil {
 		return err
 	}
 	s.log.Info(ctx, "Created profile table", nil)

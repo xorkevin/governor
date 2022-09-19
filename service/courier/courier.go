@@ -151,8 +151,8 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"courier.fallbacklink": s.fallbackLink,
-		"lcourier.inkprefix":   s.linkPrefix,
-		"ccourier.achetime":    s.cacheTime,
+		"courier.linkprefix":   s.linkPrefix,
+		"courier.cachetime":    s.cacheTime,
 	})
 
 	sr := s.router()
@@ -194,7 +194,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}
 	s.log.Info(ctx, "Created courierlinks table", nil)
 
-	if err := s.courierBucket.Init(context.Background()); err != nil {
+	if err := s.courierBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init courier bucket")
 	}
 	s.log.Info(ctx, "Created courier bucket", nil)

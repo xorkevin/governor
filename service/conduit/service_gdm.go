@@ -32,7 +32,7 @@ func (s *service) publishGDMMsgEvent(ctx context.Context, chatid string, v inter
 		return
 	}
 	for _, i := range present {
-		if err := s.ws.Publish(context.Background(), i, s.opts.GDMMsgChannel, v); err != nil {
+		if err := s.ws.Publish(ctx, i, s.opts.GDMMsgChannel, v); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish gdm msg event"), nil)
 		}
 	}
@@ -57,7 +57,7 @@ func (s *service) publishGDMSettingsEvent(ctx context.Context, chatid string, v 
 		return
 	}
 	for _, i := range present {
-		if err := s.ws.Publish(context.Background(), i, s.opts.GDMSettingsChannel, v); err != nil {
+		if err := s.ws.Publish(ctx, i, s.opts.GDMSettingsChannel, v); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish gdm settings event"), nil)
 		}
 	}

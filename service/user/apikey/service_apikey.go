@@ -204,7 +204,7 @@ func (s *service) DeleteKeys(ctx context.Context, keyids []string) error {
 }
 
 func (s *service) clearCache(ctx context.Context, keyids ...string) {
-	if err := s.kvkey.Del(context.Background(), keyids...); err != nil {
+	if err := s.kvkey.Del(ctx, keyids...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear keys from cache"), nil)
 	}
 }

@@ -152,7 +152,7 @@ func (s *service) Stop(ctx context.Context) {
 }
 
 func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
 		MaxBytes:   s.streamsize,
@@ -162,7 +162,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}
 	s.log.Info(ctx, "Created roles stream", nil)
 
-	if err := s.roles.Setup(context.Background()); err != nil {
+	if err := s.roles.Setup(ctx); err != nil {
 		return err
 	}
 	s.log.Info(ctx, "Created userrole table", nil)

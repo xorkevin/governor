@@ -44,7 +44,7 @@ func (s *service) GetUserSessions(ctx context.Context, userid string, limit, off
 }
 
 func (s *service) killCacheSessions(ctx context.Context, sessionids []string) {
-	if err := s.kvsessions.Del(context.Background(), sessionids...); err != nil {
+	if err := s.kvsessions.Del(ctx, sessionids...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete session keys"), nil)
 	}
 }

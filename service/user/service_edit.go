@@ -81,14 +81,14 @@ func (s *service) UpdateRank(ctx context.Context, userid string, updaterid strin
 
 	if editAddRank.Has(rank.TagAdmin) {
 		s.log.Info(ctx, "Invite add admin role", klog.Fields{
-			"userid":   m.Userid,
-			"username": m.Username,
+			"user.userid":   m.Userid,
+			"user.username": m.Username,
 		})
 	}
 	if editRemoveRank.Has(rank.TagAdmin) {
 		s.log.Info(ctx, "Remove admin role", klog.Fields{
-			"userid":   m.Userid,
-			"username": m.Username,
+			"user.userid":   m.Userid,
+			"user.username": m.Username,
 		})
 	}
 
@@ -221,8 +221,8 @@ func (s *service) AcceptRoleInvitation(ctx context.Context, userid, role string)
 	}
 	if inv.Role == rank.TagAdmin {
 		s.log.Info(ctx, "Add admin role", klog.Fields{
-			"userid":   m.Userid,
-			"username": m.Username,
+			"user.userid":   m.Userid,
+			"user.username": m.Username,
 		})
 	}
 	if err := s.invitations.DeleteByID(ctx, userid, role); err != nil {

@@ -107,12 +107,12 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	if k := tt.DefinedTemplates(); k != "" {
 		s.log.Info(ctx, "Loaded text templates", klog.Fields{
-			"templates": strings.TrimLeft(k, "; "),
+			"tpl.local.txttemplates": strings.TrimLeft(k, "; "),
 		})
 	}
 	if k := ht.DefinedTemplates(); k != "" {
 		s.log.Info(ctx, "Loaded html templates", klog.Fields{
-			"templates": strings.TrimLeft(k, "; "),
+			"tpl.local.htmltemplates": strings.TrimLeft(k, "; "),
 		})
 	}
 	return nil

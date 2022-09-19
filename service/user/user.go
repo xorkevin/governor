@@ -566,8 +566,8 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	}
 	s.aotpCipher.Store(s.otpCipher)
 	s.log.Info(ctx, "Refreshed otp secrets with new secrets", klog.Fields{
-		"kid":        s.otpCipher.cipher.ID(),
-		"numotpkeys": decrypter.Size(),
+		"user.otpcipher.kid":        s.otpCipher.cipher.ID(),
+		"user.otpcipher.numotpkeys": decrypter.Size(),
 	})
 	return nil
 }
@@ -641,8 +641,8 @@ func (s *service) AddAdmin(ctx context.Context, req governor.ReqAddAdmin) error 
 	}
 
 	s.log.Info(ctx, "Added admin", klog.Fields{
-		"username": madmin.Username,
-		"userid":   madmin.Userid,
+		"user.username": madmin.Username,
+		"user.userid":   madmin.Userid,
 	})
 
 	return nil

@@ -251,18 +251,18 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 		return nil, kerrors.WithMsg(err, "Failed to create user roles")
 	}
 
-	// must make a best effort attempt to publish new user event
-	if err := s.events.StreamPublish(context.Background(), s.opts.CreateChannel, b); err != nil {
+	// must make a best effort attempt to publish new user event and clear user existence cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+
+	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"), nil)
 	}
 
 	s.log.Info(ctx, "Created user", klog.Fields{
-		"userid":   m.Userid,
-		"username": m.Username,
+		"user.userid":   m.Userid,
+		"user.username": m.Username,
 	})
 
-	// must make a best effort to clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
 	s.clearUserExists(ctx, userid)
 
 	return &resUserUpdate{
