@@ -347,7 +347,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup dm model")
-		if !errors.Is(err, db.ErrAuthz{}) {
+		if !errors.Is(err, db.ErrorAuthz{}) {
 			return err
 		}
 	}

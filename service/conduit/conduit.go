@@ -2,8 +2,6 @@ package conduit
 
 import (
 	"context"
-	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,11 +13,15 @@ import (
 	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
 	servermodel "xorkevin.dev/governor/service/conduit/server/model"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/ws"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -49,8 +51,9 @@ type (
 		users          user.Users
 		events         events.Events
 		ws             ws.WS
+		ratelimiter    ratelimit.Ratelimiter
 		gate           gate.Gate
-		logger         governor.Logger
+		log            *klog.LevelLogger
 		scopens        string
 		channelns      string
 		streamns       string
@@ -62,7 +65,8 @@ type (
 	}
 
 	router struct {
-		s *service
+		s  *service
+		rt governor.MiddlewareCtx
 	}
 
 	friendProps struct {
@@ -114,6 +118,7 @@ func NewCtx(inj governor.Injector) Service {
 	users := user.GetCtxUsers(inj)
 	ev := events.GetCtxEvents(inj)
 	wss := ws.GetCtxWS(inj)
+	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
 	g := gate.GetCtxGate(inj)
 	return New(
 		friends,
@@ -125,6 +130,7 @@ func NewCtx(inj governor.Injector) Service {
 		users,
 		ev,
 		wss,
+		ratelimiter,
 		g,
 	)
 }
@@ -140,6 +146,7 @@ func New(
 	users user.Users,
 	ev events.Events,
 	wss ws.WS,
+	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
 ) Service {
 	return &service{
@@ -152,12 +159,13 @@ func New(
 		users:          users,
 		events:         ev,
 		ws:             wss,
+		ratelimiter:    ratelimiter,
 		gate:           g,
 		invitationTime: time72h,
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxConduit(inj, s)
 	s.scopens = "gov." + name
 	s.channelns = name
@@ -181,15 +189,13 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *service) router() *router {
 	return &router{
-		s: s,
+		s:  s,
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse role invitation time")
@@ -199,63 +205,19 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.syschannels = c.SysChannels
 
-	l.Info("Loaded config", map[string]string{
-		"stream size (bytes)": r.GetStr("streamsize"),
-		"event size (bytes)":  r.GetStr("eventsize"),
-		"invitationtime (s)":  strconv.FormatInt(s.invitationTime, 10),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"conduit.stream.size":    r.GetStr("streamsize"),
+		"conduit.event.size":     r.GetStr("eventsize"),
+		"conduit.invitationtime": s.invitationTime,
 	})
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	l.Info("Mounted http routes", nil)
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-	if err := s.friends.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created conduit friend table", nil)
-	if err := s.invitations.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created conduit friend invitation table", nil)
-	if err := s.dms.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created conduit dm table", nil)
-	if err := s.gdms.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created conduit gdm tables", nil)
-	if err := s.msgs.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created conduit msg table", nil)
-	if err := s.events.InitStream(context.Background(), s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init conduit stream")
-	}
-	l.Info("Created conduit stream", nil)
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.FriendChannel, s.streamns+"_FRIEND_WORKER", s.friendSubscriber, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -264,7 +226,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to friend queue")
 	}
-	l.Info("Subscribed to friend queue", nil)
+	s.log.Info(ctx, "Subscribed to friend queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UnfriendChannel, s.streamns+"_UNFRIEND_WORKER", s.unfriendSubscriber, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -274,7 +236,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to unfriend queue")
 	}
-	l.Info("Subscribed to unfriend queue", nil)
+	s.log.Info(ctx, "Subscribed to unfriend queue", nil)
 
 	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -284,7 +246,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
-	l.Info("Subscribed to user create queue", nil)
+	s.log.Info(ctx, "Subscribed to user create queue", nil)
 
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -294,7 +256,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_UPDATE", s.userUpdateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
@@ -304,22 +266,23 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}
-	l.Info("Subscribed to user update queue", nil)
+	s.log.Info(ctx, "Subscribed to user update queue", nil)
 
-	if _, err := s.events.Subscribe(s.syschannels.GC, s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook); err != nil {
+	sysEvents := sysevent.New(s.syschannels, s.events)
+	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
 	}
-	l.Info("Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	if _, err := s.ws.SubscribePresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.presenceHandler); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to ws presence channel")
 	}
-	l.Info("Subscribed to ws presence channel", nil)
+	s.log.Info(ctx, "Subscribed to ws presence channel", nil)
 
 	if _, err := s.ws.Subscribe(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.presenceQueryHandler); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to ws presence query channel")
 	}
-	l.Info("Subscribed to ws presence query channel", nil)
+	s.log.Info(ctx, "Subscribed to ws presence query channel", nil)
 
 	return nil
 }
@@ -327,7 +290,40 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.friends.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created conduit friend table", nil)
+	if err := s.invitations.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created conduit friend invitation table", nil)
+	if err := s.dms.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created conduit dm table", nil)
+	if err := s.gdms.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created conduit gdm tables", nil)
+	if err := s.msgs.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created conduit msg table", nil)
+	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
+		Replicas:   1,
+		MaxAge:     30 * 24 * time.Hour,
+		MaxBytes:   s.streamsize,
+		MaxMsgSize: s.eventsize,
+	}); err != nil {
+		return kerrors.WithMsg(err, "Failed to init conduit stream")
+	}
+	s.log.Info(ctx, "Created conduit stream", nil)
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -396,27 +392,17 @@ func (s *service) userUpdateHook(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-func (s *service) friendInvitationGCHook(ctx context.Context, topic string, msgdata []byte) {
-	l := s.logger.WithData(map[string]string{
-		"agent":   "subscriber",
-		"channel": s.syschannels.GC,
-		"group":   s.streamns + "_WORKER_INVITATION_GC",
-	})
-	props, err := governor.DecodeSysEventTimestampProps(msgdata)
-	if err != nil {
-		l.Error(err.Error(), nil)
-		return
-	}
+func (s *service) friendInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
-		l.Error(err.Error(), nil)
-		return
+		return kerrors.WithMsg(err, "Failed to GC friend invitations")
 	}
-	l.Debug("GC friend invitations", nil)
+	s.log.Info(ctx, "GC friend invitations", nil)
+	return nil
 }
 
 func decodeFriendProps(msgdata []byte) (*friendProps, error) {
 	m := &friendProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode friend props")
 	}
 	return m, nil
@@ -424,7 +410,7 @@ func decodeFriendProps(msgdata []byte) (*friendProps, error) {
 
 func decodeUnfriendProps(msgdata []byte) (*unfriendProps, error) {
 	m := &unfriendProps{}
-	if err := json.Unmarshal(msgdata, m); err != nil {
+	if err := kjson.Unmarshal(msgdata, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to decode unfriend props")
 	}
 	return m, nil

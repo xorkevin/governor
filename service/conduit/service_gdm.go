@@ -10,15 +10,13 @@ import (
 	"xorkevin.dev/governor/service/conduit/gdm/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
-func (s *service) publishGDMMsgEvent(chatid string, v interface{}) {
-	m, err := s.gdms.GetChatsMembers(context.Background(), []string{chatid}, groupChatMemberCap*2)
+func (s *service) publishGDMMsgEvent(ctx context.Context, chatid string, v interface{}) {
+	m, err := s.gdms.GetChatsMembers(ctx, []string{chatid}, groupChatMemberCap*2)
 	if err != nil {
-		s.logger.Error("Failed to get gdm members", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_gdm_members",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get gdm members"), nil)
 		return
 	}
 	if len(m) == 0 {
@@ -28,31 +26,22 @@ func (s *service) publishGDMMsgEvent(chatid string, v interface{}) {
 	for _, i := range m {
 		userids = append(userids, i.Userid)
 	}
-	present, err := s.getPresence(context.Background(), s.logger, locGDM, userids)
+	present, err := s.getPresence(ctx, locGDM, userids)
 	if err != nil {
-		s.logger.Error("Failed to get presence", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_gdm_presence",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
 		return
 	}
 	for _, i := range present {
 		if err := s.ws.Publish(context.Background(), i, s.opts.GDMMsgChannel, v); err != nil {
-			s.logger.Error("Failed to publish gdm msg event", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "conduit_publish_gdm_msg",
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish gdm msg event"), nil)
 		}
 	}
 }
 
-func (s *service) publishGDMSettingsEvent(chatid string, v interface{}) {
-	m, err := s.gdms.GetChatsMembers(context.Background(), []string{chatid}, groupChatMemberCap*2)
+func (s *service) publishGDMSettingsEvent(ctx context.Context, chatid string, v interface{}) {
+	m, err := s.gdms.GetChatsMembers(ctx, []string{chatid}, groupChatMemberCap*2)
 	if err != nil {
-		s.logger.Error("Failed to get gdm members", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_gdm_members",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get gdm members"), nil)
 		return
 	}
 	if len(m) == 0 {
@@ -62,20 +51,14 @@ func (s *service) publishGDMSettingsEvent(chatid string, v interface{}) {
 	for _, i := range m {
 		userids = append(userids, i.Userid)
 	}
-	present, err := s.getPresence(context.Background(), s.logger, locGDM, userids)
+	present, err := s.getPresence(ctx, locGDM, userids)
 	if err != nil {
-		s.logger.Error("Failed to get presence", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_gdm_presence",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
 		return
 	}
 	for _, i := range present {
 		if err := s.ws.Publish(context.Background(), i, s.opts.GDMSettingsChannel, v); err != nil {
-			s.logger.Error("Failed to publish gdm settings event", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "conduit_publish_gdm_settings",
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish gdm settings event"), nil)
 		}
 	}
 }
@@ -126,7 +109,7 @@ type (
 	}
 )
 
-func (s *service) CreateGDM(ctx context.Context, name string, theme string, requserids []string) (*resGDM, error) {
+func (s *service) createGDM(ctx context.Context, name string, theme string, requserids []string) (*resGDM, error) {
 	userids := uniqStrs(requserids)
 	if len(userids) != len(requserids) {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide unique users")
@@ -173,7 +156,7 @@ func (s *service) getGDMByChatid(ctx context.Context, userid string, chatid stri
 	}
 	m, err := s.gdms.GetByID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Group chat not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get group chat")
@@ -187,7 +170,7 @@ type (
 	}
 )
 
-func (s *service) UpdateGDM(ctx context.Context, userid string, chatid string, name, theme string) error {
+func (s *service) updateGDM(ctx context.Context, userid string, chatid string, name, theme string) error {
 	m, err := s.getGDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return err
@@ -197,7 +180,9 @@ func (s *service) UpdateGDM(ctx context.Context, userid string, chatid string, n
 	if err := s.gdms.UpdateProps(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to update group chat")
 	}
-	s.publishGDMSettingsEvent(chatid, resDMID{
+	// must make a best effort to publish gdm settings event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.publishGDMSettingsEvent(ctx, chatid, resDMID{
 		Chatid: m.Chatid,
 	})
 	return nil
@@ -207,7 +192,7 @@ const (
 	groupChatMemberCap = 31
 )
 
-func (s *service) AddGDMMembers(ctx context.Context, userid string, chatid string, reqmembers []string) error {
+func (s *service) addGDMMembers(ctx context.Context, userid string, chatid string, reqmembers []string) error {
 	if len(reqmembers) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "No users to add")
 	}
@@ -250,7 +235,7 @@ func (s *service) AddGDMMembers(ctx context.Context, userid string, chatid strin
 	return nil
 }
 
-func (s *service) RmGDMMembers(ctx context.Context, userid string, chatid string, reqmembers []string) error {
+func (s *service) rmGDMMembers(ctx context.Context, userid string, chatid string, reqmembers []string) error {
 	if len(reqmembers) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "No users to remove")
 	}
@@ -293,7 +278,7 @@ func (s *service) RmGDMMembers(ctx context.Context, userid string, chatid string
 	return nil
 }
 
-func (s *service) DeleteGDM(ctx context.Context, userid string, chatid string) error {
+func (s *service) deleteGDM(ctx context.Context, userid string, chatid string) error {
 	if _, err := s.getGDMByChatid(ctx, userid, chatid); err != nil {
 		return err
 	}
@@ -322,7 +307,7 @@ func (s *service) rmGDMUser(ctx context.Context, chatid string, userid string) e
 		return nil
 	}
 	if _, err := s.gdms.GetByID(ctx, chatid); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			// TODO: emit gdm delete event
 			return nil
 		}
@@ -381,7 +366,7 @@ func (s *service) getGDMsWithMembers(ctx context.Context, chatids []string) (*re
 	}, nil
 }
 
-func (s *service) GetLatestGDMs(ctx context.Context, userid string, before int64, limit int) (*resGDMs, error) {
+func (s *service) getLatestGDMs(ctx context.Context, userid string, before int64, limit int) (*resGDMs, error) {
 	chatids, err := s.gdms.GetLatest(ctx, userid, before, limit)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest group chats")
@@ -389,7 +374,7 @@ func (s *service) GetLatestGDMs(ctx context.Context, userid string, before int64
 	return s.getGDMsWithMembers(ctx, chatids)
 }
 
-func (s *service) GetGDMs(ctx context.Context, userid string, reqchatids []string) (*resGDMs, error) {
+func (s *service) getGDMs(ctx context.Context, userid string, reqchatids []string) (*resGDMs, error) {
 	chatids, err := s.gdms.GetUserChats(ctx, userid, reqchatids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chats")
@@ -397,7 +382,7 @@ func (s *service) GetGDMs(ctx context.Context, userid string, reqchatids []strin
 	return s.getGDMsWithMembers(ctx, chatids)
 }
 
-func (s *service) SearchGDMs(ctx context.Context, userid1, userid2 string, limit, offset int) (*resGDMs, error) {
+func (s *service) searchGDMs(ctx context.Context, userid1, userid2 string, limit, offset int) (*resGDMs, error) {
 	chatids, err := s.gdms.GetAssocs(ctx, userid1, userid2, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search group chats")
@@ -405,7 +390,7 @@ func (s *service) SearchGDMs(ctx context.Context, userid1, userid2 string, limit
 	return s.getGDMsWithMembers(ctx, chatids)
 }
 
-func (s *service) CreateGDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
+func (s *service) createGDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
 	if _, err := s.getGDMByChatid(ctx, userid, chatid); err != nil {
 		return nil, err
 	}
@@ -427,11 +412,13 @@ func (s *service) CreateGDMMsg(ctx context.Context, userid string, chatid string
 		Kind:   m.Kind,
 		Value:  m.Value,
 	}
-	s.publishGDMMsgEvent(chatid, res)
+	// must make a best effort to publish gdm msg event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.publishGDMMsgEvent(ctx, chatid, res)
 	return &res, nil
 }
 
-func (s *service) GetGDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+func (s *service) getGDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
 	if _, err := s.getGDMByChatid(ctx, userid, chatid); err != nil {
 		return nil, err
 	}
@@ -455,7 +442,7 @@ func (s *service) GetGDMMsgs(ctx context.Context, userid string, chatid string, 
 	}, nil
 }
 
-func (s *service) DelGDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
+func (s *service) delGDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
 	if _, err := s.getGDMByChatid(ctx, userid, chatid); err != nil {
 		return err
 	}

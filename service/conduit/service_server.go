@@ -21,10 +21,10 @@ type (
 	}
 )
 
-func (s *service) CreateServer(ctx context.Context, serverid string, name, desc string, theme string) (*resServer, error) {
+func (s *service) createServer(ctx context.Context, serverid string, name, desc string, theme string) (*resServer, error) {
 	m := s.servers.New(serverid, name, desc, theme)
 	if err := s.servers.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Server already created")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create server")
@@ -38,10 +38,10 @@ func (s *service) CreateServer(ctx context.Context, serverid string, name, desc 
 	}, nil
 }
 
-func (s *service) GetServer(ctx context.Context, serverid string) (*resServer, error) {
+func (s *service) getServer(ctx context.Context, serverid string) (*resServer, error) {
 	m, err := s.servers.GetServer(ctx, serverid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
@@ -55,10 +55,10 @@ func (s *service) GetServer(ctx context.Context, serverid string) (*resServer, e
 	}, nil
 }
 
-func (s *service) UpdateServer(ctx context.Context, serverid string, name, desc string, theme string) error {
+func (s *service) updateServer(ctx context.Context, serverid string, name, desc string, theme string) error {
 	m, err := s.servers.GetServer(ctx, serverid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get server")
@@ -85,9 +85,9 @@ type (
 	}
 )
 
-func (s *service) CreateChannel(ctx context.Context, serverid, channelid string, name, desc string, theme string) (*resChannel, error) {
+func (s *service) createChannel(ctx context.Context, serverid, channelid string, name, desc string, theme string) (*resChannel, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
@@ -97,7 +97,7 @@ func (s *service) CreateChannel(ctx context.Context, serverid, channelid string,
 		return nil, kerrors.WithMsg(err, "Failed to create channel")
 	}
 	if err := s.servers.InsertChannel(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique{}) {
+		if errors.Is(err, db.ErrorUnique{}) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Channel already created")
 		}
 	}
@@ -115,14 +115,14 @@ func (s *service) CreateChannel(ctx context.Context, serverid, channelid string,
 
 func (s *service) getServerChannel(ctx context.Context, serverid, channelid string) (*model.ChannelModel, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
 	}
 	m, err := s.servers.GetChannel(ctx, serverid, channelid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Channel not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get channel")
@@ -130,7 +130,7 @@ func (s *service) getServerChannel(ctx context.Context, serverid, channelid stri
 	return m, nil
 }
 
-func (s *service) GetChannel(ctx context.Context, serverid, channelid string) (*resChannel, error) {
+func (s *service) getChannel(ctx context.Context, serverid, channelid string) (*resChannel, error) {
 	m, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return nil, err
@@ -152,9 +152,9 @@ type (
 	}
 )
 
-func (s *service) GetChannels(ctx context.Context, serverid string, prefix string, limit, offset int) (*resChannels, error) {
+func (s *service) getChannels(ctx context.Context, serverid string, prefix string, limit, offset int) (*resChannels, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
@@ -180,7 +180,7 @@ func (s *service) GetChannels(ctx context.Context, serverid string, prefix strin
 	}, nil
 }
 
-func (s *service) UpdateChannel(ctx context.Context, serverid, channelid string, name, desc string, theme string) error {
+func (s *service) updateChannel(ctx context.Context, serverid, channelid string, name, desc string, theme string) error {
 	m, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func (s *service) UpdateChannel(ctx context.Context, serverid, channelid string,
 	return nil
 }
 
-func (s *service) DeleteChannel(ctx context.Context, serverid, channelid string) error {
+func (s *service) deleteChannel(ctx context.Context, serverid, channelid string) error {
 	m, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func (s *service) DeleteChannel(ctx context.Context, serverid, channelid string)
 	return nil
 }
 
-func (s *service) CreateChannelMsg(ctx context.Context, serverid, channelid string, userid string, kind string, value string) (*resMsg, error) {
+func (s *service) createChannelMsg(ctx context.Context, serverid, channelid string, userid string, kind string, value string) (*resMsg, error) {
 	ch, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (s *service) CreateChannelMsg(ctx context.Context, serverid, channelid stri
 	return &res, nil
 }
 
-func (s *service) GetChannelMsgs(ctx context.Context, serverid, channelid string, kind string, before string, limit int) (*resMsgs, error) {
+func (s *service) getChannelMsgs(ctx context.Context, serverid, channelid string, kind string, before string, limit int) (*resMsgs, error) {
 	ch, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return nil, err
@@ -259,7 +259,7 @@ func (s *service) GetChannelMsgs(ctx context.Context, serverid, channelid string
 	}, nil
 }
 
-func (s *service) DeleteChannelMsg(ctx context.Context, serverid, channelid string, msgid string) error {
+func (s *service) deleteChannelMsg(ctx context.Context, serverid, channelid string, msgid string) error {
 	ch, err := s.getServerChannel(ctx, serverid, channelid)
 	if err != nil {
 		return err

@@ -24,8 +24,7 @@ type (
 	}
 )
 
-func (m *router) getFriends(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getFriends(c governor.Context) {
 	req := reqGetFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -36,7 +35,7 @@ func (m *router) getFriends(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.getFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -52,8 +51,7 @@ type (
 	}
 )
 
-func (m *router) searchFriends(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) searchFriends(c governor.Context) {
 	req := reqSearchFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -63,7 +61,7 @@ func (m *router) searchFriends(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.searchFriends(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -78,8 +76,7 @@ type (
 	}
 )
 
-func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) removeFriend(c governor.Context) {
 	req := reqRmFriend{
 		Userid1: gate.GetCtxUserid(c),
 		Userid2: c.Param("id"),
@@ -88,7 +85,7 @@ func (m *router) removeFriend(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RemoveFriend(c.Ctx(), req.Userid1, req.Userid2); err != nil {
+	if err := s.s.removeFriend(c.Ctx(), req.Userid1, req.Userid2); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -102,8 +99,7 @@ type (
 	}
 )
 
-func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) sendFriendInvitation(c governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
@@ -112,15 +108,14 @@ func (m *router) sendFriendInvitation(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.InviteFriend(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
+	if err := s.s.inviteFriend(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) acceptFriendInvitation(c governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
@@ -129,15 +124,14 @@ func (m *router) acceptFriendInvitation(w http.ResponseWriter, r *http.Request) 
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.AcceptFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
+	if err := s.s.acceptFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteUserFriendInvitation(c governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
@@ -146,15 +140,14 @@ func (m *router) deleteUserFriendInvitation(w http.ResponseWriter, r *http.Reque
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
+	if err := s.s.deleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteInvitedFriendInvitation(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteInvitedFriendInvitation(c governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
@@ -163,7 +156,7 @@ func (m *router) deleteInvitedFriendInvitation(w http.ResponseWriter, r *http.Re
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
+	if err := s.s.deleteFriendInvitation(c.Ctx(), req.Userid, req.InvitedBy); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -178,8 +171,7 @@ type (
 	}
 )
 
-func (m *router) getInvitations(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getInvitations(c governor.Context) {
 	req := reqGetFriendInvitations{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -189,7 +181,7 @@ func (m *router) getInvitations(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetUserFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getUserFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -197,8 +189,7 @@ func (m *router) getInvitations(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getInvited(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getInvited(c governor.Context) {
 	req := reqGetFriendInvitations{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -208,7 +199,7 @@ func (m *router) getInvited(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetInvitedFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getInvitedFriendInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -224,8 +215,7 @@ type (
 	}
 )
 
-func (m *router) getLatestDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getLatestDMs(c governor.Context) {
 	req := reqGetLatestChats{
 		Userid: gate.GetCtxUserid(c),
 		Before: c.QueryInt64("before", 0),
@@ -235,7 +225,7 @@ func (m *router) getLatestDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
+	res, err := s.s.getLatestDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -250,8 +240,7 @@ type (
 	}
 )
 
-func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getDMs(c governor.Context) {
 	req := reqGetChats{
 		Userid:  gate.GetCtxUserid(c),
 		Chatids: strings.Split(c.Query("ids"), ","),
@@ -260,7 +249,7 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetDMs(c.Ctx(), req.Userid, req.Chatids)
+	res, err := s.s.getDMs(c.Ctx(), req.Userid, req.Chatids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -268,8 +257,7 @@ func (m *router) getDMs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) searchDMs(c governor.Context) {
 	req := reqSearchFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -279,7 +267,7 @@ func (m *router) searchDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchDMs(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.searchDMs(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -296,10 +284,9 @@ type (
 	}
 )
 
-func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdateDM{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateDM(c governor.Context) {
+	var req reqUpdateDM
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -309,7 +296,7 @@ func (m *router) updateDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
+	if err := s.s.updateDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -325,10 +312,9 @@ type (
 	}
 )
 
-func (m *router) createDMMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateMsg{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createDMMsg(c governor.Context) {
+	var req reqCreateMsg
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -338,7 +324,7 @@ func (m *router) createDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
+	res, err := s.s.createDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -356,8 +342,7 @@ type (
 	}
 )
 
-func (m *router) getDMMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getDMMsgs(c governor.Context) {
 	req := reqGetMsgs{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -369,7 +354,7 @@ func (m *router) getDMMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
+	res, err := s.s.getDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -385,8 +370,7 @@ type (
 	}
 )
 
-func (m *router) deleteDMMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteDMMsg(c governor.Context) {
 	req := reqDelMsg{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -396,7 +380,7 @@ func (m *router) deleteDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DelDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
+	if err := s.s.delDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -410,8 +394,7 @@ type (
 	}
 )
 
-func (m *router) getLatestGDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getLatestGDMs(c governor.Context) {
 	req := reqGetLatestChats{
 		Userid: gate.GetCtxUserid(c),
 		Before: c.QueryInt64("before", 0),
@@ -421,7 +404,7 @@ func (m *router) getLatestGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetLatestGDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
+	res, err := s.s.getLatestGDMs(c.Ctx(), req.Userid, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -429,8 +412,7 @@ func (m *router) getLatestGDMs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) getGDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getGDMs(c governor.Context) {
 	req := reqGetChats{
 		Userid:  gate.GetCtxUserid(c),
 		Chatids: strings.Split(c.Query("ids"), ","),
@@ -439,7 +421,7 @@ func (m *router) getGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetGDMs(c.Ctx(), req.Userid, req.Chatids)
+	res, err := s.s.getGDMs(c.Ctx(), req.Userid, req.Chatids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -456,8 +438,7 @@ type (
 	}
 )
 
-func (m *router) searchGDMs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) searchGDMs(c governor.Context) {
 	req := reqSearchGDMs{
 		Userid1: gate.GetCtxUserid(c),
 		Userid2: c.Query("id"),
@@ -468,7 +449,7 @@ func (m *router) searchGDMs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.SearchGDMs(c.Ctx(), req.Userid1, req.Userid2, req.Amount, req.Offset)
+	res, err := s.s.searchGDMs(c.Ctx(), req.Userid1, req.Userid2, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -485,10 +466,9 @@ type (
 	}
 )
 
-func (m *router) createGDM(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateGDM{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createGDM(c governor.Context) {
+	var req reqCreateGDM
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -500,7 +480,7 @@ func (m *router) createGDM(w http.ResponseWriter, r *http.Request) {
 	members := make([]string, len(req.Members)+1)
 	members[0] = req.Userid
 	copy(members[1:], req.Members)
-	res, err := m.s.CreateGDM(c.Ctx(), req.Name, req.Theme, members)
+	res, err := s.s.createGDM(c.Ctx(), req.Name, req.Theme, members)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -517,10 +497,9 @@ type (
 	}
 )
 
-func (m *router) updateGDM(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdateGDM{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateGDM(c governor.Context) {
+	var req reqUpdateGDM
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -530,7 +509,7 @@ func (m *router) updateGDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateGDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
+	if err := s.s.updateGDM(c.Ctx(), req.Userid, req.Chatid, req.Name, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -544,8 +523,7 @@ type (
 	}
 )
 
-func (m *router) deleteGDM(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteGDM(c governor.Context) {
 	req := reqDelGDM{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -554,17 +532,16 @@ func (m *router) deleteGDM(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteGDM(c.Ctx(), req.Userid, req.Chatid); err != nil {
+	if err := s.s.deleteGDM(c.Ctx(), req.Userid, req.Chatid); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateMsg{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createGDMMsg(c governor.Context) {
+	var req reqCreateMsg
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -574,7 +551,7 @@ func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
+	res, err := s.s.createGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -582,8 +559,7 @@ func (m *router) createGDMMsg(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (m *router) getGDMMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getGDMMsgs(c governor.Context) {
 	req := reqGetMsgs{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -595,7 +571,7 @@ func (m *router) getGDMMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetGDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
+	res, err := s.s.getGDMMsgs(c.Ctx(), req.Userid, req.Chatid, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -603,8 +579,7 @@ func (m *router) getGDMMsgs(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (m *router) deleteGDMMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteGDMMsg(c governor.Context) {
 	req := reqDelMsg{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -614,7 +589,7 @@ func (m *router) deleteGDMMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DelGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
+	if err := s.s.delGDMMsg(c.Ctx(), req.Userid, req.Chatid, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -629,10 +604,9 @@ type (
 	}
 )
 
-func (m *router) addGDMMember(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqGDMMember{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) addGDMMember(c governor.Context) {
+	var req reqGDMMember
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -642,17 +616,16 @@ func (m *router) addGDMMember(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.AddGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
+	if err := s.s.addGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqGDMMember{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) rmGDMMembers(c governor.Context) {
+	var req reqGDMMember
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -662,7 +635,7 @@ func (m *router) rmGDMMembers(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.RmGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
+	if err := s.s.rmGDMMembers(c.Ctx(), req.Userid, req.Chatid, req.Members); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -675,8 +648,7 @@ type (
 	}
 )
 
-func (m *router) getServer(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getServer(c governor.Context) {
 	req := reqGetServer{
 		ServerID: c.Param("id"),
 	}
@@ -684,7 +656,7 @@ func (m *router) getServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetServer(c.Ctx(), req.ServerID)
+	res, err := s.s.getServer(c.Ctx(), req.ServerID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -701,10 +673,9 @@ type (
 	}
 )
 
-func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateServer{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createServer(c governor.Context) {
+	var req reqCreateServer
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -713,7 +684,7 @@ func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme)
+	res, err := s.s.createServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -721,10 +692,9 @@ func (m *router) createServer(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (m *router) updateServer(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateServer{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateServer(c governor.Context) {
+	var req reqCreateServer
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -733,7 +703,7 @@ func (m *router) updateServer(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme); err != nil {
+	if err := s.s.updateServer(c.Ctx(), req.ServerID, req.Name, req.Desc, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -747,8 +717,7 @@ type (
 	}
 )
 
-func (m *router) getChannel(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getChannel(c governor.Context) {
 	req := reqGetChannel{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -757,7 +726,7 @@ func (m *router) getChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannel(c.Ctx(), req.ServerID, req.ChannelID)
+	res, err := s.s.getChannel(c.Ctx(), req.ServerID, req.ChannelID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -773,8 +742,7 @@ type (
 	}
 )
 
-func (m *router) getChannels(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getChannels(c governor.Context) {
 	req := reqGetChannels{
 		ServerID: c.Param("id"),
 		Amount:   c.QueryInt("amount", -1),
@@ -784,7 +752,7 @@ func (m *router) getChannels(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannels(c.Ctx(), req.ServerID, "", req.Amount, req.Offset)
+	res, err := s.s.getChannels(c.Ctx(), req.ServerID, "", req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -800,8 +768,7 @@ type (
 	}
 )
 
-func (m *router) searchChannels(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) searchChannels(c governor.Context) {
 	req := reqSearchChannels{
 		ServerID: c.Param("id"),
 		Prefix:   c.Query("prefix"),
@@ -811,7 +778,7 @@ func (m *router) searchChannels(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannels(c.Ctx(), req.ServerID, req.Prefix, req.Amount, 0)
+	res, err := s.s.getChannels(c.Ctx(), req.ServerID, req.Prefix, req.Amount, 0)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -829,10 +796,9 @@ type (
 	}
 )
 
-func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateChannel{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createChannel(c governor.Context) {
+	var req reqCreateChannel
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -841,7 +807,7 @@ func (m *router) createChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme)
+	res, err := s.s.createChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -859,10 +825,9 @@ type (
 	}
 )
 
-func (m *router) updateChannel(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqUpdateChannel{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) updateChannel(c governor.Context) {
+	var req reqUpdateChannel
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -872,15 +837,14 @@ func (m *router) updateChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.UpdateChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme); err != nil {
+	if err := s.s.updateChannel(c.Ctx(), req.ServerID, req.ChannelID, req.Name, req.Desc, req.Theme); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) deleteChannel(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteChannel(c governor.Context) {
 	req := reqGetChannel{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -889,7 +853,7 @@ func (m *router) deleteChannel(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteChannel(c.Ctx(), req.ServerID, req.ChannelID); err != nil {
+	if err := s.s.deleteChannel(c.Ctx(), req.ServerID, req.ChannelID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -906,10 +870,9 @@ type (
 	}
 )
 
-func (m *router) createChannelMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqCreateChannelMsg{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createChannelMsg(c governor.Context) {
+	var req reqCreateChannelMsg
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -920,7 +883,7 @@ func (m *router) createChannelMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.CreateChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Userid, req.Kind, req.Value)
+	res, err := s.s.createChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Userid, req.Kind, req.Value)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -938,8 +901,7 @@ type (
 	}
 )
 
-func (m *router) getChannelMsgs(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getChannelMsgs(c governor.Context) {
 	req := reqGetChannelMsgs{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -951,7 +913,7 @@ func (m *router) getChannelMsgs(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	res, err := m.s.GetChannelMsgs(c.Ctx(), req.ServerID, req.ChannelID, req.Kind, req.Before, req.Amount)
+	res, err := s.s.getChannelMsgs(c.Ctx(), req.ServerID, req.ChannelID, req.Kind, req.Before, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -967,8 +929,7 @@ type (
 	}
 )
 
-func (m *router) deleteChannelMsg(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteChannelMsg(c governor.Context) {
 	req := reqDelChannelMsg{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -978,14 +939,14 @@ func (m *router) deleteChannelMsg(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Msgid); err != nil {
+	if err := s.s.deleteChannelMsg(c.Ctx(), req.ServerID, req.ChannelID, req.Msgid); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
 	serverid := c.Param("id")
 	if err := validhasServerID(serverid); err != nil {
 		return "", false, false
@@ -993,55 +954,57 @@ func (m *router) serverMember(c governor.Context, userid string) (string, bool, 
 	return rank.ToOrgName(serverid), false, true
 }
 
-func (m *router) mountRoutes(r governor.Router) {
-	scopeFriendRead := m.s.scopens + ".friend:read"
-	scopeFriendWrite := m.s.scopens + ".friend:write"
-	r.Get("/friend", m.getFriends, gate.User(m.s.gate, scopeFriendRead))
-	r.Delete("/friend/id/{id}", m.removeFriend, gate.User(m.s.gate, scopeFriendWrite))
-	r.Get("/friend/search", m.searchFriends, gate.User(m.s.gate, scopeFriendRead))
-	r.Get("/friend/invitation", m.getInvitations, gate.User(m.s.gate, scopeFriendRead))
-	r.Get("/friend/invitation/invited", m.getInvited, gate.User(m.s.gate, scopeFriendRead))
-	r.Post("/friend/invitation/id/{id}", m.sendFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
-	r.Post("/friend/invitation/id/{id}/accept", m.acceptFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
-	r.Delete("/friend/invitation/id/{id}", m.deleteUserFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
-	r.Delete("/friend/invitation/invited/{id}", m.deleteInvitedFriendInvitation, gate.User(m.s.gate, scopeFriendWrite))
+func (s *router) mountRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
 
-	scopeChatRead := m.s.scopens + ".chat:read"
-	scopeChatWrite := m.s.scopens + ".chat:write"
-	scopeChatAdminWrite := m.s.scopens + ".chat.admin:write"
-	r.Get("/dm", m.getLatestDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/dm/ids", m.getDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/dm/search", m.searchDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Put("/dm/id/{id}", m.updateDM, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Post("/dm/id/{id}/msg", m.createDMMsg, gate.User(m.s.gate, scopeChatWrite))
-	r.Get("/dm/id/{id}/msg", m.getDMMsgs, gate.User(m.s.gate, scopeChatRead))
-	r.Delete("/dm/id/{id}/msg/id/{msgid}", m.deleteDMMsg, gate.User(m.s.gate, scopeChatWrite))
+	scopeFriendRead := s.s.scopens + ".friend:read"
+	scopeFriendWrite := s.s.scopens + ".friend:write"
+	m.GetCtx("/friend", s.getFriends, gate.User(s.s.gate, scopeFriendRead), s.rt)
+	m.DeleteCtx("/friend/id/{id}", s.removeFriend, gate.User(s.s.gate, scopeFriendWrite), s.rt)
+	m.GetCtx("/friend/search", s.searchFriends, gate.User(s.s.gate, scopeFriendRead), s.rt)
+	m.GetCtx("/friend/invitation", s.getInvitations, gate.User(s.s.gate, scopeFriendRead), s.rt)
+	m.GetCtx("/friend/invitation/invited", s.getInvited, gate.User(s.s.gate, scopeFriendRead), s.rt)
+	m.PostCtx("/friend/invitation/id/{id}", s.sendFriendInvitation, gate.User(s.s.gate, scopeFriendWrite), s.rt)
+	m.PostCtx("/friend/invitation/id/{id}/accept", s.acceptFriendInvitation, gate.User(s.s.gate, scopeFriendWrite), s.rt)
+	m.DeleteCtx("/friend/invitation/id/{id}", s.deleteUserFriendInvitation, gate.User(s.s.gate, scopeFriendWrite), s.rt)
+	m.DeleteCtx("/friend/invitation/invited/{id}", s.deleteInvitedFriendInvitation, gate.User(s.s.gate, scopeFriendWrite), s.rt)
 
-	r.Get("/gdm", m.getLatestGDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/gdm/ids", m.getGDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Get("/gdm/search", m.searchGDMs, gate.User(m.s.gate, scopeChatRead))
-	r.Post("/gdm", m.createGDM, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Put("/gdm/id/{id}", m.updateGDM, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Delete("/gdm/id/{id}", m.deleteGDM, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Patch("/gdm/id/{id}/member/add", m.addGDMMember, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Patch("/gdm/id/{id}/member/rm", m.rmGDMMembers, gate.User(m.s.gate, scopeChatAdminWrite))
-	r.Post("/gdm/id/{id}/msg", m.createGDMMsg, gate.User(m.s.gate, scopeChatWrite))
-	r.Get("/gdm/id/{id}/msg", m.getGDMMsgs, gate.User(m.s.gate, scopeChatRead))
-	r.Delete("/gdm/id/{id}/msg/id/{msgid}", m.deleteGDMMsg, gate.User(m.s.gate, scopeChatWrite))
+	scopeChatRead := s.s.scopens + ".chat:read"
+	scopeChatWrite := s.s.scopens + ".chat:write"
+	scopeChatAdminWrite := s.s.scopens + ".chat.admin:write"
+	m.GetCtx("/dm", s.getLatestDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.GetCtx("/dm/ids", s.getDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.GetCtx("/dm/search", s.searchDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.PutCtx("/dm/id/{id}", s.updateDM, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.PostCtx("/dm/id/{id}/msg", s.createDMMsg, gate.User(s.s.gate, scopeChatWrite), s.rt)
+	m.GetCtx("/dm/id/{id}/msg", s.getDMMsgs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.DeleteCtx("/dm/id/{id}/msg/id/{msgid}", s.deleteDMMsg, gate.User(s.s.gate, scopeChatWrite), s.rt)
 
-	scopeServerRead := m.s.scopens + ".server:read"
-	scopeServerWrite := m.s.scopens + ".server:write"
-	scopeServerChatWrite := m.s.scopens + ".server.chat:write"
-	r.Get("/server/id/{id}", m.getServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Post("/server/id/{id}", m.createServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
-	r.Put("/server/id/{id}", m.updateServer, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
-	r.Get("/server/id/{id}/channel/id/{cid}", m.getChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Get("/server/id/{id}/channel", m.getChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Get("/server/id/{id}/channel/search", m.searchChannels, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Post("/server/id/{id}/channel", m.createChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
-	r.Put("/server/id/{id}/channel/id/{cid}", m.updateChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
-	r.Delete("/server/id/{id}/channel/id/{cid}", m.deleteChannel, gate.MemberF(m.s.gate, m.serverMember, scopeServerWrite))
-	r.Post("/server/id/{id}/channel/id/{cid}/msg", m.createChannelMsg, gate.MemberF(m.s.gate, m.serverMember, scopeServerChatWrite))
-	r.Get("/server/id/{id}/channel/id/{cid}/msg", m.getChannelMsgs, gate.MemberF(m.s.gate, m.serverMember, scopeServerRead))
-	r.Delete("/server/id/{id}/channel/id/{cid}/msg/id/{msgid}", m.deleteChannelMsg, gate.MemberF(m.s.gate, m.serverMember, scopeServerChatWrite))
+	m.GetCtx("/gdm", s.getLatestGDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.GetCtx("/gdm/ids", s.getGDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.GetCtx("/gdm/search", s.searchGDMs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.PostCtx("/gdm", s.createGDM, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.PutCtx("/gdm/id/{id}", s.updateGDM, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.DeleteCtx("/gdm/id/{id}", s.deleteGDM, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.PatchCtx("/gdm/id/{id}/member/add", s.addGDMMember, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.PatchCtx("/gdm/id/{id}/member/rm", s.rmGDMMembers, gate.User(s.s.gate, scopeChatAdminWrite), s.rt)
+	m.PostCtx("/gdm/id/{id}/msg", s.createGDMMsg, gate.User(s.s.gate, scopeChatWrite), s.rt)
+	m.GetCtx("/gdm/id/{id}/msg", s.getGDMMsgs, gate.User(s.s.gate, scopeChatRead), s.rt)
+	m.DeleteCtx("/gdm/id/{id}/msg/id/{msgid}", s.deleteGDMMsg, gate.User(s.s.gate, scopeChatWrite), s.rt)
+
+	scopeServerRead := s.s.scopens + ".server:read"
+	scopeServerWrite := s.s.scopens + ".server:write"
+	scopeServerChatWrite := s.s.scopens + ".server.chat:write"
+	m.GetCtx("/server/id/{id}", s.getServer, gate.MemberF(s.s.gate, s.serverMember, scopeServerRead), s.rt)
+	m.PostCtx("/server/id/{id}", s.createServer, gate.MemberF(s.s.gate, s.serverMember, scopeServerWrite), s.rt)
+	m.PutCtx("/server/id/{id}", s.updateServer, gate.MemberF(s.s.gate, s.serverMember, scopeServerWrite), s.rt)
+	m.GetCtx("/server/id/{id}/channel/id/{cid}", s.getChannel, gate.MemberF(s.s.gate, s.serverMember, scopeServerRead), s.rt)
+	m.GetCtx("/server/id/{id}/channel", s.getChannels, gate.MemberF(s.s.gate, s.serverMember, scopeServerRead), s.rt)
+	m.GetCtx("/server/id/{id}/channel/search", s.searchChannels, gate.MemberF(s.s.gate, s.serverMember, scopeServerRead), s.rt)
+	m.PostCtx("/server/id/{id}/channel", s.createChannel, gate.MemberF(s.s.gate, s.serverMember, scopeServerWrite), s.rt)
+	m.PutCtx("/server/id/{id}/channel/id/{cid}", s.updateChannel, gate.MemberF(s.s.gate, s.serverMember, scopeServerWrite), s.rt)
+	m.DeleteCtx("/server/id/{id}/channel/id/{cid}", s.deleteChannel, gate.MemberF(s.s.gate, s.serverMember, scopeServerWrite), s.rt)
+	m.PostCtx("/server/id/{id}/channel/id/{cid}/msg", s.createChannelMsg, gate.MemberF(s.s.gate, s.serverMember, scopeServerChatWrite), s.rt)
+	m.GetCtx("/server/id/{id}/channel/id/{cid}/msg", s.getChannelMsgs, gate.MemberF(s.s.gate, s.serverMember, scopeServerRead), s.rt)
+	m.DeleteCtx("/server/id/{id}/channel/id/{cid}/msg/id/{msgid}", s.deleteChannelMsg, gate.MemberF(s.s.gate, s.serverMember, scopeServerChatWrite), s.rt)
 }

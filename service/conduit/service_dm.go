@@ -9,51 +9,39 @@ import (
 	"xorkevin.dev/governor/service/conduit/dm/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
-func (s *service) publishDMMsgEvent(userids []string, v interface{}) {
+func (s *service) publishDMMsgEvent(ctx context.Context, userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
 
-	present, err := s.getPresence(context.Background(), s.logger, locDM, userids)
+	present, err := s.getPresence(ctx, locDM, userids)
 	if err != nil {
-		s.logger.Error("Failed to get presence", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_dm_presence",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
 		return
 	}
-	// must make a best effort attempt to publish dm msg event
 	for _, i := range present {
 		if err := s.ws.Publish(context.Background(), i, s.opts.DMMsgChannel, v); err != nil {
-			s.logger.Error("Failed to publish dm msg event", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "conduit_publish_dm_msg",
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm msg event"), nil)
 		}
 	}
 }
 
-func (s *service) publishDMSettingsEvent(userids []string, v interface{}) {
+func (s *service) publishDMSettingsEvent(ctx context.Context, userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
 
-	present, err := s.getPresence(context.Background(), s.logger, locDM, userids)
+	present, err := s.getPresence(ctx, locDM, userids)
 	if err != nil {
-		s.logger.Error("Failed to get presence", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_get_dm_presence",
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
 		return
 	}
 	for _, i := range present {
-		if err := s.ws.Publish(context.Background(), i, s.opts.DMSettingsChannel, v); err != nil {
-			s.logger.Error("Failed to publish dm settings event", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "conduit_publish_dm_settings",
-			})
+		if err := s.ws.Publish(ctx, i, s.opts.DMSettingsChannel, v); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm settings event"), nil)
 		}
 	}
 }
@@ -65,7 +53,7 @@ const (
 func (s *service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
 	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "DM not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get dm")
@@ -82,7 +70,7 @@ type (
 	}
 )
 
-func (s *service) UpdateDM(ctx context.Context, userid string, chatid string, name, theme string) error {
+func (s *service) updateDM(ctx context.Context, userid string, chatid string, name, theme string) error {
 	m, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return err
@@ -92,7 +80,9 @@ func (s *service) UpdateDM(ctx context.Context, userid string, chatid string, na
 	if err := s.dms.UpdateProps(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to update dm")
 	}
-	s.publishDMSettingsEvent([]string{m.Userid1, m.Userid2}, resDMID{
+	// must make a best effort attempt to publish dm settings event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.publishDMSettingsEvent(ctx, []string{m.Userid1, m.Userid2}, resDMID{
 		Chatid: m.Chatid,
 	})
 	return nil
@@ -120,7 +110,7 @@ func useridDiff(a, b, c string) string {
 	return b
 }
 
-func (s *service) GetLatestDMs(ctx context.Context, userid string, before int64, limit int) (*resDMs, error) {
+func (s *service) getLatestDMs(ctx context.Context, userid string, before int64, limit int) (*resDMs, error) {
 	m, err := s.dms.GetLatest(ctx, userid, before, limit)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest dms")
@@ -141,7 +131,7 @@ func (s *service) GetLatestDMs(ctx context.Context, userid string, before int64,
 	}, nil
 }
 
-func (s *service) GetDMs(ctx context.Context, userid string, chatids []string) (*resDMs, error) {
+func (s *service) getDMs(ctx context.Context, userid string, chatids []string) (*resDMs, error) {
 	m, err := s.dms.GetChats(ctx, chatids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get dms")
@@ -178,7 +168,7 @@ type (
 	}
 )
 
-func (s *service) SearchDMs(ctx context.Context, userid string, prefix string, limit int) (*resDMSearches, error) {
+func (s *service) searchDMs(ctx context.Context, userid string, prefix string, limit int) (*resDMSearches, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -219,7 +209,7 @@ type (
 	}
 )
 
-func (s *service) CreateDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
+func (s *service) createDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
 	dm, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return nil, err
@@ -242,7 +232,9 @@ func (s *service) CreateDMMsg(ctx context.Context, userid string, chatid string,
 		Kind:   m.Kind,
 		Value:  m.Value,
 	}
-	s.publishDMMsgEvent([]string{dm.Userid1, dm.Userid2}, res)
+	// must make a best effort attempt to publish dm msg event
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	s.publishDMMsgEvent(ctx, []string{dm.Userid1, dm.Userid2}, res)
 	return &res, nil
 }
 
@@ -252,7 +244,7 @@ type (
 	}
 )
 
-func (s *service) GetDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+func (s *service) getDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
 	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return nil, err
 	}
@@ -276,7 +268,7 @@ func (s *service) GetDMMsgs(ctx context.Context, userid string, chatid string, k
 	}, nil
 }
 
-func (s *service) DelDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
+func (s *service) delDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
 	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return err
 	}

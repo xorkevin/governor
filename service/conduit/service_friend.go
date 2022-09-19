@@ -11,6 +11,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -19,7 +20,7 @@ type (
 	}
 )
 
-func (s *service) GetFriends(ctx context.Context, userid string, prefix string, limit, offset int) (*resFriends, error) {
+func (s *service) getFriends(ctx context.Context, userid string, prefix string, limit, offset int) (*resFriends, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -44,7 +45,7 @@ type (
 	}
 )
 
-func (s *service) SearchFriends(ctx context.Context, userid string, prefix string, limit int) (*resFriendSearches, error) {
+func (s *service) searchFriends(ctx context.Context, userid string, prefix string, limit int) (*resFriendSearches, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -61,9 +62,9 @@ func (s *service) SearchFriends(ctx context.Context, userid string, prefix strin
 	}, nil
 }
 
-func (s *service) RemoveFriend(ctx context.Context, userid1, userid2 string) error {
+func (s *service) removeFriend(ctx context.Context, userid1, userid2 string) error {
 	if _, err := s.friends.GetByID(ctx, userid1, userid2); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Friend not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get friends")
@@ -84,9 +85,9 @@ func (s *service) RemoveFriend(ctx context.Context, userid1, userid2 string) err
 	return nil
 }
 
-func (s *service) InviteFriend(ctx context.Context, userid string, invitedBy string) error {
+func (s *service) inviteFriend(ctx context.Context, userid string, invitedBy string) error {
 	if _, err := s.friends.GetByID(ctx, userid, invitedBy); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to search friends")
 		}
 	} else {
@@ -102,17 +103,17 @@ func (s *service) InviteFriend(ctx context.Context, userid string, invitedBy str
 	return nil
 }
 
-func (s *service) AcceptFriendInvitation(ctx context.Context, userid, inviter string) error {
+func (s *service) acceptFriendInvitation(ctx context.Context, userid, inviter string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 	m2, err := s.users.GetByID(ctx, inviter)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -121,7 +122,7 @@ func (s *service) AcceptFriendInvitation(ctx context.Context, userid, inviter st
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 	if _, err := s.invitations.GetByID(ctx, userid, inviter, after); err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Friend invitation not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get friend invitation")
@@ -142,16 +143,14 @@ func (s *service) AcceptFriendInvitation(ctx context.Context, userid, inviter st
 		return kerrors.WithMsg(err, "Failed to add friend")
 	}
 	// must make best effort attempt to publish friend event
-	if err := s.events.StreamPublish(context.Background(), s.opts.FriendChannel, b); err != nil {
-		s.logger.Error("Failed to publish friend event", map[string]string{
-			"error":      err.Error(),
-			"actiontype": "conduit_publish_friend",
-		})
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	if err := s.events.StreamPublish(ctx, s.opts.FriendChannel, b); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish friend event"), nil)
 	}
 	return nil
 }
 
-func (s *service) DeleteFriendInvitation(ctx context.Context, userid, inviter string) error {
+func (s *service) deleteFriendInvitation(ctx context.Context, userid, inviter string) error {
 	if err := s.invitations.DeleteByID(ctx, userid, inviter); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete friend invitation")
 	}
@@ -170,7 +169,7 @@ type (
 	}
 )
 
-func (s *service) GetUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *service) getUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -191,7 +190,7 @@ func (s *service) GetUserFriendInvitations(ctx context.Context, userid string, a
 	}, nil
 }
 
-func (s *service) GetInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *service) getInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -222,7 +221,7 @@ func (s *service) friendSubscriber(ctx context.Context, pinger events.Pinger, to
 		return kerrors.WithMsg(err, "Failed to create new dm")
 	}
 	if err := s.dms.Insert(ctx, m); err != nil {
-		if !errors.Is(err, db.ErrUnique{}) {
+		if !errors.Is(err, db.ErrorUnique{}) {
 			return kerrors.WithMsg(err, "Failed to insert new dm")
 		}
 	}
@@ -236,7 +235,7 @@ func (s *service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, 
 	}
 	m, err := s.dms.GetByID(ctx, msg.Userid, msg.Other)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound{}) {
 			// TODO: emit dm delete event
 			return nil
 		}
@@ -254,7 +253,7 @@ func (s *service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, 
 
 func (s *service) rmFriend(ctx context.Context, userid1, userid2 string) error {
 	if m, err := s.dms.GetByID(ctx, userid1, userid2); err != nil {
-		if !errors.Is(err, db.ErrNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get dm")
 		}
 	} else {
