@@ -3,7 +3,6 @@ package courier
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 const (
@@ -45,7 +45,7 @@ type (
 		orgs          org.Orgs
 		ratelimiter   ratelimit.Ratelimiter
 		gate          gate.Gate
-		logger        governor.Logger
+		log           *klog.LevelLogger
 		scopens       string
 		streamns      string
 		fallbackLink  string
@@ -55,7 +55,7 @@ type (
 
 	router struct {
 		s  *service
-		rt governor.Middleware
+		rt governor.MiddlewareCtx
 	}
 
 	ctxKeyCourier struct{}
@@ -111,7 +111,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar, jr governor.JobRegistrar) {
+func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxCourier(inj, s)
 	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
@@ -124,15 +124,12 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 func (s *service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.Base(),
+		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, l governor.Logger, m governor.Router) error {
-	s.logger = l
-	l = s.logger.WithData(map[string]string{
-		"phase": "init",
-	})
+func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
 
 	s.fallbackLink = r.GetStr("fallbacklink")
 	s.linkPrefix = r.GetStr("linkprefix")
@@ -141,55 +138,31 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	} else {
 		s.cacheTime = int64(t / time.Second)
 	}
-	if len(s.fallbackLink) == 0 {
-		l.Warn("fallbacklink is not set", nil)
+	if s.fallbackLink == "" {
+		s.log.Warn(ctx, "fallbacklink is not set", nil)
 	} else if err := validURL(s.fallbackLink); err != nil {
 		return kerrors.WithMsg(err, "Invalid fallbacklink")
 	}
-	if len(s.linkPrefix) == 0 {
-		l.Warn("linkprefix is not set", nil)
+	if s.linkPrefix == "" {
+		s.log.Warn(ctx, "linkprefix is not set", nil)
 	} else if err := validURL(s.linkPrefix); err != nil {
 		return kerrors.WithMsg(err, "Invalid linkprefix")
 	}
 
-	l.Info("Loaded config", map[string]string{
-		"fallbacklink": s.fallbackLink,
-		"linkprefix":   s.linkPrefix,
-		"cachetime":    strconv.FormatInt(s.cacheTime, 10),
+	s.log.Info(ctx, "Loaded config", klog.Fields{
+		"courier.fallbacklink": s.fallbackLink,
+		"lcourier.inkprefix":   s.linkPrefix,
+		"ccourier.achetime":    s.cacheTime,
 	})
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	l.Info("Mounted http routes", nil)
-	return nil
-}
-
-func (s *service) Setup(req governor.ReqSetup) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "setup",
-	})
-	if err := s.repo.Setup(context.Background()); err != nil {
-		return err
-	}
-	l.Info("Created courierlinks table", nil)
-
-	if err := s.courierBucket.Init(context.Background()); err != nil {
-		return kerrors.WithMsg(err, "Failed to init courier bucket")
-	}
-	l.Info("Created courier bucket", nil)
-	return nil
-}
-
-func (s *service) PostSetup(req governor.ReqSetup) error {
+	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
 func (s *service) Start(ctx context.Context) error {
-	l := s.logger.WithData(map[string]string{
-		"phase": "start",
-	})
-
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.UserDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -197,9 +170,9 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
-	l.Info("Subscribed to user delete queue", nil)
+	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
-	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.OrgDeleteHook, events.StreamConsumerOpts{
+	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
 		MaxPending:  1024,
@@ -207,7 +180,7 @@ func (s *service) Start(ctx context.Context) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
-	l.Info("Subscribed to org delete queue", nil)
+	s.log.Info(ctx, "Subscribed to org delete queue", nil)
 
 	return nil
 }
@@ -215,7 +188,20 @@ func (s *service) Start(ctx context.Context) error {
 func (s *service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health() error {
+func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	if err := s.repo.Setup(ctx); err != nil {
+		return err
+	}
+	s.log.Info(ctx, "Created courierlinks table", nil)
+
+	if err := s.courierBucket.Init(context.Background()); err != nil {
+		return kerrors.WithMsg(err, "Failed to init courier bucket")
+	}
+	s.log.Info(ctx, "Created courier bucket", nil)
+	return nil
+}
+
+func (s *service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -223,23 +209,20 @@ const (
 	linkDeleteBatchSize = 256
 )
 
-// UserDeleteHook deletes the courier links and brands of a deleted user
-func (s *service) UserDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	return s.creatorDeleteHook(ctx, pinger, props.Userid)
 }
 
-// OrgDeleteHook deletes the courier links and brands of a deleted org
-func (s *service) OrgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
+func (s *service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
 	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
 }
 
-// creatorDeleteHook deletes the courier links and brands of a deleted creator
 func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		links, err := s.GetLinkGroup(ctx, creatorid, linkDeleteBatchSize, 0)
+		links, err := s.getLinkGroup(ctx, creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get creator links")
 		}
@@ -249,7 +232,7 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 		linkids := make([]string, 0, len(links.Links))
 		for _, i := range links.Links {
 			if err := s.linkImgDir.Del(ctx, i.LinkID); err != nil {
-				if !errors.Is(err, objstore.ErrNotFound{}) {
+				if !errors.Is(err, objstore.ErrorNotFound{}) {
 					return kerrors.WithMsg(err, "Failed to delete qr code image")
 				}
 			}
@@ -259,10 +242,8 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 			return kerrors.WithMsg(err, "Failed to delete links")
 		}
 		if err := s.kvlinks.Del(ctx, linkids...); err != nil {
-			s.logger.Error("Failed to delete linkid urls", map[string]string{
-				"error":      err.Error(),
-				"actiontype": "courier_clear_link_cache",
-				"creatorid":  creatorid,
+			s.log.Error(ctx, "Failed to delete linkid urls", klog.Fields{
+				"courier.creatorid": creatorid,
 			})
 		}
 		if len(linkids) < linkDeleteBatchSize {
@@ -273,7 +254,7 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 		if err := pinger.Ping(ctx); err != nil {
 			return err
 		}
-		brands, err := s.GetBrandGroup(ctx, creatorid, linkDeleteBatchSize, 0)
+		brands, err := s.getBrandGroup(ctx, creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get creator brands")
 		}
@@ -283,7 +264,7 @@ func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 		brandids := make([]string, 0, len(brands.Brands))
 		for _, i := range brands.Brands {
 			if err := s.brandImgDir.Del(ctx, i.BrandID); err != nil {
-				if !errors.Is(err, objstore.ErrNotFound{}) {
+				if !errors.Is(err, objstore.ErrorNotFound{}) {
 					return kerrors.WithMsg(err, "Failed to delete brand image")
 				}
 			}

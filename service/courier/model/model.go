@@ -269,13 +269,13 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.tableLinks.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup link model")
-		if !errors.Is(err, db.ErrAuthz{}) {
+		if !errors.Is(err, db.ErrorAuthz{}) {
 			return err
 		}
 	}
 	if err := r.tableBrands.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup brand model")
-		if !errors.Is(err, db.ErrAuthz{}) {
+		if !errors.Is(err, db.ErrorAuthz{}) {
 			return err
 		}
 	}

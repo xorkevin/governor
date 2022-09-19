@@ -8,6 +8,7 @@ import (
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/kerrors"
 )
 
 //go:generate forge validation -o validation_courier_gen.go reqLinkGet reqGetGroup reqLinkPost reqLinkDelete reqBrandGet reqBrandPost
@@ -18,8 +19,7 @@ type (
 	}
 )
 
-func (m *router) getLink(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getLink(c governor.Context) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -27,10 +27,10 @@ func (m *router) getLink(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	url, err := m.s.GetLinkFast(c.Ctx(), req.LinkID)
+	url, err := s.s.getLinkFast(c.Ctx(), req.LinkID)
 	if err != nil {
-		if len(m.s.fallbackLink) > 0 {
-			c.Redirect(http.StatusTemporaryRedirect, m.s.fallbackLink)
+		if len(s.s.fallbackLink) > 0 {
+			c.Redirect(http.StatusTemporaryRedirect, s.s.fallbackLink)
 			return
 		}
 		c.WriteError(err)
@@ -39,8 +39,7 @@ func (m *router) getLink(w http.ResponseWriter, r *http.Request) {
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (m *router) getLinkImage(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getLinkImage(c governor.Context) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -48,17 +47,14 @@ func (m *router) getLinkImage(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetLinkImage(c.Ctx(), req.LinkID)
+	img, contentType, err := s.s.getLinkImage(c.Ctx(), req.LinkID)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("Failed to close link image", map[string]string{
-				"actiontype": "getlinkimage",
-				"error":      err.Error(),
-			})
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close link image"), nil)
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)
@@ -72,8 +68,7 @@ type (
 	}
 )
 
-func (m *router) getLinkGroup(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getLinkGroup(c governor.Context) {
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -84,7 +79,7 @@ func (m *router) getLinkGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetLinkGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
+	res, err := s.s.getLinkGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -101,10 +96,9 @@ type (
 	}
 )
 
-func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	req := reqLinkPost{}
-	if err := c.Bind(&req); err != nil {
+func (s *router) createLink(c governor.Context) {
+	var req reqLinkPost
+	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -114,7 +108,7 @@ func (m *router) createLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateLink(c.Ctx(), req.CreatorID, req.LinkID, req.URL, req.BrandID)
+	res, err := s.s.createLink(c.Ctx(), req.CreatorID, req.LinkID, req.URL, req.BrandID)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -129,8 +123,7 @@ type (
 	}
 )
 
-func (m *router) deleteLink(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteLink(c governor.Context) {
 	req := reqLinkDelete{
 		LinkID:    c.Param("linkid"),
 		CreatorID: c.Param("creatorid"),
@@ -139,7 +132,7 @@ func (m *router) deleteLink(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteLink(c.Ctx(), req.CreatorID, req.LinkID); err != nil {
+	if err := s.s.deleteLink(c.Ctx(), req.CreatorID, req.LinkID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -153,8 +146,7 @@ type (
 	}
 )
 
-func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getBrandImage(c governor.Context) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -163,24 +155,20 @@ func (m *router) getBrandImage(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	img, contentType, err := m.s.GetBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
+	img, contentType, err := s.s.getBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			m.s.logger.Error("Failed to close brand image", map[string]string{
-				"actiontype": "getbrandimage",
-				"error":      err.Error(),
-			})
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close brand image"), nil)
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)
 }
 
-func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) getBrandGroup(c governor.Context) {
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -191,7 +179,7 @@ func (m *router) getBrandGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.GetBrandGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
+	res, err := s.s.getBrandGroup(c.Ctx(), req.CreatorID, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -206,9 +194,8 @@ type (
 	}
 )
 
-func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
-	img, err := image.LoadImage(m.s.logger, c, "image")
+func (s *router) createBrand(c governor.Context) {
+	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -223,7 +210,7 @@ func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := m.s.CreateBrand(c.Ctx(), req.CreatorID, req.BrandID, img)
+	res, err := s.s.createBrand(c.Ctx(), req.CreatorID, req.BrandID, img)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -232,8 +219,7 @@ func (m *router) createBrand(w http.ResponseWriter, r *http.Request) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (m *router) deleteBrand(w http.ResponseWriter, r *http.Request) {
-	c := governor.NewContext(w, r, m.s.logger)
+func (s *router) deleteBrand(c governor.Context) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -242,14 +228,14 @@ func (m *router) deleteBrand(w http.ResponseWriter, r *http.Request) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.DeleteBrand(c.Ctx(), req.CreatorID, req.BrandID); err != nil {
+	if err := s.s.deleteBrand(c.Ctx(), req.CreatorID, req.BrandID); err != nil {
 		c.WriteError(err)
 		return
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (m *router) getLinkImageCC(c governor.Context) (string, error) {
+func (s *router) getLinkImageCC(c governor.Context) (string, error) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -257,7 +243,7 @@ func (m *router) getLinkImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatLinkImage(c.Ctx(), req.LinkID)
+	objinfo, err := s.s.statLinkImage(c.Ctx(), req.LinkID)
 	if err != nil {
 		return "", err
 	}
@@ -265,7 +251,7 @@ func (m *router) getLinkImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) getBrandImageCC(c governor.Context) (string, error) {
+func (s *router) getBrandImageCC(c governor.Context) (string, error) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -274,7 +260,7 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 		return "", err
 	}
 
-	objinfo, err := m.s.StatBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
+	objinfo, err := s.s.statBrandImage(c.Ctx(), req.CreatorID, req.BrandID)
 	if err != nil {
 		return "", err
 	}
@@ -282,7 +268,7 @@ func (m *router) getBrandImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (m *router) courierOwner(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) courierOwner(c governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false
@@ -296,18 +282,19 @@ func (m *router) courierOwner(c governor.Context, userid string) (string, bool, 
 	return creatorid, false, true
 }
 
-func (m *router) mountRoutes(r governor.Router) {
-	scopeLinkRead := m.s.scopens + ".link:read"
-	scopeLinkWrite := m.s.scopens + ".link:write"
-	scopeBrandRead := m.s.scopens + ".brand:read"
-	scopeBrandWrite := m.s.scopens + ".brand:write"
-	r.Get("/link/id/{linkid}", m.getLink, m.rt)
-	r.Get("/link/id/{linkid}/image", m.getLinkImage, cachecontrol.Control(m.s.logger, true, nil, 60, m.getLinkImageCC), m.rt)
-	r.Get("/link/c/{creatorid}", m.getLinkGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkRead), m.rt)
-	r.Post("/link/c/{creatorid}", m.createLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite), m.rt)
-	r.Delete("/link/c/{creatorid}/id/{linkid}", m.deleteLink, gate.MemberF(m.s.gate, m.courierOwner, scopeLinkWrite), m.rt)
-	r.Get("/brand/c/{creatorid}/id/{brandid}/image", m.getBrandImage, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), cachecontrol.Control(m.s.logger, true, nil, 60, m.getBrandImageCC), m.rt)
-	r.Get("/brand/c/{creatorid}", m.getBrandGroup, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandRead), m.rt)
-	r.Post("/brand/c/{creatorid}", m.createBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite), m.rt)
-	r.Delete("/brand/c/{creatorid}/id/{brandid}", m.deleteBrand, gate.MemberF(m.s.gate, m.courierOwner, scopeBrandWrite), m.rt)
+func (s *router) mountRoutes(r governor.Router) {
+	m := governor.NewMethodRouter(r)
+	scopeLinkRead := s.s.scopens + ".link:read"
+	scopeLinkWrite := s.s.scopens + ".link:write"
+	scopeBrandRead := s.s.scopens + ".brand:read"
+	scopeBrandWrite := s.s.scopens + ".brand:write"
+	m.GetCtx("/link/id/{linkid}", s.getLink, s.rt)
+	m.GetCtx("/link/id/{linkid}/image", s.getLinkImage, cachecontrol.ControlCtx(true, nil, 60, s.getLinkImageCC), s.rt)
+	m.GetCtx("/link/c/{creatorid}", s.getLinkGroup, gate.MemberF(s.s.gate, s.courierOwner, scopeLinkRead), s.rt)
+	m.PostCtx("/link/c/{creatorid}", s.createLink, gate.MemberF(s.s.gate, s.courierOwner, scopeLinkWrite), s.rt)
+	m.DeleteCtx("/link/c/{creatorid}/id/{linkid}", s.deleteLink, gate.MemberF(s.s.gate, s.courierOwner, scopeLinkWrite), s.rt)
+	m.GetCtx("/brand/c/{creatorid}/id/{brandid}/image", s.getBrandImage, gate.MemberF(s.s.gate, s.courierOwner, scopeBrandRead), cachecontrol.ControlCtx(true, nil, 60, s.getBrandImageCC), s.rt)
+	m.GetCtx("/brand/c/{creatorid}", s.getBrandGroup, gate.MemberF(s.s.gate, s.courierOwner, scopeBrandRead), s.rt)
+	m.PostCtx("/brand/c/{creatorid}", s.createBrand, gate.MemberF(s.s.gate, s.courierOwner, scopeBrandWrite), s.rt)
+	m.DeleteCtx("/brand/c/{creatorid}/id/{brandid}", s.deleteBrand, gate.MemberF(s.s.gate, s.courierOwner, scopeBrandWrite), s.rt)
 }
