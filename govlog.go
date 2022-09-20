@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -46,7 +47,11 @@ type (
 	}
 )
 
-func newZerologSerializer(c Config) klog.Serializer {
+var (
+	zerologInitOnce = &sync.Once{}
+)
+
+func setZerologGlobals() {
 	zerolog.LevelFieldName = "level"
 	zerolog.LevelDebugValue = klog.LevelDebug.String()
 	zerolog.LevelInfoValue = klog.LevelInfo.String()
@@ -58,6 +63,10 @@ func newZerologSerializer(c Config) klog.Serializer {
 	zerolog.MessageFieldName = "msg"
 	zerolog.ErrorFieldName = "error"
 	zerolog.ErrorStackFieldName = "stacktrace"
+}
+
+func newZerologSerializer(c Config) klog.Serializer {
+	zerologInitOnce.Do(setZerologGlobals)
 	w := logOutputFromString(c.logOutput)
 	if w == nil {
 		w = c.logWriter
