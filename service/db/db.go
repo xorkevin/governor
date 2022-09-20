@@ -20,12 +20,6 @@ type (
 		DB(ctx context.Context) (SQLDB, error)
 	}
 
-	// Service is a DB and governor.Service
-	Service interface {
-		governor.Service
-		Database
-	}
-
 	getClientRes struct {
 		client SQLDB
 		err    error
@@ -36,7 +30,7 @@ type (
 		res chan<- getClientRes
 	}
 
-	service struct {
+	Service struct {
 		sqldb      *sqldb
 		asqldb     *atomic.Pointer[sqldb]
 		auth       pgAuth
@@ -69,8 +63,8 @@ func setCtxDB(inj governor.Injector, d Database) {
 }
 
 // New creates a new db service
-func New() Service {
-	return &service{
+func New() *Service {
+	return &Service{
 		asqldb:   &atomic.Pointer[sqldb]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
@@ -78,7 +72,7 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxDB(inj, s)
 
 	r.SetDefault("auth", "")
@@ -147,7 +141,7 @@ func wrapDBErr(err error, fallbackmsg string) error {
 	return kerrors.WithMsg(err, fallbackmsg)
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
@@ -172,7 +166,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -197,7 +191,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	var err error
 	// Check db auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
@@ -241,7 +235,7 @@ type (
 	}
 )
 
-func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
+func (s *Service) handleGetClient(ctx context.Context) (SQLDB, error) {
 	var auth pgAuth
 	if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
@@ -280,7 +274,7 @@ func (s *service) handleGetClient(ctx context.Context) (SQLDB, error) {
 	return s.sqldb, nil
 }
 
-func (s *service) closeClient(ctx context.Context) {
+func (s *Service) closeClient(ctx context.Context) {
 	if s.sqldb == nil {
 		return
 	}
@@ -300,11 +294,11 @@ func (s *service) closeClient(ctx context.Context) {
 	s.auth = pgAuth{}
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -313,11 +307,11 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrorConn{}, "DB service not ready")
 	}
@@ -325,7 +319,7 @@ func (s *service) Health(ctx context.Context) error {
 }
 
 // DB implements [Database] and returns [SQLDB]
-func (s *service) DB(ctx context.Context) (SQLDB, error) {
+func (s *Service) DB(ctx context.Context) (SQLDB, error) {
 	if client := s.asqldb.Load(); client != nil {
 		return client, nil
 	}

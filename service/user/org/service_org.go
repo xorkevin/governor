@@ -44,7 +44,7 @@ type (
 	}
 )
 
-func (s *service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
+func (s *Service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -61,7 +61,7 @@ func (s *service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 	}, nil
 }
 
-func (s *service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
+func (s *Service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
 	m, err := s.orgs.GetByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -78,7 +78,7 @@ func (s *service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
 	}, nil
 }
 
-func (s *service) getOrgs(ctx context.Context, orgids []string) (*resOrgs, error) {
+func (s *Service) getOrgs(ctx context.Context, orgids []string) (*resOrgs, error) {
 	m, err := s.orgs.GetOrgs(ctx, orgids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
@@ -98,7 +98,7 @@ func (s *service) getOrgs(ctx context.Context, orgids []string) (*resOrgs, error
 	}, nil
 }
 
-func (s *service) getAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, error) {
+func (s *Service) getAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, error) {
 	m, err := s.orgs.GetAllOrgs(ctx, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
@@ -118,7 +118,7 @@ func (s *service) getAllOrgs(ctx context.Context, limit, offset int) (*resOrgs, 
 	}, nil
 }
 
-func (s *service) getOrgMembers(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
+func (s *Service) getOrgMembers(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
 	m, err := s.orgs.GetOrgMembers(ctx, orgid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org members")
@@ -135,7 +135,7 @@ func (s *service) getOrgMembers(ctx context.Context, orgid string, prefix string
 	}, nil
 }
 
-func (s *service) getOrgMods(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
+func (s *Service) getOrgMods(ctx context.Context, orgid string, prefix string, limit, offset int) (*resMembers, error) {
 	m, err := s.orgs.GetOrgMods(ctx, orgid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org mods")
@@ -152,7 +152,7 @@ func (s *service) getOrgMods(ctx context.Context, orgid string, prefix string, l
 	}, nil
 }
 
-func (s *service) getOrgsByID(ctx context.Context, orgids []string) (*resOrgs, error) {
+func (s *Service) getOrgsByID(ctx context.Context, orgids []string) (*resOrgs, error) {
 	m, err := s.orgs.GetOrgs(ctx, orgids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user orgs")
@@ -180,7 +180,7 @@ func (s *service) getOrgsByID(ctx context.Context, orgids []string) (*resOrgs, e
 	}, nil
 }
 
-func (s *service) getUserOrgs(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
+func (s *Service) getUserOrgs(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
 	orgids, err := s.orgs.GetUserOrgs(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user orgs")
@@ -188,7 +188,7 @@ func (s *service) getUserOrgs(ctx context.Context, userid string, prefix string,
 	return s.getOrgsByID(ctx, orgids)
 }
 
-func (s *service) getUserMods(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
+func (s *Service) getUserMods(ctx context.Context, userid string, prefix string, limit, offset int) (*resOrgs, error) {
 	orgids, err := s.orgs.GetUserMods(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user mod orgs")
@@ -196,7 +196,7 @@ func (s *service) getUserMods(ctx context.Context, userid string, prefix string,
 	return s.getOrgsByID(ctx, orgids)
 }
 
-func (s *service) createOrg(ctx context.Context, userid, displayName, desc string) (*ResOrg, error) {
+func (s *Service) createOrg(ctx context.Context, userid, displayName, desc string) (*ResOrg, error) {
 	m, err := s.orgs.New(displayName, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create org")
@@ -220,7 +220,7 @@ func (s *service) createOrg(ctx context.Context, userid, displayName, desc strin
 	}, nil
 }
 
-func (s *service) updateOrg(ctx context.Context, orgid, name, displayName, desc string) error {
+func (s *Service) updateOrg(ctx context.Context, orgid, name, displayName, desc string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -246,7 +246,7 @@ func (s *service) updateOrg(ctx context.Context, orgid, name, displayName, desc 
 	return nil
 }
 
-func (s *service) deleteOrg(ctx context.Context, orgid string) error {
+func (s *Service) deleteOrg(ctx context.Context, orgid string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {

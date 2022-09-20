@@ -16,7 +16,7 @@ const (
 	locGDM = "gdm"
 )
 
-func (s *service) presenceHandler(ctx context.Context, props ws.PresenceEventProps) error {
+func (s *Service) presenceHandler(ctx context.Context, props ws.PresenceEventProps) error {
 	subloc := strings.TrimPrefix(props.Location, s.channelns+".")
 	switch subloc {
 	// TODO handle server and channel presence
@@ -30,7 +30,7 @@ func (s *service) presenceHandler(ctx context.Context, props ws.PresenceEventPro
 	return nil
 }
 
-func (s *service) getPresence(ctx context.Context, loc string, userids []string) ([]string, error) {
+func (s *Service) getPresence(ctx context.Context, loc string, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
@@ -70,7 +70,7 @@ type (
 	}
 )
 
-func (s *service) presenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) error {
+func (s *Service) presenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) error {
 	var req reqGetPresence
 	if err := kjson.Unmarshal(msgdata, &req); err != nil {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Invalid get presence request"), nil)

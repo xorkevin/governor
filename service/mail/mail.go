@@ -51,12 +51,6 @@ type (
 		SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
 	}
 
-	// Service is a Mailer and governor.Service
-	Service interface {
-		governor.Service
-		Mailer
-	}
-
 	// Tpl points to a mail template
 	Tpl struct {
 		Kind template.Kind `json:"kind"`
@@ -137,7 +131,7 @@ type (
 		res chan<- getAuthRes
 	}
 
-	service struct {
+	Service struct {
 		tpl             template.Template
 		events          events.Events
 		mailBucket      objstore.Bucket
@@ -200,7 +194,7 @@ func setCtxMailer(inj governor.Injector, m Mailer) {
 }
 
 // NewCtx creates a new Mailer service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	tpl := template.GetCtxTemplate(inj)
 	ev := events.GetCtxEvents(inj)
 	obj := objstore.GetCtxBucket(inj)
@@ -208,8 +202,8 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new Mailer
-func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
-	return &service{
+func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service {
+	return &Service{
 		tpl:             tpl,
 		events:          ev,
 		mailBucket:      obj,
@@ -223,7 +217,7 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailer(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
@@ -252,7 +246,7 @@ type (
 	}
 )
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
@@ -300,7 +294,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -334,7 +328,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	if err := s.refreshAuth(ctx); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to refresh mail auth"), nil)
 	}
@@ -355,7 +349,7 @@ func (s *service) handlePing(ctx context.Context) {
 	s.hbfailed = 0
 }
 
-func (s *service) refreshAuth(ctx context.Context) error {
+func (s *Service) refreshAuth(ctx context.Context) error {
 	var auth secretAuth
 	if err := s.config.GetSecret(ctx, "auth", int64(s.authrefresh), &auth); err != nil {
 		return kerrors.WithMsg(err, "Invalid mail auth")
@@ -373,7 +367,7 @@ func (s *service) refreshAuth(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleGetAuth(ctx context.Context) (secretAuth, error) {
+func (s *Service) handleGetAuth(ctx context.Context) (secretAuth, error) {
 	if s.auth.Username == "" {
 		if err := s.refreshAuth(ctx); err != nil {
 			return secretAuth{}, err
@@ -382,7 +376,7 @@ func (s *service) handleGetAuth(ctx context.Context) (secretAuth, error) {
 	return s.auth, nil
 }
 
-func (s *service) getAuth(ctx context.Context) (secretAuth, error) {
+func (s *Service) getAuth(ctx context.Context) (secretAuth, error) {
 	if auth := s.aauth.Load(); auth != nil {
 		return *auth, nil
 	}
@@ -407,7 +401,7 @@ func (s *service) getAuth(ctx context.Context) (secretAuth, error) {
 	}
 }
 
-func (s *service) refreshSecrets(ctx context.Context) error {
+func (s *Service) refreshSecrets(ctx context.Context) error {
 	var maildataSecrets secretMaildata
 	if err := s.config.GetSecret(ctx, "mailkey", int64(s.authrefresh), &maildataSecrets); err != nil {
 		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mailkey secrets")
@@ -443,7 +437,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleGetCipher(ctx context.Context) (*maildataCipher, error) {
+func (s *Service) handleGetCipher(ctx context.Context) (*maildataCipher, error) {
 	if s.maildataCipher == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
 			return nil, err
@@ -453,7 +447,7 @@ func (s *service) handleGetCipher(ctx context.Context) (*maildataCipher, error) 
 	return s.maildataCipher, nil
 }
 
-func (s *service) getCipher(ctx context.Context) (*maildataCipher, error) {
+func (s *Service) getCipher(ctx context.Context) (*maildataCipher, error) {
 	if cipher := s.amaildataCipher.Load(); cipher != nil {
 		return cipher, nil
 	}
@@ -478,7 +472,7 @@ func (s *service) getCipher(ctx context.Context) (*maildataCipher, error) {
 	}
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
@@ -502,7 +496,7 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -511,7 +505,7 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.mailBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
@@ -528,7 +522,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Mail service not ready")
 	}
@@ -542,7 +536,7 @@ type (
 	}
 )
 
-func (s *service) handleSendMail(ctx context.Context, from string, to []string, msg io.Reader) error {
+func (s *Service) handleSendMail(ctx context.Context, from string, to []string, msg io.Reader) error {
 	secret, err := s.getAuth(ctx)
 	if err != nil {
 		return err
@@ -594,7 +588,7 @@ func (e ErrorSendMail) Error() string {
 	return "Error sending email"
 }
 
-func (s *service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	var emmsg mailmsg
 	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail message")
@@ -911,7 +905,7 @@ func genMsgID(msgiddomain string) (string, error) {
 	return fmt.Sprintf("%s@%s", u.Base32(), msgiddomain), nil
 }
 
-func (s *service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	var gcmsg mailgcmsg
 	if err := kjson.Unmarshal(msgdata, &gcmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail gc message")
@@ -925,7 +919,7 @@ func (s *service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic 
 }
 
 // SendTpl creates and sends a message given a template and data
-func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
+func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error {
 	if len(to) == 0 {
 		return kerrors.WithKind(nil, ErrorInvalidMail{}, "Email must have at least one recipient")
 	}
@@ -984,7 +978,7 @@ func (s *service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 }
 
 // SendStream creates and sends a message from a given body
-func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
+func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
 		return kerrors.WithKind(nil, ErrorInvalidMail{}, "Email must have at least one recipient")
 	}
@@ -1080,7 +1074,7 @@ func (s *service) SendStream(ctx context.Context, retpath string, from Addr, to 
 }
 
 // FwdStream forwards an rfc5322 message
-func (s *service) FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
+func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
 		return kerrors.WithKind(nil, ErrorInvalidMail{}, "Email must have at least one recipient")
 	}

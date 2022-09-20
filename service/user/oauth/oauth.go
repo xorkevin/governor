@@ -38,13 +38,7 @@ type (
 	OAuth interface {
 	}
 
-	// Service is an OAuth and governor.Service
-	Service interface {
-		governor.Service
-		OAuth
-	}
-
-	service struct {
+	Service struct {
 		apps         model.Repo
 		connections  connmodel.Repo
 		tokenizer    token.Tokenizer
@@ -74,7 +68,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -96,7 +90,7 @@ func setCtxOAuth(inj governor.Injector, o OAuth) {
 }
 
 // NewCtx creates a new OAuth service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	apps := model.GetCtxRepo(inj)
 	connections := connmodel.GetCtxRepo(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
@@ -120,8 +114,8 @@ func New(
 	ev events.Events,
 	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
-) Service {
-	return &service{
+) *Service {
+	return &Service{
 		apps:         apps,
 		connections:  connections,
 		tokenizer:    tokenizer,
@@ -139,7 +133,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOAuth(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -155,14 +149,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("eppicture", "http://localhost:8080/api/profile/id/{{.Userid}}/image")
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
@@ -230,7 +224,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -243,10 +237,10 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.apps.Setup(ctx); err != nil {
 		return err
 	}
@@ -265,11 +259,11 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.deleteUserConnections(ctx, props.Userid); err != nil {
 		return err
 	}

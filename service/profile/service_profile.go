@@ -30,7 +30,7 @@ type (
 	}
 )
 
-func (s *service) createProfile(ctx context.Context, userid, email, bio string) (*resProfileUpdate, error) {
+func (s *Service) createProfile(ctx context.Context, userid, email, bio string) (*resProfileUpdate, error) {
 	m := s.profiles.New(userid, email, bio)
 
 	if err := s.profiles.Insert(ctx, m); err != nil {
@@ -45,7 +45,7 @@ func (s *service) createProfile(ctx context.Context, userid, email, bio string) 
 	}, nil
 }
 
-func (s *service) updateProfile(ctx context.Context, userid, email, bio string) error {
+func (s *Service) updateProfile(ctx context.Context, userid, email, bio string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -70,7 +70,7 @@ const (
 	thumbQuality = 0
 )
 
-func (s *service) updateImage(ctx context.Context, userid string, img image.Image) error {
+func (s *Service) updateImage(ctx context.Context, userid string, img image.Image) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -102,7 +102,7 @@ func (s *service) updateImage(ctx context.Context, userid string, img image.Imag
 	return nil
 }
 
-func (s *service) deleteProfile(ctx context.Context, userid string) error {
+func (s *Service) deleteProfile(ctx context.Context, userid string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -123,7 +123,7 @@ func (s *service) deleteProfile(ctx context.Context, userid string) error {
 	return nil
 }
 
-func (s *service) getProfile(ctx context.Context, userid string) (*resProfileModel, error) {
+func (s *Service) getProfile(ctx context.Context, userid string) (*resProfileModel, error) {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -139,7 +139,7 @@ func (s *service) getProfile(ctx context.Context, userid string) (*resProfileMod
 	}, nil
 }
 
-func (s *service) statProfileImage(ctx context.Context, userid string) (*objstore.ObjectInfo, error) {
+func (s *Service) statProfileImage(ctx context.Context, userid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.profileDir.Stat(ctx, userid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -150,7 +150,7 @@ func (s *service) statProfileImage(ctx context.Context, userid string) (*objstor
 	return objinfo, nil
 }
 
-func (s *service) getProfileImage(ctx context.Context, userid string) (io.ReadCloser, string, error) {
+func (s *Service) getProfileImage(ctx context.Context, userid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.profileDir.Get(ctx, userid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -161,7 +161,7 @@ func (s *service) getProfileImage(ctx context.Context, userid string) (io.ReadCl
 	return obj, objinfo.ContentType, nil
 }
 
-func (s *service) getProfilesBulk(ctx context.Context, userids []string) (*resProfiles, error) {
+func (s *Service) getProfilesBulk(ctx context.Context, userids []string) (*resProfiles, error) {
 	m, err := s.profiles.GetBulk(ctx, userids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get profiles")

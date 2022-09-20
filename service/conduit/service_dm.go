@@ -12,7 +12,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func (s *service) publishDMMsgEvent(ctx context.Context, userids []string, v interface{}) {
+func (s *Service) publishDMMsgEvent(ctx context.Context, userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
@@ -29,7 +29,7 @@ func (s *service) publishDMMsgEvent(ctx context.Context, userids []string, v int
 	}
 }
 
-func (s *service) publishDMSettingsEvent(ctx context.Context, userids []string, v interface{}) {
+func (s *Service) publishDMSettingsEvent(ctx context.Context, userids []string, v interface{}) {
 	if len(userids) == 0 {
 		return
 	}
@@ -50,7 +50,7 @@ const (
 	chatMsgKindTxt = "t"
 )
 
-func (s *service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
+func (s *Service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
 	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -70,7 +70,7 @@ type (
 	}
 )
 
-func (s *service) updateDM(ctx context.Context, userid string, chatid string, name, theme string) error {
+func (s *Service) updateDM(ctx context.Context, userid string, chatid string, name, theme string) error {
 	m, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func useridDiff(a, b, c string) string {
 	return b
 }
 
-func (s *service) getLatestDMs(ctx context.Context, userid string, before int64, limit int) (*resDMs, error) {
+func (s *Service) getLatestDMs(ctx context.Context, userid string, before int64, limit int) (*resDMs, error) {
 	m, err := s.dms.GetLatest(ctx, userid, before, limit)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest dms")
@@ -131,7 +131,7 @@ func (s *service) getLatestDMs(ctx context.Context, userid string, before int64,
 	}, nil
 }
 
-func (s *service) getDMs(ctx context.Context, userid string, chatids []string) (*resDMs, error) {
+func (s *Service) getDMs(ctx context.Context, userid string, chatids []string) (*resDMs, error) {
 	m, err := s.dms.GetChats(ctx, chatids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get dms")
@@ -168,7 +168,7 @@ type (
 	}
 )
 
-func (s *service) searchDMs(ctx context.Context, userid string, prefix string, limit int) (*resDMSearches, error) {
+func (s *Service) searchDMs(ctx context.Context, userid string, prefix string, limit int) (*resDMSearches, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -209,7 +209,7 @@ type (
 	}
 )
 
-func (s *service) createDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
+func (s *Service) createDMMsg(ctx context.Context, userid string, chatid string, kind string, value string) (*resMsg, error) {
 	dm, err := s.getDMByChatid(ctx, userid, chatid)
 	if err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ type (
 	}
 )
 
-func (s *service) getDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
+func (s *Service) getDMMsgs(ctx context.Context, userid string, chatid string, kind string, before string, limit int) (*resMsgs, error) {
 	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (s *service) getDMMsgs(ctx context.Context, userid string, chatid string, k
 	}, nil
 }
 
-func (s *service) delDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
+func (s *Service) delDMMsg(ctx context.Context, userid string, chatid string, msgid string) error {
 	if _, err := s.getDMByChatid(ctx, userid, chatid); err != nil {
 		return err
 	}

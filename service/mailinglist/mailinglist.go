@@ -28,13 +28,7 @@ type (
 	MailingList interface {
 	}
 
-	// Service is a MailingList and governor.Service
-	Service interface {
-		MailingList
-		governor.Service
-	}
-
-	service struct {
+	Service struct {
 		lists        model.Repo
 		mailBucket   objstore.Bucket
 		rcvMailDir   objstore.Dir
@@ -62,7 +56,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -91,7 +85,7 @@ func setCtxMailingList(inj governor.Injector, m MailingList) {
 }
 
 // NewCtx creates a new MailingList service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	lists := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
@@ -104,8 +98,8 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
-	return &service{
+func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+	return &Service{
 		lists:       lists,
 		mailBucket:  obj,
 		rcvMailDir:  obj.Subdir("rcvmail"),
@@ -121,7 +115,7 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailingList(inj, s)
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
@@ -145,14 +139,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("eventsize", "16K")
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	s.port = r.GetStr("port")
@@ -227,7 +221,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) createSMTPServer() *smtp.Server {
+func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service: s,
 		log:     klog.NewLevelLogger(s.log.Logger.Sublogger("smtpserver", nil)),
@@ -243,7 +237,7 @@ func (s *service) createSMTPServer() *smtp.Server {
 	return server
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
 		AckWait:     30 * time.Second,
 		MaxDeliver:  30,
@@ -297,7 +291,7 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -312,7 +306,7 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.lists.Setup(ctx); err != nil {
 		return err
 	}
@@ -333,7 +327,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -341,15 +335,15 @@ const (
 	listDeleteBatchSize = 256
 )
 
-func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	return s.creatorDeleteHook(ctx, pinger, props.Userid)
 }
 
-func (s *service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
+func (s *Service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
 	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
 }
 
-func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
+func (s *Service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err

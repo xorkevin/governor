@@ -26,13 +26,7 @@ type (
 		Publish(ctx context.Context, userid string, channel string, v interface{}) error
 	}
 
-	// Service is the public interface for the websocket service
-	Service interface {
-		governor.Service
-		WS
-	}
-
-	service struct {
+	Service struct {
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
@@ -44,7 +38,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -103,7 +97,7 @@ func setCtxWS(inj governor.Injector, w WS) {
 }
 
 // NewCtx creates a new WS service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	ev := events.GetCtxEvents(inj)
 	g := gate.GetCtxGate(inj)
 	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
@@ -111,15 +105,15 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new WS service
-func New(ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
-	return &service{
+func New(ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+	return &Service{
 		events:      ev,
 		ratelimiter: ratelimiter,
 		gate:        g,
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxWS(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -131,14 +125,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	}
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	sr := s.router()
@@ -147,18 +141,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -209,7 +203,7 @@ func decodeReqMsg(b []byte) (string, string, []byte, error) {
 	return m.Channel, m.Userid, m.Value, nil
 }
 
-func (s *service) SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error) {
+func (s *Service) SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error) {
 	presenceChannel := presenceChannelName(s.opts.PresenceChannel, location)
 	sub, err := s.events.Subscribe(presenceChannel, group, func(ctx context.Context, topic string, msgdata []byte) error {
 		var props PresenceEventProps
@@ -224,7 +218,7 @@ func (s *service) SubscribePresence(location, group string, worker PresenceWorke
 	return sub, nil
 }
 
-func (s *service) Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error) {
+func (s *Service) Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error) {
 	if channel == "" {
 		return nil, kerrors.WithMsg(nil, "Channel pattern may not be empty")
 	}
@@ -242,7 +236,7 @@ func (s *service) Subscribe(channel, group string, worker WorkerFunc) (events.Su
 	return sub, nil
 }
 
-func (s *service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {
+func (s *Service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {
 	if userid == "" {
 		return kerrors.WithMsg(nil, "Userid may not be empty")
 	}

@@ -30,7 +30,7 @@ type (
 	}
 )
 
-func (s *service) getLink(ctx context.Context, linkid string) (*resGetLink, error) {
+func (s *Service) getLink(ctx context.Context, linkid string) (*resGetLink, error) {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -46,7 +46,7 @@ func (s *service) getLink(ctx context.Context, linkid string) (*resGetLink, erro
 	}, nil
 }
 
-func (s *service) getLinkFast(ctx context.Context, linkid string) (string, error) {
+func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(ctx, linkid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get linkid url from cache"), nil)
@@ -74,7 +74,7 @@ func (s *service) getLinkFast(ctx context.Context, linkid string) (string, error
 	return res.URL, nil
 }
 
-func (s *service) statLinkImage(ctx context.Context, linkid string) (*objstore.ObjectInfo, error) {
+func (s *Service) statLinkImage(ctx context.Context, linkid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.linkImgDir.Stat(ctx, linkid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -85,7 +85,7 @@ func (s *service) statLinkImage(ctx context.Context, linkid string) (*objstore.O
 	return objinfo, nil
 }
 
-func (s *service) getLinkImage(ctx context.Context, linkid string) (io.ReadCloser, string, error) {
+func (s *Service) getLinkImage(ctx context.Context, linkid string) (io.ReadCloser, string, error) {
 	qrimg, objinfo, err := s.linkImgDir.Get(ctx, linkid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -102,7 +102,7 @@ type (
 	}
 )
 
-func (s *service) getLinkGroup(ctx context.Context, creatorid string, limit, offset int) (*resLinkGroup, error) {
+func (s *Service) getLinkGroup(ctx context.Context, creatorid string, limit, offset int) (*resLinkGroup, error) {
 	links, err := s.repo.GetLinkGroup(ctx, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get links")
@@ -131,7 +131,7 @@ type (
 	}
 )
 
-func (s *service) createLink(ctx context.Context, creatorid, linkid, url, brandid string) (*resCreateLink, error) {
+func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandid string) (*resCreateLink, error) {
 	var m *model.LinkModel
 	if len(linkid) == 0 {
 		var err error
@@ -201,7 +201,7 @@ func (s *service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 	}, nil
 }
 
-func (s *service) deleteLink(ctx context.Context, creatorid, linkid string) error {
+func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) error {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -242,7 +242,7 @@ type (
 	}
 )
 
-func (s *service) getBrandGroup(ctx context.Context, creatorid string, limit, offset int) (*resBrandGroup, error) {
+func (s *Service) getBrandGroup(ctx context.Context, creatorid string, limit, offset int) (*resBrandGroup, error) {
 	brands, err := s.repo.GetBrandGroup(ctx, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get links")
@@ -260,7 +260,7 @@ func (s *service) getBrandGroup(ctx context.Context, creatorid string, limit, of
 	}, nil
 }
 
-func (s *service) statBrandImage(ctx context.Context, creatorid, brandid string) (*objstore.ObjectInfo, error) {
+func (s *Service) statBrandImage(ctx context.Context, creatorid, brandid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(ctx, brandid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -271,7 +271,7 @@ func (s *service) statBrandImage(ctx context.Context, creatorid, brandid string)
 	return objinfo, nil
 }
 
-func (s *service) getBrandImage(ctx context.Context, creatorid, brandid string) (io.ReadCloser, string, error) {
+func (s *Service) getBrandImage(ctx context.Context, creatorid, brandid string) (io.ReadCloser, string, error) {
 	brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(ctx, brandid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -289,7 +289,7 @@ type (
 	}
 )
 
-func (s *service) createBrand(ctx context.Context, creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
+func (s *Service) createBrand(ctx context.Context, creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
 	m := s.repo.NewBrand(creatorid, brandid)
 	if err := s.repo.InsertBrand(ctx, m); err != nil {
 		if errors.Is(err, db.ErrorUnique{}) {
@@ -311,7 +311,7 @@ func (s *service) createBrand(ctx context.Context, creatorid, brandid string, im
 	}, nil
 }
 
-func (s *service) deleteBrand(ctx context.Context, creatorid, brandid string) error {
+func (s *Service) deleteBrand(ctx context.Context, creatorid, brandid string) error {
 	m, err := s.repo.GetBrand(ctx, creatorid, brandid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {

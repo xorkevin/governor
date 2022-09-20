@@ -131,7 +131,7 @@ var (
 )
 
 type smtpBackend struct {
-	service *service
+	service *Service
 	log     *klog.LevelLogger
 }
 
@@ -169,7 +169,7 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 }
 
 type smtpSession struct {
-	service      *service
+	service      *Service
 	log          *klog.LevelLogger
 	ctx          context.Context
 	srcip        net.IP

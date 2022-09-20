@@ -29,13 +29,7 @@ type (
 	Courier interface {
 	}
 
-	// Service is the public interface for the courier service server
-	Service interface {
-		governor.Service
-		Courier
-	}
-
-	service struct {
+	Service struct {
 		repo          model.Repo
 		kvlinks       kvstore.KVStore
 		courierBucket objstore.Bucket
@@ -54,7 +48,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -76,7 +70,7 @@ func setCtxCourier(inj governor.Injector, c Courier) {
 }
 
 // NewCtx creates a new Courier service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	repo := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	obj := objstore.GetCtxBucket(inj)
@@ -96,8 +90,8 @@ func New(
 	orgs org.Orgs,
 	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
-) Service {
-	return &service{
+) *Service {
+	return &Service{
 		repo:          repo,
 		kvlinks:       kv.Subtree("links"),
 		courierBucket: obj,
@@ -111,7 +105,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxCourier(inj, s)
 	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
@@ -121,14 +115,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("cachetime", "24h")
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	s.fallbackLink = r.GetStr("fallbacklink")
@@ -161,7 +155,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -185,10 +179,10 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.repo.Setup(ctx); err != nil {
 		return err
 	}
@@ -201,7 +195,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -209,15 +203,15 @@ const (
 	linkDeleteBatchSize = 256
 )
 
-func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	return s.creatorDeleteHook(ctx, pinger, props.Userid)
 }
 
-func (s *service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
+func (s *Service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
 	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
 }
 
-func (s *service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
+func (s *Service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err

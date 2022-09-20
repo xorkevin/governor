@@ -37,18 +37,12 @@ type (
 		StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
-	// Service is a Roles and governor.Service
-	Service interface {
-		governor.Service
-		Roles
-	}
-
 	RolesProps struct {
 		Userid string
 		Roles  []string
 	}
 
-	service struct {
+	Service struct {
 		roles         model.Repo
 		kvroleset     kvstore.KVStore
 		events        events.Events
@@ -84,7 +78,7 @@ func setCtxRoles(inj governor.Injector, r Roles) {
 }
 
 // NewCtx creates a new Roles service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	roles := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	ev := events.GetCtxEvents(inj)
@@ -92,8 +86,8 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New returns a new Roles
-func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) Service {
-	return &service{
+func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) *Service {
+	return &Service{
 		roles:         roles,
 		kvroleset:     kv.Subtree("roleset"),
 		events:        ev,
@@ -101,7 +95,7 @@ func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRoles(inj, s)
 	streamname := strings.ToUpper(name)
 	s.streamns = streamname
@@ -116,7 +110,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("rolecache", "24h")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	var err error
@@ -144,14 +138,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
@@ -170,7 +164,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -182,7 +176,7 @@ func decodeRolesProps(msgdata []byte) (*RolesProps, error) {
 	return m, nil
 }
 
-func (s *service) StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeRolesProps(msgdata)
 		if err != nil {
@@ -196,7 +190,7 @@ func (s *service) StreamSubscribeCreate(group string, worker WorkerFunc, streamo
 	return sub, nil
 }
 
-func (s *service) StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeRolesProps(msgdata)
 		if err != nil {

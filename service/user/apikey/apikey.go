@@ -27,13 +27,7 @@ type (
 		DeleteKeys(ctx context.Context, keyids []string) error
 	}
 
-	// Service is an Apikeys and governor.Service
-	Service interface {
-		governor.Service
-		Apikeys
-	}
-
-	service struct {
+	Service struct {
 		apikeys        model.Repo
 		kvkey          kvstore.KVStore
 		log            *klog.LevelLogger
@@ -58,28 +52,28 @@ func setCtxApikeys(inj governor.Injector, a Apikeys) {
 }
 
 // NewCtx returns a new Apikeys service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	apikeys := model.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(apikeys, kv)
 }
 
 // New returns a new Apikeys service
-func New(apikeys model.Repo, kv kvstore.KVStore) Service {
-	return &service{
+func New(apikeys model.Repo, kv kvstore.KVStore) *Service {
+	return &Service{
 		apikeys:        apikeys,
 		kvkey:          kv.Subtree("key"),
 		scopeCacheTime: time24h,
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxApikeys(inj, s)
 
 	r.SetDefault("scopecache", "24h")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
@@ -95,14 +89,14 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.apikeys.Setup(ctx); err != nil {
 		return err
 	}
@@ -111,6 +105,6 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }

@@ -31,13 +31,7 @@ type (
 		StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
-	// Service is an Orgs and governor.Service
-	Service interface {
-		governor.Service
-		Orgs
-	}
-
-	service struct {
+	Service struct {
 		orgs        model.Repo
 		roles       role.Roles
 		users       user.Users
@@ -53,7 +47,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -85,7 +79,7 @@ func setCtxOrgs(inj governor.Injector, o Orgs) {
 }
 
 // NewCtx creates a new Orgs service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	orgs := model.GetCtxRepo(inj)
 	roles := role.GetCtxRoles(inj)
 	users := user.GetCtxUsers(inj)
@@ -96,8 +90,8 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
-	return &service{
+func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+	return &Service{
 		orgs:        orgs,
 		roles:       roles,
 		users:       users,
@@ -107,7 +101,7 @@ func New(orgs model.Repo, roles role.Roles, users user.Users, ev events.Events, 
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOrgs(inj, s)
 	s.scopens = "gov." + name
 	streamname := strings.ToUpper(name)
@@ -121,14 +115,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("eventsize", "2K")
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	var err error
@@ -154,7 +148,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.orgRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -198,10 +192,10 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
@@ -220,7 +214,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -232,7 +226,7 @@ func decodeDeleteOrgProps(msgdata []byte) (*DeleteOrgProps, error) {
 	return m, nil
 }
 
-func (s *service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeDeleteOrgProps(msgdata)
 		if err != nil {
@@ -250,7 +244,7 @@ const (
 	roleDeleteBatchSize = 256
 )
 
-func (s *service) orgRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error {
+func (s *Service) orgRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteOrgProps) error {
 	orgrole := rank.ToOrgName(props.OrgID)
 	usrOrgrole := rank.ToUsrName(orgrole)
 	modOrgrole := rank.ToModName(orgrole)
@@ -299,7 +293,7 @@ func (s *service) orgRoleDeleteHook(ctx context.Context, pinger events.Pinger, p
 	return nil
 }
 
-func (s *service) userRoleCreate(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
+func (s *Service) userRoleCreate(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
 	u, err := s.users.GetByID(ctx, props.Userid)
 	if err != nil {
 		if errors.Is(err, user.ErrorNotFound{}) {
@@ -366,7 +360,7 @@ func (s *service) userRoleCreate(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-func (s *service) userRoleDelete(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
+func (s *Service) userRoleDelete(ctx context.Context, pinger events.Pinger, props role.RolesProps) error {
 	memberorgids := make([]string, 0, len(props.Roles))
 	modorgids := make([]string, 0, len(props.Roles))
 	for _, i := range props.Roles {
@@ -389,7 +383,7 @@ func (s *service) userRoleDelete(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-func (s *service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+func (s *Service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
 	if err := s.orgs.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update member username")
 	}

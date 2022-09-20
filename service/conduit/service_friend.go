@@ -20,7 +20,7 @@ type (
 	}
 )
 
-func (s *service) getFriends(ctx context.Context, userid string, prefix string, limit, offset int) (*resFriends, error) {
+func (s *Service) getFriends(ctx context.Context, userid string, prefix string, limit, offset int) (*resFriends, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -45,7 +45,7 @@ type (
 	}
 )
 
-func (s *service) searchFriends(ctx context.Context, userid string, prefix string, limit int) (*resFriendSearches, error) {
+func (s *Service) searchFriends(ctx context.Context, userid string, prefix string, limit int) (*resFriendSearches, error) {
 	m, err := s.friends.GetFriends(ctx, userid, prefix, limit, 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to search friends")
@@ -62,7 +62,7 @@ func (s *service) searchFriends(ctx context.Context, userid string, prefix strin
 	}, nil
 }
 
-func (s *service) removeFriend(ctx context.Context, userid1, userid2 string) error {
+func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) error {
 	if _, err := s.friends.GetByID(ctx, userid1, userid2); err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Friend not found")
@@ -85,7 +85,7 @@ func (s *service) removeFriend(ctx context.Context, userid1, userid2 string) err
 	return nil
 }
 
-func (s *service) inviteFriend(ctx context.Context, userid string, invitedBy string) error {
+func (s *Service) inviteFriend(ctx context.Context, userid string, invitedBy string) error {
 	if _, err := s.friends.GetByID(ctx, userid, invitedBy); err != nil {
 		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to search friends")
@@ -103,7 +103,7 @@ func (s *service) inviteFriend(ctx context.Context, userid string, invitedBy str
 	return nil
 }
 
-func (s *service) acceptFriendInvitation(ctx context.Context, userid, inviter string) error {
+func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -150,7 +150,7 @@ func (s *service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 	return nil
 }
 
-func (s *service) deleteFriendInvitation(ctx context.Context, userid, inviter string) error {
+func (s *Service) deleteFriendInvitation(ctx context.Context, userid, inviter string) error {
 	if err := s.invitations.DeleteByID(ctx, userid, inviter); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete friend invitation")
 	}
@@ -169,7 +169,7 @@ type (
 	}
 )
 
-func (s *service) getUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *Service) getUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -190,7 +190,7 @@ func (s *service) getUserFriendInvitations(ctx context.Context, userid string, a
 	}, nil
 }
 
-func (s *service) getInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
+func (s *Service) getInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -211,7 +211,7 @@ func (s *service) getInvitedFriendInvitations(ctx context.Context, userid string
 	}, nil
 }
 
-func (s *service) friendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) friendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	msg, err := decodeFriendProps(msgdata)
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (s *service) friendSubscriber(ctx context.Context, pinger events.Pinger, to
 	return nil
 }
 
-func (s *service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 	msg, err := decodeUnfriendProps(msgdata)
 	if err != nil {
 		return err
@@ -251,7 +251,7 @@ func (s *service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, 
 	return nil
 }
 
-func (s *service) rmFriend(ctx context.Context, userid1, userid2 string) error {
+func (s *Service) rmFriend(ctx context.Context, userid1, userid2 string) error {
 	if m, err := s.dms.GetByID(ctx, userid1, userid2); err != nil {
 		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get dm")

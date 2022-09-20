@@ -27,12 +27,6 @@ type (
 		DelBucket(ctx context.Context, name string) error
 	}
 
-	// Service is an Objstore and governor.Service
-	Service interface {
-		governor.Service
-		Objstore
-	}
-
 	getClientRes struct {
 		client *minio.Client
 		err    error
@@ -43,7 +37,7 @@ type (
 		res chan<- getClientRes
 	}
 
-	service struct {
+	Service struct {
 		client     *minio.Client
 		aclient    *atomic.Pointer[minio.Client]
 		clientname string
@@ -101,8 +95,8 @@ func NewBucketInCtx(inj governor.Injector, name string) {
 }
 
 // New creates a new object store service instance
-func New() Service {
-	return &service{
+func New() *Service {
+	return &Service{
 		aclient:  &atomic.Pointer[minio.Client]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
@@ -110,7 +104,7 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxObjstore(inj, s)
 
 	r.SetDefault("auth", "")
@@ -143,7 +137,7 @@ func (e ErrorNotFound) Error() string {
 	return "Object not found"
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 	s.clientname = c.Hostname + "-" + c.Instance
@@ -173,7 +167,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -198,7 +192,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	var err error
 	// Check client auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
@@ -241,7 +235,7 @@ type (
 	}
 )
 
-func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
+func (s *Service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 	var auth minioauth
 	if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
@@ -279,17 +273,17 @@ func (s *service) handleGetClient(ctx context.Context) (*minio.Client, error) {
 	return s.client, nil
 }
 
-func (s *service) closeClient() {
+func (s *Service) closeClient() {
 	s.aclient.Store(nil)
 	s.client = nil
 	s.auth = minioauth{}
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -298,18 +292,18 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrorConn{}, "Objstore service not ready")
 	}
 	return nil
 }
 
-func (s *service) getClient(ctx context.Context) (*minio.Client, error) {
+func (s *Service) getClient(ctx context.Context) (*minio.Client, error) {
 	if client := s.aclient.Load(); client != nil {
 		return client, nil
 	}
@@ -334,7 +328,7 @@ func (s *service) getClient(ctx context.Context) (*minio.Client, error) {
 	}
 }
 
-func (s *service) clientPing(ctx context.Context, client *minio.Client) error {
+func (s *Service) clientPing(ctx context.Context, client *minio.Client) error {
 	if _, err := client.GetBucketLocation(ctx, "healthcheck-probe-"+s.clientname); err != nil {
 		if minio.ToErrorResponse(err).StatusCode != http.StatusNotFound {
 			return kerrors.WithKind(err, ErrorConn{}, "Failed to ping objstore")
@@ -343,7 +337,7 @@ func (s *service) clientPing(ctx context.Context, client *minio.Client) error {
 	return nil
 }
 
-func (s *service) Ping(ctx context.Context) error {
+func (s *Service) Ping(ctx context.Context) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
@@ -352,7 +346,7 @@ func (s *service) Ping(ctx context.Context) error {
 }
 
 // GetBucket returns the bucket of the given name
-func (s *service) GetBucket(name string) Bucket {
+func (s *Service) GetBucket(name string) Bucket {
 	return &bucket{
 		s:        s,
 		name:     name,
@@ -361,7 +355,7 @@ func (s *service) GetBucket(name string) Bucket {
 }
 
 // DelBucket deletes the bucket if it exists
-func (s *service) DelBucket(ctx context.Context, name string) error {
+func (s *Service) DelBucket(ctx context.Context, name string) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
@@ -402,7 +396,7 @@ type (
 	}
 
 	bucket struct {
-		s        *service
+		s        *Service
 		name     string
 		location string
 	}

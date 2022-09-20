@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func (s *service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]model.Model, error) {
+func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]model.Model, error) {
 	m, err := s.apikeys.GetUserKeys(ctx, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
@@ -46,7 +46,7 @@ func (s *service) GetUserKeys(ctx context.Context, userid string, limit, offset 
 	return m, nil
 }
 
-func (s *service) getKeyHash(ctx context.Context, keyid string) (string, string, error) {
+func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string, error) {
 	if result, err := s.kvkey.Get(ctx, keyid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get apikey key from cache"), nil)
@@ -85,7 +85,7 @@ func (s *service) getKeyHash(ctx context.Context, keyid string) (string, string,
 	return m.KeyHash, m.Scope, nil
 }
 
-func (s *service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
+func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
 	userid, err := model.ParseIDUserid(keyid)
 	if err != nil {
 		return "", "", kerrors.WithKind(err, ErrorInvalidKey{}, "Invalid key")
@@ -115,7 +115,7 @@ type (
 	}
 )
 
-func (s *service) Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error) {
+func (s *Service) Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error) {
 	m, key, err := s.apikeys.New(userid, scope, name, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey keys")
@@ -132,7 +132,7 @@ func (s *service) Insert(ctx context.Context, userid string, scope string, name,
 	}, nil
 }
 
-func (s *service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error) {
+func (s *Service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -153,7 +153,7 @@ func (s *service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel,
 	}, nil
 }
 
-func (s *service) UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error {
+func (s *Service) UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -173,7 +173,7 @@ func (s *service) UpdateKey(ctx context.Context, keyid string, scope string, nam
 	return nil
 }
 
-func (s *service) DeleteKey(ctx context.Context, keyid string) error {
+func (s *Service) DeleteKey(ctx context.Context, keyid string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -190,7 +190,7 @@ func (s *service) DeleteKey(ctx context.Context, keyid string) error {
 	return nil
 }
 
-func (s *service) DeleteKeys(ctx context.Context, keyids []string) error {
+func (s *Service) DeleteKeys(ctx context.Context, keyids []string) error {
 	if len(keyids) == 0 {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (s *service) DeleteKeys(ctx context.Context, keyids []string) error {
 	return nil
 }
 
-func (s *service) clearCache(ctx context.Context, keyids ...string) {
+func (s *Service) clearCache(ctx context.Context, keyids ...string) {
 	if err := s.kvkey.Del(ctx, keyids...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear keys from cache"), nil)
 	}

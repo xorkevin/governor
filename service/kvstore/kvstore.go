@@ -68,12 +68,6 @@ type (
 		Subtree(prefix string) KVStore
 	}
 
-	// Service is a KVStore and governor.Service
-	Service interface {
-		governor.Service
-		KVStore
-	}
-
 	getClientRes struct {
 		client *redis.Client
 		err    error
@@ -84,7 +78,7 @@ type (
 		res chan<- getClientRes
 	}
 
-	service struct {
+	Service struct {
 		client     *redis.Client
 		aclient    *atomic.Pointer[redis.Client]
 		auth       secretAuth
@@ -140,8 +134,8 @@ func NewSubtreeInCtx(inj governor.Injector, prefix string) {
 }
 
 // New creates a new cache service
-func New() Service {
-	return &service{
+func New() *Service {
+	return &Service{
 		aclient:  &atomic.Pointer[redis.Client]{},
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
@@ -149,7 +143,7 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRootKV(inj, s)
 
 	r.SetDefault("auth", "")
@@ -187,7 +181,7 @@ func (e ErrorVal) Error() string {
 	return "Invalid value"
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
@@ -214,7 +208,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -239,7 +233,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	var err error
 	// Check client auth expiry, and reinit client if about to be expired
 	if _, err = s.handleGetClient(ctx); err != nil {
@@ -281,7 +275,7 @@ type (
 	}
 )
 
-func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
+func (s *Service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	var secret secretAuth
 	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
@@ -317,7 +311,7 @@ func (s *service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 	return s.client, nil
 }
 
-func (s *service) closeClient(ctx context.Context) {
+func (s *Service) closeClient(ctx context.Context) {
 	if s.client == nil {
 		return
 	}
@@ -337,11 +331,11 @@ func (s *service) closeClient(ctx context.Context) {
 	s.auth = secretAuth{}
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -350,18 +344,18 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, ErrorConn{}, "KVStore service not ready")
 	}
 	return nil
 }
 
-func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
+func (s *Service) getClient(ctx context.Context) (*redis.Client, error) {
 	if client := s.aclient.Load(); client != nil {
 		return client, nil
 	}
@@ -386,7 +380,7 @@ func (s *service) getClient(ctx context.Context) (*redis.Client, error) {
 	}
 }
 
-func (s *service) Ping(ctx context.Context) error {
+func (s *Service) Ping(ctx context.Context) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
@@ -397,7 +391,7 @@ func (s *service) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Get(ctx context.Context, key string) (string, error) {
+func (s *Service) Get(ctx context.Context, key string) (string, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return "", err
@@ -412,7 +406,7 @@ func (s *service) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
-func (s *service) GetInt(ctx context.Context, key string) (int64, error) {
+func (s *Service) GetInt(ctx context.Context, key string) (int64, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
@@ -431,7 +425,7 @@ func (s *service) GetInt(ctx context.Context, key string) (int64, error) {
 	return num, nil
 }
 
-func (s *service) Set(ctx context.Context, key, val string, seconds int64) error {
+func (s *Service) Set(ctx context.Context, key, val string, seconds int64) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
@@ -442,7 +436,7 @@ func (s *service) Set(ctx context.Context, key, val string, seconds int64) error
 	return nil
 }
 
-func (s *service) Del(ctx context.Context, key ...string) error {
+func (s *Service) Del(ctx context.Context, key ...string) error {
 	if len(key) == 0 {
 		return nil
 	}
@@ -458,7 +452,7 @@ func (s *service) Del(ctx context.Context, key ...string) error {
 	return nil
 }
 
-func (s *service) Incr(ctx context.Context, key string, delta int64) (int64, error) {
+func (s *Service) Incr(ctx context.Context, key string, delta int64) (int64, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return 0, err
@@ -470,7 +464,7 @@ func (s *service) Incr(ctx context.Context, key string, delta int64) (int64, err
 	return val, nil
 }
 
-func (s *service) Expire(ctx context.Context, key string, seconds int64) error {
+func (s *Service) Expire(ctx context.Context, key string, seconds int64) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
@@ -481,14 +475,14 @@ func (s *service) Expire(ctx context.Context, key string, seconds int64) error {
 	return nil
 }
 
-func (s *service) Subkey(keypath ...string) string {
+func (s *Service) Subkey(keypath ...string) string {
 	if len(keypath) == 0 {
 		return ""
 	}
 	return strings.Join(keypath, kvpathSeparator)
 }
 
-func (s *service) Multi(ctx context.Context) (Multi, error) {
+func (s *Service) Multi(ctx context.Context) (Multi, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
@@ -498,7 +492,7 @@ func (s *service) Multi(ctx context.Context) (Multi, error) {
 	}, nil
 }
 
-func (s *service) Tx(ctx context.Context) (Multi, error) {
+func (s *Service) Tx(ctx context.Context) (Multi, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
@@ -508,7 +502,7 @@ func (s *service) Tx(ctx context.Context) (Multi, error) {
 	}, nil
 }
 
-func (s *service) Subtree(prefix string) KVStore {
+func (s *Service) Subtree(prefix string) KVStore {
 	return &tree{
 		prefix: prefix,
 		base:   s,
@@ -634,7 +628,7 @@ func (t *multi) Subtree(prefix string) Multi {
 type (
 	tree struct {
 		prefix string
-		base   *service
+		base   *Service
 	}
 )
 

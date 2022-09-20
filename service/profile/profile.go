@@ -21,13 +21,7 @@ type (
 	Profiles interface {
 	}
 
-	// Service is a Profiles and governor.Service
-	Service interface {
-		governor.Service
-		Profiles
-	}
-
-	service struct {
+	Service struct {
 		profiles      model.Repo
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
@@ -40,7 +34,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -62,7 +56,7 @@ func setCtxProfiles(inj governor.Injector, p Profiles) {
 }
 
 // NewCtx creates a new Profiles service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	profiles := model.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
 	users := user.GetCtxUsers(inj)
@@ -72,8 +66,8 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) Service {
-	return &service{
+func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+	return &Service{
 		profiles:      profiles,
 		profileBucket: obj,
 		profileDir:    obj.Subdir("profileimage"),
@@ -83,20 +77,20 @@ func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxProfiles(inj, s)
 	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	sr := s.router()
@@ -105,7 +99,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -129,10 +123,10 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.profiles.Setup(ctx); err != nil {
 		return err
 	}
@@ -144,18 +138,18 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+func (s *Service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
 	if _, err := s.createProfile(ctx, props.Userid, "", ""); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.deleteProfile(ctx, props.Userid); err != nil {
 		return err
 	}

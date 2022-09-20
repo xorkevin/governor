@@ -24,13 +24,7 @@ type (
 		Base() governor.Middleware
 	}
 
-	// Service is a Ratelimiter and governor.Service
-	Service interface {
-		governor.Service
-		Ratelimiter
-	}
-
-	service struct {
+	Service struct {
 		tags       kvstore.KVStore
 		log        *klog.LevelLogger
 		paramsBase Params
@@ -105,19 +99,19 @@ func NewSubtreeInCtx(inj governor.Injector, prefix string) {
 }
 
 // NewCtx creates a new Ratelimiter from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(kv)
 }
 
 // New creates a new Ratelimiter
-func New(kv kvstore.KVStore) Service {
-	return &service{
+func New(kv kvstore.KVStore) *Service {
+	return &Service{
 		tags: kv.Subtree("tags"),
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRootRL(inj, s)
 
 	r.SetDefault("params.base", map[string]interface{}{
@@ -132,7 +126,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	})
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	if err := r.Unmarshal("params.base", &s.paramsBase); err != nil {
@@ -150,18 +144,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -177,7 +171,7 @@ type (
 	}
 )
 
-func (s *service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.MiddlewareCtx {
+func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
 		return governor.RouteHandlerFunc(func(c governor.Context) {
 			now := time.Now().Round(0).Unix()
@@ -239,22 +233,22 @@ func (s *service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 	}
 }
 
-func (s *service) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
+func (s *Service) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
 	return s.rlimitCtx(s.tags, tagger)
 }
 
-func (s *service) Ratelimit(tagger Tagger) governor.Middleware {
+func (s *Service) Ratelimit(tagger Tagger) governor.Middleware {
 	return governor.MiddlewareFromCtx(s.log.Logger, s.RatelimitCtx(tagger))
 }
 
-func (s *service) Subtree(prefix string) Ratelimiter {
+func (s *Service) Subtree(prefix string) Ratelimiter {
 	return &tree{
 		kv:   s.tags.Subtree(prefix),
 		base: s,
 	}
 }
 
-func (s *service) BaseCtx() governor.MiddlewareCtx {
+func (s *Service) BaseCtx() governor.MiddlewareCtx {
 	return Compose(
 		s,
 		IPAddress("ip", s.paramsBase),
@@ -263,14 +257,14 @@ func (s *service) BaseCtx() governor.MiddlewareCtx {
 	)
 }
 
-func (s *service) Base() governor.Middleware {
+func (s *Service) Base() governor.Middleware {
 	return governor.MiddlewareFromCtx(s.log.Logger, s.BaseCtx())
 }
 
 type (
 	tree struct {
 		kv   kvstore.KVStore
-		base *service
+		base *Service
 	}
 )
 

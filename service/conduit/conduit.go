@@ -34,13 +34,7 @@ type (
 	Conduit interface {
 	}
 
-	// Service is the public interface for the conduit service
-	Service interface {
-		governor.Service
-		Conduit
-	}
-
-	service struct {
+	Service struct {
 		friends        friendmodel.Repo
 		invitations    invitationmodel.Repo
 		dms            dmmodel.Repo
@@ -65,7 +59,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -108,7 +102,7 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 }
 
 // NewCtx creates a new Conduit service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	friends := friendmodel.GetCtxRepo(inj)
 	invitations := invitationmodel.GetCtxRepo(inj)
 	dms := dmmodel.GetCtxRepo(inj)
@@ -148,8 +142,8 @@ func New(
 	wss ws.WS,
 	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
-) Service {
-	return &service{
+) *Service {
+	return &Service{
 		friends:        friends,
 		invitations:    invitations,
 		dms:            dms,
@@ -165,7 +159,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxConduit(inj, s)
 	s.scopens = "gov." + name
 	s.channelns = name
@@ -187,14 +181,14 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("invitationtime", "72h")
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
 	}
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
@@ -217,7 +211,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.FriendChannel, s.streamns+"_FRIEND_WORKER", s.friendSubscriber, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -287,10 +281,10 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.friends.Setup(ctx); err != nil {
 		return err
 	}
@@ -323,11 +317,11 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+func (s *Service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
 	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
@@ -338,7 +332,7 @@ const (
 	chatDeleteBatchSize = 256
 )
 
-func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
 	if err := s.invitations.DeleteByUser(ctx, props.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user invitations")
 	}
@@ -385,14 +379,14 @@ func (s *service) userDeleteHook(ctx context.Context, pinger events.Pinger, prop
 	return nil
 }
 
-func (s *service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
+func (s *Service) userUpdateHook(ctx context.Context, pinger events.Pinger, props user.UpdateUserProps) error {
 	if err := s.friends.UpdateUsername(ctx, props.Userid, props.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to update friends username")
 	}
 	return nil
 }
 
-func (s *service) friendInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) friendInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC friend invitations")
 	}

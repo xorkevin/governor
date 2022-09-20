@@ -58,13 +58,7 @@ type (
 		Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error)
 	}
 
-	// Service is a Gate and governor.Service
-	Service interface {
-		governor.Service
-		Gate
-	}
-
-	service struct {
+	Service struct {
 		roles     role.Roles
 		apikeys   apikey.Apikeys
 		tokenizer token.Tokenizer
@@ -87,7 +81,7 @@ type (
 	}
 
 	authctx struct {
-		s      *service
+		s      *Service
 		userid string
 		scope  string
 		ctx    governor.Context
@@ -114,7 +108,7 @@ func setCtxGate(inj governor.Injector, g Gate) {
 }
 
 // NewCtx creates a new Gate from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	roles := role.GetCtxRoles(inj)
 	apikeys := apikey.GetCtxApikeys(inj)
 	tokenizer := token.GetCtxTokenizer(inj)
@@ -122,21 +116,21 @@ func NewCtx(inj governor.Injector) Service {
 }
 
 // New returns a new Gate
-func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) Service {
-	return &service{
+func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) *Service {
+	return &Service{
 		roles:     roles,
 		apikeys:   apikeys,
 		tokenizer: tokenizer,
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxGate(inj, s)
 
 	r.SetDefault("realm", "governor")
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.baseurl = c.BaseURL
 	s.realm = r.GetStr("realm")
@@ -146,18 +140,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -218,7 +212,7 @@ func (r *authctx) HasScope(scope string) bool {
 	return token.HasScope(r.scope, scope)
 }
 
-func (s *service) authctx(userid string, scope string, ctx governor.Context) Context {
+func (s *Service) authctx(userid string, scope string, ctx governor.Context) Context {
 	return &authctx{
 		s:      s,
 		userid: userid,
@@ -233,7 +227,7 @@ const (
 )
 
 // AuthenticateCtx builds a middleware function to validate tokens and set claims
-func (s *service) AuthenticateCtx(v Authorizer, scope string) governor.MiddlewareCtx {
+func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
 		return governor.RouteHandlerFunc(func(c governor.Context) {
 			keyid, password, ok := c.BasicAuth()
@@ -366,12 +360,12 @@ func (s *service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 }
 
 // Authenticate builds a middleware function to validate tokens and set claims
-func (s *service) Authenticate(v Authorizer, scope string) governor.Middleware {
+func (s *Service) Authenticate(v Authorizer, scope string) governor.Middleware {
 	return governor.MiddlewareFromCtx(s.log.Logger, s.AuthenticateCtx(v, scope))
 }
 
 // Authorize authorizes a user for some given roles
-func (s *service) Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
+func (s *Service) Authorize(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
 	return s.roles.IntersectRoles(ctx, userid, roles)
 }
 

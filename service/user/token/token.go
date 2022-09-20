@@ -64,12 +64,6 @@ type (
 		GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims)
 	}
 
-	// Service is a Tokenizer and governor.Service
-	Service interface {
-		governor.Service
-		Tokenizer
-	}
-
 	tokenSigner struct {
 		signer    jose.Signer
 		keySigner jose.Signer
@@ -87,7 +81,7 @@ type (
 		res chan<- getSignerRes
 	}
 
-	service struct {
+	Service struct {
 		hs512id    string
 		rs256id    string
 		signer     *tokenSigner
@@ -123,8 +117,8 @@ func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
 }
 
 // New creates a new Tokenizer
-func New() Service {
-	return &service{
+func New() *Service {
+	return &Service{
 		asigner:  &atomic.Pointer[tokenSigner]{},
 		issuer:   "",
 		audience: "",
@@ -135,7 +129,7 @@ func New() Service {
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxTokenizer(inj, s)
 
 	r.SetDefault("tokensecret", "")
@@ -146,7 +140,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("signerrefresh", 60)
 }
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
@@ -185,7 +179,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -209,7 +203,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	err := s.refreshSecrets(ctx)
 	if err == nil {
 		s.ready.Store(true)
@@ -247,7 +241,7 @@ type (
 	}
 )
 
-func (s *service) refreshSecrets(ctx context.Context) error {
+func (s *Service) refreshSecrets(ctx context.Context) error {
 	var tokenSecrets secretToken
 	if err := s.config.GetSecret(ctx, "tokensecret", int64(s.keyrefresh), &tokenSecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid token secret")
@@ -316,7 +310,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleGetSigner(ctx context.Context) (*tokenSigner, error) {
+func (s *Service) handleGetSigner(ctx context.Context) (*tokenSigner, error) {
 	if s.signer == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
 			return nil, err
@@ -326,7 +320,7 @@ func (s *service) handleGetSigner(ctx context.Context) (*tokenSigner, error) {
 	return s.signer, nil
 }
 
-func (s *service) getSigner(ctx context.Context) (*tokenSigner, error) {
+func (s *Service) getSigner(ctx context.Context) (*tokenSigner, error) {
 	if signer := s.asigner.Load(); signer != nil {
 		return signer, nil
 	}
@@ -351,11 +345,11 @@ func (s *service) getSigner(ctx context.Context) (*tokenSigner, error) {
 	}
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -364,11 +358,11 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token service not ready")
 	}
@@ -376,7 +370,7 @@ func (s *service) Health(ctx context.Context) error {
 }
 
 // GetJWKS returns an RFC 7517 representation of the public signing key
-func (s *service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
+func (s *Service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return nil, err
@@ -387,7 +381,7 @@ func (s *service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *service) Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
+func (s *Service) Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", nil, err
@@ -416,7 +410,7 @@ func (s *service) Generate(ctx context.Context, kind Kind, userid string, durati
 }
 
 // GenerateExt creates a new id token
-func (s *service) GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
+func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", err
@@ -459,7 +453,7 @@ func HasScope(tokenScope string, scope string) bool {
 }
 
 // Validate returns whether a token is valid
-func (s *service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
+func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -495,7 +489,7 @@ func (s *service) Validate(ctx context.Context, kind Kind, tokenString string) (
 }
 
 // GetClaims returns token claims without validating time
-func (s *service) GetClaims(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
+func (s *Service) GetClaims(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil
@@ -529,7 +523,7 @@ func (s *service) GetClaims(ctx context.Context, kind Kind, tokenString string) 
 }
 
 // GetClaimsExt returns external token claims without validating time
-func (s *service) GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
+func (s *Service) GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return false, nil

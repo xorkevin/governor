@@ -21,13 +21,7 @@ type (
 		ExecuteHTML(dst io.Writer, kind Kind, templateName string, data interface{}) error
 	}
 
-	// Service is a Template and governor.Service
-	Service interface {
-		governor.Service
-		Template
-	}
-
-	service struct {
+	Service struct {
 		tt  *textTemplate.Template
 		ht  *htmlTemplate.Template
 		log *klog.LevelLogger
@@ -61,11 +55,11 @@ func setCtxTemplate(inj governor.Injector, t Template) {
 }
 
 // New creates a new Template service
-func New() Service {
-	return &service{}
+func New() *Service {
+	return &Service{}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxTemplate(inj, s)
 
 	r.SetDefault("dir", "templates")
@@ -77,7 +71,7 @@ const (
 	tplNoMatchErrorSubstring = "pattern matches no files"
 )
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	templateDir := os.DirFS(r.GetStr("dir"))
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
@@ -118,18 +112,18 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
@@ -149,7 +143,7 @@ func (e ErrorExecute) Error() string {
 }
 
 // Execute executes a template and returns the templated string
-func (s *service) Execute(dst io.Writer, kind Kind, templateName string, data interface{}) error {
+func (s *Service) Execute(dst io.Writer, kind Kind, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
 		if s.tt.Lookup(templateName) == nil {
@@ -165,7 +159,7 @@ func (s *service) Execute(dst io.Writer, kind Kind, templateName string, data in
 }
 
 // ExecuteHTML executes an html template and returns the templated string
-func (s *service) ExecuteHTML(dst io.Writer, kind Kind, templateName string, data interface{}) error {
+func (s *Service) ExecuteHTML(dst io.Writer, kind Kind, templateName string, data interface{}) error {
 	switch kind {
 	case KindLocal:
 		if s.ht.Lookup(templateName) == nil {

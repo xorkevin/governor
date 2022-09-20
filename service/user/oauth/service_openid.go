@@ -65,7 +65,7 @@ type (
 	}
 )
 
-func (s *service) getOpenidConfig() (*resOpenidConfig, error) {
+func (s *Service) getOpenidConfig() (*resOpenidConfig, error) {
 	return &resOpenidConfig{
 		Issuer:          s.issuer,
 		EPAuthorization: s.epauth,
@@ -113,7 +113,7 @@ func (s *service) getOpenidConfig() (*resOpenidConfig, error) {
 	}, nil
 }
 
-func (s *service) getJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
+func (s *Service) getJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 	return s.tokenizer.GetJWKS(ctx)
 }
 
@@ -144,7 +144,7 @@ type (
 	}
 )
 
-func (s *service) authCode(ctx context.Context, userid, clientid, scope, nonce, challenge, method string, authTime int64) (*resAuthCode, error) {
+func (s *Service) authCode(ctx context.Context, userid, clientid, scope, nonce, challenge, method string, authTime int64) (*resAuthCode, error) {
 	// sort and filter unknown scopes
 	scope = dedupSSV(scope, map[string]struct{}{
 		oidScopeOpenid:  {},
@@ -249,7 +249,7 @@ func ssvSet(s string) map[string]struct{} {
 	return scopes
 }
 
-func (s *service) getUserinfoClaims(ctx context.Context, userid string, scopes map[string]struct{}) (*UserinfoClaims, error) {
+func (s *Service) getUserinfoClaims(ctx context.Context, userid string, scopes map[string]struct{}) (*UserinfoClaims, error) {
 	claims := &UserinfoClaims{}
 	user, err := s.users.GetByID(ctx, userid)
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *service) getUserinfoClaims(ctx context.Context, userid string, scopes m
 	return claims, nil
 }
 
-func (s *service) checkClientKey(ctx context.Context, clientid, key, redirect string) error {
+func (s *Service) checkClientKey(ctx context.Context, clientid, key, redirect string) error {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, ErrorNotFound{}) {
@@ -301,7 +301,7 @@ func (s *service) checkClientKey(ctx context.Context, clientid, key, redirect st
 	return nil
 }
 
-func (s *service) authTokenCode(ctx context.Context, clientid, secret, redirect, userid, code, verifier string) (*resAuthToken, error) {
+func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect, userid, code, verifier string) (*resAuthToken, error) {
 	if err := s.checkClientKey(ctx, clientid, secret, redirect); err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func (s *service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 	}, nil
 }
 
-func (s *service) userinfo(ctx context.Context, userid string, scope string) (*resUserinfo, error) {
+func (s *Service) userinfo(ctx context.Context, userid string, scope string) (*resUserinfo, error) {
 	userClaims, err := s.getUserinfoClaims(ctx, userid, ssvSet(scope))
 	if err != nil {
 		return nil, err
@@ -424,7 +424,7 @@ type (
 	}
 )
 
-func (s *service) getConnections(ctx context.Context, userid string, amount, offset int) (*resConnections, error) {
+func (s *Service) getConnections(ctx context.Context, userid string, amount, offset int) (*resConnections, error) {
 	m, err := s.connections.GetUserConnections(ctx, userid, amount, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app connections")
@@ -444,7 +444,7 @@ func (s *service) getConnections(ctx context.Context, userid string, amount, off
 	}, nil
 }
 
-func (s *service) getConnection(ctx context.Context, userid string, clientid string) (*resConnection, error) {
+func (s *Service) getConnection(ctx context.Context, userid string, clientid string) (*resConnection, error) {
 	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -461,7 +461,7 @@ func (s *service) getConnection(ctx context.Context, userid string, clientid str
 	}, nil
 }
 
-func (s *service) delConnection(ctx context.Context, userid string, clientid string) error {
+func (s *Service) delConnection(ctx context.Context, userid string, clientid string) error {
 	if _, err := s.connections.GetByID(ctx, userid, clientid); err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not connected")
@@ -474,7 +474,7 @@ func (s *service) delConnection(ctx context.Context, userid string, clientid str
 	return nil
 }
 
-func (s *service) deleteUserConnections(ctx context.Context, userid string) error {
+func (s *Service) deleteUserConnections(ctx context.Context, userid string) error {
 	if err := s.connections.DeleteUserConnections(ctx, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user oauth app connections")
 	}

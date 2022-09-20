@@ -16,7 +16,7 @@ const (
 	cacheValN = "n"
 )
 
-func (s *service) intersectRolesRepo(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
+func (s *Service) intersectRolesRepo(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
 	m, err := s.roles.IntersectRoles(ctx, userid, roles)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get roles")
@@ -24,7 +24,7 @@ func (s *service) intersectRolesRepo(ctx context.Context, userid string, roles r
 	return m, nil
 }
 
-func (s *service) IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
+func (s *Service) IntersectRoles(ctx context.Context, userid string, roles rank.Rank) (rank.Rank, error) {
 	userkv := s.kvroleset.Subtree(userid)
 
 	res := rank.Rank{}
@@ -90,7 +90,7 @@ end:
 	return res, nil
 }
 
-func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
+func (s *Service) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := kjson.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
@@ -110,7 +110,7 @@ func (s *service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 	return nil
 }
 
-func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
+func (s *Service) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := kjson.Marshal(RolesProps{
 		Userid: userid,
 		Roles:  roles.ToSlice(),
@@ -130,7 +130,7 @@ func (s *service) DeleteRoles(ctx context.Context, userid string, roles rank.Ran
 	return nil
 }
 
-func (s *service) DeleteByRole(ctx context.Context, roleName string, userids []string) error {
+func (s *Service) DeleteByRole(ctx context.Context, roleName string, userids []string) error {
 	if len(userids) == 0 {
 		return nil
 	}
@@ -143,18 +143,18 @@ func (s *service) DeleteByRole(ctx context.Context, roleName string, userids []s
 	return nil
 }
 
-func (s *service) GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error) {
+func (s *Service) GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error) {
 	if len(prefix) == 0 {
 		return s.roles.GetRoles(ctx, userid, amount, offset)
 	}
 	return s.roles.GetRolesPrefix(ctx, userid, prefix, amount, offset)
 }
 
-func (s *service) GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error) {
+func (s *Service) GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error) {
 	return s.roles.GetByRole(ctx, roleName, amount, offset)
 }
 
-func (s *service) clearCache(ctx context.Context, userid string, roles rank.Rank) {
+func (s *Service) clearCache(ctx context.Context, userid string, roles rank.Rank) {
 	if len(roles) == 0 {
 		return
 	}
@@ -163,7 +163,7 @@ func (s *service) clearCache(ctx context.Context, userid string, roles rank.Rank
 	}
 }
 
-func (s *service) clearCacheRoles(ctx context.Context, role string, userids []string) {
+func (s *Service) clearCacheRoles(ctx context.Context, role string, userids []string) {
 	if len(userids) == 0 {
 		return
 	}

@@ -46,7 +46,7 @@ type (
 	}
 )
 
-func (s *service) getApps(ctx context.Context, limit, offset int, creatorid string) (*resApps, error) {
+func (s *Service) getApps(ctx context.Context, limit, offset int, creatorid string) (*resApps, error) {
 	m, err := s.apps.GetApps(ctx, limit, offset, creatorid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
@@ -68,7 +68,7 @@ func (s *service) getApps(ctx context.Context, limit, offset int, creatorid stri
 	}, nil
 }
 
-func (s *service) getAppsBulk(ctx context.Context, clientids []string) (*resApps, error) {
+func (s *Service) getAppsBulk(ctx context.Context, clientids []string) (*resApps, error) {
 	m, err := s.apps.GetBulk(ctx, clientids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
@@ -90,7 +90,7 @@ func (s *service) getAppsBulk(ctx context.Context, clientids []string) (*resApps
 	}, nil
 }
 
-func (s *service) getCachedClient(ctx context.Context, clientid string) (*model.Model, error) {
+func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.Model, error) {
 	if clientstr, err := s.kvclient.Get(ctx, clientid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"), nil)
@@ -133,7 +133,7 @@ type (
 	}
 )
 
-func (s *service) createApp(ctx context.Context, name, url, redirectURI, creatorID string) (*resCreate, error) {
+func (s *Service) createApp(ctx context.Context, name, url, redirectURI, creatorID string) (*resCreate, error) {
 	m, key, err := s.apps.New(name, url, redirectURI, creatorID)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create oauth app")
@@ -147,7 +147,7 @@ func (s *service) createApp(ctx context.Context, name, url, redirectURI, creator
 	}, nil
 }
 
-func (s *service) rotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
+func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -168,7 +168,7 @@ func (s *service) rotateAppKey(ctx context.Context, clientid string) (*resCreate
 	}, nil
 }
 
-func (s *service) updateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
+func (s *Service) updateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -194,7 +194,7 @@ const (
 	thumbQuality = 0
 )
 
-func (s *service) updateLogo(ctx context.Context, clientid string, img image.Image) error {
+func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Image) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -228,7 +228,7 @@ func (s *service) updateLogo(ctx context.Context, clientid string, img image.Ima
 	return nil
 }
 
-func (s *service) deleteApp(ctx context.Context, clientid string) error {
+func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -252,7 +252,7 @@ func (s *service) deleteApp(ctx context.Context, clientid string) error {
 	return nil
 }
 
-func (s *service) getApp(ctx context.Context, clientid string) (*resApp, error) {
+func (s *Service) getApp(ctx context.Context, clientid string) (*resApp, error) {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, ErrorNotFound{}) {
@@ -271,7 +271,7 @@ func (s *service) getApp(ctx context.Context, clientid string) (*resApp, error) 
 	}, nil
 }
 
-func (s *service) statLogo(ctx context.Context, clientid string) (*objstore.ObjectInfo, error) {
+func (s *Service) statLogo(ctx context.Context, clientid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.logoImgDir.Stat(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -282,7 +282,7 @@ func (s *service) statLogo(ctx context.Context, clientid string) (*objstore.Obje
 	return objinfo, nil
 }
 
-func (s *service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, string, error) {
+func (s *Service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.logoImgDir.Get(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, objstore.ErrorNotFound{}) {
@@ -293,7 +293,7 @@ func (s *service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, 
 	return obj, objinfo.ContentType, nil
 }
 
-func (s *service) clearCache(ctx context.Context, clientid string) {
+func (s *Service) clearCache(ctx context.Context, clientid string) {
 	if err := s.kvclient.Del(ctx, clientid); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear oauth client from cache"), nil)
 	}
