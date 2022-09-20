@@ -81,7 +81,7 @@ MAIN_PATH=./cmd
 BIN_DIR=./bin
 BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
-.PHONY: clean build
+.PHONY: clean build buildrace
 
 clean: ## Remove build artifacts
 	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
@@ -89,6 +89,10 @@ clean: ## Remove build artifacts
 build: ## Build app
 	mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
+
+buildrace: ## Build app with data race detection
+	mkdir -p $(BIN_DIR)
+	CGO_ENABLED=1 go build -race -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
 
 ## DOCKER
 
@@ -145,10 +149,14 @@ setup: build ## Run app setup
 
 ## LOCAL DEV
 
-.PHONY: run runsetup
+.PHONY: serve run runrace runsetup
 
-run: build ## Runs app locally
+serve: ## Serves app
 	$(BIN_PATH) serve --config $(DC_ANVIL_OUT)/governor/config.yaml
+
+run: build serve ## Runs app locally
+
+runrace: buildrace serve ## Runs app locally with data race detection
 
 runsetup: build ## Runs setup locally
 	$(BIN_PATH) setup --secret "setupsecret"

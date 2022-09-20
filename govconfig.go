@@ -61,7 +61,7 @@ type (
 	Config struct {
 		config        *viper.Viper
 		vault         secretsClient
-		vaultCache    map[string]vaultSecret
+		vaultCache    *sync.Map
 		appname       string
 		version       Version
 		showBanner    bool
@@ -187,7 +187,7 @@ func newConfig(opts Opts) *Config {
 		config:     v,
 		appname:    opts.Appname,
 		version:    opts.Version,
-		vaultCache: map[string]vaultSecret{},
+		vaultCache: &sync.Map{},
 		SysChannels: SysChannels{
 			GC: opts.Appname + ".sys.gc",
 		},
@@ -460,11 +460,14 @@ func (c *Config) initsecrets() error {
 }
 
 func (c *Config) getSecret(ctx context.Context, key string, seconds int64, target interface{}) error {
-	if s, ok := c.vaultCache[key]; ok && s.isValid() {
-		if err := mapstructure.Decode(s.value, target); err != nil {
-			return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed decoding secret")
+	if v, ok := c.vaultCache.Load(key); ok {
+		s := v.(vaultSecret)
+		if s.isValid() {
+			if err := mapstructure.Decode(s.value, target); err != nil {
+				return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed decoding secret")
+			}
+			return nil
 		}
-		return nil
 	}
 
 	kvpath := c.config.GetString(key)
@@ -479,11 +482,11 @@ func (c *Config) getSecret(ctx context.Context, key string, seconds int64, targe
 	if expire == 0 && seconds != 0 {
 		expire = time.Now().Round(0).Unix() + seconds
 	}
-	c.vaultCache[key] = vaultSecret{
+	c.vaultCache.Store(key, vaultSecret{
 		key:    key,
 		value:  data,
 		expire: expire,
-	}
+	})
 
 	if err := mapstructure.Decode(data, target); err != nil {
 		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed decoding secret")
@@ -492,7 +495,7 @@ func (c *Config) getSecret(ctx context.Context, key string, seconds int64, targe
 }
 
 func (c *Config) invalidateSecret(key string) {
-	delete(c.vaultCache, key)
+	c.vaultCache.Delete(key)
 }
 
 type (
