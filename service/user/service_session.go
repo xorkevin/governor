@@ -22,7 +22,7 @@ type (
 	}
 )
 
-func (s *service) GetUserSessions(ctx context.Context, userid string, limit, offset int) (*resUserGetSessions, error) {
+func (s *Service) getUserSessions(ctx context.Context, userid string, limit, offset int) (*resUserGetSessions, error) {
 	m, err := s.sessions.GetUserSessions(ctx, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user sessions")
@@ -43,14 +43,13 @@ func (s *service) GetUserSessions(ctx context.Context, userid string, limit, off
 	}, nil
 }
 
-func (s *service) killCacheSessions(ctx context.Context, sessionids []string) {
+func (s *Service) killCacheSessions(ctx context.Context, sessionids []string) {
 	if err := s.kvsessions.Del(ctx, sessionids...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete session keys"), nil)
 	}
 }
 
-// KillSessions terminates user sessions
-func (s *service) KillSessions(ctx context.Context, sessionids []string) error {
+func (s *Service) killSessions(ctx context.Context, sessionids []string) error {
 	if err := s.sessions.DeleteSessions(ctx, sessionids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
@@ -60,8 +59,7 @@ func (s *service) KillSessions(ctx context.Context, sessionids []string) error {
 	return nil
 }
 
-// KillAllSessions terminates all sessions of a user
-func (s *service) KillAllSessions(ctx context.Context, userid string) error {
+func (s *Service) killAllSessions(ctx context.Context, userid string) error {
 	if err := s.sessions.DeleteUserSessions(ctx, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}

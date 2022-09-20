@@ -31,7 +31,7 @@ func (s *router) createUser(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.CreateUser(c.Ctx(), req)
+	res, err := s.s.createUser(c.Ctx(), req)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -57,7 +57,7 @@ func (s *router) commitUser(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.CommitUser(c.Ctx(), req.Userid, req.Key)
+	res, err := s.s.commitUser(c.Ctx(), req.Userid, req.Key)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -85,7 +85,7 @@ func (s *router) deleteUserSelf(c governor.Context) {
 		return
 	}
 
-	if err := s.s.DeleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
+	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -111,7 +111,7 @@ func (s *router) deleteUser(c governor.Context) {
 		return
 	}
 
-	if err := s.s.DeleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
+	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -135,7 +135,7 @@ func (s *router) getUserApprovals(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetUserApprovals(c.Ctx(), req.Amount, req.Offset)
+	res, err := s.s.getUserApprovals(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -153,7 +153,7 @@ func (s *router) approveUser(c governor.Context) {
 		return
 	}
 
-	if err := s.s.ApproveUser(c.Ctx(), req.Userid); err != nil {
+	if err := s.s.approveUser(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -170,7 +170,7 @@ func (s *router) deleteUserApproval(c governor.Context) {
 		return
 	}
 
-	if err := s.s.DeleteUserApproval(c.Ctx(), req.Userid); err != nil {
+	if err := s.s.deleteUserApproval(c.Ctx(), req.Userid); err != nil {
 		c.WriteError(err)
 		return
 	}

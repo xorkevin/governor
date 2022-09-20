@@ -308,6 +308,7 @@ const (
 )
 
 type (
+	// Websocket manages a websocket
 	Websocket interface {
 		SetReadLimit(limit int64)
 		Read(ctx context.Context) (bool, []byte, error)

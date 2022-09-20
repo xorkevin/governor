@@ -14,7 +14,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func (s *service) UpdateUser(ctx context.Context, userid string, ruser reqUserPut) error {
+func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPut) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -49,7 +49,7 @@ func (s *service) UpdateUser(ctx context.Context, userid string, ruser reqUserPu
 	return nil
 }
 
-func (s *service) UpdateRank(ctx context.Context, userid string, updaterid string, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
+func (s *Service) updateRank(ctx context.Context, userid string, updaterid string, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
 	updaterRank, err := s.roles.IntersectRoles(ctx, updaterid, combineModRoles(editAddRank, editRemoveRank))
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to get updater roles")
@@ -200,7 +200,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 	return nil
 }
 
-func (s *service) AcceptRoleInvitation(ctx context.Context, userid, role string) error {
+func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -247,7 +247,7 @@ type (
 	}
 )
 
-func (s *service) GetUserRoleInvitations(ctx context.Context, userid string, amount, offset int) (*resUserRoleInvitations, error) {
+func (s *Service) getUserRoleInvitations(ctx context.Context, userid string, amount, offset int) (*resUserRoleInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -269,7 +269,7 @@ func (s *service) GetUserRoleInvitations(ctx context.Context, userid string, amo
 	}, nil
 }
 
-func (s *service) GetRoleInvitations(ctx context.Context, role string, amount, offset int) (*resUserRoleInvitations, error) {
+func (s *Service) getRoleInvitations(ctx context.Context, role string, amount, offset int) (*resUserRoleInvitations, error) {
 	now := time.Now().Round(0).Unix()
 	after := now - s.invitationTime
 
@@ -291,14 +291,14 @@ func (s *service) GetRoleInvitations(ctx context.Context, role string, amount, o
 	}, nil
 }
 
-func (s *service) DeleteRoleInvitation(ctx context.Context, userid, role string) error {
+func (s *Service) deleteRoleInvitation(ctx context.Context, userid, role string) error {
 	if err := s.invitations.DeleteByID(ctx, userid, role); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete role invitation")
 	}
 	return nil
 }
 
-func (s *service) DeleteRoleInvitations(ctx context.Context, role string) error {
+func (s *Service) DeleteRoleInvitations(ctx context.Context, role string) error {
 	if err := s.invitations.DeleteRole(ctx, role); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete role invitations")
 	}

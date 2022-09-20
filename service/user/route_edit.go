@@ -33,7 +33,7 @@ func (s *router) putUser(c governor.Context) {
 		return
 	}
 
-	if err := s.s.UpdateUser(c.Ctx(), userid, req); err != nil {
+	if err := s.s.updateUser(c.Ctx(), userid, req); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -80,7 +80,7 @@ func (s *router) patchRank(c governor.Context) {
 		return
 	}
 
-	if err := s.s.UpdateRank(c.Ctx(), req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
+	if err := s.s.updateRank(c.Ctx(), req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -103,7 +103,7 @@ func (s *router) postAcceptRoleInvitation(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := s.s.AcceptRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
+	if err := s.s.acceptRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -129,7 +129,7 @@ func (s *router) getRoleInvitations(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetRoleInvitations(c.Ctx(), req.Role, req.Amount, req.Offset)
+	res, err := s.s.getRoleInvitations(c.Ctx(), req.Role, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -156,7 +156,7 @@ func (s *router) getUserRoleInvitations(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetUserRoleInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getUserRoleInvitations(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -181,7 +181,7 @@ func (s *router) deleteRoleInvitation(c governor.Context) {
 		return
 	}
 
-	if err := s.s.DeleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
+	if err := s.s.deleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -198,7 +198,7 @@ func (s *router) deleteUserRoleInvitation(c governor.Context) {
 		return
 	}
 
-	if err := s.s.DeleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
+	if err := s.s.deleteRoleInvitation(c.Ctx(), req.Userid, req.Role); err != nil {
 		c.WriteError(err)
 		return
 	}

@@ -158,7 +158,7 @@ func (s *router) loginUser(c governor.Context) {
 		return
 	}
 
-	userid, err := s.s.GetUseridForLogin(c.Ctx(), req.Username)
+	userid, err := s.s.getUseridForLogin(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -176,7 +176,7 @@ func (s *router) loginUser(c governor.Context) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := s.s.Login(c.Ctx(), userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.login(c.Ctx(), userid, req.Password, req.Code, req.Backup, req.SessionToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -212,7 +212,7 @@ func (s *router) exchangeToken(c governor.Context) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := s.s.ExchangeToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.exchangeToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -243,7 +243,7 @@ func (s *router) refreshToken(c governor.Context) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	res, err := s.s.RefreshToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
+	res, err := s.s.refreshToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
 		if errors.Is(err, ErrorDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
 			s.rmAccessCookie(c)
@@ -273,7 +273,7 @@ func (s *router) logoutUser(c governor.Context) {
 		return
 	}
 
-	userid, err := s.s.Logout(c.Ctx(), req.RefreshToken)
+	userid, err := s.s.logout(c.Ctx(), req.RefreshToken)
 	if err != nil {
 		c.WriteError(err)
 		return

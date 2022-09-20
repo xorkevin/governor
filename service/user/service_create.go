@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func (e *emailNewUser) Query() queryEmailNewUser {
+func (e *emailNewUser) query() queryEmailNewUser {
 	return queryEmailNewUser{
 		Userid:    url.QueryEscape(e.Userid),
 		Key:       url.QueryEscape(e.Key),
@@ -50,7 +50,7 @@ func (e *emailNewUser) Query() queryEmailNewUser {
 
 func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, e.Query()); err != nil {
+	if err := tpl.Execute(b, e.query()); err != nil {
 		return kerrors.WithMsg(err, "Failed executing new user url template")
 	}
 	e.URL = base + b.String()
@@ -64,8 +64,7 @@ type (
 	}
 )
 
-// CreateUser creates a new user and places it into approvals
-func (s *service) CreateUser(ctx context.Context, ruser reqUserPost) (*resUserUpdate, error) {
+func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUpdate, error) {
 	if _, err := s.users.GetByUsername(ctx, ruser.Username); err != nil {
 		if !errors.Is(err, db.ErrorNotFound{}) {
 			return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -128,7 +127,7 @@ type (
 	}
 )
 
-func (s *service) GetUserApprovals(ctx context.Context, limit, offset int) (*resApprovals, error) {
+func (s *Service) getUserApprovals(ctx context.Context, limit, offset int) (*resApprovals, error) {
 	m, err := s.approvals.GetGroup(ctx, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user requests")
@@ -151,7 +150,7 @@ func (s *service) GetUserApprovals(ctx context.Context, limit, offset int) (*res
 	}, nil
 }
 
-func (s *service) ApproveUser(ctx context.Context, userid string) error {
+func (s *Service) approveUser(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -172,7 +171,7 @@ func (s *service) ApproveUser(ctx context.Context, userid string) error {
 	return nil
 }
 
-func (s *service) DeleteUserApproval(ctx context.Context, userid string) error {
+func (s *Service) deleteUserApproval(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -186,7 +185,7 @@ func (s *service) DeleteUserApproval(ctx context.Context, userid string) error {
 	return nil
 }
 
-func (s *service) sendNewUserEmail(ctx context.Context, code string, m *approvalmodel.Model) error {
+func (s *Service) sendNewUserEmail(ctx context.Context, code string, m *approvalmodel.Model) error {
 	emdata := emailNewUser{
 		Userid:    m.Userid,
 		Key:       code,
@@ -203,8 +202,7 @@ func (s *service) sendNewUserEmail(ctx context.Context, code string, m *approval
 	return nil
 }
 
-// CommitUser takes a user from approvals and places it into the user db
-func (s *service) CommitUser(ctx context.Context, userid string, key string) (*resUserUpdate, error) {
+func (s *Service) commitUser(ctx context.Context, userid string, key string) (*resUserUpdate, error) {
 	am, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -271,7 +269,7 @@ func (s *service) CommitUser(ctx context.Context, userid string, key string) (*r
 	}, nil
 }
 
-func (s *service) DeleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
+func (s *Service) deleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -310,7 +308,7 @@ func (s *service) DeleteUser(ctx context.Context, userid string, username string
 		return kerrors.WithMsg(err, "Failed to delete user resets")
 	}
 
-	if err := s.KillAllSessions(ctx, userid); err != nil {
+	if err := s.killAllSessions(ctx, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 
@@ -324,7 +322,7 @@ func (s *service) DeleteUser(ctx context.Context, userid string, username string
 	return nil
 }
 
-func (s *service) clearUserExists(ctx context.Context, userid string) {
+func (s *Service) clearUserExists(ctx context.Context, userid string) {
 	if err := s.kvusers.Del(ctx, userid); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete user exists in cache"), nil)
 	}

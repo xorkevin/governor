@@ -30,7 +30,7 @@ func (s *router) putEmail(c governor.Context) {
 		return
 	}
 
-	if err := s.s.UpdateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
+	if err := s.s.updateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -56,7 +56,7 @@ func (s *router) putEmailVerify(c governor.Context) {
 		return
 	}
 
-	if err := s.s.CommitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
+	if err := s.s.commitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -83,7 +83,7 @@ func (s *router) putPassword(c governor.Context) {
 		return
 	}
 
-	if err := s.s.UpdatePassword(c.Ctx(), req.Userid, req.NewPassword, req.OldPassword); err != nil {
+	if err := s.s.updatePassword(c.Ctx(), req.Userid, req.NewPassword, req.OldPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -107,7 +107,7 @@ func (s *router) forgotPassword(c governor.Context) {
 		return
 	}
 
-	if err := s.s.ForgotPassword(c.Ctx(), req.Username); err != nil {
+	if err := s.s.forgotPassword(c.Ctx(), req.Username); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -133,7 +133,7 @@ func (s *router) forgotPasswordReset(c governor.Context) {
 		return
 	}
 
-	if err := s.s.ResetPassword(c.Ctx(), req.Userid, req.Key, req.NewPassword); err != nil {
+	if err := s.s.resetPassword(c.Ctx(), req.Userid, req.Key, req.NewPassword); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -161,7 +161,7 @@ func (s *router) addOTP(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.AddOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
+	res, err := s.s.addOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -188,7 +188,7 @@ func (s *router) commitOTP(c governor.Context) {
 		return
 	}
 
-	if err := s.s.CommitOTP(c.Ctx(), req.Userid, req.Code); err != nil {
+	if err := s.s.commitOTP(c.Ctx(), req.Userid, req.Code); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -233,7 +233,7 @@ func (s *router) removeOTP(c governor.Context) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	if err := s.s.RemoveOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
+	if err := s.s.removeOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
 		c.WriteError(err)
 		return
 	}

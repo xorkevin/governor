@@ -27,7 +27,7 @@ func (s *router) getByID(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetByIDPublic(c.Ctx(), req.Userid)
+	res, err := s.s.getByIDPublic(c.Ctx(), req.Userid)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -87,7 +87,7 @@ func (s *router) getByUsername(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetByUsernamePublic(c.Ctx(), req.Username)
+	res, err := s.s.getByUsernamePublic(c.Ctx(), req.Username)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -135,7 +135,7 @@ func (s *router) getUserRoles(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -156,7 +156,7 @@ func (s *router) getUserRolesPersonal(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -191,7 +191,7 @@ func (s *router) getUserRolesIntersect(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
+	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -219,7 +219,7 @@ func (s *router) getUserRolesIntersectPersonal(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.GetUserRolesIntersect(c.Ctx(), req.Userid, roles)
+	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, roles)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -247,7 +247,7 @@ func (s *router) getUsersByRole(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
+	res, err := s.s.getIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -272,7 +272,7 @@ func (s *router) getAllUserInfo(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetInfoAll(c.Ctx(), req.Amount, req.Offset)
+	res, err := s.s.getInfoAll(c.Ctx(), req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -295,7 +295,7 @@ func (s *router) getUserInfoBulkPublic(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetInfoBulkPublic(c.Ctx(), req.Userids)
+	res, err := s.s.getInfoBulkPublic(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -320,7 +320,7 @@ func (s *router) searchUsers(c governor.Context) {
 		return
 	}
 
-	res, err := s.s.GetInfoUsernamePrefix(c.Ctx(), req.Prefix, req.Amount)
+	res, err := s.s.getInfoUsernamePrefix(c.Ctx(), req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return

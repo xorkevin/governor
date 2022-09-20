@@ -53,8 +53,7 @@ func (e ErrorDiscardSession) Error() string {
 	return "Discard session"
 }
 
-// Login authenticates a user and returns auth tokens
-func (s *service) Login(ctx context.Context, userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
+func (s *Service) login(ctx context.Context, userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -174,8 +173,7 @@ func (s *service) Login(ctx context.Context, userid, password, code, backup, ses
 	}, nil
 }
 
-// ExchangeToken validates a refresh token and returns an auth token
-func (s *service) ExchangeToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
+func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
 	validToken, claims := s.tokenizer.Validate(ctx, token.KindRefresh, refreshToken)
 	if !validToken {
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
@@ -192,7 +190,7 @@ func (s *service) ExchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get cached session"), nil)
 		}
-		return s.RefreshToken(ctx, refreshToken, ipaddr, useragent)
+		return s.refreshToken(ctx, refreshToken, ipaddr, useragent)
 	}
 
 	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
@@ -218,8 +216,7 @@ func (s *service) ExchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 	}, nil
 }
 
-// RefreshToken invalidates the previous refresh token and creates a new one
-func (s *service) RefreshToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
+func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
 	validToken, claims := s.tokenizer.Validate(ctx, token.KindRefresh, refreshToken)
 	if !validToken {
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
@@ -286,8 +283,7 @@ func (s *service) RefreshToken(ctx context.Context, refreshToken, ipaddr, userag
 	}, nil
 }
 
-// Logout removes the user session in cache
-func (s *service) Logout(ctx context.Context, refreshToken string) (string, error) {
+func (s *Service) logout(ctx context.Context, refreshToken string) (string, error) {
 	// if session_id is provided, is in cache, and is valid, set it as the sessionID
 	// the session can be expired by time
 	ok, claims := s.tokenizer.GetClaims(ctx, token.KindRefresh, refreshToken)

@@ -28,7 +28,7 @@ func (s *router) getSessions(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.GetUserSessions(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getUserSessions(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -72,7 +72,7 @@ func (s *router) killSessions(c governor.Context) {
 		return
 	}
 
-	if err := s.s.KillSessions(c.Ctx(), req.SessionIDs); err != nil {
+	if err := s.s.killSessions(c.Ctx(), req.SessionIDs); err != nil {
 		c.WriteError(err)
 		return
 	}

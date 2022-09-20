@@ -29,7 +29,7 @@ type (
 
 	// Opts is the static server configuration
 	Opts struct {
-		Version
+		Version       Version
 		Appname       string
 		Description   string
 		DefaultFile   string

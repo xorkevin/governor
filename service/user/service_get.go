@@ -61,7 +61,7 @@ func getUserFields(m *model.Model, roles []string) *ResUserGet {
 	}
 }
 
-func (s *service) getRoleSummary(ctx context.Context, userid string) (rank.Rank, error) {
+func (s *Service) getRoleSummary(ctx context.Context, userid string) (rank.Rank, error) {
 	roles, err := s.roles.IntersectRoles(ctx, userid, s.rolesummary)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user roles")
@@ -69,8 +69,7 @@ func (s *service) getRoleSummary(ctx context.Context, userid string) (rank.Rank,
 	return roles, nil
 }
 
-// GetByIDPublic gets and returns the public fields of the user
-func (s *service) GetByIDPublic(ctx context.Context, userid string) (*ResUserGetPublic, error) {
+func (s *Service) getByIDPublic(ctx context.Context, userid string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -85,8 +84,8 @@ func (s *service) GetByIDPublic(ctx context.Context, userid string) (*ResUserGet
 	return getUserPublicFields(m, roles.ToSlice()), nil
 }
 
-// GetByID gets and returns all fields of the user
-func (s *service) GetByID(ctx context.Context, userid string) (*ResUserGet, error) {
+// GetByID implements [Users] and gets and returns all fields of the user
+func (s *Service) GetByID(ctx context.Context, userid string) (*ResUserGet, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -101,8 +100,7 @@ func (s *service) GetByID(ctx context.Context, userid string) (*ResUserGet, erro
 	return getUserFields(m, roles.ToSlice()), nil
 }
 
-// GetByUsernamePublic gets and returns the public fields of the user
-func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*ResUserGetPublic, error) {
+func (s *Service) getByUsernamePublic(ctx context.Context, username string) (*ResUserGetPublic, error) {
 	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -117,8 +115,8 @@ func (s *service) GetByUsernamePublic(ctx context.Context, username string) (*Re
 	return getUserPublicFields(m, roles.ToSlice()), nil
 }
 
-// GetByUsername gets and returns all fields of the user
-func (s *service) GetByUsername(ctx context.Context, username string) (*ResUserGet, error) {
+// GetByUsername implements [Users] and gets and returns all fields of the user
+func (s *Service) GetByUsername(ctx context.Context, username string) (*ResUserGet, error) {
 	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -133,8 +131,8 @@ func (s *service) GetByUsername(ctx context.Context, username string) (*ResUserG
 	return getUserFields(m, roles.ToSlice()), nil
 }
 
-// GetByEmail gets and returns all fields of the user
-func (s *service) GetByEmail(ctx context.Context, email string) (*ResUserGet, error) {
+// GetByEmail implements [Users] and gets and returns all fields of the user
+func (s *Service) GetByEmail(ctx context.Context, email string) (*ResUserGet, error) {
 	m, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -155,8 +153,7 @@ type (
 	}
 )
 
-// GetUserRoles returns a list of user roles
-func (s *service) GetUserRoles(ctx context.Context, userid string, prefix string, amount, offset int) (*resUserRoles, error) {
+func (s *Service) getUserRoles(ctx context.Context, userid string, prefix string, amount, offset int) (*resUserRoles, error) {
 	roles, err := s.roles.GetRoles(ctx, userid, prefix, amount, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user roles")
@@ -166,8 +163,7 @@ func (s *service) GetUserRoles(ctx context.Context, userid string, prefix string
 	}, nil
 }
 
-// GetUserRolesIntersect returns the intersected roles of a user
-func (s *service) GetUserRolesIntersect(ctx context.Context, userid string, roleset rank.Rank) (*resUserRoles, error) {
+func (s *Service) getUserRolesIntersect(ctx context.Context, userid string, roleset rank.Rank) (*resUserRoles, error) {
 	roles, err := s.roles.IntersectRoles(ctx, userid, roleset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user roles")
@@ -191,8 +187,7 @@ type (
 	}
 )
 
-// GetInfoAll gets and returns info for all users
-func (s *service) GetInfoAll(ctx context.Context, amount int, offset int) (*ResUserInfoList, error) {
+func (s *Service) getInfoAll(ctx context.Context, amount int, offset int) (*ResUserInfoList, error) {
 	infoSlice, err := s.users.GetGroup(ctx, amount, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get users")
@@ -214,8 +209,8 @@ func (s *service) GetInfoAll(ctx context.Context, amount int, offset int) (*ResU
 	}, nil
 }
 
-// GetInfoBulk gets and returns info for users
-func (s *service) GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error) {
+// GetInfoBulk implements [Users] and gets and returns info for users
+func (s *Service) GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error) {
 	infoSlice, err := s.users.GetBulk(ctx, userids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get users")
@@ -250,8 +245,7 @@ type (
 	}
 )
 
-// GetInfoBulkPublic gets and returns public info for users
-func (s *service) GetInfoBulkPublic(ctx context.Context, userids []string) (*resUserInfoListPublic, error) {
+func (s *Service) getInfoBulkPublic(ctx context.Context, userids []string) (*resUserInfoListPublic, error) {
 	infoSlice, err := s.users.GetBulk(ctx, userids)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get users")
@@ -272,7 +266,7 @@ func (s *service) GetInfoBulkPublic(ctx context.Context, userids []string) (*res
 	}, nil
 }
 
-func (s *service) GetInfoUsernamePrefix(ctx context.Context, prefix string, limit int) (*resUserInfoListPublic, error) {
+func (s *Service) getInfoUsernamePrefix(ctx context.Context, prefix string, limit int) (*resUserInfoListPublic, error) {
 	if len(prefix) == 0 {
 		return &resUserInfoListPublic{
 			Users: []resUserInfoPublic{},
@@ -305,8 +299,7 @@ type (
 	}
 )
 
-// GetIDsByRole retrieves a list of user ids by role
-func (s *service) GetIDsByRole(ctx context.Context, role string, amount int, offset int) (*resUserList, error) {
+func (s *Service) getIDsByRole(ctx context.Context, role string, amount int, offset int) (*resUserList, error) {
 	userids, err := s.roles.GetByRole(ctx, role, amount, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get users")
@@ -321,8 +314,8 @@ const (
 	cacheValN = "n"
 )
 
-// CheckUserExists is a fast check to determine if a user exists
-func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, error) {
+// CheckUserExists implements [Users] and is a fast check to determine if a user exists
+func (s *Service) CheckUserExists(ctx context.Context, userid string) (bool, error) {
 	if v, err := s.kvusers.Get(ctx, userid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user exists from cache"), nil)
@@ -353,8 +346,8 @@ func (s *service) CheckUserExists(ctx context.Context, userid string) (bool, err
 	return exists, nil
 }
 
-// CheckUsersExist is a fast check to determine if users exist
-func (s *service) CheckUsersExist(ctx context.Context, userids []string) ([]string, error) {
+// CheckUsersExist implements [Users] and is a fast check to determine if users exist
+func (s *Service) CheckUsersExist(ctx context.Context, userids []string) ([]string, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
@@ -436,8 +429,7 @@ end:
 	return res, nil
 }
 
-// GetUseridForLogin gets a userid for login
-func (s *service) GetUseridForLogin(ctx context.Context, useroremail string) (string, error) {
+func (s *Service) getUseridForLogin(ctx context.Context, useroremail string) (string, error) {
 	if isEmail(useroremail) {
 		m, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {

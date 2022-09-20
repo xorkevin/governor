@@ -63,12 +63,6 @@ type (
 		StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error)
 	}
 
-	// Service is a Users and governor.Service
-	Service interface {
-		governor.Service
-		Users
-	}
-
 	otpCipher struct {
 		cipher    hunter2.Cipher
 		decrypter *hunter2.Decrypter
@@ -102,7 +96,7 @@ type (
 		res chan<- getCipherRes
 	}
 
-	service struct {
+	Service struct {
 		users             model.Repo
 		sessions          sessionmodel.Repo
 		approvals         approvalmodel.Repo
@@ -157,7 +151,7 @@ type (
 	}
 
 	router struct {
-		s  *service
+		s  *Service
 		rt governor.MiddlewareCtx
 	}
 
@@ -192,7 +186,7 @@ type (
 	}
 )
 
-// GetCtxUsers returns a Users service from the context
+// GetCtxUsers returns a [Users] service from the context
 func GetCtxUsers(inj governor.Injector) Users {
 	v := inj.Get(ctxKeyUsers{})
 	if v == nil {
@@ -201,13 +195,13 @@ func GetCtxUsers(inj governor.Injector) Users {
 	return v.(Users)
 }
 
-// setCtxUser sets a Users service in the context
+// setCtxUser sets a [Users] service in the context
 func setCtxUser(inj governor.Injector, u Users) {
 	inj.Set(ctxKeyUsers{}, u)
 }
 
 // NewCtx creates a new Users service from a context
-func NewCtx(inj governor.Injector) Service {
+func NewCtx(inj governor.Injector) *Service {
 	users := model.GetCtxRepo(inj)
 	sessions := sessionmodel.GetCtxRepo(inj)
 	approvals := approvalmodel.GetCtxRepo(inj)
@@ -254,8 +248,8 @@ func New(
 	ratelimiter ratelimit.Ratelimiter,
 	tokenizer token.Tokenizer,
 	g gate.Gate,
-) Service {
-	return &service{
+) *Service {
+	return &Service{
 		users:             users,
 		sessions:          sessions,
 		approvals:         approvals,
@@ -287,7 +281,7 @@ func New(
 	}
 }
 
-func (s *service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxUser(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
@@ -333,7 +327,7 @@ func (s *service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("otprefresh", 60)
 }
 
-func (s *service) router() *router {
+func (s *Service) router() *router {
 	return &router{
 		s:  s,
 		rt: s.ratelimiter.BaseCtx(),
@@ -346,7 +340,7 @@ type (
 	}
 )
 
-func (s *service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
@@ -495,7 +489,7 @@ func (s *service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *service) execute(ctx context.Context, done chan<- struct{}) {
+func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
 	defer ticker.Stop()
@@ -519,7 +513,7 @@ func (s *service) execute(ctx context.Context, done chan<- struct{}) {
 	}
 }
 
-func (s *service) handlePing(ctx context.Context) {
+func (s *Service) handlePing(ctx context.Context) {
 	err := s.refreshSecrets(ctx)
 	if err == nil {
 		s.ready.Store(true)
@@ -536,7 +530,7 @@ func (s *service) handlePing(ctx context.Context) {
 	s.hbfailed = 0
 }
 
-func (s *service) refreshSecrets(ctx context.Context) error {
+func (s *Service) refreshSecrets(ctx context.Context) error {
 	var otpsecrets secretOTP
 	if err := s.config.GetSecret(ctx, "otpkey", int64(s.otprefresh), &otpsecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid otpkey secrets")
@@ -572,7 +566,7 @@ func (s *service) refreshSecrets(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) handleGetCipher(ctx context.Context) (*otpCipher, error) {
+func (s *Service) handleGetCipher(ctx context.Context) (*otpCipher, error) {
 	if s.otpCipher == nil {
 		if err := s.refreshSecrets(ctx); err != nil {
 			return nil, err
@@ -582,7 +576,7 @@ func (s *service) handleGetCipher(ctx context.Context) (*otpCipher, error) {
 	return s.otpCipher, nil
 }
 
-func (s *service) getCipher(ctx context.Context) (*otpCipher, error) {
+func (s *Service) getCipher(ctx context.Context) (*otpCipher, error) {
 	if cipher := s.aotpCipher.Load(); cipher != nil {
 		return cipher, nil
 	}
@@ -607,7 +601,7 @@ func (s *service) getCipher(ctx context.Context) (*otpCipher, error) {
 	}
 }
 
-func (s *service) AddAdmin(ctx context.Context, req governor.ReqAddAdmin) error {
+func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
 	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
 	if err != nil {
 		return err
@@ -648,7 +642,7 @@ func (s *service) AddAdmin(ctx context.Context, req governor.ReqAddAdmin) error 
 	return nil
 }
 
-func (s *service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.userRoleDeleteHook, events.StreamConsumerOpts{
 		AckWait:     15 * time.Second,
 		MaxDeliver:  30,
@@ -688,7 +682,7 @@ func (s *service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) Stop(ctx context.Context) {
+func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-s.done:
 		return
@@ -697,7 +691,7 @@ func (s *service) Stop(ctx context.Context) {
 	}
 }
 
-func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
 		Replicas:   1,
 		MaxAge:     30 * 24 * time.Hour,
@@ -736,7 +730,7 @@ func (s *service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	return nil
 }
 
-func (s *service) Health(ctx context.Context) error {
+func (s *Service) Health(ctx context.Context) error {
 	if !s.ready.Load() {
 		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "User service not ready")
 	}
@@ -767,7 +761,7 @@ func decodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
 	return m, nil
 }
 
-func (s *service) StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeNewUserProps(msgdata)
 		if err != nil {
@@ -781,7 +775,7 @@ func (s *service) StreamSubscribeCreate(group string, worker WorkerFuncCreate, s
 	return sub, nil
 }
 
-func (s *service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeDeleteUserProps(msgdata)
 		if err != nil {
@@ -795,7 +789,7 @@ func (s *service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, s
 	return sub, nil
 }
 
-func (s *service) StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
+func (s *Service) StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
 	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UpdateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
 		props, err := decodeUpdateUserProps(msgdata)
 		if err != nil {
@@ -813,7 +807,7 @@ const (
 	roleDeleteBatchSize = 256
 )
 
-func (s *service) userRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
+func (s *Service) userRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
@@ -839,7 +833,7 @@ const (
 	apikeyDeleteBatchSize = 256
 )
 
-func (s *service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
+func (s *Service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
 		if err := pinger.Ping(ctx); err != nil {
 			return err
@@ -865,7 +859,7 @@ func (s *service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 	return nil
 }
 
-func (s *service) userApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) userApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.approvals.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC approvals")
 	}
@@ -873,7 +867,7 @@ func (s *service) userApprovalGCHook(ctx context.Context, props sysevent.Timesta
 	return nil
 }
 
-func (s *service) userResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) userResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.resets.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC resets")
 	}
@@ -881,7 +875,7 @@ func (s *service) userResetGCHook(ctx context.Context, props sysevent.TimestampP
 	return nil
 }
 
-func (s *service) userInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) userInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC inviations")
 	}

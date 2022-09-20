@@ -30,7 +30,7 @@ func (s *router) getUserApikeys(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.GetUserApikeys(c.Ctx(), req.Userid, req.Amount, req.Offset)
+	res, err := s.s.getUserApikeys(c.Ctx(), req.Userid, req.Amount, req.Offset)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -58,7 +58,7 @@ func (s *router) createApikey(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.CreateApikey(c.Ctx(), req.Userid, req.Scope, req.Name, req.Desc)
+	res, err := s.s.createApikey(c.Ctx(), req.Userid, req.Scope, req.Name, req.Desc)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -94,7 +94,7 @@ func (s *router) deleteApikey(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := s.s.DeleteApikey(c.Ctx(), req.Keyid); err != nil {
+	if err := s.s.deleteApikey(c.Ctx(), req.Keyid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -135,7 +135,7 @@ func (s *router) updateApikey(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := s.s.UpdateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
+	if err := s.s.updateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -155,7 +155,7 @@ func (s *router) rotateApikey(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.RotateApikey(c.Ctx(), req.Keyid)
+	res, err := s.s.rotateApikey(c.Ctx(), req.Keyid)
 	if err != nil {
 		c.WriteError(err)
 		return

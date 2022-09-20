@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func (e *emailEmailChange) Query() queryEmailEmailChange {
+func (e *emailEmailChange) query() queryEmailEmailChange {
 	return queryEmailEmailChange{
 		Userid:    url.QueryEscape(e.Userid),
 		Key:       url.QueryEscape(e.Key),
@@ -60,15 +60,14 @@ func (e *emailEmailChange) Query() queryEmailEmailChange {
 
 func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, e.Query()); err != nil {
+	if err := tpl.Execute(b, e.query()); err != nil {
 		return kerrors.WithMsg(err, "Failed executing email change url template")
 	}
 	e.URL = base + b.String()
 	return nil
 }
 
-// UpdateEmail creates a pending user email update
-func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail string, password string) error {
+func (s *Service) updateEmail(ctx context.Context, userid string, newEmail string, password string) error {
 	if _, err := s.users.GetByEmail(ctx, newEmail); err != nil {
 		if !errors.Is(err, db.ErrorNotFound{}) {
 			return kerrors.WithMsg(err, "Failed to get user")
@@ -130,8 +129,7 @@ func (s *service) UpdateEmail(ctx context.Context, userid string, newEmail strin
 	return nil
 }
 
-// CommitEmail commits an email update from the cache
-func (s *service) CommitEmail(ctx context.Context, userid string, key string, password string) error {
+func (s *Service) commitEmail(ctx context.Context, userid string, key string, password string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetEmail)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -221,7 +219,7 @@ type (
 	}
 )
 
-func (e *emailForgotPass) Query() queryEmailForgotPass {
+func (e *emailForgotPass) query() queryEmailForgotPass {
 	return queryEmailForgotPass{
 		Userid:    url.QueryEscape(e.Userid),
 		Key:       url.QueryEscape(e.Key),
@@ -233,15 +231,14 @@ func (e *emailForgotPass) Query() queryEmailForgotPass {
 
 func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) error {
 	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, e.Query()); err != nil {
+	if err := tpl.Execute(b, e.query()); err != nil {
 		return kerrors.WithMsg(err, "Failed executing forgot pass url template")
 	}
 	e.URL = base + b.String()
 	return nil
 }
 
-// UpdatePassword updates the password
-func (s *service) UpdatePassword(ctx context.Context, userid string, newPassword string, oldPassword string) error {
+func (s *Service) updatePassword(ctx context.Context, userid string, newPassword string, oldPassword string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -271,8 +268,7 @@ func (s *service) UpdatePassword(ctx context.Context, userid string, newPassword
 	return nil
 }
 
-// ForgotPassword invokes the forgot password reset procedure
-func (s *service) ForgotPassword(ctx context.Context, useroremail string) error {
+func (s *Service) forgotPassword(ctx context.Context, useroremail string) error {
 	if !s.passwordReset {
 		return governor.ErrWithRes(nil, http.StatusConflict, "", "Password reset not enabled")
 	}
@@ -345,8 +341,7 @@ func (s *service) ForgotPassword(ctx context.Context, useroremail string) error 
 	return nil
 }
 
-// ResetPassword completes the forgot password procedure
-func (s *service) ResetPassword(ctx context.Context, userid string, key string, newPassword string) error {
+func (s *Service) resetPassword(ctx context.Context, userid string, key string, newPassword string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetPass)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -420,8 +415,7 @@ type (
 	}
 )
 
-// AddOTP adds an otp secret
-func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits int, password string) (*resAddOTP, error) {
+func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits int, password string) (*resAddOTP, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -452,8 +446,7 @@ func (s *service) AddOTP(ctx context.Context, userid string, alg string, digits 
 	}, nil
 }
 
-// CommitOTP commits to using an otp
-func (s *service) CommitOTP(ctx context.Context, userid string, code string) error {
+func (s *Service) commitOTP(ctx context.Context, userid string, code string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
@@ -482,7 +475,7 @@ func (s *service) CommitOTP(ctx context.Context, userid string, code string) err
 	return nil
 }
 
-func (s *service) checkLoginRatelimit(ctx context.Context, m *model.Model) error {
+func (s *Service) checkLoginRatelimit(ctx context.Context, m *model.Model) error {
 	var k int64
 	if m.FailedLoginCount > 293 || m.FailedLoginCount < 0 {
 		k = time24h
@@ -506,7 +499,7 @@ func (e ErrorAuthenticate) Error() string {
 	return "Failed authenticating"
 }
 
-func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string, backup string, ipaddr, useragent string) error {
+func (s *Service) checkOTPCode(ctx context.Context, m *model.Model, code string, backup string, ipaddr, useragent string) error {
 	if code == "" {
 		cipher, err := s.getCipher(ctx)
 		if err != nil {
@@ -552,13 +545,13 @@ func (s *service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 	return nil
 }
 
-func (s *service) markOTPCode(ctx context.Context, userid string, code string) {
+func (s *Service) markOTPCode(ctx context.Context, userid string, code string) {
 	if err := s.kvotpcodes.Set(ctx, s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark otp code as used"), nil)
 	}
 }
 
-func (s *service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr, useragent string) {
+func (s *Service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr, useragent string) {
 	m.FailedLoginTime = time.Now().Round(0).Unix()
 	if m.FailedLoginCount < 0 {
 		m.FailedLoginCount = 0
@@ -583,7 +576,7 @@ func (s *service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr
 	}
 }
 
-func (s *service) resetLoginFailCount(ctx context.Context, m *model.Model) {
+func (s *Service) resetLoginFailCount(ctx context.Context, m *model.Model) {
 	m.FailedLoginTime = 0
 	m.FailedLoginCount = 0
 	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
@@ -591,8 +584,7 @@ func (s *service) resetLoginFailCount(ctx context.Context, m *model.Model) {
 	}
 }
 
-// RemoveOTP removes using otp
-func (s *service) RemoveOTP(ctx context.Context, userid string, code string, backup string, password string, ipaddr, useragent string) error {
+func (s *Service) removeOTP(ctx context.Context, userid string, code string, backup string, password string, ipaddr, useragent string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {

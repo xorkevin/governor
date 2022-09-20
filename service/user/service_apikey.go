@@ -24,7 +24,7 @@ type (
 	}
 )
 
-func (s *service) GetUserApikeys(ctx context.Context, userid string, limit, offset int) (*resApikeys, error) {
+func (s *Service) getUserApikeys(ctx context.Context, userid string, limit, offset int) (*resApikeys, error) {
 	m, err := s.apikeys.GetUserKeys(ctx, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
@@ -51,7 +51,7 @@ type (
 	}
 )
 
-func (s *service) CreateApikey(ctx context.Context, userid string, scope string, name, desc string) (*resApikeyModel, error) {
+func (s *Service) createApikey(ctx context.Context, userid string, scope string, name, desc string) (*resApikeyModel, error) {
 	m, err := s.apikeys.Insert(ctx, userid, scope, name, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey")
@@ -62,7 +62,7 @@ func (s *service) CreateApikey(ctx context.Context, userid string, scope string,
 	}, nil
 }
 
-func (s *service) RotateApikey(ctx context.Context, keyid string) (*resApikeyModel, error) {
+func (s *Service) rotateApikey(ctx context.Context, keyid string) (*resApikeyModel, error) {
 	m, err := s.apikeys.RotateKey(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, apikey.ErrorNotFound{}) {
@@ -76,7 +76,7 @@ func (s *service) RotateApikey(ctx context.Context, keyid string) (*resApikeyMod
 	}, nil
 }
 
-func (s *service) UpdateApikey(ctx context.Context, keyid string, scope string, name, desc string) error {
+func (s *Service) updateApikey(ctx context.Context, keyid string, scope string, name, desc string) error {
 	if err := s.apikeys.UpdateKey(ctx, keyid, scope, name, desc); err != nil {
 		if errors.Is(err, apikey.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
@@ -86,7 +86,7 @@ func (s *service) UpdateApikey(ctx context.Context, keyid string, scope string, 
 	return nil
 }
 
-func (s *service) DeleteApikey(ctx context.Context, keyid string) error {
+func (s *Service) deleteApikey(ctx context.Context, keyid string) error {
 	if err := s.apikeys.DeleteKey(ctx, keyid); err != nil {
 		if errors.Is(err, apikey.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
