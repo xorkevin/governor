@@ -154,19 +154,18 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.usrdomain = r.GetStr("usrdomain")
 	s.orgdomain = r.GetStr("orgdomain")
 	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mail max message size")
+		return kerrors.WithMsg(err, "Invalid mail max message size")
 	} else {
 		s.maxmsgsize = int(limit)
 	}
-	if t, err := time.ParseDuration(r.GetStr("readtimeout")); err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid read timeout for mail server")
-	} else {
-		s.readtimeout = t
+	var err error
+	s.readtimeout, err = r.GetDuration("readtimeout")
+	if err != nil {
+		return kerrors.WithMsg(err, "Invalid read timeout for mail server")
 	}
-	if t, err := time.ParseDuration(r.GetStr("writetimeout")); err != nil {
+	s.writetimeout, err = r.GetDuration("writetimeout")
+	if err != nil {
 		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid write timeout for mail server")
-	} else {
-		s.writetimeout = t
 	}
 
 	if src := r.GetStr("mockdnssource"); src != "" {
@@ -180,7 +179,6 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		})
 	}
 
-	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid stream size")
@@ -197,8 +195,8 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"mailinglist.usrdomain":    s.usrdomain,
 		"mailinglist.orgdomain":    s.orgdomain,
 		"mailinglist.maxmsgsize":   r.GetStr("maxmsgsize"),
-		"mailinglist.readtimeout":  r.GetStr("readtimeout"),
-		"mailinglist.writetimeout": r.GetStr("writetimeout"),
+		"mailinglist.readtimeout":  s.readtimeout.String(),
+		"mailinglist.writetimeout": s.writetimeout.String(),
 		"mailinglist.stream.size":  r.GetStr("streamsize"),
 		"mailinglist.event.size":   r.GetStr("eventsize"),
 	})

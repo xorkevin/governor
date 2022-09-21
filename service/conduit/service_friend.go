@@ -119,8 +119,7 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 	if _, err := s.invitations.GetByID(ctx, userid, inviter, after); err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Friend invitation not found")
@@ -170,8 +169,7 @@ type (
 )
 
 func (s *Service) getUserFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 
 	m, err := s.invitations.GetByUser(ctx, userid, after, amount, offset)
 	if err != nil {
@@ -191,8 +189,7 @@ func (s *Service) getUserFriendInvitations(ctx context.Context, userid string, a
 }
 
 func (s *Service) getInvitedFriendInvitations(ctx context.Context, userid string, amount, offset int) (*resFriendInvitations, error) {
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 
 	m, err := s.invitations.GetByInviter(ctx, userid, after, amount, offset)
 	if err != nil {

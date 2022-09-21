@@ -59,14 +59,14 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 	res, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
-			if err := s.kvlinks.Set(ctx, linkid, cacheValTombstone, s.cacheTime); err != nil {
+			if err := s.kvlinks.Set(ctx, linkid, cacheValTombstone, s.cacheDuration); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"), nil)
 			}
 			return "", governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return "", kerrors.WithMsg(err, "Failed to get link")
 	}
-	if err := s.kvlinks.Set(ctx, linkid, res.URL, s.cacheTime); err != nil {
+	if err := s.kvlinks.Set(ctx, linkid, res.URL, s.cacheDuration); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"), klog.Fields{
 			"courier.linkid": linkid,
 		})

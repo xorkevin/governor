@@ -26,13 +26,6 @@ const (
 	jwksRoute     = "/jwks"
 )
 
-const (
-	time1m  int64 = int64(time.Minute / time.Second)
-	time5m  int64 = time1m * 5
-	time24h int64 = int64(24 * time.Hour / time.Second)
-	time7d  int64 = time24h * 7
-)
-
 type (
 	// OAuth manages OAuth apps
 	OAuth interface {
@@ -158,19 +151,19 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.codeDuration, err = r.GetDuration("codeduration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse code time")
+		return kerrors.WithMsg(err, "Failed to parse code duration")
 	}
 	s.accessDuration, err = r.GetDuration("accessduration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse access time")
+		return kerrors.WithMsg(err, "Failed to parse access duration")
 	}
 	s.refreshDuration, err = r.GetDuration("refreshduration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse refresh time")
+		return kerrors.WithMsg(err, "Failed to parse refresh duration")
 	}
 	s.keyCache, err = r.GetDuration("keycache")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse key cache time")
+		return kerrors.WithMsg(err, "Failed to parse key cache duration")
 	}
 
 	s.realm = r.GetStr("realm")

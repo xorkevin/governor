@@ -44,7 +44,7 @@ type (
 		streamns      string
 		fallbackLink  string
 		linkPrefix    string
-		cacheTime     int64
+		cacheDuration time.Duration
 	}
 
 	router struct {
@@ -101,7 +101,6 @@ func New(
 		orgs:          orgs,
 		ratelimiter:   ratelimiter,
 		gate:          g,
-		cacheTime:     time24h,
 	}
 }
 
@@ -112,7 +111,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
-	r.SetDefault("cachetime", "24h")
+	r.SetDefault("cacheduration", "24h")
 }
 
 func (s *Service) router() *router {
@@ -127,10 +126,10 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.fallbackLink = r.GetStr("fallbacklink")
 	s.linkPrefix = r.GetStr("linkprefix")
-	if t, err := time.ParseDuration(r.GetStr("cachetime")); err != nil {
+	var err error
+	s.cacheDuration, err = r.GetDuration("cacheduration")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse cache time")
-	} else {
-		s.cacheTime = int64(t / time.Second)
 	}
 	if s.fallbackLink == "" {
 		s.log.Warn(ctx, "fallbacklink is not set", nil)
@@ -146,7 +145,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"courier.fallbacklink": s.fallbackLink,
 		"courier.linkprefix":   s.linkPrefix,
-		"courier.cachetime":    s.cacheTime,
+		"courier.cachetime":    s.cacheDuration.String(),
 	})
 
 	sr := s.router()

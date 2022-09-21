@@ -165,8 +165,8 @@ org:
 courier:
   fallbacklink: http://governor.dev.localhost:8080
   linkprefix: http://go.governor.dev.localhost:8080
-  cachetime: 24h
+  cacheduration: 24h
 conduit:
   streamsize: 200M
   eventsize: 2K
-  invitationtime: 72h
+  invitationduration: 72h

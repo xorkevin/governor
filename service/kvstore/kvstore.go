@@ -89,7 +89,7 @@ type (
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
-		hbinterval int
+		hbinterval time.Duration
 		hbmaxfail  int
 		done       <-chan struct{}
 	}
@@ -150,7 +150,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("dbname", 0)
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "6379")
-	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 5)
 }
 
@@ -187,13 +187,17 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.dbname = r.GetInt("dbname")
-	s.hbinterval = r.GetInt("hbinterval")
+	var err error
+	s.hbinterval, err = r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"kv.addr":       s.addr,
 		"kv.dbname":     strconv.Itoa(s.dbname),
-		"kv.hbinterval": s.hbinterval,
+		"kv.hbinterval": s.hbinterval.String(),
 		"kv.hbmaxfail":  s.hbmaxfail,
 	})
 
@@ -210,7 +214,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
 		select {

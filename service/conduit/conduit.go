@@ -35,27 +35,27 @@ type (
 	}
 
 	Service struct {
-		friends        friendmodel.Repo
-		invitations    invitationmodel.Repo
-		dms            dmmodel.Repo
-		gdms           gdmmodel.Repo
-		servers        servermodel.Repo
-		msgs           msgmodel.Repo
-		kvpresence     kvstore.KVStore
-		users          user.Users
-		events         events.Events
-		ws             ws.WS
-		ratelimiter    ratelimit.Ratelimiter
-		gate           gate.Gate
-		log            *klog.LevelLogger
-		scopens        string
-		channelns      string
-		streamns       string
-		opts           svcOpts
-		streamsize     int64
-		eventsize      int32
-		invitationTime int64
-		syschannels    governor.SysChannels
+		friends            friendmodel.Repo
+		invitations        invitationmodel.Repo
+		dms                dmmodel.Repo
+		gdms               gdmmodel.Repo
+		servers            servermodel.Repo
+		msgs               msgmodel.Repo
+		kvpresence         kvstore.KVStore
+		users              user.Users
+		events             events.Events
+		ws                 ws.WS
+		ratelimiter        ratelimit.Ratelimiter
+		gate               gate.Gate
+		log                *klog.LevelLogger
+		scopens            string
+		channelns          string
+		streamns           string
+		opts               svcOpts
+		streamsize         int64
+		eventsize          int32
+		invitationDuration time.Duration
+		syschannels        governor.SysChannels
 	}
 
 	router struct {
@@ -144,18 +144,17 @@ func New(
 	g gate.Gate,
 ) *Service {
 	return &Service{
-		friends:        friends,
-		invitations:    invitations,
-		dms:            dms,
-		gdms:           gdms,
-		msgs:           msgs,
-		kvpresence:     kv.Subtree("presence"),
-		users:          users,
-		events:         ev,
-		ws:             wss,
-		ratelimiter:    ratelimiter,
-		gate:           g,
-		invitationTime: time72h,
+		friends:     friends,
+		invitations: invitations,
+		dms:         dms,
+		gdms:        gdms,
+		msgs:        msgs,
+		kvpresence:  kv.Subtree("presence"),
+		users:       users,
+		events:      ev,
+		ws:          wss,
+		ratelimiter: ratelimiter,
+		gate:        g,
 	}
 }
 
@@ -178,7 +177,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
-	r.SetDefault("invitationtime", "72h")
+	r.SetDefault("invitationduration", "72h")
 }
 
 func (s *Service) router() *router {
@@ -191,18 +190,18 @@ func (s *Service) router() *router {
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
-	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
+	var err error
+	s.invitationDuration, err = r.GetDuration("invitationduration")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse role invitation time")
-	} else {
-		s.invitationTime = int64(t / time.Second)
 	}
 
 	s.syschannels = c.SysChannels
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"conduit.stream.size":    r.GetStr("streamsize"),
-		"conduit.event.size":     r.GetStr("eventsize"),
-		"conduit.invitationtime": s.invitationTime,
+		"conduit.stream.size":        r.GetStr("streamsize"),
+		"conduit.event.size":         r.GetStr("eventsize"),
+		"conduit.invitationduration": s.invitationDuration.String(),
 	})
 
 	sr := s.router()
