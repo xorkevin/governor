@@ -19,7 +19,7 @@ COVERAGE?=cover.out
 .PHONY: test coverage cover bench
 
 test: ## Run tests
-	go test -race -trimpath -ldflags "-w -s" $(TEST_ARGS) -cover -covermode atomic -coverprofile $(COVERAGE) $(TEST_PACKAGE)
+	go test -race -trimpath -ldflags "-w -s" -cover -covermode atomic -coverprofile $(COVERAGE) $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## View test coverage
 	go tool cover -html $(COVERAGE)

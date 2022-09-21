@@ -156,10 +156,10 @@ type (
 		authops         chan getAuthOp
 		ready           *atomic.Bool
 		hbfailed        int
-		hbinterval      int
+		hbinterval      time.Duration
 		hbmaxfail       int
 		done            <-chan struct{}
-		authrefresh     int
+		authrefresh     time.Duration
 	}
 
 	ctxKeyMailer struct{}
@@ -235,9 +235,9 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("fromname", "")
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "16K")
-	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
-	r.SetDefault("authrefresh", 60)
+	r.SetDefault("authrefresh", "1m")
 }
 
 type (
@@ -259,16 +259,22 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid stream size")
+		return kerrors.WithMsg(err, "Invalid stream size")
 	}
 	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
 	if err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid msg size")
+		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	s.hbinterval = r.GetInt("hbinterval")
+	s.hbinterval, err = r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
-	s.authrefresh = r.GetInt("authrefresh")
+	s.authrefresh, err = r.GetDuration("authrefresh")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse authrefresh")
+	}
 
 	s.log.Info(ctx, "Initialize mail service", klog.Fields{
 		"mail.smtp.addr":      s.addr,
@@ -278,9 +284,9 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"mail.sender.name":    s.fromName,
 		"mail.streamsize":     r.GetStr("streamsize"),
 		"mail.eventsize":      r.GetStr("eventsize"),
-		"mail.hbinterval":     s.hbinterval,
+		"mail.hbinterval":     s.hbinterval.String(),
 		"mail.hbmaxfail":      s.hbmaxfail,
-		"mail.authrefresh":    s.authrefresh,
+		"mail.authrefresh":    s.authrefresh.String(),
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -296,7 +302,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -351,7 +357,7 @@ func (s *Service) handlePing(ctx context.Context) {
 
 func (s *Service) refreshAuth(ctx context.Context) error {
 	var auth secretAuth
-	if err := s.config.GetSecret(ctx, "auth", int64(s.authrefresh), &auth); err != nil {
+	if err := s.config.GetSecret(ctx, "auth", s.authrefresh, &auth); err != nil {
 		return kerrors.WithMsg(err, "Invalid mail auth")
 	}
 	if auth.Username == "" {
@@ -403,7 +409,7 @@ func (s *Service) getAuth(ctx context.Context) (secretAuth, error) {
 
 func (s *Service) refreshSecrets(ctx context.Context) error {
 	var maildataSecrets secretMaildata
-	if err := s.config.GetSecret(ctx, "mailkey", int64(s.authrefresh), &maildataSecrets); err != nil {
+	if err := s.config.GetSecret(ctx, "mailkey", s.authrefresh, &maildataSecrets); err != nil {
 		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mailkey secrets")
 	}
 	if len(maildataSecrets.Keys) == 0 {
@@ -793,7 +799,7 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
 	h := emmail.Header{}
 	h.SetMessageID(msgid)
-	h.SetDate(time.Now().Round(0).In(time.UTC))
+	h.SetDate(time.Now().Round(0).UTC())
 	subj := strings.Builder{}
 	if _, err := io.Copy(&subj, subject); err != nil {
 		return kerrors.WithKind(err, ErrorBuildMail{}, "Failed to write mail subject")

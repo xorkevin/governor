@@ -48,7 +48,7 @@ type (
 	secretsClient interface {
 		Info() string
 		Init() error
-		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error)
+		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error)
 	}
 
 	// SysChannels are for system events
@@ -298,12 +298,12 @@ func (s *secretsFileSource) Init() error {
 	return nil
 }
 
-func (s *secretsFileSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsFileSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error) {
 	data, ok := s.data.Data[kvpath]
 	if !ok {
-		return nil, 0, kerrors.WithKind(nil, ErrorVault{}, "Failed to read vault secret")
+		return nil, time.Time{}, kerrors.WithKind(nil, ErrorVault{}, "Failed to read vault secret")
 	}
-	return data, 0, nil
+	return data, time.Time{}, nil
 }
 
 type (
@@ -321,7 +321,7 @@ type (
 		address     string
 		vault       *vaultapi.Client
 		config      secretsVaultSourceConfig
-		vaultExpire int64
+		vaultExpire time.Time
 		mu          *sync.RWMutex
 	}
 )
@@ -359,7 +359,7 @@ func (s *secretsVaultSource) Init() error {
 }
 
 func (s *secretsVaultSource) authVaultValidLocked() bool {
-	return s.vaultExpire-time.Now().Round(0).Unix() > 5
+	return time.Now().Round(0).Add(5 * time.Second).Before(s.vaultExpire)
 }
 
 func (s *secretsVaultSource) authVaultValid() bool {
@@ -384,30 +384,30 @@ func (s *secretsVaultSource) authVault() error {
 	if err != nil {
 		return kerrors.WithKind(err, ErrorVault{}, "Failed to auth with vault k8s")
 	}
-	s.vaultExpire = time.Now().Round(0).Unix() + int64(authsecret.Auth.LeaseDuration)
+	s.vaultExpire = time.Now().Round(0).Add(time.Duration(authsecret.Auth.LeaseDuration) * time.Second)
 	s.vault.SetToken(authsecret.Auth.ClientToken)
 	return nil
 }
 
-func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, int64, error) {
+func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error) {
 	if err := s.Init(); err != nil {
-		return nil, 0, err
+		return nil, time.Time{}, err
 	}
 
 	vault := s.vault.Logical()
 	secret, err := vault.ReadWithContext(ctx, kvpath)
 	if err != nil {
-		return nil, 0, kerrors.WithKind(err, ErrorVault{}, "Failed to read vault secret")
+		return nil, time.Time{}, kerrors.WithKind(err, ErrorVault{}, "Failed to read vault secret")
 	}
 	data := secret.Data
 	if v, ok := data["data"].(map[string]interface{}); ok {
 		data = v
 	}
-	var expire int64
+	var expire time.Time
 	if secret.LeaseDuration > 0 {
-		expire = time.Now().Round(0).Unix() + int64(secret.LeaseDuration)
+		expire = time.Now().Round(0).Add(time.Duration(secret.LeaseDuration) * time.Second)
 		k := s.vaultExpire
-		if expire > k {
+		if expire.After(k) {
 			expire = k
 		}
 	}
@@ -459,7 +459,7 @@ func (c *Config) initsecrets() error {
 	return nil
 }
 
-func (c *Config) getSecret(ctx context.Context, key string, seconds int64, target interface{}) error {
+func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
 	if v, ok := c.vaultCache.Load(key); ok {
 		s := v.(vaultSecret)
 		if s.isValid() {
@@ -479,8 +479,8 @@ func (c *Config) getSecret(ctx context.Context, key string, seconds int64, targe
 	if err != nil {
 		return err
 	}
-	if expire == 0 && seconds != 0 {
-		expire = time.Now().Round(0).Unix() + seconds
+	if expire.IsZero() && cacheDuration != 0 {
+		expire = time.Now().Round(0).Add(cacheDuration)
 	}
 	c.vaultCache.Store(key, vaultSecret{
 		key:    key,
@@ -528,6 +528,7 @@ type (
 		URL() string
 		GetBool(key string) bool
 		GetInt(key string) int
+		GetDuration(key string) (time.Duration, error)
 		GetStr(key string) string
 		GetStrSlice(key string) []string
 		GetStrMap(key string) map[string]string
@@ -537,7 +538,7 @@ type (
 
 	// SecretReader gets values from a secret engine
 	SecretReader interface {
-		GetSecret(ctx context.Context, key string, seconds int64, target interface{}) error
+		GetSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error
 		InvalidateSecret(key string)
 	}
 
@@ -546,7 +547,7 @@ type (
 	vaultSecret struct {
 		key    string
 		value  vaultSecretVal
-		expire int64
+		expire time.Time
 	}
 
 	configReader struct {
@@ -571,6 +572,10 @@ func (r *configReader) GetInt(key string) int {
 	return r.c.config.GetInt(r.name + "." + key)
 }
 
+func (r *configReader) GetDuration(key string) (time.Duration, error) {
+	return time.ParseDuration(r.GetStr(key))
+}
+
 func (r *configReader) GetStr(key string) string {
 	return r.c.config.GetString(r.name + "." + key)
 }
@@ -593,11 +598,11 @@ func (r *configReader) Unmarshal(key string, val interface{}) error {
 }
 
 func (s *vaultSecret) isValid() bool {
-	return s.expire == 0 || time.Now().Round(0).Unix()+5 < s.expire
+	return s.expire.IsZero() || time.Now().Round(0).Add(5*time.Second).Before(s.expire)
 }
 
-func (r *configReader) GetSecret(ctx context.Context, key string, seconds int64, target interface{}) error {
-	return r.c.getSecret(ctx, r.name+"."+key, seconds, target)
+func (r *configReader) GetSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
+	return r.c.getSecret(ctx, r.name+"."+key, cacheDuration, target)
 }
 
 func (r *configReader) InvalidateSecret(key string) {

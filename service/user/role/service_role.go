@@ -78,9 +78,9 @@ end:
 	}
 	for _, i := range uncachedRoles.ToSlice() {
 		if m.Has(i) {
-			multiset.Set(ctx, i, cacheValY, s.roleCacheTime)
+			multiset.Set(ctx, i, cacheValY, s.roleCacheDuration)
 		} else {
-			multiset.Set(ctx, i, cacheValN, s.roleCacheTime)
+			multiset.Set(ctx, i, cacheValN, s.roleCacheDuration)
 		}
 	}
 	if err := multiset.Exec(ctx); err != nil {

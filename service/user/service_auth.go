@@ -156,7 +156,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheDuration); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCache); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 
@@ -269,7 +269,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, kerrors.WithMsg(err, "Failed to save user session")
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheDuration); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCache); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 

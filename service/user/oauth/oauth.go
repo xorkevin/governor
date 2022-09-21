@@ -39,32 +39,32 @@ type (
 	}
 
 	Service struct {
-		apps         model.Repo
-		connections  connmodel.Repo
-		tokenizer    token.Tokenizer
-		kvclient     kvstore.KVStore
-		oauthBucket  objstore.Bucket
-		logoImgDir   objstore.Dir
-		users        user.Users
-		events       events.Events
-		ratelimiter  ratelimit.Ratelimiter
-		gate         gate.Gate
-		log          *klog.LevelLogger
-		rolens       string
-		scopens      string
-		streamns     string
-		codeTime     int64
-		accessTime   int64
-		refreshTime  int64
-		keyCacheTime int64
-		realm        string
-		issuer       string
-		epauth       string
-		eptoken      string
-		epuserinfo   string
-		epjwks       string
-		tplprofile   *htmlTemplate.Template
-		tplpicture   *htmlTemplate.Template
+		apps            model.Repo
+		connections     connmodel.Repo
+		tokenizer       token.Tokenizer
+		kvclient        kvstore.KVStore
+		oauthBucket     objstore.Bucket
+		logoImgDir      objstore.Dir
+		users           user.Users
+		events          events.Events
+		ratelimiter     ratelimit.Ratelimiter
+		gate            gate.Gate
+		log             *klog.LevelLogger
+		rolens          string
+		scopens         string
+		streamns        string
+		codeDuration    time.Duration
+		accessDuration  time.Duration
+		refreshDuration time.Duration
+		keyCache        time.Duration
+		realm           string
+		issuer          string
+		epauth          string
+		eptoken         string
+		epuserinfo      string
+		epjwks          string
+		tplprofile      *htmlTemplate.Template
+		tplpicture      *htmlTemplate.Template
 	}
 
 	router struct {
@@ -116,20 +116,16 @@ func New(
 	g gate.Gate,
 ) *Service {
 	return &Service{
-		apps:         apps,
-		connections:  connections,
-		tokenizer:    tokenizer,
-		kvclient:     kv.Subtree("client"),
-		oauthBucket:  obj,
-		logoImgDir:   obj.Subdir("logo"),
-		users:        users,
-		events:       ev,
-		ratelimiter:  ratelimiter,
-		gate:         g,
-		codeTime:     time1m,
-		accessTime:   time5m,
-		refreshTime:  time7d,
-		keyCacheTime: time24h,
+		apps:        apps,
+		connections: connections,
+		tokenizer:   tokenizer,
+		kvclient:    kv.Subtree("client"),
+		oauthBucket: obj,
+		logoImgDir:  obj.Subdir("logo"),
+		users:       users,
+		events:      ev,
+		ratelimiter: ratelimiter,
+		gate:        g,
 	}
 }
 
@@ -139,9 +135,9 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	s.scopens = "gov." + name
 	s.streamns = strings.ToUpper(name)
 
-	r.SetDefault("codetime", "1m")
-	r.SetDefault("accesstime", "5m")
-	r.SetDefault("refreshtime", "168h")
+	r.SetDefault("codeduration", "1m")
+	r.SetDefault("accessduration", "5m")
+	r.SetDefault("refreshduration", "168h")
 	r.SetDefault("keycache", "24h")
 	r.SetDefault("realm", "governor")
 	r.SetDefault("ephost", "http://localhost:8080")
@@ -159,28 +155,22 @@ func (s *Service) router() *router {
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
-	if t, err := time.ParseDuration(r.GetStr("codetime")); err != nil {
+	var err error
+	s.codeDuration, err = r.GetDuration("codeduration")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse code time")
-	} else {
-		s.codeTime = int64(t / time.Second)
 	}
-
-	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
+	s.accessDuration, err = r.GetDuration("accessduration")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse access time")
-	} else {
-		s.accessTime = int64(t / time.Second)
 	}
-
-	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
+	s.refreshDuration, err = r.GetDuration("refreshduration")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse refresh time")
-	} else {
-		s.refreshTime = int64(t / time.Second)
 	}
-
-	if t, err := time.ParseDuration(r.GetStr("keycache")); err != nil {
+	s.keyCache, err = r.GetDuration("keycache")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse key cache time")
-	} else {
-		s.keyCacheTime = int64(t / time.Second)
 	}
 
 	s.realm = r.GetStr("realm")
@@ -203,10 +193,10 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"oauth.codetime":               s.codeTime,
-		"oauth.accesstime":             s.accessTime,
-		"oauth.refreshtime":            s.refreshTime,
-		"oauth.keycache":               s.keyCacheTime,
+		"oauth.codeduration":           s.codeDuration.String(),
+		"oauth.accessduration":         s.accessDuration.String(),
+		"oauth.refreshduration":        s.refreshDuration.String(),
+		"oauth.keycache":               s.keyCache.String(),
 		"oauth.issuer":                 s.issuer,
 		"oauth.authorization_endpoint": s.epauth,
 		"oauth.token_endpoint":         s.eptoken,

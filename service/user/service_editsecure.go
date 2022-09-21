@@ -476,13 +476,13 @@ func (s *Service) commitOTP(ctx context.Context, userid string, code string) err
 }
 
 func (s *Service) checkLoginRatelimit(ctx context.Context, m *model.Model) error {
-	var k int64
+	var k time.Duration
 	if m.FailedLoginCount > 293 || m.FailedLoginCount < 0 {
-		k = time24h
+		k = 24 * time.Hour
 	} else {
-		k = int64(m.FailedLoginCount) * int64(m.FailedLoginCount)
+		k = time.Duration(m.FailedLoginCount*m.FailedLoginCount) * time.Second
 	}
-	cliff := time.Unix(m.FailedLoginTime, 0).Add(time.Duration(k) * time.Second).UTC()
+	cliff := time.Unix(m.FailedLoginTime, 0).Add(k).UTC()
 	if time.Now().Round(0).Before(cliff) {
 		return governor.ErrWithTooManyRequests(nil, cliff, "", "Failed login too many times")
 	}

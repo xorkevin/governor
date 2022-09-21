@@ -34,13 +34,6 @@ const (
 	authRoutePrefix = "/auth"
 )
 
-const (
-	time5m     int64 = int64(5 * time.Minute / time.Second)
-	time24h    int64 = int64(24 * time.Hour / time.Second)
-	time72h    int64 = time24h * 3
-	time6month int64 = time24h * 365 / 2
-)
-
 type (
 	// WorkerFuncCreate is a type alias for a new user event consumer
 	WorkerFuncCreate = func(ctx context.Context, pinger events.Pinger, props NewUserProps) error
@@ -126,14 +119,14 @@ type (
 		authURL               string
 		accessDuration        time.Duration
 		refreshDuration       time.Duration
-		refreshCacheDuration  time.Duration
+		refreshCache          time.Duration
 		confirmDuration       time.Duration
 		emailConfirmDuration  time.Duration
 		passwordReset         bool
 		passwordResetDuration time.Duration
 		passResetDelay        time.Duration
-		invitationTime        int64
-		userCacheTime         int64
+		invitationDuration    time.Duration
+		userCacheDuration     time.Duration
 		newLoginEmail         bool
 		passwordMinSize       int
 		userApproval          bool
@@ -144,10 +137,11 @@ type (
 		ops                   chan getOp
 		ready                 *atomic.Bool
 		hbfailed              int
-		hbinterval            int
+		hbinterval            time.Duration
 		hbmaxfail             int
+		otprefresh            time.Duration
+		gcDuration            time.Duration
 		done                  <-chan struct{}
-		otprefresh            int
 		syschannels           governor.SysChannels
 	}
 
@@ -251,35 +245,25 @@ func New(
 	g gate.Gate,
 ) *Service {
 	return &Service{
-		users:                 users,
-		sessions:              sessions,
-		approvals:             approvals,
-		invitations:           invitations,
-		resets:                resets,
-		roles:                 roles,
-		apikeys:               apikeys,
-		kvusers:               kv.Subtree("users"),
-		kvsessions:            kv.Subtree("sessions"),
-		kvotpcodes:            kv.Subtree("otpcodes"),
-		events:                ev,
-		mailer:                mailer,
-		ratelimiter:           ratelimiter,
-		gate:                  g,
-		tokenizer:             tokenizer,
-		aotpCipher:            &atomic.Pointer[otpCipher]{},
-		accessDuration:        5 * time.Minute,
-		refreshDuration:       24 * 365 / 2 * time.Hour,
-		refreshCacheDuration:  24 * time.Hour,
-		confirmDuration:       24 * time.Hour,
-		emailConfirmDuration:  24 * time.Hour,
-		passwordReset:         true,
-		passwordResetDuration: 24 * time.Hour,
-		passResetDelay:        1 * time.Hour,
-		invitationTime:        time24h,
-		userCacheTime:         time24h,
-		ops:                   make(chan getOp),
-		ready:                 &atomic.Bool{},
-		hbfailed:              0,
+		users:       users,
+		sessions:    sessions,
+		approvals:   approvals,
+		invitations: invitations,
+		resets:      resets,
+		roles:       roles,
+		apikeys:     apikeys,
+		kvusers:     kv.Subtree("users"),
+		kvsessions:  kv.Subtree("sessions"),
+		kvotpcodes:  kv.Subtree("otpcodes"),
+		events:      ev,
+		mailer:      mailer,
+		ratelimiter: ratelimiter,
+		gate:        g,
+		tokenizer:   tokenizer,
+		aotpCipher:  &atomic.Pointer[otpCipher]{},
+		ops:         make(chan getOp),
+		ready:       &atomic.Bool{},
+		hbfailed:    0,
 	}
 }
 
@@ -300,14 +284,14 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("eventsize", "2K")
 	r.SetDefault("accessduration", "5m")
 	r.SetDefault("refreshduration", "4380h")
-	r.SetDefault("refreshcacheduration", "24h")
+	r.SetDefault("refreshcache", "24h")
 	r.SetDefault("confirmduration", "24h")
 	r.SetDefault("emailconfirmduration", "24h")
 	r.SetDefault("passwordreset", true)
 	r.SetDefault("passwordresetduration", "24h")
 	r.SetDefault("passresetdelay", "1h")
-	r.SetDefault("invitationtime", "24h")
-	r.SetDefault("usercachetime", "24h")
+	r.SetDefault("invitationduration", "24h")
+	r.SetDefault("usercacheduration", "24h")
 	r.SetDefault("newloginemail", true)
 	r.SetDefault("passwordminsize", 8)
 	r.SetDefault("userapproval", false)
@@ -325,9 +309,10 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
 	r.SetDefault("email.url.newuser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
-	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
-	r.SetDefault("otprefresh", 60)
+	r.SetDefault("otprefresh", "1m")
+	r.SetDefault("gcduration", "72h")
 }
 
 func (s *Service) router() *router {
@@ -359,51 +344,42 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.eventsize = int32(eventsize)
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
-	if t, err := time.ParseDuration(r.GetStr("accessduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse access time")
-	} else {
-		s.accessDuration = t
+	s.accessDuration, err = r.GetDuration("accessduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse access duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse refresh time")
-	} else {
-		s.refreshDuration = t
+	s.refreshDuration, err = r.GetDuration("refreshduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse refresh duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshcacheduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse refresh cache")
-	} else {
-		s.refreshCacheDuration = t
+	s.refreshCache, err = r.GetDuration("refreshcache")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse refresh cache duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("confirmduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse confirm time")
-	} else {
-		s.confirmDuration = t
+	s.confirmDuration, err = r.GetDuration("confirmduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse confirm duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("emailconfirmduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse confirm time")
-	} else {
-		s.emailConfirmDuration = t
+	s.emailConfirmDuration, err = r.GetDuration("emailconfirmduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse confirm duration")
 	}
 	s.passwordReset = r.GetBool("passwordreset")
-	if t, err := time.ParseDuration(r.GetStr("passwordresetduration")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse password reset time")
-	} else {
-		s.passwordResetDuration = t
+	s.passwordResetDuration, err = r.GetDuration("passwordresetduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse password reset duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("passresetdelay")); err != nil {
+	s.passResetDelay, err = r.GetDuration("passresetdelay")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse password reset delay")
-	} else {
-		s.passResetDelay = t
 	}
-	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse role invitation time")
-	} else {
-		s.invitationTime = int64(t / time.Second)
+	s.invitationDuration, err = r.GetDuration("invitationduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse role invitation duration")
 	}
-	if t, err := time.ParseDuration(r.GetStr("usercachetime")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse user cache time")
-	} else {
-		s.userCacheTime = int64(t / time.Second)
+	s.userCacheDuration, err = r.GetDuration("usercacheduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse user cache duration")
 	}
 	s.newLoginEmail = r.GetBool("newloginemail")
 	s.passwordMinSize = r.GetInt("passwordminsize")
@@ -442,9 +418,19 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		s.emailurl.newuser = t
 	}
 
-	s.hbinterval = r.GetInt("hbinterval")
+	s.hbinterval, err = r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
-	s.otprefresh = r.GetInt("otprefresh")
+	s.otprefresh, err = r.GetDuration("otprefresh")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse otprefresh")
+	}
+	s.gcDuration, err = r.GetDuration("gcduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse gcduration")
+	}
 
 	s.syschannels = c.SysChannels
 
@@ -452,15 +438,15 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"user.stream.size":               r.GetStr("streamsize"),
 		"user.event.size":                r.GetStr("eventsize"),
 		"user.auth.accessduration":       s.accessDuration.String(),
-		"user.auth.refreshduration":      s.refreshDuration,
-		"user.auth.refreshcacheduration": s.refreshCacheDuration,
+		"user.auth.refreshduration":      s.refreshDuration.String(),
+		"user.auth.refreshcache":         s.refreshCache.String(),
 		"user.confirmduration":           s.confirmDuration.String(),
 		"user.emailconfirmduration":      s.emailConfirmDuration.String(),
 		"user.passwordresetallowed":      s.passwordReset,
 		"user.passwordresetduration":     s.passwordResetDuration.String(),
 		"user.passresetdelay":            s.passResetDelay.String(),
-		"user.invitationtime":            s.invitationTime,
-		"user.cachetime":                 s.userCacheTime,
+		"user.invitationduration":        s.invitationDuration.String(),
+		"user.cacheduration":             s.userCacheDuration.String(),
 		"user.newlogin.email":            s.newLoginEmail,
 		"user.passwordminsize":           s.passwordMinSize,
 		"user.approvalrequired":          s.userApproval,
@@ -477,9 +463,10 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"user.tpl.emailchange":           r.GetStr("email.url.emailchange"),
 		"user.tpl.forgotpass":            r.GetStr("email.url.forgotpass"),
 		"user.tpl.newuser":               r.GetStr("email.url.newuser"),
-		"user.hbinterval":                s.hbinterval,
+		"user.hbinterval":                s.hbinterval.String(),
 		"user.hbmaxfail":                 s.hbmaxfail,
-		"user.otprefresh":                s.otprefresh,
+		"user.otprefresh":                s.otprefresh.String(),
+		"user.gcduration":                s.gcDuration.String(),
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -500,7 +487,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -541,7 +528,7 @@ func (s *Service) handlePing(ctx context.Context) {
 
 func (s *Service) refreshSecrets(ctx context.Context) error {
 	var otpsecrets secretOTP
-	if err := s.config.GetSecret(ctx, "otpkey", int64(s.otprefresh), &otpsecrets); err != nil {
+	if err := s.config.GetSecret(ctx, "otpkey", s.otprefresh, &otpsecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid otpkey secrets")
 	}
 	if len(otpsecrets.Keys) == 0 {
@@ -865,7 +852,7 @@ func (s *Service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 }
 
 func (s *Service) userApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
-	if err := s.approvals.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
+	if err := s.approvals.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC approvals")
 	}
 	s.log.Info(ctx, "GC user approvals", nil)
@@ -873,7 +860,7 @@ func (s *Service) userApprovalGCHook(ctx context.Context, props sysevent.Timesta
 }
 
 func (s *Service) userResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
-	if err := s.resets.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
+	if err := s.resets.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC resets")
 	}
 	s.log.Info(ctx, "GC user resets", nil)
@@ -881,7 +868,7 @@ func (s *Service) userResetGCHook(ctx context.Context, props sysevent.TimestampP
 }
 
 func (s *Service) userInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
-	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
+	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC inviations")
 	}
 	s.log.Info(ctx, "GC user invitations", nil)

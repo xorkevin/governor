@@ -335,8 +335,8 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Invalid code challenge method")
 	}
 
-	now := time.Now().Round(0).Unix()
-	if now > m.CodeTime+s.codeTime {
+	now := time.Now().Round(0)
+	if now.After(time.Unix(m.CodeTime, 0).Add(s.codeDuration)) {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Code expired")
 	}
 
@@ -344,7 +344,7 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 
 	m.CodeHash = ""
 	m.CodeTime = 0
-	m.AccessTime = now
+	m.AccessTime = now.Unix()
 
 	var key string
 	if _, ok := scopes[oidScopeOffline]; ok {
@@ -357,13 +357,13 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 	}
 
 	sessionID := sessionPrefix + userid + keySeparator + clientid
-	accessToken, _, err := s.tokenizer.Generate(ctx, token.KindAccess, userid, s.accessTime, sessionID, m.AuthTime, m.Scope, "")
+	accessToken, _, err := s.tokenizer.Generate(ctx, token.KindAccess, userid, s.accessDuration, sessionID, m.AuthTime, m.Scope, "")
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
 	var refreshToken string
 	if key != "" {
-		refreshToken, _, err = s.tokenizer.Generate(ctx, token.KindOAuthRefresh, userid, s.refreshTime, sessionID, m.AuthTime, m.Scope, key)
+		refreshToken, _, err = s.tokenizer.Generate(ctx, token.KindOAuthRefresh, userid, s.refreshDuration, sessionID, m.AuthTime, m.Scope, key)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 		}
@@ -379,7 +379,7 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 		Azp:            clientid,
 		UserinfoClaims: *userClaims,
 	}
-	idToken, err := s.tokenizer.GenerateExt(ctx, token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessTime, sessionID, m.AuthTime, claims)
+	idToken, err := s.tokenizer.GenerateExt(ctx, token.KindOAuthID, s.issuer, userid, []string{clientid}, s.accessDuration, sessionID, m.AuthTime, claims)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate id token")
 	}
@@ -391,7 +391,7 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 	return &resAuthToken{
 		AccessToken:  accessToken,
 		TokenType:    oidTokenTypeBearer,
-		ExpiresIn:    s.accessTime,
+		ExpiresIn:    int64(s.accessDuration / time.Second),
 		RefreshToken: refreshToken,
 		Scope:        m.Scope,
 		IDToken:      idToken,

@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"xorkevin.dev/governor"
 )
@@ -14,18 +15,19 @@ func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 		Name:     "access_token",
 		Value:    accessToken,
 		Path:     s.s.baseURL,
-		MaxAge:   int(s.s.accessTime) - 5,
+		MaxAge:   int(s.s.accessDuration/time.Second) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
 func (s *router) setRefreshCookie(c governor.Context, refreshToken string, userid string) {
+	maxage := int(s.s.refreshDuration/time.Second) - 5
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     s.s.authURL,
-		MaxAge:   int(s.s.refreshTime) - 5,
+		MaxAge:   maxage,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -33,7 +35,7 @@ func (s *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Path:     s.s.authURL + "/id/" + userid,
-		MaxAge:   int(s.s.refreshTime) - 5,
+		MaxAge:   maxage,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -41,7 +43,7 @@ func (s *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Name:     "userid",
 		Value:    userid,
 		Path:     "/",
-		MaxAge:   int(s.s.refreshTime) - 5,
+		MaxAge:   maxage,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -49,7 +51,7 @@ func (s *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 		Name:     "userid_" + userid,
 		Value:    userid,
 		Path:     "/",
-		MaxAge:   int(s.s.refreshTime) - 5,
+		MaxAge:   maxage,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -60,7 +62,7 @@ func (s *router) setSessionCookie(c governor.Context, sessionID string, userid s
 		Name:     "session_token_" + userid,
 		Value:    sessionID,
 		Path:     s.s.authURL,
-		MaxAge:   int(s.s.refreshTime),
+		MaxAge:   int(s.s.refreshDuration/time.Second) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})

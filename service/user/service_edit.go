@@ -209,8 +209,7 @@ func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string)
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 
 	inv, err := s.invitations.GetByID(ctx, userid, role, after)
 	if err != nil {
@@ -248,8 +247,7 @@ type (
 )
 
 func (s *Service) getUserRoleInvitations(ctx context.Context, userid string, amount, offset int) (*resUserRoleInvitations, error) {
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 
 	m, err := s.invitations.GetByUser(ctx, userid, after, amount, offset)
 	if err != nil {
@@ -270,8 +268,7 @@ func (s *Service) getUserRoleInvitations(ctx context.Context, userid string, amo
 }
 
 func (s *Service) getRoleInvitations(ctx context.Context, role string, amount, offset int) (*resUserRoleInvitations, error) {
-	now := time.Now().Round(0).Unix()
-	after := now - s.invitationTime
+	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 
 	m, err := s.invitations.GetByRole(ctx, role, after, amount, offset)
 	if err != nil {

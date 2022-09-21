@@ -33,14 +33,14 @@ database:
   host: postgres.governor.svc.cluster.local
   port: 5432
   sslmode: disable
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 5
 kvstore:
   auth: kv/data/infra/governor/redis
   dbname: 0
   host: redis.governor.svc.cluster.local
   port: 6379
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 5
 objstore:
   auth: kv/data/infra/governor/minio
@@ -48,17 +48,17 @@ objstore:
   port: 9000
   sslmode: false
   location: us-east-1
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 5
 events:
   auth: kv/data/infra/governor/nats
   host: nats.governor.svc.cluster.local
   port: 4222
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 3
   minpullduration: 100ms
   apisecret: kv/data/infra/governor/eventsapi
-  apirefresh: 60
+  apirefresh: 1m
 template:
   dir: templates
 mail:
@@ -72,9 +72,9 @@ mail:
   streamsize: 200M
   eventsize: 2K
   mailkey: kv/data/app/governor/governor/mailkey
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 6
-  authrefresh: 60
+  authrefresh: 1m
 mailinglist:
   port: 2525
   authdomain: lists.governor.dev.localhost
@@ -96,7 +96,7 @@ ratelimit:
       period: 15
       limit: 120
 role:
-  rolecache: 24h
+  rolecacheduration: 24h
   streamsize: 200M
   eventsize: 2K
 apikey:
@@ -106,21 +106,24 @@ token:
   rsakey: kv/data/app/governor/governor/rsakey
   issuer: http://governor.dev.localhost:8080
   audience: governor
+  hbinterval: 5s
+  hbmaxfail: 6
+  keyrefresh: 1m
 gate:
   realm: governor
 user:
   streamsize: 200M
   eventsize: 2K
-  accesstime: 5m
-  refreshtime: 4380h
+  accessduration: 5m
+  refreshduration: 4380h
   refreshcache: 24h
   confirmduration: 24h
   emailconfirmduration: 24h
   passwordreset: true
   passwordresetduration: 24h
-  passresetdelay: 0
-  invitationtime: 24h
-  usercachetime: 24h
+  passresetdelay: 0s
+  invitationduration: 24h
+  usercacheduration: 24h
   newloginemail: true
   passwordminsize: 8
   userapproval: false
@@ -141,13 +144,14 @@ user:
       emailchange: /a/confirm/email?key={{.Userid}}.{{.Key}}
       forgotpass: /x/resetpass?key={{.Userid}}.{{.Key}}
       newuser: /x/confirm?userid={{.Userid}}&key={{.Key}}
-  hbinterval: 5
+  hbinterval: 5s
   hbmaxfail: 6
-  otprefresh: 60
+  otprefresh: 1m
+  gcduration: 72h
 oauth:
-  codetime: 1m
-  accesstime: 5m
-  refreshtime: 168h
+  codeduration: 1m
+  accessduration: 5m
+  refreshduration: 168h
   keycache: 24h
   realm: governor
   issuer: http://governor.dev.localhost:8080

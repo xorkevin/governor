@@ -28,10 +28,10 @@ type (
 	}
 
 	Service struct {
-		apikeys        model.Repo
-		kvkey          kvstore.KVStore
-		log            *klog.LevelLogger
-		scopeCacheTime int64
+		apikeys            model.Repo
+		kvkey              kvstore.KVStore
+		log                *klog.LevelLogger
+		scopeCacheDuration time.Duration
 	}
 
 	ctxKeyApikeys struct{}
@@ -61,9 +61,8 @@ func NewCtx(inj governor.Injector) *Service {
 // New returns a new Apikeys service
 func New(apikeys model.Repo, kv kvstore.KVStore) *Service {
 	return &Service{
-		apikeys:        apikeys,
-		kvkey:          kv.Subtree("key"),
-		scopeCacheTime: time24h,
+		apikeys: apikeys,
+		kvkey:   kv.Subtree("key"),
 	}
 }
 
@@ -76,14 +75,14 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
-	if t, err := time.ParseDuration(r.GetStr("scopecache")); err != nil {
+	var err error
+	s.scopeCacheDuration, err = r.GetDuration("scopecache")
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse scope cache time")
-	} else {
-		s.scopeCacheTime = int64(t / time.Second)
 	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"apikey.scopecache": s.scopeCacheTime,
+		"apikey.scopecache": s.scopeCacheDuration.String(),
 	})
 
 	return nil

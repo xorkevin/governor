@@ -65,7 +65,7 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
-			if err := s.kvkey.Set(ctx, keyid, cacheValTombstone, s.scopeCacheTime); err != nil {
+			if err := s.kvkey.Set(ctx, keyid, cacheValTombstone, s.scopeCacheDuration); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
 			}
 			return "", "", kerrors.WithKind(err, ErrorNotFound{}, "Apikey not found")
@@ -78,7 +78,7 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 		Scope: m.Scope,
 	}); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal json for apikey"), nil)
-	} else if err := s.kvkey.Set(ctx, keyid, string(kvVal), s.scopeCacheTime); err != nil {
+	} else if err := s.kvkey.Set(ctx, keyid, string(kvVal), s.scopeCacheDuration); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
 	}
 

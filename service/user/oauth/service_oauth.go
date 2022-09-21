@@ -109,7 +109,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
-			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCacheTime); err != nil {
+			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCache); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
 			}
 			return nil, kerrors.WithKind(err, ErrorNotFound{}, "OAuth app not found")
@@ -119,7 +119,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.
 
 	if clientbytes, err := kjson.Marshal(m); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal client to json"), nil)
-	} else if err := s.kvclient.Set(ctx, clientid, string(clientbytes), s.keyCacheTime); err != nil {
+	} else if err := s.kvclient.Set(ctx, clientid, string(clientbytes), s.keyCache); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
 	}
 

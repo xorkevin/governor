@@ -195,7 +195,7 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 					periods := make([]kvstore.IntResulter, 0, l)
 					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
 					periods = append(periods, multiget.Incr(c.Ctx(), k, 1))
-					multiget.Expire(c.Ctx(), k, i.Params.Period+1)
+					multiget.Expire(c.Ctx(), k, time.Duration(i.Params.Period+1)*time.Second)
 					for j := int64(1); j < l; j++ {
 						periods = append(periods, multiget.GetInt(c.Ctx(), multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
 					}

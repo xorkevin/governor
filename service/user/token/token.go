@@ -93,10 +93,10 @@ type (
 		ops        chan getOp
 		ready      *atomic.Bool
 		hbfailed   int
-		hbinterval int
+		hbinterval time.Duration
 		hbmaxfail  int
 		done       <-chan struct{}
-		keyrefresh int
+		keyrefresh time.Duration
 	}
 
 	ctxKeyTokenizer struct{}
@@ -135,9 +135,9 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")
-	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
-	r.SetDefault("signerrefresh", 60)
+	r.SetDefault("keyrefresh", "1m")
 }
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
@@ -146,26 +146,33 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	issuer := r.GetStr("issuer")
 	if issuer == "" {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token issuer is not set")
+		return kerrors.WithMsg(nil, "Token issuer is not set")
 	}
 	s.issuer = issuer
 
 	audience := r.GetStr("audience")
 	if audience == "" {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token audience is not set")
+		return kerrors.WithMsg(nil, "Token audience is not set")
 	}
 	s.audience = audience
 
-	s.hbinterval = r.GetInt("hbinterval")
+	var err error
+	s.hbinterval, err = r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
-	s.keyrefresh = r.GetInt("keyrefresh")
+	s.keyrefresh, err = r.GetDuration("keyrefresh")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse keyrefresh")
+	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"token.issuer":     issuer,
 		"token.audience":   audience,
-		"token.hbinterval": s.hbinterval,
+		"token.hbinterval": s.hbinterval.String(),
 		"token.hbmaxfail":  s.hbmaxfail,
-		"token.keyrefresh": s.keyrefresh,
+		"token.keyrefresh": s.keyrefresh.String(),
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -181,7 +188,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -243,7 +250,7 @@ type (
 
 func (s *Service) refreshSecrets(ctx context.Context) error {
 	var tokenSecrets secretToken
-	if err := s.config.GetSecret(ctx, "tokensecret", int64(s.keyrefresh), &tokenSecrets); err != nil {
+	if err := s.config.GetSecret(ctx, "tokensecret", s.keyrefresh, &tokenSecrets); err != nil {
 		return kerrors.WithMsg(err, "Invalid token secret")
 	}
 	keys := hunter2.NewSigningKeyring()
@@ -477,7 +484,7 @@ func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (
 	if claims.Kind != kind {
 		return false, nil
 	}
-	now := time.Now().Round(0)
+	now := time.Now().Round(0).UTC()
 	if err := claims.ValidateWithLeeway(jwt.Expected{
 		Issuer:   s.issuer,
 		Audience: []string{s.audience},

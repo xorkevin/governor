@@ -2,7 +2,6 @@ package role
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,10 +14,6 @@ import (
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
-)
-
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
 )
 
 type (
@@ -43,15 +38,15 @@ type (
 	}
 
 	Service struct {
-		roles         model.Repo
-		kvroleset     kvstore.KVStore
-		events        events.Events
-		log           *klog.LevelLogger
-		streamns      string
-		opts          svcOpts
-		streamsize    int64
-		eventsize     int32
-		roleCacheTime int64
+		roles             model.Repo
+		kvroleset         kvstore.KVStore
+		events            events.Events
+		log               *klog.LevelLogger
+		streamns          string
+		opts              svcOpts
+		streamsize        int64
+		eventsize         int32
+		roleCacheDuration time.Duration
 	}
 
 	ctxKeyRoles struct{}
@@ -88,10 +83,9 @@ func NewCtx(inj governor.Injector) *Service {
 // New returns a new Roles
 func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) *Service {
 	return &Service{
-		roles:         roles,
-		kvroleset:     kv.Subtree("roleset"),
-		events:        ev,
-		roleCacheTime: time24h,
+		roles:     roles,
+		kvroleset: kv.Subtree("roleset"),
+		events:    ev,
 	}
 }
 
@@ -107,7 +101,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
-	r.SetDefault("rolecache", "24h")
+	r.SetDefault("rolecacheduration", "24h")
 }
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
@@ -123,16 +117,15 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	if t, err := time.ParseDuration(r.GetStr("rolecache")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse role cache time")
-	} else {
-		s.roleCacheTime = int64(t / time.Second)
+	s.roleCacheDuration, err = r.GetDuration("rolecacheduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse role cache duration")
 	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"role.stream.size": r.GetStr("streamsize"),
-		"role.event.size":  r.GetStr("eventsize"),
-		"role.cache":       strconv.FormatInt(s.roleCacheTime, 10),
+		"role.stream.size":   r.GetStr("streamsize"),
+		"role.event.size":    r.GetStr("eventsize"),
+		"role.cacheduration": s.roleCacheDuration.String(),
 	})
 
 	return nil

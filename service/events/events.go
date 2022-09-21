@@ -99,11 +99,11 @@ type (
 		ready           *atomic.Bool
 		canary          <-chan struct{}
 		hbfailed        int
-		hbinterval      int
+		hbinterval      time.Duration
 		hbmaxfail       int
 		minpullduration time.Duration
 		done            <-chan struct{}
-		apirefresh      int
+		apirefresh      time.Duration
 		apisecret       secretAPI
 		aapisecret      *atomic.Pointer[secretAPI]
 		reqcount        *atomic.Uint32
@@ -209,10 +209,10 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")
-	r.SetDefault("hbinterval", 5)
+	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 3)
 	r.SetDefault("minpullduration", "100ms")
-	r.SetDefault("apirefresh", 60)
+	r.SetDefault("apirefresh", "1m")
 }
 
 type (
@@ -255,21 +255,27 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.instance = c.Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
-	s.hbinterval = r.GetInt("hbinterval")
-	s.hbmaxfail = r.GetInt("hbmaxfail")
 	var err error
-	s.minpullduration, err = time.ParseDuration(r.GetStr("minpullduration"))
+	s.hbinterval, err = r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
+	s.hbmaxfail = r.GetInt("hbmaxfail")
+	s.minpullduration, err = r.GetDuration("minpullduration")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse min pull duration")
 	}
-	s.apirefresh = r.GetInt("apirefresh")
+	s.apirefresh, err = r.GetDuration("apirefresh")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse apirefresh")
+	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"events.addr":            s.addr,
-		"events.hbinterval":      s.hbinterval,
+		"events.hbinterval":      s.hbinterval.String(),
 		"events.hbmaxfail":       s.hbmaxfail,
-		"events.minpullduration": r.GetStr("minpullduration"),
-		"events.apirefresh":      s.apirefresh,
+		"events.minpullduration": s.minpullduration.String(),
+		"events.apirefresh":      s.apirefresh.String(),
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -288,7 +294,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(time.Duration(s.hbinterval) * time.Second)
+	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -376,7 +382,7 @@ func (s *Service) handlePing(ctx context.Context) {
 
 func (s *Service) refreshApiSecret(ctx context.Context) error {
 	var apisecret secretAPI
-	if err := s.config.GetSecret(ctx, "apisecret", int64(s.apirefresh), &apisecret); err != nil {
+	if err := s.config.GetSecret(ctx, "apisecret", s.apirefresh, &apisecret); err != nil {
 		return kerrors.WithMsg(err, "Invalid api secret")
 	}
 	if apisecret.Secret == "" {
@@ -507,7 +513,7 @@ func (s *Service) handleGetClient(ctx context.Context) (*natsClient, error) {
 		nats.Name(s.clientname),
 		nats.Token(secret.Password),
 		nats.NoReconnect(),
-		nats.PingInterval(time.Duration(s.hbinterval)*time.Second),
+		nats.PingInterval(s.hbinterval),
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			close(canary)
