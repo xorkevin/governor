@@ -173,3 +173,4 @@ conduit:
   streamsize: 200M
   eventsize: 2K
   invitationduration: 72h
+  gcduration: 72h

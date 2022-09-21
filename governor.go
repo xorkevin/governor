@@ -21,9 +21,6 @@ import (
 
 const (
 	defaultMaxHeaderSize = 1 << 20 // 1MB
-
-	seconds5 = 5 * time.Second
-	seconds2 = 2 * time.Second
 )
 
 //go:embed banner.txt
@@ -216,7 +213,7 @@ func (s *Server) Start() error {
 	} else {
 		maxHeaderSize = int(limit)
 	}
-	maxConnRead := seconds5
+	maxConnRead := 5 * time.Second
 	if t, err := time.ParseDuration(s.config.maxConnRead); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnread time for http server", klog.Fields{
 			"http.server.maxconnread": s.config.maxConnRead,
@@ -224,7 +221,7 @@ func (s *Server) Start() error {
 	} else {
 		maxConnRead = t
 	}
-	maxConnHeader := seconds2
+	maxConnHeader := 2 * time.Second
 	if t, err := time.ParseDuration(s.config.maxConnHeader); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnheader time for http server", klog.Fields{
 			"http.server.maxconnheader": s.config.maxConnHeader,
@@ -232,7 +229,7 @@ func (s *Server) Start() error {
 	} else {
 		maxConnHeader = t
 	}
-	maxConnWrite := seconds5
+	maxConnWrite := 5 * time.Second
 	if t, err := time.ParseDuration(s.config.maxConnWrite); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.Fields{
 			"http.server.maxconnwrite": s.config.maxConnWrite,
@@ -240,7 +237,7 @@ func (s *Server) Start() error {
 	} else {
 		maxConnWrite = t
 	}
-	maxConnIdle := seconds5
+	maxConnIdle := 5 * time.Second
 	if t, err := time.ParseDuration(s.config.maxConnIdle); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnidle time for http server", klog.Fields{
 			"http.server.maxconnidle": s.config.maxConnIdle,

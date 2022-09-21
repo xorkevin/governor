@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ func NewClient(opts Opts) *Client {
 	return &Client{
 		config: v,
 		httpc: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 15 * time.Second,
 		},
 	}
 }
@@ -72,6 +73,8 @@ func (c *Client) Init() error {
 	c.addr = c.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.GetString("timeout")); err == nil {
 		c.httpc.Timeout = t
+	} else {
+		log.Println("Invalid http client timeout:", err)
 	}
 	return nil
 }

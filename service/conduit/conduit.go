@@ -24,11 +24,6 @@ import (
 	"xorkevin.dev/klog"
 )
 
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
-	time72h int64 = time24h * 3
-)
-
 type (
 	// Conduit is a service for messaging
 	Conduit interface {
@@ -55,6 +50,7 @@ type (
 		streamsize         int64
 		eventsize          int32
 		invitationDuration time.Duration
+		gcDuration         time.Duration
 		syschannels        governor.SysChannels
 	}
 
@@ -178,6 +174,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
 	r.SetDefault("invitationduration", "72h")
+	r.SetDefault("gcduration", "72h")
 }
 
 func (s *Service) router() *router {
@@ -193,7 +190,11 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	var err error
 	s.invitationDuration, err = r.GetDuration("invitationduration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse role invitation time")
+		return kerrors.WithMsg(err, "Failed to parse friend invitation duration")
+	}
+	s.gcDuration, err = r.GetDuration("gcduration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse gc duration")
 	}
 
 	s.syschannels = c.SysChannels
@@ -376,7 +377,7 @@ func (s *Service) userUpdateHook(ctx context.Context, pinger events.Pinger, prop
 }
 
 func (s *Service) friendInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
-	if err := s.invitations.DeleteBefore(ctx, props.Timestamp-time72h); err != nil {
+	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC friend invitations")
 	}
 	s.log.Info(ctx, "GC friend invitations", nil)

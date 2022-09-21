@@ -20,10 +20,6 @@ import (
 	"xorkevin.dev/klog"
 )
 
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
-)
-
 type (
 	// Courier is a service for sharing information
 	Courier interface {
