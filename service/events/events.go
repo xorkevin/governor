@@ -33,9 +33,9 @@ type (
 
 	// StreamConsumerOpts are opts for stream consumers
 	StreamConsumerOpts struct {
-		AckWait    time.Duration
-		MaxDeliver int
-		DLQHandler StreamWorkerFunc
+		AckWait           time.Duration
+		MaxDeliver        int
+		MaxDeliverHandler StreamWorkerFunc
 	}
 
 	// Events is a service wrapper around an event stream client
@@ -938,8 +938,8 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 				s.log.Info(msgctx, "Received msg", nil)
 			}
 			start := time.Now()
-			if overMaxDeliver && s.opts.DLQHandler != nil {
-				if err := s.opts.DLQHandler(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
+			if overMaxDeliver && s.opts.MaxDeliverHandler != nil {
+				if err := s.opts.MaxDeliverHandler(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
 					duration := time.Since(start)
 					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
 						"events.duration_ms": duration.Milliseconds(),
