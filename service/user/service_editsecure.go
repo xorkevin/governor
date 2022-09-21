@@ -138,7 +138,7 @@ func (s *Service) commitEmail(ctx context.Context, userid string, key string, pa
 		return kerrors.WithMsg(err, "Failed to get email reset request")
 	}
 
-	if time.Now().Round(0).Unix() > mr.CodeTime+s.passwordResetTime {
+	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.emailConfirmDuration)) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "New email verification expired")
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
@@ -304,7 +304,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetPass)
 	} else {
-		if time.Now().Round(0).Unix() < mr.CodeTime+s.passResetDelay {
+		if time.Now().Round(0).Before(time.Unix(mr.CodeTime, 0).Add(s.passResetDelay)) {
 			s.log.Warn(ctx, "Forgot password called prior to delay end", klog.Fields{
 				"userid": m.Userid,
 			})
@@ -350,7 +350,7 @@ func (s *Service) resetPassword(ctx context.Context, userid string, key string, 
 		return kerrors.WithMsg(err, "Failed to get password reset request")
 	}
 
-	if time.Now().Round(0).Unix() > mr.CodeTime+s.passwordResetTime {
+	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.passwordResetDuration)) {
 		return governor.ErrWithRes(nil, http.StatusNotFound, "", "Password reset expired")
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
@@ -482,10 +482,9 @@ func (s *Service) checkLoginRatelimit(ctx context.Context, m *model.Model) error
 	} else {
 		k = int64(m.FailedLoginCount) * int64(m.FailedLoginCount)
 	}
-	cliff := m.FailedLoginTime + k
-	now := time.Now().Round(0).Unix()
-	if now < cliff {
-		return governor.ErrWithTooManyRequests(nil, time.Unix(cliff, 0).UTC(), "", "Failed login too many times")
+	cliff := time.Unix(m.FailedLoginTime, 0).Add(time.Duration(k) * time.Second).UTC()
+	if time.Now().Round(0).Before(cliff) {
+		return governor.ErrWithTooManyRequests(nil, cliff, "", "Failed login too many times")
 	}
 	return nil
 }
@@ -516,7 +515,7 @@ func (s *Service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 			LastName:  m.LastName,
 			Username:  m.Username,
 			IP:        ipaddr,
-			Time:      time.Now().Round(0).UTC().Format(time.RFC3339),
+			Time:      time.Now().Round(0).UTC().Format(time.RFC1123Z),
 			UserAgent: useragent,
 		}
 		// must make best effort attempt to send the email
@@ -567,7 +566,7 @@ func (s *Service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr
 			LastName:  m.LastName,
 			Username:  m.Username,
 			IP:        ipaddr,
-			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC3339),
+			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC1123Z),
 			UserAgent: useragent,
 		}
 		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.loginratelimit), emdata, false); err != nil {

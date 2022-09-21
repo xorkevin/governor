@@ -11,8 +11,9 @@ type (
 	}
 
 	healthRes struct {
-		Time int64            `json:"time"`
-		Errs []healthErrorRes `json:"errs"`
+		Time     string           `json:"time"`
+		UnixTime int64            `json:"unixtime"`
+		Errs     []healthErrorRes `json:"errs"`
 	}
 )
 
@@ -23,7 +24,7 @@ func (s *Server) initHealth(r Router) {
 	})
 
 	m.GetCtx("/ready", func(c Context) {
-		t := time.Now().Round(0).Unix()
+		t := time.Now().Round(0)
 		errs := s.checkHealthServices(c.Ctx())
 		errReslist := make([]healthErrorRes, 0, len(errs))
 		for _, i := range errs {
@@ -36,8 +37,9 @@ func (s *Server) initHealth(r Router) {
 			status = http.StatusInternalServerError
 		}
 		c.WriteJSON(status, &healthRes{
-			Time: t,
-			Errs: errReslist,
+			Time:     t.Format(time.RFC3339),
+			UnixTime: t.Unix(),
+			Errs:     errReslist,
 		})
 	})
 

@@ -121,12 +121,12 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, m.Userid, s.accessTime, sm.SessionID, sm.AuthTime, token.ScopeAll, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, m.Userid, s.accessDuration, sm.SessionID, sm.AuthTime, token.ScopeAll, "")
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, m.Userid, s.refreshTime, sm.SessionID, sm.AuthTime, token.ScopeAll, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, m.Userid, s.refreshDuration, sm.SessionID, sm.AuthTime, token.ScopeAll, sessionKey)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 	}
@@ -138,7 +138,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 			Username:  m.Username,
 			SessionID: sm.SessionID,
 			IP:        sm.IPAddr,
-			Time:      time.Unix(sm.Time, 0).UTC().Format(time.RFC3339),
+			Time:      time.Unix(sm.Time, 0).UTC().Format(time.RFC1123Z),
 			UserAgent: sm.UserAgent,
 		}
 		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newLoginTemplate), emdata, false); err != nil {
@@ -156,7 +156,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheDuration); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 
@@ -201,7 +201,7 @@ func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessTime, claims.ID, claims.AuthTime, claims.Scope, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessDuration, claims.ID, claims.AuthTime, claims.Scope, "")
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
@@ -254,11 +254,11 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, kerrors.WithMsg(err, "Failed to generate session key")
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessTime, sm.SessionID, sm.AuthTime, claims.Scope, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessDuration, sm.SessionID, sm.AuthTime, claims.Scope, "")
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, claims.Subject, s.refreshTime, sm.SessionID, sm.AuthTime, claims.Scope, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, claims.Subject, s.refreshDuration, sm.SessionID, sm.AuthTime, claims.Scope, sessionKey)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 	}
@@ -269,7 +269,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, kerrors.WithMsg(err, "Failed to save user session")
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheTime); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCacheDuration); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 

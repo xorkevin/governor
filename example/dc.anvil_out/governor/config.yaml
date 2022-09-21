@@ -112,9 +112,10 @@ user:
   accesstime: 5m
   refreshtime: 4380h
   refreshcache: 24h
-  confirmtime: 24h
+  confirmduration: 24h
+  emailconfirmduration: 24h
   passwordreset: true
-  passwordresettime: 24h
+  passwordresetduration: 24h
   passresetdelay: 0
   invitationtime: 24h
   usercachetime: 24h

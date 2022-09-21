@@ -213,7 +213,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	if !am.Approved {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not approved")
 	}
-	if time.Now().Round(0).Unix() > am.CodeTime+s.confirmTime {
+	if time.Now().Round(0).After(time.Unix(am.CodeTime, 0).Add(s.confirmDuration)) {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Code expired")
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {

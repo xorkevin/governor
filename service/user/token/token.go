@@ -57,8 +57,8 @@ type (
 	// Tokenizer is a token generator
 	Tokenizer interface {
 		GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error)
-		Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error)
-		GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error)
+		Generate(ctx context.Context, kind Kind, userid string, duration time.Duration, id string, authTime int64, scope string, key string) (string, *Claims, error)
+		GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration time.Duration, id string, authTime int64, claims interface{}) (string, error)
 		Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
 		GetClaims(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
 		GetClaimsExt(ctx context.Context, kind Kind, tokenString string, audience []string, claims interface{}) (bool, *Claims)
@@ -381,12 +381,12 @@ func (s *Service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *Service) Generate(ctx context.Context, kind Kind, userid string, duration int64, id string, authTime int64, scope string, key string) (string, *Claims, error) {
+func (s *Service) Generate(ctx context.Context, kind Kind, userid string, duration time.Duration, id string, authTime int64, scope string, key string) (string, *Claims, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", nil, err
 	}
-	now := time.Now().Round(0)
+	now := time.Now().Round(0).UTC()
 	claims := Claims{
 		Claims: jwt.Claims{
 			Issuer:    s.issuer,
@@ -394,7 +394,7 @@ func (s *Service) Generate(ctx context.Context, kind Kind, userid string, durati
 			Audience:  []string{s.audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+			Expiry:    jwt.NewNumericDate(now.Add(duration)),
 			ID:        id,
 		},
 		Kind:     kind,
@@ -410,12 +410,12 @@ func (s *Service) Generate(ctx context.Context, kind Kind, userid string, durati
 }
 
 // GenerateExt creates a new id token
-func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration int64, id string, authTime int64, claims interface{}) (string, error) {
+func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, userid string, audience []string, duration time.Duration, id string, authTime int64, claims interface{}) (string, error) {
 	signer, err := s.getSigner(ctx)
 	if err != nil {
 		return "", err
 	}
-	now := time.Now().Round(0)
+	now := time.Now().Round(0).UTC()
 	baseClaims := Claims{
 		Claims: jwt.Claims{
 			Issuer:    issuer,
@@ -423,7 +423,7 @@ func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, use
 			Audience:  audience,
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Expiry:    jwt.NewNumericDate(time.Unix(now.Unix()+duration, 0)),
+			Expiry:    jwt.NewNumericDate(now.Add(duration)),
 			ID:        id,
 		},
 		Kind:     kind,

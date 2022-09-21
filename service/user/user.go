@@ -97,57 +97,58 @@ type (
 	}
 
 	Service struct {
-		users             model.Repo
-		sessions          sessionmodel.Repo
-		approvals         approvalmodel.Repo
-		invitations       invitationmodel.Repo
-		resets            resetmodel.Repo
-		roles             role.Roles
-		apikeys           apikey.Apikeys
-		kvusers           kvstore.KVStore
-		kvsessions        kvstore.KVStore
-		kvotpcodes        kvstore.KVStore
-		events            events.Events
-		mailer            mail.Mailer
-		ratelimiter       ratelimit.Ratelimiter
-		gate              gate.Gate
-		tokenizer         token.Tokenizer
-		otpCipher         *otpCipher
-		aotpCipher        *atomic.Pointer[otpCipher]
-		config            governor.SecretReader
-		log               *klog.LevelLogger
-		rolens            string
-		scopens           string
-		streamns          string
-		opts              svcOpts
-		streamsize        int64
-		eventsize         int32
-		baseURL           string
-		authURL           string
-		accessTime        int64
-		refreshTime       int64
-		refreshCacheTime  int64
-		confirmTime       int64
-		passwordReset     bool
-		passwordResetTime int64
-		passResetDelay    int64
-		invitationTime    int64
-		userCacheTime     int64
-		newLoginEmail     bool
-		passwordMinSize   int
-		userApproval      bool
-		otpIssuer         string
-		rolesummary       rank.Rank
-		tplname           tplName
-		emailurl          emailURLTpl
-		ops               chan getOp
-		ready             *atomic.Bool
-		hbfailed          int
-		hbinterval        int
-		hbmaxfail         int
-		done              <-chan struct{}
-		otprefresh        int
-		syschannels       governor.SysChannels
+		users                 model.Repo
+		sessions              sessionmodel.Repo
+		approvals             approvalmodel.Repo
+		invitations           invitationmodel.Repo
+		resets                resetmodel.Repo
+		roles                 role.Roles
+		apikeys               apikey.Apikeys
+		kvusers               kvstore.KVStore
+		kvsessions            kvstore.KVStore
+		kvotpcodes            kvstore.KVStore
+		events                events.Events
+		mailer                mail.Mailer
+		ratelimiter           ratelimit.Ratelimiter
+		gate                  gate.Gate
+		tokenizer             token.Tokenizer
+		otpCipher             *otpCipher
+		aotpCipher            *atomic.Pointer[otpCipher]
+		config                governor.SecretReader
+		log                   *klog.LevelLogger
+		rolens                string
+		scopens               string
+		streamns              string
+		opts                  svcOpts
+		streamsize            int64
+		eventsize             int32
+		baseURL               string
+		authURL               string
+		accessDuration        time.Duration
+		refreshDuration       time.Duration
+		refreshCacheDuration  time.Duration
+		confirmDuration       time.Duration
+		emailConfirmDuration  time.Duration
+		passwordReset         bool
+		passwordResetDuration time.Duration
+		passResetDelay        time.Duration
+		invitationTime        int64
+		userCacheTime         int64
+		newLoginEmail         bool
+		passwordMinSize       int
+		userApproval          bool
+		otpIssuer             string
+		rolesummary           rank.Rank
+		tplname               tplName
+		emailurl              emailURLTpl
+		ops                   chan getOp
+		ready                 *atomic.Bool
+		hbfailed              int
+		hbinterval            int
+		hbmaxfail             int
+		done                  <-chan struct{}
+		otprefresh            int
+		syschannels           governor.SysChannels
 	}
 
 	router struct {
@@ -250,34 +251,35 @@ func New(
 	g gate.Gate,
 ) *Service {
 	return &Service{
-		users:             users,
-		sessions:          sessions,
-		approvals:         approvals,
-		invitations:       invitations,
-		resets:            resets,
-		roles:             roles,
-		apikeys:           apikeys,
-		kvusers:           kv.Subtree("users"),
-		kvsessions:        kv.Subtree("sessions"),
-		kvotpcodes:        kv.Subtree("otpcodes"),
-		events:            ev,
-		mailer:            mailer,
-		ratelimiter:       ratelimiter,
-		gate:              g,
-		tokenizer:         tokenizer,
-		aotpCipher:        &atomic.Pointer[otpCipher]{},
-		accessTime:        time5m,
-		refreshTime:       time6month,
-		refreshCacheTime:  time24h,
-		confirmTime:       time24h,
-		passwordReset:     true,
-		passwordResetTime: time24h,
-		passResetDelay:    0,
-		invitationTime:    time24h,
-		userCacheTime:     time24h,
-		ops:               make(chan getOp),
-		ready:             &atomic.Bool{},
-		hbfailed:          0,
+		users:                 users,
+		sessions:              sessions,
+		approvals:             approvals,
+		invitations:           invitations,
+		resets:                resets,
+		roles:                 roles,
+		apikeys:               apikeys,
+		kvusers:               kv.Subtree("users"),
+		kvsessions:            kv.Subtree("sessions"),
+		kvotpcodes:            kv.Subtree("otpcodes"),
+		events:                ev,
+		mailer:                mailer,
+		ratelimiter:           ratelimiter,
+		gate:                  g,
+		tokenizer:             tokenizer,
+		aotpCipher:            &atomic.Pointer[otpCipher]{},
+		accessDuration:        5 * time.Minute,
+		refreshDuration:       24 * 365 / 2 * time.Hour,
+		refreshCacheDuration:  24 * time.Hour,
+		confirmDuration:       24 * time.Hour,
+		emailConfirmDuration:  24 * time.Hour,
+		passwordReset:         true,
+		passwordResetDuration: 24 * time.Hour,
+		passResetDelay:        1 * time.Hour,
+		invitationTime:        time24h,
+		userCacheTime:         time24h,
+		ops:                   make(chan getOp),
+		ready:                 &atomic.Bool{},
+		hbfailed:              0,
 	}
 }
 
@@ -296,13 +298,14 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
-	r.SetDefault("accesstime", "5m")
-	r.SetDefault("refreshtime", "4380h")
-	r.SetDefault("refreshcache", "24h")
-	r.SetDefault("confirmtime", "24h")
+	r.SetDefault("accessduration", "5m")
+	r.SetDefault("refreshduration", "4380h")
+	r.SetDefault("refreshcacheduration", "24h")
+	r.SetDefault("confirmduration", "24h")
+	r.SetDefault("emailconfirmduration", "24h")
 	r.SetDefault("passwordreset", true)
-	r.SetDefault("passwordresettime", "24h")
-	r.SetDefault("passresetdelay", 0)
+	r.SetDefault("passwordresetduration", "24h")
+	r.SetDefault("passresetdelay", "1h")
 	r.SetDefault("invitationtime", "24h")
 	r.SetDefault("usercachetime", "24h")
 	r.SetDefault("newloginemail", true)
@@ -356,36 +359,41 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.eventsize = int32(eventsize)
 	s.baseURL = c.BaseURL
 	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
-	if t, err := time.ParseDuration(r.GetStr("accesstime")); err != nil {
+	if t, err := time.ParseDuration(r.GetStr("accessduration")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse access time")
 	} else {
-		s.accessTime = int64(t / time.Second)
+		s.accessDuration = t
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshtime")); err != nil {
+	if t, err := time.ParseDuration(r.GetStr("refreshduration")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse refresh time")
 	} else {
-		s.refreshTime = int64(t / time.Second)
+		s.refreshDuration = t
 	}
-	if t, err := time.ParseDuration(r.GetStr("refreshcache")); err != nil {
+	if t, err := time.ParseDuration(r.GetStr("refreshcacheduration")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse refresh cache")
 	} else {
-		s.refreshCacheTime = int64(t / time.Second)
+		s.refreshCacheDuration = t
 	}
-	if t, err := time.ParseDuration(r.GetStr("confirmtime")); err != nil {
+	if t, err := time.ParseDuration(r.GetStr("confirmduration")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse confirm time")
 	} else {
-		s.confirmTime = int64(t / time.Second)
+		s.confirmDuration = t
+	}
+	if t, err := time.ParseDuration(r.GetStr("emailconfirmduration")); err != nil {
+		return kerrors.WithMsg(err, "Failed to parse confirm time")
+	} else {
+		s.emailConfirmDuration = t
 	}
 	s.passwordReset = r.GetBool("passwordreset")
-	if t, err := time.ParseDuration(r.GetStr("passwordresettime")); err != nil {
+	if t, err := time.ParseDuration(r.GetStr("passwordresetduration")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse password reset time")
 	} else {
-		s.passwordResetTime = int64(t / time.Second)
+		s.passwordResetDuration = t
 	}
 	if t, err := time.ParseDuration(r.GetStr("passresetdelay")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse password reset delay")
 	} else {
-		s.passResetDelay = int64(t / time.Second)
+		s.passResetDelay = t
 	}
 	if t, err := time.ParseDuration(r.GetStr("invitationtime")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse role invitation time")
@@ -443,13 +451,14 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"user.stream.size":               r.GetStr("streamsize"),
 		"user.event.size":                r.GetStr("eventsize"),
-		"user.auth.accesstime":           s.accessTime,
-		"user.auth.refreshtime":          s.refreshTime,
-		"user.auth.refreshcache":         s.refreshCacheTime,
-		"user.confirmtime":               s.confirmTime,
+		"user.auth.accessduration":       s.accessDuration.String(),
+		"user.auth.refreshduration":      s.refreshDuration,
+		"user.auth.refreshcacheduration": s.refreshCacheDuration,
+		"user.confirmduration":           s.confirmDuration.String(),
+		"user.emailconfirmduration":      s.emailConfirmDuration.String(),
 		"user.passwordresetallowed":      s.passwordReset,
-		"user.passwordresettime":         s.passwordResetTime,
-		"user.passresetdelay":            s.passResetDelay,
+		"user.passwordresetduration":     s.passwordResetDuration.String(),
+		"user.passresetdelay":            s.passResetDelay.String(),
 		"user.invitationtime":            s.invitationTime,
 		"user.cachetime":                 s.userCacheTime,
 		"user.newlogin.email":            s.newLoginEmail,

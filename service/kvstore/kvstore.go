@@ -44,10 +44,10 @@ type (
 	Multi interface {
 		Get(ctx context.Context, key string) Resulter
 		GetInt(ctx context.Context, key string) IntResulter
-		Set(ctx context.Context, key, val string, seconds int64) ErrResulter
+		Set(ctx context.Context, key, val string, duration time.Duration) ErrResulter
 		Del(ctx context.Context, key ...string) ErrResulter
 		Incr(ctx context.Context, key string, delta int64) IntResulter
-		Expire(ctx context.Context, key string, seconds int64) BoolResulter
+		Expire(ctx context.Context, key string, duration time.Duration) BoolResulter
 		Subkey(keypath ...string) string
 		Subtree(prefix string) Multi
 		Exec(ctx context.Context) error
@@ -58,10 +58,10 @@ type (
 		Ping(ctx context.Context) error
 		Get(ctx context.Context, key string) (string, error)
 		GetInt(ctx context.Context, key string) (int64, error)
-		Set(ctx context.Context, key, val string, seconds int64) error
+		Set(ctx context.Context, key, val string, duration time.Duration) error
 		Del(ctx context.Context, key ...string) error
 		Incr(ctx context.Context, key string, delta int64) (int64, error)
-		Expire(ctx context.Context, key string, seconds int64) error
+		Expire(ctx context.Context, key string, duration time.Duration) error
 		Subkey(keypath ...string) string
 		Multi(ctx context.Context) (Multi, error)
 		Tx(ctx context.Context) (Multi, error)
@@ -425,12 +425,12 @@ func (s *Service) GetInt(ctx context.Context, key string) (int64, error) {
 	return num, nil
 }
 
-func (s *Service) Set(ctx context.Context, key, val string, seconds int64) error {
+func (s *Service) Set(ctx context.Context, key, val string, duration time.Duration) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Set(ctx, key, val, time.Duration(seconds)*time.Second).Err(); err != nil {
+	if err := client.Set(ctx, key, val, duration).Err(); err != nil {
 		return kerrors.WithKind(err, ErrorClient{}, "Failed to set key")
 	}
 	return nil
@@ -464,12 +464,12 @@ func (s *Service) Incr(ctx context.Context, key string, delta int64) (int64, err
 	return val, nil
 }
 
-func (s *Service) Expire(ctx context.Context, key string, seconds int64) error {
+func (s *Service) Expire(ctx context.Context, key string, duration time.Duration) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Expire(ctx, key, time.Duration(seconds)*time.Second).Err(); err != nil {
+	if err := client.Expire(ctx, key, duration).Err(); err != nil {
 		return kerrors.WithKind(err, ErrorClient{}, "Failed to set expire key")
 	}
 	return nil
@@ -532,9 +532,9 @@ func (t *baseMulti) GetInt(ctx context.Context, key string) IntResulter {
 	}
 }
 
-func (t *baseMulti) Set(ctx context.Context, key, val string, seconds int64) ErrResulter {
+func (t *baseMulti) Set(ctx context.Context, key, val string, duration time.Duration) ErrResulter {
 	return &statusCmdErrResulter{
-		res: t.base.Set(ctx, key, val, time.Duration(seconds)*time.Second),
+		res: t.base.Set(ctx, key, val, duration),
 	}
 }
 
@@ -550,9 +550,9 @@ func (t *baseMulti) Incr(ctx context.Context, key string, delta int64) IntResult
 	}
 }
 
-func (t *baseMulti) Expire(ctx context.Context, key string, seconds int64) BoolResulter {
+func (t *baseMulti) Expire(ctx context.Context, key string, duration time.Duration) BoolResulter {
 	return &boolCmdResulter{
-		res: t.base.Expire(ctx, key, time.Duration(seconds)*time.Second),
+		res: t.base.Expire(ctx, key, duration),
 	}
 }
 
@@ -587,8 +587,8 @@ func (t *multi) GetInt(ctx context.Context, key string) IntResulter {
 	return t.base.GetInt(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *multi) Set(ctx context.Context, key, val string, seconds int64) ErrResulter {
-	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, seconds)
+func (t *multi) Set(ctx context.Context, key, val string, duration time.Duration) ErrResulter {
+	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, duration)
 }
 
 func (t *multi) Del(ctx context.Context, key ...string) ErrResulter {
@@ -603,8 +603,8 @@ func (t *multi) Incr(ctx context.Context, key string, delta int64) IntResulter {
 	return t.base.Incr(ctx, t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *multi) Expire(ctx context.Context, key string, seconds int64) BoolResulter {
-	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, seconds)
+func (t *multi) Expire(ctx context.Context, key string, duration time.Duration) BoolResulter {
+	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, duration)
 }
 
 func (t *multi) Exec(ctx context.Context) error {
@@ -644,8 +644,8 @@ func (t *tree) GetInt(ctx context.Context, key string) (int64, error) {
 	return t.base.GetInt(ctx, t.prefix+kvpathSeparator+key)
 }
 
-func (t *tree) Set(ctx context.Context, key, val string, seconds int64) error {
-	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, seconds)
+func (t *tree) Set(ctx context.Context, key, val string, duration time.Duration) error {
+	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, duration)
 }
 
 func (t *tree) Del(ctx context.Context, key ...string) error {
@@ -660,8 +660,8 @@ func (t *tree) Incr(ctx context.Context, key string, delta int64) (int64, error)
 	return t.base.Incr(ctx, t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *tree) Expire(ctx context.Context, key string, seconds int64) error {
-	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, seconds)
+func (t *tree) Expire(ctx context.Context, key string, duration time.Duration) error {
+	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, duration)
 }
 
 func (t *tree) Subkey(keypath ...string) string {
