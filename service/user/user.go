@@ -644,20 +644,16 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.userRoleDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.userApikeyDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}

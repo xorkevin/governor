@@ -157,20 +157,16 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}

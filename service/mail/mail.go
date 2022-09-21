@@ -474,20 +474,16 @@ func (s *Service) getCipher(ctx context.Context) (*maildataCipher, error) {
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
-		AckWait:     30 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    30 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
 	}
 	s.log.Info(ctx, "Subscribed to mail queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.GCChannel, s.streamns+"_WORKER_GC", s.gcSubscriber, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail gc queue")
 	}

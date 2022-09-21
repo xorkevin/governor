@@ -16,7 +16,6 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/minio/minio-go/v7 v7.0.36
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nats-io/jsm.go v0.0.33
 	github.com/nats-io/nats.go v1.16.0
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.5.0
@@ -79,6 +78,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/nats-io/nats-server/v2 v2.8.4 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/oklog/run v1.0.0 // indirect

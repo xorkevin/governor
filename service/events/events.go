@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	jsmapi "github.com/nats-io/jsm.go/api"
-	jsadvisory "github.com/nats-io/jsm.go/api/jetstream/advisory"
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/uid"
@@ -35,10 +33,9 @@ type (
 
 	// StreamConsumerOpts are opts for stream consumers
 	StreamConsumerOpts struct {
-		AckWait     time.Duration
-		MaxDeliver  int
-		MaxPending  int
-		MaxRequests int
+		AckWait    time.Duration
+		MaxDeliver int
+		DLQHandler StreamWorkerFunc
 	}
 
 	// Events is a service wrapper around an event stream client
@@ -51,7 +48,6 @@ type (
 		InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error
 		DeleteStream(ctx context.Context, name string) error
 		DeleteConsumer(ctx context.Context, stream, consumer string) error
-		DLQSubscribe(targetStream, targetConsumer string, stream, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
 	}
 
 	natsClient struct {
@@ -854,12 +850,6 @@ func (s *streamSubscription) init(client nats.JetStream) error {
 	if s.opts.MaxDeliver > 0 {
 		args = append(args, nats.MaxDeliver(s.opts.MaxDeliver))
 	}
-	if s.opts.MaxPending > 0 {
-		args = append(args, nats.MaxAckPending(s.opts.MaxPending))
-	}
-	if s.opts.MaxRequests > 0 {
-		args = append(args, nats.PullMaxWaiting(s.opts.MaxRequests))
-	}
 	sub, err := client.PullSubscribe(
 		s.channel,
 		s.group,
@@ -929,28 +919,51 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 			if err != nil {
 				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed getting message metadata"), nil)
 			}
+			overMaxDeliver := meta.NumDelivered > uint64(s.opts.MaxDeliver)
 			msgctx = klog.WithFields(msgctx, klog.Fields{
 				"events.msg.stream":    meta.Stream,
 				"events.msg.consumer":  meta.Consumer,
 				"events.msg.seqnum":    meta.Sequence.Stream,
 				"events.msg.delivered": meta.NumDelivered,
 			})
-			s.log.Info(msgctx, "Received msg", nil)
-			start := time.Now()
-			if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
-				duration := time.Since(start)
-				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
-					"events.duration_ms": duration.Milliseconds(),
-				})
+			if overMaxDeliver {
+				s.log.Warn(msgctx, "Received msg over max deliver", nil)
 			} else {
-				duration := time.Since(start)
-				s.log.Info(msgctx, "Handled msg", klog.Fields{
-					"events.duration_ms": duration.Milliseconds(),
-				})
-				if err := msg.Ack(); err != nil {
-					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
+				s.log.Info(msgctx, "Received msg", nil)
+			}
+			start := time.Now()
+			if overMaxDeliver && s.opts.DLQHandler != nil {
+				if err := s.opts.DLQHandler(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
+					duration := time.Since(start)
+					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+				} else {
+					duration := time.Since(start)
+					s.log.Info(msgctx, "DLQ handled msg", klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+					if err := msg.Ack(); err != nil {
+						s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
+					}
+					s.log.Info(msgctx, "Acked msg", nil)
 				}
-				s.log.Info(msgctx, "Acked msg", nil)
+			} else {
+				if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
+					duration := time.Since(start)
+					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+				} else {
+					duration := time.Since(start)
+					s.log.Info(msgctx, "Handled msg", klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+					if err := msg.Ack(); err != nil {
+						s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
+					}
+					s.log.Info(msgctx, "Acked msg", nil)
+				}
 			}
 		}
 		now := time.Now()
@@ -1046,35 +1059,4 @@ func (s *Service) DeleteConsumer(ctx context.Context, stream, consumer string) e
 		}
 	}
 	return nil
-}
-
-// channelMaxDelivery returns the max delivery error channel
-func channelMaxDelivery(stream, consumer string) string {
-	return fmt.Sprintf("%s.%s.%s", jsmapi.JSAdvisoryConsumerMaxDeliveryExceedPre, stream, consumer)
-}
-
-// DLQSubscribe subscribes to the deadletter queue of another stream consumer
-func (s *Service) DLQSubscribe(targetStream, targetConsumer string, stream, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
-	return s.StreamSubscribe(stream, channelMaxDelivery(targetStream, targetConsumer), group, func(ctx context.Context, pinger Pinger, topic string, msgdata []byte) error {
-		schemaType, advmsg, err := jsmapi.ParseMessage(msgdata)
-		if err != nil {
-			return kerrors.WithKind(err, ErrorInvalidStreamMsg{}, "Failed to parse dead letter queue message with unknown type")
-		}
-		jse, ok := advmsg.(*jsadvisory.ConsumerDeliveryExceededAdvisoryV1)
-		if !ok {
-			return kerrors.WithKind(nil, ErrorInvalidStreamMsg{}, fmt.Sprintf("Failed to parse dead letter queue message with type: %s", schemaType))
-		}
-		if jse.Stream != targetStream || jse.Consumer != targetConsumer {
-			return kerrors.WithKind(nil, ErrorInvalidStreamMsg{}, fmt.Sprintf("Invalid target stream and consumer: %s, %s", jse.Stream, jse.Consumer))
-		}
-		client, err := s.getClient(ctx)
-		if err != nil {
-			return err
-		}
-		msg, err := client.stream.GetMsg(targetStream, jse.StreamSeq, nats.Context(ctx))
-		if err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, fmt.Sprintf("Failed to get msg from stream: %d", jse.StreamSeq))
-		}
-		return worker(ctx, pinger, msg.Subject, msg.Data)
-	}, opts)
 }

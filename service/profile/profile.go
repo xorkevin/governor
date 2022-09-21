@@ -101,20 +101,16 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
 	s.log.Info(ctx, "Subscribed to user create queue", nil)
 
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}

@@ -213,50 +213,40 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.FriendChannel, s.streamns+"_FRIEND_WORKER", s.friendSubscriber, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to friend queue")
 	}
 	s.log.Info(ctx, "Subscribed to friend queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UnfriendChannel, s.streamns+"_UNFRIEND_WORKER", s.unfriendSubscriber, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to unfriend queue")
 	}
 	s.log.Info(ctx, "Subscribed to unfriend queue", nil)
 
 	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
 	}
 	s.log.Info(ctx, "Subscribed to user create queue", nil)
 
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_UPDATE", s.userUpdateHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}

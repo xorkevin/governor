@@ -150,40 +150,32 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.orgRoleDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to org delete queue", nil)
 
 	if _, err := s.roles.StreamSubscribeCreate(s.streamns+"_WORKER_USER_ROLE_CREATE", s.userRoleCreate, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user role create queue")
 	}
 	s.log.Info(ctx, "Subscribed to user role create queue", nil)
 
 	if _, err := s.roles.StreamSubscribeDelete(s.streamns+"_WORKER_USER_ROLE_DELETE", s.userRoleDelete, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user role delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to user role delete queue", nil)
 
 	if _, err := s.users.StreamSubscribeUpdate(s.streamns+"_WORKER_USER_UPDATE", s.userUpdateHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user update queue")
 	}

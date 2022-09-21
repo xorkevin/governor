@@ -239,50 +239,40 @@ func (s *Service) createSMTPServer() *smtp.Server {
 
 func (s *Service) Start(ctx context.Context) error {
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
-		AckWait:     30 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    30 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
 	}
 	s.log.Info(ctx, "Subscribed to mail queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.SendChannel, s.streamns+"SEND_WORKER", s.sendSubscriber, events.StreamConsumerOpts{
-		AckWait:     30 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    30 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to mail send queue")
 	}
 	s.log.Info(ctx, "Subscribed to send queue", nil)
 
 	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DelChannel, s.streamns+"_DEL_WORKER", s.deleteSubscriber, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  8192,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to list delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to list delete queue", nil)
 
 	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
 	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
-		AckWait:     15 * time.Second,
-		MaxDeliver:  30,
-		MaxPending:  1024,
-		MaxRequests: 32,
+		AckWait:    15 * time.Second,
+		MaxDeliver: 30,
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
 	}
