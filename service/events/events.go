@@ -665,6 +665,7 @@ func (s *Service) Subscribe(channel, group string, worker WorkerFunc) (Subscript
 		cancel: cancel,
 	}
 	s.addSub(sub, nil)
+	sub.log.Info(context.Background(), "Added subscription", nil)
 	return sub, nil
 }
 
@@ -844,6 +845,7 @@ func (s *Service) StreamSubscribe(stream, channel, group string, worker StreamWo
 		done: done,
 	}
 	s.addSub(nil, sub)
+	sub.log.Info(context.Background(), "Added subscription", nil)
 	return sub, nil
 }
 
