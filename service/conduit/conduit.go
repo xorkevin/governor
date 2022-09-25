@@ -15,11 +15,13 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/kvstore"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/ws"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -38,10 +40,12 @@ type (
 		msgs               msgmodel.Repo
 		kvpresence         kvstore.KVStore
 		users              user.Users
+		pubsub             pubsub.Pubsub
 		events             events.Events
 		ws                 ws.WS
 		ratelimiter        ratelimit.Ratelimiter
 		gate               gate.Gate
+		instance           string
 		log                *klog.LevelLogger
 		scopens            string
 		channelns          string
@@ -52,6 +56,7 @@ type (
 		invitationDuration time.Duration
 		gcDuration         time.Duration
 		syschannels        governor.SysChannels
+		wg                 *ksync.WaitGroup
 	}
 
 	router struct {
@@ -99,29 +104,19 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 
 // NewCtx creates a new Conduit service from a context
 func NewCtx(inj governor.Injector) *Service {
-	friends := friendmodel.GetCtxRepo(inj)
-	invitations := invitationmodel.GetCtxRepo(inj)
-	dms := dmmodel.GetCtxRepo(inj)
-	gdms := gdmmodel.GetCtxRepo(inj)
-	msgs := msgmodel.GetCtxRepo(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	users := user.GetCtxUsers(inj)
-	ev := events.GetCtxEvents(inj)
-	wss := ws.GetCtxWS(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
 	return New(
-		friends,
-		invitations,
-		dms,
-		gdms,
-		msgs,
-		kv,
-		users,
-		ev,
-		wss,
-		ratelimiter,
-		g,
+		friendmodel.GetCtxRepo(inj),
+		invitationmodel.GetCtxRepo(inj),
+		dmmodel.GetCtxRepo(inj),
+		gdmmodel.GetCtxRepo(inj),
+		msgmodel.GetCtxRepo(inj),
+		kvstore.GetCtxKVStore(inj),
+		user.GetCtxUsers(inj),
+		pubsub.GetCtxPubsub(inj),
+		events.GetCtxEvents(inj),
+		ws.GetCtxWS(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
 	)
 }
 
@@ -134,6 +129,7 @@ func New(
 	msgs msgmodel.Repo,
 	kv kvstore.KVStore,
 	users user.Users,
+	ps pubsub.Pubsub,
 	ev events.Events,
 	wss ws.WS,
 	ratelimiter ratelimit.Ratelimiter,
@@ -147,10 +143,12 @@ func New(
 		msgs:        msgs,
 		kvpresence:  kv.Subtree("presence"),
 		users:       users,
+		pubsub:      ps,
 		events:      ev,
 		ws:          wss,
 		ratelimiter: ratelimiter,
 		gate:        g,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
@@ -186,6 +184,7 @@ func (s *Service) router() *router {
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
+	s.instance = c.Instance
 
 	var err error
 	s.invitationDuration, err = r.GetDuration("invitationduration")
@@ -252,26 +251,26 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Subscribed to user update queue", nil)
 
-	sysEvents := sysevent.New(s.syschannels, s.events)
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
-	}
+	sysEvents := sysevent.New(s.syschannels, s.pubsub, s.log.Logger)
+	s.wg.Add(1)
+	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := s.ws.SubscribePresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.presenceHandler); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to ws presence channel")
-	}
+	s.wg.Add(1)
+	go s.ws.WatchPresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.presenceHandler).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to ws presence channel", nil)
 
-	if _, err := s.ws.Subscribe(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.presenceQueryHandler); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to ws presence query channel")
-	}
+	s.wg.Add(1)
+	go s.ws.Watch(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.presenceQueryHandler).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to ws presence query channel", nil)
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
