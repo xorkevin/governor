@@ -220,8 +220,6 @@ type (
 	ErrorConn struct{}
 	// ErrorClient is returned for unknown client errors
 	ErrorClient struct{}
-	// ErrorInvalidStreamMsg is returned for invalid stream messages
-	ErrorInvalidStreamMsg struct{}
 )
 
 func (e ErrorConn) Error() string {
@@ -230,10 +228,6 @@ func (e ErrorConn) Error() string {
 
 func (e ErrorClient) Error() string {
 	return "Events client error"
-}
-
-func (e ErrorInvalidStreamMsg) Error() string {
-	return "Events invalid stream message"
 }
 
 func (s *Service) router() *router {
