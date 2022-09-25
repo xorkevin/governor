@@ -50,6 +50,12 @@ objstore:
   location: us-east-1
   hbinterval: 5s
   hbmaxfail: 5
+pubsub:
+  auth: kv/data/infra/governor/nats
+  host: nats.governor.svc.cluster.local
+  port: 4222
+  hbinterval: 5s
+  hbmaxfail: 3
 events:
   auth: kv/data/infra/governor/nats
   host: nats.governor.svc.cluster.local

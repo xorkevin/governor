@@ -19,6 +19,7 @@ import (
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
 	profilemodel "xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
@@ -61,6 +62,7 @@ func main() {
 	gov.Register("database", "/null/db", db.New())
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
+	gov.Register("pubsub", "/null/pubsub", pubsub.New())
 	gov.Register("events", "/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	{

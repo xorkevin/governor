@@ -53,6 +53,12 @@ objstore:
   location: us-east-1
   hbinterval: 5s
   hbmaxfail: 5
+pubsub:
+  auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/nats
+  host: nats.{{ $ns }}.svc.cluster.local
+  port: 4222
+  hbinterval: 5s
+  hbmaxfail: 3
 events:
   auth: {{ .Vars.vault.kvmount }}/data/{{ with .Vars.vault.kvprefix }}{{ . }}/{{ end }}{{ $ns }}/nats
   host: nats.{{ $ns }}.svc.cluster.local

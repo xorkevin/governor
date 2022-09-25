@@ -23,7 +23,7 @@ type (
 	// Subscription manages an active subscription
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
-		Close() error
+		Close(ctx context.Context) error
 		IsPermanentlyClosed() bool
 	}
 
@@ -364,22 +364,6 @@ func (s *Service) Subscribe(ctx context.Context, channel, group string) (Subscri
 	return sub, nil
 }
 
-// Close closes the subscription
-func (s *subscription) Close() error {
-	if !s.sub.IsValid() {
-		return nil
-	}
-	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
-	}
-	return nil
-}
-
-// IsPermanentlyClosed returns if the client is closed
-func (s *subscription) IsPermanentlyClosed() bool {
-	return s.client.IsClosed()
-}
-
 // ReadMsg reads a message
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	m, err := s.sub.NextMsgWithContext(ctx)
@@ -390,4 +374,21 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 		Subject: m.Subject,
 		Data:    m.Data,
 	}, nil
+}
+
+// Close closes the subscription
+func (s *subscription) Close(ctx context.Context) error {
+	if !s.sub.IsValid() {
+		return nil
+	}
+	if err := s.sub.Unsubscribe(); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
+	}
+	s.log.Info(ctx, "Closed subscription", nil)
+	return nil
+}
+
+// IsPermanentlyClosed returns if the client is closed
+func (s *subscription) IsPermanentlyClosed() bool {
+	return s.client.IsClosed()
 }

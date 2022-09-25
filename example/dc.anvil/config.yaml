@@ -47,6 +47,12 @@ objstore:
   location: us-east-1
   hbinterval: 5s
   hbmaxfail: 5
+pubsub:
+  auth: pubsubauth
+  host: localhost
+  port: 4222
+  hbinterval: 5s
+  hbmaxfail: 3
 events:
   auth: eventsauth
   host: localhost
