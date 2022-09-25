@@ -23,20 +23,22 @@ type (
 	SystemEvents struct {
 		SysChannels governor.SysChannels
 		Pubsub      pubsub.Pubsub
+		Log         klog.Logger
 	}
 )
 
 // New creates a new [*SystemEvents]
-func New(c governor.SysChannels, ps pubsub.Pubsub) *SystemEvents {
+func New(c governor.SysChannels, ps pubsub.Pubsub, log klog.Logger) *SystemEvents {
 	return &SystemEvents{
 		SysChannels: c,
 		Pubsub:      ps,
+		Log:         log,
 	}
 }
 
 // WatchGC subscribes to system gc events
-func (s *SystemEvents) WatchGC(ctx context.Context, log klog.Logger, group string, handler HandlerFuncGC, reqidprefix string) *pubsub.Watcher {
-	return pubsub.NewWatcher(s.Pubsub, log, s.SysChannels.GC, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
+func (s *SystemEvents) WatchGC(group string, handler HandlerFuncGC, reqidprefix string) *pubsub.Watcher {
+	return pubsub.NewWatcher(s.Pubsub, s.Log, s.SysChannels.GC, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
 		props, err := decodeTimestampProps(m.Data)
 		if err != nil {
 			return err

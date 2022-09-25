@@ -8,6 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -444,8 +445,8 @@ const (
 )
 
 // Watch watches over a subscription
-func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}, maxRetry time.Duration) {
-	defer close(done)
+func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration) {
+	defer wg.Done()
 	delay := watchStartDelay
 	for {
 		select {
@@ -460,7 +461,7 @@ func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}, maxRetry time
 				select {
 				case <-ctx.Done():
 				case <-time.After(delay):
-					delay *= min(delay*2, maxRetry)
+					delay = min(delay*2, maxRetry)
 				}
 				return
 			}

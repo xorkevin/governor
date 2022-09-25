@@ -8,10 +8,10 @@ import (
 
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 func presenceChannelName(prefix, location string) string {
@@ -65,7 +65,7 @@ func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 	if err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
 	}
-	if err := s.s.events.Publish(ctx, presenceChannelName(s.s.opts.PresenceChannel, loc), msg); err != nil {
+	if err := s.s.pubsub.Publish(ctx, presenceChannelName(s.s.opts.PresenceChannel, loc), msg); err != nil {
 		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
 	}
 	return nil
@@ -96,63 +96,65 @@ func (s *router) ws(c governor.Context) {
 
 	subSuccess := make(chan struct{})
 
+	log := klog.NewLevelLogger(c.Log())
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		userChannel := userChannelName(s.s.opts.UserSendChannelPrefix, userid)
-		var sub events.SyncSubscription
-		defer func() {
-			if sub != nil {
-				if err := sub.Close(); err != nil {
-					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
-				}
-			}
-		}()
 		first := true
 		delay := 250 * time.Millisecond
 		for {
-			k, err := s.s.events.SubscribeSync(ctx, userChannel, "", func(ctx context.Context, topic string, msgdata []byte) error {
-				channel, _, err := decodeResMsg(msgdata)
-				if err != nil {
-					conn.CloseError(err)
-					return nil
-				}
-				if channel == "" {
-					conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Malformed sent message"))
-					return nil
-				}
-				if err := conn.Write(ctx, true, msgdata); err != nil {
-					conn.CloseError(err)
-					return nil
-				}
-				return nil
-			})
-			if err != nil {
-				s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-					delay *= min(delay*2, 15*time.Second)
-				}
-				continue
-			}
-			sub, k = k, sub
-			delay = 250 * time.Millisecond
-			if first {
-				first = false
-				close(subSuccess)
-			}
-			if k != nil {
-				if err := k.Close(); err != nil {
-					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
-				}
-			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-sub.Done():
+			default:
 			}
+			func() {
+				sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
+				if err != nil {
+					log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
+					select {
+					case <-ctx.Done():
+					case <-time.After(delay):
+						delay = min(delay*2, 15*time.Second)
+					}
+					return
+				}
+				defer func() {
+					if err := sub.Close(ctx); err != nil {
+						log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
+					}
+				}()
+				delay = 250 * time.Millisecond
+				if first {
+					first = false
+					close(subSuccess)
+				}
+				for {
+					m, err := sub.ReadMsg(ctx)
+					if err != nil {
+						if sub.IsPermanentlyClosed() {
+							return
+						}
+						log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+					}
+					channel, _, err := decodeResMsg(m.Data)
+					if err != nil {
+						conn.CloseError(err)
+						return
+					}
+					if channel == "" {
+						conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Malformed sent message"))
+						return
+					}
+					if err := conn.Write(ctx, true, m.Data); err != nil {
+						conn.CloseError(err)
+						return
+					}
+					return
+				}
+			}()
 		}
 	}()
 
@@ -235,7 +237,7 @@ func (s *router) ws(c governor.Context) {
 				conn.CloseError(err)
 				return
 			}
-			if err := s.s.events.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
+			if err := s.s.pubsub.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
 				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish request msg"))
 				return
 			}

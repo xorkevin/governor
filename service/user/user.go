@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/apikey"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
@@ -24,6 +25,7 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
@@ -100,6 +102,7 @@ type (
 		kvusers               kvstore.KVStore
 		kvsessions            kvstore.KVStore
 		kvotpcodes            kvstore.KVStore
+		pubsub                pubsub.Pubsub
 		events                events.Events
 		mailer                mail.Mailer
 		ratelimiter           ratelimit.Ratelimiter
@@ -107,6 +110,7 @@ type (
 		tokenizer             token.Tokenizer
 		otpCipher             *otpCipher
 		aotpCipher            *atomic.Pointer[otpCipher]
+		instance              string
 		config                governor.SecretReader
 		log                   *klog.LevelLogger
 		rolens                string
@@ -141,7 +145,7 @@ type (
 		hbmaxfail             int
 		otprefresh            time.Duration
 		gcDuration            time.Duration
-		done                  <-chan struct{}
+		wg                    *ksync.WaitGroup
 		syschannels           governor.SysChannels
 	}
 
@@ -197,34 +201,21 @@ func setCtxUser(inj governor.Injector, u Users) {
 
 // NewCtx creates a new Users service from a context
 func NewCtx(inj governor.Injector) *Service {
-	users := model.GetCtxRepo(inj)
-	sessions := sessionmodel.GetCtxRepo(inj)
-	approvals := approvalmodel.GetCtxRepo(inj)
-	invitations := invitationmodel.GetCtxRepo(inj)
-	resets := resetmodel.GetCtxRepo(inj)
-	roles := role.GetCtxRoles(inj)
-	apikeys := apikey.GetCtxApikeys(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	ev := events.GetCtxEvents(inj)
-	mailer := mail.GetCtxMailer(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	tokenizer := token.GetCtxTokenizer(inj)
-	g := gate.GetCtxGate(inj)
-
 	return New(
-		users,
-		sessions,
-		approvals,
-		invitations,
-		resets,
-		roles,
-		apikeys,
-		kv,
-		ev,
-		mailer,
-		ratelimiter,
-		tokenizer,
-		g,
+		model.GetCtxRepo(inj),
+		sessionmodel.GetCtxRepo(inj),
+		approvalmodel.GetCtxRepo(inj),
+		invitationmodel.GetCtxRepo(inj),
+		resetmodel.GetCtxRepo(inj),
+		role.GetCtxRoles(inj),
+		apikey.GetCtxApikeys(inj),
+		kvstore.GetCtxKVStore(inj),
+		pubsub.GetCtxPubsub(inj),
+		events.GetCtxEvents(inj),
+		mail.GetCtxMailer(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		token.GetCtxTokenizer(inj),
+		gate.GetCtxGate(inj),
 	)
 }
 
@@ -238,6 +229,7 @@ func New(
 	roles role.Roles,
 	apikeys apikey.Apikeys,
 	kv kvstore.KVStore,
+	ps pubsub.Pubsub,
 	ev events.Events,
 	mailer mail.Mailer,
 	ratelimiter ratelimit.Ratelimiter,
@@ -255,6 +247,7 @@ func New(
 		kvusers:     kv.Subtree("users"),
 		kvsessions:  kv.Subtree("sessions"),
 		kvotpcodes:  kv.Subtree("otpcodes"),
+		pubsub:      ps,
 		events:      ev,
 		mailer:      mailer,
 		ratelimiter: ratelimiter,
@@ -264,6 +257,7 @@ func New(
 		ops:         make(chan getOp),
 		ready:       &atomic.Bool{},
 		hbfailed:    0,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
@@ -331,6 +325,7 @@ type (
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
+	s.instance = c.Instance
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -473,9 +468,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	go s.execute(ctx, s.wg)
 
 	sr := s.router()
 	sr.mountRoute(m.GroupCtx("/user"))
@@ -485,8 +478,8 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
+func (s *Service) execute(ctx context.Context, wg ksync.Waiter) {
+	defer wg.Done()
 	ticker := time.NewTicker(s.hbinterval)
 	defer ticker.Stop()
 	for {
@@ -583,7 +576,7 @@ func (s *Service) getCipher(ctx context.Context) (*otpCipher, error) {
 		res: res,
 	}
 	select {
-	case <-s.done:
+	case <-s.wg.C():
 		return nil, kerrors.WithMsg(nil, "User service shutdown")
 	case <-ctx.Done():
 		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
@@ -655,31 +648,25 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Subscribed to user delete queue", nil)
 
-	sysEvents := sysevent.New(s.syschannels, s.events)
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_APPROVAL_GC", s.userApprovalGCHook); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
-	}
+	sysEvents := sysevent.New(s.syschannels, s.pubsub, s.log.Logger)
+	s.wg.Add(1)
+	go sysEvents.WatchGC(s.streamns+"_WORKER_APPROVAL_GC", s.userApprovalGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_RESET_GC", s.userResetGCHook); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
-	}
+	s.wg.Add(1)
+	go sysEvents.WatchGC(s.streamns+"_WORKER_RESET_GC", s.userResetGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
-	if _, err := sysEvents.SubscribeGC(s.streamns+"_WORKER_INVITATION_GC", s.userInvitationGCHook); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to gov sys gc channel")
-	}
+	s.wg.Add(1)
+	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.userInvitationGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
 }
 

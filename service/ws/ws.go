@@ -6,7 +6,7 @@ import (
 
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
@@ -15,19 +15,19 @@ import (
 )
 
 type (
-	// PresenceWorkerFunc is a type alias for a presence worker func
-	PresenceWorkerFunc = func(ctx context.Context, props PresenceEventProps) error
-	// WorkerFunc is a type alias for a worker func
-	WorkerFunc = func(ctx context.Context, topic string, userid string, msgdata []byte) error
+	// PresenceHandlerFunc is a type alias for a presence handler func
+	PresenceHandlerFunc = func(ctx context.Context, props PresenceEventProps) error
+	// HandlerFunc is a type alias for a handler func
+	HandlerFunc = func(ctx context.Context, subject string, userid string, msgdata []byte) error
 	// WS is a service for managing websocket connections
 	WS interface {
-		SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error)
-		Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error)
+		WatchPresence(location, group string, handler PresenceHandlerFunc) *pubsub.Watcher
+		Watch(subject, group string, handler HandlerFunc) *pubsub.Watcher
 		Publish(ctx context.Context, userid string, channel string, v interface{}) error
 	}
 
 	Service struct {
-		events      events.Events
+		pubsub      pubsub.Pubsub
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
 		log         *klog.LevelLogger
@@ -35,6 +35,7 @@ type (
 		scopens     string
 		channelns   string
 		opts        svcOpts
+		instance    string
 	}
 
 	router struct {
@@ -98,16 +99,17 @@ func setCtxWS(inj governor.Injector, w WS) {
 
 // NewCtx creates a new WS service from a context
 func NewCtx(inj governor.Injector) *Service {
-	ev := events.GetCtxEvents(inj)
-	g := gate.GetCtxGate(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	return New(ev, ratelimiter, g)
+	return New(
+		pubsub.GetCtxPubsub(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
+	)
 }
 
 // New creates a new WS service
-func New(ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+func New(ps pubsub.Pubsub, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
 	return &Service{
-		events:      ev,
+		pubsub:      ps,
 		ratelimiter: ratelimiter,
 		gate:        g,
 	}
@@ -134,6 +136,7 @@ func (s *Service) router() *router {
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
+	s.instance = c.Instance
 
 	sr := s.router()
 	sr.mountRoutes(m)
@@ -203,48 +206,34 @@ func decodeReqMsg(b []byte) (string, string, []byte, error) {
 	return m.Channel, m.Userid, m.Value, nil
 }
 
-func (s *Service) SubscribePresence(location, group string, worker PresenceWorkerFunc) (events.Subscription, error) {
+func (s *Service) WatchPresence(location, group string, handler PresenceHandlerFunc) *pubsub.Watcher {
 	presenceChannel := presenceChannelName(s.opts.PresenceChannel, location)
-	sub, err := s.events.Subscribe(presenceChannel, group, func(ctx context.Context, topic string, msgdata []byte) error {
+	return pubsub.NewWatcher(s.pubsub, s.log.Logger, presenceChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
 		var props PresenceEventProps
-		if err := kjson.Unmarshal(msgdata, &props); err != nil {
+		if err := kjson.Unmarshal(m.Data, &props); err != nil {
 			return kerrors.WithMsg(err, "Invalid presence message")
 		}
-		return worker(ctx, props)
-	})
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
-	}
-	return sub, nil
+		return handler(ctx, props)
+	}), s.instance)
 }
 
-func (s *Service) Subscribe(channel, group string, worker WorkerFunc) (events.Subscription, error) {
-	if channel == "" {
-		return nil, kerrors.WithMsg(nil, "Channel pattern may not be empty")
-	}
-	svcChannel := serviceChannelName(s.opts.UserRcvChannelPrefix, channel)
-	sub, err := s.events.Subscribe(svcChannel, group, func(ctx context.Context, topic string, msgdata []byte) error {
-		channel, userid, v, err := decodeReqMsg(msgdata)
+func (s *Service) Watch(subject, group string, handler HandlerFunc) *pubsub.Watcher {
+	svcChannel := serviceChannelName(s.opts.UserRcvChannelPrefix, subject)
+	return pubsub.NewWatcher(s.pubsub, s.log.Logger, svcChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
+		channel, userid, v, err := decodeReqMsg(m.Data)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed decoding request message")
 		}
-		return worker(ctx, channel, userid, v)
-	})
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to presence channel")
-	}
-	return sub, nil
+		return handler(ctx, channel, userid, v)
+	}), s.instance)
 }
 
 func (s *Service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {
-	if userid == "" {
-		return kerrors.WithMsg(nil, "Userid may not be empty")
-	}
 	b, err := encodeResMsg(channel, v)
 	if err != nil {
 		return err
 	}
-	if err := s.events.Publish(ctx, userChannelName(s.opts.UserSendChannelPrefix, userid), b); err != nil {
+	if err := s.pubsub.Publish(ctx, userChannelName(s.opts.UserSendChannelPrefix, userid), b); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish to user channel")
 	}
 	return nil
