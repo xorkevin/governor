@@ -16,9 +16,6 @@ import (
 )
 
 type (
-	// WorkerFunc is a type alias for a subscriber handler
-	WorkerFunc = func(ctx context.Context, topic string, msgdata []byte) error
-
 	// StreamWorkerFunc is a type alias for a stream subscriber handler
 	StreamWorkerFunc = func(ctx context.Context, pinger Pinger, topic string, msgdata []byte) error
 
@@ -40,9 +37,6 @@ type (
 
 	// Events is a service wrapper around an event stream client
 	Events interface {
-		Publish(ctx context.Context, channel string, msgdata []byte) error
-		Subscribe(channel, group string, worker WorkerFunc) (Subscription, error)
-		SubscribeSync(ctx context.Context, channel, group string, worker WorkerFunc) (SyncSubscription, error)
 		StreamPublish(ctx context.Context, channel string, msgdata []byte) error
 		StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
 		InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error
@@ -68,7 +62,6 @@ type (
 
 	subOp struct {
 		rm     bool
-		sub    *subscription
 		stream *streamSubscription
 	}
 
@@ -94,7 +87,6 @@ type (
 		ops             chan getOp
 		subops          chan subOp
 		secretops       chan getSecretOp
-		subs            map[*subscription]struct{}
 		streamSubs      map[*streamSubscription]struct{}
 		ready           *atomic.Bool
 		canary          <-chan struct{}
@@ -109,42 +101,9 @@ type (
 		reqcount        *atomic.Uint32
 	}
 
-	router struct {
-		s *Service
-	}
-
 	// Subscription manages an active subscription
 	Subscription interface {
 		Close() error
-	}
-
-	// SyncSubscription manages an active synchronous subscription
-	SyncSubscription interface {
-		Done() <-chan struct{}
-		Close() error
-	}
-
-	subscription struct {
-		s       *Service
-		channel string
-		group   string
-		worker  WorkerFunc
-		log     *klog.LevelLogger
-		sub     *nats.Subscription
-		ctx     context.Context
-		cancel  context.CancelFunc
-	}
-
-	syncSubscription struct {
-		s       *Service
-		channel string
-		group   string
-		worker  WorkerFunc
-		log     *klog.LevelLogger
-		sub     *nats.Subscription
-		canary  <-chan struct{}
-		ctx     context.Context
-		cancel  context.CancelFunc
 	}
 
 	streamSubscription struct {
@@ -193,7 +152,6 @@ func New() *Service {
 		aclient:    &atomic.Pointer[natsClient]{},
 		ops:        make(chan getOp),
 		subops:     make(chan subOp),
-		subs:       map[*subscription]struct{}{},
 		streamSubs: map[*streamSubscription]struct{}{},
 		ready:      &atomic.Bool{},
 		canary:     canary,
@@ -228,12 +186,6 @@ func (e ErrorConn) Error() string {
 
 func (e ErrorClient) Error() string {
 	return "Events client error"
-}
-
-func (s *Service) router() *router {
-	return &router{
-		s: s,
-	}
 }
 
 type (
@@ -280,9 +232,6 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	go s.execute(ctx, done)
 	s.done = done
 
-	sr := s.router()
-	sr.mountRoutes(governor.NewMethodRouter(m))
-	s.log.Info(ctx, "Mounted http routes", nil)
 	return nil
 }
 
@@ -309,16 +258,10 @@ func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 			}
 		case op := <-s.subops:
 			if op.rm {
-				if op.sub != nil {
-					delete(s.subs, op.sub)
-				}
 				if op.stream != nil {
 					delete(s.streamSubs, op.stream)
 				}
 			} else {
-				if op.sub != nil {
-					s.subs[op.sub] = struct{}{}
-				}
 				if op.stream != nil {
 					s.streamSubs[op.stream] = struct{}{}
 				}
@@ -425,22 +368,6 @@ func (s *Service) getApiSecret(ctx context.Context) (string, error) {
 }
 
 func (s *Service) updateSubs(ctx context.Context, client *natsClient) {
-	for k := range s.subs {
-		if k.ok() {
-			continue
-		}
-		if err := k.init(client.client); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to channel"), klog.Fields{
-				"events.channel": k.channel,
-				"events.group":   k.group,
-			})
-		} else {
-			s.log.Info(ctx, "Subscribed to channel", klog.Fields{
-				"events.channel": k.channel,
-				"events.group":   k.group,
-			})
-		}
-	}
 	for k := range s.streamSubs {
 		if k.ok() {
 			continue
@@ -460,16 +387,6 @@ func (s *Service) updateSubs(ctx context.Context, client *natsClient) {
 }
 
 func (s *Service) deinitSubs(ctx context.Context) {
-	for k := range s.subs {
-		if !k.ok() {
-			continue
-		}
-		k.deinit()
-		s.log.Info(ctx, "Closed subscription", klog.Fields{
-			"events.channel": k.channel,
-			"events.group":   k.group,
-		})
-	}
 	for k := range s.streamSubs {
 		if !k.ok() {
 			continue
@@ -599,10 +516,9 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) addSub(sub *subscription, stream *streamSubscription) {
+func (s *Service) addSub(stream *streamSubscription) {
 	op := subOp{
 		rm:     false,
-		sub:    sub,
 		stream: stream,
 	}
 	select {
@@ -611,10 +527,9 @@ func (s *Service) addSub(sub *subscription, stream *streamSubscription) {
 	}
 }
 
-func (s *Service) rmSub(sub *subscription, stream *streamSubscription) {
+func (s *Service) rmSub(stream *streamSubscription) {
 	op := subOp{
 		rm:     true,
-		sub:    sub,
 		stream: stream,
 	}
 	select {
@@ -625,187 +540,6 @@ func (s *Service) rmSub(sub *subscription, stream *streamSubscription) {
 
 func (s *Service) lreqID() string {
 	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
-}
-
-// Publish publishes to a channel
-func (s *Service) Publish(ctx context.Context, channel string, msgdata []byte) error {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return err
-	}
-	if err := client.client.Publish(channel, msgdata); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to channel")
-	}
-	return nil
-}
-
-// Subscribe subscribes to a channel
-func (s *Service) Subscribe(channel, group string, worker WorkerFunc) (Subscription, error) {
-	subctx, cancel := context.WithCancel(context.Background())
-	subctx = klog.WithFields(subctx, klog.Fields{
-		"events.channel": channel,
-		"events.group":   group,
-	})
-	sub := &subscription{
-		s:       s,
-		channel: channel,
-		group:   group,
-		worker:  worker,
-		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
-			"events.channel": channel,
-			"events.group":   group,
-		})),
-		ctx:    subctx,
-		cancel: cancel,
-	}
-	s.addSub(sub, nil)
-	sub.log.Info(context.Background(), "Added subscription", nil)
-	return sub, nil
-}
-
-func (s *subscription) init(client *nats.Conn) error {
-	if s.group == "" {
-		sub, err := client.Subscribe(s.channel, s.subscriber)
-		if err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel")
-		}
-		s.sub = sub
-	} else {
-		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
-		if err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel as queue group")
-		}
-		s.sub = sub
-	}
-	return nil
-}
-
-func (s *subscription) deinit() {
-	s.sub = nil
-}
-
-func (s *subscription) ok() bool {
-	return s.sub != nil
-}
-
-func (s *subscription) subscriber(msg *nats.Msg) {
-	ctx := klog.WithFields(s.ctx, klog.Fields{
-		"events.subject": msg.Subject,
-		"events.lreqid":  s.s.lreqID(),
-	})
-	s.log.Info(ctx, "Received msg", nil)
-	start := time.Now()
-	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
-		duration := time.Since(start)
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
-			"events.duration_ms": duration.Milliseconds(),
-		})
-	} else {
-		duration := time.Since(start)
-		s.log.Info(ctx, "Handled msg", klog.Fields{
-			"events.duration_ms": duration.Milliseconds(),
-		})
-	}
-}
-
-// Close closes the subscription
-func (s *subscription) Close() error {
-	s.s.rmSub(s, nil)
-	s.cancel()
-	if s.sub == nil {
-		return nil
-	}
-	if !s.sub.IsValid() {
-		return nil
-	}
-	if err := s.sub.Drain(); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
-	}
-	return nil
-}
-
-// SubscribeSync subscribes to a channel synchronously
-func (s *Service) SubscribeSync(ctx context.Context, channel, group string, worker WorkerFunc) (SyncSubscription, error) {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	subctx, cancel := context.WithCancel(context.Background())
-	subctx = klog.WithFields(subctx, klog.Fields{
-		"events.channel": channel,
-		"events.group":   group,
-	})
-	sub := &syncSubscription{
-		s:       s,
-		channel: channel,
-		group:   group,
-		worker:  worker,
-		log: klog.NewLevelLogger(s.log.Logger.Sublogger("syncsubscriber", klog.Fields{
-			"events.channel": channel,
-			"events.group":   group,
-		})),
-		ctx:    subctx,
-		cancel: cancel,
-	}
-	if err := sub.init(client.client, client.canary); err != nil {
-		return nil, err
-	}
-	return sub, nil
-}
-
-func (s *syncSubscription) init(client *nats.Conn, canary <-chan struct{}) error {
-	if s.group == "" {
-		sub, err := client.Subscribe(s.channel, s.subscriber)
-		if err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel")
-		}
-		s.sub = sub
-	} else {
-		sub, err := client.QueueSubscribe(s.channel, s.group, s.subscriber)
-		if err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel as queue group")
-		}
-		s.sub = sub
-	}
-	s.canary = canary
-	return nil
-}
-
-func (s *syncSubscription) subscriber(msg *nats.Msg) {
-	ctx := klog.WithFields(s.ctx, klog.Fields{
-		"events.subject": msg.Subject,
-		"events.lreqid":  s.s.lreqID(),
-	})
-	s.log.Info(ctx, "Received msg", nil)
-	start := time.Now()
-	if err := s.worker(ctx, msg.Subject, msg.Data); err != nil {
-		duration := time.Since(start)
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
-			"events.duration_ms": duration.Milliseconds(),
-		})
-	} else {
-		duration := time.Since(start)
-		s.log.Info(ctx, "Handled msg", klog.Fields{
-			"events.duration_ms": duration.Milliseconds(),
-		})
-	}
-}
-
-// Done closes the subscription
-func (s *syncSubscription) Done() <-chan struct{} {
-	return s.canary
-}
-
-// Close closes the subscription
-func (s *syncSubscription) Close() error {
-	s.cancel()
-	if !s.sub.IsValid() {
-		return nil
-	}
-	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
-	}
-	return nil
 }
 
 // StreamPublish publishes to a stream
@@ -838,7 +572,7 @@ func (s *Service) StreamSubscribe(stream, channel, group string, worker StreamWo
 		})),
 		done: done,
 	}
-	s.addSub(nil, sub)
+	s.addSub(sub)
 	sub.log.Info(context.Background(), "Added subscription", nil)
 	return sub, nil
 }
@@ -979,7 +713,7 @@ func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscript
 
 // Close closes the subscription
 func (s *streamSubscription) Close() error {
-	s.s.rmSub(nil, s)
+	s.s.rmSub(s)
 	if s.cancel != nil {
 		s.cancel()
 	}

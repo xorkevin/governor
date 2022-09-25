@@ -1,4 +1,4 @@
-package events
+package eventsapi
 
 import (
 	"crypto/subtle"
@@ -7,7 +7,7 @@ import (
 	"xorkevin.dev/governor"
 )
 
-//go:generate forge validation -o validation_events_gen.go reqPublishEvent
+//go:generate forge validation -o validation_gen.go reqPublishEvent
 
 type (
 	reqPublishEvent struct {
@@ -44,7 +44,7 @@ func (m *router) publishEvent(c governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := m.s.Publish(c.Ctx(), req.Subject, data); err != nil {
+	if err := m.s.pubsub.Publish(c.Ctx(), req.Subject, data); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -52,5 +52,5 @@ func (m *router) publishEvent(c governor.Context) {
 }
 
 func (m *router) mountRoutes(r *governor.MethodRouter) {
-	r.PostCtx("/publish", m.publishEvent)
+	r.PostCtx("/pubsub/publish", m.publishEvent)
 }

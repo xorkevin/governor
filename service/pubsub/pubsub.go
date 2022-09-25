@@ -404,14 +404,13 @@ type (
 
 	// Watcher watches over a subscription
 	Watcher struct {
-		ps       Pubsub
-		log      *klog.LevelLogger
-		subject  string
-		group    string
-		handler  Handler
-		instance string
-		maxRetry time.Duration
-		reqcount *atomic.Uint32
+		ps          Pubsub
+		log         *klog.LevelLogger
+		subject     string
+		group       string
+		handler     Handler
+		reqidprefix string
+		reqcount    *atomic.Uint32
 	}
 )
 
@@ -421,24 +420,23 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 }
 
 // NewWatcher creates a new watcher
-func NewWatcher(ps Pubsub, log klog.Logger, subject, group string, handler Handler, instance string, maxRetry time.Duration) *Watcher {
+func NewWatcher(ps Pubsub, log klog.Logger, subject, group string, handler Handler, reqidprefix string) *Watcher {
 	return &Watcher{
 		ps: ps,
 		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
 			"pubsub.subject": subject,
 			"pubsub.group":   group,
 		})),
-		subject:  subject,
-		group:    group,
-		handler:  handler,
-		instance: instance,
-		maxRetry: maxRetry,
-		reqcount: &atomic.Uint32{},
+		subject:     subject,
+		group:       group,
+		handler:     handler,
+		reqidprefix: reqidprefix,
+		reqcount:    &atomic.Uint32{},
 	}
 }
 
 func (w *Watcher) lreqID() string {
-	return w.instance + "-" + uid.ReqID(w.reqcount.Add(1))
+	return w.reqidprefix + "-" + uid.ReqID(w.reqcount.Add(1))
 }
 
 const (
@@ -446,7 +444,7 @@ const (
 )
 
 // Watch watches over a subscription
-func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}) {
+func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}, maxRetry time.Duration) {
 	defer close(done)
 	delay := watchStartDelay
 	for {
@@ -462,7 +460,7 @@ func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}) {
 				select {
 				case <-ctx.Done():
 				case <-time.After(delay):
-					delay *= min(delay*2, w.maxRetry)
+					delay *= min(delay*2, maxRetry)
 				}
 				return
 			}

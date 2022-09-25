@@ -12,6 +12,7 @@ import (
 	couriermodel "xorkevin.dev/governor/service/courier/model"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/eventsapi"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist"
@@ -63,6 +64,7 @@ func main() {
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
 	gov.Register("pubsub", "/null/pubsub", pubsub.New())
+	gov.Register("eventsapi", "/eventsapi", eventsapi.NewCtx(gov.Injector()))
 	gov.Register("events", "/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	{

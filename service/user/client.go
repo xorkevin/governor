@@ -17,8 +17,8 @@ type (
 		Username  string `json:"username" valid:"username"`
 		Password  string `json:"password" valid:"password"`
 		Email     string `json:"email" valid:"email"`
-		Firstname string `json:"first_name" valid:"first_name"`
-		Lastname  string `json:"last_name" valid:"last_name"`
+		Firstname string `json:"first_name" valid:"firstName"`
+		Lastname  string `json:"last_name" valid:"lastName"`
 	}
 )
 

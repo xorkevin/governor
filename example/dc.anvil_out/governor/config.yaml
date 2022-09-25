@@ -53,6 +53,11 @@ pubsub:
   port: 4222
   hbinterval: 5s
   hbmaxfail: 3
+eventsapi:
+  hbinterval: 5s
+  hbmaxfail: 3
+  apisecret: eventsapisecret
+  apirefresh: 1m
 events:
   auth: eventsauth
   host: localhost

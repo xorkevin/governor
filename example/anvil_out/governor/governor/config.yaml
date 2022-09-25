@@ -56,6 +56,11 @@ pubsub:
   port: 4222
   hbinterval: 5s
   hbmaxfail: 3
+eventsapi:
+  hbinterval: 5s
+  hbmaxfail: 3
+  apisecret: kv/data/infra/governor/eventsapi
+  apirefresh: 1m
 events:
   auth: kv/data/infra/governor/nats
   host: nats.governor.svc.cluster.local
