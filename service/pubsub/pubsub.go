@@ -28,6 +28,8 @@ type (
 	}
 
 	Pubsub interface {
+		Subscribe(ctx context.Context, subject, group string) (Subscription, error)
+		Publish(ctx context.Context, subject string, data []byte) error
 	}
 
 	getClientRes struct {
@@ -44,7 +46,6 @@ type (
 		client     *nats.Conn
 		aclient    *atomic.Pointer[nats.Conn]
 		clientname string
-		instance   string
 		auth       natsauth
 		addr       string
 		config     governor.SecretReader
@@ -55,13 +56,12 @@ type (
 		hbinterval time.Duration
 		hbmaxfail  int
 		done       <-chan struct{}
-		reqcount   *atomic.Uint32
 	}
 
 	ctxKeyPubsub struct{}
 
 	subscription struct {
-		channel string
+		subject string
 		group   string
 		log     *klog.LevelLogger
 		client  *nats.Conn
@@ -90,7 +90,6 @@ func New() *Service {
 		ops:      make(chan getOp),
 		ready:    &atomic.Bool{},
 		hbfailed: 0,
-		reqcount: &atomic.Uint32{},
 	}
 }
 
@@ -108,7 +107,6 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 	s.clientname = c.Hostname + "-" + c.Instance
-	s.instance = c.Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	var err error
@@ -314,24 +312,20 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) lreqID() string {
-	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
-}
-
-// Publish publishes to a channel
-func (s *Service) Publish(ctx context.Context, channel string, msgdata []byte) error {
+// Publish publishes to a subject
+func (s *Service) Publish(ctx context.Context, subject string, msgdata []byte) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.Publish(channel, msgdata); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to channel")
+	if err := client.Publish(subject, msgdata); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to subject")
 	}
 	return nil
 }
 
-// Subscribe subscribes to a channel
-func (s *Service) Subscribe(ctx context.Context, channel, group string) (Subscription, error) {
+// Subscribe subscribes to a subject
+func (s *Service) Subscribe(ctx context.Context, subject, group string) (Subscription, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
@@ -339,22 +333,22 @@ func (s *Service) Subscribe(ctx context.Context, channel, group string) (Subscri
 	var nsub *nats.Subscription
 	if group == "" {
 		var err error
-		nsub, err = client.SubscribeSync(channel)
+		nsub, err = client.SubscribeSync(subject)
 		if err != nil {
-			return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel")
+			return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to subject")
 		}
 	} else {
 		var err error
-		nsub, err = client.QueueSubscribeSync(channel, group)
+		nsub, err = client.QueueSubscribeSync(subject, group)
 		if err != nil {
-			return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to channel as queue group")
+			return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to subject as queue group")
 		}
 	}
 	sub := &subscription{
-		channel: channel,
+		subject: subject,
 		group:   group,
 		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
-			"pubsub.channel": channel,
+			"pubsub.subject": subject,
 			"pubsub.group":   group,
 		})),
 		client: client,
@@ -382,7 +376,7 @@ func (s *subscription) Close(ctx context.Context) error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to channel")
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to close subscription to subject")
 	}
 	s.log.Info(ctx, "Closed subscription", nil)
 	return nil
@@ -391,4 +385,118 @@ func (s *subscription) Close(ctx context.Context) error {
 // IsPermanentlyClosed returns if the client is closed
 func (s *subscription) IsPermanentlyClosed() bool {
 	return s.client.IsClosed()
+}
+
+func min(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+type (
+	// Handler handles a subscription message
+	Handler interface {
+		Handle(ctx context.Context, m Msg) error
+	}
+
+	HandlerFunc func(ctx context.Context, m Msg) error
+
+	// Watcher watches over a subscription
+	Watcher struct {
+		ps       Pubsub
+		log      *klog.LevelLogger
+		subject  string
+		group    string
+		handler  Handler
+		instance string
+		maxRetry time.Duration
+		reqcount *atomic.Uint32
+	}
+)
+
+// Handle implements [Handler]
+func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
+	return f(ctx, m)
+}
+
+// NewWatcher creates a new watcher
+func NewWatcher(ps Pubsub, log klog.Logger, subject, group string, handler Handler, instance string, maxRetry time.Duration) *Watcher {
+	return &Watcher{
+		ps: ps,
+		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
+			"pubsub.subject": subject,
+			"pubsub.group":   group,
+		})),
+		subject:  subject,
+		group:    group,
+		handler:  handler,
+		instance: instance,
+		maxRetry: maxRetry,
+		reqcount: &atomic.Uint32{},
+	}
+}
+
+func (w *Watcher) lreqID() string {
+	return w.instance + "-" + uid.ReqID(w.reqcount.Add(1))
+}
+
+const (
+	watchStartDelay = 250 * time.Millisecond
+)
+
+// Watch watches over a subscription
+func (w *Watcher) Watch(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	delay := watchStartDelay
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		func() {
+			sub, err := w.ps.Subscribe(ctx, w.subject, w.group)
+			if err != nil {
+				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
+				select {
+				case <-ctx.Done():
+				case <-time.After(delay):
+					delay *= min(delay*2, w.maxRetry)
+				}
+				return
+			}
+			defer func() {
+				if err := sub.Close(ctx); err != nil {
+					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"), nil)
+				}
+			}()
+			delay = watchStartDelay
+			for {
+				m, err := sub.ReadMsg(ctx)
+				if err != nil {
+					if sub.IsPermanentlyClosed() {
+						return
+					}
+					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+				}
+				msgctx := klog.WithFields(ctx, klog.Fields{
+					"pubsub.subject": m.Subject,
+					"pubsub.lreqid":  w.lreqID(),
+				})
+				start := time.Now()
+				if err := w.handler.Handle(msgctx, *m); err != nil {
+					duration := time.Since(start)
+					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+						"pubsub.duration_ms": duration.Milliseconds(),
+					})
+				} else {
+					duration := time.Since(start)
+					w.log.Info(msgctx, "Handled subscription message", klog.Fields{
+						"pubsub.duration_ms": duration.Milliseconds(),
+					})
+				}
+			}
+		}()
+	}
 }
