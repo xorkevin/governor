@@ -2,23 +2,21 @@ package events
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/scram"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
 
 type (
-	// StreamWorkerFunc is a type alias for a stream subscriber handler
-	StreamWorkerFunc = func(ctx context.Context, pinger Pinger, topic string, msgdata []byte) error
-
 	// StreamOpts are opts for streams
 	StreamOpts struct {
 		Replicas   int
@@ -28,30 +26,41 @@ type (
 		MaxMsgs    int64
 	}
 
-	// StreamConsumerOpts are opts for stream consumers
-	StreamConsumerOpts struct {
-		AckWait           time.Duration
-		MaxDeliver        int
-		MaxDeliverHandler StreamWorkerFunc
+	// ConsumerOpts are opts for event stream consumers
+	ConsumerOpts struct {
+	}
+
+	// Msg is a subscription message
+	Msg struct {
+		Topic     string
+		Key       string
+		Data      []byte
+		Partition int
+		Offset    int64
+		Time      time.Time
+		msg       kafka.Message
+	}
+
+	// Subscription manages an active subscription
+	Subscription interface {
+		Close() error
 	}
 
 	// Events is a service wrapper around an event stream client
 	Events interface {
-		StreamPublish(ctx context.Context, channel string, msgdata []byte) error
-		StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error)
-		InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error
-		DeleteStream(ctx context.Context, name string) error
-		DeleteConsumer(ctx context.Context, stream, consumer string) error
+		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
+		Publish(ctx context.Context, topic string, key string, data []byte) error
+		InitStream(ctx context.Context, topic string, opts StreamOpts) error
+		DeleteStream(ctx context.Context, topic string) error
 	}
 
-	natsClient struct {
+	kafkaClient struct {
 		client *nats.Conn
 		stream nats.JetStreamContext
-		canary <-chan struct{}
 	}
 
 	getClientRes struct {
-		client *natsClient
+		client *kafkaClient
 		err    error
 	}
 
@@ -60,71 +69,29 @@ type (
 		res chan<- getClientRes
 	}
 
-	subOp struct {
-		rm     bool
-		stream *streamSubscription
-	}
-
-	getSecretRes struct {
-		secret string
-		err    error
-	}
-
-	getSecretOp struct {
-		ctx context.Context
-		res chan<- getSecretRes
-	}
-
 	Service struct {
-		client          *natsClient
-		aclient         *atomic.Pointer[natsClient]
-		clientname      string
-		instance        string
-		auth            secretAuth
-		addr            string
-		config          governor.SecretReader
-		log             *klog.LevelLogger
-		ops             chan getOp
-		subops          chan subOp
-		secretops       chan getSecretOp
-		streamSubs      map[*streamSubscription]struct{}
-		ready           *atomic.Bool
-		canary          <-chan struct{}
-		hbfailed        int
-		hbinterval      time.Duration
-		hbmaxfail       int
-		minpullduration time.Duration
-		done            <-chan struct{}
-		apirefresh      time.Duration
-		apisecret       secretAPI
-		aapisecret      *atomic.Pointer[secretAPI]
-		reqcount        *atomic.Uint32
+		client     *kafkaClient
+		aclient    *atomic.Pointer[kafkaClient]
+		clientname string
+		instance   string
+		auth       secretAuth
+		addr       string
+		config     governor.SecretReader
+		log        *klog.LevelLogger
+		ops        chan getOp
+		ready      *atomic.Bool
+		hbfailed   int
+		hbinterval time.Duration
+		hbmaxfail  int
+		done       <-chan struct{}
 	}
 
-	// Subscription manages an active subscription
-	Subscription interface {
-		Close() error
-	}
-
-	streamSubscription struct {
-		s       *Service
-		stream  string
-		channel string
-		group   string
-		opts    StreamConsumerOpts
-		worker  StreamWorkerFunc
-		log     *klog.LevelLogger
-		cancel  context.CancelFunc
-		done    <-chan struct{}
-	}
-
-	// Pinger pings in progress liveness checks
-	Pinger interface {
-		Ping(ctx context.Context) error
-	}
-
-	pinger struct {
-		msg *nats.Msg
+	subscription struct {
+		s      *Service
+		topic  string
+		group  string
+		log    *klog.LevelLogger
+		reader *kafka.Reader
 	}
 
 	ctxKeyEvents struct{}
@@ -146,18 +113,11 @@ func setCtxEvents(inj governor.Injector, p Events) {
 
 // New creates a new events service
 func New() *Service {
-	canary := make(chan struct{})
-	close(canary)
 	return &Service{
-		aclient:    &atomic.Pointer[natsClient]{},
-		ops:        make(chan getOp),
-		subops:     make(chan subOp),
-		streamSubs: map[*streamSubscription]struct{}{},
-		ready:      &atomic.Bool{},
-		canary:     canary,
-		hbfailed:   0,
-		aapisecret: &atomic.Pointer[secretAPI]{},
-		reqcount:   &atomic.Uint32{},
+		aclient:  &atomic.Pointer[kafkaClient]{},
+		ops:      make(chan getOp),
+		ready:    &atomic.Bool{},
+		hbfailed: 0,
 	}
 }
 
@@ -169,8 +129,6 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	r.SetDefault("port", "4222")
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 3)
-	r.SetDefault("minpullduration", "100ms")
-	r.SetDefault("apirefresh", "1m")
 }
 
 type (
@@ -188,12 +146,6 @@ func (e ErrorClient) Error() string {
 	return "Events client error"
 }
 
-type (
-	secretAPI struct {
-		Secret string `mapstructure:"secret"`
-	}
-)
-
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
@@ -207,21 +159,11 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
-	s.minpullduration, err = r.GetDuration("minpullduration")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse min pull duration")
-	}
-	s.apirefresh, err = r.GetDuration("apirefresh")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse apirefresh")
-	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"events.addr":            s.addr,
-		"events.hbinterval":      s.hbinterval.String(),
-		"events.hbmaxfail":       s.hbmaxfail,
-		"events.minpullduration": s.minpullduration.String(),
-		"events.apirefresh":      s.apirefresh.String(),
+		"events.addr":       s.addr,
+		"events.hbinterval": s.hbinterval.String(),
+		"events.hbmaxfail":  s.hbmaxfail,
 	})
 
 	ctx = klog.WithFields(ctx, klog.Fields{
@@ -246,26 +188,6 @@ func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
-		case op := <-s.secretops:
-			secret, err := s.handleGetApiSecret(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getSecretRes{
-				secret: secret,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		case op := <-s.subops:
-			if op.rm {
-				if op.stream != nil {
-					delete(s.streamSubs, op.stream)
-				}
-			} else {
-				if op.stream != nil {
-					s.streamSubs[op.stream] = struct{}{}
-				}
-			}
 		case op := <-s.ops:
 			client, err := s.handleGetClient(ctx)
 			select {
@@ -299,103 +221,7 @@ func (s *Service) handlePing(ctx context.Context) {
 			s.config.InvalidateSecret("auth")
 		default:
 			s.ready.Store(true)
-			s.updateSubs(ctx, s.client)
 		}
-	}
-	err := s.refreshApiSecret(ctx)
-	if err == nil {
-		s.hbfailed = 0
-		return
-	}
-	s.hbfailed++
-	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh api secret"), nil)
-		return
-	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
-	s.aapisecret.Store(nil)
-	s.hbfailed = 0
-}
-
-func (s *Service) refreshApiSecret(ctx context.Context) error {
-	var apisecret secretAPI
-	if err := s.config.GetSecret(ctx, "apisecret", s.apirefresh, &apisecret); err != nil {
-		return kerrors.WithMsg(err, "Invalid api secret")
-	}
-	if apisecret.Secret == "" {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty api secret")
-	}
-	if apisecret != s.apisecret {
-		s.apisecret = apisecret
-		s.aapisecret.Store(&apisecret)
-		s.log.Info(ctx, "Refreshed api secret with new secret", nil)
-	}
-	return nil
-}
-
-func (s *Service) handleGetApiSecret(ctx context.Context) (string, error) {
-	if s.apisecret.Secret == "" {
-		if err := s.refreshApiSecret(ctx); err != nil {
-			return "", err
-		}
-	}
-	return s.apisecret.Secret, nil
-}
-
-func (s *Service) getApiSecret(ctx context.Context) (string, error) {
-	if apisecret := s.aapisecret.Load(); apisecret != nil {
-		return apisecret.Secret, nil
-	}
-
-	res := make(chan getSecretRes)
-	op := getSecretOp{
-		ctx: ctx,
-		res: res,
-	}
-	select {
-	case <-s.done:
-		return "", kerrors.WithMsg(nil, "Events service shutdown")
-	case <-ctx.Done():
-		return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.secretops <- op:
-		select {
-		case <-ctx.Done():
-			return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.secret, v.err
-		}
-	}
-}
-
-func (s *Service) updateSubs(ctx context.Context, client *natsClient) {
-	for k := range s.streamSubs {
-		if k.ok() {
-			continue
-		}
-		if err := k.init(client.stream); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to stream"), klog.Fields{
-				"events.channel": k.channel,
-				"events.group":   k.group,
-			})
-		} else {
-			s.log.Info(ctx, "Subscribed to stream", klog.Fields{
-				"events.channel": k.channel,
-				"events.group":   k.group,
-			})
-		}
-	}
-}
-
-func (s *Service) deinitSubs(ctx context.Context) {
-	for k := range s.streamSubs {
-		if !k.ok() {
-			continue
-		}
-		k.deinit()
-		s.log.Info(ctx, "Closed stream subscription", klog.Fields{
-			"events.channel": k.channel,
-			"events.group":   k.group,
-		})
 	}
 }
 
@@ -405,7 +231,7 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context) (*natsClient, error) {
+func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	var secret secretAuth
 	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
@@ -442,15 +268,13 @@ func (s *Service) handleGetClient(ctx context.Context) (*natsClient, error) {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to connect to events jetstream")
 	}
 
-	s.client = &natsClient{
+	s.client = &kafkaClient{
 		client: conn,
 		stream: stream,
-		canary: canary,
 	}
 	s.aclient.Store(s.client)
 	s.auth = secret
 	s.ready.Store(true)
-	s.canary = canary
 	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
 		"events.addr": s.addr,
 	})
@@ -464,10 +288,9 @@ func (s *Service) closeClient(ctx context.Context) {
 			"events.addr": s.addr,
 		})
 	}
-	s.deinitSubs(klog.ExtendCtx(context.Background(), ctx, nil))
 }
 
-func (s *Service) getClient(ctx context.Context) (*natsClient, error) {
+func (s *Service) getClient(ctx context.Context) (*kafkaClient, error) {
 	if client := s.aclient.Load(); client != nil {
 		return client, nil
 	}
@@ -516,214 +339,111 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) addSub(stream *streamSubscription) {
-	op := subOp{
-		rm:     false,
-		stream: stream,
-	}
-	select {
-	case <-s.done:
-	case s.subops <- op:
-	}
-}
-
-func (s *Service) rmSub(stream *streamSubscription) {
-	op := subOp{
-		rm:     true,
-		stream: stream,
-	}
-	select {
-	case <-s.done:
-	case s.subops <- op:
-	}
-}
-
-func (s *Service) lreqID() string {
-	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
-}
-
-// StreamPublish publishes to a stream
-func (s *Service) StreamPublish(ctx context.Context, channel string, msgdata []byte) error {
+// Publish publishes an event
+func (s *Service) Publish(ctx context.Context, topic string, key string, data []byte) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := client.stream.Publish(channel, msgdata, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.Publish(topic, data, nats.Context(ctx)); err != nil {
 		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to stream")
 	}
 	return nil
 }
 
-// StreamSubscribe subscribes to a stream
-func (s *Service) StreamSubscribe(stream, channel, group string, worker StreamWorkerFunc, opts StreamConsumerOpts) (Subscription, error) {
-	done := make(chan struct{})
-	close(done)
-	sub := &streamSubscription{
-		s:       s,
-		stream:  stream,
-		channel: channel,
-		group:   group,
-		opts:    opts,
-		worker:  worker,
-		log: klog.NewLevelLogger(s.log.Logger.Sublogger("streamsubscriber", klog.Fields{
-			"events.stream":  stream,
-			"events.channel": channel,
-			"events.group":   group,
-		})),
-		done: done,
+// Subscribe subscribes to an event stream
+func (s *Service) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
+	mechanism, err := scram.Mechanism(scram.SHA512, "username", "password")
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create scram mechanism")
 	}
-	s.addSub(sub)
-	sub.log.Info(context.Background(), "Added subscription", nil)
+	dialer := &kafka.Dialer{
+		ClientID: s.clientname + "-" + s.instance,
+		DialFunc: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 5 * time.Second,
+		}).DialContext,
+		SASLMechanism: mechanism,
+	}
+	readerconfig := kafka.ReaderConfig{
+		Brokers: []string{"localhost:9092", "localhost:9093", "localhost:9094"},
+		GroupID: group,
+		Topic:   topic,
+		Dialer:  dialer,
+		// message read config
+		QueueCapacity:  128,                 // number of messages in queue
+		MinBytes:       1,                   // minimum size of batch of messages
+		MaxBytes:       1 << 20,             // 1MB, maximum size of batch of messages, maximum single message size
+		MaxWait:        5 * time.Second,     // wait for messages for this long before repolling
+		StartOffset:    kafka.LastOffset,    // start at latest message
+		CommitInterval: 0,                   // synchronously commit offsets
+		IsolationLevel: kafka.ReadCommitted, // for transactions, read only committed messages
+		// liveness config
+		HeartbeatInterval: 5 * time.Second,  // heartbeat the group coordinator at this interval
+		SessionTimeout:    15 * time.Second, // declare consumer as dead if no heartbeat within this interval
+		// partition config
+		// partition assignment strategies
+		GroupBalancers: []kafka.GroupBalancer{
+			kafka.RangeGroupBalancer{},
+			kafka.RoundRobinGroupBalancer{},
+		},
+		PartitionWatchInterval: 5 * time.Second,    // watch for partition changes on this interval
+		WatchPartitionChanges:  true,               // watch for partition changes
+		RebalanceTimeout:       30 * time.Second,   // amount of time for group coordinator to wait before finishing rebalancing
+		JoinGroupBackoff:       5 * time.Second,    // amount of time to wait before rejoining consumer group after error
+		RetentionTime:          7 * 24 * time.Hour, // how long to save consumer group offsets
+		// connection config
+		ReadBackoffMin:        250 * time.Millisecond, // minimum amount of time to poll for new messages
+		ReadBackoffMax:        5 * time.Second,        // maximum amount of time to poll for new messages
+		MaxAttempts:           3,                      // number of attempts before reporting errors for establishing connection
+		OffsetOutOfRangeError: true,                   // will be permanently true in the future
+	}
+	if err := readerconfig.Validate(); err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Invalid reader config")
+	}
+	sub := &subscription{
+		s:     s,
+		topic: topic,
+		group: group,
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
+			"events.topic": topic,
+			"events.group": group,
+		})),
+		reader: kafka.NewReader(readerconfig),
+	}
+	sub.log.Info(ctx, "Added subscription", nil)
 	return sub, nil
 }
 
-func (s *streamSubscription) init(client nats.JetStream) error {
-	args := make([]nats.SubOpt, 0, 8)
-	args = append(args, nats.BindStream(s.stream), nats.ManualAck(), nats.AckExplicit(), nats.DeliverAll())
-	if s.opts.AckWait > 0 {
-		args = append(args, nats.AckWait(s.opts.AckWait))
-	}
-	if s.opts.MaxDeliver > 0 {
-		args = append(args, nats.MaxDeliver(s.opts.MaxDeliver))
-	}
-	sub, err := client.PullSubscribe(
-		s.channel,
-		s.group,
-		args...,
-	)
+// ReadMsg reads a message
+func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
+	m, err := s.reader.FetchMessage(ctx)
 	if err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to create subscription to stream as queue group")
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to read message")
 	}
-	subctx, cancel := context.WithCancel(context.Background())
-	subctx = klog.WithFields(subctx, klog.Fields{
-		"events.stream":  s.stream,
-		"events.channel": s.channel,
-		"events.group":   s.group,
-	})
-	done := make(chan struct{})
-	go s.subscriber(subctx, sub, done)
-	s.cancel = cancel
-	s.done = done
+	return &Msg{
+		Topic:     m.Topic,
+		Key:       string(m.Key),
+		Data:      m.Value,
+		Partition: m.Partition,
+		Offset:    m.Offset,
+		Time:      m.Time,
+		msg:       m,
+	}, nil
+}
+
+// Commit commits a new message offset
+func (s *subscription) Commit(ctx context.Context, msg Msg) error {
+	if err := s.reader.CommitMessages(ctx, msg.msg); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to commit message offset")
+	}
 	return nil
-}
-
-func (s *streamSubscription) deinit() {
-	if s.cancel != nil {
-		s.cancel()
-	}
-	<-s.done
-}
-
-func (s *streamSubscription) ok() bool {
-	select {
-	case <-s.done:
-		return false
-	default:
-		return true
-	}
-}
-
-func (s *streamSubscription) fetch(ctx context.Context, sub *nats.Subscription) ([]*nats.Msg, error) {
-	reqctx, reqcancel := context.WithTimeout(ctx, 5*time.Second)
-	defer reqcancel()
-	return sub.Fetch(1, nats.Context(reqctx))
-}
-
-func (s *streamSubscription) subscriber(ctx context.Context, sub *nats.Subscription, done chan<- struct{}) {
-	defer close(done)
-	start := time.Now()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		msgs, err := s.fetch(ctx, sub)
-		if err != nil {
-			if !errors.Is(err, context.DeadlineExceeded) {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed obtaining messages"), nil)
-				return
-			}
-			continue
-		}
-		for _, msg := range msgs {
-			msgctx := klog.WithFields(ctx, klog.Fields{
-				"events.subject": msg.Subject,
-				"events.lreqid":  s.s.lreqID(),
-			})
-			meta, err := msg.Metadata()
-			if err != nil {
-				s.log.Err(msgctx, kerrors.WithMsg(err, "Failed getting message metadata"), nil)
-			}
-			overMaxDeliver := meta.NumDelivered > uint64(s.opts.MaxDeliver)
-			msgctx = klog.WithFields(msgctx, klog.Fields{
-				"events.msg.stream":    meta.Stream,
-				"events.msg.consumer":  meta.Consumer,
-				"events.msg.seqnum":    meta.Sequence.Stream,
-				"events.msg.delivered": meta.NumDelivered,
-			})
-			if overMaxDeliver {
-				s.log.Warn(msgctx, "Received msg over max deliver", nil)
-			} else {
-				s.log.Info(msgctx, "Received msg", nil)
-			}
-			start := time.Now()
-			if overMaxDeliver && s.opts.MaxDeliverHandler != nil {
-				if err := s.opts.MaxDeliverHandler(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
-					duration := time.Since(start)
-					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-				} else {
-					duration := time.Since(start)
-					s.log.Info(msgctx, "DLQ handled msg", klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-					if err := msg.Ack(); err != nil {
-						s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
-					}
-					s.log.Info(msgctx, "Acked msg", nil)
-				}
-			} else {
-				if err := s.worker(msgctx, &pinger{msg: msg}, msg.Subject, msg.Data); err != nil {
-					duration := time.Since(start)
-					s.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing worker"), klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-				} else {
-					duration := time.Since(start)
-					s.log.Info(msgctx, "Handled msg", klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-					if err := msg.Ack(); err != nil {
-						s.log.Err(msgctx, kerrors.WithMsg(err, "Failed to ack message"), nil)
-					}
-					s.log.Info(msgctx, "Acked msg", nil)
-				}
-			}
-		}
-		now := time.Now()
-		delta := s.s.minpullduration - now.Sub(start)
-		start = now
-		if delta > 0 {
-			time.Sleep(delta)
-		}
-	}
 }
 
 // Close closes the subscription
-func (s *streamSubscription) Close() error {
-	s.s.rmSub(s)
-	if s.cancel != nil {
-		s.cancel()
-	}
-	<-s.done
-	return nil
-}
-
-func (p *pinger) Ping(ctx context.Context) error {
-	if err := p.msg.InProgress(nats.Context(ctx)); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to ping in progress")
+func (s *subscription) Close() error {
+	if err := s.reader.Close(); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to close consumer")
 	}
 	return nil
 }
@@ -762,36 +482,18 @@ func (s *Service) InitStream(ctx context.Context, name string, subjects []string
 }
 
 // DeleteStream deletes a stream
-func (s *Service) DeleteStream(ctx context.Context, name string) error {
+func (s *Service) DeleteStream(ctx context.Context, topic string) error {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
+	if _, err := client.stream.StreamInfo(topic, nats.Context(ctx)); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
 		}
 	} else {
-		if err := client.stream.DeleteStream(name, nats.Context(ctx)); err != nil {
+		if err := client.stream.DeleteStream(topic, nats.Context(ctx)); err != nil {
 			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
-		}
-	}
-	return nil
-}
-
-// DeleteConsumer deletes a consumer
-func (s *Service) DeleteConsumer(ctx context.Context, stream, consumer string) error {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return err
-	}
-	if _, err := client.stream.ConsumerInfo(stream, consumer, nats.Context(ctx)); err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to get consumer")
-		}
-	} else {
-		if err := client.stream.DeleteConsumer(stream, consumer, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete consumer")
 		}
 	}
 	return nil
