@@ -279,20 +279,19 @@ func (s *Service) handleGetClient(ctx context.Context) (SQLDB, error) {
 }
 
 func (s *Service) closeClient(ctx context.Context) {
-	if s.sqldb == nil {
-		return
-	}
 	s.asqldb.Store(nil)
-	if err := s.sqldb.Close(); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"), klog.Fields{
-			"db.connopts": s.connopts,
-			"db.username": s.auth.Username,
-		})
-	} else {
-		s.log.Info(ctx, "Closed db client", klog.Fields{
-			"db.connopts": s.connopts,
-			"db.username": s.auth.Username,
-		})
+	if s.sqldb != nil {
+		if err := s.sqldb.Close(); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"), klog.Fields{
+				"db.connopts": s.connopts,
+				"db.username": s.auth.Username,
+			})
+		} else {
+			s.log.Info(ctx, "Closed db client", klog.Fields{
+				"db.connopts": s.connopts,
+				"db.username": s.auth.Username,
+			})
+		}
 	}
 	s.sqldb = nil
 	s.auth = pgAuth{}

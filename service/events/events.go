@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/scram"
 	"xorkevin.dev/governor"
@@ -17,14 +15,14 @@ import (
 )
 
 type (
-	// StreamOpts are opts for streams
-	StreamOpts struct {
-		Replicas   int
-		MaxAge     time.Duration
-		MaxBytes   int64
-		MaxMsgSize int32
-		MaxMsgs    int64
-	}
+	// // StreamOpts are opts for streams
+	// StreamOpts struct {
+	// 	Replicas   int
+	// 	MaxAge     time.Duration
+	// 	MaxBytes   int64
+	// 	MaxMsgSize int32
+	// 	MaxMsgs    int64
+	// }
 
 	// ConsumerOpts are opts for event stream consumers
 	ConsumerOpts struct {
@@ -50,13 +48,14 @@ type (
 	Events interface {
 		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
 		Publish(ctx context.Context, topic string, key string, data []byte) error
-		InitStream(ctx context.Context, topic string, opts StreamOpts) error
-		DeleteStream(ctx context.Context, topic string) error
+		//InitStream(ctx context.Context, topic string, opts StreamOpts) error
+		//DeleteStream(ctx context.Context, topic string) error
 	}
 
 	kafkaClient struct {
-		client *nats.Conn
-		stream nats.JetStreamContext
+		dialer *kafka.Dialer
+		client *kafka.Client
+		writer *kafka.Writer
 	}
 
 	getClientRes struct {
@@ -126,24 +125,9 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
-	r.SetDefault("port", "4222")
+	r.SetDefault("port", "9092")
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 3)
-}
-
-type (
-	// ErrorConn is returned on a connection error
-	ErrorConn struct{}
-	// ErrorClient is returned for unknown client errors
-	ErrorClient struct{}
-)
-
-func (e ErrorConn) Error() string {
-	return "Events connection error"
-}
-
-func (e ErrorClient) Error() string {
-	return "Events client error"
 }
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
@@ -203,30 +187,59 @@ func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 }
 
 func (s *Service) handlePing(ctx context.Context) {
+	var err error
 	// Check client auth expiry, and reinit client if about to be expired
-	if _, err := s.handleGetClient(ctx); err != nil {
+	if _, err = s.handleGetClient(ctx); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
-	// there is a client then check the canary. This allows vault to be
-	// temporarily unavailable without disrupting the client connections. The
-	// canary is closed after failing the maximum number of heartbeats already,
-	// so no need to track number of heartbeat failures.
+	// there is a client then ping the event stream. This allows vault to be
+	// temporarily unavailable without disrupting the client connections.
 	if s.client != nil {
-		select {
-		case <-s.canary:
-			s.aclient.Store(nil)
-			s.ready.Store(false)
-			s.auth = secretAuth{}
-			s.config.InvalidateSecret("auth")
-		default:
+		err = s.ping(ctx, s.client.client)
+		if err == nil {
 			s.ready.Store(true)
+			s.hbfailed = 0
+			return
 		}
 	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping event stream"), klog.Fields{
+			"events.addr":     s.addr,
+			"events.username": s.auth.Username,
+		})
+		return
+	}
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to event stream"), klog.Fields{
+		"events.addr":     s.addr,
+		"events.username": s.auth.Username,
+	})
+	s.aclient.Store(nil)
+	s.ready.Store(false)
+	s.hbfailed = 0
+	s.auth = secretAuth{}
+	s.config.InvalidateSecret("auth")
+}
+
+type (
+	// ErrorConn is returned on a connection error
+	ErrorConn struct{}
+	// ErrorClient is returned for unknown client errors
+	ErrorClient struct{}
+)
+
+func (e ErrorConn) Error() string {
+	return "Events connection error"
+}
+
+func (e ErrorClient) Error() string {
+	return "Events client error"
 }
 
 type (
 	secretAuth struct {
+		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
@@ -236,58 +249,100 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid secret")
 	}
-	if secret.Password == "" {
+	if secret.Username == "" {
 		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
 	}
 	if secret == s.auth {
 		return s.client, nil
 	}
+	mechanism, err := scram.Mechanism(scram.SHA512, "username", "password")
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create scram mechanism")
+	}
 
 	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 
-	canary := make(chan struct{})
-	conn, err := nats.Connect(fmt.Sprintf("nats://%s", s.addr),
-		nats.Name(s.clientname),
-		nats.Token(secret.Password),
-		nats.NoReconnect(),
-		nats.PingInterval(s.hbinterval),
-		nats.MaxPingsOutstanding(s.hbmaxfail),
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			close(canary)
-			if err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Lost connection to events"), nil)
-			} else {
-				s.log.Info(ctx, "Disconnected from events", nil)
-			}
-		}))
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to connect to events")
+	netDialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 5 * time.Second,
 	}
-	stream, err := conn.JetStream()
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to connect to events jetstream")
+	dialer := &kafka.Dialer{
+		ClientID:      s.clientname + "-" + s.instance,
+		DialFunc:      netDialer.DialContext,
+		SASLMechanism: mechanism,
+	}
+	transport := &kafka.Transport{
+		ClientID:    s.clientname + "-" + s.instance,
+		Dial:        netDialer.DialContext,
+		DialTimeout: 10 * time.Second,
+		IdleTimeout: 30 * time.Second,
+		MetadataTTL: 6 * time.Second,
+		SASL:        mechanism,
+	}
+	client := &kafka.Client{
+		Addr:      kafka.TCP(s.addr),
+		Transport: transport,
+	}
+	writer := &kafka.Writer{
+		Addr:                   kafka.TCP(s.addr),
+		Balancer:               &kafka.Hash{},
+		MaxAttempts:            16,
+		BatchSize:              128,
+		BatchBytes:             1 << 20,
+		BatchTimeout:           125 * time.Millisecond,
+		ReadTimeout:            5 * time.Second,
+		WriteTimeout:           5 * time.Second,
+		RequiredAcks:           kafka.RequireAll,
+		Async:                  false,
+		AllowAutoTopicCreation: false,
+		Transport:              transport,
+	}
+
+	if err := s.ping(ctx, client); err != nil {
+		return nil, err
 	}
 
 	s.client = &kafkaClient{
-		client: conn,
-		stream: stream,
+		dialer: dialer,
+		client: client,
+		writer: writer,
 	}
 	s.aclient.Store(s.client)
 	s.auth = secret
 	s.ready.Store(true)
 	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
-		"events.addr": s.addr,
+		"events.addr":     s.addr,
+		"events.username": s.auth.Username,
 	})
 	return s.client, nil
 }
 
-func (s *Service) closeClient(ctx context.Context) {
-	if s.client != nil && !s.client.client.IsClosed() {
-		s.client.client.Close()
-		s.log.Info(ctx, "Closed events connection", klog.Fields{
-			"events.addr": s.addr,
-		})
+func (s *Service) ping(ctx context.Context, client *kafka.Client) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := client.ApiVersions(ctx, &kafka.ApiVersionsRequest{}); err != nil {
+		return kerrors.WithKind(err, ErrorConn{}, "Failed to connect to event stream")
 	}
+	return nil
+}
+
+func (s *Service) closeClient(ctx context.Context) {
+	s.aclient.Store(nil)
+	if s.client != nil {
+		if err := s.client.writer.Close(); err != nil {
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorClient{}, "Failed to close event stream connection"), klog.Fields{
+				"events.addr":     s.addr,
+				"events.username": s.auth.Username,
+			})
+		} else {
+			s.log.Info(ctx, "Closed event stream connection", klog.Fields{
+				"events.addr":     s.addr,
+				"events.username": s.auth.Username,
+			})
+		}
+	}
+	s.client = nil
+	s.auth = secretAuth{}
 }
 
 func (s *Service) getClient(ctx context.Context) (*kafkaClient, error) {
@@ -345,31 +400,28 @@ func (s *Service) Publish(ctx context.Context, topic string, key string, data []
 	if err != nil {
 		return err
 	}
-	if _, err := client.stream.Publish(topic, data, nats.Context(ctx)); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to stream")
+	if err := client.writer.WriteMessages(ctx, kafka.Message{
+		Topic: topic,
+		Key:   []byte(key),
+		Value: data,
+		Time:  time.Now().Round(0),
+	}); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to event stream")
 	}
 	return nil
 }
 
 // Subscribe subscribes to an event stream
 func (s *Service) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
-	mechanism, err := scram.Mechanism(scram.SHA512, "username", "password")
+	client, err := s.getClient(ctx)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create scram mechanism")
-	}
-	dialer := &kafka.Dialer{
-		ClientID: s.clientname + "-" + s.instance,
-		DialFunc: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 5 * time.Second,
-		}).DialContext,
-		SASLMechanism: mechanism,
+		return nil, err
 	}
 	readerconfig := kafka.ReaderConfig{
-		Brokers: []string{"localhost:9092", "localhost:9093", "localhost:9094"},
+		Brokers: []string{s.addr},
 		GroupID: group,
 		Topic:   topic,
-		Dialer:  dialer,
+		Dialer:  client.dialer,
 		// message read config
 		QueueCapacity:  128,                 // number of messages in queue
 		MinBytes:       1,                   // minimum size of batch of messages
@@ -448,53 +500,53 @@ func (s *subscription) Close() error {
 	return nil
 }
 
-// InitStream initializes a stream
-func (s *Service) InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return err
-	}
-	cfg := &nats.StreamConfig{
-		Name:       name,
-		Subjects:   subjects,
-		Retention:  nats.LimitsPolicy,
-		Discard:    nats.DiscardOld,
-		Storage:    nats.FileStorage,
-		Replicas:   opts.Replicas,
-		MaxAge:     opts.MaxAge,
-		MaxBytes:   opts.MaxBytes,
-		MaxMsgSize: opts.MaxMsgSize,
-		MaxMsgs:    opts.MaxMsgs,
-	}
-	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-		}
-		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to create stream")
-		}
-	} else {
-		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to update stream")
-		}
-	}
-	return nil
-}
-
-// DeleteStream deletes a stream
-func (s *Service) DeleteStream(ctx context.Context, topic string) error {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return err
-	}
-	if _, err := client.stream.StreamInfo(topic, nats.Context(ctx)); err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-		}
-	} else {
-		if err := client.stream.DeleteStream(topic, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
-		}
-	}
-	return nil
-}
+// // InitStream initializes a stream
+// func (s *Service) InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error {
+// 	client, err := s.getClient(ctx)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	cfg := &nats.StreamConfig{
+// 		Name:       name,
+// 		Subjects:   subjects,
+// 		Retention:  nats.LimitsPolicy,
+// 		Discard:    nats.DiscardOld,
+// 		Storage:    nats.FileStorage,
+// 		Replicas:   opts.Replicas,
+// 		MaxAge:     opts.MaxAge,
+// 		MaxBytes:   opts.MaxBytes,
+// 		MaxMsgSize: opts.MaxMsgSize,
+// 		MaxMsgs:    opts.MaxMsgs,
+// 	}
+// 	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
+// 		if !strings.Contains(err.Error(), "not found") {
+// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
+// 		}
+// 		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
+// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to create stream")
+// 		}
+// 	} else {
+// 		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
+// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to update stream")
+// 		}
+// 	}
+// 	return nil
+// }
+//
+// // DeleteStream deletes a stream
+// func (s *Service) DeleteStream(ctx context.Context, topic string) error {
+// 	client, err := s.getClient(ctx)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if _, err := client.stream.StreamInfo(topic, nats.Context(ctx)); err != nil {
+// 		if !strings.Contains(err.Error(), "not found") {
+// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
+// 		}
+// 	} else {
+// 		if err := client.stream.DeleteStream(topic, nats.Context(ctx)); err != nil {
+// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
+// 		}
+// 	}
+// 	return nil
+// }

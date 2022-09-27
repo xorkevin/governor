@@ -316,20 +316,19 @@ func (s *Service) handleGetClient(ctx context.Context) (*redis.Client, error) {
 }
 
 func (s *Service) closeClient(ctx context.Context) {
-	if s.client == nil {
-		return
-	}
 	s.aclient.Store(nil)
-	if err := s.client.Close(); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"), klog.Fields{
-			"kv.addr":   s.addr,
-			"kv.dbname": strconv.Itoa(s.dbname),
-		})
-	} else {
-		s.log.Info(ctx, "Closed kvstore connection", klog.Fields{
-			"kv.addr":   s.addr,
-			"kv.dbname": strconv.Itoa(s.dbname),
-		})
+	if s.client != nil {
+		if err := s.client.Close(); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"), klog.Fields{
+				"kv.addr":   s.addr,
+				"kv.dbname": strconv.Itoa(s.dbname),
+			})
+		} else {
+			s.log.Info(ctx, "Closed kvstore connection", klog.Fields{
+				"kv.addr":   s.addr,
+				"kv.dbname": strconv.Itoa(s.dbname),
+			})
+		}
 	}
 	s.client = nil
 	s.auth = secretAuth{}
