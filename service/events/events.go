@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/sasl/scram"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -53,9 +54,8 @@ type (
 	}
 
 	kafkaClient struct {
-		dialer *kafka.Dialer
-		client *kafka.Client
-		writer *kafka.Writer
+		auth   scram.Auth
+		client *kgo.Client
 	}
 
 	getClientRes struct {
@@ -255,9 +255,9 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	if secret == s.auth {
 		return s.client, nil
 	}
-	mechanism, err := scram.Mechanism(scram.SHA512, "username", "password")
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create scram mechanism")
+	authMechanism := scram.Auth{
+		User: secret.Username,
+		Pass: secret.Password,
 	}
 
 	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
@@ -266,36 +266,49 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 		Timeout:   5 * time.Second,
 		KeepAlive: 5 * time.Second,
 	}
-	dialer := &kafka.Dialer{
-		ClientID:      s.clientname + "-" + s.instance,
-		DialFunc:      netDialer.DialContext,
-		SASLMechanism: mechanism,
-	}
-	transport := &kafka.Transport{
-		ClientID:    s.clientname + "-" + s.instance,
-		Dial:        netDialer.DialContext,
-		DialTimeout: 10 * time.Second,
-		IdleTimeout: 30 * time.Second,
-		MetadataTTL: 6 * time.Second,
-		SASL:        mechanism,
-	}
-	client := &kafka.Client{
-		Addr:      kafka.TCP(s.addr),
-		Transport: transport,
-	}
-	writer := &kafka.Writer{
-		Addr:                   kafka.TCP(s.addr),
-		Balancer:               &kafka.Hash{},
-		MaxAttempts:            16,
-		BatchSize:              128,
-		BatchBytes:             1 << 20,
-		BatchTimeout:           125 * time.Millisecond,
-		ReadTimeout:            5 * time.Second,
-		WriteTimeout:           5 * time.Second,
-		RequiredAcks:           kafka.RequireAll,
-		Async:                  false,
-		AllowAutoTopicCreation: false,
-		Transport:              transport,
+	client, err := kgo.NewClient(
+		kgo.ClientID(s.clientname+"-"+s.instance),
+		kgo.SeedBrokers(s.addr),
+		kgo.SASL(authMechanism.AsSha512Mechanism()),
+		// connections
+		kgo.Dialer(netDialer.DialContext),
+		kgo.ConnIdleTimeout(30*time.Second),
+		// reading and writing data
+		kgo.BrokerMaxReadBytes(1<<21),  // 2MB
+		kgo.BrokerMaxWriteBytes(1<<21), // 2MB
+		kgo.RequestRetries(16),
+		kgo.RequestTimeoutOverhead(10*time.Second), // request.timeout.ms
+		// do not specify RetryBackoffFn use default exponential backoff with
+		// jitter, 250ms to 2.5s max
+		kgo.RetryTimeout(30*time.Second), // retry requests for this long
+		// metadata
+		kgo.MetadataMaxAge(1*time.Minute),         // cache metadata for up to 1 min
+		kgo.MetadataMinAge(2500*time.Millisecond), // cache metadata for at least 2.5 seconds
+		// producer requests
+		kgo.RecordPartitioner(
+			// partition by murmur2 hash of key if exists
+			// if not exists, batch requests to a random partition and switch
+			// partitions every 65KB
+			kgo.UniformBytesPartitioner(1<<16, true, true, nil),
+		),
+		kgo.ProducerBatchCompression(
+			// in order of preference
+			kgo.ZstdCompression(),
+			kgo.Lz4Compression(),
+			kgo.SnappyCompression(),
+			kgo.GzipCompression(),
+			kgo.NoCompression(),
+		),
+		kgo.MaxBufferedRecords(8192),
+		kgo.ProduceRequestTimeout(10*time.Second), // in addition to RequestTimeoutOverhead
+		kgo.ProducerBatchMaxBytes(1<<20),          // 1MB
+		kgo.RecordDeliveryTimeout(30*time.Second),
+		kgo.RecordRetries(16),
+		kgo.RequiredAcks(kgo.AllISRAcks()), // require all in-sync replicas to ack
+		kgo.UnknownTopicRetries(3),
+	)
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
 
 	if err := s.ping(ctx, client); err != nil {
@@ -303,9 +316,8 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	}
 
 	s.client = &kafkaClient{
-		dialer: dialer,
+		auth:   authMechanism,
 		client: client,
-		writer: writer,
 	}
 	s.aclient.Store(s.client)
 	s.auth = secret
@@ -317,10 +329,10 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	return s.client, nil
 }
 
-func (s *Service) ping(ctx context.Context, client *kafka.Client) error {
+func (s *Service) ping(ctx context.Context, client *kgo.Client) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if _, err := client.ApiVersions(ctx, &kafka.ApiVersionsRequest{}); err != nil {
+	if err := client.Ping(ctx); err != nil {
 		return kerrors.WithKind(err, ErrorConn{}, "Failed to connect to event stream")
 	}
 	return nil
