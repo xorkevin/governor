@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,7 +51,9 @@ type (
 
 	// Subscription manages an active subscription
 	Subscription interface {
-		Close() error
+		ReadMsg(ctx context.Context) (*Msg, error)
+		Commit(ctx context.Context, msg Msg) error
+		Close(ctx context.Context) error
 	}
 
 	// Events is a service wrapper around an event stream client
@@ -99,6 +102,8 @@ type (
 		group  string
 		log    *klog.LevelLogger
 		reader *kgo.Client
+		mu     *sync.RWMutex
+		closed bool
 	}
 
 	ctxKeyEvents struct{}
@@ -505,13 +510,25 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 			"events.group": group,
 		})),
 		reader: reader,
+		mu:     &sync.RWMutex{},
+		closed: false,
 	}
 	sub.log.Info(ctx, "Added subscriber", nil)
 	return sub, nil
 }
 
+func (s *subscription) isClosed() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.closed
+}
+
 // ReadMsg reads a message
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
+	if s.isClosed() {
+		return nil, kerrors.WithKind(nil, ErrorClientClosed{}, "Client closed")
+	}
+
 	fetches := s.reader.PollRecords(ctx, 1)
 	if err := fetches.Err0(); err != nil {
 		err = kerrors.WithKind(err, ErrorClient{}, "Failed to read message")
@@ -538,6 +555,10 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
+	if s.isClosed() {
+		return kerrors.WithKind(nil, ErrorClientClosed{}, "Client closed")
+	}
+
 	if msg.record == nil {
 		return kerrors.WithKind(nil, ErrorInvalidMsg{}, "Invalid message")
 	}
@@ -546,8 +567,19 @@ func (s *subscription) Commit(ctx context.Context, msg Msg) error {
 }
 
 // Close closes the subscription
-func (s *subscription) Close() error {
+func (s *subscription) Close(ctx context.Context) error {
+	if s.isClosed() {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
 	s.reader.Close()
+	s.closed = true
+	s.log.Info(ctx, "Closed subscriber", nil)
 	return nil
 }
 
