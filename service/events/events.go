@@ -2,12 +2,12 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"xorkevin.dev/governor"
@@ -33,11 +33,19 @@ type (
 	Msg struct {
 		Topic     string
 		Key       string
-		Data      []byte
+		Value     []byte
 		Partition int
 		Offset    int64
 		Time      time.Time
-		msg       kafka.Message
+		record    *kgo.Record
+	}
+
+	// ProduceMsg is a message for writing
+	ProduceMsg struct {
+		Topic string
+		Key   string
+		Value []byte
+		Time  time.Time
 	}
 
 	// Subscription manages an active subscription
@@ -48,7 +56,7 @@ type (
 	// Events is a service wrapper around an event stream client
 	Events interface {
 		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
-		Publish(ctx context.Context, topic string, key string, data []byte) error
+		Publish(ctx context.Context, msgs ...ProduceMsg) error
 		//InitStream(ctx context.Context, topic string, opts StreamOpts) error
 		//DeleteStream(ctx context.Context, topic string) error
 	}
@@ -90,7 +98,7 @@ type (
 		topic  string
 		group  string
 		log    *klog.LevelLogger
-		reader *kafka.Reader
+		reader *kgo.Client
 	}
 
 	ctxKeyEvents struct{}
@@ -227,6 +235,12 @@ type (
 	ErrorConn struct{}
 	// ErrorClient is returned for unknown client errors
 	ErrorClient struct{}
+	// ErrorClientClosed is returned when the client has been closed
+	ErrorClientClosed struct{}
+	// ErrorReadEmpty is returned when no messages have been read
+	ErrorReadEmpty struct{}
+	// ErrorInvalidMsg is returned when the message is malformed
+	ErrorInvalidMsg struct{}
 )
 
 func (e ErrorConn) Error() string {
@@ -235,6 +249,18 @@ func (e ErrorConn) Error() string {
 
 func (e ErrorClient) Error() string {
 	return "Events client error"
+}
+
+func (e ErrorClientClosed) Error() string {
+	return "Events client closed"
+}
+
+func (e ErrorReadEmpty) Error() string {
+	return "No messages"
+}
+
+func (e ErrorInvalidMsg) Error() string {
+	return "Invalid message"
 }
 
 type (
@@ -262,28 +288,7 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 
 	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
 
-	netDialer := &net.Dialer{
-		Timeout:   5 * time.Second,
-		KeepAlive: 5 * time.Second,
-	}
-	client, err := kgo.NewClient(
-		kgo.ClientID(s.clientname+"-"+s.instance),
-		kgo.SeedBrokers(s.addr),
-		kgo.SASL(authMechanism.AsSha512Mechanism()),
-		// connections
-		kgo.Dialer(netDialer.DialContext),
-		kgo.ConnIdleTimeout(30*time.Second),
-		// reading and writing data
-		kgo.BrokerMaxReadBytes(1<<21),  // 2MB
-		kgo.BrokerMaxWriteBytes(1<<21), // 2MB
-		kgo.RequestRetries(16),
-		kgo.RequestTimeoutOverhead(10*time.Second), // request.timeout.ms
-		// do not specify RetryBackoffFn use default exponential backoff with
-		// jitter, 250ms to 2.5s max
-		kgo.RetryTimeout(30*time.Second), // retry requests for this long
-		// metadata
-		kgo.MetadataMaxAge(1*time.Minute),         // cache metadata for up to 1 min
-		kgo.MetadataMinAge(2500*time.Millisecond), // cache metadata for at least 2.5 seconds
+	client, err := kgo.NewClient(append(s.commonOpts(authMechanism), []kgo.Opt{
 		// producer requests
 		kgo.RecordPartitioner(
 			// partition by murmur2 hash of key if exists
@@ -300,13 +305,13 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 			kgo.NoCompression(),
 		),
 		kgo.MaxBufferedRecords(8192),
-		kgo.ProduceRequestTimeout(10*time.Second), // in addition to RequestTimeoutOverhead
-		kgo.ProducerBatchMaxBytes(1<<20),          // 1MB
-		kgo.RecordDeliveryTimeout(30*time.Second),
+		kgo.ProduceRequestTimeout(10 * time.Second), // in addition to RequestTimeoutOverhead
+		kgo.ProducerBatchMaxBytes(1 << 20),          // 1MB
+		kgo.RecordDeliveryTimeout(30 * time.Second),
 		kgo.RecordRetries(16),
 		kgo.RequiredAcks(kgo.AllISRAcks()), // require all in-sync replicas to ack
 		kgo.UnknownTopicRetries(3),
-	)
+	}))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
@@ -329,6 +334,32 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	return s.client, nil
 }
 
+func (s *Service) commonOpts(auth scram.Auth) []kgo.Opt {
+	netDialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 5 * time.Second,
+	}
+	return []kgo.Opt{
+		kgo.ClientID(s.clientname + "-" + s.instance),
+		kgo.SeedBrokers(s.addr),
+		kgo.SASL(auth.AsSha512Mechanism()),
+		// connections
+		kgo.Dialer(netDialer.DialContext),
+		kgo.ConnIdleTimeout(30 * time.Second),
+		// reading and writing data
+		kgo.BrokerMaxReadBytes(1 << 21),  // 2MB
+		kgo.BrokerMaxWriteBytes(1 << 21), // 2MB
+		kgo.RequestRetries(16),
+		kgo.RequestTimeoutOverhead(10 * time.Second), // request.timeout.ms
+		// do not specify RetryBackoffFn use default exponential backoff with
+		// jitter, 250ms to 2.5s max
+		kgo.RetryTimeout(30 * time.Second), // retry requests for this long
+		// metadata
+		kgo.MetadataMaxAge(1 * time.Minute),         // cache metadata for up to 1 min
+		kgo.MetadataMinAge(2500 * time.Millisecond), // cache metadata for at least 2.5 seconds
+	}
+}
+
 func (s *Service) ping(ctx context.Context, client *kgo.Client) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -341,17 +372,11 @@ func (s *Service) ping(ctx context.Context, client *kgo.Client) error {
 func (s *Service) closeClient(ctx context.Context) {
 	s.aclient.Store(nil)
 	if s.client != nil {
-		if err := s.client.writer.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorClient{}, "Failed to close event stream connection"), klog.Fields{
-				"events.addr":     s.addr,
-				"events.username": s.auth.Username,
-			})
-		} else {
-			s.log.Info(ctx, "Closed event stream connection", klog.Fields{
-				"events.addr":     s.addr,
-				"events.username": s.auth.Username,
-			})
-		}
+		s.client.client.Close()
+		s.log.Info(ctx, "Closed event stream connection", klog.Fields{
+			"events.addr":     s.addr,
+			"events.username": s.auth.Username,
+		})
 	}
 	s.client = nil
 	s.auth = secretAuth{}
@@ -407,18 +432,31 @@ func (s *Service) Health(ctx context.Context) error {
 }
 
 // Publish publishes an event
-func (s *Service) Publish(ctx context.Context, topic string, key string, data []byte) error {
+func (s *Service) Publish(ctx context.Context, msgs ...ProduceMsg) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return err
 	}
-	if err := client.writer.WriteMessages(ctx, kafka.Message{
-		Topic: topic,
-		Key:   []byte(key),
-		Value: data,
-		Time:  time.Now().Round(0),
-	}); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish message to event stream")
+	now := time.Now().UTC().Round(0)
+	recs := make([]*kgo.Record, 0, len(msgs))
+	for _, i := range msgs {
+		t := i.Time
+		if t.IsZero() {
+			t = now
+		}
+		recs = append(recs, &kgo.Record{
+			Topic:     i.Topic,
+			Key:       []byte(i.Key),
+			Value:     i.Value,
+			Timestamp: t,
+		})
+	}
+	if err := client.client.ProduceSync(ctx, recs...).FirstErr(); err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to publish messages to event stream")
 	}
 	return nil
 }
@@ -429,42 +467,35 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	if err != nil {
 		return nil, err
 	}
-	readerconfig := kafka.ReaderConfig{
-		Brokers: []string{s.addr},
-		GroupID: group,
-		Topic:   topic,
-		Dialer:  client.dialer,
-		// message read config
-		QueueCapacity:  128,                 // number of messages in queue
-		MinBytes:       1,                   // minimum size of batch of messages
-		MaxBytes:       1 << 20,             // 1MB, maximum size of batch of messages, maximum single message size
-		MaxWait:        5 * time.Second,     // wait for messages for this long before repolling
-		StartOffset:    kafka.LastOffset,    // start at latest message
-		CommitInterval: 0,                   // synchronously commit offsets
-		IsolationLevel: kafka.ReadCommitted, // for transactions, read only committed messages
-		// liveness config
-		HeartbeatInterval: 5 * time.Second,  // heartbeat the group coordinator at this interval
-		SessionTimeout:    15 * time.Second, // declare consumer as dead if no heartbeat within this interval
-		// partition config
-		// partition assignment strategies
-		GroupBalancers: []kafka.GroupBalancer{
-			kafka.RangeGroupBalancer{},
-			kafka.RoundRobinGroupBalancer{},
-		},
-		PartitionWatchInterval: 5 * time.Second,    // watch for partition changes on this interval
-		WatchPartitionChanges:  true,               // watch for partition changes
-		RebalanceTimeout:       30 * time.Second,   // amount of time for group coordinator to wait before finishing rebalancing
-		JoinGroupBackoff:       5 * time.Second,    // amount of time to wait before rejoining consumer group after error
-		RetentionTime:          7 * 24 * time.Hour, // how long to save consumer group offsets
-		// connection config
-		ReadBackoffMin:        250 * time.Millisecond, // minimum amount of time to poll for new messages
-		ReadBackoffMax:        5 * time.Second,        // maximum amount of time to poll for new messages
-		MaxAttempts:           3,                      // number of attempts before reporting errors for establishing connection
-		OffsetOutOfRangeError: true,                   // will be permanently true in the future
+	reader, err := kgo.NewClient(append(s.commonOpts(client.auth), []kgo.Opt{
+		// consumer topic
+		kgo.ConsumeTopics(topic),
+		// consumer group
+		kgo.ConsumerGroup(group),
+		kgo.Balancers(kgo.CooperativeStickyBalancer()),
+		kgo.ConsumeResetOffset(
+			kgo.NewOffset().AfterMilli(time.Now().Round(0).UnixMilli()),
+		), // consume requests after now
+		kgo.RebalanceTimeout(30 * time.Second),
+		// liveness
+		kgo.HeartbeatInterval(3 * time.Second),
+		kgo.SessionTimeout(15 * time.Second),
+		// commits
+		kgo.AutoCommitInterval(2500 * time.Millisecond),
+		kgo.AutoCommitMarks(), // only commit marked messages
+		// consumer requests
+		kgo.FetchMinBytes(1),
+		kgo.FetchMaxBytes(1 << 20),          // 1MB
+		kgo.FetchMaxPartitionBytes(1 << 20), // 1MB
+		kgo.FetchMaxWait(5 * time.Second),
+		// transactions
+		kgo.FetchIsolationLevel(kgo.ReadCommitted()), // only read committed transactions
+		kgo.RequireStableFetchOffsets(),              // do not allow offsets past uncommitted transaction
+	}))
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
-	if err := readerconfig.Validate(); err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Invalid reader config")
-	}
+
 	sub := &subscription{
 		s:     s,
 		topic: topic,
@@ -473,42 +504,50 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 			"events.topic": topic,
 			"events.group": group,
 		})),
-		reader: kafka.NewReader(readerconfig),
+		reader: reader,
 	}
-	sub.log.Info(ctx, "Added subscription", nil)
+	sub.log.Info(ctx, "Added subscriber", nil)
 	return sub, nil
 }
 
 // ReadMsg reads a message
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
-	m, err := s.reader.FetchMessage(ctx)
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to read message")
+	fetches := s.reader.PollRecords(ctx, 1)
+	if err := fetches.Err0(); err != nil {
+		err = kerrors.WithKind(err, ErrorClient{}, "Failed to read message")
+		if errors.Is(err, kgo.ErrClientClosed) {
+			return nil, kerrors.WithKind(err, ErrorClientClosed{}, "Client closed")
+		}
+		return nil, err
 	}
+	iter := fetches.RecordIter()
+	if iter.Done() {
+		return nil, kerrors.WithKind(nil, ErrorReadEmpty{}, "No messages")
+	}
+	m := iter.Next()
 	return &Msg{
 		Topic:     m.Topic,
 		Key:       string(m.Key),
-		Data:      m.Value,
-		Partition: m.Partition,
+		Value:     m.Value,
+		Partition: int(m.Partition),
 		Offset:    m.Offset,
-		Time:      m.Time,
-		msg:       m,
+		Time:      m.Timestamp.UTC(),
+		record:    m,
 	}, nil
 }
 
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
-	if err := s.reader.CommitMessages(ctx, msg.msg); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to commit message offset")
+	if msg.record == nil {
+		return kerrors.WithKind(nil, ErrorInvalidMsg{}, "Invalid message")
 	}
+	s.reader.MarkCommitRecords(msg.record)
 	return nil
 }
 
 // Close closes the subscription
 func (s *subscription) Close() error {
-	if err := s.reader.Close(); err != nil {
-		return kerrors.WithKind(err, ErrorClient{}, "Failed to close consumer")
-	}
+	s.reader.Close()
 	return nil
 }
 
