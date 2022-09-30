@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"xorkevin.dev/governor"
@@ -17,17 +20,20 @@ import (
 )
 
 type (
-	// // StreamOpts are opts for streams
-	// StreamOpts struct {
-	// 	Replicas   int
-	// 	MaxAge     time.Duration
-	// 	MaxBytes   int64
-	// 	MaxMsgSize int32
-	// 	MaxMsgs    int64
-	// }
+	// StreamOpts are opts for streams
+	StreamOpts struct {
+		Partitions     int
+		Replicas       int
+		ReplicaQuorum  int
+		RetentionAge   time.Duration
+		RetentionBytes int
+		MaxMsgBytes    int
+	}
 
 	// ConsumerOpts are opts for event stream consumers
 	ConsumerOpts struct {
+		MaxBytes         int
+		RebalanceTimeout time.Duration
 	}
 
 	// Msg is a subscription message
@@ -60,13 +66,14 @@ type (
 	Events interface {
 		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
 		Publish(ctx context.Context, msgs ...ProduceMsg) error
-		//InitStream(ctx context.Context, topic string, opts StreamOpts) error
-		//DeleteStream(ctx context.Context, topic string) error
+		InitStream(ctx context.Context, topic string, opts StreamOpts) error
+		DeleteStream(ctx context.Context, topic string) error
 	}
 
 	kafkaClient struct {
-		auth   scram.Auth
-		client *kgo.Client
+		auth      scram.Auth
+		client    *kgo.Client
+		admclient *kadm.Client
 	}
 
 	getClientRes struct {
@@ -246,6 +253,8 @@ type (
 	ErrorReadEmpty struct{}
 	// ErrorInvalidMsg is returned when the message is malformed
 	ErrorInvalidMsg struct{}
+	// ErrorNotFound is returned when the object is not found
+	ErrorNotFound struct{}
 )
 
 func (e ErrorConn) Error() string {
@@ -266,6 +275,10 @@ func (e ErrorReadEmpty) Error() string {
 
 func (e ErrorInvalidMsg) Error() string {
 	return "Invalid message"
+}
+
+func (e ErrorNotFound) Error() string {
+	return "Not found"
 }
 
 type (
@@ -326,8 +339,9 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 	}
 
 	s.client = &kafkaClient{
-		auth:   authMechanism,
-		client: client,
+		auth:      authMechanism,
+		client:    client,
+		admclient: kadm.NewClient(client),
 	}
 	s.aclient.Store(s.client)
 	s.auth = secret
@@ -352,8 +366,8 @@ func (s *Service) commonOpts(auth scram.Auth) []kgo.Opt {
 		kgo.Dialer(netDialer.DialContext),
 		kgo.ConnIdleTimeout(30 * time.Second),
 		// reading and writing data
-		kgo.BrokerMaxReadBytes(1 << 21),  // 2MB
-		kgo.BrokerMaxWriteBytes(1 << 21), // 2MB
+		kgo.BrokerMaxReadBytes(1 << 25),  // 32MB
+		kgo.BrokerMaxWriteBytes(1 << 25), // 32MB
 		kgo.RequestRetries(16),
 		kgo.RequestTimeoutOverhead(10 * time.Second), // request.timeout.ms
 		// do not specify RetryBackoffFn use default exponential backoff with
@@ -472,6 +486,12 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	if err != nil {
 		return nil, err
 	}
+	if opts.MaxBytes == 0 {
+		opts.MaxBytes = 1 << 20 // 1MB
+	}
+	if opts.RebalanceTimeout == 0 {
+		opts.RebalanceTimeout = 30 * time.Second
+	}
 	reader, err := kgo.NewClient(append(s.commonOpts(client.auth), []kgo.Opt{
 		// consumer topic
 		kgo.ConsumeTopics(topic),
@@ -481,7 +501,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		kgo.ConsumeResetOffset(
 			kgo.NewOffset().AfterMilli(time.Now().Round(0).UnixMilli()),
 		), // consume requests after now
-		kgo.RebalanceTimeout(30 * time.Second),
+		kgo.RebalanceTimeout(opts.RebalanceTimeout),
 		// liveness
 		kgo.HeartbeatInterval(3 * time.Second),
 		kgo.SessionTimeout(15 * time.Second),
@@ -490,8 +510,8 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		kgo.AutoCommitMarks(), // only commit marked messages
 		// consumer requests
 		kgo.FetchMinBytes(1),
-		kgo.FetchMaxBytes(1 << 20),          // 1MB
-		kgo.FetchMaxPartitionBytes(1 << 20), // 1MB
+		kgo.FetchMaxBytes(int32(opts.MaxBytes)),
+		kgo.FetchMaxPartitionBytes(int32(opts.MaxBytes)),
 		kgo.FetchMaxWait(5 * time.Second),
 		// transactions
 		kgo.FetchIsolationLevel(kgo.ReadCommitted()), // only read committed transactions
@@ -583,53 +603,122 @@ func (s *subscription) Close(ctx context.Context) error {
 	return nil
 }
 
-// // InitStream initializes a stream
-// func (s *Service) InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error {
-// 	client, err := s.getClient(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	cfg := &nats.StreamConfig{
-// 		Name:       name,
-// 		Subjects:   subjects,
-// 		Retention:  nats.LimitsPolicy,
-// 		Discard:    nats.DiscardOld,
-// 		Storage:    nats.FileStorage,
-// 		Replicas:   opts.Replicas,
-// 		MaxAge:     opts.MaxAge,
-// 		MaxBytes:   opts.MaxBytes,
-// 		MaxMsgSize: opts.MaxMsgSize,
-// 		MaxMsgs:    opts.MaxMsgs,
-// 	}
-// 	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
-// 		if !strings.Contains(err.Error(), "not found") {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-// 		}
-// 		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to create stream")
-// 		}
-// 	} else {
-// 		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to update stream")
-// 		}
-// 	}
-// 	return nil
-// }
-//
-// // DeleteStream deletes a stream
-// func (s *Service) DeleteStream(ctx context.Context, topic string) error {
-// 	client, err := s.getClient(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if _, err := client.stream.StreamInfo(topic, nats.Context(ctx)); err != nil {
-// 		if !strings.Contains(err.Error(), "not found") {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-// 		}
-// 	} else {
-// 		if err := client.stream.DeleteStream(topic, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
-// 		}
-// 	}
-// 	return nil
-// }
+func optInt(a int) *string {
+	return kadm.StringPtr(strconv.Itoa(a))
+}
+
+func (s *Service) checkStream(ctx context.Context, client *kadm.Client, topic string) (*kadm.TopicDetail, error) {
+	res, err := client.ListTopics(ctx, topic)
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to get topic info")
+	}
+	resTopic := res[topic]
+	if resTopic.Topic != topic {
+		return nil, kerrors.WithKind(nil, ErrorNotFound{}, "Topic not found")
+	}
+	if err := resTopic.Err; err != nil {
+		if errors.Is(err, kerr.UnknownTopicOrPartition) {
+			return nil, kerrors.WithKind(err, ErrorNotFound{}, "Topic not found")
+		}
+		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to get topic info")
+	}
+	return &resTopic, nil
+}
+
+// InitStream initializes a stream
+func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts) error {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	if info, err := s.checkStream(ctx, client.admclient, topic); err != nil {
+		if !errors.Is(err, ErrorNotFound{}) {
+			return err
+		}
+		res, err := client.admclient.CreateTopics(ctx, int32(opts.Partitions), int16(opts.Replicas), map[string]*string{
+			"min.insync.replicas": optInt(opts.ReplicaQuorum),
+			"retention.ms":        optInt(int(opts.RetentionAge.Milliseconds())),
+			"retention.bytes":     optInt(opts.RetentionBytes),
+			"max.message.bytes":   optInt(opts.MaxMsgBytes),
+		}, topic)
+		if err != nil {
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to create topic")
+		}
+		resTopic := res[topic]
+		if resTopic.Topic != topic {
+			return kerrors.WithKind(nil, ErrorClient{}, "Failed to create topic")
+		}
+		if resTopic.Err != nil {
+			return kerrors.WithKind(resTopic.Err, ErrorClient{}, "Failed to create topic")
+		}
+	} else {
+		res, err := client.admclient.AlterTopicConfigs(ctx, []kadm.AlterConfig{
+			{Op: kadm.SetConfig, Name: "min.insync.replicas", Value: optInt(opts.ReplicaQuorum)},
+			{Op: kadm.SetConfig, Name: "retention.ms", Value: optInt(int(opts.RetentionAge.Milliseconds()))},
+			{Op: kadm.SetConfig, Name: "retention.bytes", Value: optInt(opts.RetentionBytes)},
+			{Op: kadm.SetConfig, Name: "max.message.bytes", Value: optInt(opts.MaxMsgBytes)},
+		}, topic)
+		if err != nil {
+			return kerrors.WithKind(err, ErrorClient{}, "Failed to update topic")
+		}
+		var resTopic *kadm.AlterConfigsResponse
+		for _, i := range res {
+			if i.Name == topic {
+				k := i
+				resTopic = &k
+				break
+			}
+		}
+		if resTopic == nil {
+			return kerrors.WithKind(nil, ErrorClient{}, "Failed to update topic")
+		}
+		if resTopic.Err != nil {
+			return kerrors.WithKind(resTopic.Err, ErrorClient{}, "Failed to update topic")
+		}
+		numPartitions := len(info.Partitions)
+		if opts.Partitions > numPartitions {
+			res, err := client.admclient.UpdatePartitions(ctx, opts.Partitions, topic)
+			if err != nil {
+				return kerrors.WithKind(err, ErrorClient{}, "Failed to update topic partitions")
+			}
+			resTopic := res[topic]
+			if resTopic.Topic != topic {
+				return kerrors.WithKind(nil, ErrorClient{}, "Failed to update topic partitions")
+			}
+			if resTopic.Err != nil {
+				return kerrors.WithKind(resTopic.Err, ErrorClient{}, "Failed to update topic partitions")
+			}
+		} else if opts.Partitions < numPartitions {
+			s.log.Warn(ctx, "May not specify fewer partitions", klog.Fields{
+				"events.topic": topic,
+			})
+		}
+	}
+	return nil
+}
+
+// DeleteStream deletes a stream
+func (s *Service) DeleteStream(ctx context.Context, topic string) error {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := s.checkStream(ctx, client.admclient, topic); err != nil {
+		if !errors.Is(err, ErrorNotFound{}) {
+			return err
+		}
+		return nil
+	}
+	res, err := client.admclient.DeleteTopics(ctx, topic)
+	if err != nil {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to delete topic")
+	}
+	resTopic := res[topic]
+	if resTopic.Topic != topic {
+		return kerrors.WithKind(err, ErrorClient{}, "Failed to delete topic")
+	}
+	if resTopic.Err != nil {
+		return kerrors.WithKind(resTopic.Err, ErrorClient{}, "Failed to delete topic")
+	}
+	return nil
+}

@@ -22,6 +22,7 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.8.0
 	github.com/twmb/franz-go v1.7.1
+	github.com/twmb/franz-go/pkg/kadm v1.2.1
 	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
 	gopkg.in/square/go-jose.v2 v2.6.0
