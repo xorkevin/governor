@@ -44,7 +44,7 @@ type (
 		Key       string
 		Value     []byte
 		Partition int
-		Offset    int64
+		Offset    int
 		Time      time.Time
 		record    *kgo.Record
 	}
@@ -555,7 +555,7 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	fetches := s.reader.PollRecords(ctx, 1)
 	if err := fetches.Err0(); err != nil {
 		err = kerrors.WithKind(err, ErrorClient{}, "Failed to read message")
-		if errors.Is(err, kgo.ErrClientClosed) {
+		if !kerr.IsRetriable(err) {
 			return nil, kerrors.WithKind(err, ErrorClientClosed{}, "Client closed")
 		}
 		return nil, err
@@ -570,7 +570,7 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 		Key:       string(m.Key),
 		Value:     m.Value,
 		Partition: int(m.Partition),
-		Offset:    m.Offset,
+		Offset:    int(m.Offset),
 		Time:      m.Timestamp.UTC(),
 		record:    m,
 	}, nil
@@ -754,8 +754,15 @@ type (
 		group       string
 		opts        ConsumerOpts
 		handler     Handler
+		dlqHandler  Handler
+		maxDeliver  int
 		reqidprefix string
 		reqcount    *atomic.Uint32
+	}
+
+	tuple2 struct {
+		f0 int
+		f1 int
 	}
 )
 
@@ -765,7 +772,7 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 }
 
 // NewWatcher creates a new watcher
-func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, reqidprefix string) *Watcher {
+func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqHandler Handler, maxDeliver int, reqidprefix string) *Watcher {
 	return &Watcher{
 		ev: ev,
 		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
@@ -776,6 +783,8 @@ func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOp
 		group:       group,
 		opts:        opts,
 		handler:     handler,
+		dlqHandler:  dlqHandler,
+		maxDeliver:  maxDeliver,
 		reqidprefix: reqidprefix,
 		reqcount:    &atomic.Uint32{},
 	}
@@ -790,7 +799,7 @@ const (
 )
 
 // Watch watches over a subscription
-func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration) {
+func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration, maxBackoff time.Duration) {
 	defer wg.Done()
 	delay := watchStartDelay
 	for {
@@ -816,30 +825,100 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 				}
 			}()
 			delay = watchStartDelay
+
+			handleDelay := watchStartDelay
+			var count int
+			lastmsg := tuple2{
+				f0: -1,
+				f1: -1,
+			}
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
-					if sub.IsPermanentlyClosed() {
+					if errors.Is(err, ErrorClientClosed{}) {
 						return
 					}
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+					select {
+					case <-ctx.Done():
+					case <-time.After(handleDelay):
+						handleDelay = min(handleDelay*2, maxBackoff)
+						continue
+					}
+				}
+
+				if curmsg := (tuple2{f0: m.Partition, f1: m.Offset}); curmsg != lastmsg {
+					count = 1
+					lastmsg = curmsg
 				}
 				msgctx := klog.WithFields(ctx, klog.Fields{
-					"events.topic":  m.Topic,
-					"events.lreqid": w.lreqID(),
+					"events.topic":     m.Topic,
+					"events.partition": m.Partition,
+					"events.offset":    m.Offset,
+					"events.time":      m.Time.UTC().Format(time.RFC3339Nano),
+					"events.delivered": count,
+					"events.lreqid":    w.lreqID(),
 				})
-				start := time.Now()
-				if err := w.handler.Handle(msgctx, *m); err != nil {
+				if w.dlqHandler != nil && count > w.maxDeliver {
+					count++
+					start := time.Now()
+					if err := w.dlqHandler.Handle(msgctx, *m); err != nil {
+						duration := time.Since(start)
+						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
+							"events.duration_ms": duration.Milliseconds(),
+						})
+						select {
+						case <-ctx.Done():
+						case <-time.After(handleDelay):
+							handleDelay = min(handleDelay*2, maxBackoff)
+							continue
+						}
+					}
 					duration := time.Since(start)
-					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+					w.log.Info(msgctx, "DLQ handled message", klog.Fields{
 						"events.duration_ms": duration.Milliseconds(),
 					})
+					if err := sub.Commit(ctx, *m); err != nil {
+						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+						select {
+						case <-ctx.Done():
+						case <-time.After(handleDelay):
+							handleDelay = min(handleDelay*2, maxBackoff)
+							continue
+						}
+					}
+					w.log.Info(msgctx, "Committed message", nil)
 				} else {
+					count++
+					start := time.Now()
+					if err := w.handler.Handle(msgctx, *m); err != nil {
+						duration := time.Since(start)
+						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+							"events.duration_ms": duration.Milliseconds(),
+						})
+						select {
+						case <-ctx.Done():
+						case <-time.After(handleDelay):
+							handleDelay = min(handleDelay*2, maxBackoff)
+							continue
+						}
+					}
 					duration := time.Since(start)
 					w.log.Info(msgctx, "Handled subscription message", klog.Fields{
 						"events.duration_ms": duration.Milliseconds(),
 					})
+					if err := sub.Commit(ctx, *m); err != nil {
+						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+						select {
+						case <-ctx.Done():
+						case <-time.After(handleDelay):
+							handleDelay = min(handleDelay*2, maxBackoff)
+							continue
+						}
+					}
+					w.log.Info(msgctx, "Committed message", nil)
 				}
+				handleDelay = watchStartDelay
 			}
 		}()
 	}

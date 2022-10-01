@@ -445,7 +445,7 @@ const (
 )
 
 // Watch watches over a subscription
-func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration) {
+func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration, maxBackoff time.Duration) {
 	defer wg.Done()
 	delay := watchStartDelay
 	for {
@@ -471,6 +471,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 				}
 			}()
 			delay = watchStartDelay
+
+			handleDelay := watchStartDelay
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
@@ -478,6 +480,12 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 						return
 					}
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+					select {
+					case <-ctx.Done():
+					case <-time.After(handleDelay):
+						handleDelay = min(handleDelay*2, maxBackoff)
+						continue
+					}
 				}
 				msgctx := klog.WithFields(ctx, klog.Fields{
 					"pubsub.subject": m.Subject,
@@ -489,12 +497,18 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
 						"pubsub.duration_ms": duration.Milliseconds(),
 					})
-				} else {
-					duration := time.Since(start)
-					w.log.Info(msgctx, "Handled subscription message", klog.Fields{
-						"pubsub.duration_ms": duration.Milliseconds(),
-					})
+					select {
+					case <-ctx.Done():
+					case <-time.After(handleDelay):
+						handleDelay = min(handleDelay*2, maxBackoff)
+						continue
+					}
 				}
+				duration := time.Since(start)
+				w.log.Info(msgctx, "Handled subscription message", klog.Fields{
+					"pubsub.duration_ms": duration.Milliseconds(),
+				})
+				handleDelay = watchStartDelay
 			}
 		}()
 	}
