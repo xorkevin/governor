@@ -801,6 +801,14 @@ const (
 // Watch watches over a subscription
 func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration, maxBackoff time.Duration) {
 	defer wg.Done()
+
+	if maxRetry == 0 {
+		maxRetry = 15 * time.Second
+	}
+	if maxBackoff == 0 {
+		maxBackoff = 15 * time.Second
+	}
+
 	delay := watchStartDelay
 	for {
 		select {
