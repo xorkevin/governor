@@ -15,6 +15,8 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -60,6 +62,7 @@ type (
 		ReadMsg(ctx context.Context) (*Msg, error)
 		Commit(ctx context.Context, msg Msg) error
 		Close(ctx context.Context) error
+		IsPermanentlyClosed() bool
 	}
 
 	// Events is a service wrapper around an event stream client
@@ -329,7 +332,7 @@ func (s *Service) handleGetClient(ctx context.Context) (*kafkaClient, error) {
 		kgo.RecordRetries(16),
 		kgo.RequiredAcks(kgo.AllISRAcks()), // require all in-sync replicas to ack
 		kgo.UnknownTopicRetries(3),
-	}))
+	}...)...)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
@@ -516,7 +519,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		// transactions
 		kgo.FetchIsolationLevel(kgo.ReadCommitted()), // only read committed transactions
 		kgo.RequireStableFetchOffsets(),              // do not allow offsets past uncommitted transaction
-	}))
+	}...)...)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
@@ -601,6 +604,11 @@ func (s *subscription) Close(ctx context.Context) error {
 	s.closed = true
 	s.log.Info(ctx, "Closed subscriber", nil)
 	return nil
+}
+
+// IsPermanentlyClosed returns if the client is closed
+func (s *subscription) IsPermanentlyClosed() bool {
+	return s.isClosed()
 }
 
 func optInt(a int) *string {
@@ -721,4 +729,118 @@ func (s *Service) DeleteStream(ctx context.Context, topic string) error {
 		return kerrors.WithKind(resTopic.Err, ErrorClient{}, "Failed to delete topic")
 	}
 	return nil
+}
+
+func min(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+type (
+	// Handler handles a subscription message
+	Handler interface {
+		Handle(ctx context.Context, m Msg) error
+	}
+
+	HandlerFunc func(ctx context.Context, m Msg) error
+
+	// Watcher watches over a subscription
+	Watcher struct {
+		ev          Events
+		log         *klog.LevelLogger
+		topic       string
+		group       string
+		opts        ConsumerOpts
+		handler     Handler
+		reqidprefix string
+		reqcount    *atomic.Uint32
+	}
+)
+
+// Handle implements [Handler]
+func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
+	return f(ctx, m)
+}
+
+// NewWatcher creates a new watcher
+func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, reqidprefix string) *Watcher {
+	return &Watcher{
+		ev: ev,
+		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
+			"events.topic": topic,
+			"events.group": group,
+		})),
+		topic:       topic,
+		group:       group,
+		opts:        opts,
+		handler:     handler,
+		reqidprefix: reqidprefix,
+		reqcount:    &atomic.Uint32{},
+	}
+}
+
+func (w *Watcher) lreqID() string {
+	return w.reqidprefix + "-" + uid.ReqID(w.reqcount.Add(1))
+}
+
+const (
+	watchStartDelay = 250 * time.Millisecond
+)
+
+// Watch watches over a subscription
+func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration) {
+	defer wg.Done()
+	delay := watchStartDelay
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		func() {
+			sub, err := w.ev.Subscribe(ctx, w.topic, w.group, w.opts)
+			if err != nil {
+				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
+				select {
+				case <-ctx.Done():
+				case <-time.After(delay):
+					delay = min(delay*2, maxRetry)
+				}
+				return
+			}
+			defer func() {
+				if err := sub.Close(ctx); err != nil {
+					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"), nil)
+				}
+			}()
+			delay = watchStartDelay
+			for {
+				m, err := sub.ReadMsg(ctx)
+				if err != nil {
+					if sub.IsPermanentlyClosed() {
+						return
+					}
+					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+				}
+				msgctx := klog.WithFields(ctx, klog.Fields{
+					"events.topic":  m.Topic,
+					"events.lreqid": w.lreqID(),
+				})
+				start := time.Now()
+				if err := w.handler.Handle(msgctx, *m); err != nil {
+					duration := time.Since(start)
+					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+				} else {
+					duration := time.Since(start)
+					w.log.Info(msgctx, "Handled subscription message", klog.Fields{
+						"events.duration_ms": duration.Milliseconds(),
+					})
+				}
+			}
+		}()
+	}
 }
