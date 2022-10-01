@@ -49,8 +49,8 @@ type (
 		record    *kgo.Record
 	}
 
-	// ProduceMsg is a message for writing
-	ProduceMsg struct {
+	// PublishMsg is a message for writing
+	PublishMsg struct {
 		Topic string
 		Key   string
 		Value []byte
@@ -68,7 +68,7 @@ type (
 	// Events is a service wrapper around an event stream client
 	Events interface {
 		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
-		Publish(ctx context.Context, msgs ...ProduceMsg) error
+		Publish(ctx context.Context, msgs ...PublishMsg) error
 		InitStream(ctx context.Context, topic string, opts StreamOpts) error
 		DeleteStream(ctx context.Context, topic string) error
 	}
@@ -453,8 +453,25 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
+// NewMsgs creates new publish messages for the same topic and key
+func NewMsgs(topic string, key string, values ...[]byte) []PublishMsg {
+	if len(values) == 0 {
+		return nil
+	}
+
+	m := make([]PublishMsg, 0, len(values))
+	for _, i := range values {
+		m = append(m, PublishMsg{
+			Topic: topic,
+			Key:   key,
+			Value: i,
+		})
+	}
+	return m
+}
+
 // Publish publishes an event
-func (s *Service) Publish(ctx context.Context, msgs ...ProduceMsg) error {
+func (s *Service) Publish(ctx context.Context, msgs ...PublishMsg) error {
 	if len(msgs) == 0 {
 		return nil
 	}

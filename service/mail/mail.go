@@ -3,6 +3,7 @@ package mail
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
@@ -29,6 +31,11 @@ import (
 
 const (
 	mailUIDRandSize = 8
+)
+
+const (
+	mailEventKindMail = "mail"
+	mailEventKindGC   = "gc"
 )
 
 const (
@@ -86,6 +93,16 @@ type (
 		Name    string `json:"name"`
 	}
 
+	mailEventDec struct {
+		Kind    string          `json:"kind"`
+		Payload json.RawMessage `json:"payload"`
+	}
+
+	mailEventEnc struct {
+		Kind    string      `json:"kind"`
+		Payload interface{} `json:"payload"`
+	}
+
 	mailmsg struct {
 		ReturnPath string  `json:"retpath"`
 		From       Addr    `json:"from"`
@@ -96,14 +113,14 @@ type (
 		FwdData    fwdData `json:"fwd_data"`
 	}
 
+	mailgcmsg struct {
+		MsgPath string `json:"msgpath"`
+	}
+
 	msgbuilder struct {
 		headers  []string
 		body     []byte
 		htmlbody []byte
-	}
-
-	mailgcmsg struct {
-		MsgPath string `json:"msgpath"`
 	}
 
 	maildataCipher struct {
@@ -138,10 +155,11 @@ type (
 		sendMailDir     objstore.Dir
 		maildataCipher  *maildataCipher
 		amaildataCipher *atomic.Pointer[maildataCipher]
+		instance        string
 		config          governor.SecretReader
 		log             *klog.LevelLogger
 		streamns        string
-		opts            svcOpts
+		streammail      string
 		host            string
 		addr            string
 		auth            secretAuth
@@ -160,15 +178,10 @@ type (
 		hbmaxfail       int
 		done            <-chan struct{}
 		authrefresh     time.Duration
+		wg              *ksync.WaitGroup
 	}
 
 	ctxKeyMailer struct{}
-
-	svcOpts struct {
-		StreamName  string
-		MailChannel string
-		GCChannel   string
-	}
 )
 
 // TplLocal is a local template source
@@ -219,13 +232,8 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailer(inj, s)
-	streamname := strings.ToUpper(name)
-	s.streamns = streamname
-	s.opts = svcOpts{
-		StreamName:  streamname,
-		MailChannel: streamname + ".mail",
-		GCChannel:   streamname + ".gc",
-	}
+	s.streamns = name
+	s.streammail = name + ".mail"
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
@@ -249,6 +257,7 @@ type (
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
+	s.instance = c.Instance
 
 	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
@@ -479,26 +488,18 @@ func (s *Service) getCipher(ctx context.Context) (*maildataCipher, error) {
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
-		AckWait:    30 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
-	}
-	s.log.Info(ctx, "Subscribed to mail queue", nil)
-
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.GCChannel, s.streamns+"_WORKER_GC", s.gcSubscriber, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to mail gc queue")
-	}
-	s.log.Info(ctx, "Subscribed to mail gc queue", nil)
-
+	s.wg.Add(1)
+	go events.NewWatcher(s.events, s.log.Logger, s.streammail, s.streamns+".worker", events.ConsumerOpts{
+		MaxBytes: int(s.eventsize),
+	}, events.HandlerFunc(s.mailEventHandler), nil, 0, s.instance).Watch(ctx, s.wg, 0, 0)
+	s.log.Info(ctx, "Subscribed to mail stream", nil)
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 	select {
 	case <-s.done:
 		return
@@ -512,11 +513,13 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
 	s.log.Info(ctx, "Created mail bucket", nil)
-	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
+	if err := s.events.InitStream(ctx, s.streammail, events.StreamOpts{
+		Partitions:     16,
+		Replicas:       1,
+		ReplicaQuorum:  1,
+		RetentionAge:   30 * 24 * time.Hour,
+		RetentionBytes: int(s.streamsize),
+		MaxMsgBytes:    int(s.eventsize),
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mail stream")
 	}
@@ -590,7 +593,22 @@ func (e ErrorSendMail) Error() string {
 	return "Error sending email"
 }
 
-func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) mailEventHandler(ctx context.Context, msg events.Msg) error {
+	var m mailEventDec
+	if err := kjson.Unmarshal(msg.Value, &m); err != nil {
+		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail event")
+	}
+	switch m.Kind {
+	case mailEventKindMail:
+		return s.mailHandler(ctx, m.Payload)
+	case mailEventKindGC:
+		return s.gcHandler(ctx, m.Payload)
+	default:
+		return kerrors.WithKind(nil, ErrorMailEvent{}, "Invalid mail event kind")
+	}
+}
+
+func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 	var emmsg mailmsg
 	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail message")
@@ -600,8 +618,6 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 
 	var tag string
 	var auth *hunter2.Poly1305Auth
-
-	msgpath := ""
 
 	if emmsg.Kind == mailMsgKindFwd {
 		data := emmsg.FwdData
@@ -623,7 +639,6 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"), nil)
 			}
 		}()
-		msgpath = data.Path
 		msg = b1
 		if data.Encrypted {
 			cipher, err := s.getCipher(ctx)
@@ -674,7 +689,6 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"), nil)
 				}
 			}()
-			msgpath = data.Path
 			body = b1
 			if data.Encrypted {
 				cipher, err := s.getCipher(ctx)
@@ -769,29 +783,12 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 		}
 	}
 
-	var gcpath []byte
-	if msgpath != "" {
-		b, err := kjson.Marshal(mailgcmsg{
-			MsgPath: msgpath,
-		})
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to encode mail gc event to json")
-		}
-		gcpath = b
-	}
-
 	to := make([]string, 0, len(emmsg.To))
 	for _, i := range emmsg.To {
 		to = append(to, i.Address)
 	}
 	if err := s.handleSendMail(ctx, emmsg.ReturnPath, to, msg); err != nil {
 		return err
-	}
-
-	if len(gcpath) != 0 {
-		if err := s.events.StreamPublish(ctx, s.opts.GCChannel, gcpath); err != nil {
-			return kerrors.WithMsg(err, "Failed to publish mail gc event")
-		}
 	}
 	return nil
 }
@@ -907,7 +904,7 @@ func genMsgID(msgiddomain string) (string, error) {
 	return fmt.Sprintf("%s@%s", u.Base32(), msgiddomain), nil
 }
 
-func (s *Service) gcSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
+func (s *Service) gcHandler(ctx context.Context, msgdata []byte) error {
 	var gcmsg mailgcmsg
 	if err := kjson.Unmarshal(msgdata, &gcmsg); err != nil {
 		return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decode mail gc message")
@@ -930,6 +927,12 @@ func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 	if err != nil {
 		return err
 	}
+
+	u, err := uid.NewSnowflake(mailUIDRandSize)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
+	}
+	path := u.Base32()
 
 	databytes, err := kjson.Marshal(emdata)
 	if err != nil {
@@ -956,24 +959,26 @@ func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 	if from.Name == "" {
 		from.Name = s.fromName
 	}
-	msg := mailmsg{
-		ReturnPath: retpath,
-		From:       from,
-		To:         to,
-		Kind:       mailMsgKindTpl,
-		TplData: tplData{
-			MsgID:     msgid,
-			Tpl:       tpl,
-			Emdata:    datastring,
-			Encrypted: encrypt,
-		},
-	}
 
-	b, err := kjson.Marshal(msg)
+	b, err := kjson.Marshal(mailEventEnc{
+		Kind: mailEventKindMail,
+		Payload: mailmsg{
+			ReturnPath: retpath,
+			From:       from,
+			To:         to,
+			Kind:       mailMsgKindTpl,
+			TplData: tplData{
+				MsgID:     msgid,
+				Tpl:       tpl,
+				Emdata:    datastring,
+				Encrypted: encrypt,
+			},
+		},
+	})
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streammail, path, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish mail event")
 	}
 	return nil
@@ -1050,27 +1055,38 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 	if from.Name == "" {
 		from.Name = s.fromName
 	}
-	msg := mailmsg{
-		ReturnPath: retpath,
-		From:       from,
-		To:         to,
-		Kind:       mailMsgKindRaw,
-		RawData: rawData{
-			MsgID:     msgid,
-			Subject:   subject,
-			Path:      path,
-			Key:       key,
-			Tag:       tag,
-			Encrypted: encrypt,
-		},
-	}
 
-	b, err := kjson.Marshal(msg)
+	b0, err := kjson.Marshal(mailEventEnc{
+		Kind: mailEventKindMail,
+		Payload: mailmsg{
+			ReturnPath: retpath,
+			From:       from,
+			To:         to,
+			Kind:       mailMsgKindRaw,
+			RawData: rawData{
+				MsgID:     msgid,
+				Subject:   subject,
+				Path:      path,
+				Key:       key,
+				Tag:       tag,
+				Encrypted: encrypt,
+			},
+		},
+	})
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
-		return kerrors.WithMsg(err, "Failed to publish mail event")
+	b1, err := kjson.Marshal(mailEventEnc{
+		Kind: mailEventKindGC,
+		Payload: mailgcmsg{
+			MsgPath: path,
+		},
+	})
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to encode mail event to json")
+	}
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streammail, path, b0, b1)...); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail events")
 	}
 	return nil
 }
@@ -1136,24 +1152,35 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 			Address: i,
 		})
 	}
-	msg := mailmsg{
-		ReturnPath: retpath,
-		To:         toAddrs,
-		Kind:       mailMsgKindFwd,
-		FwdData: fwdData{
-			Path:      path,
-			Key:       key,
-			Tag:       tag,
-			Encrypted: encrypt,
-		},
-	}
 
-	b, err := kjson.Marshal(msg)
+	b0, err := kjson.Marshal(mailEventEnc{
+		Kind: mailEventKindMail,
+		Payload: mailmsg{
+			ReturnPath: retpath,
+			To:         toAddrs,
+			Kind:       mailMsgKindFwd,
+			FwdData: fwdData{
+				Path:      path,
+				Key:       key,
+				Tag:       tag,
+				Encrypted: encrypt,
+			},
+		},
+	})
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode mail event to json")
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.MailChannel, b); err != nil {
-		return kerrors.WithMsg(err, "Failed to publish mail event")
+	b1, err := kjson.Marshal(mailEventEnc{
+		Kind: mailEventKindGC,
+		Payload: mailgcmsg{
+			MsgPath: path,
+		},
+	})
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to encode mail event to json")
+	}
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streammail, path, b0, b1)...); err != nil {
+		return kerrors.WithMsg(err, "Failed to publish mail events")
 	}
 	return nil
 }
