@@ -761,7 +761,14 @@ type (
 		Handle(ctx context.Context, m Msg) error
 	}
 
+	// HandlerFunc implements [Handler] for a function
 	HandlerFunc func(ctx context.Context, m Msg) error
+
+	// WatchOpts are options for watching a subscription
+	WatchOpts struct {
+		MaxRetry   time.Duration
+		MaxBackoff time.Duration
+	}
 
 	// Watcher watches over a subscription
 	Watcher struct {
@@ -771,8 +778,8 @@ type (
 		group       string
 		opts        ConsumerOpts
 		handler     Handler
-		dlqHandler  Handler
-		maxDeliver  int
+		dlqhandler  Handler
+		maxdeliver  int
 		reqidprefix string
 		reqcount    *atomic.Uint32
 	}
@@ -789,7 +796,7 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 }
 
 // NewWatcher creates a new watcher
-func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqHandler Handler, maxDeliver int, reqidprefix string) *Watcher {
+func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqhandler Handler, maxdeliver int, reqidprefix string) *Watcher {
 	return &Watcher{
 		ev: ev,
 		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
@@ -800,8 +807,8 @@ func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOp
 		group:       group,
 		opts:        opts,
 		handler:     handler,
-		dlqHandler:  dlqHandler,
-		maxDeliver:  maxDeliver,
+		dlqhandler:  dlqhandler,
+		maxdeliver:  maxdeliver,
 		reqidprefix: reqidprefix,
 		reqcount:    &atomic.Uint32{},
 	}
@@ -816,14 +823,14 @@ const (
 )
 
 // Watch watches over a subscription
-func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Duration, maxBackoff time.Duration) {
+func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 	defer wg.Done()
 
-	if maxRetry == 0 {
-		maxRetry = 15 * time.Second
+	if opts.MaxRetry == 0 {
+		opts.MaxRetry = 15 * time.Second
 	}
-	if maxBackoff == 0 {
-		maxBackoff = 15 * time.Second
+	if opts.MaxBackoff == 0 {
+		opts.MaxBackoff = 15 * time.Second
 	}
 
 	delay := watchStartDelay
@@ -840,7 +847,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 				select {
 				case <-ctx.Done():
 				case <-time.After(delay):
-					delay = min(delay*2, maxRetry)
+					delay = min(delay*2, opts.MaxRetry)
 				}
 				return
 			}
@@ -867,7 +874,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 					select {
 					case <-ctx.Done():
 					case <-time.After(handleDelay):
-						handleDelay = min(handleDelay*2, maxBackoff)
+						handleDelay = min(handleDelay*2, opts.MaxBackoff)
 						continue
 					}
 				}
@@ -884,10 +891,10 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 					"events.delivered": count,
 					"events.lreqid":    w.lreqID(),
 				})
-				if w.dlqHandler != nil && count > w.maxDeliver {
+				if w.dlqhandler != nil && count > w.maxdeliver {
 					count++
 					start := time.Now()
-					if err := w.dlqHandler.Handle(msgctx, *m); err != nil {
+					if err := w.dlqhandler.Handle(msgctx, *m); err != nil {
 						duration := time.Since(start)
 						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
 							"events.duration_ms": duration.Milliseconds(),
@@ -895,7 +902,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 						select {
 						case <-ctx.Done():
 						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, maxBackoff)
+							handleDelay = min(handleDelay*2, opts.MaxBackoff)
 							continue
 						}
 					}
@@ -908,7 +915,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 						select {
 						case <-ctx.Done():
 						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, maxBackoff)
+							handleDelay = min(handleDelay*2, opts.MaxBackoff)
 							continue
 						}
 					}
@@ -924,7 +931,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 						select {
 						case <-ctx.Done():
 						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, maxBackoff)
+							handleDelay = min(handleDelay*2, opts.MaxBackoff)
 							continue
 						}
 					}
@@ -937,7 +944,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, maxRetry time.Dura
 						select {
 						case <-ctx.Done():
 						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, maxBackoff)
+							handleDelay = min(handleDelay*2, opts.MaxBackoff)
 							continue
 						}
 					}

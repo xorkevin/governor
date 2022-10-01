@@ -489,9 +489,17 @@ func (s *Service) getCipher(ctx context.Context) (*maildataCipher, error) {
 
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
-	go events.NewWatcher(s.events, s.log.Logger, s.streammail, s.streamns+".worker", events.ConsumerOpts{
-		MaxBytes: int(s.eventsize),
-	}, events.HandlerFunc(s.mailEventHandler), nil, 0, s.instance).Watch(ctx, s.wg, 0, 0)
+	go events.NewWatcher(
+		s.events,
+		s.log.Logger,
+		s.streammail,
+		s.streamns+".worker",
+		events.ConsumerOpts{},
+		events.HandlerFunc(s.mailEventHandler),
+		nil,
+		0,
+		s.instance,
+	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to mail stream", nil)
 	return nil
 }

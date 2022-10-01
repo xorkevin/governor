@@ -2,7 +2,6 @@ package role
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -17,8 +16,7 @@ import (
 )
 
 type (
-	// WorkerFunc is a type alias for a role event consumer
-	WorkerFunc = func(ctx context.Context, pinger events.Pinger, props RolesProps) error
+	HandlerFunc = func(ctx context.Context, props RolesProps) error
 
 	// Roles manages user roles
 	Roles interface {
@@ -28,34 +26,29 @@ type (
 		DeleteByRole(ctx context.Context, roleName string, userids []string) error
 		GetRoles(ctx context.Context, userid string, prefix string, amount, offset int) (rank.Rank, error)
 		GetByRole(ctx context.Context, roleName string, amount, offset int) ([]string, error)
-		StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error)
-		StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error)
+		WatchRoles(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher
 	}
 
 	RolesProps struct {
-		Userid string
-		Roles  []string
+		Add    bool     `json:"add"`
+		Userid string   `json:"userid"`
+		Roles  []string `json:"roles"`
 	}
 
 	Service struct {
 		roles             model.Repo
 		kvroleset         kvstore.KVStore
 		events            events.Events
+		instance          string
 		log               *klog.LevelLogger
 		streamns          string
-		opts              svcOpts
+		streamroles       string
 		streamsize        int64
 		eventsize         int32
 		roleCacheDuration time.Duration
 	}
 
 	ctxKeyRoles struct{}
-
-	svcOpts struct {
-		StreamName    string
-		CreateChannel string
-		DeleteChannel string
-	}
 )
 
 // GetCtxRoles returns a Roles service from the context
@@ -91,13 +84,8 @@ func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) *Service {
 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRoles(inj, s)
-	streamname := strings.ToUpper(name)
-	s.streamns = streamname
-	s.opts = svcOpts{
-		StreamName:    streamname,
-		CreateChannel: streamname + ".create",
-		DeleteChannel: streamname + ".delete",
-	}
+	s.streamns = name
+	s.streamroles = name + ".roles"
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -106,6 +94,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
+	s.instance = c.Instance
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -139,11 +128,13 @@ func (s *Service) Stop(ctx context.Context) {
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
+	if err := s.events.InitStream(ctx, s.streamroles, events.StreamOpts{
+		Partitions:     16,
+		Replicas:       1,
+		ReplicaQuorum:  1,
+		RetentionAge:   30 * 24 * time.Hour,
+		RetentionBytes: int(s.streamsize),
+		MaxMsgBytes:    int(s.eventsize),
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init roles stream")
 	}
@@ -169,30 +160,22 @@ func decodeRolesProps(msgdata []byte) (*RolesProps, error) {
 	return m, nil
 }
 
-func (s *Service) StreamSubscribeCreate(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
-	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-		props, err := decodeRolesProps(msgdata)
+func (s *Service) WatchRoles(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher {
+	var dlqfn events.Handler
+	if dlqhandler != nil {
+		dlqfn = events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+			props, err := decodeRolesProps(msg.Value)
+			if err != nil {
+				return err
+			}
+			return dlqhandler(ctx, *props)
+		})
+	}
+	return events.NewWatcher(s.events, s.log.Logger, s.streamroles, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+		props, err := decodeRolesProps(msg.Value)
 		if err != nil {
 			return err
 		}
-		return worker(ctx, pinger, *props)
-	}, streamopts)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to role create channel")
-	}
-	return sub, nil
-}
-
-func (s *Service) StreamSubscribeDelete(group string, worker WorkerFunc, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
-	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-		props, err := decodeRolesProps(msgdata)
-		if err != nil {
-			return err
-		}
-		return worker(ctx, pinger, *props)
-	}, streamopts)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to role delete channel")
-	}
-	return sub, nil
+		return handler(ctx, *props)
+	}), dlqfn, maxdeliver, s.instance)
 }

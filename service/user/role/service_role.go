@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
@@ -92,6 +93,7 @@ end:
 
 func (s *Service) InsertRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := kjson.Marshal(RolesProps{
+		Add:    true,
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})
@@ -104,7 +106,7 @@ func (s *Service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 	// must make a best effort to clear the cache and publish role event
 	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
 	s.clearCache(ctx, userid, roles)
-	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamroles, userid, b)...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new roles event"), nil)
 	}
 	return nil
@@ -112,13 +114,14 @@ func (s *Service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 
 func (s *Service) DeleteRoles(ctx context.Context, userid string, roles rank.Rank) error {
 	b, err := kjson.Marshal(RolesProps{
+		Add:    false,
 		Userid: userid,
 		Roles:  roles.ToSlice(),
 	})
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode roles props to json")
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, b); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamroles, userid, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish delete roles event")
 	}
 	if err := s.roles.DeleteRoles(ctx, userid, roles); err != nil {
