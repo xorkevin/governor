@@ -401,12 +401,6 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.DelEqOrgID(ctx, d, m.OrgID); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete org members")
-	}
-	if err := r.tableMods.DelEqOrgID(ctx, d, m.OrgID); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete org mods")
-	}
 	if err := r.table.DelEqOrgID(ctx, d, m.OrgID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete org")
 	}

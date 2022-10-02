@@ -2,8 +2,6 @@ package profile
 
 import (
 	"context"
-	"strings"
-	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
@@ -12,6 +10,7 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -31,6 +30,7 @@ type (
 		log           *klog.LevelLogger
 		scopens       string
 		streamns      string
+		wg            *ksync.WaitGroup
 	}
 
 	router struct {
@@ -74,13 +74,14 @@ func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter
 		users:         users,
 		ratelimiter:   ratelimiter,
 		gate:          g,
+		wg:            ksync.NewWaitGroup(),
 	}
 }
 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxProfiles(inj, s)
 	s.scopens = "gov." + name
-	s.streamns = strings.ToUpper(name)
+	s.streamns = name
 }
 
 func (s *Service) router() *router {
@@ -100,22 +101,9 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.users.StreamSubscribeCreate(s.streamns+"_WORKER_CREATE", s.userCreateHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user create queue")
-	}
-	s.log.Info(ctx, "Subscribed to user create queue", nil)
-
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
-
+	s.wg.Add(1)
+	go s.users.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to user stream", nil)
 	return nil
 }
 
@@ -138,14 +126,25 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) userCreateHook(ctx context.Context, pinger events.Pinger, props user.NewUserProps) error {
+func (s *Service) userEventHandler(ctx context.Context, props user.UserEvent) error {
+	switch props.Kind {
+	case user.UserEventKindCreate:
+		return s.userCreateEventHandler(ctx, props.Create)
+	case user.UserEventKindDelete:
+		return s.userDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
+func (s *Service) userCreateEventHandler(ctx context.Context, props user.CreateUserProps) error {
 	if _, err := s.createProfile(ctx, props.Userid, "", ""); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userDeleteEventHandler(ctx context.Context, props user.DeleteUserProps) error {
 	if err := s.deleteProfile(ctx, props.Userid); err != nil {
 		return err
 	}
