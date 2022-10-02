@@ -766,7 +766,6 @@ type (
 
 	// WatchOpts are options for watching a subscription
 	WatchOpts struct {
-		MaxRetry   time.Duration
 		MaxBackoff time.Duration
 	}
 
@@ -782,11 +781,6 @@ type (
 		maxdeliver  int
 		reqidprefix string
 		reqcount    *atomic.Uint32
-	}
-
-	tuple2 struct {
-		f0 int
-		f1 int
 	}
 )
 
@@ -826,9 +820,6 @@ const (
 func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 	defer wg.Done()
 
-	if opts.MaxRetry == 0 {
-		opts.MaxRetry = 15 * time.Second
-	}
 	if opts.MaxBackoff == 0 {
 		opts.MaxBackoff = 15 * time.Second
 	}
@@ -847,7 +838,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 				select {
 				case <-ctx.Done():
 				case <-time.After(delay):
-					delay = min(delay*2, opts.MaxRetry)
+					delay = min(delay*2, opts.MaxBackoff)
 				}
 				return
 			}
@@ -858,12 +849,6 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			}()
 			delay = watchStartDelay
 
-			handleDelay := watchStartDelay
-			var count int
-			lastmsg := tuple2{
-				f0: -1,
-				f1: -1,
-			}
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
@@ -873,84 +858,90 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
 					select {
 					case <-ctx.Done():
-					case <-time.After(handleDelay):
-						handleDelay = min(handleDelay*2, opts.MaxBackoff)
+					case <-time.After(delay):
+						delay = min(delay*2, opts.MaxBackoff)
 						continue
 					}
 				}
 
-				if curmsg := (tuple2{f0: m.Partition, f1: m.Offset}); curmsg != lastmsg {
-					count = 1
-					lastmsg = curmsg
-				}
-				msgctx := klog.WithFields(ctx, klog.Fields{
-					"events.topic":     m.Topic,
-					"events.partition": m.Partition,
-					"events.offset":    m.Offset,
-					"events.time":      m.Time.UTC().Format(time.RFC3339Nano),
-					"events.delivered": count,
-					"events.lreqid":    w.lreqID(),
-				})
-				if w.dlqhandler != nil && count > w.maxdeliver {
-					count++
-					start := time.Now()
-					if err := w.dlqhandler.Handle(msgctx, *m); err != nil {
+				count := 1
+				for {
+					msgctx := klog.WithFields(ctx, klog.Fields{
+						"events.topic":     m.Topic,
+						"events.partition": m.Partition,
+						"events.offset":    m.Offset,
+						"events.time":      m.Time.UTC().Format(time.RFC3339Nano),
+						"events.delivered": count,
+						"events.lreqid":    w.lreqID(),
+					})
+					if w.dlqhandler != nil && count > w.maxdeliver {
+						count++
+						start := time.Now()
+						if err := w.dlqhandler.Handle(msgctx, *m); err != nil {
+							duration := time.Since(start)
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
+								"events.duration_ms": duration.Milliseconds(),
+							})
+							select {
+							case <-ctx.Done():
+							case <-time.After(delay):
+								delay = min(delay*2, opts.MaxBackoff)
+								continue
+							}
+						}
 						duration := time.Since(start)
-						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
+						w.log.Info(msgctx, "DLQ handled message", klog.Fields{
 							"events.duration_ms": duration.Milliseconds(),
 						})
-						select {
-						case <-ctx.Done():
-						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, opts.MaxBackoff)
-							continue
+						if err := sub.Commit(ctx, *m); err != nil {
+							if errors.Is(err, ErrorClientClosed{}) {
+								return
+							}
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							select {
+							case <-ctx.Done():
+							case <-time.After(delay):
+								delay = min(delay*2, opts.MaxBackoff)
+								continue
+							}
 						}
-					}
-					duration := time.Since(start)
-					w.log.Info(msgctx, "DLQ handled message", klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-					if err := sub.Commit(ctx, *m); err != nil {
-						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
-						select {
-						case <-ctx.Done():
-						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, opts.MaxBackoff)
-							continue
+						w.log.Info(msgctx, "Committed message", nil)
+					} else {
+						count++
+						start := time.Now()
+						if err := w.handler.Handle(msgctx, *m); err != nil {
+							duration := time.Since(start)
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+								"events.duration_ms": duration.Milliseconds(),
+							})
+							select {
+							case <-ctx.Done():
+							case <-time.After(delay):
+								delay = min(delay*2, opts.MaxBackoff)
+								continue
+							}
 						}
-					}
-					w.log.Info(msgctx, "Committed message", nil)
-				} else {
-					count++
-					start := time.Now()
-					if err := w.handler.Handle(msgctx, *m); err != nil {
 						duration := time.Since(start)
-						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
+						w.log.Info(msgctx, "Handled subscription message", klog.Fields{
 							"events.duration_ms": duration.Milliseconds(),
 						})
-						select {
-						case <-ctx.Done():
-						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, opts.MaxBackoff)
-							continue
+						if err := sub.Commit(ctx, *m); err != nil {
+							if errors.Is(err, ErrorClientClosed{}) {
+								return
+							}
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							select {
+							case <-ctx.Done():
+							case <-time.After(delay):
+								delay = min(delay*2, opts.MaxBackoff)
+								continue
+							}
 						}
+						w.log.Info(msgctx, "Committed message", nil)
+						break
 					}
-					duration := time.Since(start)
-					w.log.Info(msgctx, "Handled subscription message", klog.Fields{
-						"events.duration_ms": duration.Milliseconds(),
-					})
-					if err := sub.Commit(ctx, *m); err != nil {
-						w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
-						select {
-						case <-ctx.Done():
-						case <-time.After(handleDelay):
-							handleDelay = min(handleDelay*2, opts.MaxBackoff)
-							continue
-						}
-					}
-					w.log.Info(msgctx, "Committed message", nil)
 				}
-				handleDelay = watchStartDelay
+				delay = watchStartDelay
 			}
 		}()
 	}

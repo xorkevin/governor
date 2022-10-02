@@ -406,7 +406,6 @@ type (
 
 	// WatchOpts are options for watching a subscription
 	WatchOpts struct {
-		MaxRetry   time.Duration
 		MaxBackoff time.Duration
 	}
 
@@ -455,9 +454,6 @@ const (
 func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 	defer wg.Done()
 
-	if opts.MaxRetry == 0 {
-		opts.MaxRetry = 15 * time.Second
-	}
 	if opts.MaxBackoff == 0 {
 		opts.MaxBackoff = 15 * time.Second
 	}
@@ -476,7 +472,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 				select {
 				case <-ctx.Done():
 				case <-time.After(delay):
-					delay = min(delay*2, opts.MaxRetry)
+					delay = min(delay*2, opts.MaxBackoff)
 				}
 				return
 			}
@@ -487,7 +483,6 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			}()
 			delay = watchStartDelay
 
-			handleDelay := watchStartDelay
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
@@ -497,8 +492,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
 					select {
 					case <-ctx.Done():
-					case <-time.After(handleDelay):
-						handleDelay = min(handleDelay*2, opts.MaxBackoff)
+					case <-time.After(delay):
+						delay = min(delay*2, opts.MaxBackoff)
 						continue
 					}
 				}
@@ -514,8 +509,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					})
 					select {
 					case <-ctx.Done():
-					case <-time.After(handleDelay):
-						handleDelay = min(handleDelay*2, opts.MaxBackoff)
+					case <-time.After(delay):
+						delay = min(delay*2, opts.MaxBackoff)
 						continue
 					}
 				}
@@ -523,7 +518,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 				w.log.Info(msgctx, "Handled subscription message", klog.Fields{
 					"pubsub.duration_ms": duration.Milliseconds(),
 				})
-				handleDelay = watchStartDelay
+				delay = watchStartDelay
 			}
 		}()
 	}
