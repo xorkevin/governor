@@ -62,8 +62,16 @@ func (s *Service) searchFriends(ctx context.Context, userid string, prefix strin
 	}, nil
 }
 
+func tupleSort(a, b string) (string, string) {
+	if a < b {
+		return a, b
+	}
+	return b, a
+}
+
 func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) error {
-	if _, err := s.friends.GetByID(ctx, userid1, userid2); err != nil {
+	m, err := s.friends.GetByID(ctx, userid1, userid2)
+	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Friend not found")
 		}
@@ -76,7 +84,8 @@ func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) err
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to encode unfriend props to json")
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.UnfriendChannel, b); err != nil {
+	u1, u2 := tupleSort(m.Userid1, m.Userid2)
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamconduit, u1+"."+u2, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish unfriend event")
 	}
 	if err := s.friends.Remove(ctx, userid1, userid2); err != nil {
@@ -143,7 +152,8 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 	}
 	// must make best effort attempt to publish friend event
 	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
-	if err := s.events.StreamPublish(ctx, s.opts.FriendChannel, b); err != nil {
+	u1, u2 := tupleSort(m.Userid, m2.Userid)
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamconduit, u1+"."+u2, b)...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish friend event"), nil)
 	}
 	return nil
@@ -208,12 +218,8 @@ func (s *Service) getInvitedFriendInvitations(ctx context.Context, userid string
 	}, nil
 }
 
-func (s *Service) friendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	msg, err := decodeFriendProps(msgdata)
-	if err != nil {
-		return err
-	}
-	m, err := s.dms.New(msg.InvitedBy, msg.Userid)
+func (s *Service) friendEventHandler(ctx context.Context, props friendProps) error {
+	m, err := s.dms.New(props.InvitedBy, props.Userid)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create new dm")
 	}
@@ -225,12 +231,8 @@ func (s *Service) friendSubscriber(ctx context.Context, pinger events.Pinger, to
 	return nil
 }
 
-func (s *Service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	msg, err := decodeUnfriendProps(msgdata)
-	if err != nil {
-		return err
-	}
-	m, err := s.dms.GetByID(ctx, msg.Userid, msg.Other)
+func (s *Service) unfriendEventHandler(ctx context.Context, props unfriendProps) error {
+	m, err := s.dms.GetByID(ctx, props.Userid, props.Other)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			// TODO: emit dm delete event
@@ -241,7 +243,7 @@ func (s *Service) unfriendSubscriber(ctx context.Context, pinger events.Pinger, 
 	if err := s.msgs.DeleteChatMsgs(ctx, m.Chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete dm msgs")
 	}
-	if err := s.dms.Delete(ctx, msg.Userid, msg.Other); err != nil {
+	if err := s.dms.Delete(ctx, props.Userid, props.Other); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete dm")
 	}
 	// TODO: emit dm delete event
