@@ -7,8 +7,8 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/org/model"
-	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 )
@@ -208,7 +208,7 @@ func (s *Service) createOrg(ctx context.Context, userid, displayName, desc strin
 		return nil, kerrors.WithMsg(err, "Failed to insert org")
 	}
 	orgrole := rank.ToOrgName(m.OrgID)
-	if err := s.roles.InsertRoles(ctx, userid, rank.Rank{}.AddMod(orgrole).AddUsr(orgrole)); err != nil {
+	if err := s.users.InsertRoles(ctx, userid, rank.Rank{}.AddMod(orgrole).AddUsr(orgrole)); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to add mod roles to user")
 	}
 	return &ResOrg{
@@ -254,15 +254,17 @@ func (s *Service) deleteOrg(ctx context.Context, orgid string) error {
 		}
 		return kerrors.WithMsg(err, "Failed to get org")
 	}
-	b, err := kjson.Marshal(DeleteOrgProps{
+
+	b, err := encodeOrgEventDelete(DeleteOrgProps{
 		OrgID: m.OrgID,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode org props to json")
+		return err
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, b); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamorgs, orgid, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish delete org event")
 	}
+
 	if err := s.orgs.Delete(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete org")
 	}

@@ -104,7 +104,10 @@ type (
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
 		DeleteRoleInvitations(ctx context.Context, role string) error
-		WatchUsers(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher
+		GetRoleUsers(ctx context.Context, roleName string, amount, offset int) ([]string, error)
+		InsertRoles(ctx context.Context, userid string, roles rank.Rank) error
+		DeleteRolesByRole(ctx context.Context, roleName string, userids []string) error
+		WatchUsers(group string, opts events.ConsumerOpts, handler, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher
 	}
 
 	otpCipher struct {
@@ -739,7 +742,7 @@ func (e ErrorUserEvent) Error() string {
 	return "Malformed user event"
 }
 
-func decodeUsersEvent(msgdata []byte) (*UserEvent, error) {
+func decodeUserEvent(msgdata []byte) (*UserEvent, error) {
 	var m userEventDec
 	if err := kjson.Unmarshal(msgdata, &m); err != nil {
 		return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode user event")
@@ -814,11 +817,11 @@ func encodeUserEventRoles(props RolesProps) ([]byte, error) {
 	return b, nil
 }
 
-func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher {
+func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher {
 	var dlqfn events.Handler
 	if dlqhandler != nil {
 		dlqfn = events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
-			props, err := decodeUsersEvent(msg.Value)
+			props, err := decodeUserEvent(msg.Value)
 			if err != nil {
 				return err
 			}
@@ -826,7 +829,7 @@ func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler Han
 		})
 	}
 	return events.NewWatcher(s.events, s.log.Logger, s.streamusers, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
-		props, err := decodeUsersEvent(msg.Value)
+		props, err := decodeUserEvent(msg.Value)
 		if err != nil {
 			return err
 		}
