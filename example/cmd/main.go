@@ -64,8 +64,7 @@ func main() {
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
 	gov.Register("pubsub", "/null/pubsub", pubsub.New())
-	gov.Register("eventsapi", "/eventsapi", eventsapi.NewCtx(gov.Injector()))
-	gov.Register("events", "/events", events.New())
+	gov.Register("events", "/null/events", events.New())
 	gov.Register("template", "/null/tpl", template.New())
 	{
 		inj := gov.Injector()
@@ -91,6 +90,7 @@ func main() {
 	}
 	gov.Register("token", "/null/token", token.New())
 	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
+	gov.Register("eventsapi", "/eventsapi", eventsapi.NewCtx(gov.Injector()))
 	{
 		inj := gov.Injector()
 		ratelimit.NewSubtreeInCtx(inj, "ws")

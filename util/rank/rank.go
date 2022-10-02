@@ -233,21 +233,15 @@ func IsValidOrgName(orgname string) bool {
 
 // BaseUser creates a new user rank
 func BaseUser() Rank {
-	return Rank{
-		TagUser: struct{}{},
-	}
+	return Rank{}.AddUser()
 }
 
 // Admin creates a new Administrator rank
 func Admin() Rank {
-	b := BaseUser()
-	b[TagAdmin] = struct{}{}
-	return b
+	return BaseUser().AddAdmin()
 }
 
 // System creates a new System rank
 func System() Rank {
-	return Rank{
-		TagSystem: struct{}{},
-	}
+	return Rank{}.AddSystem()
 }

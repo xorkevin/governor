@@ -8,7 +8,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -26,39 +26,45 @@ func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPu
 	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
-	b, err := kjson.Marshal(UpdateUserProps{
-		Userid:   m.Userid,
-		Username: m.Username,
-	})
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode update user props to json")
+	var b []byte
+	if updUsername {
+		var err error
+		b, err = encodeUserEventUpdate(UpdateUserProps{
+			Userid:   m.Userid,
+			Username: m.Username,
+		})
+		if err != nil {
+			return err
+		}
 	}
+
 	if err = s.users.UpdateProps(ctx, m); err != nil {
 		if errors.Is(err, db.ErrorUnique{}) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Username must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update user")
 	}
+
 	if updUsername {
 		// must make a best effort to publish username update
 		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
-		if err := s.events.StreamPublish(ctx, s.opts.UpdateChannel, b); err != nil {
+		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"), nil)
 		}
 	}
 	return nil
 }
 
-func (s *Service) updateRank(ctx context.Context, userid string, updaterid string, editAddRank rank.Rank, editRemoveRank rank.Rank) error {
-	updaterRank, err := s.roles.IntersectRoles(ctx, updaterid, combineModRoles(editAddRank, editRemoveRank))
+func (s *Service) updateRoles(ctx context.Context, userid string, updaterid string, editAddRoles rank.Rank, editRemoveRoles rank.Rank) error {
+	updaterRank, err := s.roles.IntersectRoles(ctx, updaterid, combineModRoles(editAddRoles, editRemoveRoles))
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to get updater roles")
 	}
 
-	if err := canUpdateRank(editAddRank, updaterRank, userid, updaterid, true); err != nil {
+	if err := canUpdateRank(editAddRoles, updaterRank, userid, updaterid, true); err != nil {
 		return err
 	}
-	if err := canUpdateRank(editRemoveRank, updaterRank, userid, updaterid, false); err != nil {
+	if err := canUpdateRank(editRemoveRoles, updaterRank, userid, updaterid, false); err != nil {
 		return err
 	}
 
@@ -70,46 +76,80 @@ func (s *Service) updateRank(ctx context.Context, userid string, updaterid strin
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 
-	editAddRank.Remove(editRemoveRank)
+	editAddRoles.Remove(editRemoveRoles)
 
-	currentRoles, err := s.roles.IntersectRoles(ctx, userid, editAddRank)
+	currentRoles, err := s.roles.IntersectRoles(ctx, userid, editAddRoles)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to get user roles")
 	}
 
-	editAddRank.Remove(currentRoles)
+	editAddRoles.Remove(currentRoles)
 
-	if editAddRank.Has(rank.TagAdmin) {
+	now := time.Now().Round(0).Unix()
+
+	if editAddRoles.Has(rank.TagUser) {
+		userRole := rank.BaseUser()
+		editAddRoles.Remove(userRole)
+
+		b, err := encodeUserEventRoles(RolesProps{
+			Add:    true,
+			Userid: userid,
+			Roles:  userRole.ToSlice(),
+		})
+		if err != nil {
+			return err
+		}
+
+		if err := s.roles.InsertRoles(ctx, m.Userid, userRole); err != nil {
+			return kerrors.WithMsg(err, "Failed to update user roles")
+		}
+
+		// must make a best effort attempt to publish role update event
+		ectx := klog.ExtendCtx(context.Background(), ctx, nil)
+		if err := s.events.Publish(ectx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+		}
+	}
+
+	if err := s.invitations.DeleteByRoles(ctx, m.Userid, editAddRoles.Union(editRemoveRoles)); err != nil {
+		return kerrors.WithMsg(err, "Failed to remove role invitations")
+	}
+	if err := s.invitations.Insert(ctx, m.Userid, editAddRoles, updaterid, now); err != nil {
+		return kerrors.WithMsg(err, "Failed to add role invitations")
+	}
+	if editAddRoles.Has(rank.TagAdmin) {
 		s.log.Info(ctx, "Invite add admin role", klog.Fields{
 			"user.userid":   m.Userid,
 			"user.username": m.Username,
 		})
 	}
-	if editRemoveRank.Has(rank.TagAdmin) {
-		s.log.Info(ctx, "Remove admin role", klog.Fields{
-			"user.userid":   m.Userid,
-			"user.username": m.Username,
+
+	if editRemoveRoles.Len() > 0 {
+		b, err := encodeUserEventRoles(RolesProps{
+			Add:    false,
+			Userid: userid,
+			Roles:  editRemoveRoles.ToSlice(),
 		})
-	}
-
-	now := time.Now().Round(0).Unix()
-
-	if editAddRank.Has(rank.TagUser) {
-		userRole := rank.Rank{}.AddUser()
-		editAddRank.Remove(userRole)
-		if err := s.roles.InsertRoles(ctx, m.Userid, userRole); err != nil {
-			return kerrors.WithMsg(err, "Failed to update user roles")
+		if err != nil {
+			return err
 		}
-	}
 
-	if err := s.invitations.DeleteByRoles(ctx, m.Userid, editAddRank.Union(editRemoveRank)); err != nil {
-		return kerrors.WithMsg(err, "Failed to remove role invitations")
-	}
-	if err := s.invitations.Insert(ctx, m.Userid, editAddRank, updaterid, now); err != nil {
-		return kerrors.WithMsg(err, "Failed to add role invitations")
-	}
-	if err := s.roles.DeleteRoles(ctx, m.Userid, editRemoveRank); err != nil {
-		return kerrors.WithMsg(err, "Failed to remove user roles")
+		if err := s.roles.DeleteRoles(ctx, m.Userid, editRemoveRoles); err != nil {
+			return kerrors.WithMsg(err, "Failed to remove user roles")
+		}
+
+		if editRemoveRoles.Has(rank.TagAdmin) {
+			s.log.Info(ctx, "Remove admin role", klog.Fields{
+				"user.userid":   m.Userid,
+				"user.username": m.Username,
+			})
+		}
+
+		// must make a best effort attempt to publish role update events
+		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+		}
 	}
 
 	return nil
@@ -218,17 +258,34 @@ func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string)
 		}
 		return kerrors.WithMsg(err, "Failed to get role invitation")
 	}
+
+	userRole := rank.Rank{}.AddOne(inv.Role)
+	b, err := encodeUserEventRoles(RolesProps{
+		Add:    true,
+		Userid: userid,
+		Roles:  userRole.ToSlice(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := s.invitations.DeleteByID(ctx, userid, role); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete role invitation")
+	}
+	if err := s.roles.InsertRoles(ctx, m.Userid, userRole); err != nil {
+		return kerrors.WithMsg(err, "Failed to update roles")
+	}
+
 	if inv.Role == rank.TagAdmin {
 		s.log.Info(ctx, "Add admin role", klog.Fields{
 			"user.userid":   m.Userid,
 			"user.username": m.Username,
 		})
 	}
-	if err := s.invitations.DeleteByID(ctx, userid, role); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete role invitation")
-	}
-	if err := s.roles.InsertRoles(ctx, m.Userid, rank.Rank{}.AddOne(inv.Role)); err != nil {
-		return kerrors.WithMsg(err, "Failed to update roles")
+	// must make a best effort attempt to publish role update events
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
 	}
 	return nil
 }

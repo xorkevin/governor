@@ -233,7 +233,7 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailer(inj, s)
 	s.streamns = name
-	s.streammail = name + ".mail"
+	s.streammail = name
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
@@ -575,7 +575,7 @@ func (s *Service) handleSendMail(ctx context.Context, from string, to []string, 
 }
 
 type (
-	// ErrorMailEvent is returned when the msgqueue mail message is malformed
+	// ErrorMailEvent is returned when the mail event is malformed
 	ErrorMailEvent struct{}
 	// ErrorInvalidMail is returned when the mail message is invalid
 	ErrorInvalidMail struct{}
@@ -586,7 +586,7 @@ type (
 )
 
 func (e ErrorMailEvent) Error() string {
-	return "Malformed mail message"
+	return "Malformed mail event"
 }
 
 func (e ErrorInvalidMail) Error() string {

@@ -11,9 +11,9 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/mail"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
-	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -223,7 +223,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	}
 	m := s.approvals.ToUserModel(am)
 
-	b, err := kjson.Marshal(NewUserProps{
+	b0, err := encodeUserEventCreate(CreateUserProps{
 		Userid:       m.Userid,
 		Username:     m.Username,
 		Email:        m.Email,
@@ -232,7 +232,15 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 		CreationTime: m.CreationTime,
 	})
 	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to encode user props to json")
+		return nil, err
+	}
+	b1, err := encodeUserEventRoles(RolesProps{
+		Add:    true,
+		Userid: userid,
+		Roles:  rank.BaseUser().ToSlice(),
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.approvals.Delete(ctx, am); err != nil {
@@ -245,14 +253,15 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create user")
 	}
+
+	// must make a best effort attempt to add roles, publish new user event, and clear user existence cache
+	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+
 	if err := s.roles.InsertRoles(ctx, m.Userid, rank.BaseUser()); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create user roles")
 	}
 
-	// must make a best effort attempt to publish new user event and clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
-
-	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b0, b1)...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"), nil)
 	}
 
@@ -294,13 +303,13 @@ func (s *Service) deleteUser(ctx context.Context, userid string, username string
 		}
 	}
 
-	j, err := kjson.Marshal(DeleteUserProps{
+	b, err := encodeUserEventDelete(DeleteUserProps{
 		Userid: m.Userid,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode user props to json")
+		return err
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.DeleteChannel, j); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish delete user event")
 	}
 

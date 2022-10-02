@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func (s *router) patchRank(c governor.Context) {
+func (s *router) patchRoles(c governor.Context) {
 	var req reqUserPutRank
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -80,7 +80,7 @@ func (s *router) patchRank(c governor.Context) {
 		return
 	}
 
-	if err := s.s.updateRank(c.Ctx(), req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
+	if err := s.s.updateRoles(c.Ctx(), req.Userid, updaterUserid, editAddRank, editRemoveRank); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -226,7 +226,7 @@ func (s *router) mountEdit(m *governor.MethodRouter) {
 	scopeAdminRead := s.s.scopens + ".admin:read"
 	scopeAdminWrite := s.s.scopens + ".admin:write"
 	m.PutCtx("", s.putUser, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.PatchCtx("/id/{id}/rank", s.patchRank, gate.User(s.s.gate, scopeAdminWrite), s.rt)
+	m.PatchCtx("/id/{id}/roles", s.patchRoles, gate.User(s.s.gate, scopeAdminWrite), s.rt)
 	m.GetCtx("/roles/invitation", s.getUserRoleInvitations, gate.User(s.s.gate, scopeAccountRead), s.rt)
 	m.PostCtx("/roles/invitation/{role}/accept", s.postAcceptRoleInvitation, gate.User(s.s.gate, scopeAccountWrite), s.rt)
 	m.DeleteCtx("/roles/invitation/{role}", s.deleteUserRoleInvitation, gate.User(s.s.gate, scopeAccountWrite), s.rt)

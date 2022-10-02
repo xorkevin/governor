@@ -2,8 +2,8 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	htmlTemplate "html/template"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -36,13 +36,64 @@ const (
 	authRoutePrefix = "/auth"
 )
 
+// User event kinds
+const (
+	UserEventKindCreate = "create"
+	UserEventKindUpdate = "update"
+	UserEventKindDelete = "delete"
+	UserEventKindRoles  = "roles"
+)
+
 type (
-	// WorkerFuncCreate is a type alias for a new user event consumer
-	WorkerFuncCreate = func(ctx context.Context, pinger events.Pinger, props NewUserProps) error
-	// WorkerFuncDelete is a type alias for a delete user event consumer
-	WorkerFuncDelete = func(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error
-	// WorkerFuncUpdate is a type alias for an update user event consumer
-	WorkerFuncUpdate = func(ctx context.Context, pinger events.Pinger, props UpdateUserProps) error
+	userEventDec struct {
+		Kind    string          `json:"kind"`
+		Payload json.RawMessage `json:"payload"`
+	}
+
+	userEventEnc struct {
+		Kind    string      `json:"kind"`
+		Payload interface{} `json:"payload"`
+	}
+
+	// UserEvent is a user event
+	UserEvent struct {
+		Kind   string
+		Create CreateUserProps
+		Update UpdateUserProps
+		Delete DeleteUserProps
+		Roles  RolesProps
+	}
+
+	// CreateUserProps are properties of a newly created user
+	CreateUserProps struct {
+		Userid       string `json:"userid"`
+		Username     string `json:"username"`
+		Email        string `json:"email"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		CreationTime int64  `json:"creation_time"`
+	}
+
+	// DeleteUserProps are properties of a deleted user
+	DeleteUserProps struct {
+		Userid string `json:"userid"`
+	}
+
+	// UpdateUserProps are properties of a user update
+	UpdateUserProps struct {
+		Userid   string `json:"userid"`
+		Username string `json:"username"`
+	}
+
+	// RolesProps are properties of a user role update
+	RolesProps struct {
+		Add    bool     `json:"add"`
+		Userid string   `json:"userid"`
+		Roles  []string `json:"roles"`
+	}
+
+	// HandlerFunc is a user event handler
+	HandlerFunc = func(ctx context.Context, props UserEvent) error
 
 	// Users is a user management service
 	Users interface {
@@ -53,9 +104,7 @@ type (
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
 		DeleteRoleInvitations(ctx context.Context, role string) error
-		StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error)
-		StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error)
-		StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error)
+		WatchUsers(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher
 	}
 
 	otpCipher struct {
@@ -97,7 +146,7 @@ type (
 		approvals             approvalmodel.Repo
 		invitations           invitationmodel.Repo
 		resets                resetmodel.Repo
-		roles                 role.Roles
+		roles                 role.RolesManager
 		apikeys               apikey.Apikeys
 		kvusers               kvstore.KVStore
 		kvsessions            kvstore.KVStore
@@ -116,7 +165,7 @@ type (
 		rolens                string
 		scopens               string
 		streamns              string
-		opts                  svcOpts
+		streamusers           string
 		streamsize            int64
 		eventsize             int32
 		baseURL               string
@@ -154,27 +203,6 @@ type (
 		rt governor.MiddlewareCtx
 	}
 
-	// NewUserProps are properties of a newly created user
-	NewUserProps struct {
-		Userid       string `json:"userid"`
-		Username     string `json:"username"`
-		Email        string `json:"email"`
-		FirstName    string `json:"first_name"`
-		LastName     string `json:"last_name"`
-		CreationTime int64  `json:"creation_time"`
-	}
-
-	// DeleteUserProps are properties of a deleted user
-	DeleteUserProps struct {
-		Userid string `json:"userid"`
-	}
-
-	// UpdateUserProps are properties of a user update
-	UpdateUserProps struct {
-		Userid   string `json:"userid"`
-		Username string `json:"username"`
-	}
-
 	ctxKeyUsers struct{}
 
 	svcOpts struct {
@@ -207,7 +235,7 @@ func NewCtx(inj governor.Injector) *Service {
 		approvalmodel.GetCtxRepo(inj),
 		invitationmodel.GetCtxRepo(inj),
 		resetmodel.GetCtxRepo(inj),
-		role.GetCtxRoles(inj),
+		role.GetCtxRolesManager(inj),
 		apikey.GetCtxApikeys(inj),
 		kvstore.GetCtxKVStore(inj),
 		pubsub.GetCtxPubsub(inj),
@@ -226,7 +254,7 @@ func New(
 	approvals approvalmodel.Repo,
 	invitations invitationmodel.Repo,
 	resets resetmodel.Repo,
-	roles role.Roles,
+	roles role.RolesManager,
 	apikeys apikey.Apikeys,
 	kv kvstore.KVStore,
 	ps pubsub.Pubsub,
@@ -265,14 +293,8 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	setCtxUser(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
-	streamname := strings.ToUpper(name)
-	s.streamns = streamname
-	s.opts = svcOpts{
-		StreamName:    streamname,
-		CreateChannel: streamname + ".create",
-		DeleteChannel: streamname + ".delete",
-		UpdateChannel: streamname + ".update",
-	}
+	s.streamns = name
+	s.streamusers = name
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")
@@ -596,7 +618,7 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
 		return err
 	}
 
-	b, err := kjson.Marshal(NewUserProps{
+	b0, err := encodeUserEventCreate(CreateUserProps{
 		Userid:       madmin.Userid,
 		Username:     madmin.Username,
 		Email:        madmin.Email,
@@ -605,22 +627,30 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
 		CreationTime: madmin.CreationTime,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode admin user props to json")
+		return err
+	}
+	b1, err := encodeUserEventRoles(RolesProps{
+		Add:    true,
+		Userid: madmin.Userid,
+		Roles:  rank.Admin().ToSlice(),
+	})
+	if err != nil {
+		return err
 	}
 
 	if err := s.users.Insert(ctx, madmin); err != nil {
 		return err
 	}
 
-	// must make best effort to add roles and publish new user event
+	// must make best effort to add roles, publish new user event, and clear user existence cache
 	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
 
 	if err := s.roles.InsertRoles(ctx, madmin.Userid, rank.Admin()); err != nil {
-		return err
+		return kerrors.WithMsg(err, "Failed to add user roles")
 	}
 
-	if err := s.events.StreamPublish(ctx, s.opts.CreateChannel, b); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user"), nil)
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, madmin.Userid, b0, b1)...); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"), nil)
 	}
 
 	s.log.Info(ctx, "Added admin", klog.Fields{
@@ -628,37 +658,19 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
 		"user.userid":   madmin.Userid,
 	})
 
+	s.clearUserExists(ctx, madmin.Userid)
+
 	return nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_ROLE_DELETE", s.userRoleDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
-
-	if _, err := s.StreamSubscribeDelete(s.streamns+"_WORKER_APIKEY_DELETE", s.userApikeyDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
+	s.wg.Add(1)
+	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to users stream", nil)
 
 	sysEvents := sysevent.New(s.syschannels, s.pubsub, s.log.Logger)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+"_WORKER_APPROVAL_GC", s.userApprovalGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
-	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
-
-	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+"_WORKER_RESET_GC", s.userResetGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
-	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
-
-	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.userInvitationGCHook, s.instance).Watch(ctx, s.wg, 15*time.Second)
+	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC, s.instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	return nil
@@ -671,11 +683,13 @@ func (s *Service) Stop(ctx context.Context) {
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
+	if err := s.events.InitStream(ctx, s.streamusers, events.StreamOpts{
+		Partitions:     16,
+		Replicas:       1,
+		ReplicaQuorum:  1,
+		RetentionAge:   30 * 24 * time.Hour,
+		RetentionBytes: int(s.streamsize),
+		MaxMsgBytes:    int(s.eventsize),
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init user stream")
 	}
@@ -716,87 +730,143 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func decodeNewUserProps(msgdata []byte) (*NewUserProps, error) {
-	m := &NewUserProps{}
-	if err := kjson.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode new user props")
-	}
-	return m, nil
+type (
+	// ErrorUserEvent is returned when the user event is malformed
+	ErrorUserEvent struct{}
+)
+
+func (e ErrorUserEvent) Error() string {
+	return "Malformed user event"
 }
 
-func decodeDeleteUserProps(msgdata []byte) (*DeleteUserProps, error) {
-	m := &DeleteUserProps{}
-	if err := kjson.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode delete user props")
+func decodeUsersEvent(msgdata []byte) (*UserEvent, error) {
+	var m userEventDec
+	if err := kjson.Unmarshal(msgdata, &m); err != nil {
+		return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode user event")
 	}
-	return m, nil
+	props := &UserEvent{
+		Kind: m.Kind,
+	}
+	switch m.Kind {
+	case UserEventKindCreate:
+		if err := kjson.Unmarshal(m.Payload, &props.Create); err != nil {
+			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode create user event")
+		}
+	case UserEventKindUpdate:
+		if err := kjson.Unmarshal(m.Payload, &props.Update); err != nil {
+			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode update user event")
+		}
+	case UserEventKindDelete:
+		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
+			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode delete user event")
+		}
+	case UserEventKindRoles:
+		if err := kjson.Unmarshal(m.Payload, &props.Roles); err != nil {
+			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode roles user event")
+		}
+	default:
+		return nil, kerrors.WithKind(nil, ErrorUserEvent{}, "Invalid user event kind")
+	}
+	return props, nil
 }
 
-func decodeUpdateUserProps(msgdata []byte) (*UpdateUserProps, error) {
-	m := &UpdateUserProps{}
-	if err := kjson.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to decode update user props")
+func encodeUserEventCreate(props CreateUserProps) ([]byte, error) {
+	b, err := kjson.Marshal(userEventEnc{
+		Kind:    UserEventKindCreate,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode create user props to json")
 	}
-	return m, nil
+	return b, nil
 }
 
-func (s *Service) StreamSubscribeCreate(group string, worker WorkerFuncCreate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
-	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.CreateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-		props, err := decodeNewUserProps(msgdata)
+func encodeUserEventUpdate(props UpdateUserProps) ([]byte, error) {
+	b, err := kjson.Marshal(userEventEnc{
+		Kind:    UserEventKindUpdate,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode update user props to json")
+	}
+	return b, nil
+}
+
+func encodeUserEventDelete(props DeleteUserProps) ([]byte, error) {
+	b, err := kjson.Marshal(userEventEnc{
+		Kind:    UserEventKindDelete,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode delete user props to json")
+	}
+	return b, nil
+}
+
+func encodeUserEventRoles(props RolesProps) ([]byte, error) {
+	b, err := kjson.Marshal(userEventEnc{
+		Kind:    UserEventKindRoles,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode user roles props to json")
+	}
+	return b, nil
+}
+
+func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler HandlerFunc, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher {
+	var dlqfn events.Handler
+	if dlqhandler != nil {
+		dlqfn = events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+			props, err := decodeUsersEvent(msg.Value)
+			if err != nil {
+				return err
+			}
+			return dlqhandler(ctx, *props)
+		})
+	}
+	return events.NewWatcher(s.events, s.log.Logger, s.streamusers, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+		props, err := decodeUsersEvent(msg.Value)
 		if err != nil {
 			return err
 		}
-		return worker(ctx, pinger, *props)
-	}, streamopts)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to user create channel")
-	}
-	return sub, nil
-}
-
-func (s *Service) StreamSubscribeDelete(group string, worker WorkerFuncDelete, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
-	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DeleteChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-		props, err := decodeDeleteUserProps(msgdata)
-		if err != nil {
-			return err
-		}
-		return worker(ctx, pinger, *props)
-	}, streamopts)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to user delete channel")
-	}
-	return sub, nil
-}
-
-func (s *Service) StreamSubscribeUpdate(group string, worker WorkerFuncUpdate, streamopts events.StreamConsumerOpts) (events.Subscription, error) {
-	sub, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.UpdateChannel, group, func(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-		props, err := decodeUpdateUserProps(msgdata)
-		if err != nil {
-			return err
-		}
-		return worker(ctx, pinger, *props)
-	}, streamopts)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to subscribe to user update channel")
-	}
-	return sub, nil
+		return handler(ctx, *props)
+	}), dlqfn, maxdeliver, s.instance)
 }
 
 const (
-	roleDeleteBatchSize = 256
+	roleDeleteBatchSize   = 256
+	apikeyDeleteBatchSize = 256
 )
 
-func (s *Service) userRoleDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
+func (s *Service) userEventHandler(ctx context.Context, props UserEvent) error {
+	switch props.Kind {
+	case UserEventKindDelete:
+		return s.userEventHandlerDelete(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
+func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserProps) error {
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
 		r, err := s.roles.GetRoles(ctx, props.Userid, "", roleDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user roles")
 		}
 		if len(r) == 0 {
 			break
+		}
+		b, err := encodeUserEventRoles(RolesProps{
+			Add:    false,
+			Userid: props.Userid,
+			Roles:  r.ToSlice(),
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, props.Userid, b)...); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish delete roles event"), nil)
 		}
 		if err := s.roles.DeleteRoles(ctx, props.Userid, r); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user roles")
@@ -805,18 +875,7 @@ func (s *Service) userRoleDeleteHook(ctx context.Context, pinger events.Pinger, 
 			break
 		}
 	}
-	return nil
-}
-
-const (
-	apikeyDeleteBatchSize = 256
-)
-
-func (s *Service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger, props DeleteUserProps) error {
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
 		keys, err := s.apikeys.GetUserKeys(ctx, props.Userid, apikeyDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user apikeys")
@@ -838,26 +897,21 @@ func (s *Service) userApikeyDeleteHook(ctx context.Context, pinger events.Pinger
 	return nil
 }
 
-func (s *Service) userApprovalGCHook(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) userEventHandlerGC(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.approvals.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		return kerrors.WithMsg(err, "Failed to GC approvals")
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC approvals"), nil)
+	} else {
+		s.log.Info(ctx, "GC user approvals", nil)
 	}
-	s.log.Info(ctx, "GC user approvals", nil)
-	return nil
-}
-
-func (s *Service) userResetGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.resets.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		return kerrors.WithMsg(err, "Failed to GC resets")
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC resets"), nil)
+	} else {
+		s.log.Info(ctx, "GC user resets", nil)
 	}
-	s.log.Info(ctx, "GC user resets", nil)
-	return nil
-}
-
-func (s *Service) userInvitationGCHook(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		return kerrors.WithMsg(err, "Failed to GC inviations")
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC inviations"), nil)
+	} else {
+		s.log.Info(ctx, "GC user invitations", nil)
 	}
-	s.log.Info(ctx, "GC user invitations", nil)
 	return nil
 }
