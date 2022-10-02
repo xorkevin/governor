@@ -227,6 +227,7 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 		authops:         make(chan getAuthOp),
 		ready:           &atomic.Bool{},
 		hbfailed:        0,
+		wg:              ksync.NewWaitGroup(),
 	}
 }
 

@@ -2,8 +2,8 @@ package mailinglist
 
 import (
 	"context"
+	"encoding/json"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/emersion/go-smtp"
@@ -18,12 +18,51 @@ import (
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/dns"
+	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
 
+const (
+	listEventKindMail   = "mail"
+	listEventKindSend   = "send"
+	listEventKindDelete = "delete"
+)
+
 type (
+	listEventDec struct {
+		Kind    string          `json:"kind"`
+		Payload json.RawMessage `json:"payload"`
+	}
+
+	listEventEnc struct {
+		Kind    string      `json:"kind"`
+		Payload interface{} `json:"payload"`
+	}
+
+	listEvent struct {
+		Kind   string
+		Mail   mailProps
+		Send   sendProps
+		Delete delProps
+	}
+
+	mailProps struct {
+		ListID string `json:"listid"`
+		MsgID  string `json:"msgid"`
+	}
+
+	sendProps struct {
+		ListID string `json:"listid"`
+		MsgID  string `json:"msgid"`
+	}
+
+	delProps struct {
+		ListID string `json:"listid"`
+	}
+
 	// MailingList is a mailing list service
 	MailingList interface {
 	}
@@ -38,10 +77,11 @@ type (
 		mailer       mail.Mailer
 		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
+		instance     string
 		log          *klog.LevelLogger
 		scopens      string
 		streamns     string
-		opts         svcOpts
+		streammail   string
 		resolver     dns.Resolver
 		server       *smtp.Server
 		port         string
@@ -53,6 +93,7 @@ type (
 		writetimeout time.Duration
 		streamsize   int64
 		eventsize    int32
+		wg           *ksync.WaitGroup
 	}
 
 	router struct {
@@ -61,13 +102,6 @@ type (
 	}
 
 	ctxKeyMailingList struct{}
-
-	svcOpts struct {
-		StreamName  string
-		MailChannel string
-		SendChannel string
-		DelChannel  string
-	}
 )
 
 // GetCtxMailingList returns a MailingList service from the context
@@ -112,20 +146,15 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 		resolver: dns.NewCachingResolver(&net.Resolver{
 			PreferGo: true,
 		}, time.Minute),
+		wg: ksync.NewWaitGroup(),
 	}
 }
 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailingList(inj, s)
 	s.scopens = "gov." + name
-	streamname := strings.ToUpper(name)
-	s.streamns = streamname
-	s.opts = svcOpts{
-		StreamName:  streamname,
-		MailChannel: streamname + ".mail",
-		SendChannel: streamname + ".send",
-		DelChannel:  streamname + ".del",
-	}
+	s.streamns = name
+	s.streammail = name
 
 	r.SetDefault("port", "2525")
 	r.SetDefault("authdomain", "lists.mail.localhost")
@@ -148,6 +177,7 @@ func (s *Service) router() *router {
 
 func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
+	s.instance = c.Instance
 
 	s.port = r.GetStr("port")
 	s.authdomain = r.GetStr("authdomain")
@@ -236,45 +266,27 @@ func (s *Service) createSMTPServer() *smtp.Server {
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.MailChannel, s.streamns+"_WORKER", s.mailSubscriber, events.StreamConsumerOpts{
-		AckWait:    30 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to mail queue")
-	}
-	s.log.Info(ctx, "Subscribed to mail queue", nil)
+	s.wg.Add(1)
+	go events.NewWatcher(
+		s.events,
+		s.log.Logger,
+		s.streammail,
+		s.streamns+".worker",
+		events.ConsumerOpts{},
+		events.HandlerFunc(s.listEventHandler),
+		nil,
+		0,
+		s.instance,
+	).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to mailinglist stream", nil)
 
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.SendChannel, s.streamns+"SEND_WORKER", s.sendSubscriber, events.StreamConsumerOpts{
-		AckWait:    30 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to mail send queue")
-	}
-	s.log.Info(ctx, "Subscribed to send queue", nil)
+	s.wg.Add(1)
+	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to users stream", nil)
 
-	if _, err := s.events.StreamSubscribe(s.opts.StreamName, s.opts.DelChannel, s.streamns+"_DEL_WORKER", s.deleteSubscriber, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to list delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to list delete queue", nil)
-
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
-
-	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to org delete queue", nil)
+	s.wg.Add(1)
+	go s.orgs.WatchOrgs(s.streamns+".worker.orgs", events.ConsumerOpts{}, s.orgEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to orgs stream", nil)
 
 	return nil
 }
@@ -287,10 +299,13 @@ func (s *Service) Stop(ctx context.Context) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Shutdown mailing list SMTP server error"), nil)
 		}
 	}()
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 	select {
 	case <-done:
 	case <-ctx.Done():
-		s.log.Err(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
 	}
 }
 
@@ -303,15 +318,17 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
 	s.log.Info(ctx, "Created mail bucket", nil)
-	if err := s.events.InitStream(ctx, s.opts.StreamName, []string{s.opts.StreamName + ".>"}, events.StreamOpts{
-		Replicas:   1,
-		MaxAge:     30 * 24 * time.Hour,
-		MaxBytes:   s.streamsize,
-		MaxMsgSize: s.eventsize,
+	if err := s.events.InitStream(ctx, s.streammail, events.StreamOpts{
+		Partitions:     16,
+		Replicas:       1,
+		ReplicaQuorum:  1,
+		RetentionAge:   30 * 24 * time.Hour,
+		RetentionBytes: int(s.streamsize),
+		MaxMsgBytes:    int(s.eventsize),
 	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to init mail stream")
+		return kerrors.WithMsg(err, "Failed to init mailinglist stream")
 	}
-	s.log.Info(ctx, "Created mail stream", nil)
+	s.log.Info(ctx, "Created mailinglist stream", nil)
 	return nil
 }
 
@@ -319,23 +336,124 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
+type (
+	// errorListEvent is returned when the mailinglist message is malformed
+	errorListEvent struct{}
+)
+
+func (e errorListEvent) Error() string {
+	return "Malformed mailinglist message"
+}
+
+func decodeListEvent(msgdata []byte) (*listEvent, error) {
+	var m listEventDec
+	if err := kjson.Unmarshal(msgdata, &m); err != nil {
+		return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode mailinglist event")
+	}
+	props := &listEvent{
+		Kind: m.Kind,
+	}
+	switch m.Kind {
+	case listEventKindMail:
+		if err := kjson.Unmarshal(m.Payload, &props.Mail); err != nil {
+			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode mail event")
+		}
+	case listEventKindSend:
+		if err := kjson.Unmarshal(m.Payload, &props.Send); err != nil {
+			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode send event")
+		}
+	case listEventKindDelete:
+		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
+			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode delete event")
+		}
+	default:
+		return nil, kerrors.WithKind(nil, errorListEvent{}, "Invalid list event kind")
+	}
+	return props, nil
+}
+
+func encodeListEventMail(props mailProps) ([]byte, error) {
+	b, err := kjson.Marshal(listEventEnc{
+		Kind:    listEventKindMail,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode mail props to json")
+	}
+	return b, nil
+}
+
+func encodeListEventSend(props sendProps) ([]byte, error) {
+	b, err := kjson.Marshal(listEventEnc{
+		Kind:    listEventKindSend,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode send props to json")
+	}
+	return b, nil
+}
+
+func encodeListEventDelete(props delProps) ([]byte, error) {
+	b, err := kjson.Marshal(listEventEnc{
+		Kind:    listEventKindDelete,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode delete props to json")
+	}
+	return b, nil
+}
+
+func (s *Service) listEventHandler(ctx context.Context, msg events.Msg) error {
+	props, err := decodeListEvent(msg.Value)
+	if err != nil {
+		return err
+	}
+	switch props.Kind {
+	case listEventKindMail:
+		return s.mailEventHandler(ctx, props.Mail)
+	case listEventKindSend:
+		return s.sendEventHandler(ctx, props.Send)
+	case listEventKindDelete:
+		return s.deleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
 const (
 	listDeleteBatchSize = 256
 )
 
-func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
-	return s.creatorDeleteHook(ctx, pinger, props.Userid)
+func (s *Service) userEventHandler(ctx context.Context, props user.UserEvent) error {
+	switch props.Kind {
+	case user.UserEventKindDelete:
+		return s.userDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
 }
 
-func (s *Service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
-	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
+func (s *Service) userDeleteEventHandler(ctx context.Context, props user.DeleteUserProps) error {
+	return s.creatorDeleteEventHandler(ctx, props.Userid)
 }
 
-func (s *Service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
+func (s *Service) orgEventHandler(ctx context.Context, props org.OrgEvent) error {
+	switch props.Kind {
+	case org.OrgEventKindDelete:
+		return s.orgDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
+func (s *Service) orgDeleteEventHandler(ctx context.Context, props org.DeleteOrgProps) error {
+	return s.creatorDeleteEventHandler(ctx, rank.ToOrgName(props.OrgID))
+}
+
+func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid string) error {
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
 		lists, err := s.getCreatorLists(ctx, creatorid, listDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get user mailinglists")

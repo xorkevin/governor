@@ -19,8 +19,8 @@ import (
 	"github.com/emersion/go-msgauth/dmarc"
 	"github.com/emersion/go-smtp"
 	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -635,7 +635,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPBaseExists
 	}
 
-	j, err := kjson.Marshal(mailmsg{
+	j, err := encodeListEventMail(mailProps{
 		ListID: s.rcptList,
 		MsgID:  msgid,
 	})
@@ -652,7 +652,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	} else {
 		// mail already exists for this list
 		if !msg.Processed {
-			if err := s.service.events.StreamPublish(ctx, s.service.opts.MailChannel, j); err != nil {
+			if err := s.service.events.Publish(ctx, events.NewMsgs(s.service.streammail, s.rcptList, j)...); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"), nil)
 				return errSMTPBaseExists
 			}
@@ -694,7 +694,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		// sent yet, hence must continue with publishing the event and marking
 		// message as processed.
 	}
-	if err := s.service.events.StreamPublish(ctx, s.service.opts.MailChannel, j); err != nil {
+	if err := s.service.events.Publish(ctx, events.NewMsgs(s.service.streammail, s.rcptList, j)...); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"), nil)
 		return errSMTPBaseExists
 	}

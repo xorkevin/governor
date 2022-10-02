@@ -448,7 +448,7 @@ func (w *Watcher) lreqID() string {
 }
 
 const (
-	watchStartDelay = 250 * time.Millisecond
+	watchStartDelay = 1 * time.Second
 )
 
 // Watch watches over a subscription

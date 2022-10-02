@@ -2,7 +2,6 @@ package conduit
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -77,12 +76,12 @@ func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) err
 		}
 		return kerrors.WithMsg(err, "Failed to get friends")
 	}
-	b, err := json.Marshal(unfriendProps{
+	b, err := encodeConduitEventUnfriend(unfriendProps{
 		Userid: userid1,
 		Other:  userid2,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode unfriend props to json")
+		return err
 	}
 	u1, u2 := tupleSort(m.Userid1, m.Userid2)
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamconduit, u1+"."+u2, b)...); err != nil {
@@ -136,12 +135,12 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 		return kerrors.WithMsg(err, "Failed to get friend invitation")
 	}
 
-	b, err := json.Marshal(friendProps{
+	b, err := encodeConduitEventFriend(friendProps{
 		Userid:    m.Userid,
 		InvitedBy: m2.Userid,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode friend props to json")
+		return err
 	}
 
 	if err := s.invitations.DeleteByID(ctx, userid, inviter); err != nil {
@@ -150,6 +149,7 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 	if err := s.friends.Insert(ctx, m.Userid, m2.Userid, m.Username, m2.Username); err != nil {
 		return kerrors.WithMsg(err, "Failed to add friend")
 	}
+
 	// must make best effort attempt to publish friend event
 	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
 	u1, u2 := tupleSort(m.Userid, m2.Userid)

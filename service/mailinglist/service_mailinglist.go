@@ -13,7 +13,6 @@ import (
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 )
@@ -158,13 +157,13 @@ func (s *Service) deleteList(ctx context.Context, creatorid string, listname str
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
 	}
-	j, err := kjson.Marshal(delmsg{
+	b, err := encodeListEventDelete(delProps{
 		ListID: m.ListID,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode list delete message")
+		return err
 	}
-	if err := s.events.StreamPublish(ctx, s.opts.DelChannel, j); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streammail, m.ListID, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish list delete event")
 	}
 	if err := s.lists.DeleteList(ctx, m); err != nil {
@@ -518,34 +517,20 @@ func (s *Service) getMsgContent(ctx context.Context, listid, msgid string) (io.R
 	return obj, objinfo.ContentType, nil
 }
 
-type (
-	delmsg struct {
-		ListID string `json:"listid"`
-	}
-)
-
 const (
 	msgDeleteBatchSize = 256
 )
 
-func (s *Service) deleteSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	var msg delmsg
-	if err := kjson.Unmarshal(msgdata, &msg); err != nil {
-		return kerrors.WithKind(err, errorMailEvent{}, "Failed to decode list delete message")
-	}
-
-	if err := s.lists.DeleteListMembers(ctx, msg.ListID); err != nil {
+func (s *Service) deleteEventHandler(ctx context.Context, props delProps) error {
+	if err := s.lists.DeleteListMembers(ctx, props.ListID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list members")
 	}
-	if err := s.lists.DeleteListTrees(ctx, msg.ListID); err != nil {
+	if err := s.lists.DeleteListTrees(ctx, props.ListID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list trees")
 	}
 
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
-		msgs, err := s.lists.GetListMsgs(ctx, msg.ListID, msgDeleteBatchSize, 0)
+		msgs, err := s.lists.GetListMsgs(ctx, props.ListID, msgDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get list messages")
 		}
@@ -561,10 +546,10 @@ func (s *Service) deleteSubscriber(ctx context.Context, pinger events.Pinger, to
 			}
 			msgids = append(msgids, i.Msgid)
 		}
-		if err := s.lists.DeleteSentMsgLogs(ctx, msg.ListID, msgids); err != nil {
+		if err := s.lists.DeleteSentMsgLogs(ctx, props.ListID, msgids); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete sent message logs")
 		}
-		if err := s.lists.DeleteMsgs(ctx, msg.ListID, msgids); err != nil {
+		if err := s.lists.DeleteMsgs(ctx, props.ListID, msgids); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete list messages")
 		}
 		if len(msgs) < msgDeleteBatchSize {
@@ -574,40 +559,16 @@ func (s *Service) deleteSubscriber(ctx context.Context, pinger events.Pinger, to
 	return nil
 }
 
-type (
-	mailmsg struct {
-		ListID string `json:"listid"`
-		MsgID  string `json:"msgid"`
-	}
-
-	sendmsg struct {
-		ListID string `json:"listid"`
-		MsgID  string `json:"msgid"`
-	}
-
-	// errorMailEvent is returned when the msgqueue mail message is malformed
-	errorMailEvent struct{}
-)
-
-func (e errorMailEvent) Error() string {
-	return "Malformed mail message"
-}
-
-func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	var emmsg mailmsg
-	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
-		return kerrors.WithKind(err, errorMailEvent{}, "Failed to decode mail message")
-	}
-
-	j, err := kjson.Marshal(sendmsg{
-		ListID: emmsg.ListID,
-		MsgID:  emmsg.MsgID,
+func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
+	b, err := encodeListEventSend(sendProps{
+		ListID: props.ListID,
+		MsgID:  props.MsgID,
 	})
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to encode mail send message")
+		return err
 	}
 
-	ml, err := s.lists.GetListByID(ctx, emmsg.ListID)
+	ml, err := s.lists.GetListByID(ctx, props.ListID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"), nil)
@@ -615,7 +576,7 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetMsg(ctx, emmsg.ListID, emmsg.MsgID)
+	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"), nil)
@@ -685,7 +646,7 @@ func (s *Service) mailSubscriber(ctx context.Context, pinger events.Pinger, topi
 		}
 	}
 
-	if err := s.events.StreamPublish(ctx, s.opts.SendChannel, j); err != nil {
+	if err := s.events.Publish(ctx, events.NewMsgs(s.streammail, props.ListID, b)...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish mail send event")
 	}
 	return nil
@@ -695,20 +656,15 @@ const (
 	mailingListSendBatchSize = 256
 )
 
-func (s *Service) sendSubscriber(ctx context.Context, pinger events.Pinger, topic string, msgdata []byte) error {
-	var emmsg sendmsg
-	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
-		return kerrors.WithKind(err, errorMailEvent{}, "Failed to decode mail message")
-	}
-
-	if _, err := s.lists.GetListByID(ctx, emmsg.ListID); err != nil {
+func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
+	if _, err := s.lists.GetListByID(ctx, props.ListID); err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"), nil)
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
 	}
-	m, err := s.lists.GetMsg(ctx, emmsg.ListID, emmsg.MsgID)
+	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound{}) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"), nil)
@@ -753,10 +709,7 @@ func (s *Service) sendSubscriber(ctx context.Context, pinger events.Pinger, topi
 	}
 
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
-		userids, err := s.lists.GetUnsentMsgs(ctx, emmsg.ListID, emmsg.MsgID, mailingListSendBatchSize)
+		userids, err := s.lists.GetUnsentMsgs(ctx, props.ListID, props.MsgID, mailingListSendBatchSize)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get unsent messages")
 		}
@@ -776,7 +729,7 @@ func (s *Service) sendSubscriber(ctx context.Context, pinger events.Pinger, topi
 				return kerrors.WithMsg(err, "Failed to send mail message")
 			}
 		}
-		if err := s.lists.LogSentMsg(ctx, emmsg.ListID, emmsg.MsgID, userids); err != nil {
+		if err := s.lists.LogSentMsg(ctx, props.ListID, props.MsgID, userids); err != nil {
 			return kerrors.WithMsg(err, "Failed to log sent mail messages")
 		}
 		if len(userids) < mailingListSendBatchSize {

@@ -338,6 +338,28 @@ func decodeConduitEvent(msgdata []byte) (*conduitEvent, error) {
 	return props, nil
 }
 
+func encodeConduitEventFriend(props friendProps) ([]byte, error) {
+	b, err := kjson.Marshal(conduitEventEnc{
+		Kind:    conduitEventKindFriend,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode friend props to json")
+	}
+	return b, nil
+}
+
+func encodeConduitEventUnfriend(props unfriendProps) ([]byte, error) {
+	b, err := kjson.Marshal(conduitEventEnc{
+		Kind:    conduitEventKindUnfriend,
+		Payload: props,
+	})
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to encode unfriend props to json")
+	}
+	return b, nil
+}
+
 func (s *Service) conduitEventHandler(ctx context.Context, msg events.Msg) error {
 	props, err := decodeConduitEvent(msg.Value)
 	if err != nil {
