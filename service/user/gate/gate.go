@@ -109,10 +109,11 @@ func setCtxGate(inj governor.Injector, g Gate) {
 
 // NewCtx creates a new Gate from a context
 func NewCtx(inj governor.Injector) *Service {
-	roles := role.GetCtxRoles(inj)
-	apikeys := apikey.GetCtxApikeys(inj)
-	tokenizer := token.GetCtxTokenizer(inj)
-	return New(roles, apikeys, tokenizer)
+	return New(
+		role.GetCtxRoles(inj),
+		apikey.GetCtxApikeys(inj),
+		token.GetCtxTokenizer(inj),
+	)
 }
 
 // New returns a new Gate

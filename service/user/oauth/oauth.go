@@ -3,7 +3,6 @@ package oauth
 import (
 	"context"
 	htmlTemplate "html/template"
-	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -16,6 +15,7 @@ import (
 	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
 	"xorkevin.dev/governor/service/user/oauth/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -58,6 +58,7 @@ type (
 		epjwks          string
 		tplprofile      *htmlTemplate.Template
 		tplpicture      *htmlTemplate.Template
+		wg              *ksync.WaitGroup
 	}
 
 	router struct {
@@ -84,16 +85,17 @@ func setCtxOAuth(inj governor.Injector, o OAuth) {
 
 // NewCtx creates a new OAuth service from a context
 func NewCtx(inj governor.Injector) *Service {
-	apps := model.GetCtxRepo(inj)
-	connections := connmodel.GetCtxRepo(inj)
-	tokenizer := token.GetCtxTokenizer(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	obj := objstore.GetCtxBucket(inj)
-	users := user.GetCtxUsers(inj)
-	ev := events.GetCtxEvents(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
-	return New(apps, connections, tokenizer, kv, obj, users, ev, ratelimiter, g)
+	return New(
+		model.GetCtxRepo(inj),
+		connmodel.GetCtxRepo(inj),
+		token.GetCtxTokenizer(inj),
+		kvstore.GetCtxKVStore(inj),
+		objstore.GetCtxBucket(inj),
+		user.GetCtxUsers(inj),
+		events.GetCtxEvents(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
+	)
 }
 
 // New returns a new Apikey
@@ -119,6 +121,7 @@ func New(
 		events:      ev,
 		ratelimiter: ratelimiter,
 		gate:        g,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
@@ -126,7 +129,7 @@ func (s *Service) Register(name string, inj governor.Injector, r governor.Config
 	setCtxOAuth(inj, s)
 	s.rolens = "gov." + name
 	s.scopens = "gov." + name
-	s.streamns = strings.ToUpper(name)
+	s.streamns = name
 
 	r.SetDefault("codeduration", "1m")
 	r.SetDefault("accessduration", "5m")
@@ -208,17 +211,16 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
+	s.wg.Add(1)
+	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to users stream", nil)
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
@@ -244,7 +246,16 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
+func (s *Service) userEventHandler(ctx context.Context, props user.UserEvent) error {
+	switch props.Kind {
+	case user.UserEventKindDelete:
+		return s.userDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
+func (s *Service) userDeleteEventHandler(ctx context.Context, props user.DeleteUserProps) error {
 	if err := s.deleteUserConnections(ctx, props.Userid); err != nil {
 		return err
 	}

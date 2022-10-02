@@ -57,12 +57,13 @@ func setCtxProfiles(inj governor.Injector, p Profiles) {
 
 // NewCtx creates a new Profiles service from a context
 func NewCtx(inj governor.Injector) *Service {
-	profiles := model.GetCtxRepo(inj)
-	obj := objstore.GetCtxBucket(inj)
-	users := user.GetCtxUsers(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
-	return New(profiles, obj, users, ratelimiter, g)
+	return New(
+		model.GetCtxRepo(inj),
+		objstore.GetCtxBucket(inj),
+		user.GetCtxUsers(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
+	)
 }
 
 // New creates a new Profiles service
@@ -102,12 +103,15 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
-	go s.users.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to user stream", nil)
+	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to users stream", nil)
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {

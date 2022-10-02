@@ -3,7 +3,6 @@ package courier
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"xorkevin.dev/governor"
@@ -15,6 +14,7 @@ import (
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -41,6 +41,7 @@ type (
 		fallbackLink  string
 		linkPrefix    string
 		cacheDuration time.Duration
+		wg            *ksync.WaitGroup
 	}
 
 	router struct {
@@ -67,14 +68,15 @@ func setCtxCourier(inj governor.Injector, c Courier) {
 
 // NewCtx creates a new Courier service from a context
 func NewCtx(inj governor.Injector) *Service {
-	repo := model.GetCtxRepo(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	obj := objstore.GetCtxBucket(inj)
-	users := user.GetCtxUsers(inj)
-	orgs := org.GetCtxOrgs(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
-	return New(repo, kv, obj, users, orgs, ratelimiter, g)
+	return New(
+		model.GetCtxRepo(inj),
+		kvstore.GetCtxKVStore(inj),
+		objstore.GetCtxBucket(inj),
+		user.GetCtxUsers(inj),
+		org.GetCtxOrgs(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
+	)
 }
 
 // New creates a new Courier service
@@ -97,13 +99,14 @@ func New(
 		orgs:          orgs,
 		ratelimiter:   ratelimiter,
 		gate:          g,
+		wg:            ksync.NewWaitGroup(),
 	}
 }
 
 func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxCourier(inj, s)
 	s.scopens = "gov." + name
-	s.streamns = strings.ToUpper(name)
+	s.streamns = name
 
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")
@@ -151,26 +154,21 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if _, err := s.users.StreamSubscribeDelete(s.streamns+"_WORKER_DELETE", s.userDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to user delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to user delete queue", nil)
+	s.wg.Add(1)
+	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to users stream", nil)
 
-	if _, err := s.orgs.StreamSubscribeDelete(s.streamns+"_WORKER_ORG_DELETE", s.orgDeleteHook, events.StreamConsumerOpts{
-		AckWait:    15 * time.Second,
-		MaxDeliver: 30,
-	}); err != nil {
-		return kerrors.WithMsg(err, "Failed to subscribe to org delete queue")
-	}
-	s.log.Info(ctx, "Subscribed to org delete queue", nil)
+	s.wg.Add(1)
+	go s.orgs.WatchOrgs(s.streamns+".worker.orgs", events.ConsumerOpts{}, s.orgEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	s.log.Info(ctx, "Subscribed to orgs stream", nil)
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+	}
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
@@ -194,19 +192,34 @@ const (
 	linkDeleteBatchSize = 256
 )
 
-func (s *Service) userDeleteHook(ctx context.Context, pinger events.Pinger, props user.DeleteUserProps) error {
-	return s.creatorDeleteHook(ctx, pinger, props.Userid)
+func (s *Service) userEventHandler(ctx context.Context, props user.UserEvent) error {
+	switch props.Kind {
+	case user.UserEventKindDelete:
+		return s.userDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
 }
 
-func (s *Service) orgDeleteHook(ctx context.Context, pinger events.Pinger, props org.DeleteOrgProps) error {
-	return s.creatorDeleteHook(ctx, pinger, rank.ToOrgName(props.OrgID))
+func (s *Service) userDeleteEventHandler(ctx context.Context, props user.DeleteUserProps) error {
+	return s.creatorDeleteEventHandler(ctx, props.Userid)
 }
 
-func (s *Service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, creatorid string) error {
+func (s *Service) orgEventHandler(ctx context.Context, props org.OrgEvent) error {
+	switch props.Kind {
+	case org.OrgEventKindDelete:
+		return s.orgDeleteEventHandler(ctx, props.Delete)
+	default:
+		return nil
+	}
+}
+
+func (s *Service) orgDeleteEventHandler(ctx context.Context, props org.DeleteOrgProps) error {
+	return s.creatorDeleteEventHandler(ctx, rank.ToOrgName(props.OrgID))
+}
+
+func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid string) error {
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
 		links, err := s.getLinkGroup(ctx, creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get creator links")
@@ -236,9 +249,6 @@ func (s *Service) creatorDeleteHook(ctx context.Context, pinger events.Pinger, c
 		}
 	}
 	for {
-		if err := pinger.Ping(ctx); err != nil {
-			return err
-		}
 		brands, err := s.getBrandGroup(ctx, creatorid, linkDeleteBatchSize, 0)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get creator brands")

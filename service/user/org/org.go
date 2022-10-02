@@ -98,12 +98,13 @@ func setCtxOrgs(inj governor.Injector, o Orgs) {
 
 // NewCtx creates a new Orgs service from a context
 func NewCtx(inj governor.Injector) *Service {
-	orgs := model.GetCtxRepo(inj)
-	users := user.GetCtxUsers(inj)
-	ev := events.GetCtxEvents(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
-	return New(orgs, users, ev, ratelimiter, g)
+	return New(
+		model.GetCtxRepo(inj),
+		user.GetCtxUsers(inj),
+		events.GetCtxEvents(inj),
+		ratelimit.GetCtxRatelimiter(inj),
+		gate.GetCtxGate(inj),
+	)
 }
 
 // New returns a new Orgs service

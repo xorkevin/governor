@@ -64,10 +64,11 @@ func setCtxRolesManager(inj governor.Injector, r RolesManager) {
 
 // NewCtx creates a new RolesManager service from a context
 func NewCtx(inj governor.Injector) *Service {
-	roles := model.GetCtxRepo(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	ev := events.GetCtxEvents(inj)
-	return New(roles, kv, ev)
+	return New(
+		model.GetCtxRepo(inj),
+		kvstore.GetCtxKVStore(inj),
+		events.GetCtxEvents(inj),
+	)
 }
 
 // New returns a new RolesManager
