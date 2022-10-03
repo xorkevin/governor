@@ -471,10 +471,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
 				select {
 				case <-ctx.Done():
+					return
 				case <-time.After(delay):
 					delay = min(delay*2, opts.MaxBackoff)
+					return
 				}
-				return
 			}
 			defer func() {
 				if err := sub.Close(ctx); err != nil {
@@ -492,6 +493,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
 					select {
 					case <-ctx.Done():
+						return
 					case <-time.After(delay):
 						delay = min(delay*2, opts.MaxBackoff)
 						continue
@@ -508,7 +510,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						"pubsub.duration_ms": duration.Milliseconds(),
 					})
 					select {
-					case <-ctx.Done():
+					case <-msgctx.Done():
+						return
 					case <-time.After(delay):
 						delay = min(delay*2, opts.MaxBackoff)
 						continue
