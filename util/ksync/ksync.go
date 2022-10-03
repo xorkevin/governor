@@ -68,3 +68,74 @@ func (w *WaitGroup) Wait(ctx context.Context) error {
 		return nil
 	}
 }
+
+type (
+	flightCall[T any] struct {
+		wg       *WaitGroup
+		val      *T
+		err      error
+		panicked interface{}
+	}
+
+	// SingleFlight ensures that only one function call may be performed at a
+	// given time, and the results of that function call may be shared among any
+	// callers waiting on its completion
+	SingleFlight[T any] struct {
+		mu   *sync.Mutex
+		call *flightCall[T]
+	}
+)
+
+// NewSingleFlight creates a new [*SingleFlight]
+func NewSingleFlight[T any]() *SingleFlight[T] {
+	return &SingleFlight[T]{
+		mu: &sync.Mutex{},
+	}
+}
+
+// Do executes a function, ensuring that only one is in-flight, and sharing the
+// results among callers waiting on its completion.
+func (s *SingleFlight[T]) Do(ctx context.Context, fn func(ctx context.Context) (*T, error)) (*T, error) {
+	s.mu.Lock()
+
+	if s.call != nil {
+		c := s.call
+		s.mu.Unlock()
+		if err := c.wg.Wait(ctx); err != nil {
+			return nil, err
+		}
+		if c.panicked != nil {
+			panic(c.panicked)
+		}
+		return c.val, c.err
+	}
+
+	c := &flightCall[T]{
+		wg: NewWaitGroup(),
+	}
+	c.wg.Add(1)
+	s.call = c
+	s.mu.Unlock()
+
+	return func() (*T, error) {
+		defer func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			c.wg.Done()
+			if s.call == c {
+				s.call = nil
+			}
+		}()
+
+		defer func() {
+			if r := recover(); r != nil {
+				// save panicked value for other callers
+				c.panicked = r
+				panic(r)
+			}
+		}()
+
+		c.val, c.err = fn(ctx)
+		return c.val, c.err
+	}()
+}
