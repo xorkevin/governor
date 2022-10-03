@@ -93,21 +93,27 @@ func NewSingleFlight[T any]() *SingleFlight[T] {
 	}
 }
 
+func (s *SingleFlight[T]) waitForCall(waitctx context.Context, c *flightCall[T]) (*T, error) {
+	if err := c.wg.Wait(waitctx); err != nil {
+		return nil, err
+	}
+	if c.panicked != nil {
+		panic(c.panicked)
+	}
+	return c.val, c.err
+}
+
 // Do executes a function, ensuring that only one is in-flight, and sharing the
-// results among callers waiting on its completion.
-func (s *SingleFlight[T]) Do(ctx context.Context, fn func(ctx context.Context) (*T, error)) (*T, error) {
+// results among callers waiting on its completion. fullctx is the context
+// given to the function to complete, while the waitctx is the amount of time a
+// caller is willing to wait for the result.
+func (s *SingleFlight[T]) Do(fullctx, waitctx context.Context, fn func(ctx context.Context) (*T, error)) (*T, error) {
 	s.mu.Lock()
 
 	if s.call != nil {
 		c := s.call
 		s.mu.Unlock()
-		if err := c.wg.Wait(ctx); err != nil {
-			return nil, err
-		}
-		if c.panicked != nil {
-			panic(c.panicked)
-		}
-		return c.val, c.err
+		return s.waitForCall(waitctx, c)
 	}
 
 	c := &flightCall[T]{
@@ -117,7 +123,7 @@ func (s *SingleFlight[T]) Do(ctx context.Context, fn func(ctx context.Context) (
 	s.call = c
 	s.mu.Unlock()
 
-	return func() (*T, error) {
+	go func() {
 		defer func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
@@ -135,7 +141,8 @@ func (s *SingleFlight[T]) Do(ctx context.Context, fn func(ctx context.Context) (
 			}
 		}()
 
-		c.val, c.err = fn(ctx)
-		return c.val, c.err
+		c.val, c.err = fn(fullctx)
 	}()
+
+	return s.waitForCall(waitctx, c)
 }
