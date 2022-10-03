@@ -60,6 +60,7 @@ type (
 	// Subscription manages an active subscription
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
+		IsAssigned(msg Msg) bool
 		Commit(ctx context.Context, msg Msg) error
 		Close(ctx context.Context) error
 		IsPermanentlyClosed() bool
@@ -107,13 +108,14 @@ type (
 	}
 
 	subscription struct {
-		s      *Service
-		topic  string
-		group  string
-		log    *klog.LevelLogger
-		reader *kgo.Client
-		mu     *sync.RWMutex
-		closed bool
+		s        *Service
+		topic    string
+		group    string
+		log      *klog.LevelLogger
+		reader   *kgo.Client
+		mu       *sync.RWMutex
+		assigned map[int32]struct{}
+		closed   bool
 	}
 
 	ctxKeyEvents struct{}
@@ -252,10 +254,12 @@ type (
 	ErrorClient struct{}
 	// ErrorClientClosed is returned when the client has been closed
 	ErrorClientClosed struct{}
-	// ErrorReadEmpty is returned when no messages have been read
-	ErrorReadEmpty struct{}
+	// ErrorPartitionUnassigned is returned when the client has been unassigned the partition
+	ErrorPartitionUnassigned struct{}
 	// ErrorInvalidMsg is returned when the message is malformed
 	ErrorInvalidMsg struct{}
+	// ErrorReadEmpty is returned when no messages have been read
+	ErrorReadEmpty struct{}
 	// ErrorNotFound is returned when the object is not found
 	ErrorNotFound struct{}
 )
@@ -272,12 +276,16 @@ func (e ErrorClientClosed) Error() string {
 	return "Events client closed"
 }
 
-func (e ErrorReadEmpty) Error() string {
-	return "No messages"
+func (e ErrorPartitionUnassigned) Error() string {
+	return "Partition unassigned"
 }
 
 func (e ErrorInvalidMsg) Error() string {
 	return "Invalid message"
+}
+
+func (e ErrorReadEmpty) Error() string {
+	return "No messages"
 }
 
 func (e ErrorNotFound) Error() string {
@@ -512,6 +520,20 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	if opts.RebalanceTimeout == 0 {
 		opts.RebalanceTimeout = 30 * time.Second
 	}
+
+	sub := &subscription{
+		s:     s,
+		topic: topic,
+		group: group,
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
+			"events.topic": topic,
+			"events.group": group,
+		})),
+		mu:       &sync.RWMutex{},
+		assigned: map[int32]struct{}{},
+		closed:   false,
+	}
+
 	reader, err := kgo.NewClient(append(s.commonOpts(client.auth), []kgo.Opt{
 		// consumer topic
 		kgo.ConsumeTopics(topic),
@@ -522,6 +544,9 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 			kgo.NewOffset().AfterMilli(time.Now().Round(0).UnixMilli()),
 		), // consume requests after now
 		kgo.RebalanceTimeout(opts.RebalanceTimeout),
+		kgo.OnPartitionsAssigned(sub.onAssigned),
+		kgo.OnPartitionsRevoked(sub.onRevoked),
+		kgo.OnPartitionsLost(sub.onLost),
 		// liveness
 		kgo.HeartbeatInterval(3 * time.Second),
 		kgo.SessionTimeout(15 * time.Second),
@@ -541,18 +566,8 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create event stream client")
 	}
 
-	sub := &subscription{
-		s:     s,
-		topic: topic,
-		group: group,
-		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
-			"events.topic": topic,
-			"events.group": group,
-		})),
-		reader: reader,
-		mu:     &sync.RWMutex{},
-		closed: false,
-	}
+	sub.reader = reader
+
 	sub.log.Info(ctx, "Added subscriber", nil)
 	return sub, nil
 }
@@ -561,6 +576,65 @@ func (s *subscription) isClosed() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.closed
+}
+
+// IsAssigned returns if a message is assigned to the consumer
+func (s *subscription) IsAssigned(msg Msg) bool {
+	if msg.record == nil || msg.record.Topic != s.topic {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return false
+	}
+	_, ok := s.assigned[msg.record.Partition]
+	return ok
+}
+
+func (s *subscription) onAssigned(ctx context.Context, client *kgo.Client, assigned map[string][]int32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for topic, partitions := range assigned {
+		if topic != s.topic {
+			continue
+		}
+		for _, i := range partitions {
+			s.assigned[i] = struct{}{}
+		}
+	}
+}
+
+func (s *subscription) onRevoked(ctx context.Context, client *kgo.Client, revoked map[string][]int32) {
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for topic, partitions := range revoked {
+			if topic != s.topic {
+				continue
+			}
+			for _, i := range partitions {
+				delete(s.assigned, i)
+			}
+		}
+	}()
+	// must commit any marked but uncommitted messages
+	if err := client.CommitUncommittedOffsets(ctx); err != nil {
+		s.log.Err(ctx, kerrors.WithKind(err, ErrorClient{}, "Failed to commit offsets on revoke"), nil)
+	}
+}
+
+func (s *subscription) onLost(ctx context.Context, client *kgo.Client, lost map[string][]int32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for topic, partitions := range lost {
+		if topic != s.topic {
+			continue
+		}
+		for _, i := range partitions {
+			delete(s.assigned, i)
+		}
+	}
 }
 
 // ReadMsg reads a message
@@ -598,7 +672,9 @@ func (s *subscription) Commit(ctx context.Context, msg Msg) error {
 	if s.isClosed() {
 		return kerrors.WithKind(nil, ErrorClientClosed{}, "Client closed")
 	}
-
+	if !s.IsAssigned(msg) {
+		return kerrors.WithKind(nil, ErrorPartitionUnassigned{}, "Unassigned partition")
+	}
 	if msg.record == nil {
 		return kerrors.WithKind(nil, ErrorInvalidMsg{}, "Invalid message")
 	}
@@ -894,10 +970,13 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 							"events.duration_ms": duration.Milliseconds(),
 						})
 						if err := sub.Commit(ctx, *m); err != nil {
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
 							if errors.Is(err, ErrorClientClosed{}) {
 								return
 							}
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							if errors.Is(err, ErrorPartitionUnassigned{}) || errors.Is(err, ErrorInvalidMsg{}) {
+								break
+							}
 							select {
 							case <-ctx.Done():
 							case <-time.After(delay):
@@ -926,10 +1005,13 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 							"events.duration_ms": duration.Milliseconds(),
 						})
 						if err := sub.Commit(ctx, *m); err != nil {
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
 							if errors.Is(err, ErrorClientClosed{}) {
 								return
 							}
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							if errors.Is(err, ErrorPartitionUnassigned{}) || errors.Is(err, ErrorInvalidMsg{}) {
+								break
+							}
 							select {
 							case <-ctx.Done():
 							case <-time.After(delay):
