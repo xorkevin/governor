@@ -913,10 +913,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
 				select {
 				case <-ctx.Done():
+					return
 				case <-time.After(delay):
 					delay = min(delay*2, opts.MaxBackoff)
+					return
 				}
-				return
 			}
 			defer func() {
 				if err := sub.Close(ctx); err != nil {
@@ -934,6 +935,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
 					select {
 					case <-ctx.Done():
+						return
 					case <-time.After(delay):
 						delay = min(delay*2, opts.MaxBackoff)
 						continue
@@ -959,7 +961,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								"events.duration_ms": duration.Milliseconds(),
 							})
 							select {
-							case <-ctx.Done():
+							case <-msgctx.Done():
+								return
 							case <-time.After(delay):
 								delay = min(delay*2, opts.MaxBackoff)
 								continue
@@ -969,7 +972,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						w.log.Info(msgctx, "DLQ handled message", klog.Fields{
 							"events.duration_ms": duration.Milliseconds(),
 						})
-						if err := sub.Commit(ctx, *m); err != nil {
+						if err := sub.Commit(msgctx, *m); err != nil {
 							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
 							if errors.Is(err, ErrorClientClosed{}) {
 								return
@@ -978,7 +981,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								break
 							}
 							select {
-							case <-ctx.Done():
+							case <-msgctx.Done():
+								return
 							case <-time.After(delay):
 								delay = min(delay*2, opts.MaxBackoff)
 								continue
@@ -994,7 +998,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								"events.duration_ms": duration.Milliseconds(),
 							})
 							select {
-							case <-ctx.Done():
+							case <-msgctx.Done():
+								return
 							case <-time.After(delay):
 								delay = min(delay*2, opts.MaxBackoff)
 								continue
@@ -1004,7 +1009,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						w.log.Info(msgctx, "Handled subscription message", klog.Fields{
 							"events.duration_ms": duration.Milliseconds(),
 						})
-						if err := sub.Commit(ctx, *m); err != nil {
+						if err := sub.Commit(msgctx, *m); err != nil {
 							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
 							if errors.Is(err, ErrorClientClosed{}) {
 								return
@@ -1013,7 +1018,8 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								break
 							}
 							select {
-							case <-ctx.Done():
+							case <-msgctx.Done():
+								return
 							case <-time.After(delay):
 								delay = min(delay*2, opts.MaxBackoff)
 								continue
