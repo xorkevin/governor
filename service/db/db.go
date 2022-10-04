@@ -10,6 +10,7 @@ import (
 
 	"github.com/lib/pq"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -20,25 +21,18 @@ type (
 		DB(ctx context.Context) (SQLDB, error)
 	}
 
-	getClientRes struct {
-		client SQLDB
-		err    error
-	}
-
-	getOp struct {
-		ctx context.Context
-		res chan<- getClientRes
+	sqldbClient struct {
+		client *sqldb
+		auth   pgAuth
 	}
 
 	Service struct {
-		sqldb      *sqldb
-		asqldb     *atomic.Pointer[sqldb]
-		auth       pgAuth
+		asqldb     *atomic.Pointer[sqldbClient]
+		sf         *ksync.SingleFlight[sqldbClient]
+		doctx      context.Context
 		connopts   string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
-		ops        chan getOp
-		ready      *atomic.Bool
 		hbfailed   int
 		hbinterval time.Duration
 		hbmaxfail  int
@@ -65,9 +59,8 @@ func setCtxDB(inj governor.Injector, d Database) {
 // New creates a new db service
 func New() *Service {
 	return &Service{
-		asqldb:   &atomic.Pointer[sqldb]{},
-		ops:      make(chan getOp),
-		ready:    &atomic.Bool{},
+		asqldb:   &atomic.Pointer[sqldbClient]{},
+		sf:       ksync.NewSingleFlight[sqldbClient](),
 		hbfailed: 0,
 	}
 }
@@ -163,6 +156,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
+	s.doctx = ctx
 	done := make(chan struct{})
 	go s.execute(ctx, done)
 	s.done = done
@@ -177,59 +171,50 @@ func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
+			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil), s.asqldb.Swap(nil))
 			return
 		case <-ticker.C:
 			s.handlePing(ctx)
-		case op := <-s.ops:
-			client, err := s.handleGetClient(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getClientRes{
-				client: client,
-				err:    err,
-			}:
-				close(op.res)
-			}
 		}
 	}
 }
 
 func (s *Service) handlePing(ctx context.Context) {
-	var err error
 	// Check db auth expiry, and reinit client if about to be expired
-	if _, err = s.handleGetClient(ctx); err != nil {
+	client, err := s.sf.Do(ctx, ctx, s.handleGetClient)
+	if err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create db client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a db client,
 	// if there is a db client then ping the db. This allows vault to be
 	// temporarily unavailable without disrupting the DB connections.
-	if s.sqldb != nil {
-		err = s.sqldb.PingContext(ctx)
+	username := ""
+	if client != nil {
+		err = client.client.PingContext(ctx)
 		if err == nil {
-			s.ready.Store(true)
 			s.hbfailed = 0
 			return
 		}
+		username = client.auth.Username
 	}
 	// Failed a heartbeat
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping db"), klog.Fields{
 			"db.connopts": s.connopts,
-			"db.username": s.auth.Username,
+			"db.username": username,
 		})
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to db"), klog.Fields{
 		"db.connopts": s.connopts,
-		"db.username": s.auth.Username,
+		"db.username": username,
 	})
-	s.asqldb.Store(nil)
-	s.ready.Store(false)
+
 	s.hbfailed = 0
-	s.auth = pgAuth{}
+	// invalidate secret first in order to ensure that get client will return new auth
 	s.config.InvalidateSecret("auth")
+	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil), s.asqldb.Swap(nil))
 }
 
 type (
@@ -239,62 +224,62 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context) (SQLDB, error) {
+func (s *Service) handleGetClient(ctx context.Context) (*sqldbClient, error) {
 	var auth pgAuth
-	if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
-		return nil, kerrors.WithMsg(err, "Invalid secret")
-	}
-	if auth.Username == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
-	}
-	if auth == s.auth {
-		return s.sqldb, nil
+	{
+		client := s.asqldb.Load()
+		if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
+			return client, kerrors.WithMsg(err, "Invalid secret")
+		}
+		if auth.Username == "" {
+			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
+		}
+		if client != nil && auth == client.auth {
+			return client, nil
+		}
 	}
 
-	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
+	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil), s.asqldb.Swap(nil))
 
-	opts := fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts)
-	client, err := sql.Open("postgres", opts)
+	dbClient, err := sql.Open("postgres", fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to init db conn")
 	}
-	if err := client.PingContext(ctx); err != nil {
+	if err := dbClient.PingContext(ctx); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping db")
 	}
 
-	s.sqldb = &sqldb{
-		log:    s.log,
-		client: client,
+	client := &sqldbClient{
+		client: &sqldb{
+			log:    s.log,
+			client: dbClient,
+		},
+		auth: auth,
 	}
-	s.asqldb.Store(s.sqldb)
-	s.auth = auth
-	s.ready.Store(true)
-	s.hbfailed = 0
+	s.asqldb.Store(client)
+
 	s.log.Info(ctx, "Established connection to db", klog.Fields{
 		"db.connopts": s.connopts,
-		"db.username": s.auth.Username,
+		"db.username": auth.Username,
 	})
-	return s.sqldb, nil
+	return client, nil
 }
 
-func (s *Service) closeClient(ctx context.Context) {
-	s.asqldb.Store(nil)
-	if s.sqldb != nil {
-		if err := s.sqldb.Close(); err != nil {
+func (s *Service) closeClient(ctx context.Context, client *sqldbClient) {
+	if client != nil {
+		if err := client.client.Close(); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"), klog.Fields{
 				"db.connopts": s.connopts,
-				"db.username": s.auth.Username,
+				"db.username": client.auth.Username,
 			})
 		} else {
 			s.log.Info(ctx, "Closed db client", klog.Fields{
 				"db.connopts": s.connopts,
-				"db.username": s.auth.Username,
+				"db.username": client.auth.Username,
 			})
 		}
 	}
-	s.sqldb = nil
-	s.auth = pgAuth{}
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -315,7 +300,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.asqldb.Load() == nil {
 		return kerrors.WithKind(nil, ErrorConn{}, "DB service not ready")
 	}
 	return nil
@@ -324,27 +309,14 @@ func (s *Service) Health(ctx context.Context) error {
 // DB implements [Database] and returns [SQLDB]
 func (s *Service) DB(ctx context.Context) (SQLDB, error) {
 	if client := s.asqldb.Load(); client != nil {
-		return client, nil
+		return client.client, nil
 	}
 
-	res := make(chan getClientRes)
-	op := getOp{
-		ctx: ctx,
-		res: res,
+	client, err := s.sf.Do(s.doctx, ctx, s.handleGetClient)
+	if err != nil {
+		return nil, err
 	}
-	select {
-	case <-s.done:
-		return nil, kerrors.WithMsg(nil, "DB service shutdown")
-	case <-ctx.Done():
-		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.ops <- op:
-		select {
-		case <-ctx.Done():
-			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.client, v.err
-		}
-	}
+	return client.client, nil
 }
 
 type (

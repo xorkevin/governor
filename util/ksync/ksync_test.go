@@ -81,4 +81,15 @@ func TestWaitGroup(t *testing.T) {
 			}
 		}()
 	})
+
+	t.Run("context cancellation takes priority in wait", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		wg := NewWaitGroup()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		assert.ErrorIs(wg.Wait(ctx), context.Canceled)
+	})
 }

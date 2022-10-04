@@ -58,6 +58,11 @@ func (w *WaitGroup) Done() {
 
 // Wait waits for the group to complete
 func (w *WaitGroup) Wait(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	if w.count.Load() < 1 {
 		return nil
 	}
@@ -93,6 +98,26 @@ func NewSingleFlight[T any]() *SingleFlight[T] {
 	}
 }
 
+func (s *SingleFlight[T]) doCall(fullctx context.Context, c *flightCall[T], fn func(ctx context.Context) (*T, error)) {
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		c.wg.Done()
+		if s.call == c {
+			s.call = nil
+		}
+	}()
+
+	defer func() {
+		if r := recover(); r != nil {
+			// save panicked value for other callers
+			c.panicked = r
+		}
+	}()
+
+	c.val, c.err = fn(fullctx)
+}
+
 func (s *SingleFlight[T]) waitForCall(waitctx context.Context, c *flightCall[T]) (*T, error) {
 	if err := c.wg.Wait(waitctx); err != nil {
 		return nil, err
@@ -123,26 +148,7 @@ func (s *SingleFlight[T]) Do(fullctx, waitctx context.Context, fn func(ctx conte
 	s.call = c
 	s.mu.Unlock()
 
-	go func() {
-		defer func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			c.wg.Done()
-			if s.call == c {
-				s.call = nil
-			}
-		}()
-
-		defer func() {
-			if r := recover(); r != nil {
-				// save panicked value for other callers
-				c.panicked = r
-				panic(r)
-			}
-		}()
-
-		c.val, c.err = fn(fullctx)
-	}()
+	go s.doCall(fullctx, c, fn)
 
 	return s.waitForCall(waitctx, c)
 }
