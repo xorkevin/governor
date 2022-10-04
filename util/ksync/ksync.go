@@ -112,6 +112,7 @@ func (s *SingleFlight[T]) doCall(fullctx context.Context, c *flightCall[T], fn f
 		if r := recover(); r != nil {
 			// save panicked value for other callers
 			c.panicked = r
+			panic(r)
 		}
 	}()
 

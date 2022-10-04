@@ -2,6 +2,7 @@ package ksync
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,5 +92,56 @@ func TestWaitGroup(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		assert.ErrorIs(wg.Wait(ctx), context.Canceled)
+	})
+}
+
+type (
+	testobj struct {
+		field int64
+	}
+)
+
+func TestSingleFlight(t *testing.T) {
+	t.Parallel()
+
+	t.Run("waits with no count", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		sf := NewSingleFlight[testobj]()
+
+		block := make(chan struct{})
+		count := &atomic.Int64{}
+		fn := func(ctx context.Context) (*testobj, error) {
+			select {
+			case <-block:
+				return &testobj{
+					field: count.Add(1),
+				}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		wg := NewWaitGroup()
+		var ret1, ret2 *testobj
+		var err1, err2 error
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ret1, err1 = sf.Do(context.Background(), context.Background(), fn)
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ret2, err2 = sf.Do(context.Background(), context.Background(), fn)
+		}()
+		<-time.After(10 * time.Millisecond)
+		close(block)
+		wg.Wait(context.Background())
+		assert.NoError(err1)
+		assert.NoError(err2)
+		assert.NotNil(ret1)
+		assert.True(ret1 == ret2)
 	})
 }
