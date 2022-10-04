@@ -2,6 +2,9 @@ package ksync
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 )
@@ -110,9 +113,10 @@ func (s *SingleFlight[T]) doCall(fullctx context.Context, c *flightCall[T], fn f
 
 	defer func() {
 		if r := recover(); r != nil {
+			// stacktrace is lost if not printed here
+			fmt.Fprintf(os.Stderr, "singleflight recovered panic stacktrace:\n\n%s", string(debug.Stack()))
 			// save panicked value for other callers
 			c.panicked = r
-			panic(r)
 		}
 	}()
 

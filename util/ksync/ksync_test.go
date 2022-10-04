@@ -104,7 +104,51 @@ type (
 func TestSingleFlight(t *testing.T) {
 	t.Parallel()
 
-	t.Run("waits with no count", func(t *testing.T) {
+	t.Run("shares return values among multiple callers", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		sf := NewSingleFlight[testobj]()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		block := make(chan struct{})
+		count := &atomic.Int64{}
+		fn := func(innerctx context.Context) (*testobj, error) {
+			assert.True(innerctx == ctx)
+			select {
+			case <-block:
+				return &testobj{
+					field: count.Add(1),
+				}, nil
+			case <-innerctx.Done():
+				return nil, innerctx.Err()
+			}
+		}
+		wg := NewWaitGroup()
+		var ret1, ret2 *testobj
+		var err1, err2 error
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ret1, err1 = sf.Do(ctx, ctx, fn)
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ret2, err2 = sf.Do(ctx, ctx, fn)
+		}()
+		<-time.After(10 * time.Millisecond)
+		close(block)
+		wg.Wait(ctx)
+		assert.NoError(err1)
+		assert.NoError(err2)
+		assert.NotNil(ret1)
+		assert.True(ret1 == ret2)
+	})
+
+	t.Run("allows function to finish despite wait context cancellation", func(t *testing.T) {
 		t.Parallel()
 
 		assert := require.New(t)
@@ -129,7 +173,9 @@ func TestSingleFlight(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ret1, err1 = sf.Do(context.Background(), context.Background(), fn)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			ret1, err1 = sf.Do(context.Background(), ctx, fn)
 		}()
 		wg.Add(1)
 		go func() {
@@ -139,9 +185,63 @@ func TestSingleFlight(t *testing.T) {
 		<-time.After(10 * time.Millisecond)
 		close(block)
 		wg.Wait(context.Background())
-		assert.NoError(err1)
+		assert.ErrorIs(err1, context.Canceled)
 		assert.NoError(err2)
-		assert.NotNil(ret1)
-		assert.True(ret1 == ret2)
+		assert.Nil(ret1)
+		assert.Equal(&testobj{
+			field: 1,
+		}, ret2)
+	})
+
+	t.Run("shares panics among callers", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		sf := NewSingleFlight[testobj]()
+
+		block := make(chan struct{})
+		count := &atomic.Int64{}
+		fn := func(ctx context.Context) (*testobj, error) {
+			select {
+			case <-block:
+				panic(&testobj{
+					field: count.Add(1),
+				})
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		wg := NewWaitGroup()
+		var pan1, pan2 *testobj
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					p, ok := r.(*testobj)
+					assert.True(ok)
+					pan1 = p
+				}
+			}()
+			sf.Do(context.Background(), context.Background(), fn)
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					p, ok := r.(*testobj)
+					assert.True(ok)
+					pan2 = p
+				}
+			}()
+			sf.Do(context.Background(), context.Background(), fn)
+		}()
+		<-time.After(10 * time.Millisecond)
+		close(block)
+		wg.Wait(context.Background())
+		assert.NotNil(pan1)
+		assert.True(pan1 == pan2)
 	})
 }
