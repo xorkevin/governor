@@ -121,17 +121,35 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	}
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, m.Userid, s.accessDuration, sm.SessionID, sm.AuthTime, token.ScopeAll, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(
+		ctx,
+		token.KindAccess,
+		m.Userid,
+		s.authsettings.accessDuration,
+		sm.SessionID,
+		sm.AuthTime,
+		token.ScopeAll,
+		"",
+	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
 	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, m.Userid, s.refreshDuration, sm.SessionID, sm.AuthTime, token.ScopeAll, sessionKey)
+	refreshToken, _, err := s.tokenizer.Generate(
+		ctx,
+		token.KindRefresh,
+		m.Userid,
+		s.authsettings.refreshDuration,
+		sm.SessionID,
+		sm.AuthTime,
+		token.ScopeAll,
+		sessionKey,
+	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 	}
 
-	if s.newLoginEmail && !sessionExists {
+	if s.authsettings.newLoginEmail && !sessionExists {
 		emdata := emailNewLogin{
 			FirstName: m.FirstName,
 			LastName:  m.LastName,
@@ -156,7 +174,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCache); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 
@@ -201,7 +219,16 @@ func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessDuration, claims.ID, claims.AuthTime, claims.Scope, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(
+		ctx,
+		token.KindAccess,
+		claims.Subject,
+		s.authsettings.accessDuration,
+		claims.ID,
+		claims.AuthTime,
+		claims.Scope,
+		"",
+	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
@@ -254,11 +281,29 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, kerrors.WithMsg(err, "Failed to generate session key")
 	}
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(ctx, token.KindAccess, claims.Subject, s.accessDuration, sm.SessionID, sm.AuthTime, claims.Scope, "")
+	accessToken, accessClaims, err := s.tokenizer.Generate(
+		ctx,
+		token.KindAccess,
+		claims.Subject,
+		s.authsettings.accessDuration,
+		sm.SessionID,
+		sm.AuthTime,
+		claims.Scope,
+		"",
+	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(ctx, token.KindRefresh, claims.Subject, s.refreshDuration, sm.SessionID, sm.AuthTime, claims.Scope, sessionKey)
+	newRefreshToken, _, err := s.tokenizer.Generate(
+		ctx,
+		token.KindRefresh,
+		claims.Subject,
+		s.authsettings.refreshDuration,
+		sm.SessionID,
+		sm.AuthTime,
+		claims.Scope,
+		sessionKey,
+	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
 	}
@@ -269,7 +314,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, kerrors.WithMsg(err, "Failed to save user session")
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.refreshCache); err != nil {
+	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
 	}
 

@@ -138,7 +138,7 @@ func (s *Service) commitEmail(ctx context.Context, userid string, key string, pa
 		return kerrors.WithMsg(err, "Failed to get email reset request")
 	}
 
-	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.emailConfirmDuration)) {
+	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.authsettings.emailConfirmDuration)) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "New email verification expired")
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {
@@ -269,7 +269,7 @@ func (s *Service) updatePassword(ctx context.Context, userid string, newPassword
 }
 
 func (s *Service) forgotPassword(ctx context.Context, useroremail string) error {
-	if !s.passwordReset {
+	if !s.authsettings.passwordReset {
 		return governor.ErrWithRes(nil, http.StatusConflict, "", "Password reset not enabled")
 	}
 
@@ -304,7 +304,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 		needInsert = true
 		mr = s.resets.New(m.Userid, kindResetPass)
 	} else {
-		if time.Now().Round(0).Before(time.Unix(mr.CodeTime, 0).Add(s.passResetDelay)) {
+		if time.Now().Round(0).Before(time.Unix(mr.CodeTime, 0).Add(s.authsettings.passResetDelay)) {
 			s.log.Warn(ctx, "Forgot password called prior to delay end", klog.Fields{
 				"userid": m.Userid,
 			})
@@ -350,7 +350,7 @@ func (s *Service) resetPassword(ctx context.Context, userid string, key string, 
 		return kerrors.WithMsg(err, "Failed to get password reset request")
 	}
 
-	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.passwordResetDuration)) {
+	if time.Now().Round(0).After(time.Unix(mr.CodeTime, 0).Add(s.authsettings.passwordResetDuration)) {
 		return governor.ErrWithRes(nil, http.StatusNotFound, "", "Password reset expired")
 	}
 	if ok, err := s.resets.ValidateCode(key, mr); err != nil {

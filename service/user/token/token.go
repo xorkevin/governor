@@ -3,12 +3,13 @@ package token
 import (
 	"context"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -69,34 +70,20 @@ type (
 		keySigner jose.Signer
 		keys      *hunter2.SigningKeyring
 		jwks      []jose.JSONWebKey
-	}
-
-	getSignerRes struct {
-		signer *tokenSigner
-		err    error
-	}
-
-	getOp struct {
-		ctx context.Context
-		res chan<- getSignerRes
+		hs512id   string
+		rs256id   string
 	}
 
 	Service struct {
-		hs512id    string
-		rs256id    string
-		signer     *tokenSigner
-		asigner    *atomic.Pointer[tokenSigner]
+		lc         *lifecycle.Lifecycle[tokenSigner]
 		issuer     string
 		audience   string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
-		ops        chan getOp
-		ready      *atomic.Bool
 		hbfailed   int
-		hbinterval time.Duration
 		hbmaxfail  int
-		done       <-chan struct{}
 		keyrefresh time.Duration
+		wg         *ksync.WaitGroup
 	}
 
 	ctxKeyTokenizer struct{}
@@ -119,13 +106,8 @@ func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
 // New creates a new Tokenizer
 func New() *Service {
 	return &Service{
-		asigner:  &atomic.Pointer[tokenSigner]{},
-		issuer:   "",
-		audience: "",
-		signer:   nil,
-		ops:      make(chan getOp),
-		ready:    &atomic.Bool{},
 		hbfailed: 0,
+		wg:       ksync.NewWaitGroup(),
 	}
 }
 
@@ -156,8 +138,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.audience = audience
 
-	var err error
-	s.hbinterval, err = r.GetDuration("hbinterval")
+	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
@@ -170,7 +151,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"token.issuer":     issuer,
 		"token.audience":   audience,
-		"token.hbinterval": s.hbinterval.String(),
+		"token.hbinterval": hbinterval.String(),
 		"token.hbmaxfail":  s.hbmaxfail,
 		"token.keyrefresh": s.keyrefresh.String(),
 	})
@@ -179,41 +160,21 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	s.lc = lifecycle.New(
+		ctx,
+		s.getSecrets,
+		s.closeSecrets,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
 
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(s.hbinterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.handlePing(ctx)
-		case op := <-s.ops:
-			signer, err := s.handleGetSigner(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getSignerRes{
-				signer: signer,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		}
-	}
-}
-
-func (s *Service) handlePing(ctx context.Context) {
-	err := s.refreshSecrets(ctx)
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[tokenSigner]) {
+	_, err := m.Construct(ctx)
 	if err == nil {
-		s.ready.Store(true)
 		s.hbfailed = 0
 		return
 	}
@@ -223,8 +184,9 @@ func (s *Service) handlePing(ctx context.Context) {
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
-	s.ready.Store(false)
 	s.hbfailed = 0
+	// clear the cached signer because its secret may be invalid
+	m.Stop(ctx)
 }
 
 type (
@@ -248,10 +210,11 @@ type (
 	}
 )
 
-func (s *Service) refreshSecrets(ctx context.Context) error {
+func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSigner]) (*tokenSigner, error) {
+	currentSigner := m.Load(ctx)
 	var tokenSecrets secretToken
 	if err := s.config.GetSecret(ctx, "tokensecret", s.keyrefresh, &tokenSecrets); err != nil {
-		return kerrors.WithMsg(err, "Invalid token secret")
+		return nil, kerrors.WithMsg(err, "Invalid token secret")
 	}
 	keys := hunter2.NewSigningKeyring()
 	var khs512 hunter2.SigningKey
@@ -260,7 +223,7 @@ func (s *Service) refreshSecrets(ctx context.Context) error {
 	for _, i := range tokenSecrets.Secrets {
 		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgHS512:
@@ -278,78 +241,60 @@ func (s *Service) refreshSecrets(ctx context.Context) error {
 				krs256 = k
 			}
 		}
-		if khs512 != nil && krs256 != nil && khs512.ID() == s.hs512id && krs256.ID() == s.rs256id {
+		if currentSigner != nil && khs512 != nil && krs256 != nil && khs512.ID() == currentSigner.hs512id && krs256.ID() == currentSigner.rs256id {
 			// first signing keys of each type match current signing keys, therefore no
 			// change in signing keys
-			return nil
+			return currentSigner, nil
 		}
 		keys.RegisterSigningKey(k)
 	}
 	if khs512 == nil || krs256 == nil {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
 	}
 
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
 	if err != nil {
-		return kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
+		return nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
 	}
 
 	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
 	if err != nil {
-		return kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
+		return nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
 	}
 
-	s.hs512id = khs512.ID()
-	s.rs256id = krs256.ID()
-	s.signer = &tokenSigner{
+	m.Stop(ctx)
+
+	signer := &tokenSigner{
 		signer:    sig,
 		keySigner: keySig,
 		keys:      keys,
 		jwks:      jwks,
+		hs512id:   khs512.ID(),
+		rs256id:   krs256.ID(),
 	}
 
 	s.log.Info(ctx, "Refreshed token keys with new keys", klog.Fields{
-		"token.hs512kid": s.hs512id,
-		"token.rs256kid": s.rs256id,
+		"token.hs512kid": signer.hs512id,
+		"token.rs256kid": signer.rs256id,
 		"token.numjwks":  len(jwks),
 		"token.numother": keys.Size() - len(jwks),
 	})
-	return nil
+
+	m.Store(signer)
+
+	return signer, nil
 }
 
-func (s *Service) handleGetSigner(ctx context.Context) (*tokenSigner, error) {
-	if s.signer == nil {
-		if err := s.refreshSecrets(ctx); err != nil {
-			return nil, err
-		}
-		s.ready.Store(true)
-	}
-	return s.signer, nil
+func (s *Service) closeSecrets(ctx context.Context, signer *tokenSigner) {
+	// nothing to close
 }
 
 func (s *Service) getSigner(ctx context.Context) (*tokenSigner, error) {
-	if signer := s.asigner.Load(); signer != nil {
+	if signer := s.lc.Load(ctx); signer != nil {
 		return signer, nil
 	}
 
-	res := make(chan getSignerRes)
-	op := getOp{
-		ctx: ctx,
-		res: res,
-	}
-	select {
-	case <-s.done:
-		return nil, kerrors.WithMsg(nil, "Token service shutdown")
-	case <-ctx.Done():
-		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.ops <- op:
-		select {
-		case <-ctx.Done():
-			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.signer, v.err
-		}
-	}
+	return s.lc.Construct(ctx)
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -357,11 +302,8 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
 }
 
@@ -370,7 +312,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.lc.Load(ctx) == nil {
 		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token service not ready")
 	}
 	return nil

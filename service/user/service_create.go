@@ -87,7 +87,7 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 	}
 
 	am := s.approvals.New(m)
-	if s.userApproval {
+	if s.authsettings.userApproval {
 		if err := s.approvals.Insert(ctx, am); err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
@@ -213,7 +213,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	if !am.Approved {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not approved")
 	}
-	if time.Now().Round(0).After(time.Unix(am.CodeTime, 0).Add(s.confirmDuration)) {
+	if time.Now().Round(0).After(time.Unix(am.CodeTime, 0).Add(s.authsettings.confirmDuration)) {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Code expired")
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {

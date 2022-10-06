@@ -339,7 +339,7 @@ func (s *Service) CheckUserExists(ctx context.Context, userid string) (bool, err
 	if exists {
 		v = cacheValY
 	}
-	if err := s.kvusers.Set(ctx, userid, v, s.userCacheDuration); err != nil {
+	if err := s.kvusers.Set(ctx, userid, v, s.authsettings.userCacheDuration); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set user exists in cache"), nil)
 	}
 
@@ -417,9 +417,9 @@ end:
 	}
 	for _, i := range dneInCache {
 		if _, ok := userExists[i]; ok {
-			multiset.Set(ctx, i, cacheValY, s.userCacheDuration)
+			multiset.Set(ctx, i, cacheValY, s.authsettings.userCacheDuration)
 		} else {
-			multiset.Set(ctx, i, cacheValN, s.userCacheDuration)
+			multiset.Set(ctx, i, cacheValN, s.authsettings.userCacheDuration)
 		}
 	}
 	if err := multiset.Exec(ctx); err != nil {

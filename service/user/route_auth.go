@@ -15,14 +15,14 @@ func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 		Name:     "access_token",
 		Value:    accessToken,
 		Path:     s.s.baseURL,
-		MaxAge:   int(s.s.accessDuration/time.Second) - 5,
+		MaxAge:   int(s.s.authsettings.accessDuration/time.Second) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
 func (s *router) setRefreshCookie(c governor.Context, refreshToken string, userid string) {
-	maxage := int(s.s.refreshDuration/time.Second) - 5
+	maxage := int(s.s.authsettings.refreshDuration/time.Second) - 5
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -62,7 +62,7 @@ func (s *router) setSessionCookie(c governor.Context, sessionID string, userid s
 		Name:     "session_token_" + userid,
 		Value:    sessionID,
 		Path:     s.s.authURL,
-		MaxAge:   int(s.s.refreshDuration/time.Second) - 5,
+		MaxAge:   int(s.s.authsettings.refreshDuration/time.Second) - 5,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
 	})
