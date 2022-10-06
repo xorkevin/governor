@@ -231,7 +231,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 	}
 	if err := dbClient.PingContext(ctx); err != nil {
 		if err := dbClient.Close(); err != nil {
-			s.log.Info(ctx, "Failed to close db after failed initial ping", klog.Fields{
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn{}, "Failed to close db after failed initial ping"), klog.Fields{
 				"db.connopts": s.connopts,
 				"db.username": auth.Username,
 			})
@@ -304,6 +304,7 @@ func (s *Service) DB(ctx context.Context) (SQLDB, error) {
 
 	client, err := s.lc.Construct(ctx)
 	if err != nil {
+		// explicitly return nil in order to prevent usage of any cached client
 		return nil, err
 	}
 	return client.client, nil

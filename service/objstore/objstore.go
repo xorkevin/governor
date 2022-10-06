@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync/atomic"
-	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -27,19 +27,13 @@ type (
 		DelBucket(ctx context.Context, name string) error
 	}
 
-	getClientRes struct {
+	objstoreClient struct {
 		client *minio.Client
-		err    error
-	}
-
-	getOp struct {
-		ctx context.Context
-		res chan<- getClientRes
+		auth   minioauth
 	}
 
 	Service struct {
-		client     *minio.Client
-		aclient    *atomic.Pointer[minio.Client]
+		lc         *lifecycle.Lifecycle[objstoreClient]
 		clientname string
 		auth       minioauth
 		addr       string
@@ -47,12 +41,9 @@ type (
 		location   string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
-		ops        chan getOp
-		ready      *atomic.Bool
 		hbfailed   int
-		hbinterval time.Duration
 		hbmaxfail  int
-		done       <-chan struct{}
+		wg         *ksync.WaitGroup
 	}
 
 	ctxKeyObjstore struct{}
@@ -97,10 +88,8 @@ func NewBucketInCtx(inj governor.Injector, name string) {
 // New creates a new object store service instance
 func New() *Service {
 	return &Service{
-		aclient:  &atomic.Pointer[minio.Client]{},
-		ops:      make(chan getOp),
-		ready:    &atomic.Bool{},
 		hbfailed: 0,
+		wg:       ksync.NewWaitGroup(),
 	}
 }
 
@@ -145,8 +134,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.sslmode = r.GetBool("sslmode")
 	s.location = r.GetStr("location")
-	var err error
-	s.hbinterval, err = r.GetDuration("hbinterval")
+	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
@@ -156,7 +144,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"obj.addr":       s.addr,
 		"obj.sslmode":    s.sslmode,
 		"obj.location":   s.location,
-		"obj.hbinterval": s.hbinterval.String(),
+		"obj.hbinterval": hbinterval.String(),
 		"obj.hbmaxfail":  s.hbmaxfail,
 	})
 
@@ -164,51 +152,30 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	s.lc = lifecycle.New(
+		ctx,
+		s.handleGetClient,
+		s.closeClient,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
 
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(s.hbinterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			s.closeClient()
-			return
-		case <-ticker.C:
-			s.handlePing(ctx)
-		case op := <-s.ops:
-			client, err := s.handleGetClient(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getClientRes{
-				client: client,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		}
-	}
-}
-
-func (s *Service) handlePing(ctx context.Context) {
-	var err error
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[objstoreClient]) {
 	// Check client auth expiry, and reinit client if about to be expired
-	if _, err = s.handleGetClient(ctx); err != nil {
+	client, err := m.Construct(ctx)
+	if err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create objstore client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
 	// unavailable without disrupting the client connections.
-	if s.client != nil {
-		err = s.clientPing(ctx, s.client)
+	if client != nil {
+		err = s.clientPing(ctx, client.client)
 		if err == nil {
-			s.ready.Store(true)
 			s.hbfailed = 0
 			return
 		}
@@ -225,11 +192,13 @@ func (s *Service) handlePing(ctx context.Context) {
 		"obj.addr":     s.addr,
 		"obj.username": s.auth.Username,
 	})
-	s.aclient.Store(nil)
-	s.ready.Store(false)
 	s.hbfailed = 0
-	s.auth = minioauth{}
+	// first invalidate cached secret in order to ensure that construct client
+	// will use refreshed auth
 	s.config.InvalidateSecret("auth")
+	// must stop the client in order to invalidate cached client, and force wait
+	// on newly constructed client
+	m.Stop(ctx)
 }
 
 type (
@@ -239,48 +208,51 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context) (*minio.Client, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[objstoreClient]) (*objstoreClient, error) {
 	var auth minioauth
-	if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
-		return nil, kerrors.WithMsg(err, "Invalid secret")
-	}
-	if auth.Username == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
-	}
-	if auth == s.auth {
-		return s.client, nil
+	{
+		client := m.Load(ctx)
+		if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
+			return client, kerrors.WithMsg(err, "Invalid secret")
+		}
+		if auth.Username == "" {
+			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
+		}
+		if client != nil && auth == client.auth {
+			return client, nil
+		}
 	}
 
-	s.closeClient()
-
-	client, err := minio.New(s.addr, &minio.Options{
+	objClient, err := minio.New(s.addr, &minio.Options{
 		Creds:  credentials.NewStaticV4(auth.Username, auth.Password, ""),
 		Secure: s.sslmode,
 	})
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to create objstore client")
 	}
-	if err := s.clientPing(ctx, client); err != nil {
+	if err := s.clientPing(ctx, objClient); err != nil {
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping objstore")
 	}
 
-	s.client = client
-	s.aclient.Store(s.client)
-	s.auth = auth
-	s.ready.Store(false)
-	s.hbfailed = 0
+	m.Stop(ctx)
+
 	s.log.Info(ctx, "Established connection to objstore", klog.Fields{
 		"obj.addr":     s.addr,
 		"obj.username": s.auth.Username,
 	})
-	return s.client, nil
+
+	client := &objstoreClient{
+		client: objClient,
+		auth:   auth,
+	}
+	m.Store(client)
+
+	return client, nil
 }
 
-func (s *Service) closeClient() {
-	s.aclient.Store(nil)
-	s.client = nil
-	s.auth = minioauth{}
+func (s *Service) closeClient(ctx context.Context, client *objstoreClient) {
+	// no close
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -288,11 +260,8 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
 }
 
@@ -301,35 +270,23 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.lc.Load(ctx) == nil {
 		return kerrors.WithKind(nil, ErrorConn{}, "Objstore service not ready")
 	}
 	return nil
 }
 
 func (s *Service) getClient(ctx context.Context) (*minio.Client, error) {
-	if client := s.aclient.Load(); client != nil {
-		return client, nil
+	if client := s.lc.Load(ctx); client != nil {
+		return client.client, nil
 	}
 
-	res := make(chan getClientRes)
-	op := getOp{
-		ctx: ctx,
-		res: res,
+	client, err := s.lc.Construct(ctx)
+	if err != nil {
+		// explicitly return nil in order to prevent usage of any cached client
+		return nil, err
 	}
-	select {
-	case <-s.done:
-		return nil, kerrors.WithMsg(nil, "Objstore service shutdown")
-	case <-ctx.Done():
-		return nil, kerrors.WithMsg(nil, "Context cancelled")
-	case s.ops <- op:
-		select {
-		case <-ctx.Done():
-			return nil, kerrors.WithMsg(nil, "Context cancelled")
-		case v := <-res:
-			return v.client, v.err
-		}
-	}
+	return client.client, nil
 }
 
 func (s *Service) clientPing(ctx context.Context, client *minio.Client) error {

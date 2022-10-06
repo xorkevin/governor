@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -68,30 +69,20 @@ type (
 		Subtree(prefix string) KVStore
 	}
 
-	getClientRes struct {
+	kvstoreClient struct {
 		client *redis.Client
-		err    error
-	}
-
-	getOp struct {
-		ctx context.Context
-		res chan<- getClientRes
+		auth   secretAuth
 	}
 
 	Service struct {
-		client     *redis.Client
-		aclient    *atomic.Pointer[redis.Client]
-		auth       secretAuth
-		addr       string
-		dbname     int
-		config     governor.SecretReader
-		log        *klog.LevelLogger
-		ops        chan getOp
-		ready      *atomic.Bool
-		hbfailed   int
-		hbinterval time.Duration
-		hbmaxfail  int
-		done       <-chan struct{}
+		lc        *lifecycle.Lifecycle[kvstoreClient]
+		addr      string
+		dbname    int
+		config    governor.SecretReader
+		log       *klog.LevelLogger
+		hbfailed  int
+		hbmaxfail int
+		wg        *ksync.WaitGroup
 	}
 
 	ctxKeyRootKV struct{}
@@ -136,10 +127,8 @@ func NewSubtreeInCtx(inj governor.Injector, prefix string) {
 // New creates a new cache service
 func New() *Service {
 	return &Service{
-		aclient:  &atomic.Pointer[redis.Client]{},
-		ops:      make(chan getOp),
-		ready:    &atomic.Bool{},
 		hbfailed: 0,
+		wg:       ksync.NewWaitGroup(),
 	}
 }
 
@@ -187,8 +176,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.dbname = r.GetInt("dbname")
-	var err error
-	s.hbinterval, err = r.GetDuration("hbinterval")
+	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
@@ -197,7 +185,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"kv.addr":       s.addr,
 		"kv.dbname":     strconv.Itoa(s.dbname),
-		"kv.hbinterval": s.hbinterval.String(),
+		"kv.hbinterval": hbinterval.String(),
 		"kv.hbmaxfail":  s.hbmaxfail,
 	})
 
@@ -205,51 +193,30 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	s.lc = lifecycle.New(
+		ctx,
+		s.handleGetClient,
+		s.closeClient,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
 
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(s.hbinterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
-			return
-		case <-ticker.C:
-			s.handlePing(ctx)
-		case op := <-s.ops:
-			client, err := s.handleGetClient(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getClientRes{
-				client: client,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		}
-	}
-}
-
-func (s *Service) handlePing(ctx context.Context) {
-	var err error
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kvstoreClient]) {
 	// Check client auth expiry, and reinit client if about to be expired
-	if _, err = s.handleGetClient(ctx); err != nil {
+	client, err := m.Construct(ctx)
+	if err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore client"), nil)
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
 	// unavailable without disrupting the client connections.
-	if s.client != nil {
-		_, err = s.client.Ping(ctx).Result()
+	if client != nil {
+		_, err = client.client.Ping(ctx).Result()
 		if err == nil {
-			s.ready.Store(true)
 			s.hbfailed = 0
 			return
 		}
@@ -266,11 +233,14 @@ func (s *Service) handlePing(ctx context.Context) {
 		"kv.addr":   s.addr,
 		"kv.dbname": strconv.Itoa(s.dbname),
 	})
-	s.aclient.Store(nil)
-	s.ready.Store(false)
+
 	s.hbfailed = 0
-	s.auth = secretAuth{}
+	// first invalidate cached secret in order to ensure that construct client
+	// will use refreshed auth
 	s.config.InvalidateSecret("auth")
+	// must stop the client in order to invalidate cached client, and force wait
+	// on newly constructed client
+	m.Stop(ctx)
 }
 
 type (
@@ -279,46 +249,56 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context) (*redis.Client, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvstoreClient]) (*kvstoreClient, error) {
 	var secret secretAuth
-	if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
-		return nil, kerrors.WithMsg(err, "Invalid secret")
-	}
-	if secret.Password == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
-	}
-	if secret == s.auth {
-		return s.client, nil
+	{
+		client := m.Load(ctx)
+		if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
+			return client, kerrors.WithMsg(err, "Invalid secret")
+		}
+		if secret.Password == "" {
+			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
+		}
+		if client != nil && secret == client.auth {
+			return client, nil
+		}
 	}
 
-	s.closeClient(klog.ExtendCtx(context.Background(), ctx, nil))
-
-	client := redis.NewClient(&redis.Options{
+	kvClient := redis.NewClient(&redis.Options{
 		Addr:     s.addr,
 		Password: secret.Password,
 		DB:       s.dbname,
 	})
-	if _, err := client.Ping(ctx).Result(); err != nil {
+	if _, err := kvClient.Ping(ctx).Result(); err != nil {
+		if err := kvClient.Close(); err != nil {
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn{}, "Failed to close db after failed initial ping"), klog.Fields{
+				"kv.addr":   s.addr,
+				"kv.dbname": strconv.Itoa(s.dbname),
+			})
+		}
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping kvstore")
 	}
 
-	s.client = client
-	s.aclient.Store(s.client)
-	s.auth = secret
-	s.ready.Store(true)
-	s.hbfailed = 0
+	m.Stop(ctx)
+
 	s.log.Info(ctx, "Established connection to kvstore", klog.Fields{
 		"kv.addr":   s.addr,
 		"kv.dbname": strconv.Itoa(s.dbname),
 	})
-	return s.client, nil
+
+	client := &kvstoreClient{
+		client: kvClient,
+		auth:   secret,
+	}
+	m.Store(client)
+
+	return client, nil
 }
 
-func (s *Service) closeClient(ctx context.Context) {
-	s.aclient.Store(nil)
-	if s.client != nil {
-		if err := s.client.Close(); err != nil {
+func (s *Service) closeClient(ctx context.Context, client *kvstoreClient) {
+	if client != nil {
+		if err := client.client.Close(); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"), klog.Fields{
 				"kv.addr":   s.addr,
 				"kv.dbname": strconv.Itoa(s.dbname),
@@ -330,8 +310,6 @@ func (s *Service) closeClient(ctx context.Context) {
 			})
 		}
 	}
-	s.client = nil
-	s.auth = secretAuth{}
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -339,11 +317,8 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
 }
 
@@ -352,35 +327,23 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.lc.Load(ctx) == nil {
 		return kerrors.WithKind(nil, ErrorConn{}, "KVStore service not ready")
 	}
 	return nil
 }
 
 func (s *Service) getClient(ctx context.Context) (*redis.Client, error) {
-	if client := s.aclient.Load(); client != nil {
-		return client, nil
+	if client := s.lc.Load(ctx); client != nil {
+		return client.client, nil
 	}
 
-	res := make(chan getClientRes)
-	op := getOp{
-		ctx: ctx,
-		res: res,
+	client, err := s.lc.Construct(ctx)
+	if err != nil {
+		// explicitly return nil in order to prevent usage of any cached client
+		return nil, err
 	}
-	select {
-	case <-s.done:
-		return nil, kerrors.WithMsg(nil, "KVStore service shutdown")
-	case <-ctx.Done():
-		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.ops <- op:
-		select {
-		case <-ctx.Done():
-			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.client, v.err
-		}
-	}
+	return client.client, nil
 }
 
 func (s *Service) Ping(ctx context.Context) error {
