@@ -133,7 +133,7 @@ func (s *SingleFlight[T]) waitForCall(waitctx context.Context, c *flightCall[T])
 	return c.val, c.err
 }
 
-// Do executes a function, ensuring that only one is in-flight, and sharing the
+// Do calls a function, ensuring that only one is in-flight, and sharing the
 // results among callers waiting on its completion. fullctx is the context
 // given to the function to complete, while the waitctx is the amount of time a
 // caller is willing to wait for the result.

@@ -9,7 +9,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	_ "github.com/emersion/go-message/charset"
@@ -23,6 +22,7 @@ import (
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
@@ -123,62 +123,35 @@ type (
 		htmlbody []byte
 	}
 
-	maildataCipher struct {
+	mailSecrets struct {
+		auth      secretAuth
 		cipher    hunter2.Cipher
 		decrypter *hunter2.Decrypter
 	}
 
-	getCipherRes struct {
-		cipher *maildataCipher
-		err    error
-	}
-
-	getOp struct {
-		ctx context.Context
-		res chan<- getCipherRes
-	}
-
-	getAuthRes struct {
-		auth secretAuth
-		err  error
-	}
-
-	getAuthOp struct {
-		ctx context.Context
-		res chan<- getAuthRes
-	}
-
 	Service struct {
-		tpl             template.Template
-		events          events.Events
-		mailBucket      objstore.Bucket
-		sendMailDir     objstore.Dir
-		maildataCipher  *maildataCipher
-		amaildataCipher *atomic.Pointer[maildataCipher]
-		instance        string
-		config          governor.SecretReader
-		log             *klog.LevelLogger
-		streamns        string
-		streammail      string
-		host            string
-		addr            string
-		auth            secretAuth
-		aauth           *atomic.Pointer[secretAuth]
-		msgiddomain     string
-		returnpath      string
-		fromAddress     string
-		fromName        string
-		streamsize      int64
-		eventsize       int32
-		ops             chan getOp
-		authops         chan getAuthOp
-		ready           *atomic.Bool
-		hbfailed        int
-		hbinterval      time.Duration
-		hbmaxfail       int
-		done            <-chan struct{}
-		authrefresh     time.Duration
-		wg              *ksync.WaitGroup
+		tpl         template.Template
+		events      events.Events
+		mailBucket  objstore.Bucket
+		sendMailDir objstore.Dir
+		lc          *lifecycle.Lifecycle[mailSecrets]
+		instance    string
+		config      governor.SecretReader
+		log         *klog.LevelLogger
+		streamns    string
+		streammail  string
+		host        string
+		addr        string
+		msgiddomain string
+		returnpath  string
+		fromAddress string
+		fromName    string
+		streamsize  int64
+		eventsize   int32
+		hbfailed    int
+		hbmaxfail   int
+		authrefresh time.Duration
+		wg          *ksync.WaitGroup
 	}
 
 	ctxKeyMailer struct{}
@@ -217,17 +190,12 @@ func NewCtx(inj governor.Injector) *Service {
 // New creates a new Mailer
 func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service {
 	return &Service{
-		tpl:             tpl,
-		events:          ev,
-		mailBucket:      obj,
-		sendMailDir:     obj.Subdir("sendmail"),
-		amaildataCipher: &atomic.Pointer[maildataCipher]{},
-		aauth:           &atomic.Pointer[secretAuth]{},
-		ops:             make(chan getOp),
-		authops:         make(chan getAuthOp),
-		ready:           &atomic.Bool{},
-		hbfailed:        0,
-		wg:              ksync.NewWaitGroup(),
+		tpl:         tpl,
+		events:      ev,
+		mailBucket:  obj,
+		sendMailDir: obj.Subdir("sendmail"),
+		hbfailed:    0,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
@@ -276,7 +244,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	s.hbinterval, err = r.GetDuration("hbinterval")
+	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
@@ -294,7 +262,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"mail.sender.name":    s.fromName,
 		"mail.streamsize":     r.GetStr("streamsize"),
 		"mail.eventsize":      r.GetStr("eventsize"),
-		"mail.hbinterval":     s.hbinterval.String(),
+		"mail.hbinterval":     hbinterval.String(),
 		"mail.hbmaxfail":      s.hbmaxfail,
 		"mail.authrefresh":    s.authrefresh.String(),
 	})
@@ -303,55 +271,21 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	s.lc = lifecycle.New(
+		ctx,
+		s.handleGetSecrets,
+		s.closeSecrets,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
 
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(s.hbinterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.handlePing(ctx)
-		case op := <-s.ops:
-			cipher, err := s.handleGetCipher(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getCipherRes{
-				cipher: cipher,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		case op := <-s.authops:
-			auth, err := s.handleGetAuth(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getAuthRes{
-				auth: auth,
-				err:  err,
-			}:
-				close(op.res)
-			}
-		}
-	}
-}
-
-func (s *Service) handlePing(ctx context.Context) {
-	if err := s.refreshAuth(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to refresh mail auth"), nil)
-	}
-
-	err := s.refreshSecrets(ctx)
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[mailSecrets]) {
+	_, err := m.Construct(ctx)
 	if err == nil {
-		s.ready.Store(true)
 		s.hbfailed = 0
 		return
 	}
@@ -361,131 +295,79 @@ func (s *Service) handlePing(ctx context.Context) {
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
-	s.ready.Store(false)
 	s.hbfailed = 0
+	// clear the cached cipher because its secret may be invalid
+	m.Stop(ctx)
 }
 
-func (s *Service) refreshAuth(ctx context.Context) error {
+func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mailSecrets]) (*mailSecrets, error) {
+	currentSecrets := m.Load(ctx)
+
 	var auth secretAuth
 	if err := s.config.GetSecret(ctx, "auth", s.authrefresh, &auth); err != nil {
-		return kerrors.WithMsg(err, "Invalid mail auth")
+		return nil, kerrors.WithMsg(err, "Invalid mail auth")
 	}
 	if auth.Username == "" {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty mail auth")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty mail auth")
 	}
-	if auth != s.auth {
-		s.auth = auth
-		s.aauth.Store(&auth)
+	if currentSecrets != nil && auth != currentSecrets.auth {
 		s.log.Info(ctx, "Refreshed smtp auth", klog.Fields{
 			"mail.smtp.username": auth.Username,
 		})
 	}
-	return nil
-}
 
-func (s *Service) handleGetAuth(ctx context.Context) (secretAuth, error) {
-	if s.auth.Username == "" {
-		if err := s.refreshAuth(ctx); err != nil {
-			return secretAuth{}, err
-		}
-	}
-	return s.auth, nil
-}
-
-func (s *Service) getAuth(ctx context.Context) (secretAuth, error) {
-	if auth := s.aauth.Load(); auth != nil {
-		return *auth, nil
-	}
-
-	res := make(chan getAuthRes)
-	op := getAuthOp{
-		ctx: ctx,
-		res: res,
-	}
-	select {
-	case <-s.done:
-		return secretAuth{}, kerrors.WithMsg(nil, "Mail service shutdown")
-	case <-ctx.Done():
-		return secretAuth{}, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.authops <- op:
-		select {
-		case <-ctx.Done():
-			return secretAuth{}, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.auth, v.err
-		}
-	}
-}
-
-func (s *Service) refreshSecrets(ctx context.Context) error {
 	var maildataSecrets secretMaildata
 	if err := s.config.GetSecret(ctx, "mailkey", s.authrefresh, &maildataSecrets); err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mailkey secrets")
+		return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mailkey secrets")
 	}
 	if len(maildataSecrets.Keys) == 0 {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No mailkey present")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No mailkey present")
 	}
 	decrypter := hunter2.NewDecrypter()
 	var cipher hunter2.Cipher
 	for n, i := range maildataSecrets.Keys {
 		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid cipher param")
+			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid cipher param")
 		}
 		if n == 0 {
-			if s.maildataCipher != nil && s.maildataCipher.cipher.ID() == c.ID() {
+			if currentSecrets != nil && currentSecrets.cipher.ID() == c.ID() {
 				// first, newest cipher matches current cipher, therefore no change in ciphers
-				return nil
+				return currentSecrets, nil
 			}
 			cipher = c
 		}
 		decrypter.RegisterCipher(c)
 	}
-	s.maildataCipher = &maildataCipher{
+
+	m.Stop(ctx)
+
+	secrets := &mailSecrets{
+		auth:      auth,
 		cipher:    cipher,
 		decrypter: decrypter,
 	}
-	s.amaildataCipher.Store(s.maildataCipher)
+
 	s.log.Info(ctx, "Refreshed mailkey with new keys", klog.Fields{
-		"mail.datakey.kid":  s.maildataCipher.cipher.ID(),
+		"mail.datakey.kid":  secrets.cipher.ID(),
 		"mail.datakeys.num": strconv.Itoa(decrypter.Size()),
 	})
-	return nil
+
+	m.Store(secrets)
+
+	return secrets, nil
 }
 
-func (s *Service) handleGetCipher(ctx context.Context) (*maildataCipher, error) {
-	if s.maildataCipher == nil {
-		if err := s.refreshSecrets(ctx); err != nil {
-			return nil, err
-		}
-		s.ready.Store(true)
-	}
-	return s.maildataCipher, nil
+func (s *Service) closeSecrets(ctx context.Context, secrets *mailSecrets) {
+	// nothing to close
 }
 
-func (s *Service) getCipher(ctx context.Context) (*maildataCipher, error) {
-	if cipher := s.amaildataCipher.Load(); cipher != nil {
-		return cipher, nil
+func (s *Service) getSecrets(ctx context.Context) (*mailSecrets, error) {
+	if secrets := s.lc.Load(ctx); secrets != nil {
+		return secrets, nil
 	}
 
-	res := make(chan getCipherRes)
-	op := getOp{
-		ctx: ctx,
-		res: res,
-	}
-	select {
-	case <-s.done:
-		return nil, kerrors.WithMsg(nil, "Mail service shutdown")
-	case <-ctx.Done():
-		return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.ops <- op:
-		select {
-		case <-ctx.Done():
-			return nil, kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.cipher, v.err
-		}
-	}
+	return s.lc.Construct(ctx)
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -509,12 +391,6 @@ func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
-	}
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
@@ -537,7 +413,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.lc.Load(ctx) != nil {
 		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Mail service not ready")
 	}
 	return nil
@@ -551,26 +427,24 @@ type (
 )
 
 func (s *Service) handleSendMail(ctx context.Context, from string, to []string, msg io.Reader) error {
-	secret, err := s.getAuth(ctx)
+	secrets, err := s.getSecrets(ctx)
 	if err != nil {
 		return err
 	}
 
-	auth := sasl.NewPlainClient("", secret.Username, secret.Password)
+	auth := sasl.NewPlainClient("", secrets.auth.Username, secrets.auth.Password)
 	if err := smtp.SendMail(s.addr, auth, from, to, msg); err != nil {
 		return kerrors.WithKind(err, ErrorSendMail{}, "Failed to send mail")
 	}
 	s.log.Info(ctx, "Mail sent", klog.Fields{
 		"mail.smtp.addr":     s.addr,
-		"mail.smtp.username": secret.Username,
+		"mail.smtp.username": secrets.auth.Username,
 	})
-	s.log.DebugF(ctx, func() (string, klog.Fields) {
-		return "Mail sent", klog.Fields{
-			"mail.smtp.addr":     s.addr,
-			"mail.smtp.username": secret.Username,
-			"mail.from":          from,
-			"mail.to":            to,
-		}
+	s.log.Debug(ctx, "Mail sent", klog.Fields{
+		"mail.smtp.addr":     s.addr,
+		"mail.smtp.username": secrets.auth.Username,
+		"mail.from":          from,
+		"mail.to":            to,
 	})
 	return nil
 }
@@ -650,11 +524,11 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 		}()
 		msg = b1
 		if data.Encrypted {
-			cipher, err := s.getCipher(ctx)
+			secrets, err := s.getSecrets(ctx)
 			if err != nil {
 				return err
 			}
-			data.Key, err = cipher.decrypter.Decrypt(data.Key)
+			data.Key, err = secrets.decrypter.Decrypt(data.Key)
 			if err != nil {
 				return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decrypt mail data key")
 			}
@@ -700,15 +574,15 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			}()
 			body = b1
 			if data.Encrypted {
-				cipher, err := s.getCipher(ctx)
+				secrets, err := s.getSecrets(ctx)
 				if err != nil {
 					return err
 				}
-				data.Subject, err = cipher.decrypter.Decrypt(data.Subject)
+				data.Subject, err = secrets.decrypter.Decrypt(data.Subject)
 				if err != nil {
 					return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decrypt mail subject")
 				}
-				data.Key, err = cipher.decrypter.Decrypt(data.Key)
+				data.Key, err = secrets.decrypter.Decrypt(data.Key)
 				if err != nil {
 					return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decrypt mail data key")
 				}
@@ -737,11 +611,11 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			})
 			s.log.Info(ctx, "Received mail msg to send", nil)
 			if data.Encrypted {
-				cipher, err := s.getCipher(ctx)
+				secrets, err := s.getSecrets(ctx)
 				if err != nil {
 					return err
 				}
-				data.Emdata, err = cipher.decrypter.Decrypt(data.Emdata)
+				data.Emdata, err = secrets.decrypter.Decrypt(data.Emdata)
 				if err != nil {
 					return kerrors.WithKind(err, ErrorMailEvent{}, "Failed to decrypt mail data")
 				}
@@ -949,11 +823,11 @@ func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 	}
 	datastring := string(databytes)
 	if encrypt {
-		cipher, err := s.getCipher(ctx)
+		secrets, err := s.getSecrets(ctx)
 		if err != nil {
 			return err
 		}
-		datastring, err = cipher.cipher.Encrypt(datastring)
+		datastring, err = secrets.cipher.Encrypt(datastring)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data")
 		}
@@ -1016,11 +890,11 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
-		cipher, err := s.getCipher(ctx)
+		secrets, err := s.getSecrets(ctx)
 		if err != nil {
 			return err
 		}
-		subject, err = cipher.cipher.Encrypt(subject)
+		subject, err = secrets.cipher.Encrypt(subject)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail subject")
 		}
@@ -1030,7 +904,7 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = cipher.cipher.Encrypt(config.String())
+		key, err = secrets.cipher.Encrypt(config.String())
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
@@ -1118,7 +992,7 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 	var tag string
 	var auth *hunter2.Poly1305Auth
 	if encrypt {
-		cipher, err := s.getCipher(ctx)
+		secrets, err := s.getSecrets(ctx)
 		if err != nil {
 			return err
 		}
@@ -1127,7 +1001,7 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = cipher.cipher.Encrypt(config.String())
+		key, err = secrets.cipher.Encrypt(config.String())
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
