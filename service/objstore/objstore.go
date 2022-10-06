@@ -252,7 +252,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[objs
 }
 
 func (s *Service) closeClient(ctx context.Context, client *objstoreClient) {
-	// no close
+	// client has no close
 }
 
 func (s *Service) Start(ctx context.Context) error {

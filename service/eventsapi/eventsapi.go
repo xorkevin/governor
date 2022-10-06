@@ -2,11 +2,12 @@ package eventsapi
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/pubsub"
+	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -26,18 +27,14 @@ type (
 	}
 
 	Service struct {
+		lc         *lifecycle.Lifecycle[secretAPI]
 		pubsub     pubsub.Pubsub
 		config     governor.SecretReader
 		log        *klog.LevelLogger
-		secretops  chan getSecretOp
-		ready      *atomic.Bool
 		hbfailed   int
-		hbinterval time.Duration
 		hbmaxfail  int
-		done       <-chan struct{}
 		apirefresh time.Duration
-		apisecret  secretAPI
-		aapisecret *atomic.Pointer[secretAPI]
+		wg         *ksync.WaitGroup
 	}
 
 	router struct {
@@ -71,11 +68,9 @@ func NewCtx(inj governor.Injector) *Service {
 // New creates a new events service
 func New(ps pubsub.Pubsub) *Service {
 	return &Service{
-		pubsub:     ps,
-		secretops:  make(chan getSecretOp),
-		ready:      &atomic.Bool{},
-		hbfailed:   0,
-		aapisecret: &atomic.Pointer[secretAPI]{},
+		pubsub:   ps,
+		hbfailed: 0,
+		wg:       ksync.NewWaitGroup(),
 	}
 }
 
@@ -98,8 +93,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 
-	var err error
-	s.hbinterval, err = r.GetDuration("hbinterval")
+	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
 	}
@@ -110,7 +104,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"eventsapi.hbinterval": s.hbinterval.String(),
+		"eventsapi.hbinterval": hbinterval.String(),
 		"eventsapi.hbmaxfail":  s.hbmaxfail,
 		"eventsapi.apirefresh": s.apirefresh.String(),
 	})
@@ -119,9 +113,14 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		"gov.service.phase": "run",
 	})
 
-	done := make(chan struct{})
-	go s.execute(ctx, done)
-	s.done = done
+	s.lc = lifecycle.New(
+		ctx,
+		s.handleGetAPISecret,
+		s.closeAPISecret,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
 
 	sr := s.router()
 	sr.mountRoutes(governor.NewMethodRouter(m))
@@ -129,32 +128,8 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	return nil
 }
 
-func (s *Service) execute(ctx context.Context, done chan<- struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(s.hbinterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.handlePing(ctx)
-		case op := <-s.secretops:
-			secret, err := s.handleGetAPISecret(ctx)
-			select {
-			case <-op.ctx.Done():
-			case op.res <- getSecretRes{
-				secret: secret,
-				err:    err,
-			}:
-				close(op.res)
-			}
-		}
-	}
-}
-
-func (s *Service) handlePing(ctx context.Context) {
-	err := s.refreshAPISecret(ctx)
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[secretAPI]) {
+	_, err := m.Construct(ctx)
 	if err == nil {
 		s.hbfailed = 0
 		return
@@ -165,8 +140,9 @@ func (s *Service) handlePing(ctx context.Context) {
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
-	s.aapisecret.Store(nil)
 	s.hbfailed = 0
+	// clear the cached secret because it may now be invalid
+	m.Stop(ctx)
 }
 
 type (
@@ -175,54 +151,42 @@ type (
 	}
 )
 
-func (s *Service) refreshAPISecret(ctx context.Context) error {
+func (s *Service) handleGetAPISecret(ctx context.Context, m *lifecycle.Manager[secretAPI]) (*secretAPI, error) {
+	currentAuth := m.Load(ctx)
 	var apisecret secretAPI
 	if err := s.config.GetSecret(ctx, "apisecret", s.apirefresh, &apisecret); err != nil {
-		return kerrors.WithMsg(err, "Invalid api secret")
+		return nil, kerrors.WithMsg(err, "Invalid api secret")
 	}
 	if apisecret.Secret == "" {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty api secret")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty api secret")
 	}
-	if apisecret != s.apisecret {
-		s.apisecret = apisecret
-		s.aapisecret.Store(&apisecret)
-		s.log.Info(ctx, "Refreshed api secret with new secret", nil)
+	if currentAuth != nil && apisecret == *currentAuth {
+		return currentAuth, nil
 	}
-	return nil
+
+	m.Stop(ctx)
+
+	s.log.Info(ctx, "Refreshed api secret with new secret", nil)
+
+	m.Store(&apisecret)
+
+	return &apisecret, nil
 }
 
-func (s *Service) handleGetAPISecret(ctx context.Context) (string, error) {
-	if s.apisecret.Secret == "" {
-		if err := s.refreshAPISecret(ctx); err != nil {
-			return "", err
-		}
-	}
-	return s.apisecret.Secret, nil
+func (s *Service) closeAPISecret(ctx context.Context, secret *secretAPI) {
+	// nothing to close
 }
 
 func (s *Service) getApiSecret(ctx context.Context) (string, error) {
-	if apisecret := s.aapisecret.Load(); apisecret != nil {
+	if apisecret := s.lc.Load(ctx); apisecret != nil {
 		return apisecret.Secret, nil
 	}
 
-	res := make(chan getSecretRes)
-	op := getSecretOp{
-		ctx: ctx,
-		res: res,
+	apisecret, err := s.lc.Construct(ctx)
+	if err != nil {
+		return "", err
 	}
-	select {
-	case <-s.done:
-		return "", kerrors.WithMsg(nil, "Events api service shutdown")
-	case <-ctx.Done():
-		return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
-	case s.secretops <- op:
-		select {
-		case <-ctx.Done():
-			return "", kerrors.WithMsg(ctx.Err(), "Context cancelled")
-		case v := <-res:
-			return v.secret, v.err
-		}
-	}
+	return apisecret.Secret, nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -230,11 +194,8 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	select {
-	case <-s.done:
-		return
-	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
 	}
 }
 
@@ -243,7 +204,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if !s.ready.Load() {
+	if s.lc.Load(ctx) == nil {
 		return kerrors.WithMsg(nil, "Eventsapi service not ready")
 	}
 	return nil
