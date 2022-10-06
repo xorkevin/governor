@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"compress/gzip"
 	"context"
 	"net"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -141,39 +139,64 @@ func ipnetsContain(ip net.IP, ipnet []net.IPNet) bool {
 }
 
 const (
-	headerConnection           = "Connection"
-	headerUpgrade              = "Upgrade"
-	headerConnectionValUpgrade = "upgrade"
-	headerUpgradeValWS         = "websocket"
+	headerContentEncoding = "Content-Encoding"
 )
 
-func reqIsWS(r *http.Request) bool {
-	isUpgrade := false
-	for _, i := range r.Header.Values(headerConnection) {
-		if strings.Contains(strings.ToLower(i), headerConnectionValUpgrade) {
-			isUpgrade = true
-			break
-		}
+type (
+	compressorWriter struct {
+		http.ResponseWriter
+		r            *http.Request
+		status       int
+		compressable bool
+		wroteHeader  bool
 	}
-	if !isUpgrade {
+)
+
+func (w *compressorWriter) shouldCompress() bool {
+	if w.ResponseWriter.Header().Get(headerContentEncoding) != "" {
+		// do not re-compress compressed data
 		return false
 	}
-	for _, i := range r.Header.Values(headerUpgrade) {
-		if strings.Contains(strings.ToLower(i), headerUpgradeValWS) {
-			return true
-		}
+	if w.status == http.StatusSwitchingProtocols {
+		// do not compress switched protocols, e.g. websockets
+		return false
 	}
+	// TODO check accept encoding headers and response content type headers
 	return false
 }
 
+func (w *compressorWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
+	w.status = status
+	w.compressable = w.shouldCompress()
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *compressorWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if !w.compressable {
+		return w.ResponseWriter.Write(p)
+	}
+	// TODO use compress writer
+	return w.ResponseWriter.Write(p)
+}
+
 func compressorMiddleware(next http.Handler) http.Handler {
-	compressor := middleware.Compress(gzip.DefaultCompression)(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if reqIsWS(r) {
-			next.ServeHTTP(w, r)
-		} else {
-			compressor.ServeHTTP(w, r)
+		w2 := &compressorWriter{
+			ResponseWriter: w,
+			r:              r,
+			status:         0,
+			compressable:   false,
+			wroteHeader:    false,
 		}
+		next.ServeHTTP(w2, r)
 	})
 }
 

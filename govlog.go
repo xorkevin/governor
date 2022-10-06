@@ -169,13 +169,30 @@ func (s *Server) lreqID(count uint32) string {
 type (
 	govResponseWriter struct {
 		http.ResponseWriter
-		status int
+		status      int
+		wroteHeader bool
 	}
 )
 
 func (w *govResponseWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
 	w.status = status
+	w.wroteHeader = true
 	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *govResponseWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *govResponseWriter) isWS() bool {
+	return w.status == http.StatusSwitchingProtocols
 }
 
 func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
@@ -196,31 +213,23 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 			"http.forwarded": forwarded,
 			"http.lreqid":    lreqid,
 		})
-		if reqIsWS(c.Req()) {
-			s.log.Info(c.Ctx(), "WS open", klog.Fields{
-				"ws": true,
-			})
-			start := time.Now()
-			next.ServeHTTP(c.R())
-			duration := time.Since(start)
-			route := chi.RouteContext(c.Ctx()).RoutePattern()
+		w2 := &govResponseWriter{
+			ResponseWriter: w,
+			status:         0,
+		}
+		s.log.Info(c.Ctx(), "HTTP request", nil)
+		start := time.Now()
+		next.ServeHTTP(w2, c.Req())
+		duration := time.Since(start)
+		route := chi.RouteContext(c.Ctx()).RoutePattern()
+		if w2.isWS() {
 			s.log.Info(c.Ctx(), "WS close", klog.Fields{
 				"http.ws":          true,
 				"http.route":       route,
+				"http.status":      w2.status,
 				"http.duration_ms": duration.Milliseconds(),
 			})
 		} else {
-			s.log.Info(c.Ctx(), "HTTP request", klog.Fields{
-				"http.ws": false,
-			})
-			start := time.Now()
-			w2 := &govResponseWriter{
-				ResponseWriter: w,
-				status:         0,
-			}
-			next.ServeHTTP(w2, c.Req())
-			duration := time.Since(start)
-			route := chi.RouteContext(c.Ctx()).RoutePattern()
 			s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
 				"http.ws":         false,
 				"http.route":      route,
