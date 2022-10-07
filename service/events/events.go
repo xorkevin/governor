@@ -183,24 +183,26 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kafkaClie
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the event stream. This allows vault to be
 	// temporarily unavailable without disrupting the client connections.
+	username := ""
 	if client != nil {
 		err = s.ping(ctx, client.client)
 		if err == nil {
 			s.hbfailed = 0
 			return
 		}
+		username = client.auth.Username
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping event stream"), klog.Fields{
 			"events.addr":     s.addr,
-			"events.username": client.auth.Username,
+			"events.username": username,
 		})
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to event stream"), klog.Fields{
 		"events.addr":     s.addr,
-		"events.username": client.auth.Username,
+		"events.username": username,
 	})
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -347,6 +349,8 @@ func (s *Service) commonOpts(auth scram.Auth) []kgo.Opt {
 		// reading and writing data
 		kgo.BrokerMaxReadBytes(1 << 25),  // 32MB
 		kgo.BrokerMaxWriteBytes(1 << 25), // 32MB
+		// need to set otherwise error with max fetch greater than broker max read
+		kgo.FetchMaxBytes(int32(1 << 20)), // 1MB
 		kgo.RequestRetries(16),
 		kgo.RequestTimeoutOverhead(10 * time.Second), // request.timeout.ms
 		// do not specify RetryBackoffFn use default exponential backoff with

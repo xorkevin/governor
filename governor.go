@@ -158,8 +158,8 @@ func (s *Server) init(ctx context.Context) error {
 		})
 	}
 
-	i.Use(compressorMiddleware)
-	s.log.Info(ctx, "Init middleware gzip", nil)
+	i.Use(s.compressorMiddleware(nil, nil))
+	s.log.Info(ctx, "Init middleware compressor", nil)
 
 	i.Use(s.recovererMiddleware)
 	s.log.Info(ctx, "Init middleware recoverer", nil)
