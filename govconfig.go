@@ -59,30 +59,32 @@ type (
 	// Config is the server configuration including those from a config file and
 	// environment variables
 	Config struct {
-		config        *viper.Viper
-		vault         secretsClient
-		vaultCache    *sync.Map
-		appname       string
-		version       Version
-		showBanner    bool
-		logLevel      string
-		logOutput     string
-		logWriter     io.Writer
-		addr          string
-		BaseURL       string
-		maxReqSize    string
-		maxHeaderSize string
-		maxConnRead   string
-		maxConnHeader string
-		maxConnWrite  string
-		maxConnIdle   string
-		origins       []string
-		allowpaths    []*corsPathRule
-		rewrite       []*rewriteRule
-		proxies       []string
-		SysChannels   SysChannels
-		Hostname      string
-		Instance      string
+		config             *viper.Viper
+		vault              secretsClient
+		vaultCache         *sync.Map
+		appname            string
+		version            Version
+		showBanner         bool
+		logLevel           string
+		logOutput          string
+		logWriter          io.Writer
+		addr               string
+		BaseURL            string
+		maxReqSize         string
+		maxHeaderSize      string
+		maxConnRead        string
+		maxConnHeader      string
+		maxConnWrite       string
+		maxConnIdle        string
+		origins            []string
+		allowpaths         []*corsPathRule
+		rewrite            []*rewriteRule
+		proxies            []string
+		compressibleTypes  []string
+		preferredEncodings []string
+		SysChannels        SysChannels
+		Hostname           string
+		Instance           string
 	}
 
 	corsPathRule struct {
@@ -164,6 +166,8 @@ func newConfig(opts Opts) *Config {
 	v.SetDefault("allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
 	v.SetDefault("proxies", []string{})
+	v.SetDefault("compressibletypes", []string{})
+	v.SetDefault("preferredencodings", []string{})
 	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -246,6 +250,8 @@ func (c *Config) init() error {
 	}
 	c.rewrite = rewrite
 	c.proxies = c.config.GetStringSlice("proxies")
+	c.compressibleTypes = c.config.GetStringSlice("compressibletypes")
+	c.preferredEncodings = c.config.GetStringSlice("preferredencodings")
 	var err error
 	c.Hostname, err = os.Hostname()
 	if err != nil {

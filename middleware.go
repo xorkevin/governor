@@ -155,7 +155,6 @@ const (
 var (
 	defaultCompressibleMediaTypes = []string{
 		"application/atom+xml",
-		"application/javascript",
 		"application/json",
 		"application/rss+xml",
 		"application/xhtml+xml",

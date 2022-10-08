@@ -8,7 +8,6 @@ maxconnread: 5s
 maxconnheader: 2s
 maxconnwrite: 5s
 maxconnidle: 5s
-alloworigins: []
 allowpaths:
   - '^/api/oauth/(token|userinfo|jwks)$'
 routerewrite:
@@ -20,7 +19,6 @@ routerewrite:
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
     replace: /api/oauth/openid-configuration
-proxies: []
 vault:
   filesource: dc.anvil_out/governor/secrets.yaml
 setupsecret: setupsecret

@@ -8,7 +8,6 @@ maxconnread: 5s
 maxconnheader: 2s
 maxconnwrite: 5s
 maxconnidle: 5s
-alloworigins: []
 allowpaths:
   - '^/api/oauth/(token|userinfo|jwks)$'
 routerewrite:
@@ -20,7 +19,6 @@ routerewrite:
     methods: ['GET']
     pattern: '^\/\.well-known\/openid-configuration$'
     replace: /api/oauth/openid-configuration
-proxies: []
 vault:
   addr: http://vault.vault.svc.cluster.local:8200
   k8s:
