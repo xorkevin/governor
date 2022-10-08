@@ -240,6 +240,7 @@ func (w *compressorWriter) shouldCompress() (string, bool) {
 	if accept := strings.TrimSpace(w.r.Header.Get(headerAcceptEncoding)); accept != "" {
 		for _, directive := range strings.Split(accept, ",") {
 			enc, _, _ := strings.Cut(directive, ";")
+			enc = strings.TrimSpace(enc)
 			if _, ok := w.allowedEncodings[enc]; ok {
 				encodingSet[enc] = struct{}{}
 			}
