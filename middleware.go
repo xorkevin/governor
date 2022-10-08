@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
+	"github.com/klauspost/compress/zstd"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -205,6 +206,10 @@ type (
 		w io.Writer
 	}
 
+	pooledZstdWriter struct {
+		w *zstd.Encoder
+	}
+
 	pooledGzipWriter struct {
 		w *gzip.Writer
 	}
@@ -305,6 +310,29 @@ func (w *identityWriter) Reset(r io.Writer) {
 	w.w = r
 }
 
+func (w *pooledZstdWriter) Kind() string {
+	return encodingKindZstd
+}
+
+func (w *pooledZstdWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	if err != nil {
+		return n, kerrors.WithMsg(err, "Failed to write to zstd writer")
+	}
+	return n, nil
+}
+
+func (w *pooledZstdWriter) Close() error {
+	if err := w.w.Close(); err != nil {
+		return kerrors.WithMsg(err, "Failed to close zstd writer")
+	}
+	return nil
+}
+
+func (w *pooledZstdWriter) Reset(wr io.Writer) {
+	w.w.Reset(wr)
+}
+
 func (w *pooledGzipWriter) Kind() string {
 	return encodingKindGzip
 }
@@ -353,6 +381,18 @@ func (w *pooledZlibWriter) Reset(wr io.Writer) {
 
 func (s *Server) compressorMiddleware(compressibleTypes []string, preferredEncodings []string) Middleware {
 	allowedEncodings := map[string]*sync.Pool{
+		encodingKindZstd: {
+			New: func() interface{} {
+				w, _ := zstd.NewWriter(nil,
+					// 3 is a good tradeoff of size to speed
+					zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
+					zstd.WithEncoderConcurrency(1),
+				)
+				return &pooledZstdWriter{
+					w: w,
+				}
+			},
+		},
 		encodingKindGzip: {
 			New: func() interface{} {
 				// 5 is a good tradeoff of size to speed
