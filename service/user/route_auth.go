@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/user/gate"
 )
 
 //go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
 
 func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 	c.SetCookie(&http.Cookie{
-		Name:     "access_token",
+		Name:     gate.CookieNameAccessToken,
 		Value:    accessToken,
 		Path:     s.s.baseURL,
 		MaxAge:   int(s.s.authsettings.accessDuration/time.Second) - 5,
@@ -95,7 +96,7 @@ func getSessionCookie(c governor.Context, userid string) (string, bool) {
 
 func (s *router) rmAccessCookie(c governor.Context) {
 	c.SetCookie(&http.Cookie{
-		Name:   "access_token",
+		Name:   gate.CookieNameAccessToken,
 		Value:  "invalid",
 		MaxAge: -1,
 		Path:   s.s.baseURL,

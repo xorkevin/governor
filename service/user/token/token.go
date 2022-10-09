@@ -22,6 +22,11 @@ const (
 	ScopeForbidden = "forbidden"
 )
 
+const (
+	// KeyIDSystem is the system id key
+	KeyIDSystem = "gov:system"
+)
+
 type (
 	// Kind is a token kind
 	Kind string
@@ -32,6 +37,8 @@ const (
 	KindAccess Kind = "access"
 	// KindRefresh is a refresh token kind
 	KindRefresh = "refresh"
+	// KindSystem is a system token kind
+	KindSystem = "system"
 	// KindOAuthAccess is an oauth access token kind
 	KindOAuthAccess = "oauth:access"
 	// KindOAuthRefresh is an oauth refresh token kind

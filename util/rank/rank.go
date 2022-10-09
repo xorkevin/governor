@@ -20,7 +20,6 @@ const (
 	TagModPrefix  = "mod"
 	TagOrgPrefix  = "org"
 	TagAdmin      = "admin"
-	TagSystem     = "system"
 )
 
 const (
@@ -125,11 +124,6 @@ func (r Rank) AddAdmin() Rank {
 	return r.AddOne(TagAdmin)
 }
 
-// AddSystem adds a system tag
-func (r Rank) AddSystem() Rank {
-	return r.AddOne(TagSystem)
-}
-
 // Add adds a rank
 func (r Rank) Add(other Rank) {
 	for k := range other {
@@ -191,7 +185,7 @@ func FromSlice(rankSlice []string) (Rank, error) {
 	}
 	r := make(Rank, len(rankSlice))
 	for _, i := range rankSlice {
-		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin && i != TagSystem {
+		if len(i) > rankLengthCap || !rankRegexMod.MatchString(i) && !rankRegexUsr.MatchString(i) && !rankRegexBan.MatchString(i) && i != TagUser && i != TagAdmin {
 			return Rank{}, kerrors.WithKind(nil, ErrorInvalidRank{}, "Invalid rank")
 		}
 		r[i] = struct{}{}
@@ -239,9 +233,4 @@ func BaseUser() Rank {
 // Admin creates a new Administrator rank
 func Admin() Rank {
 	return BaseUser().AddAdmin()
-}
-
-// System creates a new System rank
-func System() Rank {
-	return Rank{}.AddSystem()
 }

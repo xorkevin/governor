@@ -16,9 +16,15 @@ import (
 	"xorkevin.dev/klog"
 )
 
+const (
+	// CookieNameAccessToken is the name of the access token cookie
+	CookieNameAccessToken = "access_token"
+)
+
 type (
-	ctxKeyUserid struct{}
-	ctxKeyClaims struct{}
+	ctxKeyUserid    struct{}
+	ctxKeyClaims    struct{}
+	ctxKeySysUserid struct{}
 )
 
 // GetCtxUserid returns a userid from the context
@@ -47,7 +53,29 @@ func GetCtxClaims(c governor.Context) *token.Claims {
 }
 
 func setCtxClaims(c governor.Context, claims *token.Claims) {
+	c.Set(ctxKeyUserid{}, claims.Subject)
 	c.Set(ctxKeyClaims{}, claims)
+	c.LogFields(klog.Fields{
+		"gate.userid":    claims.Subject,
+		"gate.sessionid": claims.ID,
+	})
+}
+
+// GetCtxSysUserid returns a system userid from the context
+func GetCtxSysUserid(c governor.Context) string {
+	v := c.Get(ctxKeySysUserid{})
+	if v == nil {
+		return ""
+	}
+	return v.(string)
+}
+
+func setCtxSystem(c governor.Context, claims *token.Claims) {
+	c.Set(ctxKeySysUserid{}, claims.Subject)
+	c.LogFields(klog.Fields{
+		"gate.sysuserid":    claims.Subject,
+		"gate.syssessionid": claims.ID,
+	})
 }
 
 type (
@@ -75,16 +103,18 @@ type (
 	// Context holds an auth context
 	Context interface {
 		Intersector
+		IsSystem() bool
 		Userid() string
 		HasScope(scope string) bool
 		Ctx() governor.Context
 	}
 
 	authctx struct {
-		s      *Service
-		userid string
-		scope  string
-		ctx    governor.Context
+		s        *Service
+		isSystem bool
+		userid   string
+		scope    string
+		ctx      governor.Context
 	}
 
 	// Authorizer is a function to check the authorization of a user
@@ -170,7 +200,7 @@ func (e errAuthNotFound) Error() string {
 }
 
 func getAccessCookie(c governor.Context) (string, error) {
-	cookie, err := c.Cookie("access_token")
+	cookie, err := c.Cookie(CookieNameAccessToken)
 	if err != nil {
 		return "", err
 	}
@@ -190,6 +220,10 @@ func getAuthHeader(c governor.Context) (string, error) {
 		return "", errInvalidHeader{}
 	}
 	return token, nil
+}
+
+func (r *authctx) IsSystem() bool {
+	return r.isSystem
 }
 
 func (r *authctx) Userid() string {
@@ -213,12 +247,13 @@ func (r *authctx) HasScope(scope string) bool {
 	return token.HasScope(r.scope, scope)
 }
 
-func (s *Service) authctx(userid string, scope string, ctx governor.Context) Context {
+func (s *Service) authctx(isSystem bool, userid string, scope string, ctx governor.Context) Context {
 	return &authctx{
-		s:      s,
-		userid: userid,
-		scope:  scope,
-		ctx:    ctx,
+		s:        s,
+		isSystem: isSystem,
+		userid:   userid,
+		scope:    scope,
+		ctx:      ctx,
 	}
 }
 
@@ -233,52 +268,100 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 		return governor.RouteHandlerFunc(func(c governor.Context) {
 			keyid, password, ok := c.BasicAuth()
 			if ok {
-				userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
-				if err != nil {
-					if !errors.Is(err, apikey.ErrorInvalidKey{}) && !errors.Is(err, apikey.ErrorNotFound{}) {
-						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
+				if keyid == token.KeyIDSystem {
+					validToken, claims := s.tokenizer.Validate(c.Ctx(), token.KindSystem, password)
+					if !validToken {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInvalidToken,
+								"Access token is invalid",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "System user is not authorized"))
 						return
 					}
-					c.SetHeader(
-						"WWW-Authenticate",
-						fmt.Sprintf(
-							`Basic realm="%s", error="%s", error_description="%s"`,
-							s.realm,
-							oauthErrorInvalidToken,
-							"Api key is invalid",
-						),
-					)
-					c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
-					return
+					if !token.HasScope(claims.Scope, scope) {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", scope="%s", error="%s", error_description="%s"`,
+								s.realm,
+								scope,
+								oauthErrorInsufficientScope,
+								"Access token lacks required scope",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "System user is forbidden"))
+						return
+					}
+					if !v(s.authctx(true, claims.Subject, claims.Scope, c)) {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInsufficientScope,
+								"System user lacks required permission",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "System user is forbidden"))
+						return
+					}
+					setCtxSystem(c, claims)
+				} else {
+					userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
+					if err != nil {
+						if !errors.Is(err, apikey.ErrorInvalidKey{}) && !errors.Is(err, apikey.ErrorNotFound{}) {
+							c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
+							return
+						}
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInvalidToken,
+								"Api key is invalid",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
+						return
+					}
+					if !token.HasScope(keyscope, scope) {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", scope="%s", error="%s", error_description="%s"`,
+								s.realm,
+								scope,
+								oauthErrorInsufficientScope,
+								"Api key lacks required scope",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
+						return
+					}
+					if !v(s.authctx(false, userid, keyscope, c)) {
+						c.SetHeader(
+							"WWW-Authenticate",
+							fmt.Sprintf(
+								`Basic realm="%s", error="%s", error_description="%s"`,
+								s.realm,
+								oauthErrorInsufficientScope,
+								"User lacks required permission",
+							),
+						)
+						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
+						return
+					}
+					setCtxUserid(c, userid)
+					c.LogFields(klog.Fields{
+						"gate.keyid": keyid,
+					})
 				}
-				if !token.HasScope(keyscope, scope) {
-					c.SetHeader(
-						"WWW-Authenticate",
-						fmt.Sprintf(
-							`Basic realm="%s", scope="%s", error="%s", error_description="%s"`,
-							s.realm,
-							scope,
-							oauthErrorInsufficientScope,
-							"Api key lacks required scope",
-						),
-					)
-					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
-					return
-				}
-				if !v(s.authctx(userid, keyscope, c)) {
-					c.SetHeader(
-						"WWW-Authenticate",
-						fmt.Sprintf(
-							`Basic realm="%s", error="%s", error_description="%s"`,
-							s.realm,
-							oauthErrorInsufficientScope,
-							"User lacks required permission",
-						),
-					)
-					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
-					return
-				}
-				setCtxUserid(c, userid)
 			} else {
 				accessToken, err := getAuthHeader(c)
 				isBearer := true
@@ -337,7 +420,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
-				if !v(s.authctx(claims.Subject, claims.Scope, c)) {
+				if !v(s.authctx(false, claims.Subject, claims.Scope, c)) {
 					if isBearer {
 						c.SetHeader(
 							"WWW-Authenticate",
@@ -352,7 +435,6 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 					return
 				}
-				setCtxUserid(c, claims.Subject)
 				setCtxClaims(c, claims)
 			}
 			next.ServeHTTPCtx(c)
@@ -692,19 +774,10 @@ func Member(g Gate, group string, scope string) governor.MiddlewareCtx {
 	}, scope)
 }
 
-func checkSystem(ctx context.Context, r Intersector) (bool, error) {
-	roles, err := r.Intersect(ctx, rank.System())
-	if err != nil {
-		return false, err
-	}
-	return roles.Has(rank.TagSystem), nil
-}
-
-func AuthSystem(ctx context.Context, g Gate, userid string) (bool, error) {
-	return checkSystem(ctx, newIntersector(g, userid))
-}
-
-// System is a middleware function to validate if the request is made by a system
+// System is a middleware function to validate if the request is made by a
+// system user
 func System(g Gate, scope string) governor.MiddlewareCtx {
-	return g.AuthenticateCtx(wrapIntersector(checkSystem), scope)
+	return g.AuthenticateCtx(func(c Context) bool {
+		return c.IsSystem()
+	}, scope)
 }

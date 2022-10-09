@@ -191,9 +191,6 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 				if !updaterIsAdmin {
 					return governor.ErrWithRes(nil, http.StatusForbidden, "", "Must be admin to modify admin status")
 				}
-			case rank.TagSystem:
-				// no one can change the system status
-				return governor.ErrWithRes(nil, http.StatusForbidden, "", "Cannot modify system rank")
 			case rank.TagUser:
 				// only admins can change the user status
 				if !updaterIsAdmin {
