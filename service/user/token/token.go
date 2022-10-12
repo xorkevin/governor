@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"crypto"
 	"strings"
 	"time"
 
@@ -73,12 +74,15 @@ type (
 	}
 
 	tokenSigner struct {
-		signer    jose.Signer
-		keySigner jose.Signer
-		keys      *hunter2.SigningKeyring
-		jwks      []jose.JSONWebKey
-		hs512id   string
-		rs256id   string
+		signer          jose.Signer
+		extsigner       jose.Signer
+		signingkeys     *hunter2.SigningKeyring
+		extsigningkeys  *hunter2.SigningKeyring
+		sysverifierkeys *hunter2.VerifierKeyring
+		jwks            []jose.JSONWebKey
+		hs512id         string
+		rs256id         string
+		eddsaid         string
 	}
 
 	Service struct {
@@ -213,7 +217,9 @@ func (e ErrorGenerate) Error() string {
 
 type (
 	secretToken struct {
-		Secrets []string `mapstructure:"secrets"`
+		Secrets    []string `mapstructure:"secrets"`
+		ExtKeys    []string `mapstructure:"extkeys"`
+		SysPubKeys []string `mapstructure:"syspubkeys"`
 	}
 )
 
@@ -223,20 +229,92 @@ func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSign
 	if err := s.config.GetSecret(ctx, "tokensecret", s.keyrefresh, &tokenSecrets); err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid token secret")
 	}
-	keys := hunter2.NewSigningKeyring()
+	signingkeys, sig, hs512id, err := s.getTokenSecrets(tokenSecrets.Secrets, currentSigner)
+	if err != nil {
+		return nil, err
+	}
+	extsigningkeys, extsig, rs256id, jwks, err := s.getExtSecrets(tokenSecrets.ExtKeys, currentSigner)
+	if err != nil {
+		return nil, err
+	}
+	sysverifierkeys, eddsaid, err := s.getSysVerifierSecrets(tokenSecrets.SysPubKeys, currentSigner)
+	if err != nil {
+		return nil, err
+	}
+	if currentSigner != nil && hs512id == currentSigner.hs512id && rs256id == currentSigner.rs256id && eddsaid == currentSigner.eddsaid {
+		return currentSigner, nil
+	}
+
+	m.Stop(ctx)
+
+	signer := &tokenSigner{
+		signer:          sig,
+		extsigner:       extsig,
+		signingkeys:     signingkeys,
+		extsigningkeys:  extsigningkeys,
+		sysverifierkeys: sysverifierkeys,
+		jwks:            jwks,
+		hs512id:         hs512id,
+		rs256id:         rs256id,
+		eddsaid:         eddsaid,
+	}
+
+	s.log.Info(ctx, "Refreshed token keys with new keys", klog.Fields{
+		"token.hs512kid":        signer.hs512id,
+		"token.rs256kid":        signer.rs256id,
+		"token.eddsakid":        signer.eddsaid,
+		"token.numjwks":         len(jwks),
+		"token.numtokensigners": signingkeys.Size(),
+		"token.numextsigners":   extsigningkeys.Size(),
+		"token.numsysverifiers": sysverifierkeys.Size(),
+	})
+
+	m.Store(signer)
+
+	return signer, nil
+}
+
+func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunter2.SigningKeyring, jose.Signer, string, error) {
 	var khs512 hunter2.SigningKey
-	var krs256 hunter2.SigningKey
-	var jwks []jose.JSONWebKey
-	for _, i := range tokenSecrets.Secrets {
+	signingkeys := hunter2.NewSigningKeyring()
+	for _, i := range secrets {
 		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
-			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+			return nil, nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgHS512:
 			if khs512 == nil {
 				khs512 = k
 			}
+		}
+		if current != nil && khs512 != nil && khs512.ID() == current.hs512id {
+			// first signing key matches current signing key, therefore no change in
+			// signing keys
+			return current.signingkeys, current.signer, current.hs512id, nil
+		}
+		signingkeys.RegisterSigningKey(k)
+	}
+	if khs512 == nil {
+		return nil, nil, "", kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
+	}
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
+	if err != nil {
+		return nil, nil, "", kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
+	}
+	return signingkeys, sig, khs512.ID(), nil
+}
+
+func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter2.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
+	var krs256 hunter2.SigningKey
+	signingkeys := hunter2.NewSigningKeyring()
+	var jwks []jose.JSONWebKey
+	for _, i := range secrets {
+		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
+		if err != nil {
+			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+		}
+		switch k.Alg() {
 		case hunter2.SigningAlgRS256:
 			jwks = append(jwks, jose.JSONWebKey{
 				Algorithm: "RS256",
@@ -248,48 +326,45 @@ func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSign
 				krs256 = k
 			}
 		}
-		if currentSigner != nil && khs512 != nil && krs256 != nil && khs512.ID() == currentSigner.hs512id && krs256.ID() == currentSigner.rs256id {
-			// first signing keys of each type match current signing keys, therefore no
-			// change in signing keys
-			return currentSigner, nil
+		if current != nil && krs256 != nil && krs256.ID() == current.rs256id {
+			// first signing key matches current signing key, therefore no change in
+			// signing keys
+			return current.extsigningkeys, current.extsigner, current.rs256id, current.jwks, nil
 		}
-		keys.RegisterSigningKey(k)
+		signingkeys.RegisterSigningKey(k)
 	}
-	if khs512 == nil || krs256 == nil {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
+	if krs256 == nil {
+		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
 	}
-
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
+	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
+		return nil, nil, "", nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
 	}
+	return signingkeys, extsig, krs256.ID(), jwks, nil
+}
 
-	keySig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
+func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) (*hunter2.VerifierKeyring, string, error) {
+	var keddsa hunter2.VerifierKey
+	sysverifierkeys := hunter2.NewVerifierKeyring()
+	for _, i := range secrets {
+		k, err := hunter2.VerifierKeyFromParams(i, hunter2.DefaultVerifierKeyAlgs)
+		if err != nil {
+			return nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+		}
+		switch k.Alg() {
+		case hunter2.SigningAlgEdDSA:
+			if keddsa == nil {
+				keddsa = k
+			}
+		}
+		if current != nil && keddsa != nil && keddsa.ID() == current.eddsaid {
+			// first verifier key matches current verifier key, therefore no change
+			// in verifier keys
+			return current.sysverifierkeys, current.eddsaid, nil
+		}
+		sysverifierkeys.RegisterVerifierKey(k)
 	}
-
-	m.Stop(ctx)
-
-	signer := &tokenSigner{
-		signer:    sig,
-		keySigner: keySig,
-		keys:      keys,
-		jwks:      jwks,
-		hs512id:   khs512.ID(),
-		rs256id:   krs256.ID(),
-	}
-
-	s.log.Info(ctx, "Refreshed token keys with new keys", klog.Fields{
-		"token.hs512kid": signer.hs512id,
-		"token.rs256kid": signer.rs256id,
-		"token.numjwks":  len(jwks),
-		"token.numother": keys.Size() - len(jwks),
-	})
-
-	m.Store(signer)
-
-	return signer, nil
+	return sysverifierkeys, keddsa.ID(), nil
 }
 
 func (s *Service) closeSecrets(ctx context.Context, signer *tokenSigner) {
@@ -385,7 +460,7 @@ func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, use
 		Kind:     kind,
 		AuthTime: authTime,
 	}
-	token, err := jwt.Signed(signer.keySigner).Claims(baseClaims).Claims(claims).CompactSerialize()
+	token, err := jwt.Signed(signer.extsigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
 		return "", kerrors.WithKind(err, ErrorGenerate{}, "Failed to generate a new jwt token")
 	}
@@ -408,6 +483,23 @@ func HasScope(tokenScope string, scope string) bool {
 	return false
 }
 
+func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool) {
+	if kind == KindSystem {
+		if key, ok := s.sysverifierkeys.Get(keyid); ok {
+			return key.Public(), true
+		}
+		return nil, false
+	} else {
+		if key, ok := s.signingkeys.Get(keyid); ok {
+			return key.Public(), true
+		}
+		if key, ok := s.extsigningkeys.Get(keyid); ok {
+			return key.Public(), true
+		}
+		return nil, false
+	}
+}
+
 // Validate returns whether a token is valid
 func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
 	token, err := jwt.ParseSigned(tokenString)
@@ -422,12 +514,12 @@ func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
-	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
 	if !ok {
 		return false, nil
 	}
 	claims := &Claims{}
-	if err := token.Claims(key.Public(), claims); err != nil {
+	if err := token.Claims(pubkey, claims); err != nil {
 		return false, nil
 	}
 	if claims.Kind != kind {
@@ -458,12 +550,12 @@ func (s *Service) GetClaims(ctx context.Context, kind Kind, tokenString string) 
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
-	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
 	if !ok {
 		return false, nil
 	}
 	claims := &Claims{}
-	if err := token.Claims(key.Public(), claims); err != nil {
+	if err := token.Claims(pubkey, claims); err != nil {
 		return false, nil
 	}
 	if claims.Kind != kind {
@@ -492,7 +584,7 @@ func (s *Service) GetClaimsExt(ctx context.Context, kind Kind, tokenString strin
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
 		return false, nil
 	}
-	key, ok := signer.keys.Get(token.Headers[0].KeyID)
+	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
 	if !ok {
 		return false, nil
 	}
@@ -500,7 +592,7 @@ func (s *Service) GetClaimsExt(ctx context.Context, kind Kind, tokenString strin
 		claims = &struct{}{}
 	}
 	baseClaims := &Claims{}
-	if err := token.Claims(key.Public(), baseClaims, claims); err != nil {
+	if err := token.Claims(pubkey, baseClaims, claims); err != nil {
 		return false, nil
 	}
 	if baseClaims.Kind != kind {

@@ -16,7 +16,7 @@ TEST_ARGS?=
 TEST_PACKAGE?=./...
 COVERAGE?=cover.out
 
-.PHONY: test coverage cover bench
+.PHONY: test coverage cover
 
 test: ## Run tests
 	go test -race -trimpath -ldflags "-w -s" -cover -covermode atomic -coverprofile $(COVERAGE) $(TEST_ARGS) $(TEST_PACKAGE)
