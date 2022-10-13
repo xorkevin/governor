@@ -25,9 +25,59 @@ type (
 	// Client is a server client
 	Client struct {
 		config *viper.Viper
+		cmds   []*CmdTree
 		httpc  *http.Client
 		flags  ClientFlags
 		addr   string
+	}
+
+	// CmdTree is a tree of client cmds
+	CmdTree struct {
+		ConfigPrefix string
+		URLPrefix    string
+		Desc         CmdDesc
+		Handler      CmdHandler
+		Children     []*CmdTree
+	}
+
+	// CmdFlag describes a client flag
+	CmdFlag struct {
+		Long     string
+		Short    string
+		Usage    string
+		Required bool
+		Default  interface{}
+		Value    interface{}
+	}
+
+	// CmdDesc describes a client cmd
+	CmdDesc struct {
+		Usage string
+		Short string
+		Long  string
+		Flags []CmdFlag
+	}
+
+	// CmdHandler handles a client cmd
+	CmdHandler interface {
+		Handle(c ConfigValueReader, args []string)
+	}
+
+	// CmdRegistrar registers cmd handlers on a client
+	CmdRegistrar interface {
+		Register(cmd CmdDesc, handler CmdHandler)
+		Group(cmd CmdDesc) CmdRegistrar
+	}
+
+	// ServiceClient is a client for a service
+	ServiceClient interface {
+		Register(name string, r ConfigRegistrar, cr CmdRegistrar)
+	}
+
+	cmdRegistrar struct {
+		opt    serviceOpt
+		c      *Client
+		parent *CmdTree
 	}
 )
 
@@ -60,6 +110,79 @@ func NewClient(opts Opts) *Client {
 // SetFlags sets Client flags
 func (c *Client) SetFlags(flags ClientFlags) {
 	c.flags = flags
+}
+
+func (c *Client) addCmd(cmd *CmdTree) {
+	c.cmds = append(c.cmds, cmd)
+}
+
+func (t *CmdTree) addCmd(cmd *CmdTree) {
+	t.Children = append(t.Children, cmd)
+}
+
+func (r *cmdRegistrar) addCmd(cmd *CmdTree) {
+	if r.parent == nil {
+		r.c.addCmd(cmd)
+	} else {
+		r.parent.addCmd(cmd)
+	}
+}
+
+func (r *cmdRegistrar) Register(cmd CmdDesc, handler CmdHandler) {
+	r.addCmd(&CmdTree{
+		ConfigPrefix: r.opt.name,
+		URLPrefix:    r.opt.url,
+		Desc:         cmd,
+		Handler:      handler,
+	})
+}
+
+func (r *cmdRegistrar) Group(cmd CmdDesc) CmdRegistrar {
+	t := &CmdTree{
+		ConfigPrefix: r.opt.name,
+		URLPrefix:    r.opt.url,
+		Desc:         cmd,
+	}
+	r.addCmd(t)
+	return &cmdRegistrar{
+		opt:    r.opt,
+		parent: t,
+	}
+}
+
+// Register registers a service client
+func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient) {
+	var cr CmdRegistrar = &cmdRegistrar{
+		opt: serviceOpt{
+			name: name,
+			url:  url,
+		},
+		c: c,
+	}
+	if cmd.Usage != "" {
+		cr = cr.Group(cmd)
+	}
+	r.Register(name, &configRegistrar{
+		prefix: name,
+		v:      c.config,
+	}, cr)
+}
+
+// GetCmds returns registered cmds
+func (c *Client) GetCmds() []*CmdTree {
+	return c.cmds
+}
+
+// GetConfigValueReader returns a config value reader for a registered cmd
+func (c *Client) GetConfigValueReader(prefix string, url string) ConfigValueReader {
+	return &configValueReader{
+		opt: serviceOpt{
+			name: prefix,
+			url:  url,
+		},
+		name: prefix,
+		v:    c.config,
+	}
 }
 
 // Init initializes the Client by reading a config

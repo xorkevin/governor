@@ -37,7 +37,19 @@ func (c *Cmd) initCmd(opts Opts) {
 It is built on the governor microservice framework which handles config
 management, logging, health checks, setup procedures, authentication, db,
 caching, object storage, emailing, message queues and more.`,
-		Version:           opts.Version.String(),
+		Version: opts.Version.String(),
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if c.s != nil {
+				c.s.SetFlags(Flags{
+					ConfigFile: c.configFile,
+				})
+			}
+			if c.c != nil {
+				c.c.SetFlags(ClientFlags{
+					ConfigFile: c.configFile,
+				})
+			}
+		},
 		DisableAutoGenTag: true,
 	}
 
@@ -48,9 +60,6 @@ caching, object storage, emailing, message queues and more.`,
 
 The server first runs all init procedures for all services before starting.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			c.s.SetFlags(Flags{
-				ConfigFile: c.configFile,
-			})
 			if err := c.s.Start(); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -74,9 +83,6 @@ Calls the server setup endpoint.`,
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			c.c.SetFlags(ClientFlags{
-				ConfigFile: c.configFile,
-			})
 			if err := c.c.Init(); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -94,9 +100,100 @@ Calls the server setup endpoint.`,
 
 	rootCmd.AddCommand(serveCmd, setupCmd)
 
-	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/%s.yaml)", opts.Appname, opts.DefaultFile))
+	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.yaml for server and client respectively)", opts.Appname, opts.DefaultFile, opts.ClientDefault))
+
+	c.addTrees(c.c.GetCmds(), rootCmd)
 
 	c.cmd = rootCmd
+}
+
+func (c *Cmd) addTrees(t []*CmdTree, parent *cobra.Command) {
+	for _, i := range t {
+		c.addTree(i, parent)
+	}
+}
+
+func (c *Cmd) addTree(t *CmdTree, parent *cobra.Command) {
+	cmd := &cobra.Command{
+		Use:               t.Desc.Usage,
+		Short:             t.Desc.Short,
+		Long:              t.Desc.Long,
+		DisableAutoGenTag: true,
+	}
+	if t.Handler != nil {
+		cmd.Run = func(cmd *cobra.Command, args []string) {
+			if err := c.c.Init(); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			t.Handler.Handle(c.c.GetConfigValueReader(t.ConfigPrefix, t.URLPrefix), args)
+		}
+	}
+	c.addFlags(cmd, t.Desc.Flags)
+	c.addTrees(t.Children, cmd)
+}
+
+func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
+	for _, i := range flags {
+		if i.Value == nil {
+			panic("governor: client flag value may not be nil")
+		}
+		switch v := i.Value.(type) {
+		case *bool:
+			{
+				var dv bool
+				if i.Default != nil {
+					var ok bool
+					dv, ok = i.Default.(bool)
+					if !ok {
+						panic("governor: client must have same default value type as value")
+					}
+				}
+				cmd.PersistentFlags().BoolVarP(v, i.Long, i.Short, dv, i.Usage)
+			}
+		case *int:
+			{
+				var dv int
+				if i.Default != nil {
+					var ok bool
+					dv, ok = i.Default.(int)
+					if !ok {
+						panic("governor: client must have same default value type as value")
+					}
+				}
+				cmd.PersistentFlags().IntVarP(v, i.Long, i.Short, dv, i.Usage)
+			}
+		case *string:
+			{
+				var dv string
+				if i.Default != nil {
+					var ok bool
+					dv, ok = i.Default.(string)
+					if !ok {
+						panic("governor: client must have same default value type as value")
+					}
+				}
+				cmd.PersistentFlags().StringVarP(v, i.Long, i.Short, dv, i.Usage)
+			}
+		case *[]string:
+			{
+				var dv []string
+				if i.Default != nil {
+					var ok bool
+					dv, ok = i.Default.([]string)
+					if !ok {
+						panic("governor: client must have same default value type as value")
+					}
+				}
+				cmd.PersistentFlags().StringArrayVarP(v, i.Long, i.Short, dv, i.Usage)
+			}
+		default:
+			panic("governor: invalid client flag value type")
+		}
+		if i.Required {
+			cmd.MarkFlagRequired(i.Long)
+		}
+	}
 }
 
 // Execute runs the governor cmd

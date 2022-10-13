@@ -528,8 +528,7 @@ func (c *Config) registrar(prefix string) ConfigRegistrar {
 }
 
 type (
-	// ConfigReader gets values from the config parser
-	ConfigReader interface {
+	ConfigValueReader interface {
 		Name() string
 		URL() string
 		GetBool(key string) bool
@@ -537,8 +536,12 @@ type (
 		GetDuration(key string) (time.Duration, error)
 		GetStr(key string) string
 		GetStrSlice(key string) []string
-		GetStrMap(key string) map[string]string
 		Unmarshal(key string, val interface{}) error
+	}
+
+	// ConfigReader gets values from the config parser
+	ConfigReader interface {
+		ConfigValueReader
 		SecretReader
 	}
 
@@ -557,50 +560,79 @@ type (
 	}
 
 	configReader struct {
-		serviceOpt
 		c *Config
+		v *configValueReader
+	}
+
+	configValueReader struct {
+		opt  serviceOpt
+		name string
+		v    *viper.Viper
 	}
 )
 
-func (r *configReader) Name() string {
-	return r.name
+func (r *configValueReader) Name() string {
+	return r.opt.name
 }
 
-func (r *configReader) URL() string {
-	return r.url
+func (r *configValueReader) URL() string {
+	return r.opt.url
 }
 
-func (r *configReader) GetBool(key string) bool {
-	return r.c.config.GetBool(r.name + "." + key)
+func (r *configValueReader) GetBool(key string) bool {
+	return r.v.GetBool(r.name + "." + key)
 }
 
-func (r *configReader) GetInt(key string) int {
-	return r.c.config.GetInt(r.name + "." + key)
+func (r *configValueReader) GetInt(key string) int {
+	return r.v.GetInt(r.name + "." + key)
 }
 
-func (r *configReader) GetDuration(key string) (time.Duration, error) {
+func (r *configValueReader) GetDuration(key string) (time.Duration, error) {
 	return time.ParseDuration(r.GetStr(key))
 }
 
+func (r *configValueReader) GetStr(key string) string {
+	return r.v.GetString(r.name + "." + key)
+}
+
+func (r *configValueReader) GetStrSlice(key string) []string {
+	return r.v.GetStringSlice(r.name + "." + key)
+}
+
+func (r *configValueReader) Unmarshal(key string, val interface{}) error {
+	return r.v.UnmarshalKey(r.name+"."+key, val)
+}
+
+func (r *configReader) Name() string {
+	return r.v.Name()
+}
+
+func (r *configReader) URL() string {
+	return r.v.URL()
+}
+
+func (r *configReader) GetBool(key string) bool {
+	return r.v.GetBool(key)
+}
+
+func (r *configReader) GetInt(key string) int {
+	return r.v.GetInt(key)
+}
+
+func (r *configReader) GetDuration(key string) (time.Duration, error) {
+	return r.v.GetDuration(key)
+}
+
 func (r *configReader) GetStr(key string) string {
-	return r.c.config.GetString(r.name + "." + key)
+	return r.v.GetStr(key)
 }
 
 func (r *configReader) GetStrSlice(key string) []string {
-	return r.c.config.GetStringSlice(r.name + "." + key)
-}
-
-func (r *configReader) GetStrMap(key string) map[string]string {
-	if key == "" {
-		key = r.name
-	} else {
-		key = r.name + "." + key
-	}
-	return r.c.config.GetStringMapString(key)
+	return r.v.GetStrSlice(key)
 }
 
 func (r *configReader) Unmarshal(key string, val interface{}) error {
-	return r.c.config.UnmarshalKey(r.name+"."+key, val)
+	return r.v.Unmarshal(key, val)
 }
 
 func (s *vaultSecret) isValid() bool {
@@ -608,16 +640,20 @@ func (s *vaultSecret) isValid() bool {
 }
 
 func (r *configReader) GetSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
-	return r.c.getSecret(ctx, r.name+"."+key, cacheDuration, target)
+	return r.c.getSecret(ctx, r.v.Name()+"."+key, cacheDuration, target)
 }
 
 func (r *configReader) InvalidateSecret(key string) {
-	r.c.invalidateSecret(r.name + "." + key)
+	r.c.invalidateSecret(r.v.Name() + "." + key)
 }
 
 func (c *Config) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
-		serviceOpt: opt,
-		c:          c,
+		c: c,
+		v: &configValueReader{
+			opt:  opt,
+			name: opt.name,
+			v:    c.config,
+		},
 	}
 }
