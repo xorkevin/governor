@@ -24,11 +24,16 @@ type (
 
 	// Client is a server client
 	Client struct {
-		config *viper.Viper
+		config *ClientConfig
 		cmds   []*CmdTree
 		httpc  *http.Client
 		flags  ClientFlags
-		addr   string
+	}
+
+	// ClientConfig is the client config
+	ClientConfig struct {
+		config *viper.Viper
+		Addr   string
 	}
 
 	// CmdTree is a tree of client cmds
@@ -60,7 +65,7 @@ type (
 
 	// CmdHandler handles a client cmd
 	CmdHandler interface {
-		Handle(c ConfigValueReader, args []string)
+		Handle(c ClientConfig, r ConfigValueReader, args []string)
 	}
 
 	// CmdRegistrar registers cmd handlers on a client
@@ -100,7 +105,9 @@ func NewClient(opts Opts) *Client {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	return &Client{
-		config: v,
+		config: &ClientConfig{
+			config: v,
+		},
 		httpc: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -110,6 +117,11 @@ func NewClient(opts Opts) *Client {
 // SetFlags sets Client flags
 func (c *Client) SetFlags(flags ClientFlags) {
 	c.flags = flags
+}
+
+// GetConfig returns the client config
+func (c *Client) GetConfig() ClientConfig {
+	return *c.config
 }
 
 func (c *Client) addCmd(cmd *CmdTree) {
@@ -164,7 +176,7 @@ func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient)
 	}
 	r.Register(name, &configRegistrar{
 		prefix: name,
-		v:      c.config,
+		v:      c.config.config,
 	}, cr)
 }
 
@@ -181,20 +193,20 @@ func (c *Client) GetConfigValueReader(prefix string, url string) ConfigValueRead
 			url:  url,
 		},
 		name: prefix,
-		v:    c.config,
+		v:    c.config.config,
 	}
 }
 
 // Init initializes the Client by reading a config
 func (c *Client) Init() error {
 	if file := c.flags.ConfigFile; file != "" {
-		c.config.SetConfigFile(file)
+		c.config.config.SetConfigFile(file)
 	}
-	if err := c.config.ReadInConfig(); err != nil {
+	if err := c.config.config.ReadInConfig(); err != nil {
 		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read in config")
 	}
-	c.addr = c.config.GetString("addr")
-	if t, err := time.ParseDuration(c.config.GetString("timeout")); err == nil {
+	c.config.Addr = c.config.config.GetString("addr")
+	if t, err := time.ParseDuration(c.config.config.GetString("timeout")); err == nil {
 		c.httpc.Timeout = t
 	} else {
 		log.Println("Invalid http client timeout:", err)
@@ -233,7 +245,7 @@ func (c *Client) Request(method, path string, data interface{}, response interfa
 		}
 		body = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, c.addr+path, body)
+	req, err := http.NewRequest(method, c.config.Addr+path, body)
 	if body != nil {
 		req.Header.Add("Content-Type", "application/json")
 	}

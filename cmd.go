@@ -126,7 +126,7 @@ func (c *Cmd) addTree(t *CmdTree, parent *cobra.Command) {
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			t.Handler.Handle(c.c.GetConfigValueReader(t.ConfigPrefix, t.URLPrefix), args)
+			t.Handler.Handle(c.c.GetConfig(), c.c.GetConfigValueReader(t.ConfigPrefix, t.URLPrefix), args)
 		}
 	}
 	c.addFlags(cmd, t.Desc.Flags)
