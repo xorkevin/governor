@@ -115,11 +115,11 @@ func New(ps pubsub.Pubsub, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Serv
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxWS(inj, s)
-	s.rolens = "gov." + name
-	s.scopens = "gov." + name
-	s.channelns = "gov." + name
+	s.rolens = "gov." + r.Name()
+	s.scopens = "gov." + r.Name()
+	s.channelns = "gov." + r.Name()
 	s.opts = svcOpts{
 		PresenceChannel:       s.channelns + ".presence.loc",
 		UserSendChannelPrefix: s.channelns + ".send.user",

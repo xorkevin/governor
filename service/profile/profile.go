@@ -79,10 +79,10 @@ func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxProfiles(inj, s)
-	s.scopens = "gov." + name
-	s.streamns = name
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
 }
 
 func (s *Service) router() *router {

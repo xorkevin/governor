@@ -272,12 +272,12 @@ func New(
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxUser(inj, s)
-	s.rolens = "gov." + name
-	s.scopens = "gov." + name
-	s.streamns = name
-	s.streamusers = name
+	s.rolens = "gov." + r.Name()
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
+	s.streamusers = r.Name()
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")

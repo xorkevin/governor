@@ -79,7 +79,7 @@ func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) *Service {
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxRolesManager(inj, s)
 
 	r.SetDefault("rolecacheduration", "24h")

@@ -80,7 +80,7 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxEventsAPI(inj, s)
 
 	r.SetDefault("hbinterval", "5s")

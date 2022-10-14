@@ -507,6 +507,7 @@ func (c *Config) invalidateSecret(key string) {
 type (
 	// ConfigRegistrar sets default values on the config parser
 	ConfigRegistrar interface {
+		Name() string
 		SetDefault(key string, value interface{})
 	}
 
@@ -515,6 +516,10 @@ type (
 		v      *viper.Viper
 	}
 )
+
+func (r *configRegistrar) Name() string {
+	return r.prefix
+}
 
 func (r *configRegistrar) SetDefault(key string, value interface{}) {
 	r.v.SetDefault(r.prefix+"."+key, value)

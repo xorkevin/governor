@@ -199,10 +199,10 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailer(inj, s)
-	s.streamns = name
-	s.streammail = name
+	s.streamns = r.Name()
+	s.streammail = r.Name()
 
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")

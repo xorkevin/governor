@@ -119,11 +119,11 @@ func New(orgs model.Repo, users user.Users, ev events.Events, ratelimiter rateli
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOrgs(inj, s)
-	s.scopens = "gov." + name
-	s.streamns = name
-	s.streamorgs = name
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
+	s.streamorgs = r.Name()
 
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "2K")

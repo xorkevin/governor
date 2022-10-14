@@ -150,11 +150,11 @@ func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Use
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxMailingList(inj, s)
-	s.scopens = "gov." + name
-	s.streamns = name
-	s.streammail = name
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
+	s.streammail = r.Name()
 
 	r.SetDefault("port", "2525")
 	r.SetDefault("authdomain", "lists.mail.localhost")

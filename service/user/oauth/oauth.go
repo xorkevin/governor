@@ -125,11 +125,11 @@ func New(
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxOAuth(inj, s)
-	s.rolens = "gov." + name
-	s.scopens = "gov." + name
-	s.streamns = name
+	s.rolens = "gov." + r.Name()
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
 
 	r.SetDefault("codeduration", "1m")
 	r.SetDefault("accessduration", "5m")

@@ -103,10 +103,10 @@ func New(
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxCourier(inj, s)
-	s.scopens = "gov." + name
-	s.streamns = name
+	s.scopens = "gov." + r.Name()
+	s.streamns = r.Name()
 
 	r.SetDefault("fallbacklink", "")
 	r.SetDefault("linkprefix", "")

@@ -171,18 +171,18 @@ func New(
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxConduit(inj, s)
-	s.scopens = "gov." + name
-	s.channelns = name
-	s.streamns = name
-	s.streamconduit = name
+	s.scopens = "gov." + r.Name()
+	s.channelns = r.Name()
+	s.streamns = r.Name()
+	s.streamconduit = r.Name()
 	s.opts = svcOpts{
-		PresenceQueryChannel: name + ".presence",
-		DMMsgChannel:         name + ".chat.dm.msg",
-		DMSettingsChannel:    name + ".chat.dm.settings",
-		GDMMsgChannel:        name + ".chat.gdm.msg",
-		GDMSettingsChannel:   name + ".chat.gdm.settings",
+		PresenceQueryChannel: s.channelns + ".presence",
+		DMMsgChannel:         s.channelns + ".chat.dm.msg",
+		DMSettingsChannel:    s.channelns + ".chat.dm.settings",
+		GDMMsgChannel:        s.channelns + ".chat.gdm.msg",
+		GDMSettingsChannel:   s.channelns + ".chat.gdm.settings",
 	}
 
 	r.SetDefault("streamsize", "200M")

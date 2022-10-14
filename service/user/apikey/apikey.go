@@ -66,7 +66,7 @@ func New(apikeys model.Repo, kv kvstore.KVStore) *Service {
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxApikeys(inj, s)
 
 	r.SetDefault("scopecache", "24h")

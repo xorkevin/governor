@@ -93,7 +93,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxObjstore(inj, s)
 
 	r.SetDefault("auth", "")

@@ -59,7 +59,7 @@ func New() *Service {
 	return &Service{}
 }
 
-func (s *Service) Register(name string, inj governor.Injector, r governor.ConfigRegistrar) {
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxTemplate(inj, s)
 
 	r.SetDefault("dir", "templates")
