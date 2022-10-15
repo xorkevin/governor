@@ -78,6 +78,30 @@ func (w *WaitGroup) Wait(ctx context.Context) error {
 }
 
 type (
+	// Once performs an action once
+	Once[T any] struct {
+		once *sync.Once
+		val  *T
+		err  error
+	}
+)
+
+// NewOnce creates a new [*Once]
+func NewOnce[T any]() *Once[T] {
+	return &Once[T]{
+		once: &sync.Once{},
+	}
+}
+
+// Do calls a function returning a value and error once
+func (o *Once[T]) Do(f func() (*T, error)) (*T, error) {
+	o.once.Do(func() {
+		o.val, o.err = f()
+	})
+	return o.val, o.err
+}
+
+type (
 	flightCall[T any] struct {
 		wg       *WaitGroup
 		val      *T

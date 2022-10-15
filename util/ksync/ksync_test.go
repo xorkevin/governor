@@ -101,6 +101,29 @@ type (
 	}
 )
 
+func TestOnce(t *testing.T) {
+	t.Parallel()
+
+	t.Run("runs a function once", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		once := NewOnce[testobj]()
+		count := &atomic.Int64{}
+		fn := func() (*testobj, error) {
+			return &testobj{
+				field: count.Add(1),
+			}, nil
+		}
+		v1, err := once.Do(fn)
+		assert.NoError(err)
+		v2, err := once.Do(fn)
+		assert.NoError(err)
+		assert.True(v1 == v2)
+	})
+}
+
 func TestSingleFlight(t *testing.T) {
 	t.Parallel()
 
