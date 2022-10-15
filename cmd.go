@@ -2,7 +2,7 @@ package governor
 
 import (
 	"fmt"
-	"os"
+	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -61,8 +61,7 @@ caching, object storage, emailing, message queues and more.`,
 The server first runs all init procedures for all services before starting.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := c.s.Start(); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.Fatalln(err)
 			}
 		},
 		DisableAutoGenTag: true,
@@ -80,17 +79,14 @@ Calls the server setup endpoint.`,
 				Secret: setupSecret,
 			}
 			if err := req.valid(); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.Fatalln(err)
 			}
 			if err := c.c.Init(); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.Fatalln(err)
 			}
 			res, err := c.c.Setup(req)
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.Fatalln(err)
 			}
 			fmt.Printf("Successfully setup governor:%s\n", res.Version)
 		},
@@ -123,14 +119,14 @@ func (c *Cmd) addTree(t *CmdTree, parent *cobra.Command) {
 	if t.Handler != nil {
 		cmd.Run = func(cmd *cobra.Command, args []string) {
 			if err := c.c.Init(); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.Fatalln(err)
 			}
 			t.Handler.Handle(c.c.GetConfig(), c.c.GetConfigValueReader(t.ConfigPrefix, t.URLPrefix), args)
 		}
 	}
 	c.addFlags(cmd, t.Desc.Flags)
 	c.addTrees(t.Children, cmd)
+	parent.AddCommand(cmd)
 }
 
 func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
@@ -191,7 +187,7 @@ func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
 			panic("governor: invalid client flag value type")
 		}
 		if i.Required {
-			cmd.MarkFlagRequired(i.Long)
+			cmd.MarkPersistentFlagRequired(i.Long)
 		}
 	}
 }
@@ -199,7 +195,6 @@ func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
 // Execute runs the governor cmd
 func (c *Cmd) Execute() {
 	if err := c.cmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatalln(err)
 	}
 }

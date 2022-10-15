@@ -156,6 +156,13 @@ func main() {
 		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}
 
-	cmd := governor.NewCmd(opts, gov, governor.NewClient(opts))
+	client := governor.NewClient(opts)
+	client.Register("token", "/null/token", governor.CmdDesc{
+		Usage: "token",
+		Short: "manage tokens",
+		Long:  "manage tokens",
+	}, token.NewClient())
+
+	cmd := governor.NewCmd(opts, gov, client)
 	cmd.Execute()
 }

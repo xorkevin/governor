@@ -68,6 +68,9 @@ type (
 		Handle(c ClientConfig, r ConfigValueReader, args []string)
 	}
 
+	// CmdHandlerFunc implements CmdHandler for a function
+	CmdHandlerFunc func(c ClientConfig, r ConfigValueReader, args []string)
+
 	// CmdRegistrar registers cmd handlers on a client
 	CmdRegistrar interface {
 		Register(cmd CmdDesc, handler CmdHandler)
@@ -76,7 +79,7 @@ type (
 
 	// ServiceClient is a client for a service
 	ServiceClient interface {
-		Register(name string, r ConfigRegistrar, cr CmdRegistrar)
+		Register(r ConfigRegistrar, cr CmdRegistrar)
 	}
 
 	cmdRegistrar struct {
@@ -112,6 +115,11 @@ func NewClient(opts Opts) *Client {
 			Timeout: 15 * time.Second,
 		},
 	}
+}
+
+// Handle implements [CmdHandler]
+func (f CmdHandlerFunc) Handle(c ClientConfig, r ConfigValueReader, args []string) {
+	f(c, r, args)
 }
 
 // SetFlags sets Client flags
@@ -174,7 +182,7 @@ func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient)
 	if cmd.Usage != "" {
 		cr = cr.Group(cmd)
 	}
-	r.Register(name, &configRegistrar{
+	r.Register(&configRegistrar{
 		prefix: name,
 		v:      c.config.config,
 	}, cr)

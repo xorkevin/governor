@@ -1,2 +1,5 @@
-addr: http://governor.dev.localhost:8080/api
-timeout: 5s
+addr: 'http://governor.dev.localhost:8080/api'
+timeout: '5s'
+token:
+  issuer: 'governor'
+  audience: 'governor'
