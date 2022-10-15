@@ -570,9 +570,8 @@ type (
 	}
 
 	configValueReader struct {
-		opt  serviceOpt
-		name string
-		v    *viper.Viper
+		opt serviceOpt
+		v   *viper.Viper
 	}
 )
 
@@ -585,11 +584,11 @@ func (r *configValueReader) URL() string {
 }
 
 func (r *configValueReader) GetBool(key string) bool {
-	return r.v.GetBool(r.name + "." + key)
+	return r.v.GetBool(r.opt.name + "." + key)
 }
 
 func (r *configValueReader) GetInt(key string) int {
-	return r.v.GetInt(r.name + "." + key)
+	return r.v.GetInt(r.opt.name + "." + key)
 }
 
 func (r *configValueReader) GetDuration(key string) (time.Duration, error) {
@@ -597,15 +596,15 @@ func (r *configValueReader) GetDuration(key string) (time.Duration, error) {
 }
 
 func (r *configValueReader) GetStr(key string) string {
-	return r.v.GetString(r.name + "." + key)
+	return r.v.GetString(r.opt.name + "." + key)
 }
 
 func (r *configValueReader) GetStrSlice(key string) []string {
-	return r.v.GetStringSlice(r.name + "." + key)
+	return r.v.GetStringSlice(r.opt.name + "." + key)
 }
 
 func (r *configValueReader) Unmarshal(key string, val interface{}) error {
-	return r.v.UnmarshalKey(r.name+"."+key, val)
+	return r.v.UnmarshalKey(r.opt.name+"."+key, val)
 }
 
 func (r *configReader) Name() string {
@@ -656,9 +655,8 @@ func (c *Config) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
 		c: c,
 		v: &configValueReader{
-			opt:  opt,
-			name: opt.name,
-			v:    c.config,
+			opt: opt,
+			v:   c.config,
 		},
 	}
 }

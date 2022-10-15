@@ -9,47 +9,44 @@ import (
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
 )
 
 type (
-	// Client is a token cmd client
-	Client struct {
+	clientConfig struct {
 		issuer   string
 		audience string
+	}
+
+	// Client is a token cmd client
+	Client struct {
+		once          *ksync.Once[clientConfig]
+		config        governor.ConfigValueReader
+		sysTokenFlags sysTokenFlags
+	}
+
+	sysTokenFlags struct {
+		privkey   string
+		subject   string
+		expirestr string
+		scope     string
+		output    string
 	}
 )
 
 // NewClient creates a new [*Client]
 func NewClient() *Client {
-	return &Client{}
-}
-
-func (c *Client) initConfig(r governor.ConfigValueReader) error {
-	c.issuer = r.GetStr("issuer")
-	if c.issuer == "" {
-		return kerrors.WithMsg(nil, "Token issuer is not set")
+	return &Client{
+		once: ksync.NewOnce[clientConfig](),
 	}
-	c.audience = r.GetStr("audience")
-	if c.audience == "" {
-		return kerrors.WithMsg(nil, "Token audience is not set")
-	}
-	return nil
 }
 
 func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")
-
-	var (
-		sysprivkey  string
-		syssubject  string
-		sysduration string
-		sysscope    string
-		sysoutput   string
-	)
 
 	cr.Register(governor.CmdDesc{
 		Usage: "gen-sys",
@@ -61,21 +58,21 @@ func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) 
 				Short:    "i",
 				Usage:    "token private key",
 				Required: true,
-				Value:    &sysprivkey,
+				Value:    &c.sysTokenFlags.privkey,
 			},
 			{
 				Long:     "output",
 				Short:    "o",
 				Usage:    "token output file",
 				Required: false,
-				Value:    &sysoutput,
+				Value:    &c.sysTokenFlags.output,
 			},
 			{
 				Long:     "subject",
 				Short:    "u",
 				Usage:    "token subject",
 				Required: true,
-				Value:    &syssubject,
+				Value:    &c.sysTokenFlags.subject,
 			},
 			{
 				Long:     "expire",
@@ -83,7 +80,7 @@ func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) 
 				Usage:    "token expiration",
 				Required: false,
 				Default:  "1h",
-				Value:    &sysduration,
+				Value:    &c.sysTokenFlags.expirestr,
 			},
 			{
 				Long:     "scope",
@@ -91,26 +88,44 @@ func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) 
 				Usage:    "token scope",
 				Required: false,
 				Default:  ScopeAll,
-				Value:    &sysscope,
+				Value:    &c.sysTokenFlags.scope,
 			},
 		},
-	}, governor.CmdHandlerFunc(func(cc governor.ClientConfig, r governor.ConfigValueReader, args []string) {
-		if err := c.initConfig(r); err != nil {
-			log.Fatalln(err)
-		}
-		expiration, err := time.ParseDuration(sysduration)
-		if err != nil {
-			log.Fatalln(kerrors.WithMsg(err, "Invalid token expiration"))
-		}
-		if err := c.GenSysToken(sysprivkey, syssubject, expiration, sysscope, sysoutput); err != nil {
-			log.Fatalln(err)
-		}
-	}))
+	}, governor.CmdHandlerFunc(c.genSysToken))
 }
 
-func (c *Client) GenSysToken(sysprivkey string, subject string, expiration time.Duration, scope string, outputfile string) error {
+func (c *Client) Init(gc governor.ClientConfig, r governor.ConfigValueReader) error {
+	c.config = r
+	return nil
+}
+
+func (c *Client) initConfig() (*clientConfig, error) {
+	return c.once.Do(func() (*clientConfig, error) {
+		cc := &clientConfig{
+			issuer:   c.config.GetStr("issuer"),
+			audience: c.config.GetStr("audience"),
+		}
+		if cc.issuer == "" {
+			return nil, kerrors.WithMsg(nil, "Token issuer is not set")
+		}
+		if cc.audience == "" {
+			return nil, kerrors.WithMsg(nil, "Token audience is not set")
+		}
+		return cc, nil
+	})
+}
+
+func (c *Client) genSysToken(args []string) error {
+	cc, err := c.initConfig()
+	if err != nil {
+		return err
+	}
+	expire, err := time.ParseDuration(c.sysTokenFlags.expirestr)
+	if err != nil {
+		return kerrors.WithMsg(err, "Invalid token expiration")
+	}
 	skb, err := func() ([]byte, error) {
-		skf, err := os.Open(sysprivkey)
+		skf, err := os.Open(c.sysTokenFlags.privkey)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to open private key file")
 		}
@@ -146,24 +161,24 @@ func (c *Client) GenSysToken(sysprivkey string, subject string, expiration time.
 	now := time.Now().Round(0).UTC()
 	claims := Claims{
 		Claims: jwt.Claims{
-			Issuer:    c.issuer,
-			Subject:   subject,
-			Audience:  []string{c.audience},
+			Issuer:    cc.issuer,
+			Subject:   c.sysTokenFlags.subject,
+			Audience:  []string{cc.audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			Expiry:    jwt.NewNumericDate(now.Add(expiration)),
+			Expiry:    jwt.NewNumericDate(now.Add(expire)),
 			ID:        u.Base32(),
 		},
 		Kind:     KindSystem,
 		AuthTime: now.Unix(),
-		Scope:    scope,
+		Scope:    c.sysTokenFlags.scope,
 		Key:      "",
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
 	output := os.Stdout
-	if outputfile != "" {
+	if c.sysTokenFlags.output != "" {
 		var err error
-		output, err = os.Create(outputfile)
+		output, err = os.Create(c.sysTokenFlags.output)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create output file")
 		}
@@ -174,6 +189,9 @@ func (c *Client) GenSysToken(sysprivkey string, subject string, expiration time.
 		}()
 	}
 	if _, err := io.WriteString(output, token); err != nil {
+		return kerrors.WithMsg(err, "Failed to write token output")
+	}
+	if _, err := io.WriteString(output, "\n"); err != nil {
 		return kerrors.WithMsg(err, "Failed to write token output")
 	}
 	return nil

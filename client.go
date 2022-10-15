@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,10 +23,11 @@ type (
 
 	// Client is a server client
 	Client struct {
-		config *ClientConfig
-		cmds   []*CmdTree
-		httpc  *http.Client
-		flags  ClientFlags
+		config  *ClientConfig
+		clients []clientDef
+		cmds    []*CmdTree
+		httpc   *http.Client
+		flags   ClientFlags
 	}
 
 	// ClientConfig is the client config
@@ -36,13 +36,16 @@ type (
 		Addr   string
 	}
 
+	clientDef struct {
+		opt serviceOpt
+		r   ServiceClient
+	}
+
 	// CmdTree is a tree of client cmds
 	CmdTree struct {
-		ConfigPrefix string
-		URLPrefix    string
-		Desc         CmdDesc
-		Handler      CmdHandler
-		Children     []*CmdTree
+		Desc     CmdDesc
+		Handler  CmdHandler
+		Children []*CmdTree
 	}
 
 	// CmdFlag describes a client flag
@@ -65,11 +68,11 @@ type (
 
 	// CmdHandler handles a client cmd
 	CmdHandler interface {
-		Handle(c ClientConfig, r ConfigValueReader, args []string)
+		Handle(args []string) error
 	}
 
 	// CmdHandlerFunc implements CmdHandler for a function
-	CmdHandlerFunc func(c ClientConfig, r ConfigValueReader, args []string)
+	CmdHandlerFunc func(args []string) error
 
 	// CmdRegistrar registers cmd handlers on a client
 	CmdRegistrar interface {
@@ -80,10 +83,10 @@ type (
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(r ConfigRegistrar, cr CmdRegistrar)
+		Init(gc ClientConfig, r ConfigValueReader) error
 	}
 
 	cmdRegistrar struct {
-		opt    serviceOpt
 		c      *Client
 		parent *CmdTree
 	}
@@ -118,8 +121,8 @@ func NewClient(opts Opts) *Client {
 }
 
 // Handle implements [CmdHandler]
-func (f CmdHandlerFunc) Handle(c ClientConfig, r ConfigValueReader, args []string) {
-	f(c, r, args)
+func (f CmdHandlerFunc) Handle(args []string) error {
+	return f(args)
 }
 
 // SetFlags sets Client flags
@@ -150,33 +153,31 @@ func (r *cmdRegistrar) addCmd(cmd *CmdTree) {
 
 func (r *cmdRegistrar) Register(cmd CmdDesc, handler CmdHandler) {
 	r.addCmd(&CmdTree{
-		ConfigPrefix: r.opt.name,
-		URLPrefix:    r.opt.url,
-		Desc:         cmd,
-		Handler:      handler,
+		Desc:    cmd,
+		Handler: handler,
 	})
 }
 
 func (r *cmdRegistrar) Group(cmd CmdDesc) CmdRegistrar {
 	t := &CmdTree{
-		ConfigPrefix: r.opt.name,
-		URLPrefix:    r.opt.url,
-		Desc:         cmd,
+		Desc: cmd,
 	}
 	r.addCmd(t)
 	return &cmdRegistrar{
-		opt:    r.opt,
 		parent: t,
 	}
 }
 
 // Register registers a service client
 func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient) {
-	var cr CmdRegistrar = &cmdRegistrar{
+	c.clients = append(c.clients, clientDef{
 		opt: serviceOpt{
 			name: name,
 			url:  url,
 		},
+		r: r,
+	})
+	var cr CmdRegistrar = &cmdRegistrar{
 		c: c,
 	}
 	if cmd.Usage != "" {
@@ -193,18 +194,6 @@ func (c *Client) GetCmds() []*CmdTree {
 	return c.cmds
 }
 
-// GetConfigValueReader returns a config value reader for a registered cmd
-func (c *Client) GetConfigValueReader(prefix string, url string) ConfigValueReader {
-	return &configValueReader{
-		opt: serviceOpt{
-			name: prefix,
-			url:  url,
-		},
-		name: prefix,
-		v:    c.config.config,
-	}
-}
-
 // Init initializes the Client by reading a config
 func (c *Client) Init() error {
 	if file := c.flags.ConfigFile; file != "" {
@@ -217,7 +206,15 @@ func (c *Client) Init() error {
 	if t, err := time.ParseDuration(c.config.config.GetString("timeout")); err == nil {
 		c.httpc.Timeout = t
 	} else {
-		log.Println("Invalid http client timeout:", err)
+		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Invalid http client timeout")
+	}
+	for _, i := range c.clients {
+		if err := i.r.Init(*c.config, &configValueReader{
+			opt: i.opt,
+			v:   c.config.config,
+		}); err != nil {
+			return kerrors.WithMsg(err, "Init client failed")
+		}
 	}
 	return nil
 }

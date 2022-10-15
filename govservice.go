@@ -43,15 +43,15 @@ type (
 	}
 
 	serviceDef struct {
-		serviceOpt
-		r Service
+		opt serviceOpt
+		r   Service
 	}
 )
 
 // Register adds the service to the governor Server and runs service.Register
 func (s *Server) Register(name string, url string, r Service) {
 	s.services = append(s.services, serviceDef{
-		serviceOpt: serviceOpt{
+		opt: serviceOpt{
 			name: name,
 			url:  url,
 		},
@@ -88,12 +88,12 @@ func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
 		if err := i.r.Setup(ctx, rsetup); err != nil {
 			err := kerrors.WithMsg(err, "Setup service failed")
 			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.name,
+				"gov.service": i.opt.name,
 			})
 			return err
 		}
 		s.log.Info(ctx, "Setup service success", klog.Fields{
-			"gov.service": i.name,
+			"gov.service": i.opt.name,
 		})
 	}
 
@@ -114,16 +114,16 @@ func (s *Server) checkHealthServices(ctx context.Context) []error {
 func (s *Server) initServices(ctx context.Context) error {
 	s.log.Info(ctx, "Init all services begin", nil)
 	for _, i := range s.services {
-		l := s.log.Logger.Sublogger(i.name, klog.Fields{"gov.service": i.name})
-		if err := i.r.Init(ctx, *s.config, s.config.reader(i.serviceOpt), l, s.router(s.config.BaseURL+i.url, l)); err != nil {
+		l := s.log.Logger.Sublogger(i.opt.name, klog.Fields{"gov.service": i.opt.name})
+		if err := i.r.Init(ctx, *s.config, s.config.reader(i.opt), l, s.router(s.config.BaseURL+i.opt.url, l)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.name,
+				"gov.service": i.opt.name,
 			})
 			return err
 		}
 		s.log.Info(ctx, "Init service success", klog.Fields{
-			"gov.service": i.name,
+			"gov.service": i.opt.name,
 		})
 	}
 	s.log.Info(ctx, "Init all services complete", nil)
@@ -136,12 +136,12 @@ func (s *Server) startServices(ctx context.Context) error {
 		if err := i.r.Start(ctx); err != nil {
 			err := kerrors.WithMsg(err, "Start service failed")
 			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.name,
+				"gov.service": i.opt.name,
 			})
 			return err
 		}
 		s.log.Info(ctx, "Start service success", klog.Fields{
-			"gov.service": i.name,
+			"gov.service": i.opt.name,
 		})
 	}
 	s.log.Info(ctx, "Start all services complete", nil)
@@ -155,7 +155,7 @@ func (s *Server) stopServices(ctx context.Context) {
 		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
 		s.log.Info(ctx, "Stop service", klog.Fields{
-			"gov.service": i.name,
+			"gov.service": i.opt.name,
 		})
 	}
 	s.log.Info(ctx, "Stop all services complete", nil)
