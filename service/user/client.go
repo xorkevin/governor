@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ type (
 		gate          gate.Client
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
+		cli           governor.CLI
 		http          governor.HTTPClient
 		addAdminFlags reqAddAdmin
 	}
@@ -72,7 +74,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 				Long:     "password",
 				Short:    "p",
 				Usage:    "password",
-				Required: true,
+				Required: false,
 				Value:    &c.addAdminFlags.Password,
 			},
 			{
@@ -100,13 +102,24 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.addAdmin))
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, m governor.HTTPClient) error {
+func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
+	c.cli = cli
 	c.http = m
 	return nil
 }
 
 func (c *CmdClient) addAdmin(args []string) error {
+	if c.addAdminFlags.Password == "-" {
+		var err error
+		c.addAdminFlags.Password, err = c.cli.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return kerrors.WithMsg(err, "Failed reading user password")
+		}
+	}
+	if err := c.addAdminFlags.valid(); err != nil {
+		return err
+	}
 	r, err := c.http.NewJSONRequest(http.MethodPost, "/user/admin", c.addAdminFlags)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")

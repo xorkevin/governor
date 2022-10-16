@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit"
 	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
@@ -156,7 +158,7 @@ func main() {
 		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}
 
-	client := governor.NewClient(opts)
+	client := governor.NewClient(opts, os.Stdin)
 	client.Register("token", "/null/token", &governor.CmdDesc{
 		Usage: "token",
 		Short: "manage tokens",

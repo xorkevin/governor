@@ -78,9 +78,6 @@ Calls the server setup endpoint.`,
 			if err := c.c.Init(); err != nil {
 				log.Fatalln(err)
 			}
-			if err := setupSecretValid(setupSecret); err != nil {
-				log.Fatalln(err)
-			}
 			res, err := c.c.Setup(setupSecret)
 			if err != nil {
 				log.Fatalln(err)

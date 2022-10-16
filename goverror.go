@@ -84,28 +84,48 @@ func (e *ErrorTooManyRequests) RetryAfterTime() string {
 
 // ErrWithNoLog returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorNoLog] kind and message
 func ErrWithNoLog(err error) error {
-	return kerrors.WithKind(err, ErrorNoLog{}, "No log")
+	return kerrors.New(
+		kerrors.OptMsg("No log"),
+		kerrors.OptKind(ErrorNoLog{}),
+		kerrors.OptInner(err),
+		kerrors.OptSkip(1),
+	)
 }
 
 // ErrWithRes returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorRes] kind and message
 func ErrWithRes(err error, status int, code string, resmsg string) error {
-	return kerrors.WithKind(err, &ErrorRes{
-		Status:  status,
-		Code:    code,
-		Message: resmsg,
-	}, "Error response")
+	return kerrors.New(
+		kerrors.OptMsg("Error response"),
+		kerrors.OptKind(&ErrorRes{
+			Status:  status,
+			Code:    code,
+			Message: resmsg,
+		}),
+		kerrors.OptInner(err),
+		kerrors.OptSkip(1),
+	)
 }
 
 // ErrWithUnreachable returns an error wrapped by an [*xorkevin.dev/kerrors.Error] with an [ErrorUnreachable] kind and message
 func ErrWithUnreachable(err error, msg string) error {
-	return kerrors.WithKind(err, ErrorUnreachable{}, msg)
+	return kerrors.New(
+		kerrors.OptMsg(msg),
+		kerrors.OptKind(ErrorUnreachable{}),
+		kerrors.OptInner(err),
+		kerrors.OptSkip(1),
+	)
 }
 
 // ErrWithTooManyRequests returns an error wrapped by [ErrWithRes] with an [ErrorTooManyRequests] kind and message
 func ErrWithTooManyRequests(err error, t time.Time, code string, resmsg string) error {
-	return ErrWithRes(kerrors.WithKind(err, &ErrorTooManyRequests{
-		RetryAfter: t,
-	}, "Too many requests"), http.StatusTooManyRequests, code, resmsg)
+	return ErrWithRes(kerrors.New(
+		kerrors.OptMsg("Too many requests"),
+		kerrors.OptKind(&ErrorTooManyRequests{
+			RetryAfter: t,
+		}),
+		kerrors.OptInner(err),
+		kerrors.OptSkip(1),
+	), http.StatusTooManyRequests, code, resmsg)
 }
 
 func (c *govcontext) WriteError(err error) {

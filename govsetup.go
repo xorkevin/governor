@@ -17,6 +17,9 @@ const (
 )
 
 func setupSecretValid(secret string) error {
+	if len(secret) == 0 {
+		return ErrWithRes(nil, http.StatusUnauthorized, "", "Secret not provided")
+	}
 	if len(secret) > lengthCapSetupSecret {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Secret must be shorter than 256 chars")
 	}

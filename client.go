@@ -1,9 +1,12 @@
 package governor
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 )
@@ -29,6 +33,7 @@ type (
 		inj     Injector
 		cmds    []*CmdTree
 		config  *ClientConfig
+		stdin   *bufio.Reader
 		httpc   *http.Client
 		flags   ClientFlags
 	}
@@ -83,6 +88,11 @@ type (
 		Group(cmd CmdDesc) CmdRegistrar
 	}
 
+	CLI interface {
+		ReadString(delim byte) (string, error)
+		ReadPassword() (string, error)
+	}
+
 	HTTPClient interface {
 		NewRequest(method, path string, body io.Reader) (*http.Request, error)
 		NewJSONRequest(method, path string, data interface{}) (*http.Request, error)
@@ -93,7 +103,7 @@ type (
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
-		Init(gc ClientConfig, r ConfigValueReader, m HTTPClient) error
+		Init(gc ClientConfig, r ConfigValueReader, cli CLI, m HTTPClient) error
 	}
 
 	cmdRegistrar struct {
@@ -103,7 +113,7 @@ type (
 )
 
 // NewClient creates a new Client
-func NewClient(opts Opts) *Client {
+func NewClient(opts Opts, stdin io.Reader) *Client {
 	v := viper.New()
 	v.SetDefault("addr", "http://localhost:8080/api")
 	v.SetDefault("timeout", "5s")
@@ -125,6 +135,7 @@ func NewClient(opts Opts) *Client {
 		config: &ClientConfig{
 			config: v,
 		},
+		stdin: bufio.NewReader(stdin),
 		httpc: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -223,11 +234,28 @@ func (c *Client) Init() error {
 		if err := i.r.Init(*c.config, &configValueReader{
 			opt: i.opt,
 			v:   c.config.config,
-		}, c); err != nil {
+		}, c, c); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
 	return nil
+}
+
+func (c *Client) ReadString(delim byte) (string, error) {
+	s, err := c.stdin.ReadString(delim)
+	if err != nil && !errors.Is(err, io.EOF) {
+		err = kerrors.WithMsg(err, "Failed to read stdin")
+	}
+	return s, err
+}
+
+func (c *Client) ReadPassword() (string, error) {
+	s, err := term.ReadPassword(0)
+	if err != nil {
+		return "", kerrors.WithMsg(err, "Failed to read password")
+	}
+	fmt.Println()
+	return string(s), nil
 }
 
 type (
@@ -324,6 +352,16 @@ func isStatusDecodable(status int) bool {
 
 // Setup sends a setup request to the server
 func (c *Client) Setup(secret string) (*ResSetup, error) {
+	if secret == "-" {
+		var err error
+		secret, err = c.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, kerrors.WithMsg(err, "Failed reading setup secret")
+		}
+	}
+	if err := setupSecretValid(secret); err != nil {
+		return nil, err
+	}
 	body := &ResSetup{}
 	r, err := c.NewRequest(http.MethodPost, "/setupz", nil)
 	if err != nil {
