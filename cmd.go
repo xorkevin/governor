@@ -82,7 +82,7 @@ Calls the server setup endpoint.`,
 			if err != nil {
 				log.Fatalln(err)
 			}
-			fmt.Printf("Successfully setup governor:%s\n", res.Version)
+			log.Printf("Successfully setup governor:%s\n", res.Version)
 		},
 		DisableAutoGenTag: true,
 	}
