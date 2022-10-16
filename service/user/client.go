@@ -1,16 +1,12 @@
 package user
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 
-	"golang.org/x/term"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/ksync"
@@ -28,7 +24,12 @@ type (
 		config        governor.ConfigValueReader
 		cli           governor.CLI
 		http          governor.HTTPClient
-		addAdminFlags reqAddAdmin
+		addAdminReq   reqAddAdmin
+		addAdminFlags addAdminFlags
+	}
+
+	addAdminFlags struct {
+		interactive bool
 	}
 )
 
@@ -58,35 +59,42 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 				Short:    "u",
 				Usage:    "username",
 				Required: true,
-				Value:    &c.addAdminFlags.Username,
+				Value:    &c.addAdminReq.Username,
 			},
 			{
 				Long:     "password",
 				Short:    "p",
 				Usage:    "password",
 				Required: false,
-				Value:    &c.addAdminFlags.Password,
+				Value:    &c.addAdminReq.Password,
 			},
 			{
 				Long:     "email",
 				Short:    "m",
 				Usage:    "email",
 				Required: true,
-				Value:    &c.addAdminFlags.Email,
+				Value:    &c.addAdminReq.Email,
 			},
 			{
 				Long:     "firstname",
 				Short:    "",
 				Usage:    "user first name",
 				Required: true,
-				Value:    &c.addAdminFlags.Firstname,
+				Value:    &c.addAdminReq.Firstname,
 			},
 			{
 				Long:     "lastname",
 				Short:    "",
 				Usage:    "user last name",
 				Required: true,
-				Value:    &c.addAdminFlags.Lastname,
+				Value:    &c.addAdminReq.Lastname,
+			},
+			{
+				Long:     "interactive",
+				Short:    "",
+				Usage:    "show interactive password prompt",
+				Required: false,
+				Value:    &c.addAdminFlags.interactive,
 			},
 		},
 	}, governor.CmdHandlerFunc(c.addAdmin))
@@ -100,17 +108,33 @@ func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader,
 }
 
 func (c *CmdClient) addAdmin(args []string) error {
-	if c.addAdminFlags.Password == "-" {
+	if c.addAdminReq.Password == "-" {
 		var err error
-		c.addAdminFlags.Password, err = c.cli.ReadString('\n')
+		c.addAdminReq.Password, err = c.cli.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return kerrors.WithMsg(err, "Failed reading user password")
 		}
 	}
-	if err := c.addAdminFlags.valid(); err != nil {
+	if c.addAdminFlags.interactive && c.addAdminReq.Password == "" {
+		fmt.Print("Password: ")
+		var err error
+		c.addAdminReq.Password, err = c.cli.ReadPassword()
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to read password")
+		}
+		fmt.Print("Verify password: ")
+		passwordAgain, err := c.cli.ReadPassword()
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to read password")
+		}
+		if passwordAgain != c.addAdminReq.Password {
+			return kerrors.WithMsg(err, "Passwords do not match")
+		}
+	}
+	if err := c.addAdminReq.valid(); err != nil {
 		return err
 	}
-	r, err := c.http.NewJSONRequest(http.MethodPost, "/user/admin", c.addAdminFlags)
+	r, err := c.http.NewJSONRequest(http.MethodPost, "/user/admin", c.addAdminReq)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")
 	}
@@ -127,59 +151,4 @@ func (c *CmdClient) addAdmin(args []string) error {
 	}
 	log.Printf("Created admin user %s: %s\n", body.Username, body.Userid)
 	return nil
-}
-
-func getAdminPromptReq() (*reqAddAdmin, error) {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Print("First name: ")
-	firstname, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("Last name: ")
-	lastname, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("Username: ")
-	username, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("Email: ")
-	email, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Print("Password: ")
-	passwordBytes, err := term.ReadPassword(0)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println()
-	password := string(passwordBytes)
-
-	fmt.Print("Verify password: ")
-	passwordVerifyBytes, err := term.ReadPassword(0)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println()
-	passwordVerify := string(passwordVerifyBytes)
-	if password != passwordVerify {
-		return nil, errors.New("Passwords do not match")
-	}
-
-	return &reqAddAdmin{
-		Username:  strings.TrimSpace(username),
-		Password:  password,
-		Email:     strings.TrimSpace(email),
-		Firstname: strings.TrimSpace(firstname),
-		Lastname:  strings.TrimSpace(lastname),
-	}, nil
 }
