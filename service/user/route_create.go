@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 )
 
-//go:generate forge validation -o validation_create_gen.go reqUserPost reqUserPostConfirm reqUserDeleteSelf reqUserDelete reqGetUserApprovals
+//go:generate forge validation -o validation_create_gen.go reqUserPost reqUserPostConfirm reqUserDeleteSelf reqAddAdmin reqUserDelete reqGetUserApprovals
 
 type (
 	reqUserPost struct {
@@ -119,6 +119,36 @@ func (s *router) deleteUser(c governor.Context) {
 }
 
 type (
+	reqAddAdmin struct {
+		Username  string `json:"username" valid:"username"`
+		Password  string `json:"password" valid:"password"`
+		Email     string `json:"email" valid:"email"`
+		Firstname string `json:"first_name" valid:"firstName"`
+		Lastname  string `json:"last_name" valid:"lastName"`
+	}
+)
+
+func (s *router) addAdmin(c governor.Context) {
+	var req reqAddAdmin
+	if err := c.Bind(&req, false); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := s.s.addAdmin(c.Ctx(), req)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	c.WriteJSON(http.StatusCreated, res)
+}
+
+type (
 	reqGetUserApprovals struct {
 		Amount int `valid:"amount" json:"-"`
 		Offset int `valid:"offset" json:"-"`
@@ -182,7 +212,9 @@ func (s *router) mountCreate(m *governor.MethodRouter) {
 	scopeApprovalRead := s.s.scopens + ".approval:read"
 	scopeApprovalWrite := s.s.scopens + ".approval:write"
 	scopeAdminAccount := s.s.scopens + ".admin.account:delete"
+	scopeAddAdmin := s.s.scopens + ".add.admin:write"
 	m.PostCtx("", s.createUser, s.rt)
+	m.PostCtx("/admin", s.addAdmin, s.rt, gate.System(s.s.gate, scopeAddAdmin))
 	m.PostCtx("/confirm", s.commitUser, s.rt)
 	m.GetCtx("/approvals", s.getUserApprovals, gate.Member(s.s.gate, s.s.rolens, scopeApprovalRead), s.rt)
 	m.PostCtx("/approvals/id/{id}", s.approveUser, gate.Member(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)

@@ -17,8 +17,6 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_client_gen.go reqAddAdmin
-
 type (
 	clientConfig struct {
 	}
@@ -31,14 +29,6 @@ type (
 		cli           governor.CLI
 		http          governor.HTTPClient
 		addAdminFlags reqAddAdmin
-	}
-
-	reqAddAdmin struct {
-		Username  string `json:"username" valid:"username"`
-		Password  string `json:"password" valid:"password"`
-		Email     string `json:"email" valid:"email"`
-		Firstname string `json:"first_name" valid:"firstName"`
-		Lastname  string `json:"last_name" valid:"lastName"`
 	}
 )
 

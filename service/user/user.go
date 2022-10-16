@@ -561,57 +561,6 @@ func (s *Service) getCipher(ctx context.Context) (*otpCipher, error) {
 	return s.lc.Construct(ctx)
 }
 
-func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) error {
-	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
-	if err != nil {
-		return err
-	}
-
-	b0, err := encodeUserEventCreate(CreateUserProps{
-		Userid:       madmin.Userid,
-		Username:     madmin.Username,
-		Email:        madmin.Email,
-		FirstName:    madmin.FirstName,
-		LastName:     madmin.LastName,
-		CreationTime: madmin.CreationTime,
-	})
-	if err != nil {
-		return err
-	}
-	b1, err := encodeUserEventRoles(RolesProps{
-		Add:    true,
-		Userid: madmin.Userid,
-		Roles:  rank.Admin().ToSlice(),
-	})
-	if err != nil {
-		return err
-	}
-
-	if err := s.users.Insert(ctx, madmin); err != nil {
-		return err
-	}
-
-	// must make best effort to add roles, publish new user event, and clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
-
-	if err := s.roles.InsertRoles(ctx, madmin.Userid, rank.Admin()); err != nil {
-		return kerrors.WithMsg(err, "Failed to add user roles")
-	}
-
-	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, madmin.Userid, b0, b1)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"), nil)
-	}
-
-	s.log.Info(ctx, "Added admin", klog.Fields{
-		"user.username": madmin.Username,
-		"user.userid":   madmin.Userid,
-	})
-
-	s.clearUserExists(ctx, madmin.Userid)
-
-	return nil
-}
-
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
