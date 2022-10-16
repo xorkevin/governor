@@ -9,7 +9,6 @@ import (
 type (
 	// ReqSetup is a service setup request
 	ReqSetup struct {
-		Secret string `json:"secret,omitempty"`
 	}
 )
 
@@ -17,8 +16,8 @@ const (
 	lengthCapSetupSecret = 255
 )
 
-func (r ReqSetup) valid() error {
-	if len(r.Secret) > lengthCapSetupSecret {
+func setupSecretValid(secret string) error {
+	if len(secret) > lengthCapSetupSecret {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Secret must be shorter than 256 chars")
 	}
 	return nil
@@ -34,23 +33,22 @@ type (
 func (s *Server) initSetup(r Router) {
 	m := NewMethodRouter(r)
 	m.PostCtx("", func(c Context) {
-		var req ReqSetup
-		if err := c.Bind(&req, false); err != nil {
-			c.WriteError(err)
-			return
-		}
-		if err := req.valid(); err != nil {
-			c.WriteError(err)
-			return
-		}
 		c.LogFields(klog.Fields{
 			"gov.service.phase": "setup",
 		})
-		if err := s.setupServices(c.Ctx(), req); err != nil {
+		username, password, ok := c.BasicAuth()
+		if !ok || username != "setup" {
+			c.WriteError(ErrWithRes(nil, http.StatusForbidden, "", "Invalid setup secret"))
+			return
+		}
+		if err := setupSecretValid(password); err != nil {
 			c.WriteError(err)
 			return
 		}
-
+		if err := s.setupServices(c.Ctx(), password, ReqSetup{}); err != nil {
+			c.WriteError(err)
+			return
+		}
 		c.WriteJSON(http.StatusCreated, &ResSetup{
 			Version: s.config.version.Num,
 		})

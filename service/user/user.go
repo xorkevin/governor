@@ -213,7 +213,7 @@ func setCtxUser(inj governor.Injector, u Users) {
 	inj.Set(ctxKeyUsers{}, u)
 }
 
-// NewCtx creates a new Users service from a context
+// NewCtx creates a new [Users] service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
 		model.GetCtxRepo(inj),

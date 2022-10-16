@@ -157,12 +157,17 @@ func main() {
 	}
 
 	client := governor.NewClient(opts)
-	client.Register("token", "/null/token", governor.CmdDesc{
+	client.Register("token", "/null/token", &governor.CmdDesc{
 		Usage: "token",
 		Short: "manage tokens",
 		Long:  "manage tokens",
 	}, token.NewCmdClient())
-	client.Register("gate", "/null/gate", governor.CmdDesc{}, gate.NewCmdClient())
+	client.Register("gate", "/null/gate", nil, gate.NewCmdClient())
+	client.Register("user", "/u", &governor.CmdDesc{
+		Usage: "user",
+		Short: "manage users",
+		Long:  "manage users",
+	}, user.NewCmdClientCtx(client.Injector()))
 
 	cmd := governor.NewCmd(opts, gov, client)
 	cmd.Execute()

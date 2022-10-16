@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -82,10 +83,17 @@ type (
 		Group(cmd CmdDesc) CmdRegistrar
 	}
 
+	HTTPClient interface {
+		NewRequest(method, path string, body io.Reader) (*http.Request, error)
+		NewJSONRequest(method, path string, data interface{}) (*http.Request, error)
+		DoRequest(r *http.Request) (*http.Response, error)
+		DoRequestJSON(r *http.Request, response interface{}) (*http.Response, bool, error)
+	}
+
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
-		Init(gc ClientConfig, r ConfigValueReader) error
+		Init(gc ClientConfig, r ConfigValueReader, m HTTPClient) error
 	}
 
 	cmdRegistrar struct {
@@ -172,7 +180,7 @@ func (r *cmdRegistrar) Group(cmd CmdDesc) CmdRegistrar {
 }
 
 // Register registers a service client
-func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient) {
+func (c *Client) Register(name string, url string, cmd *CmdDesc, r ServiceClient) {
 	c.clients = append(c.clients, clientDef{
 		opt: serviceOpt{
 			name: name,
@@ -183,8 +191,8 @@ func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient)
 	var cr CmdRegistrar = &cmdRegistrar{
 		c: c,
 	}
-	if cmd.Usage != "" {
-		cr = cr.Group(cmd)
+	if cmd != nil {
+		cr = cr.Group(*cmd)
 	}
 	r.Register(c.inj, &configRegistrar{
 		prefix: name,
@@ -215,7 +223,7 @@ func (c *Client) Init() error {
 		if err := i.r.Init(*c.config, &configValueReader{
 			opt: i.opt,
 			v:   c.config.config,
-		}); err != nil {
+		}, c); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
@@ -243,51 +251,91 @@ func (e ErrorServerRes) Error() string {
 	return "Error server response"
 }
 
-// Request sends a request to the server
-func (c *Client) Request(method, path string, data interface{}, response interface{}) (int, error) {
-	var body io.Reader
-	if data != nil {
-		b, err := kjson.Marshal(data)
-		if err != nil {
-			return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed to encode body to json")
-		}
-		body = bytes.NewReader(b)
-	}
+// NewRequest creates a new request
+func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.config.Addr+path, body)
-	if body != nil {
-		req.Header.Add("Content-Type", "application/json")
-	}
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Malformed request")
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Malformed request")
 	}
-	res, err := c.httpc.Do(req)
-	if err != nil {
-		return 0, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed request")
-	}
-	defer res.Body.Close()
-	if res.StatusCode >= http.StatusBadRequest {
-		var errres ErrorRes
-		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
-			return 0, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
-		}
-		return res.StatusCode, kerrors.WithKind(nil, ErrorServerRes{}, errres.Message)
-	} else if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-		return 0, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
-	}
-	return res.StatusCode, nil
+	return req, nil
 }
 
-func isStatusOK(status int) bool {
-	return status >= http.StatusOK && status < http.StatusMultipleChoices
+// NewJSONRequest creates a new json request
+func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Request, error) {
+	b, err := kjson.Marshal(data)
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed to encode body to json")
+	}
+	body := bytes.NewReader(b)
+	req, err := c.NewRequest(method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add(headerContentType, "application/json")
+	return req, nil
+}
+
+// DoRequest sends a request to the server and returns its response
+func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
+	res, err := c.httpc.Do(r)
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed request")
+	}
+	if res.StatusCode >= http.StatusBadRequest {
+		defer func() {
+			if err := res.Body.Close(); err != nil {
+				log.Println(kerrors.WithMsg(err, "Failed to close response body"))
+			}
+		}()
+		var errres ErrorRes
+		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
+			return res, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
+		}
+		return res, kerrors.WithKind(nil, ErrorServerRes{}, errres.Message)
+	}
+	return res, nil
+}
+
+// DoRequestJSON sends a request to the server and decodes response json
+func (c *Client) DoRequestJSON(r *http.Request, response interface{}) (*http.Response, bool, error) {
+	res, err := c.DoRequest(r)
+	if err != nil {
+		return res, false, err
+	}
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			log.Println(kerrors.WithMsg(err, "Failed to close response body"))
+		}
+	}()
+
+	decoded := false
+	if response != nil && isStatusDecodable(res.StatusCode) {
+		if err := json.NewDecoder(res.Body).Decode(response); err != nil {
+			return res, false, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
+		}
+		decoded = true
+	}
+	return res, decoded, nil
+}
+
+func isStatusDecodable(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices && status != http.StatusNoContent
 }
 
 // Setup sends a setup request to the server
-func (c *Client) Setup(req ReqSetup) (*ResSetup, error) {
-	res := &ResSetup{}
-	if status, err := c.Request("POST", "/setupz", req, res); err != nil {
+func (c *Client) Setup(secret string) (*ResSetup, error) {
+	body := &ResSetup{}
+	r, err := c.NewRequest(http.MethodPost, "/setupz", nil)
+	if err != nil {
 		return nil, err
-	} else if !isStatusOK(status) {
-		return nil, kerrors.WithKind(nil, ErrorServerRes{}, "Non success response")
 	}
-	return res, nil
+	r.SetBasicAuth("setup", secret)
+	_, decoded, err := c.DoRequestJSON(r, body)
+	if err != nil {
+		return nil, err
+	}
+	if !decoded {
+		return nil, kerrors.WithKind(nil, ErrorServerRes{}, "Non-decodable response")
+	}
+	return body, nil
 }

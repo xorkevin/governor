@@ -66,18 +66,14 @@ type (
 	}
 )
 
-func (s *Server) setupServices(ctx context.Context, rsetup ReqSetup) error {
-	if err := rsetup.valid(); err != nil {
-		return err
-	}
+func (s *Server) setupServices(ctx context.Context, reqsecret string, rsetup ReqSetup) error {
 	var secret secretSetup
 	if err := s.config.getSecret(ctx, "setupsecret", 0, &secret); err != nil {
 		return kerrors.WithMsg(err, "Invalid setup secret")
 	}
-	if subtle.ConstantTimeCompare([]byte(rsetup.Secret), []byte(secret.Secret)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(reqsecret), []byte(secret.Secret)) != 1 {
 		return ErrWithRes(nil, http.StatusForbidden, "", "Invalid setup secret")
 	}
-	rsetup.Secret = ""
 
 	// To avoid partial setup, no request context is passed beyond this point
 

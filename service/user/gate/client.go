@@ -11,14 +11,14 @@ import (
 )
 
 type (
-	clientConfig struct {
-		systokenfile string
-	}
-
 	// Client is a gate client
 	Client interface {
 		GetSysToken() (string, error)
 		AddSysToken(r *http.Request) error
+	}
+
+	clientConfig struct {
+		systokenfile string
 	}
 
 	// CmdClient is a gate cmd client
@@ -58,7 +58,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	r.SetDefault("systokenfile", "")
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader) error {
+func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, m governor.HTTPClient) error {
 	c.config = r
 	return nil
 }

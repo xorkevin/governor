@@ -75,16 +75,13 @@ The server first runs all init procedures for all services before starting.`,
 
 Calls the server setup endpoint.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			req := ReqSetup{
-				Secret: setupSecret,
-			}
-			if err := req.valid(); err != nil {
-				log.Fatalln(err)
-			}
 			if err := c.c.Init(); err != nil {
 				log.Fatalln(err)
 			}
-			res, err := c.c.Setup(req)
+			if err := setupSecretValid(setupSecret); err != nil {
+				log.Fatalln(err)
+			}
+			res, err := c.c.Setup(setupSecret)
 			if err != nil {
 				log.Fatalln(err)
 			}
