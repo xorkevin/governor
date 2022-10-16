@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 )
 
 type (
@@ -13,7 +14,14 @@ type (
 		s          *Server
 		c          *Client
 		cmd        *cobra.Command
+		opts       Opts
 		configFile string
+		cmdFlags   cmdTopLevelFlags
+	}
+
+	cmdTopLevelFlags struct {
+		setupSecret  string
+		docOutputDir string
 	}
 )
 
@@ -22,36 +30,27 @@ func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
 	cmd := &Cmd{
 		s:          s,
 		c:          c,
+		opts:       opts,
 		configFile: "",
 	}
-	cmd.initCmd(opts)
+	cmd.initCmd()
 	return cmd
 }
 
-func (c *Cmd) initCmd(opts Opts) {
+func (c *Cmd) initCmd() {
 	rootCmd := &cobra.Command{
-		Use:   opts.Appname,
-		Short: opts.Description,
-		Long: opts.Description + `
+		Use:   c.opts.Appname,
+		Short: c.opts.Description,
+		Long: c.opts.Description + `
 
 It is built on the governor microservice framework which handles config
 management, logging, health checks, setup procedures, authentication, db,
 caching, object storage, emailing, message queues and more.`,
-		Version: opts.Version.String(),
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if c.s != nil {
-				c.s.SetFlags(Flags{
-					ConfigFile: c.configFile,
-				})
-			}
-			if c.c != nil {
-				c.c.SetFlags(ClientFlags{
-					ConfigFile: c.configFile,
-				})
-			}
-		},
+		Version:           c.opts.Version.String(),
+		PersistentPreRun:  c.prerun,
 		DisableAutoGenTag: true,
 	}
+	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.yaml for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
 
 	serveCmd := &cobra.Command{
 		Use:   "serve",
@@ -59,42 +58,98 @@ caching, object storage, emailing, message queues and more.`,
 		Long: `Starts the http server and runs all services
 
 The server first runs all init procedures for all services before starting.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := c.s.Start(); err != nil {
-				log.Fatalln(err)
-			}
-		},
+		Run:               c.serve,
 		DisableAutoGenTag: true,
 	}
+	rootCmd.AddCommand(serveCmd)
 
-	var setupSecret string
 	setupCmd := &cobra.Command{
 		Use:   "setup",
 		Short: "runs the setup procedures for all services",
 		Long: `Runs the setup procedures for all services
 
 Calls the server setup endpoint.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := c.c.Init(); err != nil {
-				log.Fatalln(err)
-			}
-			res, err := c.c.Setup(setupSecret)
-			if err != nil {
-				log.Fatalln(err)
-			}
-			log.Printf("Successfully setup governor:%s\n", res.Version)
-		},
+		Run:               c.setup,
 		DisableAutoGenTag: true,
 	}
-	setupCmd.PersistentFlags().StringVar(&setupSecret, "secret", "", "setup secret")
+	setupCmd.PersistentFlags().StringVar(&c.cmdFlags.setupSecret, "secret", "", "setup secret")
+	rootCmd.AddCommand(setupCmd)
 
-	rootCmd.AddCommand(serveCmd, setupCmd)
+	docCmd := &cobra.Command{
+		Use:               "doc",
+		Short:             "generate documentation",
+		Long:              `Generate documentation in several formats`,
+		DisableAutoGenTag: true,
+	}
+	docCmd.PersistentFlags().StringVarP(&c.cmdFlags.docOutputDir, "output", "o", ".", "documentation output path")
+	rootCmd.AddCommand(docCmd)
 
-	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.yaml for server and client respectively)", opts.Appname, opts.DefaultFile, opts.ClientDefault))
+	docManCmd := &cobra.Command{
+		Use:               "man",
+		Short:             "generate man page documentation",
+		Long:              `Generate man page documentation`,
+		Run:               c.docMan,
+		DisableAutoGenTag: true,
+	}
+	docCmd.AddCommand(docManCmd)
+
+	docMdCmd := &cobra.Command{
+		Use:               "md",
+		Short:             "generate markdown documentation",
+		Long:              `Generate markdown documentation`,
+		Run:               c.docMd,
+		DisableAutoGenTag: true,
+	}
+	docCmd.AddCommand(docMdCmd)
 
 	c.addTrees(c.c.GetCmds(), rootCmd)
 
 	c.cmd = rootCmd
+}
+
+func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
+	if c.s != nil {
+		c.s.SetFlags(Flags{
+			ConfigFile: c.configFile,
+		})
+	}
+	if c.c != nil {
+		c.c.SetFlags(ClientFlags{
+			ConfigFile: c.configFile,
+		})
+	}
+}
+
+func (c *Cmd) serve(cmd *cobra.Command, args []string) {
+	if err := c.s.Start(); err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func (c *Cmd) setup(cmd *cobra.Command, args []string) {
+	if err := c.c.Init(); err != nil {
+		log.Fatalln(err)
+	}
+	res, err := c.c.Setup(c.cmdFlags.setupSecret)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Printf("Successfully setup governor:%s\n", res.Version)
+}
+
+func (c *Cmd) docMan(cmd *cobra.Command, args []string) {
+	if err := doc.GenManTree(c.cmd, &doc.GenManHeader{
+		Title:   c.opts.Appname,
+		Section: "1",
+	}, c.cmdFlags.docOutputDir); err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func (c *Cmd) docMd(cmd *cobra.Command, args []string) {
+	if err := doc.GenMarkdownTree(c.cmd, c.cmdFlags.docOutputDir); err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func (c *Cmd) addTrees(t []*CmdTree, parent *cobra.Command) {
