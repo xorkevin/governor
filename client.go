@@ -2,6 +2,7 @@ package governor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -23,9 +24,10 @@ type (
 
 	// Client is a server client
 	Client struct {
-		config  *ClientConfig
 		clients []clientDef
+		inj     Injector
 		cmds    []*CmdTree
+		config  *ClientConfig
 		httpc   *http.Client
 		flags   ClientFlags
 	}
@@ -82,7 +84,7 @@ type (
 
 	// ServiceClient is a client for a service
 	ServiceClient interface {
-		Register(r ConfigRegistrar, cr CmdRegistrar)
+		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
 		Init(gc ClientConfig, r ConfigValueReader) error
 	}
 
@@ -111,6 +113,7 @@ func NewClient(opts Opts) *Client {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	return &Client{
+		inj: newInjector(context.Background()),
 		config: &ClientConfig{
 			config: v,
 		},
@@ -183,7 +186,7 @@ func (c *Client) Register(name string, url string, cmd CmdDesc, r ServiceClient)
 	if cmd.Usage != "" {
 		cr = cr.Group(cmd)
 	}
-	r.Register(&configRegistrar{
+	r.Register(c.inj, &configRegistrar{
 		prefix: name,
 		v:      c.config.config,
 	}, cr)

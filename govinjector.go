@@ -42,7 +42,7 @@ func (s *Server) Injector() Injector {
 	return s.inj.Clone()
 }
 
-// BaseInjector returns the base injector
-func (s *Server) BaseInjector() Injector {
-	return s.inj
+// Injector gets a clone of the client injector instance
+func (c *Client) Injector() Injector {
+	return c.inj.Clone()
 }

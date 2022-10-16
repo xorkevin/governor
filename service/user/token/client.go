@@ -21,8 +21,8 @@ type (
 		audience string
 	}
 
-	// Client is a token cmd client
-	Client struct {
+	// CmdClient is a token cmd client
+	CmdClient struct {
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
 		sysTokenFlags sysTokenFlags
@@ -37,14 +37,14 @@ type (
 	}
 )
 
-// NewClient creates a new [*Client]
-func NewClient() *Client {
-	return &Client{
+// NewCmdClient creates a new [*CmdClient]
+func NewCmdClient() *CmdClient {
+	return &CmdClient{
 		once: ksync.NewOnce[clientConfig](),
 	}
 }
 
-func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
+func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")
 
@@ -94,28 +94,28 @@ func (c *Client) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) 
 	}, governor.CmdHandlerFunc(c.genSysToken))
 }
 
-func (c *Client) Init(gc governor.ClientConfig, r governor.ConfigValueReader) error {
+func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader) error {
 	c.config = r
 	return nil
 }
 
-func (c *Client) initConfig() (*clientConfig, error) {
+func (c *CmdClient) initConfig() (*clientConfig, error) {
 	return c.once.Do(func() (*clientConfig, error) {
 		cc := &clientConfig{
 			issuer:   c.config.GetStr("issuer"),
 			audience: c.config.GetStr("audience"),
 		}
 		if cc.issuer == "" {
-			return nil, kerrors.WithMsg(nil, "Token issuer is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token issuer is not set")
 		}
 		if cc.audience == "" {
-			return nil, kerrors.WithMsg(nil, "Token audience is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token audience is not set")
 		}
 		return cc, nil
 	})
 }
 
-func (c *Client) genSysToken(args []string) error {
+func (c *CmdClient) genSysToken(args []string) error {
 	cc, err := c.initConfig()
 	if err != nil {
 		return err
@@ -124,24 +124,9 @@ func (c *Client) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
-	skb, err := func() ([]byte, error) {
-		skf, err := os.Open(c.sysTokenFlags.privkey)
-		if err != nil {
-			return nil, kerrors.WithMsg(err, "Failed to open private key file")
-		}
-		defer func() {
-			if err := skf.Close(); err != nil {
-				log.Println(kerrors.WithMsg(err, "Failed to close private key file"))
-			}
-		}()
-		skb, err := io.ReadAll(skf)
-		if err != nil {
-			return nil, kerrors.WithMsg(err, "Failed to read private key file")
-		}
-		return skb, nil
-	}()
+	skb, err := os.ReadFile(c.sysTokenFlags.privkey)
 	if err != nil {
-		return err
+		return kerrors.WithMsg(err, "Failed to read private key file")
 	}
 	key, err := hunter2.SigningKeyFromParams(string(skb), hunter2.DefaultSigningKeyAlgs)
 	if err != nil {

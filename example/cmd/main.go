@@ -161,7 +161,8 @@ func main() {
 		Usage: "token",
 		Short: "manage tokens",
 		Long:  "manage tokens",
-	}, token.NewClient())
+	}, token.NewCmdClient())
+	client.Register("gate", "/null/gate", governor.CmdDesc{}, gate.NewCmdClient())
 
 	cmd := governor.NewCmd(opts, gov, client)
 	cmd.Execute()
