@@ -72,20 +72,20 @@ func (t *apikeyModelTable) DelEqKeyid(ctx context.Context, d db.SQLExecutor, key
 	return err
 }
 
-func (t *apikeyModelTable) DelHasKeyid(ctx context.Context, d db.SQLExecutor, keyid []string) error {
+func (t *apikeyModelTable) DelHasKeyid(ctx context.Context, d db.SQLExecutor, keyids []string) error {
 	paramCount := 0
-	args := make([]interface{}, 0, paramCount+len(keyid))
-	var placeholderskeyid string
+	args := make([]interface{}, 0, paramCount+len(keyids))
+	var placeholderskeyids string
 	{
-		placeholders := make([]string, 0, len(keyid))
-		for _, i := range keyid {
+		placeholders := make([]string, 0, len(keyids))
+		for _, i := range keyids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholderskeyid = strings.Join(placeholders, ", ")
+		placeholderskeyids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid IN (VALUES "+placeholderskeyid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid IN (VALUES "+placeholderskeyids+");", args...)
 	return err
 }
 
@@ -104,7 +104,7 @@ func (t *apikeyModelTable) GetModelEqUseridOrdTime(ctx context.Context, d db.SQL
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
 			return nil, err
 		}

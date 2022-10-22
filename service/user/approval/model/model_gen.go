@@ -91,7 +91,7 @@ func (t *approvalModelTable) GetModelOrdCreationTime(ctx context.Context, d db.S
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Username, &m.PassHash, &m.Email, &m.FirstName, &m.LastName, &m.CreationTime, &m.Approved, &m.CodeHash, &m.CodeTime); err != nil {
 			return nil, err
 		}

@@ -70,7 +70,7 @@ func (t *msgModelTable) GetModelEqChatidOrdMsgid(ctx context.Context, d db.SQLEx
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Chatid, &m.Msgid, &m.Userid, &m.Timems, &m.Kind, &m.Value); err != nil {
 			return nil, err
 		}
@@ -97,7 +97,7 @@ func (t *msgModelTable) GetModelEqChatidLtMsgidOrdMsgid(ctx context.Context, d d
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Chatid, &m.Msgid, &m.Userid, &m.Timems, &m.Kind, &m.Value); err != nil {
 			return nil, err
 		}
@@ -124,7 +124,7 @@ func (t *msgModelTable) GetModelEqChatidEqKindOrdMsgid(ctx context.Context, d db
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Chatid, &m.Msgid, &m.Userid, &m.Timems, &m.Kind, &m.Value); err != nil {
 			return nil, err
 		}
@@ -151,7 +151,7 @@ func (t *msgModelTable) GetModelEqChatidEqKindLtMsgidOrdMsgid(ctx context.Contex
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Chatid, &m.Msgid, &m.Userid, &m.Timems, &m.Kind, &m.Value); err != nil {
 			return nil, err
 		}
@@ -168,21 +168,21 @@ func (t *msgModelTable) DelEqChatid(ctx context.Context, d db.SQLExecutor, chati
 	return err
 }
 
-func (t *msgModelTable) UpdmsgValueEqChatidHasMsgid(ctx context.Context, d db.SQLExecutor, m *msgValue, chatid string, msgid []string) error {
+func (t *msgModelTable) UpdmsgValueEqChatidHasMsgid(ctx context.Context, d db.SQLExecutor, m *msgValue, chatid string, msgids []string) error {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(msgid))
+	args := make([]interface{}, 0, paramCount+len(msgids))
 	args = append(args, m.Value, chatid)
-	var placeholdersmsgid string
+	var placeholdersmsgids string
 	{
-		placeholders := make([]string, 0, len(msgid))
-		for _, i := range msgid {
+		placeholders := make([]string, 0, len(msgids))
+		for _, i := range msgids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersmsgid = strings.Join(placeholders, ", ")
+		placeholdersmsgids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (value) = ROW($1) WHERE chatid = $2 AND msgid IN (VALUES "+placeholdersmsgid+");", args...)
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (value) = ROW($1) WHERE chatid = $2 AND msgid IN (VALUES "+placeholdersmsgids+");", args...)
 	if err != nil {
 		return err
 	}

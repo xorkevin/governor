@@ -76,21 +76,21 @@ func (t *invModelTable) DelEqUseridEqRole(ctx context.Context, d db.SQLExecutor,
 	return err
 }
 
-func (t *invModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, role []string) error {
+func (t *invModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, roles []string) error {
 	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(role))
+	args := make([]interface{}, 0, paramCount+len(roles))
 	args = append(args, userid)
-	var placeholdersrole string
+	var placeholdersroles string
 	{
-		placeholders := make([]string, 0, len(role))
-		for _, i := range role {
+		placeholders := make([]string, 0, len(roles))
+		for _, i := range roles {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersrole = strings.Join(placeholders, ", ")
+		placeholdersroles = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersroles+");", args...)
 	return err
 }
 
@@ -114,7 +114,7 @@ func (t *invModelTable) GetModelEqUseridGtCreationTimeOrdCreationTime(ctx contex
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func (t *invModelTable) GetModelEqRoleGtCreationTimeOrdCreationTime(ctx context.
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role, &m.InvitedBy, &m.CreationTime); err != nil {
 			return nil, err
 		}

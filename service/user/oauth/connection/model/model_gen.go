@@ -80,21 +80,21 @@ func (t *connectionModelTable) UpdModelEqUseridEqClientID(ctx context.Context, d
 	return nil
 }
 
-func (t *connectionModelTable) DelEqUseridHasClientID(ctx context.Context, d db.SQLExecutor, userid string, clientid []string) error {
+func (t *connectionModelTable) DelEqUseridHasClientID(ctx context.Context, d db.SQLExecutor, userid string, clientids []string) error {
 	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(clientid))
+	args := make([]interface{}, 0, paramCount+len(clientids))
 	args = append(args, userid)
-	var placeholdersclientid string
+	var placeholdersclientids string
 	{
-		placeholders := make([]string, 0, len(clientid))
-		for _, i := range clientid {
+		placeholders := make([]string, 0, len(clientids))
+		for _, i := range clientids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersclientid = strings.Join(placeholders, ", ")
+		placeholdersclientids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND clientid IN (VALUES "+placeholdersclientid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND clientid IN (VALUES "+placeholdersclientids+");", args...)
 	return err
 }
 
@@ -113,7 +113,7 @@ func (t *connectionModelTable) GetModelEqUseridOrdAccessTime(ctx context.Context
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.ClientID, &m.Scope, &m.Nonce, &m.Challenge, &m.ChallengeMethod, &m.CodeHash, &m.AuthTime, &m.CodeTime, &m.AccessTime, &m.CreationTime, &m.KeyHash); err != nil {
 			return nil, err
 		}

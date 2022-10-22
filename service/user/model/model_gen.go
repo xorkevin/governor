@@ -95,7 +95,7 @@ func (t *userModelTable) GetInfoOrdUserid(ctx context.Context, d db.SQLExecutor,
 		}
 	}()
 	for rows.Next() {
-		m := Info{}
+		var m Info
 		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}
@@ -107,26 +107,26 @@ func (t *userModelTable) GetInfoOrdUserid(ctx context.Context, d db.SQLExecutor,
 	return res, nil
 }
 
-func (t *userModelTable) GetInfoHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userid []string, orderasc bool, limit, offset int) ([]Info, error) {
+func (t *userModelTable) GetInfoHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userids []string, orderasc bool, limit, offset int) ([]Info, error) {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(userid))
+	args := make([]interface{}, 0, paramCount+len(userids))
 	args = append(args, limit, offset)
-	var placeholdersuserid string
+	var placeholdersuserids string
 	{
-		placeholders := make([]string, 0, len(userid))
-		for _, i := range userid {
+		placeholders := make([]string, 0, len(userids))
+		for _, i := range userids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersuserid = strings.Join(placeholders, ", ")
+		placeholdersuserids = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserids+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (t *userModelTable) GetInfoHasUseridOrdUserid(ctx context.Context, d db.SQL
 		}
 	}()
 	for rows.Next() {
-		m := Info{}
+		var m Info
 		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}
@@ -147,13 +147,13 @@ func (t *userModelTable) GetInfoHasUseridOrdUserid(ctx context.Context, d db.SQL
 	return res, nil
 }
 
-func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, username string, orderasc bool, limit, offset int) ([]Info, error) {
+func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, usernamePrefix string, orderasc bool, limit, offset int) ([]Info, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Info, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE username LIKE $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, username)
+	rows, err := d.QueryContext(ctx, "SELECT userid, username, email, first_name, last_name FROM "+t.TableName+" WHERE username LIKE $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, usernamePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (t *userModelTable) GetInfoLikeUsernameOrdUsername(ctx context.Context, d d
 		}
 	}()
 	for rows.Next() {
-		m := Info{}
+		var m Info
 		if err := rows.Scan(&m.Userid, &m.Username, &m.Email, &m.FirstName, &m.LastName); err != nil {
 			return nil, err
 		}

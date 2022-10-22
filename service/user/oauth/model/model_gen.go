@@ -67,26 +67,26 @@ func (t *oauthappModelTable) GetModelEqClientID(ctx context.Context, d db.SQLExe
 	return m, nil
 }
 
-func (t *oauthappModelTable) GetModelHasClientIDOrdClientID(ctx context.Context, d db.SQLExecutor, clientid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *oauthappModelTable) GetModelHasClientIDOrdClientID(ctx context.Context, d db.SQLExecutor, clientids []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(clientid))
+	args := make([]interface{}, 0, paramCount+len(clientids))
 	args = append(args, limit, offset)
-	var placeholdersclientid string
+	var placeholdersclientids string
 	{
-		placeholders := make([]string, 0, len(clientid))
-		for _, i := range clientid {
+		placeholders := make([]string, 0, len(clientids))
+		for _, i := range clientids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersclientid = strings.Join(placeholders, ", ")
+		placeholdersclientids = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" WHERE clientid IN (VALUES "+placeholdersclientid+") ORDER BY clientid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT clientid, name, url, redirect_uri, logo, keyhash, time, creation_time, creator_id FROM "+t.TableName+" WHERE clientid IN (VALUES "+placeholdersclientids+") ORDER BY clientid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (t *oauthappModelTable) GetModelHasClientIDOrdClientID(ctx context.Context,
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (t *oauthappModelTable) GetModelOrdCreationTime(ctx context.Context, d db.S
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
 			return nil, err
 		}
@@ -154,7 +154,7 @@ func (t *oauthappModelTable) GetModelEqCreatorIDOrdCreationTime(ctx context.Cont
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.ClientID, &m.Name, &m.URL, &m.RedirectURI, &m.Logo, &m.KeyHash, &m.Time, &m.CreationTime, &m.CreatorID); err != nil {
 			return nil, err
 		}

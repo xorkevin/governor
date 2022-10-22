@@ -80,20 +80,20 @@ func (t *sessionModelTable) DelEqSessionID(ctx context.Context, d db.SQLExecutor
 	return err
 }
 
-func (t *sessionModelTable) DelHasSessionID(ctx context.Context, d db.SQLExecutor, sessionid []string) error {
+func (t *sessionModelTable) DelHasSessionID(ctx context.Context, d db.SQLExecutor, sessionids []string) error {
 	paramCount := 0
-	args := make([]interface{}, 0, paramCount+len(sessionid))
-	var placeholderssessionid string
+	args := make([]interface{}, 0, paramCount+len(sessionids))
+	var placeholderssessionids string
 	{
-		placeholders := make([]string, 0, len(sessionid))
-		for _, i := range sessionid {
+		placeholders := make([]string, 0, len(sessionids))
+		for _, i := range sessionids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholderssessionid = strings.Join(placeholders, ", ")
+		placeholderssessionids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sessionid IN (VALUES "+placeholderssessionid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sessionid IN (VALUES "+placeholderssessionids+");", args...)
 	return err
 }
 
@@ -117,7 +117,7 @@ func (t *sessionModelTable) GetModelEqUseridOrdTime(ctx context.Context, d db.SQ
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func (t *sessionModelTable) GetqIDEqUseridOrdSessionID(ctx context.Context, d db
 		}
 	}()
 	for rows.Next() {
-		m := qID{}
+		var m qID
 		if err := rows.Scan(&m.SessionID); err != nil {
 			return nil, err
 		}

@@ -80,26 +80,26 @@ func (t *dmModelTable) GetModelEqChatid(ctx context.Context, d db.SQLExecutor, c
 	return m, nil
 }
 
-func (t *dmModelTable) GetModelHasChatidOrdLastUpdated(ctx context.Context, d db.SQLExecutor, chatid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *dmModelTable) GetModelHasChatidOrdLastUpdated(ctx context.Context, d db.SQLExecutor, chatids []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(chatid))
+	args := make([]interface{}, 0, paramCount+len(chatids))
 	args = append(args, limit, offset)
-	var placeholderschatid string
+	var placeholderschatids string
 	{
-		placeholders := make([]string, 0, len(chatid))
-		for _, i := range chatid {
+		placeholders := make([]string, 0, len(chatids))
+		for _, i := range chatids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholderschatid = strings.Join(placeholders, ", ")
+		placeholderschatids = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid IN (VALUES "+placeholderschatid+") ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE chatid IN (VALUES "+placeholderschatids+") ORDER BY last_updated "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (t *dmModelTable) GetModelHasChatidOrdLastUpdated(ctx context.Context, d db
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Chatid, &m.Name, &m.Theme, &m.LastUpdated, &m.CreationTime); err != nil {
 			return nil, err
 		}

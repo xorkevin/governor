@@ -70,7 +70,7 @@ func (t *roleModelTable) GetModelEqRoleOrdUserid(ctx context.Context, d db.SQLEx
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
 			return nil, err
 		}
@@ -110,7 +110,7 @@ func (t *roleModelTable) GetModelEqUseridOrdRole(ctx context.Context, d db.SQLEx
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
 			return nil, err
 		}
@@ -122,26 +122,26 @@ func (t *roleModelTable) GetModelEqUseridOrdRole(ctx context.Context, d db.SQLEx
 	return res, nil
 }
 
-func (t *roleModelTable) GetModelEqUseridHasRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, role []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqUseridHasRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, roles []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
-	args := make([]interface{}, 0, paramCount+len(role))
+	args := make([]interface{}, 0, paramCount+len(roles))
 	args = append(args, limit, offset, userid)
-	var placeholdersrole string
+	var placeholdersroles string
 	{
-		placeholders := make([]string, 0, len(role))
-		for _, i := range role {
+		placeholders := make([]string, 0, len(roles))
+		for _, i := range roles {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersrole = strings.Join(placeholders, ", ")
+		placeholdersroles = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role IN (VALUES "+placeholdersrole+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role IN (VALUES "+placeholdersroles+") ORDER BY role "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (t *roleModelTable) GetModelEqUseridHasRoleOrdRole(ctx context.Context, d d
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
 			return nil, err
 		}
@@ -162,13 +162,13 @@ func (t *roleModelTable) GetModelEqUseridHasRoleOrdRole(ctx context.Context, d d
 	return res, nil
 }
 
-func (t *roleModelTable) GetModelEqUseridLikeRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, role string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *roleModelTable) GetModelEqUseridLikeRoleOrdRole(ctx context.Context, d db.SQLExecutor, userid string, rolePrefix string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, role)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, rolePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (t *roleModelTable) GetModelEqUseridLikeRoleOrdRole(ctx context.Context, d 
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Role); err != nil {
 			return nil, err
 		}
@@ -189,21 +189,21 @@ func (t *roleModelTable) GetModelEqUseridLikeRoleOrdRole(ctx context.Context, d 
 	return res, nil
 }
 
-func (t *roleModelTable) DelEqRoleHasUserid(ctx context.Context, d db.SQLExecutor, role string, userid []string) error {
+func (t *roleModelTable) DelEqRoleHasUserid(ctx context.Context, d db.SQLExecutor, role string, userids []string) error {
 	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(userid))
+	args := make([]interface{}, 0, paramCount+len(userids))
 	args = append(args, role)
-	var placeholdersuserid string
+	var placeholdersuserids string
 	{
-		placeholders := make([]string, 0, len(userid))
-		for _, i := range userid {
+		placeholders := make([]string, 0, len(userids))
+		for _, i := range userids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersuserid = strings.Join(placeholders, ", ")
+		placeholdersuserids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE role = $1 AND userid IN (VALUES "+placeholdersuserid+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE role = $1 AND userid IN (VALUES "+placeholdersuserids+");", args...)
 	return err
 }
 
@@ -212,20 +212,20 @@ func (t *roleModelTable) DelEqUseridEqRole(ctx context.Context, d db.SQLExecutor
 	return err
 }
 
-func (t *roleModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, role []string) error {
+func (t *roleModelTable) DelEqUseridHasRole(ctx context.Context, d db.SQLExecutor, userid string, roles []string) error {
 	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(role))
+	args := make([]interface{}, 0, paramCount+len(roles))
 	args = append(args, userid)
-	var placeholdersrole string
+	var placeholdersroles string
 	{
-		placeholders := make([]string, 0, len(role))
-		for _, i := range role {
+		placeholders := make([]string, 0, len(roles))
+		for _, i := range roles {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersrole = strings.Join(placeholders, ", ")
+		placeholdersroles = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersrole+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND role IN (VALUES "+placeholdersroles+");", args...)
 	return err
 }

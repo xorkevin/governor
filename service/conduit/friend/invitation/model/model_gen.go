@@ -81,21 +81,21 @@ func (t *invModelTable) DelEqUseridEqInvitedBy(ctx context.Context, d db.SQLExec
 	return err
 }
 
-func (t *invModelTable) DelEqUseridHasInvitedBy(ctx context.Context, d db.SQLExecutor, userid string, invitedby []string) error {
+func (t *invModelTable) DelEqUseridHasInvitedBy(ctx context.Context, d db.SQLExecutor, userid string, invitedbys []string) error {
 	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(invitedby))
+	args := make([]interface{}, 0, paramCount+len(invitedbys))
 	args = append(args, userid)
-	var placeholdersinvitedby string
+	var placeholdersinvitedbys string
 	{
-		placeholders := make([]string, 0, len(invitedby))
-		for _, i := range invitedby {
+		placeholders := make([]string, 0, len(invitedbys))
+		for _, i := range invitedbys {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersinvitedby = strings.Join(placeholders, ", ")
+		placeholdersinvitedbys = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND invited_by IN (VALUES "+placeholdersinvitedby+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND invited_by IN (VALUES "+placeholdersinvitedbys+");", args...)
 	return err
 }
 
@@ -114,7 +114,7 @@ func (t *invModelTable) GetModelEqUseridGtCreationTimeOrdCreationTime(ctx contex
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.InvitedBy, &m.CreationTime); err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func (t *invModelTable) GetModelEqInvitedByGtCreationTimeOrdCreationTime(ctx con
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.InvitedBy, &m.CreationTime); err != nil {
 			return nil, err
 		}

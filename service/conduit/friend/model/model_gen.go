@@ -67,26 +67,26 @@ func (t *friendModelTable) GetModelEqUserid1EqUserid2(ctx context.Context, d db.
 	return m, nil
 }
 
-func (t *friendModelTable) GetModelEqUserid1HasUserid2OrdUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2 []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *friendModelTable) GetModelEqUserid1HasUserid2OrdUserid2(ctx context.Context, d db.SQLExecutor, userid1 string, userid2s []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 3
-	args := make([]interface{}, 0, paramCount+len(userid2))
+	args := make([]interface{}, 0, paramCount+len(userid2s))
 	args = append(args, limit, offset, userid1)
-	var placeholdersuserid2 string
+	var placeholdersuserid2s string
 	{
-		placeholders := make([]string, 0, len(userid2))
-		for _, i := range userid2 {
+		placeholders := make([]string, 0, len(userid2s))
+		for _, i := range userid2s {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersuserid2 = strings.Join(placeholders, ", ")
+		placeholdersuserid2s = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND userid_2 IN (VALUES "+placeholdersuserid2+") ORDER BY userid_2 "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND userid_2 IN (VALUES "+placeholdersuserid2s+") ORDER BY userid_2 "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (t *friendModelTable) GetModelEqUserid1HasUserid2OrdUserid2(ctx context.Con
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func (t *friendModelTable) GetModelEqUserid1OrdUsername(ctx context.Context, d d
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 			return nil, err
 		}
@@ -134,13 +134,13 @@ func (t *friendModelTable) GetModelEqUserid1OrdUsername(ctx context.Context, d d
 	return res, nil
 }
 
-func (t *friendModelTable) GetModelEqUserid1LikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, userid1 string, username string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *friendModelTable) GetModelEqUserid1LikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, userid1 string, usernamePrefix string, orderasc bool, limit, offset int) ([]Model, error) {
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, username)
+	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, username FROM "+t.TableName+" WHERE userid_1 = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid1, usernamePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (t *friendModelTable) GetModelEqUserid1LikeUsernameOrdUsername(ctx context.
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid1, &m.Userid2, &m.Username); err != nil {
 			return nil, err
 		}

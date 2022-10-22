@@ -63,26 +63,26 @@ func (t *orgModelTable) GetModelEqOrgID(ctx context.Context, d db.SQLExecutor, o
 	return m, nil
 }
 
-func (t *orgModelTable) GetModelHasOrgIDOrdOrgID(ctx context.Context, d db.SQLExecutor, orgid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *orgModelTable) GetModelHasOrgIDOrdOrgID(ctx context.Context, d db.SQLExecutor, orgids []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(orgid))
+	args := make([]interface{}, 0, paramCount+len(orgids))
 	args = append(args, limit, offset)
-	var placeholdersorgid string
+	var placeholdersorgids string
 	{
-		placeholders := make([]string, 0, len(orgid))
-		for _, i := range orgid {
+		placeholders := make([]string, 0, len(orgids))
+		for _, i := range orgids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersorgid = strings.Join(placeholders, ", ")
+		placeholdersorgids = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" WHERE orgid IN (VALUES "+placeholdersorgid+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, name, display_name, description, creation_time FROM "+t.TableName+" WHERE orgid IN (VALUES "+placeholdersorgids+") ORDER BY orgid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (t *orgModelTable) GetModelHasOrgIDOrdOrgID(ctx context.Context, d db.SQLEx
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func (t *orgModelTable) GetModelOrdCreationTime(ctx context.Context, d db.SQLExe
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.OrgID, &m.Name, &m.DisplayName, &m.Desc, &m.CreationTime); err != nil {
 			return nil, err
 		}
@@ -149,4 +149,200 @@ func (t *orgModelTable) GetModelOrdCreationTime(ctx context.Context, d db.SQLExe
 		return nil, err
 	}
 	return res, nil
+}
+
+type (
+	memberModelTable struct {
+		TableName string
+	}
+)
+
+func (t *memberModelTable) Setup(ctx context.Context, d db.SQLExecutor) error {
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (orgid VARCHAR(31), userid VARCHAR(31), PRIMARY KEY (orgid, userid), name VARCHAR(255) NOT NULL, username VARCHAR(255) NOT NULL);")
+	if err != nil {
+		return err
+	}
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid__name_index ON "+t.TableName+" (userid, name);")
+	if err != nil {
+		return err
+	}
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_orgid__username_index ON "+t.TableName+" (orgid, username);")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *memberModelTable) Insert(ctx context.Context, d db.SQLExecutor, m *MemberModel) error {
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, userid, name, username) VALUES ($1, $2, $3, $4);", m.OrgID, m.Userid, m.Name, m.Username)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *memberModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models []*MemberModel, allowConflict bool) error {
+	conflictSQL := ""
+	if allowConflict {
+		conflictSQL = " ON CONFLICT DO NOTHING"
+	}
+	placeholders := make([]string, 0, len(models))
+	args := make([]interface{}, 0, len(models)*4)
+	for c, m := range models {
+		n := c * 4
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4))
+		args = append(args, m.OrgID, m.Userid, m.Name, m.Username)
+	}
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (orgid, userid, name, username) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *memberModelTable) DelEqOrgID(ctx context.Context, d db.SQLExecutor, orgid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE orgid = $1;", orgid)
+	return err
+}
+
+func (t *memberModelTable) DelEqUseridHasOrgID(ctx context.Context, d db.SQLExecutor, userid string, orgids []string) error {
+	paramCount := 1
+	args := make([]interface{}, 0, paramCount+len(orgids))
+	args = append(args, userid)
+	var placeholdersorgids string
+	{
+		placeholders := make([]string, 0, len(orgids))
+		for _, i := range orgids {
+			paramCount++
+			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
+			args = append(args, i)
+		}
+		placeholdersorgids = strings.Join(placeholders, ", ")
+	}
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND orgid IN (VALUES "+placeholdersorgids+");", args...)
+	return err
+}
+
+func (t *memberModelTable) GetMemberModelEqUseridOrdName(ctx context.Context, d db.SQLExecutor, userid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE userid = $3 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var m MemberModel
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (t *memberModelTable) GetMemberModelEqUseridLikeNameOrdName(ctx context.Context, d db.SQLExecutor, userid string, namePrefix string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE userid = $3 AND name LIKE $4 ORDER BY name "+order+" LIMIT $1 OFFSET $2;", limit, offset, userid, namePrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var m MemberModel
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (t *memberModelTable) GetMemberModelEqOrgIDOrdUsername(ctx context.Context, d db.SQLExecutor, orgid string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE orgid = $3 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var m MemberModel
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (t *memberModelTable) GetMemberModelEqOrgIDLikeUsernameOrdUsername(ctx context.Context, d db.SQLExecutor, orgid string, usernamePrefix string, orderasc bool, limit, offset int) ([]MemberModel, error) {
+	order := "DESC"
+	if orderasc {
+		order = "ASC"
+	}
+	res := make([]MemberModel, 0, limit)
+	rows, err := d.QueryContext(ctx, "SELECT orgid, userid, name, username FROM "+t.TableName+" WHERE orgid = $3 AND username LIKE $4 ORDER BY username "+order+" LIMIT $1 OFFSET $2;", limit, offset, orgid, usernamePrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+		}
+	}()
+	for rows.Next() {
+		var m MemberModel
+		if err := rows.Scan(&m.OrgID, &m.Userid, &m.Name, &m.Username); err != nil {
+			return nil, err
+		}
+		res = append(res, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (t *memberModelTable) UpdorgNameEqOrgID(ctx context.Context, d db.SQLExecutor, m *orgName, orgid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (name) = ROW($1) WHERE orgid = $2;", m.Name, orgid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *memberModelTable) UpdmemberUsernameEqUserid(ctx context.Context, d db.SQLExecutor, m *memberUsername, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (username) = ROW($1) WHERE userid = $2;", m.Username, userid)
+	if err != nil {
+		return err
+	}
+	return nil
 }

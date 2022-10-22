@@ -59,26 +59,26 @@ func (t *profileModelTable) GetModelEqUserid(ctx context.Context, d db.SQLExecut
 	return m, nil
 }
 
-func (t *profileModelTable) GetModelHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userid []string, orderasc bool, limit, offset int) ([]Model, error) {
+func (t *profileModelTable) GetModelHasUseridOrdUserid(ctx context.Context, d db.SQLExecutor, userids []string, orderasc bool, limit, offset int) ([]Model, error) {
 	paramCount := 2
-	args := make([]interface{}, 0, paramCount+len(userid))
+	args := make([]interface{}, 0, paramCount+len(userids))
 	args = append(args, limit, offset)
-	var placeholdersuserid string
+	var placeholdersuserids string
 	{
-		placeholders := make([]string, 0, len(userid))
-		for _, i := range userid {
+		placeholders := make([]string, 0, len(userids))
+		for _, i := range userids {
 			paramCount++
 			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
 			args = append(args, i)
 		}
-		placeholdersuserid = strings.Join(placeholders, ", ")
+		placeholdersuserids = strings.Join(placeholders, ", ")
 	}
 	order := "DESC"
 	if orderasc {
 		order = "ASC"
 	}
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, contact_email, bio, profile_image_url FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserid+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
+	rows, err := d.QueryContext(ctx, "SELECT userid, contact_email, bio, profile_image_url FROM "+t.TableName+" WHERE userid IN (VALUES "+placeholdersuserids+") ORDER BY userid "+order+" LIMIT $1 OFFSET $2;", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (t *profileModelTable) GetModelHasUseridOrdUserid(ctx context.Context, d db
 		}
 	}()
 	for rows.Next() {
-		m := Model{}
+		var m Model
 		if err := rows.Scan(&m.Userid, &m.Email, &m.Bio, &m.Image); err != nil {
 			return nil, err
 		}

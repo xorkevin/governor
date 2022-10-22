@@ -2,13 +2,6 @@
 
 package profile
 
-func (r reqProfileGetID) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r reqProfileModel) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
@@ -17,6 +10,13 @@ func (r reqProfileModel) valid() error {
 		return err
 	}
 	if err := validBio(r.Bio); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqProfileGetID) valid() error {
+	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
 	return nil
