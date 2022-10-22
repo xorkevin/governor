@@ -128,7 +128,7 @@ func NewClient(opts Opts, stdin io.Reader) *Client {
 
 	v.SetEnvPrefix(opts.EnvPrefix)
 	v.AutomaticEnv()
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 
 	return &Client{
 		inj: newInjector(context.Background()),
