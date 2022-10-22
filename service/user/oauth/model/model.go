@@ -12,7 +12,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p oauthapp -o model_gen.go Model oauthKeyHash oauthProps
+//go:generate forge model
 
 const (
 	uidSize = 16
@@ -43,8 +43,10 @@ type (
 	}
 
 	// Model is the db OAuth app model
+	//forge:model oauthapp
+	//forge:model:query oauthapp
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|arr;deleq,clientid"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|in;deleq,clientid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
 		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
@@ -55,11 +57,13 @@ type (
 		CreatorID    string `model:"creator_id,VARCHAR(31) NOT NULL" query:"creator_id;deleq,creator_id"`
 	}
 
+	//forge:model:query oauthapp
 	oauthKeyHash struct {
 		KeyHash string `query:"keyhash;updeq,clientid"`
 		Time    int64  `query:"time"`
 	}
 
+	//forge:model:query oauthapp
 	oauthProps struct {
 		Name        string `query:"name;updeq,clientid"`
 		URL         string `query:"url"`

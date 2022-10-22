@@ -12,7 +12,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p connection -o model_gen.go Model
+//go:generate forge model
 
 const (
 	keySize = 32
@@ -43,9 +43,11 @@ type (
 	}
 
 	// Model is an connected OAuth app to a user account
+	//forge:model connection
+	//forge:model:query connection
 	Model struct {
 		Userid          string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
-		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid;getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|arr"`
+		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid;getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|in"`
 		Scope           string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		Nonce           string `model:"nonce,VARCHAR(255)" query:"nonce"`
 		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`

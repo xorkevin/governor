@@ -13,9 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p gdm -o model_gen.go Model gdmProps modelLastUpdated
-//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel modelLastUpdated
-//go:generate forge model -m AssocModel -p assoc -o modelassoc_gen.go AssocModel modelLastUpdated
+//go:generate forge model
 
 const (
 	chatUIDSize = 16
@@ -49,36 +47,46 @@ type (
 	}
 
 	// Model is the db dm chat model
+	//forge:model gdm
+	//forge:model:query gdm
 	Model struct {
-		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;getoneeq,chatid;getgroupeq,chatid|arr;updeq,chatid;deleq,chatid"`
+		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;getoneeq,chatid;getgroupeq,chatid|in;updeq,chatid;deleq,chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
 		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
+	//forge:model:query gdm
 	gdmProps struct {
 		Name  string `query:"name;updeq,chatid"`
 		Theme string `query:"theme"`
 	}
 
-	modelLastUpdated struct {
-		LastUpdated int64 `query:"last_updated;updeq,chatid"`
-	}
-
 	// MemberModel is the db chat member model
+	//forge:model member
+	//forge:model:query member
 	MemberModel struct {
-		Chatid      string `model:"chatid,VARCHAR(31);index,userid" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|arr;getgroupeq,chatid|arr"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid,userid|arr;deleq,chatid,userid|arr"`
+		Chatid      string `model:"chatid,VARCHAR(31);index,userid" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|in;getgroupeq,chatid|in"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid,userid|in;deleq,chatid,userid|in"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
 	}
 
 	// AssocModel is the db chat association model
+	//forge:model assoc
+	//forge:model:query assoc
 	AssocModel struct {
 		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
-		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,chatid,userid_1|arr"`
-		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,chatid,userid_2|arr"`
+		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,chatid,userid_1|in"`
+		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,chatid,userid_2|in"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,userid_2" query:"last_updated;getgroupeq,userid_1,userid_2"`
+	}
+
+	//forge:model:query gdm
+	//forge:model:query member
+	//forge:model:query assoc
+	modelLastUpdated struct {
+		LastUpdated int64 `query:"last_updated;updeq,chatid"`
 	}
 
 	ctxKeyRepo struct{}

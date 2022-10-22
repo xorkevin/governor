@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p approval -o model_gen.go Model
+//go:generate forge model
 
 const (
 	keySize = 16
@@ -43,6 +43,8 @@ type (
 	}
 
 	// Model is the db Approval model
+	//forge:model approval
+	//forge:model:query approval
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;updeq,userid;deleq,userid"`
 		Username     string `model:"username,VARCHAR(255) NOT NULL" query:"username"`

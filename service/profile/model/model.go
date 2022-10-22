@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p profile -o model_gen.go Model
+//go:generate forge model
 
 type (
 	// Repo is a profile repository
@@ -30,8 +30,10 @@ type (
 
 	// Model is the db profile model
 	// Image should be mostly be under 1024
+	//forge:model profile
+	//forge:model:query profile
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;getgroupeq,userid|arr;updeq,userid;deleq,userid"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;getgroupeq,userid|in;updeq,userid;deleq,userid"`
 		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
 		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
 		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`

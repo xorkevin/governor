@@ -11,8 +11,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m LinkModel -p link -o modellink_gen.go LinkModel
-//go:generate forge model -m BrandModel -p brand -o modelbrand_gen.go BrandModel
+//go:generate forge model
 
 const (
 	defaultUIDSize = 8
@@ -44,17 +43,21 @@ type (
 	}
 
 	// LinkModel is the db link model
+	//forge:model link
+	//forge:model:query link
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid;deleq,linkid|arr"`
+		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid;deleq,linkid|in"`
 		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroupeq,creatorid"`
 	}
 
 	// BrandModel is the db brand model
+	//forge:model brand
+	//forge:model:query brand
 	BrandModel struct {
 		CreatorID    string `model:"creatorid,VARCHAR(31)" query:"creatorid"`
-		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid;deleq,creatorid,brandid|arr"`
+		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid;deleq,creatorid,brandid|in"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroupeq,creatorid"`
 	}
 

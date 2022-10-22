@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p dm -o model_gen.go Model dmProps dmLastUpdated
+//go:generate forge model
 
 const (
 	chatUIDSize = 16
@@ -40,13 +40,15 @@ type (
 	}
 
 	// Model is the db dm chat model
+	//forge:model dm
+	//forge:model:query dm
 	Model struct {
 		Userid1      string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
 		Userid2      string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2)" query:"userid_2;getoneeq,userid_1,userid_2;deleq,userid_1,userid_2"`
 		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid;getoneeq,chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|arr"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|in"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
@@ -57,11 +59,13 @@ type (
 		Name    string
 	}
 
+	//forge:model:query dm
 	dmProps struct {
 		Name  string `query:"name;updeq,userid_1,userid_2"`
 		Theme string `query:"theme"`
 	}
 
+	//forge:model:query dm
 	dmLastUpdated struct {
 		LastUpdated int64 `query:"last_updated;updeq,userid_1,userid_2"`
 	}

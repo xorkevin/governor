@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p session -o model_gen.go Model qID
+//go:generate forge model
 
 const (
 	uidSize = 8
@@ -49,8 +49,10 @@ type (
 	}
 
 	// Model is the db User session model
+	//forge:model session
+	//forge:model:query session
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(63) PRIMARY KEY;index,userid" query:"sessionid;getoneeq,sessionid;updeq,sessionid;deleq,sessionid;deleq,sessionid|arr"`
+		SessionID string `model:"sessionid,VARCHAR(63) PRIMARY KEY;index,userid" query:"sessionid;getoneeq,sessionid;updeq,sessionid;deleq,sessionid;deleq,sessionid|in"`
 		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid;deleq,userid"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
 		Time      int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
@@ -59,6 +61,7 @@ type (
 		UserAgent string `model:"user_agent,VARCHAR(1023)" query:"user_agent"`
 	}
 
+	//forge:model:query session
 	qID struct {
 		SessionID string `query:"sessionid;getgroupeq,userid"`
 	}

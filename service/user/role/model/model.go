@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p role -o model_gen.go Model
+//go:generate forge model
 
 type (
 	// Repo is a user role repository
@@ -34,9 +34,11 @@ type (
 	}
 
 	// Model is the db User role model
+	//forge:model role
+	//forge:model:query role
 	Model struct {
 		Userid string `model:"userid,VARCHAR(31);index,role" query:"userid;getgroupeq,role;deleq,userid"`
-		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|arr;getgroupeq,userid,role|like;deleq,role,userid|arr;deleq,userid,role;deleq,userid,role|arr"`
+		Role   string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role;getgroupeq,userid;getgroupeq,userid,role|in;getgroupeq,userid,role|like;deleq,role,userid|in;deleq,userid,role;deleq,userid,role|in"`
 	}
 
 	ctxKeyRepo struct{}

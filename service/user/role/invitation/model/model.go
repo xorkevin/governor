@@ -10,7 +10,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p inv -o model_gen.go Model
+//go:generate forge model
 
 type (
 	// Repo is a role invitation repository
@@ -32,9 +32,11 @@ type (
 	}
 
 	// Model is the db role invitation model
+	//forge:model inv
+	//forge:model:query inv
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31)" query:"userid"`
-		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|arr;deleq,role"`
+		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|in;deleq,role"`
 		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,role" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
 	}

@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p apikey -o model_gen.go Model apikeyHash apikeyProps
+//go:generate forge model
 
 const (
 	uidSize = 8
@@ -47,8 +47,10 @@ type (
 	}
 
 	// Model is the db Apikey model
+	//forge:model apikey
+	//forge:model:query apikey
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;deleq,keyid;deleq,keyid|arr"`
+		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;deleq,keyid;deleq,keyid|in"`
 		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid"`
 		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
 		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
@@ -57,11 +59,13 @@ type (
 		Time    int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
 	}
 
+	//forge:model:query apikey
 	apikeyHash struct {
 		KeyHash string `query:"keyhash;updeq,keyid"`
 		Time    int64  `query:"time"`
 	}
 
+	//forge:model:query apikey
 	apikeyProps struct {
 		Scope string `query:"scope;updeq,keyid"`
 		Name  string `query:"name"`

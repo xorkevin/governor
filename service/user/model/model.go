@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p user -o model_gen.go Model Info userProps userEmail userPassHash userGenOTP userFailLogin
+//go:generate forge model
 
 const (
 	uidSize       = 16
@@ -56,6 +56,8 @@ type (
 	}
 
 	// Model is the db User model
+	//forge:model user
+	//forge:model:query user
 	Model struct {
 		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;deleq,userid"`
 		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username;getoneeq,username"`
@@ -71,20 +73,34 @@ type (
 		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL" query:"failed_login_count"`
 	}
 
+	// Info is the metadata of a user
+	//forge:model:query user
+	Info struct {
+		Userid    string `query:"userid;getgroup;getgroupeq,userid|in"`
+		Username  string `query:"username;getgroupeq,username|like"`
+		Email     string `query:"email"`
+		FirstName string `query:"first_name"`
+		LastName  string `query:"last_name"`
+	}
+
+	//forge:model:query user
 	userProps struct {
 		Username  string `query:"username;updeq,userid"`
 		FirstName string `query:"first_name"`
 		LastName  string `query:"last_name"`
 	}
 
+	//forge:model:query user
 	userEmail struct {
 		Email string `query:"email;updeq,userid"`
 	}
 
+	//forge:model:query user
 	userPassHash struct {
 		PassHash string `query:"pass_hash;updeq,userid"`
 	}
 
+	//forge:model:query user
 	userGenOTP struct {
 		OTPEnabled       bool   `query:"otp_enabled;updeq,userid"`
 		OTPSecret        string `query:"otp_secret"`
@@ -93,18 +109,10 @@ type (
 		FailedLoginCount int    `query:"failed_login_count"`
 	}
 
+	//forge:model:query user
 	userFailLogin struct {
 		FailedLoginTime  int64 `query:"failed_login_time;updeq,userid"`
 		FailedLoginCount int   `query:"failed_login_count"`
-	}
-
-	// Info is the metadata of a user
-	Info struct {
-		Userid    string `query:"userid;getgroup;getgroupeq,userid|arr"`
-		Username  string `query:"username;getgroupeq,username|like"`
-		Email     string `query:"email"`
-		FirstName string `query:"first_name"`
-		LastName  string `query:"last_name"`
 	}
 
 	ctxKeyRepo struct{}

@@ -10,11 +10,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m ListModel -p list -o modellist_gen.go ListModel listProps listLastUpdated
-//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel listLastUpdated
-//go:generate forge model -m MsgModel -p msg -o modelmsg_gen.go MsgModel msgProcessed msgSent msgDeleted msgParent msgChildren
-//go:generate forge model -m SentMsgModel -p sentmsg -o modelsentmsg_gen.go SentMsgModel
-//go:generate forge model -m TreeModel -p tree -o modeltree_gen.go TreeModel
+//go:generate forge model
 
 const (
 	keySeparator = "."
@@ -78,8 +74,10 @@ type (
 	}
 
 	// ListModel is the db mailing list model
+	//forge:model list
+	//forge:model:query list
 	ListModel struct {
-		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|arr;deleq,listid"`
+		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|in;deleq,listid"`
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid;deleq,creatorid"`
 		Listname     string `model:"listname,VARCHAR(127) NOT NULL" query:"listname"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
@@ -91,6 +89,7 @@ type (
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
+	//forge:model:query list
 	listProps struct {
 		Name         string `query:"name;updeq,listid"`
 		Description  string `query:"description"`
@@ -100,17 +99,23 @@ type (
 	}
 
 	// MemberModel is the db mailing list member model
+	//forge:model member
+	//forge:model:query member
 	MemberModel struct {
-		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid;getgroupeq,listid|arr"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;getgroupeq,listid,userid|arr;deleq,listid,userid|arr;deleq,userid"`
+		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid;getgroupeq,listid|in"`
+		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;getgroupeq,listid,userid|in;deleq,listid,userid|in;deleq,userid"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid"`
 	}
 
+	//forge:model:query list
+	//forge:model:query member
 	listLastUpdated struct {
 		LastUpdated int64 `query:"last_updated;updeq,listid"`
 	}
 
 	// MsgModel is the db mailing list message model
+	//forge:model msg
+	//forge:model:query msg
 	MsgModel struct {
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
@@ -127,41 +132,50 @@ type (
 		Deleted      bool   `model:"deleted,BOOL NOT NULL" query:"deleted"`
 	}
 
+	//forge:model:query msg
 	msgProcessed struct {
 		Processed bool `query:"processed;updeq,listid,msgid"`
 	}
 
+	//forge:model:query msg
 	msgSent struct {
 		Sent bool `query:"sent;updeq,listid,msgid"`
 	}
 
+	//forge:model:query msg
 	msgDeleted struct {
 		Userid   string `query:"userid"`
 		SPFPass  string `query:"spf_pass"`
 		DKIMPass string `query:"dkim_pass"`
 		Subject  string `query:"subject"`
-		Deleted  bool   `query:"deleted;updeq,listid,msgid|arr"`
+		Deleted  bool   `query:"deleted;updeq,listid,msgid|in"`
 	}
 
+	//forge:model:query msg
 	msgParent struct {
 		ParentID string `query:"parent_id"`
 		ThreadID string `query:"thread_id;updeq,listid,msgid,thread_id"`
 	}
 
+	//forge:model:query msg
 	msgChildren struct {
 		ParentID string `query:"parent_id"`
 		ThreadID string `query:"thread_id;updeq,listid,thread_id,in_reply_to"`
 	}
 
 	// SentMsgModel is the db mailing list sent message log
+	//forge:model sentmsg
+	//forge:model:query sentmsg
 	SentMsgModel struct {
 		ListID   string `model:"listid,VARCHAR(255)" query:"listid"`
-		Msgid    string `model:"msgid,VARCHAR(1023);index,listid,userid" query:"msgid;deleq,listid,msgid|arr"`
+		Msgid    string `model:"msgid,VARCHAR(1023);index,listid,userid" query:"msgid;deleq,listid,msgid|in"`
 		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, msgid, userid)" query:"userid"`
 		SentTime int64  `model:"sent_time,BIGINT NOT NULL" query:"sent_time"`
 	}
 
 	// TreeModel is the db mailing list message tree model
+	//forge:model tree
+	//forge:model:query tree
 	TreeModel struct {
 		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
 		Msgid        string `model:"msgid,VARCHAR(1023)" query:"msgid"`

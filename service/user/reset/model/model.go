@@ -12,7 +12,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p reset -o model_gen.go Model
+//go:generate forge model
 
 const (
 	keySize = 16
@@ -41,6 +41,8 @@ type (
 	}
 
 	// Model is the user reset request model
+	//forge:model reset
+	//forge:model:query reset
 	Model struct {
 		Userid   string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
 		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind;getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`

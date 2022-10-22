@@ -11,11 +11,11 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
+//go:generate forge model
+
 const (
 	msgUIDRandSize = 8
 )
-
-//go:generate forge model -m Model -p msg -o model_gen.go Model msgValue
 
 type (
 	Repo interface {
@@ -33,6 +33,8 @@ type (
 	}
 
 	// Model is the db chat msg model
+	//forge:model msg
+	//forge:model:query msg
 	Model struct {
 		Chatid string `model:"chatid,VARCHAR(31)" query:"chatid"`
 		Msgid  string `model:"msgid,VARCHAR(31), PRIMARY KEY (chatid, msgid);index,chatid,kind" query:"msgid;getgroupeq,chatid;getgroupeq,chatid,msgid|lt;getgroupeq,chatid,kind;getgroupeq,chatid,kind,msgid|lt;deleq,chatid"`
@@ -42,8 +44,9 @@ type (
 		Value  string `model:"value,VARCHAR(4095) NOT NULL" query:"value"`
 	}
 
+	//forge:model:query msg
 	msgValue struct {
-		Value string `query:"value;updeq,chatid,msgid|arr"`
+		Value string `query:"value;updeq,chatid,msgid|in"`
 	}
 
 	ctxKeyRepo struct{}

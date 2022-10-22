@@ -11,9 +11,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p server -o model_gen.go Model serverProps
-//go:generate forge model -m ChannelModel -p channel -o modelchannel_gen.go ChannelModel channelProps
-//go:generate forge model -m PresenceModel -p presence -o modelpresence_gen.go PresenceModel
+//go:generate forge model
 
 const (
 	chatUIDSize = 16
@@ -46,6 +44,8 @@ type (
 	}
 
 	// Model is the db conduit server model
+	//forge:model server
+	//forge:model:query server
 	Model struct {
 		ServerID     string `model:"serverid,VARCHAR(31) PRIMARY KEY" query:"serverid;getoneeq,serverid;deleq,serverid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
@@ -54,6 +54,7 @@ type (
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
+	//forge:model:query server
 	serverProps struct {
 		Name  string `query:"name;updeq,serverid"`
 		Desc  string `query:"desc"`
@@ -61,9 +62,11 @@ type (
 	}
 
 	// ChannelModel is the db server channel model
+	//forge:model channel
+	//forge:model:query channel
 	ChannelModel struct {
 		ServerID     string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
-		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getoneeq,serverid,channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;deleq,serverid,channelid|arr"`
+		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getoneeq,serverid,channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;deleq,serverid,channelid|in"`
 		Chatid       string `model:"chatid,VARCHAR(31) UNIQUE" query:"chatid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
 		Desc         string `model:"desc,VARCHAR(255)" query:"desc"`
@@ -71,6 +74,7 @@ type (
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
 	}
 
+	//forge:model:query channel
 	channelProps struct {
 		Name  string `query:"name;updeq,serverid,channelid"`
 		Desc  string `query:"desc"`
@@ -78,6 +82,8 @@ type (
 	}
 
 	// PresenceModel is the db presence model
+	//forge:model presence
+	//forge:model:query presence
 	PresenceModel struct {
 		ServerID    string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
 		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (serverid, userid)" query:"userid"`

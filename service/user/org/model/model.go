@@ -11,8 +11,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p org -o model_gen.go Model
-//go:generate forge model -m MemberModel -p member -o modelmember_gen.go MemberModel orgName memberUsername
+//go:generate forge model
 
 const (
 	uidSize = 16
@@ -50,8 +49,10 @@ type (
 	}
 
 	// Model is the user org model
+	//forge:model org
+	//forge:model:query org
 	Model struct {
-		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid;getoneeq,orgid;getgroupeq,orgid|arr;updeq,orgid;deleq,orgid"`
+		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid;getoneeq,orgid;getgroupeq,orgid|in;updeq,orgid;deleq,orgid"`
 		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE" query:"name;getoneeq,name"`
 		DisplayName  string `model:"display_name,VARCHAR(255) NOT NULL" query:"display_name"`
 		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
@@ -59,17 +60,21 @@ type (
 	}
 
 	// MemberModel is the user org member model
+	//forge:model member
+	//forge:model:query member
 	MemberModel struct {
 		OrgID    string `model:"orgid,VARCHAR(31)" query:"orgid;deleq,orgid"`
-		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (orgid, userid)" query:"userid;deleq,userid,orgid|arr"`
+		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (orgid, userid)" query:"userid;deleq,userid,orgid|in"`
 		Name     string `model:"name,VARCHAR(255) NOT NULL;index,userid" query:"name;getgroupeq,userid;getgroupeq,userid,name|like"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,orgid" query:"username;getgroupeq,orgid;getgroupeq,orgid,username|like"`
 	}
 
+	//forge:model:query member
 	orgName struct {
 		Name string `query:"name;updeq,orgid"`
 	}
 
+	//forge:model:query member
 	memberUsername struct {
 		Username string `query:"username;updeq,userid"`
 	}

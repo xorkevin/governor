@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge model -m Model -p friend -o model_gen.go Model friendUsername
+//go:generate forge model
 
 type (
 	Repo interface {
@@ -28,12 +28,15 @@ type (
 	}
 
 	// Model is the db friend relationship model
+	//forge:model friend
+	//forge:model:query friend
 	Model struct {
 		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|arr"`
+		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|in"`
 		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
 	}
 
+	//forge:model:query friend
 	friendUsername struct {
 		Username string `query:"username;updeq,userid_2"`
 	}
