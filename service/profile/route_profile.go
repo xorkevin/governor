@@ -11,9 +11,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_profile_gen.go reqProfileGetID reqProfileModel reqGetProfiles
-
 type (
+	//forge:valid
 	reqProfileModel struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Email  string `valid:"email" json:"contact_email"`
@@ -63,6 +62,7 @@ func (s *router) updateProfile(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqProfileGetID struct {
 		Userid string `valid:"userid,has" json:"userid"`
 	}
@@ -162,6 +162,7 @@ func (s *router) getProfileImage(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetProfiles struct {
 		Userids []string `valid:"userids,has" json:"-"`
 	}

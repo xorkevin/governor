@@ -10,9 +10,8 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_get_gen.go reqUserGetID reqUserGetUsername reqGetUserRoles reqGetUserRolesIntersect reqGetRoleUser reqGetUserBulk reqGetUsers reqSearchUsers
-
 type (
+	//forge:valid
 	reqUserGetID struct {
 		Userid string `valid:"userid,has" json:"-"`
 	}
@@ -73,6 +72,7 @@ func (s *router) getByIDPrivate(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserGetUsername struct {
 		Username string `valid:"username,has" json:"-"`
 	}
@@ -115,6 +115,7 @@ func (s *router) getByUsernamePrivate(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUserRoles struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Prefix string `valid:"rolePrefix,has" json:"-"`
@@ -166,6 +167,7 @@ func (s *router) getUserRolesPersonal(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUserRolesIntersect struct {
 		Userid string   `valid:"userid,has" json:"-"`
 		Roles  []string `valid:"rank" json:"-"`
@@ -229,6 +231,7 @@ func (s *router) getUserRolesIntersectPersonal(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetRoleUser struct {
 		Role   string `valid:"role,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -256,6 +259,7 @@ func (s *router) getUsersByRole(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUserBulk struct {
 		Amount int `valid:"amount" json:"-"`
 		Offset int `valid:"offset" json:"-"`
@@ -281,6 +285,7 @@ func (s *router) getAllUserInfo(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUsers struct {
 		Userids []string `valid:"userids,has" json:"-"`
 	}
@@ -304,6 +309,7 @@ func (s *router) getUserInfoBulkPublic(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqSearchUsers struct {
 		Prefix string `valid:"username,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`

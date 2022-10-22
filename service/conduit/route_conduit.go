@@ -9,13 +9,8 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_friend_gen.go reqGetFriends reqSearchFriends reqRmFriend reqFriendInvitation reqGetFriendInvitations
-//go:generate forge validation -o validation_chat_gen.go reqGetLatestChats reqGetChats reqCreateMsg reqGetMsgs reqDelMsg reqGetPresence
-//go:generate forge validation -o validation_dm_gen.go reqUpdateDM
-//go:generate forge validation -o validation_gdm_gen.go reqSearchGDMs reqCreateGDM reqUpdateGDM reqDelGDM reqGDMMember
-//go:generate forge validation -o validation_server_gen.go reqGetServer reqCreateServer reqGetChannel reqGetChannels reqSearchChannels reqCreateChannel reqUpdateChannel reqCreateChannelMsg reqGetChannelMsgs reqDelChannelMsg
-
 type (
+	//forge:valid
 	reqGetFriends struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Prefix string `valid:"username,opt" json:"-"`
@@ -44,6 +39,7 @@ func (s *router) getFriends(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqSearchFriends struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Prefix string `valid:"username,has" json:"-"`
@@ -70,6 +66,7 @@ func (s *router) searchFriends(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqRmFriend struct {
 		Userid1 string `valid:"userid,has" json:"-"`
 		Userid2 string `valid:"userid,has" json:"-"`
@@ -93,6 +90,7 @@ func (s *router) removeFriend(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqFriendInvitation struct {
 		Userid    string `valid:"userid,has" json:"-"`
 		InvitedBy string `valid:"userid,has" json:"-"`
@@ -164,6 +162,7 @@ func (s *router) deleteInvitedFriendInvitation(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetFriendInvitations struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -208,6 +207,7 @@ func (s *router) getInvited(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetLatestChats struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Before int64  `json:"-"`
@@ -234,6 +234,7 @@ func (s *router) getLatestDMs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetChats struct {
 		Userid  string   `valid:"userid,has" json:"-"`
 		Chatids []string `valid:"chatids,has" json:"-"`
@@ -276,6 +277,7 @@ func (s *router) searchDMs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUpdateDM struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -304,6 +306,7 @@ func (s *router) updateDM(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqCreateMsg struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -333,6 +336,7 @@ func (s *router) createDMMsg(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetMsgs struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -363,6 +367,7 @@ func (s *router) getDMMsgs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqDelMsg struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -388,6 +393,7 @@ func (s *router) deleteDMMsg(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetPresence struct {
 		Userid  string   `valid:"userid,has" json:"-"`
 		Userids []string `valid:"userids,has" json:"userids"`
@@ -430,6 +436,7 @@ func (s *router) getGDMs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqSearchGDMs struct {
 		Userid1 string `valid:"userid,has" json:"-"`
 		Userid2 string `valid:"userid,has" json:"-"`
@@ -458,6 +465,7 @@ func (s *router) searchGDMs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqCreateGDM struct {
 		Userid  string   `valid:"userid,has" json:"-"`
 		Name    string   `valid:"name" json:"name"`
@@ -489,6 +497,7 @@ func (s *router) createGDM(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUpdateGDM struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -517,6 +526,7 @@ func (s *router) updateGDM(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqDelGDM struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Chatid string `valid:"chatid,has" json:"-"`
@@ -597,6 +607,7 @@ func (s *router) deleteGDMMsg(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGDMMember struct {
 		Userid  string   `valid:"userid,has" json:"-"`
 		Chatid  string   `valid:"chatid,has" json:"-"`
@@ -643,6 +654,7 @@ func (s *router) rmGDMMembers(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetServer struct {
 		ServerID string `valid:"serverID,has" json:"-"`
 	}
@@ -665,6 +677,7 @@ func (s *router) getServer(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqCreateServer struct {
 		ServerID string `valid:"serverID,has" json:"-"`
 		Name     string `valid:"name" json:"name"`
@@ -711,6 +724,7 @@ func (s *router) updateServer(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetChannel struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
 		ChannelID string `valid:"channelID,has" json:"-"`
@@ -735,6 +749,7 @@ func (s *router) getChannel(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetChannels struct {
 		ServerID string `valid:"serverID,has" json:"-"`
 		Amount   int    `valid:"amount" json:"-"`
@@ -761,6 +776,7 @@ func (s *router) getChannels(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqSearchChannels struct {
 		ServerID string `valid:"serverID,has" json:"-"`
 		Prefix   string `valid:"channelID,has" json:"-"`
@@ -787,6 +803,7 @@ func (s *router) searchChannels(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqCreateChannel struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
 		ChannelID string `valid:"channelID" json:"channelid"`
@@ -816,6 +833,7 @@ func (s *router) createChannel(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUpdateChannel struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
 		ChannelID string `valid:"channelID,has" json:"-"`
@@ -861,6 +879,7 @@ func (s *router) deleteChannel(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqCreateChannelMsg struct {
 		Userid    string `valid:"userid,has" json:"-"`
 		ServerID  string `valid:"serverID,has" json:"-"`
@@ -892,6 +911,7 @@ func (s *router) createChannelMsg(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetChannelMsgs struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
 		ChannelID string `valid:"channelID,has" json:"-"`
@@ -922,6 +942,7 @@ func (s *router) getChannelMsgs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqDelChannelMsg struct {
 		ServerID  string `valid:"serverID,has" json:"-"`
 		ChannelID string `valid:"channelID,has" json:"-"`

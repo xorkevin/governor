@@ -8,9 +8,8 @@ import (
 	"xorkevin.dev/governor/service/user/session/model"
 )
 
-//go:generate forge validation -o validation_session_gen.go reqGetUserSessions reqUserRmSessions
-
 type (
+	//forge:valid
 	reqGetUserSessions struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -37,6 +36,7 @@ func (s *router) getSessions(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserRmSessions struct {
 		Userid     string   `valid:"userid,has" json:"-"`
 		SessionIDs []string `valid:"sessionIDs" json:"session_ids"`

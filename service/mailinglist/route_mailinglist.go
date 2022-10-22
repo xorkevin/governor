@@ -12,60 +12,12 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_mailinglist_gen.go reqCreatorLists reqUserLists reqList reqListMsgs reqListThread reqListMsg reqListMembers reqCreateList reqUpdateList reqSub reqUpdListMembers reqListID reqMsgIDs
-
 type (
+	//forge:valid
 	reqCreatorLists struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		Amount    int    `valid:"amount" json:"-"`
 		Offset    int    `valid:"offset" json:"-"`
-	}
-
-	reqListMembers struct {
-		Listid  string   `valid:"listid,has" json:"-"`
-		Userids []string `valid:"userids,has" json:"-"`
-	}
-
-	reqCreateList struct {
-		CreatorID    string `valid:"creatorID,has" json:"-"`
-		Listname     string `valid:"listname" json:"listname"`
-		Name         string `valid:"name" json:"name"`
-		Desc         string `valid:"desc" json:"desc"`
-		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
-		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
-	}
-
-	reqUpdateList struct {
-		CreatorID    string `valid:"creatorID,has" json:"-"`
-		Listname     string `valid:"listname,has" json:"-"`
-		Name         string `valid:"name" json:"name"`
-		Desc         string `valid:"desc" json:"desc"`
-		Archive      bool   `json:"archive"`
-		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
-		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
-	}
-
-	reqSub struct {
-		CreatorID string `valid:"creatorID,has" json:"-"`
-		Listname  string `valid:"listname,has" json:"-"`
-		Userid    string `valid:"userid,has" json:"-"`
-	}
-
-	reqUpdListMembers struct {
-		CreatorID string   `valid:"creatorID,has" json:"-"`
-		Listname  string   `valid:"listname,has" json:"-"`
-		Remove    []string `valid:"userids,has" json:"remove"`
-	}
-
-	reqListID struct {
-		CreatorID string `valid:"creatorID,has" json:"-"`
-		Listname  string `valid:"listname,has" json:"-"`
-	}
-
-	reqMsgIDs struct {
-		CreatorID string   `valid:"creatorID,has" json:"-"`
-		Listname  string   `valid:"listname,has" json:"-"`
-		Msgids    []string `valid:"msgids,has" json:"msgids"`
 	}
 )
 
@@ -88,6 +40,7 @@ func (s *router) getCreatorLists(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserLists struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -114,6 +67,7 @@ func (s *router) getPersonalLists(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqList struct {
 		Listid string `valid:"listid,has" json:"-"`
 	}
@@ -136,6 +90,7 @@ func (s *router) getList(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqListMsgs struct {
 		Listid string `valid:"listid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -180,6 +135,7 @@ func (s *router) getListThreads(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqListThread struct {
 		Listid   string `valid:"listid,has" json:"-"`
 		Threadid string `valid:"msgid,has" json:"-"`
@@ -213,6 +169,7 @@ func (s *router) getListThread(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqListMsg struct {
 		Listid string `valid:"listid,has" json:"-"`
 		Msgid  string `valid:"msgid,has" json:"-"`
@@ -309,6 +266,14 @@ func (s *router) getListMembers(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
+type (
+	//forge:valid
+	reqListMembers struct {
+		Listid  string   `valid:"listid,has" json:"-"`
+		Userids []string `valid:"userids,has" json:"-"`
+	}
+)
+
 func (s *router) getListMemberIDs(c governor.Context) {
 	req := reqListMembers{
 		Listid:  c.Param("listid"),
@@ -325,6 +290,18 @@ func (s *router) getListMemberIDs(c governor.Context) {
 	}
 	c.WriteJSON(http.StatusOK, res)
 }
+
+type (
+	//forge:valid
+	reqCreateList struct {
+		CreatorID    string `valid:"creatorID,has" json:"-"`
+		Listname     string `valid:"listname" json:"listname"`
+		Name         string `valid:"name" json:"name"`
+		Desc         string `valid:"desc" json:"desc"`
+		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
+		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
+	}
+)
 
 func (s *router) createList(c governor.Context) {
 	var req reqCreateList
@@ -345,6 +322,19 @@ func (s *router) createList(c governor.Context) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
+type (
+	//forge:valid
+	reqUpdateList struct {
+		CreatorID    string `valid:"creatorID,has" json:"-"`
+		Listname     string `valid:"listname,has" json:"-"`
+		Name         string `valid:"name" json:"name"`
+		Desc         string `valid:"desc" json:"desc"`
+		Archive      bool   `json:"archive"`
+		SenderPolicy string `valid:"senderPolicy" json:"sender_policy"`
+		MemberPolicy string `valid:"memberPolicy" json:"member_policy"`
+	}
+)
+
 func (s *router) updateList(c governor.Context) {
 	var req reqUpdateList
 	if err := c.Bind(&req, false); err != nil {
@@ -363,6 +353,15 @@ func (s *router) updateList(c governor.Context) {
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
+
+type (
+	//forge:valid
+	reqSub struct {
+		CreatorID string `valid:"creatorID,has" json:"-"`
+		Listname  string `valid:"listname,has" json:"-"`
+		Userid    string `valid:"userid,has" json:"-"`
+	}
+)
 
 func (s *router) subList(c governor.Context) {
 	req := reqSub{
@@ -398,6 +397,15 @@ func (s *router) unsubList(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	//forge:valid
+	reqUpdListMembers struct {
+		CreatorID string   `valid:"creatorID,has" json:"-"`
+		Listname  string   `valid:"listname,has" json:"-"`
+		Remove    []string `valid:"userids,has" json:"remove"`
+	}
+)
+
 func (s *router) updateListMembers(c governor.Context) {
 	var req reqUpdListMembers
 	if err := c.Bind(&req, false); err != nil {
@@ -417,6 +425,14 @@ func (s *router) updateListMembers(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+type (
+	//forge:valid
+	reqListID struct {
+		CreatorID string `valid:"creatorID,has" json:"-"`
+		Listname  string `valid:"listname,has" json:"-"`
+	}
+)
+
 func (s *router) deleteList(c governor.Context) {
 	req := reqListID{
 		CreatorID: c.Param("creatorid"),
@@ -432,6 +448,15 @@ func (s *router) deleteList(c governor.Context) {
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
+
+type (
+	//forge:valid
+	reqMsgIDs struct {
+		CreatorID string   `valid:"creatorID,has" json:"-"`
+		Listname  string   `valid:"listname,has" json:"-"`
+		Msgids    []string `valid:"msgids,has" json:"msgids"`
+	}
+)
 
 func (s *router) deleteMsgs(c governor.Context) {
 	var req reqMsgIDs

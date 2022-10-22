@@ -11,9 +11,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_courier_gen.go reqLinkGet reqGetGroup reqLinkPost reqLinkDelete reqBrandGet reqBrandPost
-
 type (
+	//forge:valid
 	reqLinkGet struct {
 		LinkID string `valid:"linkID,has" json:"-"`
 	}
@@ -61,6 +60,7 @@ func (s *router) getLinkImage(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetGroup struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		Amount    int    `valid:"amount" json:"-"`
@@ -88,6 +88,7 @@ func (s *router) getLinkGroup(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqLinkPost struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		LinkID    string `valid:"linkID" json:"linkid"`
@@ -117,6 +118,7 @@ func (s *router) createLink(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqLinkDelete struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		LinkID    string `valid:"linkID,has" json:"-"`
@@ -140,6 +142,7 @@ func (s *router) deleteLink(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqBrandGet struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		BrandID   string `valid:"brandID,has" json:"-"`
@@ -188,6 +191,7 @@ func (s *router) getBrandGroup(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqBrandPost struct {
 		CreatorID string `valid:"creatorID,has" json:"-"`
 		BrandID   string `valid:"brandID" json:"-"`

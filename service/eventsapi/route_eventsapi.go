@@ -7,9 +7,8 @@ import (
 	"xorkevin.dev/governor"
 )
 
-//go:generate forge validation -o validation_gen.go reqPublishEvent
-
 type (
+	//forge:valid
 	reqPublishEvent struct {
 		Subject string `valid:"subject" json:"-"`
 	}

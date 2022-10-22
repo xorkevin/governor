@@ -10,21 +10,23 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_org_gen.go reqOrgGet reqOrgNameGet reqOrgsGet reqOrgMembersSearch reqOrgsSearch reqOrgsGetBulk reqOrgPost reqOrgPut
-
 type (
+	//forge:valid
 	reqOrgGet struct {
 		OrgID string `valid:"orgid,has" json:"-"`
 	}
 
+	//forge:valid
 	reqOrgNameGet struct {
 		Name string `valid:"name,has" json:"-"`
 	}
 
+	//forge:valid
 	reqOrgsGet struct {
 		OrgIDs []string `valid:"orgids,has" json:"-"`
 	}
 
+	//forge:valid
 	reqOrgMembersSearch struct {
 		OrgID  string `valid:"orgid,has" json:"-"`
 		Mods   bool   `json:"-"`
@@ -33,6 +35,7 @@ type (
 		Offset int    `valid:"offset" json:"-"`
 	}
 
+	//forge:valid
 	reqOrgsSearch struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Mods   bool   `json:"-"`
@@ -41,6 +44,7 @@ type (
 		Offset int    `valid:"offset" json:"-"`
 	}
 
+	//forge:valid
 	reqOrgsGetBulk struct {
 		Amount int `valid:"amount" json:"-"`
 		Offset int `valid:"offset" json:"-"`
@@ -177,6 +181,7 @@ func (s *router) getAllOrgs(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOrgPost struct {
 		Display string `valid:"display" json:"display_name"`
 		Desc    string `valid:"desc" json:"desc"`
@@ -205,6 +210,7 @@ func (s *router) createOrg(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOrgPut struct {
 		OrgID   string `valid:"orgid,has" json:"-"`
 		Name    string `valid:"name" json:"name"`

@@ -10,9 +10,8 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_edit_gen.go reqUserPut reqUserPutRank reqAcceptRoleInvitation reqGetRoleInvitations reqGetUserRoleInvitations reqDelRoleInvitation
-
 type (
+	//forge:valid
 	reqUserPut struct {
 		Username  string `valid:"username" json:"username"`
 		FirstName string `valid:"firstName" json:"first_name"`
@@ -41,6 +40,7 @@ func (s *router) putUser(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserPutRank struct {
 		Userid string   `valid:"userid,has" json:"-"`
 		Add    []string `valid:"rank" json:"add"`
@@ -88,6 +88,7 @@ func (s *router) patchRoles(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqAcceptRoleInvitation struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Role   string `valid:"role,has" json:"-"`
@@ -111,6 +112,7 @@ func (s *router) postAcceptRoleInvitation(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetRoleInvitations struct {
 		Role   string `valid:"role,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -138,6 +140,7 @@ func (s *router) getRoleInvitations(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUserRoleInvitations struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -165,6 +168,7 @@ func (s *router) getUserRoleInvitations(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqDelRoleInvitation struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Role   string `valid:"role,has" json:"-"`

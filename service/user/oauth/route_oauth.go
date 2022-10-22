@@ -11,9 +11,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_oauth_gen.go reqAppGet reqGetAppGroup reqGetAppBulk reqAppPost reqAppPut
-
 type (
+	//forge:valid
 	reqAppGet struct {
 		ClientID string `valid:"clientID,has" json:"-"`
 	}
@@ -57,6 +56,7 @@ func (s *router) getAppLogo(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetAppGroup struct {
 		CreatorID string `valid:"userid,opt" json:"-"`
 		Amount    int    `valid:"amount" json:"-"`
@@ -84,6 +84,7 @@ func (s *router) getAppGroup(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetAppBulk struct {
 		ClientIDs []string `valid:"clientIDs,has" json:"-"`
 	}
@@ -107,6 +108,7 @@ func (s *router) getAppBulk(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqAppPost struct {
 		Name        string `valid:"name" json:"name"`
 		URL         string `valid:"URL" json:"url"`
@@ -136,6 +138,7 @@ func (s *router) createApp(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqAppPut struct {
 		ClientID    string `valid:"clientID,has" json:"-"`
 		Name        string `valid:"name" json:"name"`

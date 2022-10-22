@@ -6,6 +6,8 @@ import (
 	"xorkevin.dev/governor"
 )
 
+//go:generate forge validation
+
 const (
 	lengthCapSubject = 255
 )

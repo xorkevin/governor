@@ -8,9 +8,8 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 )
 
-//go:generate forge validation -o validation_editsecure_gen.go reqUserPutEmail reqUserPutEmailVerify reqUserPutPassword reqForgotPassword reqForgotPasswordReset reqAddOTP reqOTPCode reqOTPCodeBackup
-
 type (
+	//forge:valid
 	reqUserPutEmail struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Email    string `valid:"email" json:"email"`
@@ -38,6 +37,7 @@ func (s *router) putEmail(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserPutEmailVerify struct {
 		Userid   string `valid:"userid,has" json:"userid"`
 		Key      string `valid:"token,has" json:"key"`
@@ -64,6 +64,7 @@ func (s *router) putEmailVerify(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserPutPassword struct {
 		Userid      string `valid:"userid,has" json:"-"`
 		NewPassword string `valid:"password" json:"new_password"`
@@ -91,6 +92,7 @@ func (s *router) putPassword(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqForgotPassword struct {
 		Username string `valid:"usernameOrEmail,has" json:"username"`
 	}
@@ -115,6 +117,7 @@ func (s *router) forgotPassword(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqForgotPasswordReset struct {
 		Userid      string `valid:"userid,has" json:"userid"`
 		Key         string `valid:"token,has" json:"key"`
@@ -141,6 +144,7 @@ func (s *router) forgotPasswordReset(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqAddOTP struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Alg      string `valid:"OTPAlg" json:"alg"`
@@ -170,6 +174,7 @@ func (s *router) addOTP(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOTPCode struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Code   string `valid:"OTPCode" json:"code"`
@@ -196,6 +201,7 @@ func (s *router) commitOTP(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOTPCodeBackup struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Code     string `valid:"OTPCode" json:"code"`

@@ -7,6 +7,8 @@ import (
 	"xorkevin.dev/governor"
 )
 
+//go:generate forge validation
+
 const (
 	lengthCapUserid = 31
 	lengthCapOrgID  = 31

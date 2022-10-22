@@ -14,8 +14,6 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-//go:generate forge validation -o validation_openid_gen.go reqOAuthAuthorize reqOAuthTokenCode reqGetConnectionGroup reqGetConnection
-
 func (s *router) getOpenidConfig(c governor.Context) {
 	res, err := s.s.getOpenidConfig()
 	if err != nil {
@@ -35,6 +33,7 @@ func (s *router) getJWKS(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOAuthAuthorize struct {
 		Userid              string `valid:"userid,has" json:"-"`
 		ClientID            string `valid:"clientID,has" json:"client_id"`
@@ -79,6 +78,7 @@ func (s *router) authCode(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqOAuthTokenCode struct {
 		ClientID     string `valid:"oidClientID,has" json:"-"`
 		ClientSecret string `valid:"oidClientSecret,has" json:"-"`
@@ -187,6 +187,7 @@ func (s *router) userinfo(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetConnectionGroup struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -214,6 +215,7 @@ func (s *router) getConnections(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetConnection struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		ClientID string `valid:"clientID,has" json:"-"`

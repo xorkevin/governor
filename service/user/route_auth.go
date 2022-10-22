@@ -9,8 +9,6 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-//go:generate forge validation -o validation_auth_gen.go reqUserAuth reqRefreshToken
-
 func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     gate.CookieNameAccessToken,
@@ -131,6 +129,7 @@ func (s *router) rmRefreshCookie(c governor.Context, userid string) {
 }
 
 type (
+	//forge:valid
 	reqUserAuth struct {
 		Username     string `valid:"usernameOrEmail,has" json:"username"`
 		Password     string `valid:"password,has" json:"password"`
@@ -193,6 +192,7 @@ func (s *router) loginUser(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqRefreshToken struct {
 		RefreshToken string `valid:"refreshToken,has" json:"refresh_token"`
 	}

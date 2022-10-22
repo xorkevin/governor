@@ -10,9 +10,8 @@ import (
 	"xorkevin.dev/governor/util/rank"
 )
 
-//go:generate forge validation -o validation_apikey_gen.go reqGetUserApikeys reqApikeyPost reqApikeyID reqApikeyUpdate reqApikeyCheck
-
 type (
+	//forge:valid
 	reqGetUserApikeys struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
@@ -39,6 +38,7 @@ func (s *router) getUserApikeys(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqApikeyPost struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Scope  string `valid:"scope" json:"scope"`
@@ -67,6 +67,7 @@ func (s *router) createApikey(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqApikeyID struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Keyid  string `valid:"apikeyid,has" json:"-"`
@@ -102,6 +103,7 @@ func (s *router) deleteApikey(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqApikeyUpdate struct {
 		Userid string `valid:"userid,has" json:"-"`
 		Keyid  string `valid:"apikeyid,has" json:"-"`
@@ -164,6 +166,7 @@ func (s *router) rotateApikey(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqApikeyCheck struct {
 		Roles []string `valid:"rank"`
 		Scope string   `valid:"scope"`

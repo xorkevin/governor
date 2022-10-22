@@ -10,6 +10,8 @@ import (
 	"xorkevin.dev/hunter2"
 )
 
+//go:generate forge validation
+
 const (
 	lengthCapUserid    = 31
 	lengthCapApikeyid  = 63

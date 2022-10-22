@@ -8,9 +8,8 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 )
 
-//go:generate forge validation -o validation_create_gen.go reqUserPost reqUserPostConfirm reqUserDeleteSelf reqAddAdmin reqUserDelete reqGetUserApprovals
-
 type (
+	//forge:valid
 	reqUserPost struct {
 		Username  string `valid:"username" json:"username"`
 		Password  string `valid:"password" json:"password"`
@@ -40,6 +39,7 @@ func (s *router) createUser(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserPostConfirm struct {
 		Userid string `valid:"userid,has" json:"userid"`
 		Key    string `valid:"token,has" json:"key"`
@@ -66,6 +66,7 @@ func (s *router) commitUser(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserDeleteSelf struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Username string `valid:"username,has" json:"username"`
@@ -93,6 +94,7 @@ func (s *router) deleteUserSelf(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqUserDelete struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Username string `valid:"username,has" json:"username"`
@@ -119,6 +121,7 @@ func (s *router) deleteUser(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqAddAdmin struct {
 		Username  string `json:"username" valid:"username"`
 		Password  string `json:"password" valid:"password"`
@@ -149,6 +152,7 @@ func (s *router) addAdmin(c governor.Context) {
 }
 
 type (
+	//forge:valid
 	reqGetUserApprovals struct {
 		Amount int `valid:"amount" json:"-"`
 		Offset int `valid:"offset" json:"-"`

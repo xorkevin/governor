@@ -8,6 +8,8 @@ import (
 	"xorkevin.dev/governor/util/kjson"
 )
 
+//go:generate forge validation
+
 const (
 	lengthCapChatid    = 31
 	lengthCapServerID  = 31
