@@ -35,6 +35,7 @@ type (
 		Header(key string) string
 		SetHeader(key, value string)
 		AddHeader(key, value string)
+		DelHeader(key string)
 		Cookie(key string) (*http.Cookie, error)
 		SetCookie(cookie *http.Cookie)
 		BasicAuth() (string, string, bool)
@@ -159,6 +160,10 @@ func (c *govcontext) SetHeader(key, value string) {
 
 func (c *govcontext) AddHeader(key, value string) {
 	c.w.Header().Add(key, value)
+}
+
+func (c *govcontext) DelHeader(key string) {
+	c.w.Header().Del(key)
 }
 
 func (c *govcontext) Cookie(key string) (*http.Cookie, error) {

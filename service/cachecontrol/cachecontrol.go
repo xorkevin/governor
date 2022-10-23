@@ -3,15 +3,16 @@ package cachecontrol
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/klog"
 )
 
 const (
-	ccHeader          = "Cache-Control"
-	ifNoneMatchHeader = "If-None-Match"
-	etagHeader        = "ETag"
+	headerCacheControl = "Cache-Control"
+	headerIfNoneMatch  = "If-None-Match"
+	headerETag         = "ETag"
 )
 
 type (
@@ -36,6 +37,47 @@ const (
 	DirImmutable      Directive = "immutable"
 )
 
+type (
+	cacheControlWriter struct {
+		http.ResponseWriter
+		valCC       string
+		valETag     string
+		wroteHeader bool
+	}
+)
+
+func (w *cacheControlWriter) shouldAddHeaders(status int) bool {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return false
+	}
+	if w.ResponseWriter.Header().Get(headerCacheControl) != "" {
+		return false
+	}
+	return w.valCC != ""
+}
+
+func (w *cacheControlWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
+	if w.shouldAddHeaders(status) {
+		w.ResponseWriter.Header().Set(headerCacheControl, w.valCC)
+		if w.valETag != "" {
+			w.ResponseWriter.Header().Set(headerETag, w.valETag)
+		}
+	}
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *cacheControlWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
 func etagToValue(etag string) string {
 	return fmt.Sprintf(`W/"%s"`, etag)
 }
@@ -54,26 +96,30 @@ func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(
 				etag = etagToValue(tag)
 			}
 
-			if val := c.Header(ifNoneMatchHeader); etag != "" && val == etag {
+			if val := c.Header(headerIfNoneMatch); etag != "" && val == etag {
 				c.WriteStatus(http.StatusNotModified)
 				return
 			}
 
+			finalDirectives := make([]string, 0, 2+len(directives))
 			if public {
-				c.SetHeader(ccHeader, string(DirPublic))
+				finalDirectives = append(finalDirectives, string(DirPublic))
 			} else {
-				c.SetHeader(ccHeader, string(DirPrivate))
+				finalDirectives = append(finalDirectives, string(DirPrivate))
 			}
-
+			finalDirectives = append(finalDirectives, fmt.Sprintf("%s=%d", DirMaxAge, maxage))
 			for _, i := range directives {
-				c.AddHeader(ccHeader, string(i))
+				finalDirectives = append(finalDirectives, string(i))
 			}
 
-			c.AddHeader(ccHeader, fmt.Sprintf("%s=%d", DirMaxAge, maxage))
-
-			if etag != "" {
-				c.SetHeader(etagHeader, etag)
+			w2 := &cacheControlWriter{
+				ResponseWriter: c.Res(),
+				valCC:          strings.Join(finalDirectives, ", "),
+				valETag:        etag,
+				wroteHeader:    false,
 			}
+
+			c = governor.NewContext(w2, c.Req(), c.Log())
 
 			next.ServeHTTPCtx(c)
 		})
@@ -88,7 +134,7 @@ func Control(log klog.Logger, public bool, directives Directives, maxage int64, 
 // ControlNoStoreCtx creates a middleware function to deny caching responses
 func ControlNoStoreCtx(next governor.RouteHandler) governor.RouteHandler {
 	return governor.RouteHandlerFunc(func(c governor.Context) {
-		c.SetHeader(ccHeader, string(DirNoStore))
+		c.SetHeader(headerCacheControl, string(DirNoStore))
 		next.ServeHTTPCtx(c)
 	})
 }

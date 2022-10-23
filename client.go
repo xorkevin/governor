@@ -299,7 +299,7 @@ func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Re
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add(headerContentType, "application/json")
+	req.Header.Set(headerContentType, "application/json")
 	return req, nil
 }
 
