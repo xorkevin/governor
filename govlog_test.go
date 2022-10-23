@@ -21,6 +21,10 @@ func TestLogOutputFromString(t *testing.T) {
 		Writer io.Writer
 	}{
 		{
+			Env:    "STDERR",
+			Writer: os.Stderr,
+		},
+		{
 			Env:    "STDOUT",
 			Writer: os.Stdout,
 		},

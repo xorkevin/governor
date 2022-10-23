@@ -2,7 +2,7 @@
 {{ $svc := .Vars.kube.service.name -}}
 {{ $nssvc := printf "%s-%s" $ns $svc -}}
 loglevel: DEBUG
-logoutput: STDOUT
+logoutput: STDERR
 addr: ':8080'
 baseurl: /api
 maxreqsize: 2M

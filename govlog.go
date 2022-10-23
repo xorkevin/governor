@@ -31,6 +31,8 @@ func newLogger(c Config) *klog.LevelLogger {
 
 func logOutputFromString(s string) io.Writer {
 	switch s {
+	case "STDERR":
+		return os.Stderr
 	case "STDOUT":
 		return os.Stdout
 	case "TEST":

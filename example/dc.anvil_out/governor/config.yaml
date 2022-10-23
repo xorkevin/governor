@@ -1,5 +1,5 @@
 loglevel: DEBUG
-logoutput: STDOUT
+logoutput: STDERR
 addr: ':8080'
 baseurl: /api
 maxreqsize: 2M

@@ -152,7 +152,7 @@ func (r rewriteRule) String() string {
 func newConfig(opts Opts) *Config {
 	v := viper.New()
 	v.SetDefault("loglevel", "INFO")
-	v.SetDefault("logoutput", "STDOUT")
+	v.SetDefault("logoutput", "STDERR")
 	v.SetDefault("banner", true)
 	v.SetDefault("addr", ":8080")
 	v.SetDefault("baseurl", "/")
