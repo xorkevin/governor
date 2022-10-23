@@ -52,7 +52,7 @@ type (
 func (s *Server) router(path string, l klog.Logger) Router {
 	return &govrouter{
 		r: s.i.Route(path, func(r chi.Router) {}),
-		log: l.Sublogger("router", klog.Fields{
+		log: klog.Sub(l, "router", klog.Fields{
 			"gov.router.path": path,
 		}),
 		path: path,
@@ -72,7 +72,7 @@ func (r *govrouter) Group(path string, mw ...Middleware) Router {
 	}
 	return &govrouter{
 		r: sr,
-		log: r.log.Sublogger("", klog.Fields{
+		log: klog.Sub(r.log, "", klog.Fields{
 			"gov.router.path": cpath,
 		}),
 		path: cpath,
@@ -140,7 +140,7 @@ func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 
 func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	cpath := r.path + path
-	l := r.log.Sublogger("", klog.Fields{
+	l := klog.Sub(r.log, "", klog.Fields{
 		"gov.router.path": cpath,
 	})
 	var sr chi.Router
@@ -164,20 +164,20 @@ func (r *govrouter) MethodCtx(method string, path string, h RouteHandler, mw ...
 	if lmethod == "" {
 		lmethod = "ANY"
 	}
-	r.Method(method, path, toHTTPHandler(chainMiddlewareCtx(h, mw), r.log.Sublogger("", klog.Fields{
+	r.Method(method, path, toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
 		"gov.router.method": lmethod,
 		"gov.router.path":   r.path + path,
 	})))
 }
 
 func (r *govrouter) NotFoundCtx(h RouteHandler, mw ...MiddlewareCtx) {
-	r.NotFound(toHTTPHandler(chainMiddlewareCtx(h, mw), r.log.Sublogger("", klog.Fields{
+	r.NotFound(toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
 		"gov.router.notfound": true,
 	})))
 }
 
 func (r *govrouter) MethodNotAllowedCtx(h RouteHandler, mw ...MiddlewareCtx) {
-	r.MethodNotAllowed(toHTTPHandler(chainMiddlewareCtx(h, mw), r.log.Sublogger("", klog.Fields{
+	r.MethodNotAllowed(toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
 		"gov.router.methodnotallowed": true,
 	})))
 }

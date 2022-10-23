@@ -110,7 +110,7 @@ func (s *Server) checkHealthServices(ctx context.Context) []error {
 func (s *Server) initServices(ctx context.Context) error {
 	s.log.Info(ctx, "Init all services begin", nil)
 	for _, i := range s.services {
-		l := s.log.Logger.Sublogger(i.opt.name, klog.Fields{"gov.service": i.opt.name})
+		l := klog.Sub(s.log.Logger, i.opt.name, klog.Fields{"gov.service": i.opt.name})
 		if err := i.r.Init(ctx, *s.config, s.config.reader(i.opt), l, s.router(s.config.BaseURL+i.opt.url, l)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.Fields{

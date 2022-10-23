@@ -252,7 +252,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service: s,
-		log:     klog.NewLevelLogger(s.log.Logger.Sublogger("smtpserver", nil)),
+		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "smtpserver", nil)),
 	}
 	server := smtp.NewServer(be)
 	server.Addr = ":" + s.port

@@ -72,7 +72,7 @@ func TestZerologLogger(t *testing.T) {
 				logWriter: &logbuf,
 			})
 
-			l.Logger.Sublogger("sublog", nil).Log(context.Background(), klog.LevelInfo, 1, "test message 1", tc.Fields)
+			klog.Sub(l.Logger, "sublog", nil).Log(context.Background(), klog.LevelInfo, "", 1, "test message 1", tc.Fields)
 
 			d := json.NewDecoder(&logbuf)
 			var j struct {

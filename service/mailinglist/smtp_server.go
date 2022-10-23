@@ -161,7 +161,7 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 	})
 	return &smtpSession{
 		service: s.service,
-		log:     klog.NewLevelLogger(s.log.Logger.Sublogger("session", nil)),
+		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "session", nil)),
 		ctx:     ctx,
 		srcip:   hostip,
 		helo:    state.Hostname,

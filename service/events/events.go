@@ -478,7 +478,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		s:     s,
 		topic: topic,
 		group: group,
-		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber", klog.Fields{
+		log: klog.NewLevelLogger(klog.Sub(s.log.Logger, "subscriber", klog.Fields{
 			"events.topic": topic,
 			"events.group": group,
 		})),
@@ -826,7 +826,7 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqhandler Handler, maxdeliver int, reqidprefix string) *Watcher {
 	return &Watcher{
 		ev: ev,
-		log: klog.NewLevelLogger(log.Sublogger("watcher", klog.Fields{
+		log: klog.NewLevelLogger(klog.Sub(log, "watcher", klog.Fields{
 			"events.topic": topic,
 			"events.group": group,
 		})),
