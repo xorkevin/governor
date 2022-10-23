@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"runtime/debug"
 	"strings"
@@ -94,7 +95,7 @@ type (
 	ctxKeyMiddlewareRealIP struct{}
 )
 
-func realIPMiddleware(proxies []net.IPNet) Middleware {
+func realIPMiddleware(proxies []netip.Prefix) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -115,7 +116,7 @@ func getCtxMiddlewareRealIP(ctx context.Context) net.IP {
 	return k.(net.IP)
 }
 
-func getForwardedForIP(r *http.Request, proxies []net.IPNet) net.IP {
+func getForwardedForIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
 	xff := r.Header.Get(headerXForwardedFor)
 	if xff == "" {
 		return nil
@@ -123,19 +124,19 @@ func getForwardedForIP(r *http.Request, proxies []net.IPNet) net.IP {
 
 	ipstrs := strings.Split(xff, ",")
 	for i := len(ipstrs) - 1; i >= 0; i-- {
-		ip := net.ParseIP(strings.TrimSpace(ipstrs[i]))
-		if ip == nil {
+		ip, err := netip.ParseAddr(strings.TrimSpace(ipstrs[i]))
+		if err != nil {
 			break
 		}
 		if !ipnetsContain(ip, proxies) {
-			return ip
+			return &ip
 		}
 	}
 
 	return nil
 }
 
-func ipnetsContain(ip net.IP, ipnet []net.IPNet) bool {
+func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
 	for _, i := range ipnet {
 		if i.Contains(ip) {
 			return true

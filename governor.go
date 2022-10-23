@@ -4,8 +4,8 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
@@ -80,13 +80,13 @@ func (s *Server) init(ctx context.Context) error {
 	s.log.Info(ctx, "Init strip slashes middleware", nil)
 
 	if len(s.config.proxies) > 0 {
-		proxies := make([]net.IPNet, 0, len(s.config.proxies))
+		proxies := make([]netip.Prefix, 0, len(s.config.proxies))
 		for _, i := range s.config.proxies {
-			_, k, err := net.ParseCIDR(i)
+			k, err := netip.ParsePrefix(i)
 			if err != nil {
-				return err
+				return kerrors.WithMsg(err, "Invalid proxy CIDR")
 			}
-			proxies = append(proxies, *k)
+			proxies = append(proxies, k)
 		}
 		i.Use(realIPMiddleware(proxies))
 		s.log.Info(ctx, "Init real ip middleware", klog.Fields{
