@@ -130,6 +130,7 @@ func getRealIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
 		return &remoteip
 	}
 
+	last := remoteip
 	ipstrs := strings.Split(xff, ",")
 	for i := len(ipstrs) - 1; i >= 0; i-- {
 		ip, err := netip.ParseAddr(strings.TrimSpace(ipstrs[i]))
@@ -139,9 +140,10 @@ func getRealIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
 		if !ipnetsContain(ip, proxies) {
 			return &ip
 		}
+		last = ip
 	}
 
-	return &remoteip
+	return &last
 }
 
 func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
