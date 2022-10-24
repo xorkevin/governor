@@ -127,21 +127,21 @@ func getRealIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
 
 	xff := r.Header.Get(headerXForwardedFor)
 	if xff == "" {
-		return nil
+		return &remoteip
 	}
 
 	ipstrs := strings.Split(xff, ",")
 	for i := len(ipstrs) - 1; i >= 0; i-- {
 		ip, err := netip.ParseAddr(strings.TrimSpace(ipstrs[i]))
 		if err != nil {
-			return nil
+			return &remoteip
 		}
 		if !ipnetsContain(ip, proxies) {
 			return &ip
 		}
 	}
 
-	return nil
+	return &remoteip
 }
 
 func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
