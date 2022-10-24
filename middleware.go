@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -99,7 +98,7 @@ func realIPMiddleware(proxies []netip.Prefix) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			ip := getForwardedForIP(r, proxies)
+			ip := getRealIP(r, proxies)
 			if ip != nil {
 				ctx = context.WithValue(ctx, ctxKeyMiddlewareRealIP{}, ip)
 			}
@@ -108,15 +107,24 @@ func realIPMiddleware(proxies []netip.Prefix) Middleware {
 	}
 }
 
-func getCtxMiddlewareRealIP(ctx context.Context) net.IP {
+func getCtxMiddlewareRealIP(ctx context.Context) *netip.Addr {
 	k := ctx.Value(ctxKeyMiddlewareRealIP{})
 	if k == nil {
 		return nil
 	}
-	return k.(net.IP)
+	return k.(*netip.Addr)
 }
 
-func getForwardedForIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
+func getRealIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
+	host, err := netip.ParseAddrPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		return nil
+	}
+	remoteip := host.Addr()
+	if !ipnetsContain(remoteip, proxies) {
+		return &remoteip
+	}
+
 	xff := r.Header.Get(headerXForwardedFor)
 	if xff == "" {
 		return nil
@@ -126,7 +134,7 @@ func getForwardedForIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
 	for i := len(ipstrs) - 1; i >= 0; i-- {
 		ip, err := netip.ParseAddr(strings.TrimSpace(ipstrs[i]))
 		if err != nil {
-			break
+			return nil
 		}
 		if !ipnetsContain(ip, proxies) {
 			return &ip

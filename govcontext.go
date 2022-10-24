@@ -8,8 +8,8 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -25,7 +25,7 @@ type (
 	// Context is an http request and writer wrapper
 	Context interface {
 		LReqID() string
-		RealIP() net.IP
+		RealIP() *netip.Addr
 		Param(key string) string
 		Query(key string) string
 		QueryDef(key string, def string) string
@@ -85,15 +85,8 @@ func (c *govcontext) LReqID() string {
 	return getCtxLocalReqID(c.Ctx())
 }
 
-func (c *govcontext) RealIP() net.IP {
-	if ip := getCtxMiddlewareRealIP(c.Ctx()); ip != nil {
-		return ip
-	}
-	host, _, err := net.SplitHostPort(c.Req().RemoteAddr)
-	if err != nil {
-		return nil
-	}
-	return net.ParseIP(host)
+func (c *govcontext) RealIP() *netip.Addr {
+	return getCtxMiddlewareRealIP(c.Ctx())
 }
 
 func (c *govcontext) Param(key string) string {

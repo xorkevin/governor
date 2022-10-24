@@ -203,17 +203,17 @@ func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 		c := NewContext(w, r, s.log.Logger)
 		lreqid := s.lreqID(reqcount.Add(1))
 		c.Set(ctxKeyLocalReqID{}, lreqid)
-		var forwarded string
+		var realip string
 		if ip := c.RealIP(); ip != nil {
-			forwarded = ip.String()
+			realip = ip.String()
 		}
 		c.LogFields(klog.Fields{
-			"http.host":      c.Req().Host,
-			"http.method":    c.Req().Method,
-			"http.reqpath":   c.Req().URL.EscapedPath(),
-			"http.remote":    c.Req().RemoteAddr,
-			"http.forwarded": forwarded,
-			"http.lreqid":    lreqid,
+			"http.host":    c.Req().Host,
+			"http.method":  c.Req().Method,
+			"http.reqpath": c.Req().URL.EscapedPath(),
+			"http.remote":  c.Req().RemoteAddr,
+			"http.realip":  realip,
+			"http.lreqid":  lreqid,
 		})
 		w2 := &govResponseWriter{
 			ResponseWriter: w,
