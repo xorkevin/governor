@@ -18,7 +18,7 @@ type (
 	}
 )
 
-func (s *router) getApp(c governor.Context) {
+func (s *router) getApp(c *governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -34,7 +34,7 @@ func (s *router) getApp(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getAppLogo(c governor.Context) {
+func (s *router) getAppLogo(c *governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -64,7 +64,7 @@ type (
 	}
 )
 
-func (s *router) getAppGroup(c governor.Context) {
+func (s *router) getAppGroup(c *governor.Context) {
 	req := reqGetAppGroup{
 		CreatorID: c.Query("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -90,7 +90,7 @@ type (
 	}
 )
 
-func (s *router) getAppBulk(c governor.Context) {
+func (s *router) getAppBulk(c *governor.Context) {
 	req := reqGetAppBulk{
 		ClientIDs: strings.Split(c.Query("ids"), ","),
 	}
@@ -117,7 +117,7 @@ type (
 	}
 )
 
-func (s *router) createApp(c governor.Context) {
+func (s *router) createApp(c *governor.Context) {
 	var req reqAppPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -147,7 +147,7 @@ type (
 	}
 )
 
-func (s *router) updateApp(c governor.Context) {
+func (s *router) updateApp(c *governor.Context) {
 	var req reqAppPut
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -166,7 +166,7 @@ func (s *router) updateApp(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) updateAppLogo(c governor.Context) {
+func (s *router) updateAppLogo(c *governor.Context) {
 	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
@@ -189,7 +189,7 @@ func (s *router) updateAppLogo(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) rotateAppKey(c governor.Context) {
+func (s *router) rotateAppKey(c *governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -205,7 +205,7 @@ func (s *router) rotateAppKey(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) deleteApp(c governor.Context) {
+func (s *router) deleteApp(c *governor.Context) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}
@@ -222,7 +222,7 @@ func (s *router) deleteApp(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) getAppLogoCC(c governor.Context) (string, error) {
+func (s *router) getAppLogoCC(c *governor.Context) (string, error) {
 	req := reqAppGet{
 		ClientID: c.Param("clientid"),
 	}

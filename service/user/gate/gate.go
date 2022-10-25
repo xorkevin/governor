@@ -28,7 +28,7 @@ type (
 )
 
 // GetCtxUserid returns a userid from the context
-func GetCtxUserid(c governor.Context) string {
+func GetCtxUserid(c *governor.Context) string {
 	v := c.Get(ctxKeyUserid{})
 	if v == nil {
 		return ""
@@ -36,7 +36,7 @@ func GetCtxUserid(c governor.Context) string {
 	return v.(string)
 }
 
-func setCtxUserid(c governor.Context, userid string) {
+func setCtxUserid(c *governor.Context, userid string) {
 	c.Set(ctxKeyUserid{}, userid)
 	c.LogFields(klog.Fields{
 		"gate.userid": userid,
@@ -44,7 +44,7 @@ func setCtxUserid(c governor.Context, userid string) {
 }
 
 // GetCtxClaims returns token claims from the context
-func GetCtxClaims(c governor.Context) *token.Claims {
+func GetCtxClaims(c *governor.Context) *token.Claims {
 	v := c.Get(ctxKeyClaims{})
 	if v == nil {
 		return nil
@@ -52,7 +52,7 @@ func GetCtxClaims(c governor.Context) *token.Claims {
 	return v.(*token.Claims)
 }
 
-func setCtxClaims(c governor.Context, claims *token.Claims) {
+func setCtxClaims(c *governor.Context, claims *token.Claims) {
 	c.Set(ctxKeyUserid{}, claims.Subject)
 	c.Set(ctxKeyClaims{}, claims)
 	c.LogFields(klog.Fields{
@@ -62,7 +62,7 @@ func setCtxClaims(c governor.Context, claims *token.Claims) {
 }
 
 // GetCtxSysUserid returns a system userid from the context
-func GetCtxSysUserid(c governor.Context) string {
+func GetCtxSysUserid(c *governor.Context) string {
 	v := c.Get(ctxKeySysUserid{})
 	if v == nil {
 		return ""
@@ -70,7 +70,7 @@ func GetCtxSysUserid(c governor.Context) string {
 	return v.(string)
 }
 
-func setCtxSystem(c governor.Context, claims *token.Claims) {
+func setCtxSystem(c *governor.Context, claims *token.Claims) {
 	c.Set(ctxKeySysUserid{}, claims.Subject)
 	c.LogFields(klog.Fields{
 		"gate.sysuserid":    claims.Subject,
@@ -106,7 +106,7 @@ type (
 		IsSystem() bool
 		Userid() string
 		HasScope(scope string) bool
-		Ctx() governor.Context
+		Ctx() *governor.Context
 	}
 
 	authctx struct {
@@ -114,7 +114,7 @@ type (
 		isSystem bool
 		userid   string
 		scope    string
-		ctx      governor.Context
+		ctx      *governor.Context
 	}
 
 	// Authorizer is a function to check the authorization of a user
@@ -199,7 +199,7 @@ func (e errAuthNotFound) Error() string {
 	return "Auth not found"
 }
 
-func getAccessCookie(c governor.Context) (string, error) {
+func getAccessCookie(c *governor.Context) (string, error) {
 	cookie, err := c.Cookie(CookieNameAccessToken)
 	if err != nil {
 		return "", err
@@ -210,7 +210,7 @@ func getAccessCookie(c governor.Context) (string, error) {
 	return cookie.Value, nil
 }
 
-func getAuthHeader(c governor.Context) (string, error) {
+func getAuthHeader(c *governor.Context) (string, error) {
 	authHeader := c.Header("Authorization")
 	if authHeader == "" {
 		return "", errAuthNotFound{}
@@ -230,7 +230,7 @@ func (r *authctx) Userid() string {
 	return r.userid
 }
 
-func (r *authctx) Ctx() governor.Context {
+func (r *authctx) Ctx() *governor.Context {
 	return r.ctx
 }
 
@@ -247,7 +247,7 @@ func (r *authctx) HasScope(scope string) bool {
 	return token.HasScope(r.scope, scope)
 }
 
-func (s *Service) authctx(isSystem bool, userid string, scope string, ctx governor.Context) Context {
+func (s *Service) authctx(isSystem bool, userid string, scope string, ctx *governor.Context) Context {
 	return &authctx{
 		s:        s,
 		isSystem: isSystem,
@@ -265,7 +265,7 @@ const (
 // AuthenticateCtx builds a middleware function to validate tokens and set claims
 func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
-		return governor.RouteHandlerFunc(func(c governor.Context) {
+		return governor.RouteHandlerFunc(func(c *governor.Context) {
 			keyid, password, ok := c.BasicAuth()
 			if ok {
 				if keyid == token.KeyIDSystem {
@@ -491,7 +491,7 @@ func newIntersector(g Gate, userid string) Intersector {
 // Owner is a middleware function to validate if a user owns the resource
 //
 // idfunc should return true if the resource is owned by the given user
-func Owner(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.MiddlewareCtx {
+func Owner(g Gate, idfunc func(*governor.Context, string) bool, scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -515,7 +515,7 @@ func OwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
 		panic("idparam cannot be empty")
 	}
 
-	return Owner(g, func(c governor.Context, userid string) bool {
+	return Owner(g, func(c *governor.Context, userid string) bool {
 		return c.Param(idparam) == userid
 	}, scope)
 }
@@ -564,7 +564,7 @@ func User(g Gate, scope string) governor.MiddlewareCtx {
 // the resource owner or an admin
 //
 // idfunc should return true if the resource is owned by the given user
-func OwnerOrAdmin(g Gate, idfunc func(governor.Context, string) bool, scope string) governor.MiddlewareCtx {
+func OwnerOrAdmin(g Gate, idfunc func(*governor.Context, string) bool, scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -591,7 +591,7 @@ func OwnerOrAdminParam(g Gate, idparam string, scope string) governor.Middleware
 		panic("idparam cannot be empty")
 	}
 
-	return OwnerOrAdmin(g, func(c governor.Context, userid string) bool {
+	return OwnerOrAdmin(g, func(c *governor.Context, userid string) bool {
 		return c.Param(idparam) == userid
 	}, scope)
 }
@@ -629,7 +629,7 @@ func AuthMod(ctx context.Context, g Gate, userid string, modtag string) (bool, e
 // moderator of a group or an admin
 //
 // idfunc should return the group of the resource
-func ModF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
+func ModF(g Gate, idfunc func(*governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -650,7 +650,7 @@ func Mod(g Gate, group string, scope string) governor.MiddlewareCtx {
 		panic("group cannot be empty")
 	}
 
-	return ModF(g, func(_ governor.Context, _ string) (string, bool, bool) {
+	return ModF(g, func(_ *governor.Context, _ string) (string, bool, bool) {
 		return group, false, true
 	}, scope)
 }
@@ -688,7 +688,7 @@ func AuthNoBan(ctx context.Context, g Gate, userid string, bantag string) (bool,
 // not banned from the group
 //
 // idfunc should return the group of the resource
-func NoBanF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
+func NoBanF(g Gate, idfunc func(*governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -709,7 +709,7 @@ func NoBan(g Gate, group string, scope string) governor.MiddlewareCtx {
 		panic("group cannot be empty")
 	}
 
-	return NoBanF(g, func(_ governor.Context, _ string) (string, bool, bool) {
+	return NoBanF(g, func(_ *governor.Context, _ string) (string, bool, bool) {
 		return group, false, true
 	}, scope)
 }
@@ -748,7 +748,7 @@ func AuthMember(ctx context.Context, g Gate, userid string, tag string) (bool, e
 //
 // idfunc should return the group of the resource and whether the resource is owned by self
 // allowSelf allows the self group
-func MemberF(g Gate, idfunc func(governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
+func MemberF(g Gate, idfunc func(*governor.Context, string) (string, bool, bool), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
@@ -769,7 +769,7 @@ func Member(g Gate, group string, scope string) governor.MiddlewareCtx {
 		panic("group cannot be empty")
 	}
 
-	return MemberF(g, func(_ governor.Context, _ string) (string, bool, bool) {
+	return MemberF(g, func(_ *governor.Context, _ string) (string, bool, bool) {
 		return group, false, true
 	}, scope)
 }

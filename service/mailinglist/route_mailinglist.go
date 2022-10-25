@@ -21,7 +21,7 @@ type (
 	}
 )
 
-func (s *router) getCreatorLists(c governor.Context) {
+func (s *router) getCreatorLists(c *governor.Context) {
 	req := reqCreatorLists{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func (s *router) getPersonalLists(c governor.Context) {
+func (s *router) getPersonalLists(c *governor.Context) {
 	req := reqUserLists{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -73,7 +73,7 @@ type (
 	}
 )
 
-func (s *router) getList(c governor.Context) {
+func (s *router) getList(c *governor.Context) {
 	req := reqList{
 		Listid: c.Param("listid"),
 	}
@@ -98,7 +98,7 @@ type (
 	}
 )
 
-func (s *router) getListMsgs(c governor.Context) {
+func (s *router) getListMsgs(c *governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -116,7 +116,7 @@ func (s *router) getListMsgs(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getListThreads(c governor.Context) {
+func (s *router) getListThreads(c *governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -144,7 +144,7 @@ type (
 	}
 )
 
-func (s *router) getListThread(c governor.Context) {
+func (s *router) getListThread(c *governor.Context) {
 	threadid, err := url.QueryUnescape(c.Param("threadid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -176,7 +176,7 @@ type (
 	}
 )
 
-func (s *router) getListMsg(c governor.Context) {
+func (s *router) getListMsg(c *governor.Context) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -199,7 +199,7 @@ func (s *router) getListMsg(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getListMsgContent(c governor.Context) {
+func (s *router) getListMsgContent(c *governor.Context) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id"))
@@ -227,7 +227,7 @@ func (s *router) getListMsgContent(c governor.Context) {
 	c.WriteFile(http.StatusOK, contentType, msg)
 }
 
-func (s *router) getListMsgCC(c governor.Context) (string, error) {
+func (s *router) getListMsgCC(c *governor.Context) (string, error) {
 	msgid, err := url.QueryUnescape(c.Param("msgid"))
 	if err != nil {
 		return "", governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid msg id")
@@ -248,7 +248,7 @@ func (s *router) getListMsgCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (s *router) getListMembers(c governor.Context) {
+func (s *router) getListMembers(c *governor.Context) {
 	req := reqListMsgs{
 		Listid: c.Param("listid"),
 		Amount: c.QueryInt("amount", -1),
@@ -274,7 +274,7 @@ type (
 	}
 )
 
-func (s *router) getListMemberIDs(c governor.Context) {
+func (s *router) getListMemberIDs(c *governor.Context) {
 	req := reqListMembers{
 		Listid:  c.Param("listid"),
 		Userids: strings.Split(c.Query("ids"), ","),
@@ -303,7 +303,7 @@ type (
 	}
 )
 
-func (s *router) createList(c governor.Context) {
+func (s *router) createList(c *governor.Context) {
 	var req reqCreateList
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -335,7 +335,7 @@ type (
 	}
 )
 
-func (s *router) updateList(c governor.Context) {
+func (s *router) updateList(c *governor.Context) {
 	var req reqUpdateList
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -363,7 +363,7 @@ type (
 	}
 )
 
-func (s *router) subList(c governor.Context) {
+func (s *router) subList(c *governor.Context) {
 	req := reqSub{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -380,7 +380,7 @@ func (s *router) subList(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) unsubList(c governor.Context) {
+func (s *router) unsubList(c *governor.Context) {
 	req := reqSub{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -406,7 +406,7 @@ type (
 	}
 )
 
-func (s *router) updateListMembers(c governor.Context) {
+func (s *router) updateListMembers(c *governor.Context) {
 	var req reqUpdListMembers
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -433,7 +433,7 @@ type (
 	}
 )
 
-func (s *router) deleteList(c governor.Context) {
+func (s *router) deleteList(c *governor.Context) {
 	req := reqListID{
 		CreatorID: c.Param("creatorid"),
 		Listname:  c.Param("listname"),
@@ -458,7 +458,7 @@ type (
 	}
 )
 
-func (s *router) deleteMsgs(c governor.Context) {
+func (s *router) deleteMsgs(c *governor.Context) {
 	var req reqMsgIDs
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -477,7 +477,7 @@ func (s *router) deleteMsgs(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) listOwner(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) listOwner(c *governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false
@@ -491,7 +491,7 @@ func (s *router) listOwner(c governor.Context, userid string) (string, bool, boo
 	return creatorid, false, true
 }
 
-func (s *router) listNoBan(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) listNoBan(c *governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false

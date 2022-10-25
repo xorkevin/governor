@@ -51,7 +51,7 @@ type (
 	}
 )
 
-func (s *router) getOrg(c governor.Context) {
+func (s *router) getOrg(c *governor.Context) {
 	req := reqOrgGet{
 		OrgID: c.Param("id"),
 	}
@@ -68,7 +68,7 @@ func (s *router) getOrg(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getOrgByName(c governor.Context) {
+func (s *router) getOrgByName(c *governor.Context) {
 	req := reqOrgNameGet{
 		Name: c.Param("name"),
 	}
@@ -85,7 +85,7 @@ func (s *router) getOrgByName(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getOrgs(c governor.Context) {
+func (s *router) getOrgs(c *governor.Context) {
 	req := reqOrgsGet{
 		OrgIDs: strings.Split(c.Query("ids"), ","),
 	}
@@ -102,7 +102,7 @@ func (s *router) getOrgs(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getOrgMembers(c governor.Context) {
+func (s *router) getOrgMembers(c *governor.Context) {
 	req := reqOrgMembersSearch{
 		OrgID:  c.Param("id"),
 		Mods:   c.QueryBool("mod"),
@@ -132,7 +132,7 @@ func (s *router) getOrgMembers(c governor.Context) {
 	}
 }
 
-func (s *router) getUserOrgs(c governor.Context) {
+func (s *router) getUserOrgs(c *governor.Context) {
 	req := reqOrgsSearch{
 		Userid: gate.GetCtxUserid(c),
 		Mods:   c.QueryBool("mod"),
@@ -162,7 +162,7 @@ func (s *router) getUserOrgs(c governor.Context) {
 	}
 }
 
-func (s *router) getAllOrgs(c governor.Context) {
+func (s *router) getAllOrgs(c *governor.Context) {
 	req := reqOrgsGetBulk{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -189,7 +189,7 @@ type (
 	}
 )
 
-func (s *router) createOrg(c governor.Context) {
+func (s *router) createOrg(c *governor.Context) {
 	var req reqOrgPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -219,7 +219,7 @@ type (
 	}
 )
 
-func (s *router) updateOrg(c governor.Context) {
+func (s *router) updateOrg(c *governor.Context) {
 	var req reqOrgPut
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -238,7 +238,7 @@ func (s *router) updateOrg(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteOrg(c governor.Context) {
+func (s *router) deleteOrg(c *governor.Context) {
 	req := reqOrgGet{
 		OrgID: c.Param("id"),
 	}
@@ -254,7 +254,7 @@ func (s *router) deleteOrg(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) orgMember(c governor.Context, _ string) (string, bool, bool) {
+func (s *router) orgMember(c *governor.Context, _ string) (string, bool, bool) {
 	orgid := c.Param("id")
 	if err := validhasOrgid(orgid); err != nil {
 		return "", false, false

@@ -17,7 +17,7 @@ type (
 	}
 )
 
-func (s *router) getByID(c governor.Context) {
+func (s *router) getByID(c *governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -35,7 +35,7 @@ func (s *router) getByID(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getByIDPersonal(c governor.Context) {
+func (s *router) getByIDPersonal(c *governor.Context) {
 	req := reqUserGetID{
 		Userid: gate.GetCtxUserid(c),
 	}
@@ -53,7 +53,7 @@ func (s *router) getByIDPersonal(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getByIDPrivate(c governor.Context) {
+func (s *router) getByIDPrivate(c *governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -78,7 +78,7 @@ type (
 	}
 )
 
-func (s *router) getByUsername(c governor.Context) {
+func (s *router) getByUsername(c *governor.Context) {
 	req := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -96,7 +96,7 @@ func (s *router) getByUsername(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getByUsernamePrivate(c governor.Context) {
+func (s *router) getByUsernamePrivate(c *governor.Context) {
 	req := reqUserGetUsername{
 		Username: c.Param("username"),
 	}
@@ -124,7 +124,7 @@ type (
 	}
 )
 
-func (s *router) getUserRoles(c governor.Context) {
+func (s *router) getUserRoles(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: c.Param("id"),
 		Prefix: c.Query("prefix"),
@@ -145,7 +145,7 @@ func (s *router) getUserRoles(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getUserRolesPersonal(c governor.Context) {
+func (s *router) getUserRolesPersonal(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -174,7 +174,7 @@ type (
 	}
 )
 
-func (s *router) getUserRolesIntersect(c governor.Context) {
+func (s *router) getUserRolesIntersect(c *governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: c.Param("id"),
 		Roles:  rank.SplitString(c.Query("roles")),
@@ -202,7 +202,7 @@ func (s *router) getUserRolesIntersect(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getUserRolesIntersectPersonal(c governor.Context) {
+func (s *router) getUserRolesIntersectPersonal(c *governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: gate.GetCtxUserid(c),
 		Roles:  rank.SplitString(c.Query("roles")),
@@ -239,7 +239,7 @@ type (
 	}
 )
 
-func (s *router) getUsersByRole(c governor.Context) {
+func (s *router) getUsersByRole(c *governor.Context) {
 	req := reqGetRoleUser{
 		Role:   c.Param("role"),
 		Amount: c.QueryInt("amount", -1),
@@ -266,7 +266,7 @@ type (
 	}
 )
 
-func (s *router) getAllUserInfo(c governor.Context) {
+func (s *router) getAllUserInfo(c *governor.Context) {
 	req := reqGetUserBulk{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -291,7 +291,7 @@ type (
 	}
 )
 
-func (s *router) getUserInfoBulkPublic(c governor.Context) {
+func (s *router) getUserInfoBulkPublic(c *governor.Context) {
 	req := reqGetUsers{
 		Userids: strings.Split(c.Query("ids"), ","),
 	}
@@ -316,7 +316,7 @@ type (
 	}
 )
 
-func (s *router) searchUsers(c governor.Context) {
+func (s *router) searchUsers(c *governor.Context) {
 	req := reqSearchUsers{
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),

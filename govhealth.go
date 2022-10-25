@@ -19,11 +19,11 @@ type (
 
 func (s *Server) initHealth(r Router) {
 	m := NewMethodRouter(r)
-	m.GetCtx("/live", func(c Context) {
+	m.GetCtx("/live", func(c *Context) {
 		c.WriteStatus(http.StatusOK)
 	})
 
-	m.GetCtx("/ready", func(c Context) {
+	m.GetCtx("/ready", func(c *Context) {
 		t := time.Now().Round(0)
 		errs := s.checkHealthServices(c.Ctx())
 		errReslist := make([]healthErrorRes, 0, len(errs))
@@ -43,7 +43,7 @@ func (s *Server) initHealth(r Router) {
 		})
 	})
 
-	m.GetCtx("/version", func(c Context) {
+	m.GetCtx("/version", func(c *Context) {
 		c.WriteString(http.StatusOK, s.config.version.String())
 	})
 }

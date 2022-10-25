@@ -39,7 +39,7 @@ type (
 	}
 
 	// Tagger computes tags for requests
-	Tagger func(c governor.Context) []Tag
+	Tagger func(c *governor.Context) []Tag
 
 	// Params specify rate limiting params
 	Params struct {
@@ -173,7 +173,7 @@ type (
 
 func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
-		return governor.RouteHandlerFunc(func(c governor.Context) {
+		return governor.RouteHandlerFunc(func(c *governor.Context) {
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
@@ -293,7 +293,7 @@ func (t *tree) Base() governor.Middleware {
 
 // Compose composes rate limit taggers
 func Compose(r Ratelimiter, taggers ...Tagger) governor.MiddlewareCtx {
-	return r.RatelimitCtx(func(c governor.Context) []Tag {
+	return r.RatelimitCtx(func(c *governor.Context) []Tag {
 		var tags []Tag
 		for _, i := range taggers {
 			tags = append(tags, i(c)...)
@@ -307,7 +307,7 @@ func IPAddress(key string, params Params) Tagger {
 	if params.Period <= 0 {
 		panic("period must be positive")
 	}
-	return func(c governor.Context) []Tag {
+	return func(c *governor.Context) []Tag {
 		ip := c.RealIP()
 		if ip == nil {
 			return nil
@@ -327,7 +327,7 @@ func Userid(key string, params Params) Tagger {
 	if params.Period <= 0 {
 		panic("period must be positive")
 	}
-	return func(c governor.Context) []Tag {
+	return func(c *governor.Context) []Tag {
 		userid := gate.GetCtxUserid(c)
 		if userid == "" {
 			return nil
@@ -347,7 +347,7 @@ func UseridIPAddress(key string, params Params) Tagger {
 	if params.Period <= 0 {
 		panic("period must be positive")
 	}
-	return func(c governor.Context) []Tag {
+	return func(c *governor.Context) []Tag {
 		userid := gate.GetCtxUserid(c)
 		if userid == "" {
 			return nil

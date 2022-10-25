@@ -10,7 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/netip"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -23,85 +22,39 @@ import (
 
 type (
 	// Context is an http request and writer wrapper
-	Context interface {
-		LReqID() string
-		RealIP() *netip.Addr
-		Param(key string) string
-		Query(key string) string
-		QueryDef(key string, def string) string
-		QueryInt(key string, def int) int
-		QueryInt64(key string, def int64) int64
-		QueryBool(key string) bool
-		Header(key string) string
-		SetHeader(key, value string)
-		AddHeader(key, value string)
-		DelHeader(key string)
-		Cookie(key string) (*http.Cookie, error)
-		SetCookie(cookie *http.Cookie)
-		BasicAuth() (string, string, bool)
-		ReadAllBody() ([]byte, error)
-		Bind(i interface{}, allowUnknown bool) error
-		FormValue(key string) string
-		FormFile(key string) (multipart.File, *multipart.FileHeader, error)
-		WriteStatus(status int)
-		Redirect(status int, url string)
-		WriteString(status int, text string)
-		WriteJSON(status int, body interface{})
-		WriteFile(status int, contentType string, r io.Reader)
-		WriteError(err error)
-		Ctx() context.Context
-		SetCtx(ctx context.Context)
-		Get(key interface{}) interface{}
-		Set(key, value interface{})
-		LogFields(fields klog.Fields)
-		Log() klog.Logger
-		Req() *http.Request
-		Res() http.ResponseWriter
-		R() (http.ResponseWriter, *http.Request)
-		Websocket() (Websocket, error)
-	}
-
-	govcontext struct {
-		w        http.ResponseWriter
-		r        *http.Request
-		query    url.Values
-		rawquery string
-		log      *klog.LevelLogger
+	Context struct {
+		w   http.ResponseWriter
+		r   *http.Request
+		log *klog.LevelLogger
 	}
 )
 
 // NewContext creates a Context
-func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) Context {
-	return &govcontext{
-		w:        w,
-		r:        r,
-		query:    r.URL.Query(),
-		rawquery: r.URL.RawQuery,
-		log:      klog.NewLevelLogger(log),
+func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) *Context {
+	return &Context{
+		w:   w,
+		r:   r,
+		log: klog.NewLevelLogger(log),
 	}
 }
 
-func (c *govcontext) LReqID() string {
+func (c *Context) LReqID() string {
 	return getCtxLocalReqID(c.Ctx())
 }
 
-func (c *govcontext) RealIP() *netip.Addr {
+func (c *Context) RealIP() *netip.Addr {
 	return getCtxMiddlewareRealIP(c.Ctx())
 }
 
-func (c *govcontext) Param(key string) string {
-	return chi.URLParam(c.Req(), key)
+func (c *Context) Param(key string) string {
+	return chi.URLParam(c.r, key)
 }
 
-func (c *govcontext) Query(key string) string {
-	if u := c.Req().URL; u.RawQuery != c.rawquery {
-		c.query = u.Query()
-		c.rawquery = u.RawQuery
-	}
-	return c.query.Get(key)
+func (c *Context) Query(key string) string {
+	return c.r.FormValue(key)
 }
 
-func (c *govcontext) QueryDef(key string, def string) string {
+func (c *Context) QueryDef(key string, def string) string {
 	v := c.Query(key)
 	if v == "" {
 		return def
@@ -109,7 +62,7 @@ func (c *govcontext) QueryDef(key string, def string) string {
 	return v
 }
 
-func (c *govcontext) QueryInt(key string, def int) int {
+func (c *Context) QueryInt(key string, def int) int {
 	s := c.Query(key)
 	if s == "" {
 		return def
@@ -121,7 +74,7 @@ func (c *govcontext) QueryInt(key string, def int) int {
 	return v
 }
 
-func (c *govcontext) QueryInt64(key string, def int64) int64 {
+func (c *Context) QueryInt64(key string, def int64) int64 {
 	s := c.Query(key)
 	if s == "" {
 		return def
@@ -133,7 +86,7 @@ func (c *govcontext) QueryInt64(key string, def int64) int64 {
 	return v
 }
 
-func (c *govcontext) QueryBool(key string) bool {
+func (c *Context) QueryBool(key string) bool {
 	s := c.Query(key)
 	switch s {
 	case "t", "true", "y", "yes", "1":
@@ -143,36 +96,36 @@ func (c *govcontext) QueryBool(key string) bool {
 	}
 }
 
-func (c *govcontext) Header(key string) string {
-	return c.Req().Header.Get(key)
+func (c *Context) Header(key string) string {
+	return c.r.Header.Get(key)
 }
 
-func (c *govcontext) SetHeader(key, value string) {
+func (c *Context) SetHeader(key, value string) {
 	c.w.Header().Set(key, value)
 }
 
-func (c *govcontext) AddHeader(key, value string) {
+func (c *Context) AddHeader(key, value string) {
 	c.w.Header().Add(key, value)
 }
 
-func (c *govcontext) DelHeader(key string) {
+func (c *Context) DelHeader(key string) {
 	c.w.Header().Del(key)
 }
 
-func (c *govcontext) Cookie(key string) (*http.Cookie, error) {
-	return c.Req().Cookie(key)
+func (c *Context) Cookie(key string) (*http.Cookie, error) {
+	return c.r.Cookie(key)
 }
 
-func (c *govcontext) SetCookie(cookie *http.Cookie) {
+func (c *Context) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(c.w, cookie)
 }
 
-func (c *govcontext) BasicAuth() (string, string, bool) {
-	return c.Req().BasicAuth()
+func (c *Context) BasicAuth() (string, string, bool) {
+	return c.r.BasicAuth()
 }
 
-func (c *govcontext) ReadAllBody() ([]byte, error) {
-	data, err := io.ReadAll(c.Req().Body)
+func (c *Context) ReadAllBody() ([]byte, error) {
+	data, err := io.ReadAll(c.r.Body)
 	if err != nil {
 		var rerr *http.MaxBytesError
 		if errors.As(err, &rerr) {
@@ -183,18 +136,18 @@ func (c *govcontext) ReadAllBody() ([]byte, error) {
 	return data, nil
 }
 
-func (c *govcontext) Bind(i interface{}, allowUnknown bool) error {
+func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 	// ContentLength of -1 is unknown
-	if c.Req().ContentLength == 0 {
+	if c.r.ContentLength == 0 {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Empty request body")
 	}
-	mediaType, _, err := mime.ParseMediaType(c.Req().Header.Get("Content-Type"))
+	mediaType, _, err := mime.ParseMediaType(c.Header("Content-Type"))
 	if err != nil {
 		return ErrWithRes(err, http.StatusBadRequest, "", "Invalid mime type")
 	}
 	switch mediaType {
 	case "application/json":
-		d := json.NewDecoder(c.Req().Body)
+		d := json.NewDecoder(c.r.Body)
 		if !allowUnknown {
 			d.DisallowUnknownFields()
 		}
@@ -214,23 +167,23 @@ func (c *govcontext) Bind(i interface{}, allowUnknown bool) error {
 	}
 }
 
-func (c *govcontext) FormValue(key string) string {
-	return c.Req().FormValue(key)
+func (c *Context) FormValue(key string) string {
+	return c.r.PostFormValue(key)
 }
 
-func (c *govcontext) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	return c.Req().FormFile(key)
+func (c *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	return c.r.FormFile(key)
 }
 
-func (c *govcontext) WriteStatus(status int) {
+func (c *Context) WriteStatus(status int) {
 	c.w.WriteHeader(status)
 }
 
-func (c *govcontext) Redirect(status int, url string) {
-	http.Redirect(c.Res(), c.Req(), url, status)
+func (c *Context) Redirect(status int, url string) {
+	http.Redirect(c.w, c.r, url, status)
 }
 
-func (c *govcontext) WriteString(status int, text string) {
+func (c *Context) WriteString(status int, text string) {
 	c.w.Header().Set("Content-Type", mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	if _, err := io.WriteString(c.w, text); err != nil {
@@ -238,8 +191,8 @@ func (c *govcontext) WriteString(status int, text string) {
 	}
 }
 
-func (c *govcontext) WriteJSON(status int, body interface{}) {
-	b := bytes.Buffer{}
+func (c *Context) WriteJSON(status int, body interface{}) {
+	var b bytes.Buffer
 	e := json.NewEncoder(&b)
 	e.SetEscapeHTML(false)
 	if err := e.Encode(body); err != nil {
@@ -255,7 +208,32 @@ func (c *govcontext) WriteJSON(status int, body interface{}) {
 	}
 }
 
-func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
+func (c *Context) WriteError(err error) {
+	var rerr *ErrorRes
+	if !errors.As(err, &rerr) {
+		rerr = &ErrorRes{
+			Status:  http.StatusInternalServerError,
+			Message: "Internal Server Error",
+		}
+	}
+
+	if !errors.Is(err, ErrorNoLog{}) {
+		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
+			c.log.WarnErr(c.Ctx(), err, nil)
+		} else {
+			c.log.Err(c.Ctx(), err, nil)
+		}
+	}
+
+	var tmrErr *ErrorTooManyRequests
+	if errors.As(err, &tmrErr) {
+		c.SetHeader(retryAfterHeader, tmrErr.RetryAfterTime())
+	}
+
+	c.WriteJSON(rerr.Status, rerr)
+}
+
+func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
 	c.w.Header().Set("Content-Type", contentType)
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
@@ -264,40 +242,40 @@ func (c *govcontext) WriteFile(status int, contentType string, r io.Reader) {
 	}
 }
 
-func (c *govcontext) Ctx() context.Context {
+func (c *Context) Ctx() context.Context {
 	return c.r.Context()
 }
 
-func (c *govcontext) SetCtx(ctx context.Context) {
+func (c *Context) SetCtx(ctx context.Context) {
 	c.r = c.r.WithContext(ctx)
 }
 
-func (c *govcontext) Get(key interface{}) interface{} {
+func (c *Context) Get(key interface{}) interface{} {
 	return c.Ctx().Value(key)
 }
 
-func (c *govcontext) Set(key, value interface{}) {
+func (c *Context) Set(key, value interface{}) {
 	c.SetCtx(context.WithValue(c.Ctx(), key, value))
 }
 
-func (c *govcontext) LogFields(fields klog.Fields) {
+func (c *Context) LogFields(fields klog.Fields) {
 	c.SetCtx(klog.WithFields(c.Ctx(), fields))
 }
 
-func (c *govcontext) Log() klog.Logger {
+func (c *Context) Log() klog.Logger {
 	return c.log.Logger
 }
 
-func (c *govcontext) Req() *http.Request {
+func (c *Context) Req() *http.Request {
 	return c.r
 }
 
-func (c *govcontext) Res() http.ResponseWriter {
+func (c *Context) Res() http.ResponseWriter {
 	return c.w
 }
 
-func (c *govcontext) R() (http.ResponseWriter, *http.Request) {
-	return c.Res(), c.Req()
+func (c *Context) R() (http.ResponseWriter, *http.Request) {
+	return c.w, c.r
 }
 
 const (
@@ -307,29 +285,21 @@ const (
 
 type (
 	// Websocket manages a websocket
-	Websocket interface {
-		SetReadLimit(limit int64)
-		Read(ctx context.Context) (bool, []byte, error)
-		Write(ctx context.Context, txt bool, b []byte) error
-		Close(status int, reason string)
-		CloseError(err error)
-	}
-
-	govws struct {
-		c    *govcontext
+	Websocket struct {
+		c    *Context
 		conn *websocket.Conn
 	}
 )
 
-func (c *govcontext) Websocket() (Websocket, error) {
-	conn, err := websocket.Accept(c.Res(), c.Req(), &websocket.AcceptOptions{
+func (c *Context) Websocket() (*Websocket, error) {
+	conn, err := websocket.Accept(c.w, c.r, &websocket.AcceptOptions{
 		Subprotocols:    []string{WSProtocolVersion},
 		CompressionMode: websocket.CompressionContextTakeover,
 	})
 	if err != nil {
 		return nil, ErrWithRes(err, http.StatusBadRequest, "", "Failed to open ws connection")
 	}
-	w := &govws{
+	w := &Websocket{
 		c:    c,
 		conn: conn,
 	}
@@ -341,7 +311,7 @@ func (c *govcontext) Websocket() (Websocket, error) {
 	return w, nil
 }
 
-func (w *govws) SetReadLimit(limit int64) {
+func (w *Websocket) SetReadLimit(limit int64) {
 	w.conn.SetReadLimit(limit)
 }
 
@@ -364,7 +334,7 @@ func (e *ErrorWS) Error() string {
 	return b.String()
 }
 
-func (w *govws) wrapWSErr(err error, status int, reason string) error {
+func (w *Websocket) wrapWSErr(err error, status int, reason string) error {
 	var werr websocket.CloseError
 	if errors.As(err, &werr) {
 		return kerrors.WithKind(err, &ErrorWS{
@@ -386,7 +356,7 @@ func ErrWS(err error, status int, reason string) error {
 	}, "Websocket error")
 }
 
-func (w *govws) Read(ctx context.Context) (bool, []byte, error) {
+func (w *Websocket) Read(ctx context.Context) (bool, []byte, error) {
 	t, b, err := w.conn.Read(ctx)
 	if err != nil {
 		return false, nil, w.wrapWSErr(err, int(websocket.StatusUnsupportedData), "Failed to read from ws")
@@ -394,7 +364,7 @@ func (w *govws) Read(ctx context.Context) (bool, []byte, error) {
 	return t == websocket.MessageText, b, nil
 }
 
-func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
+func (w *Websocket) Write(ctx context.Context, txt bool, b []byte) error {
 	msgtype := websocket.MessageBinary
 	if txt {
 		msgtype = websocket.MessageText
@@ -407,7 +377,7 @@ func (w *govws) Write(ctx context.Context, txt bool, b []byte) error {
 	return nil
 }
 
-func (w *govws) Close(status int, reason string) {
+func (w *Websocket) Close(status int, reason string) {
 	if err := w.conn.Close(websocket.StatusCode(status), reason); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "already wrote close") {
 			return
@@ -417,7 +387,7 @@ func (w *govws) Close(status int, reason string) {
 	}
 }
 
-func (w *govws) CloseError(err error) {
+func (w *Websocket) CloseError(err error) {
 	var werr *ErrorWS
 	isError := errors.As(err, &werr)
 	if !isError {

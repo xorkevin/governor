@@ -71,7 +71,7 @@ func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 	return nil
 }
 
-func (s *router) ws(c governor.Context) {
+func (s *router) ws(c *governor.Context) {
 	userid := gate.GetCtxUserid(c)
 
 	conn, err := c.Websocket()
@@ -250,7 +250,7 @@ func (s *router) ws(c governor.Context) {
 	}
 }
 
-func (s *router) echo(c governor.Context) {
+func (s *router) echo(c *governor.Context) {
 	conn, err := c.Websocket()
 	if err != nil {
 		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)

@@ -14,7 +14,7 @@ type (
 	}
 )
 
-func (m *router) publishEvent(c governor.Context) {
+func (m *router) publishEvent(c *governor.Context) {
 	username, password, ok := c.BasicAuth()
 	if !ok || username != "system" {
 		c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))

@@ -20,7 +20,7 @@ type (
 	}
 )
 
-func (s *router) createProfile(c governor.Context) {
+func (s *router) createProfile(c *governor.Context) {
 	var req reqProfileModel
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -41,7 +41,7 @@ func (s *router) createProfile(c governor.Context) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (s *router) updateProfile(c governor.Context) {
+func (s *router) updateProfile(c *governor.Context) {
 	var req reqProfileModel
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -68,7 +68,7 @@ type (
 	}
 )
 
-func (s *router) updateImage(c governor.Context) {
+func (s *router) updateImage(c *governor.Context) {
 	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
@@ -91,7 +91,7 @@ func (s *router) updateImage(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteProfile(c governor.Context) {
+func (s *router) deleteProfile(c *governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -108,7 +108,7 @@ func (s *router) deleteProfile(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) getOwnProfile(c governor.Context) {
+func (s *router) getOwnProfile(c *governor.Context) {
 	req := reqProfileGetID{
 		Userid: gate.GetCtxUserid(c),
 	}
@@ -121,7 +121,7 @@ func (s *router) getOwnProfile(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getProfile(c governor.Context) {
+func (s *router) getProfile(c *governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -139,7 +139,7 @@ func (s *router) getProfile(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getProfileImage(c governor.Context) {
+func (s *router) getProfileImage(c *governor.Context) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}
@@ -168,7 +168,7 @@ type (
 	}
 )
 
-func (s *router) getProfilesBulk(c governor.Context) {
+func (s *router) getProfilesBulk(c *governor.Context) {
 	req := reqGetProfiles{
 		Userids: strings.Split(c.Query("ids"), ","),
 	}
@@ -185,7 +185,7 @@ func (s *router) getProfilesBulk(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getProfileImageCC(c governor.Context) (string, error) {
+func (s *router) getProfileImageCC(c *governor.Context) (string, error) {
 	req := reqProfileGetID{
 		Userid: c.Param("id"),
 	}

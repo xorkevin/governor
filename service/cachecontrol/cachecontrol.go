@@ -83,9 +83,9 @@ func etagToValue(etag string) string {
 }
 
 // ControlCtx creates a middleware function to cache the response
-func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.MiddlewareCtx {
+func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(*governor.Context) (string, error)) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
-		return governor.RouteHandlerFunc(func(c governor.Context) {
+		return governor.RouteHandlerFunc(func(c *governor.Context) {
 			etag := ""
 			if etagfunc != nil {
 				tag, err := etagfunc(c)
@@ -127,13 +127,13 @@ func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(
 }
 
 // Control creates a middleware function to cache the response
-func Control(log klog.Logger, public bool, directives Directives, maxage int64, etagfunc func(governor.Context) (string, error)) governor.Middleware {
+func Control(log klog.Logger, public bool, directives Directives, maxage int64, etagfunc func(*governor.Context) (string, error)) governor.Middleware {
 	return governor.MiddlewareFromCtx(log, ControlCtx(public, directives, maxage, etagfunc))
 }
 
 // ControlNoStoreCtx creates a middleware function to deny caching responses
 func ControlNoStoreCtx(next governor.RouteHandler) governor.RouteHandler {
-	return governor.RouteHandlerFunc(func(c governor.Context) {
+	return governor.RouteHandlerFunc(func(c *governor.Context) {
 		c.SetHeader(headerCacheControl, string(DirNoStore))
 		next.ServeHTTPCtx(c)
 	})

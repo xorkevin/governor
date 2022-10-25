@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func (s *router) getFriends(c governor.Context) {
+func (s *router) getFriends(c *governor.Context) {
 	req := reqGetFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -47,7 +47,7 @@ type (
 	}
 )
 
-func (s *router) searchFriends(c governor.Context) {
+func (s *router) searchFriends(c *governor.Context) {
 	req := reqSearchFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -73,7 +73,7 @@ type (
 	}
 )
 
-func (s *router) removeFriend(c governor.Context) {
+func (s *router) removeFriend(c *governor.Context) {
 	req := reqRmFriend{
 		Userid1: gate.GetCtxUserid(c),
 		Userid2: c.Param("id"),
@@ -97,7 +97,7 @@ type (
 	}
 )
 
-func (s *router) sendFriendInvitation(c governor.Context) {
+func (s *router) sendFriendInvitation(c *governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
@@ -113,7 +113,7 @@ func (s *router) sendFriendInvitation(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) acceptFriendInvitation(c governor.Context) {
+func (s *router) acceptFriendInvitation(c *governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
@@ -129,7 +129,7 @@ func (s *router) acceptFriendInvitation(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteUserFriendInvitation(c governor.Context) {
+func (s *router) deleteUserFriendInvitation(c *governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    gate.GetCtxUserid(c),
 		InvitedBy: c.Param("id"),
@@ -145,7 +145,7 @@ func (s *router) deleteUserFriendInvitation(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteInvitedFriendInvitation(c governor.Context) {
+func (s *router) deleteInvitedFriendInvitation(c *governor.Context) {
 	req := reqFriendInvitation{
 		Userid:    c.Param("id"),
 		InvitedBy: gate.GetCtxUserid(c),
@@ -170,7 +170,7 @@ type (
 	}
 )
 
-func (s *router) getInvitations(c governor.Context) {
+func (s *router) getInvitations(c *governor.Context) {
 	req := reqGetFriendInvitations{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -188,7 +188,7 @@ func (s *router) getInvitations(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getInvited(c governor.Context) {
+func (s *router) getInvited(c *governor.Context) {
 	req := reqGetFriendInvitations{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -215,7 +215,7 @@ type (
 	}
 )
 
-func (s *router) getLatestDMs(c governor.Context) {
+func (s *router) getLatestDMs(c *governor.Context) {
 	req := reqGetLatestChats{
 		Userid: gate.GetCtxUserid(c),
 		Before: c.QueryInt64("before", 0),
@@ -241,7 +241,7 @@ type (
 	}
 )
 
-func (s *router) getDMs(c governor.Context) {
+func (s *router) getDMs(c *governor.Context) {
 	req := reqGetChats{
 		Userid:  gate.GetCtxUserid(c),
 		Chatids: strings.Split(c.Query("ids"), ","),
@@ -258,7 +258,7 @@ func (s *router) getDMs(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) searchDMs(c governor.Context) {
+func (s *router) searchDMs(c *governor.Context) {
 	req := reqSearchFriends{
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
@@ -286,7 +286,7 @@ type (
 	}
 )
 
-func (s *router) updateDM(c governor.Context) {
+func (s *router) updateDM(c *governor.Context) {
 	var req reqUpdateDM
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -315,7 +315,7 @@ type (
 	}
 )
 
-func (s *router) createDMMsg(c governor.Context) {
+func (s *router) createDMMsg(c *governor.Context) {
 	var req reqCreateMsg
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -346,7 +346,7 @@ type (
 	}
 )
 
-func (s *router) getDMMsgs(c governor.Context) {
+func (s *router) getDMMsgs(c *governor.Context) {
 	req := reqGetMsgs{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -375,7 +375,7 @@ type (
 	}
 )
 
-func (s *router) deleteDMMsg(c governor.Context) {
+func (s *router) deleteDMMsg(c *governor.Context) {
 	req := reqDelMsg{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -400,7 +400,7 @@ type (
 	}
 )
 
-func (s *router) getLatestGDMs(c governor.Context) {
+func (s *router) getLatestGDMs(c *governor.Context) {
 	req := reqGetLatestChats{
 		Userid: gate.GetCtxUserid(c),
 		Before: c.QueryInt64("before", 0),
@@ -418,7 +418,7 @@ func (s *router) getLatestGDMs(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getGDMs(c governor.Context) {
+func (s *router) getGDMs(c *governor.Context) {
 	req := reqGetChats{
 		Userid:  gate.GetCtxUserid(c),
 		Chatids: strings.Split(c.Query("ids"), ","),
@@ -445,7 +445,7 @@ type (
 	}
 )
 
-func (s *router) searchGDMs(c governor.Context) {
+func (s *router) searchGDMs(c *governor.Context) {
 	req := reqSearchGDMs{
 		Userid1: gate.GetCtxUserid(c),
 		Userid2: c.Query("id"),
@@ -474,7 +474,7 @@ type (
 	}
 )
 
-func (s *router) createGDM(c governor.Context) {
+func (s *router) createGDM(c *governor.Context) {
 	var req reqCreateGDM
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -506,7 +506,7 @@ type (
 	}
 )
 
-func (s *router) updateGDM(c governor.Context) {
+func (s *router) updateGDM(c *governor.Context) {
 	var req reqUpdateGDM
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -533,7 +533,7 @@ type (
 	}
 )
 
-func (s *router) deleteGDM(c governor.Context) {
+func (s *router) deleteGDM(c *governor.Context) {
 	req := reqDelGDM{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -549,7 +549,7 @@ func (s *router) deleteGDM(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) createGDMMsg(c governor.Context) {
+func (s *router) createGDMMsg(c *governor.Context) {
 	var req reqCreateMsg
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -569,7 +569,7 @@ func (s *router) createGDMMsg(c governor.Context) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (s *router) getGDMMsgs(c governor.Context) {
+func (s *router) getGDMMsgs(c *governor.Context) {
 	req := reqGetMsgs{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -589,7 +589,7 @@ func (s *router) getGDMMsgs(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) deleteGDMMsg(c governor.Context) {
+func (s *router) deleteGDMMsg(c *governor.Context) {
 	req := reqDelMsg{
 		Userid: gate.GetCtxUserid(c),
 		Chatid: c.Param("id"),
@@ -615,7 +615,7 @@ type (
 	}
 )
 
-func (s *router) addGDMMember(c governor.Context) {
+func (s *router) addGDMMember(c *governor.Context) {
 	var req reqGDMMember
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -634,7 +634,7 @@ func (s *router) addGDMMember(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) rmGDMMembers(c governor.Context) {
+func (s *router) rmGDMMembers(c *governor.Context) {
 	var req reqGDMMember
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -660,7 +660,7 @@ type (
 	}
 )
 
-func (s *router) getServer(c governor.Context) {
+func (s *router) getServer(c *governor.Context) {
 	req := reqGetServer{
 		ServerID: c.Param("id"),
 	}
@@ -686,7 +686,7 @@ type (
 	}
 )
 
-func (s *router) createServer(c governor.Context) {
+func (s *router) createServer(c *governor.Context) {
 	var req reqCreateServer
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -705,7 +705,7 @@ func (s *router) createServer(c governor.Context) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (s *router) updateServer(c governor.Context) {
+func (s *router) updateServer(c *governor.Context) {
 	var req reqCreateServer
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -731,7 +731,7 @@ type (
 	}
 )
 
-func (s *router) getChannel(c governor.Context) {
+func (s *router) getChannel(c *governor.Context) {
 	req := reqGetChannel{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -757,7 +757,7 @@ type (
 	}
 )
 
-func (s *router) getChannels(c governor.Context) {
+func (s *router) getChannels(c *governor.Context) {
 	req := reqGetChannels{
 		ServerID: c.Param("id"),
 		Amount:   c.QueryInt("amount", -1),
@@ -784,7 +784,7 @@ type (
 	}
 )
 
-func (s *router) searchChannels(c governor.Context) {
+func (s *router) searchChannels(c *governor.Context) {
 	req := reqSearchChannels{
 		ServerID: c.Param("id"),
 		Prefix:   c.Query("prefix"),
@@ -813,7 +813,7 @@ type (
 	}
 )
 
-func (s *router) createChannel(c governor.Context) {
+func (s *router) createChannel(c *governor.Context) {
 	var req reqCreateChannel
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -843,7 +843,7 @@ type (
 	}
 )
 
-func (s *router) updateChannel(c governor.Context) {
+func (s *router) updateChannel(c *governor.Context) {
 	var req reqUpdateChannel
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -862,7 +862,7 @@ func (s *router) updateChannel(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteChannel(c governor.Context) {
+func (s *router) deleteChannel(c *governor.Context) {
 	req := reqGetChannel{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -889,7 +889,7 @@ type (
 	}
 )
 
-func (s *router) createChannelMsg(c governor.Context) {
+func (s *router) createChannelMsg(c *governor.Context) {
 	var req reqCreateChannelMsg
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -921,7 +921,7 @@ type (
 	}
 )
 
-func (s *router) getChannelMsgs(c governor.Context) {
+func (s *router) getChannelMsgs(c *governor.Context) {
 	req := reqGetChannelMsgs{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -950,7 +950,7 @@ type (
 	}
 )
 
-func (s *router) deleteChannelMsg(c governor.Context) {
+func (s *router) deleteChannelMsg(c *governor.Context) {
 	req := reqDelChannelMsg{
 		ServerID:  c.Param("id"),
 		ChannelID: c.Param("cid"),
@@ -967,7 +967,7 @@ func (s *router) deleteChannelMsg(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) serverMember(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) serverMember(c *governor.Context, userid string) (string, bool, bool) {
 	serverid := c.Param("id")
 	if err := validhasServerID(serverid); err != nil {
 		return "", false, false

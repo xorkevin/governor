@@ -10,11 +10,11 @@ import (
 type (
 	// RouteHandler responds to an HTTP request with Context
 	RouteHandler interface {
-		ServeHTTPCtx(c Context)
+		ServeHTTPCtx(c *Context)
 	}
 
 	// RouteHandlerFunc adapts a function as a [RouteHandler]
-	RouteHandlerFunc func(c Context)
+	RouteHandlerFunc func(c *Context)
 
 	// Middleware is a type alias for [Router] middleware
 	Middleware = func(next http.Handler) http.Handler
@@ -24,7 +24,7 @@ type (
 )
 
 // ServeHTTPCtx implements [RouteHandler]
-func (f RouteHandlerFunc) ServeHTTPCtx(c Context) {
+func (f RouteHandlerFunc) ServeHTTPCtx(c *Context) {
 	f(c)
 }
 
@@ -132,7 +132,7 @@ func chainMiddlewareCtx(h RouteHandler, mw []MiddlewareCtx) RouteHandler {
 // MiddlewareFromCtx creates [Middleware] from one or more [MiddlewareCtx]
 func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 	return func(next http.Handler) http.Handler {
-		return toHTTPHandler(chainMiddlewareCtx(RouteHandlerFunc(func(c Context) {
+		return toHTTPHandler(chainMiddlewareCtx(RouteHandlerFunc(func(c *Context) {
 			next.ServeHTTP(c.Res(), c.Req())
 		}), mw), log)
 	}

@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func (s *router) getUserApikeys(c governor.Context) {
+func (s *router) getUserApikeys(c *governor.Context) {
 	req := reqGetUserApikeys{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -47,7 +47,7 @@ type (
 	}
 )
 
-func (s *router) createApikey(c governor.Context) {
+func (s *router) createApikey(c *governor.Context) {
 	var req reqApikeyPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -82,7 +82,7 @@ func (r *reqApikeyID) validUserid() error {
 	return nil
 }
 
-func (s *router) deleteApikey(c governor.Context) {
+func (s *router) deleteApikey(c *governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
@@ -121,7 +121,7 @@ func (r *reqApikeyUpdate) validUserid() error {
 	return nil
 }
 
-func (s *router) updateApikey(c governor.Context) {
+func (s *router) updateApikey(c *governor.Context) {
 	var req reqApikeyUpdate
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -144,7 +144,7 @@ func (s *router) updateApikey(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) rotateApikey(c governor.Context) {
+func (s *router) rotateApikey(c *governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
 		Keyid:  c.Param("id"),
@@ -206,7 +206,7 @@ type (
 	}
 )
 
-func (s *router) checkApikey(c governor.Context) {
+func (s *router) checkApikey(c *governor.Context) {
 	c.WriteJSON(http.StatusOK, resApikeyOK{
 		Message: "OK",
 	})

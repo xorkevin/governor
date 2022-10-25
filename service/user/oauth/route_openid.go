@@ -14,7 +14,7 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-func (s *router) getOpenidConfig(c governor.Context) {
+func (s *router) getOpenidConfig(c *governor.Context) {
 	res, err := s.s.getOpenidConfig()
 	if err != nil {
 		c.WriteError(err)
@@ -23,7 +23,7 @@ func (s *router) getOpenidConfig(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) getJWKS(c governor.Context) {
+func (s *router) getJWKS(c *governor.Context) {
 	res, err := s.s.getJWKS(c.Ctx())
 	if err != nil {
 		c.WriteError(err)
@@ -44,7 +44,7 @@ type (
 	}
 )
 
-func (s *router) authCode(c governor.Context) {
+func (s *router) authCode(c *governor.Context) {
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
 		c.WriteError(governor.ErrWithRes(nil, http.StatusBadRequest, oidErrorInvalidRequest, "Unauthorized"))
@@ -95,7 +95,7 @@ type (
 	}
 )
 
-func (s *router) writeOAuthTokenError(c governor.Context, err error) {
+func (s *router) writeOAuthTokenError(c *governor.Context, err error) {
 	var rerr *governor.ErrorRes
 	if !errors.As(err, &rerr) {
 		rerr = &governor.ErrorRes{
@@ -122,7 +122,7 @@ func (s *router) writeOAuthTokenError(c governor.Context, err error) {
 	})
 }
 
-func (s *router) authToken(c governor.Context) {
+func (s *router) authToken(c *governor.Context) {
 	grantType := c.FormValue("grant_type")
 	if err := validOidGrantType(grantType); err != nil {
 		s.writeOAuthTokenError(c, err)
@@ -172,7 +172,7 @@ func (s *router) authToken(c governor.Context) {
 	return
 }
 
-func (s *router) userinfo(c governor.Context) {
+func (s *router) userinfo(c *governor.Context) {
 	claims := gate.GetCtxClaims(c)
 	if claims == nil {
 		c.WriteError(kerrors.WithMsg(nil, "No access token claims"))
@@ -195,7 +195,7 @@ type (
 	}
 )
 
-func (s *router) getConnections(c governor.Context) {
+func (s *router) getConnections(c *governor.Context) {
 	req := reqGetConnectionGroup{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -222,7 +222,7 @@ type (
 	}
 )
 
-func (s *router) getConnection(c governor.Context) {
+func (s *router) getConnection(c *governor.Context) {
 	req := reqGetConnection{
 		Userid:   gate.GetCtxUserid(c),
 		ClientID: c.Param("id"),
@@ -240,7 +240,7 @@ func (s *router) getConnection(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) delConnection(c governor.Context) {
+func (s *router) delConnection(c *governor.Context) {
 	req := reqGetConnection{
 		Userid:   gate.GetCtxUserid(c),
 		ClientID: c.Param("id"),

@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,29 +125,4 @@ func ErrWithTooManyRequests(err error, t time.Time, code string, resmsg string) 
 		kerrors.OptInner(err),
 		kerrors.OptSkip(1),
 	), http.StatusTooManyRequests, code, resmsg)
-}
-
-func (c *govcontext) WriteError(err error) {
-	var rerr *ErrorRes
-	if !errors.As(err, &rerr) {
-		rerr = &ErrorRes{
-			Status:  http.StatusInternalServerError,
-			Message: "Internal Server Error",
-		}
-	}
-
-	if !errors.Is(err, ErrorNoLog{}) {
-		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
-			c.log.WarnErr(c.Ctx(), err, nil)
-		} else {
-			c.log.Err(c.Ctx(), err, nil)
-		}
-	}
-
-	var tmrErr *ErrorTooManyRequests
-	if errors.As(err, &tmrErr) {
-		c.SetHeader(retryAfterHeader, tmrErr.RetryAfterTime())
-	}
-
-	c.WriteJSON(rerr.Status, rerr)
 }

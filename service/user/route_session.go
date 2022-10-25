@@ -17,7 +17,7 @@ type (
 	}
 )
 
-func (s *router) getSessions(c governor.Context) {
+func (s *router) getSessions(c *governor.Context) {
 	req := reqGetUserSessions{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -56,7 +56,7 @@ func (r *reqUserRmSessions) validUserid() error {
 	return nil
 }
 
-func (s *router) killSessions(c governor.Context) {
+func (s *router) killSessions(c *governor.Context) {
 	var req reqUserRmSessions
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)

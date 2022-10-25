@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func (s *router) putUser(c governor.Context) {
+func (s *router) putUser(c *governor.Context) {
 	userid := gate.GetCtxUserid(c)
 
 	var req reqUserPut
@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func (s *router) patchRoles(c governor.Context) {
+func (s *router) patchRoles(c *governor.Context) {
 	var req reqUserPutRank
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -95,7 +95,7 @@ type (
 	}
 )
 
-func (s *router) postAcceptRoleInvitation(c governor.Context) {
+func (s *router) postAcceptRoleInvitation(c *governor.Context) {
 	req := reqAcceptRoleInvitation{
 		Userid: gate.GetCtxUserid(c),
 		Role:   c.Param("role"),
@@ -120,7 +120,7 @@ type (
 	}
 )
 
-func (s *router) getRoleInvitations(c governor.Context) {
+func (s *router) getRoleInvitations(c *governor.Context) {
 	req := reqGetRoleInvitations{
 		Role:   c.Param("role"),
 		Amount: c.QueryInt("amount", -1),
@@ -148,7 +148,7 @@ type (
 	}
 )
 
-func (s *router) getUserRoleInvitations(c governor.Context) {
+func (s *router) getUserRoleInvitations(c *governor.Context) {
 	req := reqGetUserRoleInvitations{
 		Userid: gate.GetCtxUserid(c),
 		Amount: c.QueryInt("amount", -1),
@@ -175,7 +175,7 @@ type (
 	}
 )
 
-func (s *router) deleteRoleInvitation(c governor.Context) {
+func (s *router) deleteRoleInvitation(c *governor.Context) {
 	req := reqDelRoleInvitation{
 		Userid: c.Param("id"),
 		Role:   c.Param("role"),
@@ -192,7 +192,7 @@ func (s *router) deleteRoleInvitation(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteUserRoleInvitation(c governor.Context) {
+func (s *router) deleteUserRoleInvitation(c *governor.Context) {
 	req := reqDelRoleInvitation{
 		Userid: gate.GetCtxUserid(c),
 		Role:   c.Param("role"),
@@ -209,7 +209,7 @@ func (s *router) deleteUserRoleInvitation(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) roleMod(c governor.Context, _ string) (string, bool, bool) {
+func (s *router) roleMod(c *governor.Context, _ string) (string, bool, bool) {
 	role := c.Param("role")
 	if err := validhasRole(role); err != nil {
 		return "", false, false

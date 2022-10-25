@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func (s *router) createUser(c governor.Context) {
+func (s *router) createUser(c *governor.Context) {
 	var req reqUserPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -46,7 +46,7 @@ type (
 	}
 )
 
-func (s *router) commitUser(c governor.Context) {
+func (s *router) commitUser(c *governor.Context) {
 	var req reqUserPostConfirm
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -74,7 +74,7 @@ type (
 	}
 )
 
-func (s *router) deleteUserSelf(c governor.Context) {
+func (s *router) deleteUserSelf(c *governor.Context) {
 	var req reqUserDeleteSelf
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -101,7 +101,7 @@ type (
 	}
 )
 
-func (s *router) deleteUser(c governor.Context) {
+func (s *router) deleteUser(c *governor.Context) {
 	var req reqUserDelete
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -131,7 +131,7 @@ type (
 	}
 )
 
-func (s *router) addAdmin(c governor.Context) {
+func (s *router) addAdmin(c *governor.Context) {
 	var req reqAddAdmin
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -159,7 +159,7 @@ type (
 	}
 )
 
-func (s *router) getUserApprovals(c governor.Context) {
+func (s *router) getUserApprovals(c *governor.Context) {
 	req := reqGetUserApprovals{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
@@ -178,7 +178,7 @@ func (s *router) getUserApprovals(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) approveUser(c governor.Context) {
+func (s *router) approveUser(c *governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}
@@ -195,7 +195,7 @@ func (s *router) approveUser(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) deleteUserApproval(c governor.Context) {
+func (s *router) deleteUserApproval(c *governor.Context) {
 	req := reqUserGetID{
 		Userid: c.Param("id"),
 	}

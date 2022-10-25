@@ -18,7 +18,7 @@ type (
 	}
 )
 
-func (s *router) getLink(c governor.Context) {
+func (s *router) getLink(c *governor.Context) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -38,7 +38,7 @@ func (s *router) getLink(c governor.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (s *router) getLinkImage(c governor.Context) {
+func (s *router) getLinkImage(c *governor.Context) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -68,7 +68,7 @@ type (
 	}
 )
 
-func (s *router) getLinkGroup(c governor.Context) {
+func (s *router) getLinkGroup(c *governor.Context) {
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -97,7 +97,7 @@ type (
 	}
 )
 
-func (s *router) createLink(c governor.Context) {
+func (s *router) createLink(c *governor.Context) {
 	var req reqLinkPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -125,7 +125,7 @@ type (
 	}
 )
 
-func (s *router) deleteLink(c governor.Context) {
+func (s *router) deleteLink(c *governor.Context) {
 	req := reqLinkDelete{
 		LinkID:    c.Param("linkid"),
 		CreatorID: c.Param("creatorid"),
@@ -149,7 +149,7 @@ type (
 	}
 )
 
-func (s *router) getBrandImage(c governor.Context) {
+func (s *router) getBrandImage(c *governor.Context) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -171,7 +171,7 @@ func (s *router) getBrandImage(c governor.Context) {
 	c.WriteFile(http.StatusOK, contentType, img)
 }
 
-func (s *router) getBrandGroup(c governor.Context) {
+func (s *router) getBrandGroup(c *governor.Context) {
 	req := reqGetGroup{
 		CreatorID: c.Param("creatorid"),
 		Amount:    c.QueryInt("amount", -1),
@@ -198,7 +198,7 @@ type (
 	}
 )
 
-func (s *router) createBrand(c governor.Context) {
+func (s *router) createBrand(c *governor.Context) {
 	img, err := image.LoadImage(c, "image")
 	if err != nil {
 		c.WriteError(err)
@@ -223,7 +223,7 @@ func (s *router) createBrand(c governor.Context) {
 	c.WriteJSON(http.StatusCreated, res)
 }
 
-func (s *router) deleteBrand(c governor.Context) {
+func (s *router) deleteBrand(c *governor.Context) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -239,7 +239,7 @@ func (s *router) deleteBrand(c governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-func (s *router) getLinkImageCC(c governor.Context) (string, error) {
+func (s *router) getLinkImageCC(c *governor.Context) (string, error) {
 	req := reqLinkGet{
 		LinkID: c.Param("linkid"),
 	}
@@ -255,7 +255,7 @@ func (s *router) getLinkImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (s *router) getBrandImageCC(c governor.Context) (string, error) {
+func (s *router) getBrandImageCC(c *governor.Context) (string, error) {
 	req := reqBrandGet{
 		CreatorID: c.Param("creatorid"),
 		BrandID:   c.Param("brandid"),
@@ -272,7 +272,7 @@ func (s *router) getBrandImageCC(c governor.Context) (string, error) {
 	return objinfo.ETag, nil
 }
 
-func (s *router) courierOwner(c governor.Context, userid string) (string, bool, bool) {
+func (s *router) courierOwner(c *governor.Context, userid string) (string, bool, bool) {
 	creatorid := c.Param("creatorid")
 	if err := validhasCreatorID(creatorid); err != nil {
 		return "", false, false

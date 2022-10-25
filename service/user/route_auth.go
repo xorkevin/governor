@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 )
 
-func (s *router) setAccessCookie(c governor.Context, accessToken string) {
+func (s *router) setAccessCookie(c *governor.Context, accessToken string) {
 	c.SetCookie(&http.Cookie{
 		Name:     gate.CookieNameAccessToken,
 		Value:    accessToken,
@@ -20,7 +20,7 @@ func (s *router) setAccessCookie(c governor.Context, accessToken string) {
 	})
 }
 
-func (s *router) setRefreshCookie(c governor.Context, refreshToken string, userid string) {
+func (s *router) setRefreshCookie(c *governor.Context, refreshToken string, userid string) {
 	maxage := int(s.s.authsettings.refreshDuration/time.Second) - 5
 	c.SetCookie(&http.Cookie{
 		Name:     "refresh_token",
@@ -56,7 +56,7 @@ func (s *router) setRefreshCookie(c governor.Context, refreshToken string, useri
 	})
 }
 
-func (s *router) setSessionCookie(c governor.Context, sessionID string, userid string) {
+func (s *router) setSessionCookie(c *governor.Context, sessionID string, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "session_token_" + userid,
 		Value:    sessionID,
@@ -67,7 +67,7 @@ func (s *router) setSessionCookie(c governor.Context, sessionID string, userid s
 	})
 }
 
-func getRefreshCookie(c governor.Context) (string, bool) {
+func getRefreshCookie(c *governor.Context) (string, bool) {
 	cookie, err := c.Cookie("refresh_token")
 	if err != nil {
 		return "", false
@@ -78,7 +78,7 @@ func getRefreshCookie(c governor.Context) (string, bool) {
 	return cookie.Value, true
 }
 
-func getSessionCookie(c governor.Context, userid string) (string, bool) {
+func getSessionCookie(c *governor.Context, userid string) (string, bool) {
 	if userid == "" {
 		return "", false
 	}
@@ -92,7 +92,7 @@ func getSessionCookie(c governor.Context, userid string) (string, bool) {
 	return cookie.Value, true
 }
 
-func (s *router) rmAccessCookie(c governor.Context) {
+func (s *router) rmAccessCookie(c *governor.Context) {
 	c.SetCookie(&http.Cookie{
 		Name:   gate.CookieNameAccessToken,
 		Value:  "invalid",
@@ -101,7 +101,7 @@ func (s *router) rmAccessCookie(c governor.Context) {
 	})
 }
 
-func (s *router) rmRefreshCookie(c governor.Context, userid string) {
+func (s *router) rmRefreshCookie(c *governor.Context, userid string) {
 	c.SetCookie(&http.Cookie{
 		Name:   "refresh_token",
 		Value:  "invalid",
@@ -149,7 +149,7 @@ func (r *reqUserAuth) validCode() error {
 	return nil
 }
 
-func (s *router) loginUser(c governor.Context) {
+func (s *router) loginUser(c *governor.Context) {
 	var req reqUserAuth
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -198,7 +198,7 @@ type (
 	}
 )
 
-func (s *router) exchangeToken(c governor.Context) {
+func (s *router) exchangeToken(c *governor.Context) {
 	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
 		req.RefreshToken = t
@@ -229,7 +229,7 @@ func (s *router) exchangeToken(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) refreshToken(c governor.Context) {
+func (s *router) refreshToken(c *governor.Context) {
 	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
 		req.RefreshToken = t
@@ -263,7 +263,7 @@ func (s *router) refreshToken(c governor.Context) {
 	c.WriteJSON(http.StatusOK, res)
 }
 
-func (s *router) logoutUser(c governor.Context) {
+func (s *router) logoutUser(c *governor.Context) {
 	var req reqRefreshToken
 	if t, ok := getRefreshCookie(c); ok {
 		req.RefreshToken = t

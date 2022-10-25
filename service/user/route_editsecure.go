@@ -17,7 +17,7 @@ type (
 	}
 )
 
-func (s *router) putEmail(c governor.Context) {
+func (s *router) putEmail(c *governor.Context) {
 	var req reqUserPutEmail
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -45,7 +45,7 @@ type (
 	}
 )
 
-func (s *router) putEmailVerify(c governor.Context) {
+func (s *router) putEmailVerify(c *governor.Context) {
 	var req reqUserPutEmailVerify
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -72,7 +72,7 @@ type (
 	}
 )
 
-func (s *router) putPassword(c governor.Context) {
+func (s *router) putPassword(c *governor.Context) {
 	var req reqUserPutPassword
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -98,7 +98,7 @@ type (
 	}
 )
 
-func (s *router) forgotPassword(c governor.Context) {
+func (s *router) forgotPassword(c *governor.Context) {
 	var req reqForgotPassword
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -125,7 +125,7 @@ type (
 	}
 )
 
-func (s *router) forgotPasswordReset(c governor.Context) {
+func (s *router) forgotPasswordReset(c *governor.Context) {
 	var req reqForgotPasswordReset
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -153,7 +153,7 @@ type (
 	}
 )
 
-func (s *router) addOTP(c governor.Context) {
+func (s *router) addOTP(c *governor.Context) {
 	var req reqAddOTP
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -181,7 +181,7 @@ type (
 	}
 )
 
-func (s *router) commitOTP(c governor.Context) {
+func (s *router) commitOTP(c *governor.Context) {
 	var req reqOTPCode
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -223,7 +223,7 @@ func (r *reqOTPCodeBackup) validCode() error {
 	return nil
 }
 
-func (s *router) removeOTP(c governor.Context) {
+func (s *router) removeOTP(c *governor.Context) {
 	var req reqOTPCodeBackup
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)

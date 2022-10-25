@@ -35,7 +35,7 @@ type (
 
 func (s *Server) initSetup(r Router) {
 	m := NewMethodRouter(r)
-	m.PostCtx("", func(c Context) {
+	m.PostCtx("", func(c *Context) {
 		c.LogFields(klog.Fields{
 			"gov.service.phase": "setup",
 		})

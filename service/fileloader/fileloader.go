@@ -26,7 +26,7 @@ func (e ErrorUnsupportedMIME) Error() string {
 }
 
 // LoadOpenFile returns an open file from a Context
-func LoadOpenFile(c governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
+func LoadOpenFile(c *governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {
 		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidFile{}, "Invalid file format"), http.StatusBadRequest, "", "Invalid file format")

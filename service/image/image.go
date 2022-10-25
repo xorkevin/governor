@@ -126,7 +126,7 @@ var (
 )
 
 // LoadImage returns an image file from a Context
-func LoadImage(c governor.Context, formField string) (Image, error) {
+func LoadImage(c *governor.Context, formField string) (Image, error) {
 	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, allowedMediaTypes)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid image file")
