@@ -31,7 +31,7 @@ type (
 	Client struct {
 		clients []clientDef
 		inj     Injector
-		cmds    []*CmdTree
+		cmds    []*cmdTree
 		config  *ClientConfig
 		stdin   *bufio.Reader
 		httpc   *http.Client
@@ -49,11 +49,11 @@ type (
 		r   ServiceClient
 	}
 
-	// CmdTree is a tree of client cmds
-	CmdTree struct {
+	// cmdTree is a tree of client cmds
+	cmdTree struct {
 		Desc     CmdDesc
 		Handler  CmdHandler
-		Children []*CmdTree
+		Children []*cmdTree
 	}
 
 	// CmdFlag describes a client flag
@@ -108,7 +108,7 @@ type (
 
 	cmdRegistrar struct {
 		c      *Client
-		parent *CmdTree
+		parent *cmdTree
 	}
 )
 
@@ -157,15 +157,15 @@ func (c *Client) GetConfig() ClientConfig {
 	return *c.config
 }
 
-func (c *Client) addCmd(cmd *CmdTree) {
+func (c *Client) addCmd(cmd *cmdTree) {
 	c.cmds = append(c.cmds, cmd)
 }
 
-func (t *CmdTree) addCmd(cmd *CmdTree) {
+func (t *cmdTree) addCmd(cmd *cmdTree) {
 	t.Children = append(t.Children, cmd)
 }
 
-func (r *cmdRegistrar) addCmd(cmd *CmdTree) {
+func (r *cmdRegistrar) addCmd(cmd *cmdTree) {
 	if r.parent == nil {
 		r.c.addCmd(cmd)
 	} else {
@@ -174,14 +174,14 @@ func (r *cmdRegistrar) addCmd(cmd *CmdTree) {
 }
 
 func (r *cmdRegistrar) Register(cmd CmdDesc, handler CmdHandler) {
-	r.addCmd(&CmdTree{
+	r.addCmd(&cmdTree{
 		Desc:    cmd,
 		Handler: handler,
 	})
 }
 
 func (r *cmdRegistrar) Group(cmd CmdDesc) CmdRegistrar {
-	t := &CmdTree{
+	t := &cmdTree{
 		Desc: cmd,
 	}
 	r.addCmd(t)
@@ -212,7 +212,7 @@ func (c *Client) Register(name string, url string, cmd *CmdDesc, r ServiceClient
 }
 
 // GetCmds returns registered cmds
-func (c *Client) GetCmds() []*CmdTree {
+func (c *Client) GetCmds() []*cmdTree {
 	return c.cmds
 }
 
