@@ -72,58 +72,67 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	r.SetDefault("hbmaxfail", 5)
 }
 
-type (
+var (
 	// ErrorConn is returned on a db connection error
-	ErrorConn struct{}
+	ErrorConn errorConn
 	// ErrorClient is returned for unknown client errors
-	ErrorClient struct{}
+	ErrorClient errorClient
 	// ErrorNotFound is returned when a row is not found
-	ErrorNotFound struct{}
+	ErrorNotFound errorNotFound
 	// ErrorUnique is returned when a unique constraint is violated
-	ErrorUnique struct{}
+	ErrorUnique errorUnique
 	// ErrorUndefinedTable is returned when a table does not exist yet
-	ErrorUndefinedTable struct{}
+	ErrorUndefinedTable errorUndefinedTable
 	// ErrorAuthz is returned when not authorized
-	ErrorAuthz struct{}
+	ErrorAuthz errorAuthz
 )
 
-func (e ErrorConn) Error() string {
+type (
+	errorConn           struct{}
+	errorClient         struct{}
+	errorNotFound       struct{}
+	errorUnique         struct{}
+	errorUndefinedTable struct{}
+	errorAuthz          struct{}
+)
+
+func (e errorConn) Error() string {
 	return "DB connection error"
 }
 
-func (e ErrorClient) Error() string {
+func (e errorClient) Error() string {
 	return "DB client error"
 }
 
-func (e ErrorNotFound) Error() string {
+func (e errorNotFound) Error() string {
 	return "Row not found"
 }
 
-func (e ErrorUnique) Error() string {
+func (e errorUnique) Error() string {
 	return "Unique constraint violated"
 }
 
-func (e ErrorUndefinedTable) Error() string {
+func (e errorUndefinedTable) Error() string {
 	return "Undefined table"
 }
 
-func (e ErrorAuthz) Error() string {
+func (e errorAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
 func wrapDBErr(err error, fallbackmsg string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return kerrors.WithKind(err, ErrorNotFound{}, "Not found")
+		return kerrors.WithKind(err, ErrorNotFound, "Not found")
 	}
-	perr := &pq.Error{}
+	var perr *pq.Error
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return kerrors.WithKind(err, ErrorUnique{}, "Unique constraint violated")
+			return kerrors.WithKind(err, ErrorUnique, "Unique constraint violated")
 		case "42P01": // undefined_table
-			return kerrors.WithKind(err, ErrorUndefinedTable{}, "Table not defined")
+			return kerrors.WithKind(err, ErrorUndefinedTable, "Table not defined")
 		case "42501": // insufficient_privilege
-			return kerrors.WithKind(err, ErrorAuthz{}, "Unauthorized")
+			return kerrors.WithKind(err, ErrorAuthz, "Unauthorized")
 		}
 	}
 	return kerrors.WithMsg(err, fallbackmsg)
@@ -218,7 +227,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if auth.Username == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
 		}
 		if client != nil && auth == client.auth {
 			return client, nil
@@ -227,17 +236,17 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 
 	dbClient, err := sql.Open("postgres", fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient{}, "Failed to init db conn")
+		return nil, kerrors.WithKind(err, ErrorClient, "Failed to init db conn")
 	}
 	if err := dbClient.PingContext(ctx); err != nil {
 		if err := dbClient.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn{}, "Failed to close db after failed initial ping"), klog.Fields{
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"), klog.Fields{
 				"db.connopts": s.connopts,
 				"db.username": auth.Username,
 			})
 		}
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrorConn{}, "Failed to ping db")
+		return nil, kerrors.WithKind(err, ErrorConn, "Failed to ping db")
 	}
 
 	m.Stop(ctx)
@@ -291,7 +300,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn{}, "DB service not ready")
+		return kerrors.WithKind(nil, ErrorConn, "DB service not ready")
 	}
 	return nil
 }

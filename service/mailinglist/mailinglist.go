@@ -195,14 +195,14 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	}
 	s.writetimeout, err = r.GetDuration("writetimeout")
 	if err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid write timeout for mail server")
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid write timeout for mail server")
 	}
 
 	if src := r.GetStr("mockdnssource"); src != "" {
 		var err error
 		s.resolver, err = dns.NewMockResolverFromFile(src)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid mockdns source")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid mockdns source")
 		}
 		s.log.Info(ctx, "Use mockdns", klog.Fields{
 			"mailinglist.mockdns.source": src,

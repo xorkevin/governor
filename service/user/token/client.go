@@ -106,10 +106,10 @@ func (c *CmdClient) initConfig() (*clientConfig, error) {
 			audience: c.config.GetStr("audience"),
 		}
 		if cc.issuer == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token issuer is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Token issuer is not set")
 		}
 		if cc.audience == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token audience is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Token audience is not set")
 		}
 		return cc, nil
 	})

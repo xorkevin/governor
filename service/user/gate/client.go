@@ -73,7 +73,7 @@ func (c *CmdClient) initConfig() (*clientConfig, error) {
 
 func (c *clientConfig) getSysTokenFile() (string, error) {
 	if c.systokenfile == "" {
-		return "", kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Systoken file is not set")
+		return "", kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Systoken file is not set")
 	}
 	return c.systokenfile, nil
 }

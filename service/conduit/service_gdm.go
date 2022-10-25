@@ -156,7 +156,7 @@ func (s *Service) getGDMByChatid(ctx context.Context, userid string, chatid stri
 	}
 	m, err := s.gdms.GetByID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Group chat not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get group chat")
@@ -307,7 +307,7 @@ func (s *Service) rmGDMUser(ctx context.Context, chatid string, userid string) e
 		return nil
 	}
 	if _, err := s.gdms.GetByID(ctx, chatid); err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			// TODO: emit gdm delete event
 			return nil
 		}

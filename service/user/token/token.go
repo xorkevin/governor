@@ -200,18 +200,23 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[tokenSign
 	m.Stop(ctx)
 }
 
-type (
+var (
 	// ErrorSigner is returned when failing to create a signer
-	ErrorSigner struct{}
+	ErrorSigner errorSigner
 	// ErrorGenerate is returned when failing to generate a token
-	ErrorGenerate struct{}
+	ErrorGenerate errorGenerate
 )
 
-func (e ErrorSigner) Error() string {
+type (
+	errorSigner   struct{}
+	errorGenerate struct{}
+)
+
+func (e errorSigner) Error() string {
 	return "Error creating signer"
 }
 
-func (e ErrorGenerate) Error() string {
+func (e errorGenerate) Error() string {
 	return "Error generating token"
 }
 
@@ -280,7 +285,7 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunt
 	for _, i := range secrets {
 		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
-			return nil, nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+			return nil, nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgHS512:
@@ -296,11 +301,11 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunt
 		signingkeys.RegisterSigningKey(k)
 	}
 	if khs512 == nil {
-		return nil, nil, "", kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
+		return nil, nil, "", kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No token keys present")
 	}
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
 	if err != nil {
-		return nil, nil, "", kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt HS512 signer")
+		return nil, nil, "", kerrors.WithKind(err, ErrorSigner, "Failed to create new jwt HS512 signer")
 	}
 	return signingkeys, sig, khs512.ID(), nil
 }
@@ -312,7 +317,7 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter
 	for _, i := range secrets {
 		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
 		if err != nil {
-			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgRS256:
@@ -334,11 +339,11 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter
 		signingkeys.RegisterSigningKey(k)
 	}
 	if krs256 == nil {
-		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No token keys present")
+		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No token keys present")
 	}
 	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
 	if err != nil {
-		return nil, nil, "", nil, kerrors.WithKind(err, ErrorSigner{}, "Failed to create new jwt RS256 signer")
+		return nil, nil, "", nil, kerrors.WithKind(err, ErrorSigner, "Failed to create new jwt RS256 signer")
 	}
 	return signingkeys, extsig, krs256.ID(), jwks, nil
 }
@@ -349,7 +354,7 @@ func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) 
 	for _, i := range secrets {
 		k, err := hunter2.VerifierKeyFromParams(i, hunter2.DefaultVerifierKeyAlgs)
 		if err != nil {
-			return nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid key param")
+			return nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
 		case hunter2.SigningAlgEdDSA:
@@ -395,7 +400,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Token service not ready")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Token service not ready")
 	}
 	return nil
 }
@@ -435,7 +440,7 @@ func (s *Service) Generate(ctx context.Context, kind Kind, userid string, durati
 	}
 	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", nil, kerrors.WithKind(err, ErrorGenerate{}, "Failed to generate a new jwt token")
+		return "", nil, kerrors.WithKind(err, ErrorGenerate, "Failed to generate a new jwt token")
 	}
 	return token, &claims, nil
 }
@@ -462,7 +467,7 @@ func (s *Service) GenerateExt(ctx context.Context, kind Kind, issuer string, use
 	}
 	token, err := jwt.Signed(signer.extsigner).Claims(baseClaims).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", kerrors.WithKind(err, ErrorGenerate{}, "Failed to generate a new jwt token")
+		return "", kerrors.WithKind(err, ErrorGenerate, "Failed to generate a new jwt token")
 	}
 	return token, nil
 }

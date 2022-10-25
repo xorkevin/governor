@@ -11,13 +11,19 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-type (
+// Sentinel errors
+var (
 	// ErrorNoLog is an error kind to prevent logging
-	ErrorNoLog struct{}
+	ErrorNoLog errorNoLog
+	// ErrorUnreachable is an error kind to mark unreachable code
+	ErrorUnreachable errorUnreachable
 )
 
-// Error implements error
-func (e ErrorNoLog) Error() string {
+type (
+	errorNoLog struct{}
+)
+
+func (e errorNoLog) Error() string {
 	return "No log"
 }
 
@@ -51,12 +57,10 @@ func (e *ErrorRes) Error() string {
 }
 
 type (
-	// ErrorUnreachable is an error kind to mark unreachable code
-	ErrorUnreachable struct{}
+	errorUnreachable struct{}
 )
 
-// Error implements error
-func (e ErrorUnreachable) Error() string {
+func (e errorUnreachable) Error() string {
 	return "Unreachable code. Invariant violated"
 }
 
@@ -85,7 +89,7 @@ func (e *ErrorTooManyRequests) RetryAfterTime() string {
 func ErrWithNoLog(err error) error {
 	return kerrors.New(
 		kerrors.OptMsg("No log"),
-		kerrors.OptKind(ErrorNoLog{}),
+		kerrors.OptKind(ErrorNoLog),
 		kerrors.OptInner(err),
 		kerrors.OptSkip(1),
 	)
@@ -109,7 +113,7 @@ func ErrWithRes(err error, status int, code string, resmsg string) error {
 func ErrWithUnreachable(err error, msg string) error {
 	return kerrors.New(
 		kerrors.OptMsg(msg),
-		kerrors.OptKind(ErrorUnreachable{}),
+		kerrors.OptKind(ErrorUnreachable),
 		kerrors.OptInner(err),
 		kerrors.OptSkip(1),
 	)

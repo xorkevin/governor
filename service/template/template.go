@@ -82,7 +82,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 			})
 			tt = textTemplate.New("default")
 		} else {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Failed to load templates")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Failed to load templates")
 		}
 	}
 	s.tt = tt
@@ -94,7 +94,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 			})
 			ht = htmlTemplate.New("default")
 		} else {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Failed to load templates")
+			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Failed to load templates")
 		}
 	}
 	s.ht = ht
@@ -127,18 +127,24 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-type (
+// Template errors
+var (
 	// ErrorTemplateDNE is returned when a template does not exist
-	ErrorTemplateDNE struct{}
+	ErrorTemplateDNE errorTemplateDNE
 	// ErrorExecute is returned when failing to execute a template
-	ErrorExecute struct{}
+	ErrorExecute errorExecute
 )
 
-func (e ErrorTemplateDNE) Error() string {
+type (
+	errorTemplateDNE struct{}
+	errorExecute     struct{}
+)
+
+func (e errorTemplateDNE) Error() string {
 	return "Template does not exist"
 }
 
-func (e ErrorExecute) Error() string {
+func (e errorExecute) Error() string {
 	return "Error executing template"
 }
 
@@ -147,13 +153,13 @@ func (s *Service) Execute(dst io.Writer, kind Kind, templateName string, data in
 	switch kind {
 	case KindLocal:
 		if s.tt.Lookup(templateName) == nil {
-			return kerrors.WithKind(nil, ErrorTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+			return kerrors.WithKind(nil, ErrorTemplateDNE, fmt.Sprintf("Template %s does not exist", templateName))
 		}
 		if err := s.tt.ExecuteTemplate(dst, templateName, data); err != nil {
-			return kerrors.WithKind(err, ErrorExecute{}, "Failed executing text template")
+			return kerrors.WithKind(err, ErrorExecute, "Failed executing text template")
 		}
 	default:
-		return kerrors.WithKind(nil, ErrorTemplateDNE{}, "Invalid text template kind")
+		return kerrors.WithKind(nil, ErrorTemplateDNE, "Invalid text template kind")
 	}
 	return nil
 }
@@ -163,13 +169,13 @@ func (s *Service) ExecuteHTML(dst io.Writer, kind Kind, templateName string, dat
 	switch kind {
 	case KindLocal:
 		if s.ht.Lookup(templateName) == nil {
-			return kerrors.WithKind(nil, ErrorTemplateDNE{}, fmt.Sprintf("Template %s does not exist", templateName))
+			return kerrors.WithKind(nil, ErrorTemplateDNE, fmt.Sprintf("Template %s does not exist", templateName))
 		}
 		if err := s.ht.ExecuteTemplate(dst, templateName, data); err != nil {
-			return kerrors.WithKind(err, ErrorExecute{}, "Failed executing html template")
+			return kerrors.WithKind(err, ErrorExecute, "Failed executing html template")
 		}
 	default:
-		return kerrors.WithKind(nil, ErrorTemplateDNE{}, "Invalid html template kind")
+		return kerrors.WithKind(nil, ErrorTemplateDNE, "Invalid html template kind")
 	}
 	return nil
 }

@@ -71,7 +71,7 @@ func tupleSort(a, b string) (string, string) {
 func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) error {
 	m, err := s.friends.GetByID(ctx, userid1, userid2)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Friend not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get friends")
@@ -95,7 +95,7 @@ func (s *Service) removeFriend(ctx context.Context, userid1, userid2 string) err
 
 func (s *Service) inviteFriend(ctx context.Context, userid string, invitedBy string) error {
 	if _, err := s.friends.GetByID(ctx, userid, invitedBy); err != nil {
-		if !errors.Is(err, db.ErrorNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound) {
 			return kerrors.WithMsg(err, "Failed to search friends")
 		}
 	} else {
@@ -114,14 +114,14 @@ func (s *Service) inviteFriend(ctx context.Context, userid string, invitedBy str
 func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 	m2, err := s.users.GetByID(ctx, inviter)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -129,7 +129,7 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 
 	after := time.Now().Round(0).Add(-s.invitationDuration).Unix()
 	if _, err := s.invitations.GetByID(ctx, userid, inviter, after); err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Friend invitation not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get friend invitation")
@@ -224,7 +224,7 @@ func (s *Service) friendEventHandler(ctx context.Context, props friendProps) err
 		return kerrors.WithMsg(err, "Failed to create new dm")
 	}
 	if err := s.dms.Insert(ctx, m); err != nil {
-		if !errors.Is(err, db.ErrorUnique{}) {
+		if !errors.Is(err, db.ErrorUnique) {
 			return kerrors.WithMsg(err, "Failed to insert new dm")
 		}
 	}
@@ -234,7 +234,7 @@ func (s *Service) friendEventHandler(ctx context.Context, props friendProps) err
 func (s *Service) unfriendEventHandler(ctx context.Context, props unfriendProps) error {
 	m, err := s.dms.GetByID(ctx, props.Userid, props.Other)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			// TODO: emit dm delete event
 			return nil
 		}
@@ -252,7 +252,7 @@ func (s *Service) unfriendEventHandler(ctx context.Context, props unfriendProps)
 
 func (s *Service) rmFriend(ctx context.Context, userid1, userid2 string) error {
 	if m, err := s.dms.GetByID(ctx, userid1, userid2); err != nil {
-		if !errors.Is(err, db.ErrorNotFound{}) {
+		if !errors.Is(err, db.ErrorNotFound) {
 			return kerrors.WithMsg(err, "Failed to get dm")
 		}
 	} else {

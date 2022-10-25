@@ -44,7 +44,7 @@ func (s *Service) IntersectRoles(ctx context.Context, userid string, roles rank.
 		for k, v := range resget {
 			v, err := v.Result()
 			if err != nil {
-				if !errors.Is(err, kvstore.ErrorNotFound{}) {
+				if !errors.Is(err, kvstore.ErrorNotFound) {
 					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user role result from cache"), nil)
 				}
 				uncachedRoles.AddOne(k)

@@ -17,7 +17,7 @@ import (
 func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPut) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -39,7 +39,7 @@ func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPu
 	}
 
 	if err = s.users.UpdateProps(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique{}) {
+		if errors.Is(err, db.ErrorUnique) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Username must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update user")
@@ -70,7 +70,7 @@ func (s *Service) updateRoles(ctx context.Context, userid string, updaterid stri
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -240,7 +240,7 @@ func canUpdateRank(edit, updater rank.Rank, editid, updaterid string, add bool) 
 func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -250,7 +250,7 @@ func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string)
 
 	inv, err := s.invitations.GetByID(ctx, userid, role, after)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Role invitation not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get role invitation")

@@ -33,7 +33,7 @@ type (
 func (s *Service) getLink(ctx context.Context, linkid string) (*resGetLink, error) {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get link")
@@ -48,7 +48,7 @@ func (s *Service) getLink(ctx context.Context, linkid string) (*resGetLink, erro
 
 func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(ctx, linkid); err != nil {
-		if !errors.Is(err, kvstore.ErrorNotFound{}) {
+		if !errors.Is(err, kvstore.ErrorNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get linkid url from cache"), nil)
 		}
 	} else if cachedURL == cacheValTombstone {
@@ -58,7 +58,7 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 	}
 	res, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			if err := s.kvlinks.Set(ctx, linkid, cacheValTombstone, s.cacheDuration); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"), nil)
 			}
@@ -77,7 +77,7 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 func (s *Service) statLinkImage(ctx context.Context, linkid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.linkImgDir.Stat(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Link qr code image not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get link qr code image")
@@ -88,7 +88,7 @@ func (s *Service) statLinkImage(ctx context.Context, linkid string) (*objstore.O
 func (s *Service) getLinkImage(ctx context.Context, linkid string) (io.ReadCloser, string, error) {
 	qrimg, objinfo, err := s.linkImgDir.Get(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Link qr code image not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get link qr code image")
@@ -187,7 +187,7 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 	}
 
 	if err := s.repo.InsertLink(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique{}) {
+		if errors.Is(err, db.ErrorUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Link id already taken")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create link")
@@ -204,7 +204,7 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) error {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get link")
@@ -213,7 +213,7 @@ func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) erro
 		return governor.ErrWithRes(nil, http.StatusNotFound, "", "Link not found")
 	}
 	if err := s.linkImgDir.Del(ctx, linkid); err != nil {
-		if !errors.Is(err, objstore.ErrorNotFound{}) {
+		if !errors.Is(err, objstore.ErrorNotFound) {
 			return kerrors.WithMsg(err, "Failed to delete qr code image")
 		}
 	}
@@ -263,7 +263,7 @@ func (s *Service) getBrandGroup(ctx context.Context, creatorid string, limit, of
 func (s *Service) statBrandImage(ctx context.Context, creatorid, brandid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(ctx, brandid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get brand image")
@@ -274,7 +274,7 @@ func (s *Service) statBrandImage(ctx context.Context, creatorid, brandid string)
 func (s *Service) getBrandImage(ctx context.Context, creatorid, brandid string) (io.ReadCloser, string, error) {
 	brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(ctx, brandid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound{}) {
+		if errors.Is(err, objstore.ErrorNotFound) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get brand image")
@@ -292,7 +292,7 @@ type (
 func (s *Service) createBrand(ctx context.Context, creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
 	m := s.repo.NewBrand(creatorid, brandid)
 	if err := s.repo.InsertBrand(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique{}) {
+		if errors.Is(err, db.ErrorUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Brand name must be unique")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create brand")
@@ -314,13 +314,13 @@ func (s *Service) createBrand(ctx context.Context, creatorid, brandid string, im
 func (s *Service) deleteBrand(ctx context.Context, creatorid, brandid string) error {
 	m, err := s.repo.GetBrand(ctx, creatorid, brandid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
 		}
 		return kerrors.WithMsg(err, "Failed to delete brand")
 	}
 	if err := s.brandImgDir.Del(ctx, brandid); err != nil {
-		if !errors.Is(err, objstore.ErrorNotFound{}) {
+		if !errors.Is(err, objstore.ErrorNotFound) {
 			return kerrors.WithMsg(err, "Failed to delete brand image")
 		}
 	}

@@ -158,7 +158,7 @@ func (s *Service) handleGetAPISecret(ctx context.Context, m *lifecycle.Manager[s
 		return nil, kerrors.WithMsg(err, "Invalid api secret")
 	}
 	if apisecret.Secret == "" {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "Empty api secret")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty api secret")
 	}
 	if currentAuth != nil && apisecret == *currentAuth {
 		return currentAuth, nil

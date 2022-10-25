@@ -202,18 +202,24 @@ func (c *Config) setConfigFile(file string) {
 	c.config.SetConfigFile(file)
 }
 
-type (
+// Config errors
+var (
 	// ErrorInvalidConfig is returned when the config is invalid
-	ErrorInvalidConfig struct{}
+	ErrorInvalidConfig errorInvalidConfig
 	// ErrorVault is returned when failing to contact vault
-	ErrorVault struct{}
+	ErrorVault errorVault
 )
 
-func (e ErrorInvalidConfig) Error() string {
+type (
+	errorInvalidConfig struct{}
+	errorVault         struct{}
+)
+
+func (e errorInvalidConfig) Error() string {
 	return "Invalid config"
 }
 
-func (e ErrorVault) Error() string {
+func (e errorVault) Error() string {
 	return "Failed vault request"
 }
 
@@ -223,7 +229,7 @@ const (
 
 func (c *Config) init() error {
 	if err := c.config.ReadInConfig(); err != nil {
-		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read in config")
+		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 	}
 	c.showBanner = c.config.GetBool("banner")
 	c.logLevel = c.config.GetString("loglevel")
@@ -284,11 +290,11 @@ type (
 func newSecretsFileSource(s string) (secretsClient, error) {
 	b, err := os.ReadFile(s)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read secrets file source")
+		return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read secrets file source")
 	}
 	data := secretsFileData{}
 	if err := yaml.Unmarshal(b, &data); err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidConfig{}, "Invalid secrets file source file")
+		return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Invalid secrets file source file")
 	}
 	return &secretsFileSource{
 		path: s,
@@ -307,7 +313,7 @@ func (s *secretsFileSource) Init() error {
 func (s *secretsFileSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error) {
 	data, ok := s.data.Data[kvpath]
 	if !ok {
-		return nil, time.Time{}, kerrors.WithKind(nil, ErrorVault{}, "Failed to read vault secret")
+		return nil, time.Time{}, kerrors.WithKind(nil, ErrorVault, "Failed to read vault secret")
 	}
 	return data, time.Time{}, nil
 }
@@ -335,12 +341,12 @@ type (
 func newSecretsVaultSource(config secretsVaultSourceConfig) (secretsClient, error) {
 	vconfig := vaultapi.DefaultConfig()
 	if err := vconfig.Error; err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to create vault default config")
+		return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to create vault default config")
 	}
 	vconfig.Address = config.Addr
 	vault, err := vaultapi.NewClient(vconfig)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to create vault client")
+		return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to create vault client")
 	}
 	return &secretsVaultSource{
 		address: config.Addr,
@@ -388,7 +394,7 @@ func (s *secretsVaultSource) authVault() error {
 		"role": s.config.K8SRole,
 	})
 	if err != nil {
-		return kerrors.WithKind(err, ErrorVault{}, "Failed to auth with vault k8s")
+		return kerrors.WithKind(err, ErrorVault, "Failed to auth with vault k8s")
 	}
 	s.vaultExpire = time.Now().Round(0).Add(time.Duration(authsecret.Auth.LeaseDuration) * time.Second)
 	s.vault.SetToken(authsecret.Auth.ClientToken)
@@ -403,7 +409,7 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 	vault := s.vault.Logical()
 	secret, err := vault.ReadWithContext(ctx, kvpath)
 	if err != nil {
-		return nil, time.Time{}, kerrors.WithKind(err, ErrorVault{}, "Failed to read vault secret")
+		return nil, time.Time{}, kerrors.WithKind(err, ErrorVault, "Failed to read vault secret")
 	}
 	data := secret.Data
 	if v, ok := data["data"].(map[string]interface{}); ok {
@@ -440,17 +446,17 @@ func (c *Config) initsecrets() error {
 		config.K8SLoginPath = c.config.GetString("vault.k8s.loginpath")
 		jwtpath := c.config.GetString("vault.k8s.jwtpath")
 		if config.K8SRole == "" {
-			return kerrors.WithKind(nil, ErrorInvalidConfig{}, "No vault role set")
+			return kerrors.WithKind(nil, ErrorInvalidConfig, "No vault role set")
 		}
 		if config.K8SLoginPath == "" {
-			return kerrors.WithKind(nil, ErrorInvalidConfig{}, "No vault k8s login path set")
+			return kerrors.WithKind(nil, ErrorInvalidConfig, "No vault k8s login path set")
 		}
 		if jwtpath == "" {
-			return kerrors.WithKind(nil, ErrorInvalidConfig{}, "No path for vault k8s service account jwt auth")
+			return kerrors.WithKind(nil, ErrorInvalidConfig, "No path for vault k8s service account jwt auth")
 		}
 		jwtbytes, err := os.ReadFile(jwtpath)
 		if err != nil {
-			return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read vault k8s service account jwt")
+			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read vault k8s service account jwt")
 		}
 		config.K8SJWT = string(jwtbytes)
 	}
@@ -470,7 +476,7 @@ func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.D
 		s := v.(vaultSecret)
 		if s.isValid() {
 			if err := mapstructure.Decode(s.value, target); err != nil {
-				return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed decoding secret")
+				return kerrors.WithKind(err, ErrorInvalidConfig, "Failed decoding secret")
 			}
 			return nil
 		}
@@ -478,7 +484,7 @@ func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.D
 
 	kvpath := c.config.GetString(key)
 	if kvpath == "" {
-		return kerrors.WithKind(nil, ErrorInvalidConfig{}, "Empty secret key "+key)
+		return kerrors.WithKind(nil, ErrorInvalidConfig, "Empty secret key "+key)
 	}
 
 	data, expire, err := c.vault.GetSecret(ctx, kvpath)
@@ -495,7 +501,7 @@ func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.D
 	})
 
 	if err := mapstructure.Decode(data, target); err != nil {
-		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed decoding secret")
+		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed decoding secret")
 	}
 	return nil
 }

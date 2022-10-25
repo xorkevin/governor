@@ -217,7 +217,7 @@ func (c *Context) WriteError(err error) {
 		}
 	}
 
-	if !errors.Is(err, ErrorNoLog{}) {
+	if !errors.Is(err, ErrorNoLog) {
 		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
 			c.log.WarnErr(c.Ctx(), err, nil)
 		} else {
@@ -397,7 +397,7 @@ func (w *Websocket) CloseError(err error) {
 		}
 	}
 
-	if !errors.Is(err, ErrorNoLog{}) {
+	if !errors.Is(err, ErrorNoLog) {
 		if werr.Status != int(websocket.StatusInternalError) {
 			w.c.log.WarnErr(w.c.Ctx(), err, nil)
 		} else {

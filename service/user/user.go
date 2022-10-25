@@ -388,7 +388,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.otpIssuer = r.GetStr("otpissuer")
 	s.rolesummary, err = rank.FromSlice(r.GetStrSlice("rolesummary"))
 	if err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid rank for role summary")
+		return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid rank for role summary")
 	}
 
 	s.tplname = tplName{
@@ -513,14 +513,14 @@ func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.Manager[otpC
 		return nil, kerrors.WithMsg(err, "Invalid otpkey secrets")
 	}
 	if len(otpsecrets.Keys) == 0 {
-		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "No otpkey present")
+		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No otpkey present")
 	}
 	decrypter := hunter2.NewDecrypter()
 	var hcipher hunter2.Cipher
 	for n, i := range otpsecrets.Keys {
 		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
 		if err != nil {
-			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig{}, "Invalid cipher param")
+			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid cipher param")
 		}
 		if n == 0 {
 			if currentCipher != nil && currentCipher.cipher.ID() == c.ID() {
@@ -623,24 +623,28 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, governor.ErrorInvalidConfig{}, "User service not ready")
+		return kerrors.WithKind(nil, governor.ErrorInvalidConfig, "User service not ready")
 	}
 	return nil
 }
 
-type (
+var (
 	// ErrorUserEvent is returned when the user event is malformed
-	ErrorUserEvent struct{}
+	ErrorUserEvent errorUserEvent
 )
 
-func (e ErrorUserEvent) Error() string {
+type (
+	errorUserEvent struct{}
+)
+
+func (e errorUserEvent) Error() string {
 	return "Malformed user event"
 }
 
 func decodeUserEvent(msgdata []byte) (*UserEvent, error) {
 	var m userEventDec
 	if err := kjson.Unmarshal(msgdata, &m); err != nil {
-		return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode user event")
+		return nil, kerrors.WithKind(err, ErrorUserEvent, "Failed to decode user event")
 	}
 	props := &UserEvent{
 		Kind: m.Kind,
@@ -648,22 +652,22 @@ func decodeUserEvent(msgdata []byte) (*UserEvent, error) {
 	switch m.Kind {
 	case UserEventKindCreate:
 		if err := kjson.Unmarshal(m.Payload, &props.Create); err != nil {
-			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode create user event")
+			return nil, kerrors.WithKind(err, ErrorUserEvent, "Failed to decode create user event")
 		}
 	case UserEventKindUpdate:
 		if err := kjson.Unmarshal(m.Payload, &props.Update); err != nil {
-			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode update user event")
+			return nil, kerrors.WithKind(err, ErrorUserEvent, "Failed to decode update user event")
 		}
 	case UserEventKindDelete:
 		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
-			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode delete user event")
+			return nil, kerrors.WithKind(err, ErrorUserEvent, "Failed to decode delete user event")
 		}
 	case UserEventKindRoles:
 		if err := kjson.Unmarshal(m.Payload, &props.Roles); err != nil {
-			return nil, kerrors.WithKind(err, ErrorUserEvent{}, "Failed to decode roles user event")
+			return nil, kerrors.WithKind(err, ErrorUserEvent, "Failed to decode roles user event")
 		}
 	default:
-		return nil, kerrors.WithKind(nil, ErrorUserEvent{}, "Invalid user event kind")
+		return nil, kerrors.WithKind(nil, ErrorUserEvent, "Invalid user event kind")
 	}
 	return props, nil
 }

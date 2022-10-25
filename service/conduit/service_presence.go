@@ -51,7 +51,7 @@ func (s *Service) getPresence(ctx context.Context, loc string, userids []string)
 	for n, i := range kvres {
 		k, err := i.Result()
 		if err != nil {
-			if !errors.Is(err, kvstore.ErrorNotFound{}) {
+			if !errors.Is(err, kvstore.ErrorNotFound) {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence result"), nil)
 			}
 			continue

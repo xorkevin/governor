@@ -222,13 +222,13 @@ func (c *Client) Init() error {
 		c.config.config.SetConfigFile(file)
 	}
 	if err := c.config.config.ReadInConfig(); err != nil {
-		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Failed to read in config")
+		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 	}
 	c.config.Addr = c.config.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.config.GetString("timeout")); err == nil {
 		c.httpc.Timeout = t
 	} else {
-		return kerrors.WithKind(err, ErrorInvalidConfig{}, "Invalid http client timeout")
+		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
 	}
 	for _, i := range c.clients {
 		if err := i.r.Init(*c.config, &configValueReader{

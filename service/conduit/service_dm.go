@@ -53,7 +53,7 @@ const (
 func (s *Service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
 	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound{}) {
+		if errors.Is(err, db.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "DM not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get dm")
