@@ -186,7 +186,7 @@ func (s *router) getUserRolesIntersect(c *governor.Context) {
 
 	roles, err := rank.FromSlice(req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrorInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
@@ -214,7 +214,7 @@ func (s *router) getUserRolesIntersectPersonal(c *governor.Context) {
 
 	roles, err := rank.FromSlice(req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrorInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}

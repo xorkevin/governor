@@ -63,7 +63,7 @@ func (s *router) patchRoles(c *governor.Context) {
 	updaterUserid := gate.GetCtxUserid(c)
 	editAddRank, err := rank.FromSlice(req.Add)
 	if err != nil {
-		if errors.Is(err, rank.ErrorInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}
@@ -72,7 +72,7 @@ func (s *router) patchRoles(c *governor.Context) {
 	}
 	editRemoveRank, err := rank.FromSlice(req.Remove)
 	if err != nil {
-		if errors.Is(err, rank.ErrorInvalidRank{}) {
+		if errors.Is(err, rank.ErrorInvalidRank) {
 			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
 			return
 		}

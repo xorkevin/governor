@@ -258,24 +258,31 @@ func (c *Client) ReadPassword() (string, error) {
 	return string(s), nil
 }
 
-type (
+// Client http errors
+var (
 	// ErrorInvalidClientReq is returned when the client request could not be made
-	ErrorInvalidClientReq struct{}
+	ErrorInvalidClientReq errorInvalidClientReq
 	// ErrorInvalidServerRes is returned on an invalid server response
-	ErrorInvalidServerRes struct{}
+	ErrorInvalidServerRes errorInvalidServerRes
 	// ErrorServerRes is a returned server error
-	ErrorServerRes struct{}
+	ErrorServerRes errorServerRes
 )
 
-func (e ErrorInvalidClientReq) Error() string {
+type (
+	errorInvalidClientReq struct{}
+	errorInvalidServerRes struct{}
+	errorServerRes        struct{}
+)
+
+func (e errorInvalidClientReq) Error() string {
 	return "Invalid client request"
 }
 
-func (e ErrorInvalidServerRes) Error() string {
+func (e errorInvalidServerRes) Error() string {
 	return "Invalid server response"
 }
 
-func (e ErrorServerRes) Error() string {
+func (e errorServerRes) Error() string {
 	return "Error server response"
 }
 
@@ -283,7 +290,7 @@ func (e ErrorServerRes) Error() string {
 func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.config.Addr+path, body)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Malformed request")
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Malformed request")
 	}
 	return req, nil
 }
@@ -292,7 +299,7 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Request, error) {
 	b, err := kjson.Marshal(data)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed to encode body to json")
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
 	}
 	body := bytes.NewReader(b)
 	req, err := c.NewRequest(method, path, body)
@@ -307,7 +314,7 @@ func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Re
 func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
 	res, err := c.httpc.Do(r)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq{}, "Failed request")
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
 	}
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
@@ -317,9 +324,9 @@ func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
 		}()
 		var errres ErrorRes
 		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
-			return res, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
+			return res, kerrors.WithKind(err, ErrorInvalidServerRes, "Failed decoding response")
 		}
-		return res, kerrors.WithKind(nil, ErrorServerRes{}, errres.Message)
+		return res, kerrors.WithKind(nil, ErrorServerRes, errres.Message)
 	}
 	return res, nil
 }
@@ -339,7 +346,7 @@ func (c *Client) DoRequestJSON(r *http.Request, response interface{}) (*http.Res
 	decoded := false
 	if response != nil && isStatusDecodable(res.StatusCode) {
 		if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-			return res, false, kerrors.WithKind(err, ErrorInvalidServerRes{}, "Failed decoding response")
+			return res, false, kerrors.WithKind(err, ErrorInvalidServerRes, "Failed decoding response")
 		}
 		decoded = true
 	}
@@ -373,7 +380,7 @@ func (c *Client) Setup(secret string) (*ResSetup, error) {
 		return nil, err
 	}
 	if !decoded {
-		return nil, kerrors.WithKind(nil, ErrorServerRes{}, "Non-decodable response")
+		return nil, kerrors.WithKind(nil, ErrorServerRes, "Non-decodable response")
 	}
 	return body, nil
 }

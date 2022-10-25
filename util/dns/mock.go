@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"xorkevin.dev/kerrors"
 )
 
 type (
@@ -28,18 +29,23 @@ type (
 	}
 )
 
-type (
+var (
 	// ErrorNotFound is returned when a record is not found
-	ErrorNotFound struct{}
+	ErrorNotFound errorNotFound
 	// ErrorInvalid is returned when a record is invalid
-	ErrorInvalid struct{}
+	ErrorInvalid errorInvalid
 )
 
-func (e ErrorNotFound) Error() string {
+type (
+	errorNotFound struct{}
+	errorInvalid  struct{}
+)
+
+func (e errorNotFound) Error() string {
 	return "DNS record not found"
 }
 
-func (e ErrorInvalid) Error() string {
+func (e errorInvalid) Error() string {
 	return "DNS record is invalid"
 }
 
@@ -63,11 +69,11 @@ func NewMockResolver(zones map[string]MockZone) Resolver {
 func NewMockResolverFromFile(s string) (Resolver, error) {
 	b, err := os.ReadFile(s)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read mockdns file %s: %w", s, err)
+		return nil, kerrors.WithMsg(err, fmt.Sprintf("Failed to read mockdns file %s", s))
 	}
 	data := zoneData{}
 	if err := yaml.Unmarshal(b, &data); err != nil {
-		return nil, fmt.Errorf("Invalid mockdns file %s: %w", s, err)
+		return nil, kerrors.WithMsg(err, fmt.Sprintf("Invalid mockdns file %s", s))
 	}
 	return &MockResolver{
 		Zones: data.Data,
@@ -75,13 +81,13 @@ func NewMockResolverFromFile(s string) (Resolver, error) {
 }
 
 func (r *MockResolver) LookupAddr(ctx context.Context, addr string) ([]string, error) {
-	return nil, ErrorNotFound{}
+	return nil, ErrorNotFound
 }
 
 func (r *MockResolver) LookupCNAME(ctx context.Context, host string) (cname string, err error) {
 	z, ok := r.Zones[FQDN(host)]
 	if !ok {
-		return "", ErrorNotFound{}
+		return "", ErrorNotFound
 	}
 	return z.CNAME, nil
 }
@@ -90,13 +96,13 @@ func (r *MockResolver) targetZone(name string) (MockZone, error) {
 	name = FQDN(name)
 	z, ok := r.Zones[name]
 	if !ok {
-		return MockZone{}, ErrorNotFound{}
+		return MockZone{}, ErrorNotFound
 	}
 	for z.CNAME != "" {
 		name = z.CNAME
 		z, ok = r.Zones[name]
 		if !ok {
-			return MockZone{}, ErrorNotFound{}
+			return MockZone{}, ErrorNotFound
 		}
 	}
 	return z, nil
@@ -111,7 +117,7 @@ func (r *MockResolver) LookupHost(ctx context.Context, host string) ([]string, e
 	res = append(res, z.A...)
 	res = append(res, z.AAAA...)
 	if len(res) == 0 {
-		return nil, ErrorNotFound{}
+		return nil, ErrorNotFound
 	}
 	return res, err
 }
@@ -125,7 +131,7 @@ func (r *MockResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPA
 	for _, i := range addrs {
 		ip := net.ParseIP(i)
 		if ip == nil {
-			return nil, fmt.Errorf("%w: invalid IP %s", ErrorInvalid{}, i)
+			return nil, kerrors.WithKind(nil, ErrorInvalid, fmt.Sprintf("Invalid IP %s", i))
 		}
 		res = append(res, net.IPAddr{IP: ip})
 	}

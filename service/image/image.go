@@ -66,18 +66,23 @@ func FromImage(img goimg.Image) Image {
 	}
 }
 
-type (
+var (
 	// ErrorInvalidImage is returned when the image file is malformed
-	ErrorInvalidImage struct{}
+	ErrorInvalidImage errorInvalidImage
 	// ErrorEncode is returned when failing to encode an image
-	ErrorEncode struct{}
+	ErrorEncode errorEncode
 )
 
-func (e ErrorInvalidImage) Error() string {
+type (
+	errorInvalidImage struct{}
+	errorEncode       struct{}
+)
+
+func (e errorInvalidImage) Error() string {
 	return "Invalid image"
 }
 
-func (e ErrorEncode) Error() string {
+func (e errorEncode) Error() string {
 	return "Failed to encode image"
 }
 
@@ -85,7 +90,7 @@ func (e ErrorEncode) Error() string {
 func FromJpeg(file io.Reader) (Image, error) {
 	i, err := jpeg.Decode(file)
 	if err != nil {
-		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage{}, "Invalid JPEG"), http.StatusBadRequest, "", "Invalid JPEG image")
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage, "Invalid JPEG"), http.StatusBadRequest, "", "Invalid JPEG image")
 	}
 	return FromImage(i), nil
 }
@@ -94,7 +99,7 @@ func FromJpeg(file io.Reader) (Image, error) {
 func FromPng(file io.Reader) (Image, error) {
 	i, err := png.Decode(file)
 	if err != nil {
-		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage{}, "Invalid PNG"), http.StatusBadRequest, "", "Invalid PNG image")
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage, "Invalid PNG"), http.StatusBadRequest, "", "Invalid PNG image")
 	}
 	return FromImage(i), nil
 }
@@ -103,7 +108,7 @@ func FromPng(file io.Reader) (Image, error) {
 func FromGif(file io.Reader) (Image, error) {
 	i, err := gif.Decode(file)
 	if err != nil {
-		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage{}, "Invalid GIF"), http.StatusBadRequest, "", "Invalid GIF image")
+		return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidImage, "Invalid GIF"), http.StatusBadRequest, "", "Invalid GIF image")
 	}
 	return FromImage(i), nil
 }
@@ -253,7 +258,7 @@ func (i *imageData) ToJpeg(quality int) (*bytes.Buffer, error) {
 		Quality: quality,
 	}
 	if err := jpeg.Encode(b, i.img, &j); err != nil {
-		return nil, kerrors.WithKind(err, ErrorEncode{}, "Failed to encode JPEG image")
+		return nil, kerrors.WithKind(err, ErrorEncode, "Failed to encode JPEG image")
 	}
 	return b, nil
 }
@@ -290,7 +295,7 @@ func (i *imageData) ToPng(level PngCompressionOpt) (*bytes.Buffer, error) {
 		CompressionLevel: compressionOptTranslate(level),
 	}
 	if err := encoder.Encode(b, i.img); err != nil {
-		return nil, kerrors.WithKind(err, ErrorEncode{}, "Failed to encode PNG image")
+		return nil, kerrors.WithKind(err, ErrorEncode, "Failed to encode PNG image")
 	}
 	return b, nil
 }

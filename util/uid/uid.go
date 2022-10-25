@@ -18,18 +18,23 @@ type (
 	}
 )
 
-type (
+var (
 	// ErrorRand is returned when failing to read random bytes
-	ErrorRand struct{}
+	ErrorRand errorRand
 	// ErrorInvalidUID is returned on an invalid uid
-	ErrorInvalidUID struct{}
+	ErrorInvalidUID errorInvalidUID
 )
 
-func (e ErrorRand) Error() string {
+type (
+	errorRand       struct{}
+	errorInvalidUID struct{}
+)
+
+func (e errorRand) Error() string {
 	return "Error reading rand"
 }
 
-func (e ErrorInvalidUID) Error() string {
+func (e errorInvalidUID) Error() string {
 	return "Invalid uid"
 }
 
@@ -38,7 +43,7 @@ func New(size int) (*UID, error) {
 	u := make([]byte, size)
 	_, err := rand.Read(u)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorRand{}, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrorRand, "Failed reading crypto/rand")
 	}
 
 	return &UID{
@@ -57,7 +62,7 @@ func FromBytes(b []byte) *UID {
 func FromBase64(ustring string) (*UID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(ustring)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidUID{}, "Invalid uid string")
+		return nil, kerrors.WithKind(err, ErrorInvalidUID, "Invalid uid string")
 	}
 	return FromBytes(b), nil
 }
@@ -90,7 +95,7 @@ func NewSnowflake(randsize int) (*Snowflake, error) {
 	binary.BigEndian.PutUint64(u[:timeSize], now)
 	_, err := rand.Read(u[timeSize:])
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorRand{}, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrorRand, "Failed reading crypto/rand")
 	}
 	return &Snowflake{
 		u: u,
