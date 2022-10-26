@@ -19,6 +19,7 @@ import (
 	"golang.org/x/term"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -33,6 +34,7 @@ type (
 		inj     Injector
 		cmds    []*cmdTree
 		config  *ClientConfig
+		log     *klog.LevelLogger
 		stdin   *bufio.Reader
 		httpc   *http.Client
 		flags   ClientFlags
@@ -40,8 +42,11 @@ type (
 
 	// ClientConfig is the client config
 	ClientConfig struct {
-		config *viper.Viper
-		Addr   string
+		config    *viper.Viper
+		logLevel  string
+		logOutput string
+		logWriter io.Writer
+		Addr      string
 	}
 
 	clientDef struct {
@@ -117,6 +122,8 @@ func NewClient(opts Opts, stdin io.Reader) *Client {
 	v := viper.New()
 	v.SetDefault("addr", "http://localhost:8080/api")
 	v.SetDefault("timeout", "5s")
+	v.SetDefault("loglevel", "INFO")
+	v.SetDefault("logoutput", "STDERR")
 
 	v.SetConfigName(opts.ClientDefault)
 	v.SetConfigType("yaml")
@@ -224,12 +231,18 @@ func (c *Client) Init() error {
 	if err := c.config.config.ReadInConfig(); err != nil {
 		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 	}
+
 	c.config.Addr = c.config.config.GetString("addr")
 	if t, err := time.ParseDuration(c.config.config.GetString("timeout")); err == nil {
 		c.httpc.Timeout = t
 	} else {
 		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
 	}
+
+	c.config.logLevel = c.config.config.GetString("loglevel")
+	c.config.logOutput = c.config.config.GetString("logoutput")
+	c.log = newPlaintextLogger(*c.config)
+
 	for _, i := range c.clients {
 		if err := i.r.Init(*c.config, &configValueReader{
 			opt: i.opt,

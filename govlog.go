@@ -38,7 +38,7 @@ func logOutputFromString(s string) io.Writer {
 	case "TEST":
 		return nil
 	default:
-		return os.Stdout
+		return os.Stderr
 	}
 }
 
@@ -147,6 +147,64 @@ func (s *zerologSerializer) Log(level klog.Level, t, mt time.Time, caller *klog.
 		e = e.Int64("monounixtimeus", monounixtimeus)
 	}
 	e.Str("caller", callerstr).
+		Str("path", path).
+		Fields(map[string]interface{}(fields)).
+		Msg(msg)
+}
+
+func newPlaintextLogger(c ClientConfig) *klog.LevelLogger {
+	return klog.NewLevelLogger(klog.New(
+		klog.OptMinLevelStr(c.logLevel),
+		klog.OptSerializer(newPlaintextSerializer(c)),
+	))
+}
+
+type (
+	plaintextSerializer struct {
+		log *zerolog.Logger
+	}
+)
+
+func newPlaintextSerializer(c ClientConfig) klog.Serializer {
+	zerologInitOnce.Do(setZerologGlobals)
+	w := logOutputFromString(c.logOutput)
+	if w == nil {
+		w = c.logWriter
+	}
+	l := zerolog.New(zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {
+		cw.Out = klog.NewSyncWriter(w)
+	}))
+	return &plaintextSerializer{
+		log: &l,
+	}
+}
+
+func (s *plaintextSerializer) Log(level klog.Level, t, mt time.Time, caller *klog.Frame, path string, msg string, fields klog.Fields) {
+	timestr := t.Format(time.RFC3339Nano)
+	callerstr := ""
+	if caller != nil {
+		callerstr = fmt.Sprintf("%s:%d", caller.File, caller.Line)
+	}
+	if path == "" {
+		path = "."
+	}
+	for k := range reservedLogFields {
+		delete(fields, k)
+	}
+	e := s.log.Info()
+	switch level {
+	case klog.LevelDebug:
+		e = s.log.Debug()
+	case klog.LevelInfo:
+		e = s.log.Info()
+	case klog.LevelWarn:
+		e = s.log.Warn()
+	case klog.LevelError:
+		e = s.log.Error()
+	}
+	e.Str("level", level.String()).
+		Str("time", timestr).
+		Str("caller", callerstr).
 		Str("path", path).
 		Fields(map[string]interface{}(fields)).
 		Msg(msg)

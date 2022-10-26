@@ -34,7 +34,7 @@ func TestLogOutputFromString(t *testing.T) {
 		},
 		{
 			Env:    "bogus",
-			Writer: os.Stdout,
+			Writer: os.Stderr,
 		},
 	} {
 		tc := tc
