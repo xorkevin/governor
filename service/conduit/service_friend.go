@@ -9,6 +9,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -114,14 +115,14 @@ func (s *Service) inviteFriend(ctx context.Context, userid string, invitedBy str
 func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, user.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
 	m2, err := s.users.GetByID(ctx, inviter)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, user.ErrorNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
