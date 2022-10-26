@@ -248,7 +248,7 @@ func (s *router) refreshToken(c *governor.Context) {
 	}
 	res, err := s.s.refreshToken(c.Ctx(), req.RefreshToken, ipaddr, c.Header("User-Agent"))
 	if err != nil {
-		if errors.Is(err, ErrorDiscardSession) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
+		if errors.Is(err, errorDiscardSession{}) && res != nil && res.Claims != nil && res.Claims.Subject != "" {
 			s.rmAccessCookie(c)
 			s.rmRefreshCookie(c, res.Claims.Subject)
 		}

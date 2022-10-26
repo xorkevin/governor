@@ -489,12 +489,8 @@ func (s *Service) checkLoginRatelimit(ctx context.Context, m *model.Model) error
 	return nil
 }
 
-var (
-	// ErrorAuthenticate is returned when failing to authenticate
-	ErrorAuthenticate errorAuthenticate
-)
-
 type (
+	// errorAuthenticate is returned when failing to authenticate
 	errorAuthenticate struct{}
 )
 
@@ -511,7 +507,7 @@ func (s *Service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 		if ok, err := s.users.ValidateOTPBackup(cipher.decrypter, m, backup); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp backup code")
 		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, ErrorAuthenticate, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
+			return governor.ErrWithRes(kerrors.WithKind(nil, errorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
 		}
 
 		emdata := emailOTPBackupUsed{
@@ -542,7 +538,7 @@ func (s *Service) checkOTPCode(ctx context.Context, m *model.Model, code string,
 		if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp code")
 		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, ErrorAuthenticate, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")
+			return governor.ErrWithRes(kerrors.WithKind(nil, errorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")
 		}
 	}
 	return nil

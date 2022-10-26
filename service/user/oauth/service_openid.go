@@ -154,7 +154,7 @@ func (s *Service) authCode(ctx context.Context, userid, clientid, scope, nonce, 
 	})
 
 	if _, err := s.getCachedClient(ctx, clientid); err != nil {
-		if errors.Is(err, ErrorNotFound) {
+		if errors.Is(err, errorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -285,7 +285,7 @@ func (s *Service) getUserinfoClaims(ctx context.Context, userid string, scopes m
 func (s *Service) checkClientKey(ctx context.Context, clientid, key, redirect string) error {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, ErrorNotFound) {
+		if errors.Is(err, errorNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusUnauthorized, oidErrorInvalidClient, "Invalid client")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")

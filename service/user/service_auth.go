@@ -44,12 +44,8 @@ type (
 	}
 )
 
-var (
-	// ErrorDiscardSession is returned when the login session should be discarded
-	ErrorDiscardSession errorDiscardSession
-)
-
 type (
+	// errorDiscardSession is returned when the login session should be discarded
 	errorDiscardSession struct{}
 )
 
@@ -83,7 +79,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 
 		if err := s.checkOTPCode(ctx, m, code, backup, ipaddr, useragent); err != nil {
-			if errors.Is(err, ErrorAuthenticate) {
+			if errors.Is(err, errorAuthenticate{}) {
 				// must make a best effort to increment login failures
 				s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx, nil), m, ipaddr, useragent)
 			}
@@ -263,7 +259,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 						Subject: claims.Subject,
 					},
 				},
-			}, governor.ErrWithRes(kerrors.WithKind(err, ErrorDiscardSession, "No session"), http.StatusUnauthorized, "", "Invalid token")
+			}, governor.ErrWithRes(kerrors.WithKind(err, errorDiscardSession{}, "No session"), http.StatusUnauthorized, "", "Invalid token")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get session")
 	}
@@ -277,7 +273,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 					Subject: claims.Subject,
 				},
 			},
-		}, governor.ErrWithRes(kerrors.WithKind(err, ErrorDiscardSession, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
+		}, governor.ErrWithRes(kerrors.WithKind(err, errorDiscardSession{}, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
 	}
 
 	sessionKey, err := s.sessions.RehashKey(sm)

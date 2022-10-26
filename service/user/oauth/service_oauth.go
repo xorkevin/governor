@@ -17,12 +17,8 @@ import (
 	"xorkevin.dev/klog"
 )
 
-var (
-	// ErrorNotFound is returned when an oauth app is not found
-	ErrorNotFound errorNotFound
-)
-
 type (
+	// errorNotFound is returned when an oauth app is not found
 	errorNotFound struct{}
 )
 
@@ -100,7 +96,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"), nil)
 		}
 	} else if clientstr == cacheValTombstone {
-		return nil, kerrors.WithKind(err, ErrorNotFound, "OAuth app not found")
+		return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
 	} else {
 		cm := &model.Model{}
 		if err := kjson.Unmarshal([]byte(clientstr), cm); err != nil {
@@ -116,7 +112,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.
 			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCache); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
 			}
-			return nil, kerrors.WithKind(err, ErrorNotFound, "OAuth app not found")
+			return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
@@ -259,7 +255,7 @@ func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 func (s *Service) getApp(ctx context.Context, clientid string) (*resApp, error) {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, ErrorNotFound) {
+		if errors.Is(err, errorNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
