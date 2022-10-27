@@ -1,9 +1,7 @@
 package token
 
 import (
-	"context"
-	"io"
-	"os"
+	"bufio"
 	"time"
 
 	"gopkg.in/square/go-jose.v2"
@@ -27,6 +25,7 @@ type (
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
 		log           *klog.LevelLogger
+		cli           governor.CLI
 		sysTokenFlags sysTokenFlags
 	}
 
@@ -99,6 +98,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
 	c.log = klog.NewLevelLogger(log)
+	c.cli = cli
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
-	skb, err := os.ReadFile(c.sysTokenFlags.privkey)
+	skb, err := c.cli.ReadFile(c.sysTokenFlags.privkey)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to read private key file")
 	}
@@ -163,23 +163,17 @@ func (c *CmdClient) genSysToken(args []string) error {
 		Key:      "",
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
-	output := os.Stdout
 	if c.sysTokenFlags.output != "" {
-		var err error
-		output, err = os.Create(c.sysTokenFlags.output)
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to create output file")
+		if err := c.cli.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0600); err != nil {
+			return kerrors.WithMsg(err, "Failed to write token output to file")
 		}
-		defer func() {
-			if err := output.Close(); err != nil {
-				c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close output file"), nil)
-			}
-		}()
+		return nil
 	}
-	if _, err := io.WriteString(output, token); err != nil {
+	out := bufio.NewWriter(c.cli.Stdout())
+	if _, err := out.WriteString(token + "\n"); err != nil {
 		return kerrors.WithMsg(err, "Failed to write token output")
 	}
-	if _, err := io.WriteString(output, "\n"); err != nil {
+	if err := out.Flush(); err != nil {
 		return kerrors.WithMsg(err, "Failed to write token output")
 	}
 	return nil

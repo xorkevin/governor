@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ type (
 		cmds    []*cmdTree
 		config  *ClientConfig
 		log     *klog.LevelLogger
+		stdout  io.Writer
 		stdin   *bufio.Reader
 		httpc   *http.Client
 		flags   ClientFlags
@@ -93,6 +95,10 @@ type (
 	}
 
 	CLI interface {
+		Stdout() io.Writer
+		Stdin() io.Reader
+		ReadFile(name string) ([]byte, error)
+		WriteFile(name string, data []byte, mode fs.FileMode) error
 		ReadString(delim byte) (string, error)
 		ReadPassword() (string, error)
 	}
@@ -117,7 +123,7 @@ type (
 )
 
 // NewClient creates a new Client
-func NewClient(opts Opts, stdin io.Reader) *Client {
+func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
 	v := viper.New()
 	v.SetDefault("addr", "http://localhost:8080/api")
 	v.SetDefault("timeout", "5s")
@@ -141,7 +147,8 @@ func NewClient(opts Opts, stdin io.Reader) *Client {
 		config: &ClientConfig{
 			config: v,
 		},
-		stdin: bufio.NewReader(stdin),
+		stdout: stdout,
+		stdin:  bufio.NewReader(stdin),
 		httpc: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -250,6 +257,29 @@ func (c *Client) Init() error {
 		}, l, c, c); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
+	}
+	return nil
+}
+
+func (c *Client) Stdout() io.Writer {
+	return c.stdout
+}
+
+func (c *Client) Stdin() io.Reader {
+	return c.stdin
+}
+
+func (c *Client) ReadFile(name string) ([]byte, error) {
+	b, err := os.ReadFile(name)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to read file")
+	}
+	return b, nil
+}
+
+func (c *Client) WriteFile(name string, data []byte, mode fs.FileMode) error {
+	if err := os.WriteFile(name, data, mode); err != nil {
+		return kerrors.WithMsg(err, "Failed to write file")
 	}
 	return nil
 }

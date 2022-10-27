@@ -2,7 +2,6 @@ package gate
 
 import (
 	"net/http"
-	"os"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/token"
@@ -27,6 +26,7 @@ type (
 		once         *ksync.Once[clientConfig]
 		systokenonce *ksync.Once[string]
 		config       governor.ConfigValueReader
+		cli          governor.CLI
 	}
 
 	ctxKeyClient struct{}
@@ -61,6 +61,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 
 func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
+	c.cli = cli
 	return nil
 }
 
@@ -89,7 +90,7 @@ func (c *CmdClient) GetSysToken() (string, error) {
 		if err != nil {
 			return nil, err
 		}
-		b, err := os.ReadFile(fp)
+		b, err := c.cli.ReadFile(fp)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to read systoken file")
 		}
