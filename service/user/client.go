@@ -1,16 +1,17 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -22,6 +23,7 @@ type (
 		gate          gate.Client
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
+		log           *klog.LevelLogger
 		cli           governor.CLI
 		http          governor.HTTPClient
 		addAdminReq   reqAddAdmin
@@ -100,8 +102,9 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.addAdmin))
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
+	c.log = klog.NewLevelLogger(log)
 	c.cli = cli
 	c.http = m
 	return nil
@@ -142,13 +145,16 @@ func (c *CmdClient) addAdmin(args []string) error {
 		return kerrors.WithMsg(err, "Failed to add systoken")
 	}
 	var body resUserUpdate
-	_, decoded, err := c.http.DoRequestJSON(r, &body)
+	_, decoded, err := c.http.DoRequestJSON(context.Background(), r, &body)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed adding admin")
 	}
 	if !decoded {
 		return kerrors.WithKind(nil, governor.ErrorServerRes, "Non-decodable response")
 	}
-	log.Printf("Created admin user %s: %s\n", body.Username, body.Userid)
+	c.log.Info(context.Background(), "Created admin user", klog.Fields{
+		"userid":   body.Userid,
+		"username": body.Username,
+	})
 	return nil
 }

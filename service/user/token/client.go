@@ -1,8 +1,8 @@
 package token
 
 import (
+	"context"
 	"io"
-	"log"
 	"os"
 	"time"
 
@@ -13,6 +13,7 @@ import (
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -25,6 +26,7 @@ type (
 	CmdClient struct {
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
+		log           *klog.LevelLogger
 		sysTokenFlags sysTokenFlags
 	}
 
@@ -94,8 +96,9 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.genSysToken))
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
+	c.log = klog.NewLevelLogger(log)
 	return nil
 }
 
@@ -169,7 +172,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 		}
 		defer func() {
 			if err := output.Close(); err != nil {
-				log.Println(kerrors.WithMsg(err, "Failed to close output file"))
+				c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close output file"), nil)
 			}
 		}()
 	}
