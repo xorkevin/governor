@@ -35,8 +35,6 @@ func logOutputFromString(s string) io.Writer {
 		return os.Stderr
 	case "STDOUT":
 		return os.Stdout
-	case "TEST":
-		return nil
 	default:
 		return os.Stderr
 	}
@@ -70,7 +68,7 @@ func setZerologGlobals() {
 func newZerologSerializer(c Config) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
 	w := logOutputFromString(c.logOutput)
-	if w == nil {
+	if c.logWriter != nil {
 		w = c.logWriter
 	}
 	w = klog.NewSyncWriter(w)
@@ -168,7 +166,7 @@ type (
 func newPlaintextSerializer(c ClientConfig) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
 	w := logOutputFromString(c.logOutput)
-	if w == nil {
+	if c.logWriter != nil {
 		w = c.logWriter
 	}
 	l := zerolog.New(zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {

@@ -29,10 +29,6 @@ func TestLogOutputFromString(t *testing.T) {
 			Writer: os.Stdout,
 		},
 		{
-			Env:    "TEST",
-			Writer: nil,
-		},
-		{
 			Env:    "bogus",
 			Writer: os.Stderr,
 		},
