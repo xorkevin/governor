@@ -1,8 +1,9 @@
 package governor
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -107,6 +108,11 @@ Calls the server setup endpoint.`,
 	c.cmd = rootCmd
 }
 
+func (c *Cmd) logFatal(v interface{}) {
+	fmt.Fprintln(os.Stderr, v)
+	os.Exit(1)
+}
+
 func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 	if c.s != nil {
 		c.s.SetFlags(Flags{
@@ -122,19 +128,17 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 
 func (c *Cmd) serve(cmd *cobra.Command, args []string) {
 	if err := c.s.Start(); err != nil {
-		log.Fatalln(err)
+		c.logFatal(err)
 	}
 }
 
 func (c *Cmd) setup(cmd *cobra.Command, args []string) {
 	if err := c.c.Init(); err != nil {
-		log.Fatalln(err)
+		c.logFatal(err)
 	}
-	res, err := c.c.Setup(c.cmdFlags.setupSecret)
-	if err != nil {
-		log.Fatalln(err)
+	if _, err := c.c.Setup(context.Background(), c.cmdFlags.setupSecret); err != nil {
+		c.logFatal(err)
 	}
-	log.Printf("Successfully setup governor:%s\n", res.Version)
 }
 
 func (c *Cmd) docMan(cmd *cobra.Command, args []string) {
@@ -142,13 +146,13 @@ func (c *Cmd) docMan(cmd *cobra.Command, args []string) {
 		Title:   c.opts.Appname,
 		Section: "1",
 	}, c.cmdFlags.docOutputDir); err != nil {
-		log.Fatalln(err)
+		c.logFatal(err)
 	}
 }
 
 func (c *Cmd) docMd(cmd *cobra.Command, args []string) {
 	if err := doc.GenMarkdownTree(c.cmd, c.cmdFlags.docOutputDir); err != nil {
-		log.Fatalln(err)
+		c.logFatal(err)
 	}
 }
 
@@ -168,10 +172,10 @@ func (c *Cmd) addTree(t *cmdTree, parent *cobra.Command) {
 	if t.Handler != nil {
 		cmd.Run = func(cmd *cobra.Command, args []string) {
 			if err := c.c.Init(); err != nil {
-				log.Fatalln(err)
+				c.logFatal(err)
 			}
 			if err := t.Handler.Handle(args); err != nil {
-				log.Fatalln(err)
+				c.logFatal(err)
 			}
 		}
 	}
@@ -246,6 +250,6 @@ func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
 // Execute runs the governor cmd
 func (c *Cmd) Execute() {
 	if err := c.cmd.Execute(); err != nil {
-		log.Fatalln(err)
+		c.logFatal(err)
 	}
 }

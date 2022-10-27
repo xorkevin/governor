@@ -1,7 +1,9 @@
 package governor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -159,21 +161,17 @@ func newPlaintextLogger(c ClientConfig) *klog.LevelLogger {
 
 type (
 	plaintextSerializer struct {
-		log *zerolog.Logger
+		w io.Writer
 	}
 )
 
 func newPlaintextSerializer(c ClientConfig) klog.Serializer {
-	zerologInitOnce.Do(setZerologGlobals)
 	w := logOutputFromString(c.logOutput)
 	if c.logWriter != nil {
 		w = c.logWriter
 	}
-	l := zerolog.New(zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {
-		cw.Out = klog.NewSyncWriter(w)
-	}))
 	return &plaintextSerializer{
-		log: &l,
+		w: klog.NewSyncWriter(w),
 	}
 }
 
@@ -186,26 +184,18 @@ func (s *plaintextSerializer) Log(level klog.Level, t, mt time.Time, caller *klo
 	if path == "" {
 		path = "."
 	}
-	for k := range reservedLogFields {
-		delete(fields, k)
+	var b bytes.Buffer
+	j := json.NewEncoder(&b)
+	j.SetEscapeHTML(false)
+	if err := j.Encode(fields); err != nil {
+		// ignore marshal error
+		return
 	}
-	e := s.log.Info()
-	switch level {
-	case klog.LevelDebug:
-		e = s.log.Debug()
-	case klog.LevelInfo:
-		e = s.log.Info()
-	case klog.LevelWarn:
-		e = s.log.Warn()
-	case klog.LevelError:
-		e = s.log.Error()
+	fmt.Fprintf(s.w, "[%s %s] %s %s %s ", level.String(), timestr, msg, path, callerstr)
+	if _, err := io.Copy(s.w, &b); err != nil {
+		// ignore buffer copy error
+		return
 	}
-	e.Str("level", level.String()).
-		Str("time", timestr).
-		Str("caller", callerstr).
-		Str("path", path).
-		Fields(map[string]interface{}(fields)).
-		Msg(msg)
 }
 
 type (

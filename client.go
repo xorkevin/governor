@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,14 +100,14 @@ type (
 	HTTPClient interface {
 		NewRequest(method, path string, body io.Reader) (*http.Request, error)
 		NewJSONRequest(method, path string, data interface{}) (*http.Request, error)
-		DoRequest(r *http.Request) (*http.Response, error)
-		DoRequestJSON(r *http.Request, response interface{}) (*http.Response, bool, error)
+		DoRequest(ctx context.Context, r *http.Request) (*http.Response, error)
+		DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error)
 	}
 
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
-		Init(gc ClientConfig, r ConfigValueReader, cli CLI, m HTTPClient) error
+		Init(gc ClientConfig, r ConfigValueReader, log klog.Logger, cli CLI, m HTTPClient) error
 	}
 
 	cmdRegistrar struct {
@@ -244,10 +243,11 @@ func (c *Client) Init() error {
 	c.log = newPlaintextLogger(*c.config)
 
 	for _, i := range c.clients {
+		l := klog.Sub(c.log.Logger, i.opt.name, nil)
 		if err := i.r.Init(*c.config, &configValueReader{
 			opt: i.opt,
 			v:   c.config.config,
-		}, c, c); err != nil {
+		}, l, c, c); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
@@ -324,7 +324,7 @@ func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Re
 }
 
 // DoRequest sends a request to the server and returns its response
-func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
+func (c *Client) DoRequest(ctx context.Context, r *http.Request) (*http.Response, error) {
 	res, err := c.httpc.Do(r)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
@@ -332,7 +332,7 @@ func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
 			if err := res.Body.Close(); err != nil {
-				log.Println(kerrors.WithMsg(err, "Failed to close response body"))
+				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close response body"), nil)
 			}
 		}()
 		var errres ErrorRes
@@ -345,14 +345,14 @@ func (c *Client) DoRequest(r *http.Request) (*http.Response, error) {
 }
 
 // DoRequestJSON sends a request to the server and decodes response json
-func (c *Client) DoRequestJSON(r *http.Request, response interface{}) (*http.Response, bool, error) {
-	res, err := c.DoRequest(r)
+func (c *Client) DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
+	res, err := c.DoRequest(ctx, r)
 	if err != nil {
 		return res, false, err
 	}
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			log.Println(kerrors.WithMsg(err, "Failed to close response body"))
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close response body"), nil)
 		}
 	}()
 
@@ -371,7 +371,7 @@ func isStatusDecodable(status int) bool {
 }
 
 // Setup sends a setup request to the server
-func (c *Client) Setup(secret string) (*ResSetup, error) {
+func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 	if secret == "-" {
 		var err error
 		secret, err = c.ReadString('\n')
@@ -388,12 +388,15 @@ func (c *Client) Setup(secret string) (*ResSetup, error) {
 		return nil, err
 	}
 	r.SetBasicAuth("setup", secret)
-	_, decoded, err := c.DoRequestJSON(r, body)
+	_, decoded, err := c.DoRequestJSON(ctx, r, body)
 	if err != nil {
 		return nil, err
 	}
 	if !decoded {
 		return nil, kerrors.WithKind(nil, ErrorServerRes, "Non-decodable response")
 	}
+	c.log.Info(ctx, "Successfully setup governor", klog.Fields{
+		"version": body.Version,
+	})
 	return body, nil
 }
