@@ -255,7 +255,11 @@ func (c *Client) Init() error {
 		if err := i.r.Init(*c.config, &configValueReader{
 			opt: i.opt,
 			v:   c.config.config,
-		}, l, c, c); err != nil {
+		}, l, c, &httpClient{
+			log:   c.log,
+			httpc: c.httpc,
+			base:  c.config.Addr + i.opt.url,
+		}); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
@@ -302,6 +306,14 @@ func (c *Client) ReadPassword() (string, error) {
 	return string(s), nil
 }
 
+type (
+	httpClient struct {
+		log   *klog.LevelLogger
+		httpc *http.Client
+		base  string
+	}
+)
+
 // Client http errors
 var (
 	// ErrorInvalidClientReq is returned when the client request could not be made
@@ -331,8 +343,8 @@ func (e errorServerRes) Error() string {
 }
 
 // NewRequest creates a new request
-func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, c.config.Addr+path, body)
+func (c *httpClient) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, c.base+path, body)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Malformed request")
 	}
@@ -340,7 +352,7 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 }
 
 // NewJSONRequest creates a new json request
-func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Request, error) {
+func (c *httpClient) NewJSONRequest(method, path string, data interface{}) (*http.Request, error) {
 	b, err := kjson.Marshal(data)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
@@ -355,7 +367,7 @@ func (c *Client) NewJSONRequest(method, path string, data interface{}) (*http.Re
 }
 
 // DoRequest sends a request to the server and returns its response
-func (c *Client) DoRequest(ctx context.Context, r *http.Request) (*http.Response, error) {
+func (c *httpClient) DoRequest(ctx context.Context, r *http.Request) (*http.Response, error) {
 	res, err := c.httpc.Do(r)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
@@ -381,7 +393,7 @@ func (c *Client) DoRequest(ctx context.Context, r *http.Request) (*http.Response
 }
 
 // DoRequestNoContent sends a request to the server and discards the response body
-func (c *Client) DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
+func (c *httpClient) DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
 	res, err := c.DoRequest(ctx, r)
 	if err != nil {
 		return res, err
@@ -400,7 +412,7 @@ func (c *Client) DoRequestNoContent(ctx context.Context, r *http.Request) (*http
 }
 
 // DoRequestJSON sends a request to the server and decodes response json
-func (c *Client) DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
+func (c *httpClient) DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
 	res, err := c.DoRequest(ctx, r)
 	if err != nil {
 		return res, false, err
@@ -442,13 +454,18 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 	if err := setupSecretValid(secret); err != nil {
 		return nil, err
 	}
+	httpc := httpClient{
+		log:   c.log,
+		httpc: c.httpc,
+		base:  c.config.Addr,
+	}
 	body := &ResSetup{}
-	r, err := c.NewRequest(http.MethodPost, "/setupz", nil)
+	r, err := httpc.NewRequest(http.MethodPost, "/setupz", nil)
 	if err != nil {
 		return nil, err
 	}
 	r.SetBasicAuth("setup", secret)
-	_, decoded, err := c.DoRequestJSON(ctx, r, body)
+	_, decoded, err := httpc.DoRequestJSON(ctx, r, body)
 	if err != nil {
 		return nil, err
 	}

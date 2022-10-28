@@ -20,7 +20,6 @@ type (
 		log          *klog.LevelLogger
 		cli          governor.CLI
 		http         governor.HTTPClient
-		url          string
 		publishFlags publishFlags
 	}
 
@@ -70,7 +69,6 @@ func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader,
 	c.log = klog.NewLevelLogger(log)
 	c.cli = cli
 	c.http = m
-	c.url = r.URL()
 	return nil
 }
 
@@ -85,14 +83,9 @@ func (c *CmdClient) publishEvent(args []string) error {
 			return kerrors.WithMsg(err, "Failed reading event payload")
 		}
 	}
-	u, err := url.Parse(c.url + "/pubsub/publish")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to create events api url")
-	}
-	q := u.Query()
+	var q url.Values
 	q.Add("subject", c.publishFlags.subject)
-	u.RawQuery = q.Encode()
-	r, err := c.http.NewRequest(http.MethodPost, u.String(), &payload)
+	r, err := c.http.NewRequest(http.MethodPost, "/pubsub/publish?"+q.Encode(), &payload)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create events api requeust")
 	}

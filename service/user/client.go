@@ -20,7 +20,6 @@ type (
 		log           *klog.LevelLogger
 		cli           governor.CLI
 		http          governor.HTTPClient
-		url           string
 		addAdminReq   reqAddAdmin
 		addAdminFlags addAdminFlags
 	}
@@ -100,7 +99,6 @@ func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader,
 	c.log = klog.NewLevelLogger(log)
 	c.cli = cli
 	c.http = m
-	c.url = r.URL()
 	return nil
 }
 
@@ -131,7 +129,7 @@ func (c *CmdClient) addAdmin(args []string) error {
 	if err := c.addAdminReq.valid(); err != nil {
 		return err
 	}
-	r, err := c.http.NewJSONRequest(http.MethodPost, c.url+"/user/admin", c.addAdminReq)
+	r, err := c.http.NewJSONRequest(http.MethodPost, "/user/admin", c.addAdminReq)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")
 	}
