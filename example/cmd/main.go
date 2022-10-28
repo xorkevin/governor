@@ -165,6 +165,11 @@ func main() {
 		Long:  "manage tokens",
 	}, token.NewCmdClient())
 	client.Register("gate", "/null/gate", nil, gate.NewCmdClient())
+	client.Register("events", "/eventsapi", &governor.CmdDesc{
+		Usage: "events",
+		Short: "interact with events",
+		Long:  "interact with events",
+	}, eventsapi.NewCmdClientCtx(client.Injector()))
 	client.Register("user", "/u", &governor.CmdDesc{
 		Usage: "user",
 		Short: "manage users",

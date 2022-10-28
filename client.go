@@ -107,6 +107,7 @@ type (
 		NewRequest(method, path string, body io.Reader) (*http.Request, error)
 		NewJSONRequest(method, path string, data interface{}) (*http.Request, error)
 		DoRequest(ctx context.Context, r *http.Request) (*http.Response, error)
+		DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error)
 		DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error)
 	}
 
@@ -362,7 +363,12 @@ func (c *Client) DoRequest(ctx context.Context, r *http.Request) (*http.Response
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
 			if err := res.Body.Close(); err != nil {
-				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close response body"), nil)
+				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+			}
+		}()
+		defer func() {
+			if _, err := io.Copy(io.Discard, res.Body); err != nil {
+				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
 			}
 		}()
 		var errres ErrorRes
@@ -374,6 +380,25 @@ func (c *Client) DoRequest(ctx context.Context, r *http.Request) (*http.Response
 	return res, nil
 }
 
+// DoRequestNoContent sends a request to the server and discards the response body
+func (c *Client) DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
+	res, err := c.DoRequest(ctx, r)
+	if err != nil {
+		return res, err
+	}
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+		}
+	}()
+	defer func() {
+		if _, err := io.Copy(io.Discard, res.Body); err != nil {
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
+		}
+	}()
+	return res, nil
+}
+
 // DoRequestJSON sends a request to the server and decodes response json
 func (c *Client) DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
 	res, err := c.DoRequest(ctx, r)
@@ -382,7 +407,12 @@ func (c *Client) DoRequestJSON(ctx context.Context, r *http.Request, response in
 	}
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close response body"), nil)
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+		}
+	}()
+	defer func() {
+		if _, err := io.Copy(io.Discard, res.Body); err != nil {
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
 		}
 	}()
 

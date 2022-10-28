@@ -32,7 +32,7 @@ func (s *router) publishEvent(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	c.WriteStatus(http.StatusOK)
+	c.WriteStatus(http.StatusNoContent)
 }
 
 func (s *router) mountRoutes(r *governor.MethodRouter) {
