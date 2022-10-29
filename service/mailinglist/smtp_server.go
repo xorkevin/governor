@@ -9,6 +9,7 @@ import (
 	"net"
 	gomail "net/mail"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"blitiri.com.ar/go/spf"
@@ -133,8 +134,13 @@ var (
 )
 
 type smtpBackend struct {
-	service *Service
-	log     *klog.LevelLogger
+	service  *Service
+	log      *klog.LevelLogger
+	reqcount *atomic.Uint32
+}
+
+func (s *smtpBackend) lreqID() string {
+	return s.service.instance + "-" + uid.ReqID(s.reqcount.Add(1))
 }
 
 func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {
@@ -163,6 +169,7 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 	})
 	return &smtpSession{
 		service: s.service,
+		be:      s,
 		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "session", nil)),
 		ctx:     ctx,
 		srcip:   hostip,
@@ -172,6 +179,7 @@ func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session,
 
 type smtpSession struct {
 	service      *Service
+	be           *smtpBackend
 	log          *klog.LevelLogger
 	ctx          context.Context
 	srcip        net.IP
@@ -218,12 +226,7 @@ func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
 		"smtp.cmd":      "mail",
 		"smtp.mailfrom": from,
 	})
-	u, err := uid.NewSnowflake(mailidRandSize)
-	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to generate mail id"), nil)
-		return errSMTPBase
-	}
-	id := u.Base32()
+	id := s.be.lreqID()
 	ctx = klog.WithFields(ctx, klog.Fields{
 		"smtp.id": id,
 	})

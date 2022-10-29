@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/emersion/go-smtp"
@@ -251,8 +252,9 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 
 func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
-		service: s,
-		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "smtpserver", nil)),
+		service:  s,
+		log:      klog.NewLevelLogger(klog.Sub(s.log.Logger, "smtpserver", nil)),
+		reqcount: &atomic.Uint32{},
 	}
 	server := smtp.NewServer(be)
 	server.Addr = ":" + s.port
