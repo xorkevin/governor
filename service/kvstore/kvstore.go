@@ -46,6 +46,7 @@ type (
 		Get(ctx context.Context, key string) Resulter
 		GetInt(ctx context.Context, key string) IntResulter
 		Set(ctx context.Context, key, val string, duration time.Duration) ErrResulter
+		SetNX(ctx context.Context, key, val string, duration time.Duration) BoolResulter
 		Del(ctx context.Context, key ...string) ErrResulter
 		Incr(ctx context.Context, key string, delta int64) IntResulter
 		Expire(ctx context.Context, key string, duration time.Duration) BoolResulter
@@ -524,6 +525,12 @@ func (t *baseMulti) Set(ctx context.Context, key, val string, duration time.Dura
 	}
 }
 
+func (t *baseMulti) SetNX(ctx context.Context, key, val string, duration time.Duration) BoolResulter {
+	return &boolCmdResulter{
+		res: t.base.SetNX(ctx, key, val, duration),
+	}
+}
+
 func (t *baseMulti) Del(ctx context.Context, key ...string) ErrResulter {
 	return &intCmdErrResulter{
 		res: t.base.Del(ctx, key...),
@@ -575,6 +582,10 @@ func (t *multi) GetInt(ctx context.Context, key string) IntResulter {
 
 func (t *multi) Set(ctx context.Context, key, val string, duration time.Duration) ErrResulter {
 	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, duration)
+}
+
+func (t *multi) SetNX(ctx context.Context, key, val string, duration time.Duration) BoolResulter {
+	return t.base.SetNX(ctx, t.prefix+kvpathSeparator+key, val, duration)
 }
 
 func (t *multi) Del(ctx context.Context, key ...string) ErrResulter {
