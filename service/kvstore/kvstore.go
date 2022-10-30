@@ -60,6 +60,7 @@ type (
 		Get(ctx context.Context, key string) (string, error)
 		GetInt(ctx context.Context, key string) (int64, error)
 		Set(ctx context.Context, key, val string, duration time.Duration) error
+		SetNX(ctx context.Context, key, val string, duration time.Duration) (bool, error)
 		Del(ctx context.Context, key ...string) error
 		Incr(ctx context.Context, key string, delta int64) (int64, error)
 		Expire(ctx context.Context, key string, duration time.Duration) error
@@ -409,6 +410,18 @@ func (s *Service) Set(ctx context.Context, key, val string, duration time.Durati
 	return nil
 }
 
+func (s *Service) SetNX(ctx context.Context, key, val string, duration time.Duration) (bool, error) {
+	client, err := s.getClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	ok, err := client.SetNX(ctx, key, val, duration).Result()
+	if err != nil {
+		return false, kerrors.WithKind(err, ErrorClient, "Failed to setnx key")
+	}
+	return ok, nil
+}
+
 func (s *Service) Del(ctx context.Context, key ...string) error {
 	if len(key) == 0 {
 		return nil
@@ -619,6 +632,10 @@ func (t *tree) GetInt(ctx context.Context, key string) (int64, error) {
 
 func (t *tree) Set(ctx context.Context, key, val string, duration time.Duration) error {
 	return t.base.Set(ctx, t.prefix+kvpathSeparator+key, val, duration)
+}
+
+func (t *tree) SetNX(ctx context.Context, key, val string, duration time.Duration) (bool, error) {
+	return t.base.SetNX(ctx, t.prefix+kvpathSeparator+key, val, duration)
 }
 
 func (t *tree) Del(ctx context.Context, key ...string) error {
