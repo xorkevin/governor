@@ -153,7 +153,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 		})
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubusub server"), klog.Fields{
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"), klog.Fields{
 		"pubsub.addr": s.addr,
 	})
 	s.hbfailed = 0

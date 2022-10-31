@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -48,6 +49,7 @@ type (
 		Offset    int
 		Time      time.Time
 		record    *kgo.Record
+		natsmsg   *nats.Msg
 	}
 
 	// PublishMsg is a message for writing
@@ -94,7 +96,6 @@ type (
 	}
 
 	subscription struct {
-		s        *Service
 		topic    string
 		group    string
 		log      *klog.LevelLogger
@@ -485,7 +486,6 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	}
 
 	sub := &subscription{
-		s:     s,
 		topic: topic,
 		group: group,
 		log: klog.NewLevelLogger(klog.Sub(s.log.Logger, "subscriber", klog.Fields{
