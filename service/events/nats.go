@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -228,10 +229,39 @@ func (s *NatsService) Health(ctx context.Context) error {
 	return nil
 }
 
+const (
+	natsMsgKeyHeader = "events.key"
+)
+
 var (
 	natsStreamNameReplacer = strings.NewReplacer(".", "_")
 )
 
+// Publish publishes to a subject
+func (s *NatsService) Publish(ctx context.Context, msgs ...PublishMsg) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	_, jetstream, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	for _, i := range msgs {
+		header := nats.Header{}
+		header.Set(natsMsgKeyHeader, i.Key)
+		if _, err := jetstream.PublishMsg(&nats.Msg{
+			Subject: i.Topic,
+			Header:  header,
+			Data:    i.Value,
+		}, nats.Context(ctx)); err != nil {
+			return kerrors.WithKind(err, ErrorClient, "Failed to publish message to event stream")
+		}
+	}
+	return nil
+}
+
+// Subscribe subscribes to an event stream
 func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
 	client, jetstream, err := s.getClient(ctx)
 	if err != nil {
@@ -313,7 +343,7 @@ func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	}
 	return &Msg{
 		Topic:     m.Subject,
-		Key:       m.Header.Get("events.key"),
+		Key:       m.Header.Get(natsMsgKeyHeader),
 		Value:     m.Data,
 		Partition: 0,
 		Offset:    int(meta.Sequence.Stream),
@@ -356,53 +386,53 @@ func (s *natsSubscription) IsPermanentlyClosed() bool {
 	return s.isClosed()
 }
 
-// // InitStream initializes a stream
-// func (s *Service) InitStream(ctx context.Context, name string, subjects []string, opts StreamOpts) error {
-// 	client, err := s.getClient(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	cfg := &nats.StreamConfig{
-// 		Name:       name,
-// 		Subjects:   subjects,
-// 		Retention:  nats.LimitsPolicy,
-// 		Discard:    nats.DiscardOld,
-// 		Storage:    nats.FileStorage,
-// 		Replicas:   opts.Replicas,
-// 		MaxAge:     opts.MaxAge,
-// 		MaxBytes:   opts.MaxBytes,
-// 		MaxMsgSize: opts.MaxMsgSize,
-// 		MaxMsgs:    opts.MaxMsgs,
-// 	}
-// 	if _, err := client.stream.StreamInfo(name, nats.Context(ctx)); err != nil {
-// 		if !strings.Contains(err.Error(), "not found") {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-// 		}
-// 		if _, err := client.stream.AddStream(cfg, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to create stream")
-// 		}
-// 	} else {
-// 		if _, err := client.stream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to update stream")
-// 		}
-// 	}
-// 	return nil
-// }
-//
-// // DeleteStream deletes a stream
-// func (s *Service) DeleteStream(ctx context.Context, topic string) error {
-// 	client, err := s.getClient(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if _, err := client.stream.StreamInfo(topic, nats.Context(ctx)); err != nil {
-// 		if !strings.Contains(err.Error(), "not found") {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to get stream")
-// 		}
-// 	} else {
-// 		if err := client.stream.DeleteStream(topic, nats.Context(ctx)); err != nil {
-// 			return kerrors.WithKind(err, ErrorClient{}, "Failed to delete stream")
-// 		}
-// 	}
-// 	return nil
-// }
+// InitStream initializes a stream
+func (s *NatsService) InitStream(ctx context.Context, topic string, opts StreamOpts) error {
+	_, jetstream, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	streamName := natsStreamNameReplacer.Replace(topic)
+	cfg := &nats.StreamConfig{
+		Name:       streamName,
+		Subjects:   []string{topic},
+		Retention:  nats.LimitsPolicy,
+		Discard:    nats.DiscardOld,
+		Storage:    nats.FileStorage,
+		Replicas:   opts.Replicas,
+		MaxAge:     opts.RetentionAge,
+		MaxBytes:   int64(opts.RetentionBytes),
+		MaxMsgSize: int32(opts.MaxMsgBytes),
+	}
+	if _, err := jetstream.StreamInfo(streamName, nats.Context(ctx)); err != nil {
+		if !errors.Is(err, nats.ErrStreamNotFound) {
+			return kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+		}
+		if _, err := jetstream.AddStream(cfg, nats.Context(ctx)); err != nil {
+			return kerrors.WithKind(err, ErrorClient, "Failed to create topic")
+		}
+	} else {
+		if _, err := jetstream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
+			return kerrors.WithKind(err, ErrorClient, "Failed to update topic")
+		}
+	}
+	return nil
+}
+
+// DeleteStream deletes a stream
+func (s *NatsService) DeleteStream(ctx context.Context, topic string) error {
+	_, jetstream, err := s.getClient(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := jetstream.StreamInfo(topic, nats.Context(ctx)); err != nil {
+		if !errors.Is(err, nats.ErrStreamNotFound) {
+			return kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+		}
+		return nil
+	}
+	if err := jetstream.DeleteStream(topic, nats.Context(ctx)); err != nil {
+		return kerrors.WithKind(err, ErrorClient, "Failed to delete topic")
+	}
+	return nil
+}
