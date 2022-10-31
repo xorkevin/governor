@@ -329,7 +329,7 @@ func (s *natsSubscription) IsAssigned(msg Msg) bool {
 
 // ReadMsg reads a message
 func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
-	msgs, err := s.sub.Fetch(1, ctx)
+	msgs, err := s.sub.Fetch(1, nats.Context(ctx))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get message")
 	}
@@ -363,7 +363,7 @@ func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 	if msg.natsmsg == nil {
 		return kerrors.WithKind(nil, ErrorInvalidMsg, "Invalid message")
 	}
-	if err := msg.natsmsg.Ack(); err != nil {
+	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
 		s.log.Err(ctx, kerrors.WithKind(nil, ErrorClient, "Failed to ack message"), nil)
 	}
 	return nil
