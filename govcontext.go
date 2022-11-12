@@ -27,6 +27,8 @@ type (
 		r   *http.Request
 		log *klog.LevelLogger
 	}
+
+	ctxKeyLocalReqID struct{}
 )
 
 // NewContext creates a Context
@@ -36,6 +38,18 @@ func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) *Contex
 		r:   r,
 		log: klog.NewLevelLogger(log),
 	}
+}
+
+func getCtxLocalReqID(ctx context.Context) string {
+	v := ctx.Value(ctxKeyLocalReqID{})
+	if v == nil {
+		return ""
+	}
+	return v.(string)
+}
+
+func setCtxLocalReqID(c *Context, lreqid string) {
+	c.Set(ctxKeyLocalReqID{}, lreqid)
 }
 
 func (c *Context) LReqID() string {

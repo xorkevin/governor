@@ -2,19 +2,14 @@ package governor
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
-	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/klog"
 )
 
@@ -70,7 +65,7 @@ func setZerologGlobals() {
 func newZerologSerializer(c Config) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
 	w := c.LogWriter
-	if w != nil {
+	if w == nil {
 		w = logOutputFromString(c.logger.output)
 	}
 	w = klog.NewSyncWriter(w)
@@ -167,7 +162,7 @@ type (
 
 func newPlaintextSerializer(c ClientConfig) klog.Serializer {
 	w := c.LogWriter
-	if w != nil {
+	if w == nil {
 		w = logOutputFromString(c.logger.output)
 	}
 	return &plaintextSerializer{
@@ -191,99 +186,9 @@ func (s *plaintextSerializer) Log(level klog.Level, t, mt time.Time, caller *klo
 		// ignore marshal error
 		return
 	}
-	fmt.Fprintf(s.w, "[%s %s] %s %s %s ", level.String(), timestr, msg, path, callerstr)
+	fmt.Fprintf(s.w, "[%s %s] %s [%s %s] ", level.String(), timestr, msg, path, callerstr)
 	if _, err := io.Copy(s.w, &b); err != nil {
 		// ignore buffer copy error
 		return
 	}
-}
-
-type (
-	ctxKeyLocalReqID struct{}
-)
-
-func getCtxLocalReqID(ctx context.Context) string {
-	v := ctx.Value(ctxKeyLocalReqID{})
-	if v == nil {
-		return ""
-	}
-	return v.(string)
-}
-
-func (s *Server) lreqID(count uint32) string {
-	return s.config.Instance + "-" + uid.ReqID(count)
-}
-
-type (
-	govResponseWriter struct {
-		http.ResponseWriter
-		status      int
-		wroteHeader bool
-	}
-)
-
-func (w *govResponseWriter) WriteHeader(status int) {
-	if w.wroteHeader {
-		w.ResponseWriter.WriteHeader(status)
-		return
-	}
-	w.status = status
-	w.wroteHeader = true
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *govResponseWriter) Write(p []byte) (int, error) {
-	if !w.wroteHeader {
-		w.WriteHeader(http.StatusOK)
-	}
-	return w.ResponseWriter.Write(p)
-}
-
-func (w *govResponseWriter) isWS() bool {
-	return w.status == http.StatusSwitchingProtocols
-}
-
-func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
-	reqcount := atomic.Uint32{}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log.Logger)
-		lreqid := s.lreqID(reqcount.Add(1))
-		c.Set(ctxKeyLocalReqID{}, lreqid)
-		var realip string
-		if ip := c.RealIP(); ip != nil {
-			realip = ip.String()
-		}
-		c.LogFields(klog.Fields{
-			"http.host":    c.Req().Host,
-			"http.method":  c.Req().Method,
-			"http.reqpath": c.Req().URL.EscapedPath(),
-			"http.remote":  c.Req().RemoteAddr,
-			"http.realip":  realip,
-			"http.lreqid":  lreqid,
-		})
-		w2 := &govResponseWriter{
-			ResponseWriter: w,
-			status:         0,
-		}
-		s.log.Info(c.Ctx(), "HTTP request", nil)
-		start := time.Now()
-		next.ServeHTTP(w2, c.Req())
-		duration := time.Since(start)
-		route := chi.RouteContext(c.Ctx()).RoutePattern()
-		if w2.isWS() {
-			s.log.Info(c.Ctx(), "WS close", klog.Fields{
-				"http.ws":          true,
-				"http.route":       route,
-				"http.status":      w2.status,
-				"http.duration_ms": duration.Milliseconds(),
-			})
-		} else {
-			s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
-				"http.ws":         false,
-				"http.route":      route,
-				"http.status":     w2.status,
-				"http.latency_us": duration.Microseconds(),
-			})
-		}
-	})
 }

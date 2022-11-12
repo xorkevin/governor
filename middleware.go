@@ -10,29 +10,18 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
 	"github.com/klauspost/compress/zstd"
+	"go.uber.org/atomic"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
-
-func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// ContentLength of -1 is unknown
-			if r.ContentLength > limit {
-				c := NewContext(w, r, s.log.Logger)
-				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
-				return
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 
 func stripSlashesMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,44 +35,6 @@ func stripSlashesMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func corsPathsAllowAllMiddleware(rules []*corsPathRule) Middleware {
-	allowAll := cors.AllowAll()
-	return func(next http.Handler) http.Handler {
-		corsNext := allowAll.Handler(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			isMatch := false
-			for _, i := range rules {
-				if i.match(r) {
-					isMatch = true
-					break
-				}
-			}
-			if isMatch {
-				corsNext.ServeHTTP(w, r)
-			} else {
-				next.ServeHTTP(w, r)
-			}
-		})
-	}
-}
-
-func routeRewriteMiddleware(rules []*rewriteRule) Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r2 := new(http.Request)
-			*r2 = *r
-			r2.URL = new(url.URL)
-			*r2.URL = *r.URL
-			for _, i := range rules {
-				if i.match(r2) {
-					r2.URL.Path = i.replace(r2.URL.Path)
-				}
-			}
-			next.ServeHTTP(w, r2)
-		})
-	}
 }
 
 const (
@@ -153,6 +104,137 @@ func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) lreqID(count uint32) string {
+	return s.config.Instance + "-" + uid.ReqID(count)
+}
+
+type (
+	govResponseWriter struct {
+		http.ResponseWriter
+		status      int
+		wroteHeader bool
+	}
+)
+
+func (w *govResponseWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
+	w.status = status
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *govResponseWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *govResponseWriter) isWS() bool {
+	return w.status == http.StatusSwitchingProtocols
+}
+
+func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
+	reqcount := atomic.Uint32{}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := NewContext(w, r, s.log.Logger)
+		lreqid := s.lreqID(reqcount.Add(1))
+		setCtxLocalReqID(c, lreqid)
+		var realip string
+		if ip := c.RealIP(); ip != nil {
+			realip = ip.String()
+		}
+		c.LogFields(klog.Fields{
+			"http.host":    c.Req().Host,
+			"http.method":  c.Req().Method,
+			"http.reqpath": c.Req().URL.EscapedPath(),
+			"http.remote":  c.Req().RemoteAddr,
+			"http.realip":  realip,
+			"http.lreqid":  lreqid,
+		})
+		w2 := &govResponseWriter{
+			ResponseWriter: w,
+			status:         0,
+		}
+		s.log.Info(c.Ctx(), "HTTP request", nil)
+		start := time.Now()
+		next.ServeHTTP(w2, c.Req())
+		duration := time.Since(start)
+		route := chi.RouteContext(c.Ctx()).RoutePattern()
+		if w2.isWS() {
+			s.log.Info(c.Ctx(), "WS close", klog.Fields{
+				"http.ws":          true,
+				"http.route":       route,
+				"http.status":      w2.status,
+				"http.duration_ms": duration.Milliseconds(),
+			})
+		} else {
+			s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
+				"http.ws":         false,
+				"http.route":      route,
+				"http.status":     w2.status,
+				"http.latency_us": duration.Microseconds(),
+			})
+		}
+	})
+}
+
+func routeRewriteMiddleware(rules []*rewriteRule) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r2 := new(http.Request)
+			*r2 = *r
+			r2.URL = new(url.URL)
+			*r2.URL = *r.URL
+			for _, i := range rules {
+				if i.match(r2) {
+					r2.URL.Path = i.replace(r2.URL.Path)
+				}
+			}
+			next.ServeHTTP(w, r2)
+		})
+	}
+}
+
+func corsPathsAllowAllMiddleware(rules []*corsPathRule) Middleware {
+	allowAll := cors.AllowAll()
+	return func(next http.Handler) http.Handler {
+		corsNext := allowAll.Handler(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isMatch := false
+			for _, i := range rules {
+				if i.match(r) {
+					isMatch = true
+					break
+				}
+			}
+			if isMatch {
+				corsNext.ServeHTTP(w, r)
+			} else {
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
+}
+
+func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// ContentLength of -1 is unknown
+			if r.ContentLength > limit {
+				c := NewContext(w, r, s.log.Logger)
+				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 const (
