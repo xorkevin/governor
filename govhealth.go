@@ -44,6 +44,6 @@ func (s *Server) initHealth(r Router) {
 	})
 
 	m.GetCtx("/version", func(c *Context) {
-		c.WriteString(http.StatusOK, s.config.version.String())
+		c.WriteString(http.StatusOK, s.settings.config.Version.String())
 	})
 }

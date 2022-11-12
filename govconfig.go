@@ -29,13 +29,15 @@ type (
 
 	// Opts is the static server configuration
 	Opts struct {
-		Version       Version
 		Appname       string
+		Version       Version
 		Description   string
 		DefaultFile   string
+		EnvPrefix     string
 		ClientDefault string
 		ClientPrefix  string
-		EnvPrefix     string
+		ConfigReader  io.Reader
+		VaultReader   io.Reader
 	}
 )
 
@@ -51,9 +53,23 @@ type (
 		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error)
 	}
 
+	settings struct {
+		v            *viper.Viper
+		configReader io.Reader
+		vault        secretsClient
+		vaultCache   *sync.Map
+		vaultReader  io.Reader
+		showBanner   bool
+		config       Config
+		logger       configLogger
+		httpServer   configHTTPServer
+		middleware   configMiddleware
+	}
+
 	configLogger struct {
 		level  string
 		output string
+		writer io.Writer
 	}
 
 	configHTTPServer struct {
@@ -77,22 +93,12 @@ type (
 	// Config is the server configuration including those from a config file and
 	// environment variables
 	Config struct {
-		config       *viper.Viper
-		ConfigReader io.Reader
-		vault        secretsClient
-		vaultCache   *sync.Map
-		VaultReader  io.Reader
-		Appname      string
-		version      Version
-		Hostname     string
-		Instance     string
-		showBanner   bool
-		logger       configLogger
-		LogWriter    io.Writer
-		addr         string
-		BaseURL      string
-		httpServer   configHTTPServer
-		middleware   configMiddleware
+		Appname  string
+		Version  Version
+		Hostname string
+		Instance string
+		Addr     string
+		BaseURL  string
 	}
 
 	corsPathRule struct {
@@ -157,7 +163,7 @@ func (r rewriteRule) String() string {
 	return fmt.Sprintf("Host: %s, Methods: %s, Pattern: %s, Replace: %s", r.Host, strings.Join(r.Methods, " "), r.Pattern, r.Replace)
 }
 
-func newConfig(opts Opts) *Config {
+func newSettings(opts Opts) *settings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("logger.output", "STDERR")
@@ -195,16 +201,16 @@ func newConfig(opts Opts) *Config {
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 
-	return &Config{
-		config:     v,
-		Appname:    opts.Appname,
-		version:    opts.Version,
-		vaultCache: &sync.Map{},
+	return &settings{
+		v:            v,
+		configReader: opts.ConfigReader,
+		vaultCache:   &sync.Map{},
+		vaultReader:  opts.VaultReader,
+		config: Config{
+			Appname: opts.Appname,
+			Version: opts.Version,
+		},
 	}
-}
-
-func (c *Config) setConfigFile(file string) {
-	c.config.SetConfigFile(file)
 }
 
 // Config errors
@@ -232,9 +238,13 @@ const (
 	instanceIDRandSize = 8
 )
 
-func (c *Config) init() error {
+func (s *settings) init(flags Flags) error {
+	if flags.ConfigFile != "" {
+		s.v.SetConfigFile(flags.ConfigFile)
+	}
+
 	var err error
-	c.Hostname, err = os.Hostname()
+	s.config.Hostname, err = os.Hostname()
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to get hostname")
 	}
@@ -242,46 +252,46 @@ func (c *Config) init() error {
 	if err != nil {
 		return err
 	}
-	c.Instance = u.Base32()
+	s.config.Instance = u.Base32()
 
-	if c.ConfigReader != nil {
-		if err := c.config.ReadConfig(c.ConfigReader); err != nil {
+	if s.configReader != nil {
+		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 		}
 	} else {
-		if err := c.config.ReadInConfig(); err != nil {
+		if err := s.v.ReadInConfig(); err != nil {
 			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 		}
 	}
 
-	c.showBanner = c.config.GetBool("banner")
-	c.logger.level = c.config.GetString("logger.level")
-	c.logger.output = c.config.GetString("logger.output")
-	c.addr = c.config.GetString("http.addr")
-	c.BaseURL = c.config.GetString("http.baseurl")
-	c.httpServer.maxReqSize = c.config.GetString("http.maxreqsize")
-	c.httpServer.maxHeaderSize = c.config.GetString("http.maxheadersize")
-	c.httpServer.maxConnRead = c.config.GetString("http.maxconnread")
-	c.httpServer.maxConnHeader = c.config.GetString("http.maxconnheader")
-	c.httpServer.maxConnWrite = c.config.GetString("http.maxconnwrite")
-	c.httpServer.maxConnIdle = c.config.GetString("http.maxconnidle")
-	c.middleware.origins = c.config.GetStringSlice("cors.alloworigins")
-	allowPathPatterns := c.config.GetStringSlice("cors.allowpaths")
-	c.middleware.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
+	s.showBanner = s.v.GetBool("banner")
+	s.logger.level = s.v.GetString("logger.level")
+	s.logger.output = s.v.GetString("logger.output")
+	s.config.Addr = s.v.GetString("http.addr")
+	s.config.BaseURL = s.v.GetString("http.baseurl")
+	s.httpServer.maxReqSize = s.v.GetString("http.maxreqsize")
+	s.httpServer.maxHeaderSize = s.v.GetString("http.maxheadersize")
+	s.httpServer.maxConnRead = s.v.GetString("http.maxconnread")
+	s.httpServer.maxConnHeader = s.v.GetString("http.maxconnheader")
+	s.httpServer.maxConnWrite = s.v.GetString("http.maxconnwrite")
+	s.httpServer.maxConnIdle = s.v.GetString("http.maxconnidle")
+	s.middleware.origins = s.v.GetStringSlice("cors.alloworigins")
+	allowPathPatterns := s.v.GetStringSlice("cors.allowpaths")
+	s.middleware.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
 	for _, i := range allowPathPatterns {
-		c.middleware.allowpaths = append(c.middleware.allowpaths, &corsPathRule{
+		s.middleware.allowpaths = append(s.middleware.allowpaths, &corsPathRule{
 			pattern: i,
 		})
 	}
 	routerewrite := []*rewriteRule{}
-	if err := c.config.UnmarshalKey("routerewrite", &routerewrite); err != nil {
+	if err := s.v.UnmarshalKey("routerewrite", &routerewrite); err != nil {
 		return err
 	}
-	c.middleware.routerewrite = routerewrite
-	c.middleware.trustedproxies = c.config.GetStringSlice("trustedproxies")
-	c.middleware.compressibleTypes = c.config.GetStringSlice("compressor.compressibletypes")
-	c.middleware.preferredEncodings = c.config.GetStringSlice("compressor.preferredencodings")
-	if err := c.initsecrets(); err != nil {
+	s.middleware.routerewrite = routerewrite
+	s.middleware.trustedproxies = s.v.GetStringSlice("trustedproxies")
+	s.middleware.compressibleTypes = s.v.GetStringSlice("compressor.compressibletypes")
+	s.middleware.preferredEncodings = s.v.GetStringSlice("compressor.preferredencodings")
+	if err := s.initsecrets(); err != nil {
 		return err
 	}
 	return nil
@@ -450,25 +460,25 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 	return data, expire, nil
 }
 
-func (c *Config) initsecrets() error {
-	if vsource := c.config.GetString("vault.filesource"); vsource != "" {
-		client, err := newSecretsFileSource(vsource, c.VaultReader)
+func (s *settings) initsecrets() error {
+	if vsource := s.v.GetString("vault.filesource"); vsource != "" {
+		client, err := newSecretsFileSource(vsource, s.vaultReader)
 		if err != nil {
 			return err
 		}
-		c.vault = client
+		s.vault = client
 		return nil
 	}
 	config := secretsVaultSourceConfig{}
-	if vaddr := c.config.GetString("vault.addr"); vaddr != "" {
+	if vaddr := s.v.GetString("vault.addr"); vaddr != "" {
 		config.Addr = vaddr
 	}
-	if c.config.GetBool("vault.k8s.auth") {
+	if s.v.GetBool("vault.k8s.auth") {
 		config.K8SAuth = true
 
-		config.K8SRole = c.config.GetString("vault.k8s.role")
-		config.K8SLoginPath = c.config.GetString("vault.k8s.loginpath")
-		jwtpath := c.config.GetString("vault.k8s.jwtpath")
+		config.K8SRole = s.v.GetString("vault.k8s.role")
+		config.K8SLoginPath = s.v.GetString("vault.k8s.loginpath")
+		jwtpath := s.v.GetString("vault.k8s.jwtpath")
 		if config.K8SRole == "" {
 			return kerrors.WithKind(nil, ErrorInvalidConfig, "No vault role set")
 		}
@@ -491,12 +501,12 @@ func (c *Config) initsecrets() error {
 	if err := vault.Init(); err != nil {
 		return err
 	}
-	c.vault = vault
+	s.vault = vault
 	return nil
 }
 
-func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
-	if v, ok := c.vaultCache.Load(key); ok {
+func (s *settings) getSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
+	if v, ok := s.vaultCache.Load(key); ok {
 		s := v.(vaultSecret)
 		if s.isValid() {
 			if err := mapstructure.Decode(s.value, target); err != nil {
@@ -506,19 +516,19 @@ func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.D
 		}
 	}
 
-	kvpath := c.config.GetString(key)
+	kvpath := s.v.GetString(key)
 	if kvpath == "" {
 		return kerrors.WithKind(nil, ErrorInvalidConfig, "Empty secret key "+key)
 	}
 
-	data, expire, err := c.vault.GetSecret(ctx, kvpath)
+	data, expire, err := s.vault.GetSecret(ctx, kvpath)
 	if err != nil {
 		return err
 	}
 	if expire.IsZero() && cacheDuration != 0 {
 		expire = time.Now().Round(0).Add(cacheDuration)
 	}
-	c.vaultCache.Store(key, vaultSecret{
+	s.vaultCache.Store(key, vaultSecret{
 		key:    key,
 		value:  data,
 		expire: expire,
@@ -530,8 +540,8 @@ func (c *Config) getSecret(ctx context.Context, key string, cacheDuration time.D
 	return nil
 }
 
-func (c *Config) invalidateSecret(key string) {
-	c.vaultCache.Delete(key)
+func (s *settings) invalidateSecret(key string) {
+	s.vaultCache.Delete(key)
 }
 
 type (
@@ -555,10 +565,10 @@ func (r *configRegistrar) SetDefault(key string, value interface{}) {
 	r.v.SetDefault(r.prefix+"."+key, value)
 }
 
-func (c *Config) registrar(prefix string) ConfigRegistrar {
+func (s *settings) registrar(prefix string) ConfigRegistrar {
 	return &configRegistrar{
 		prefix: prefix,
-		v:      c.config,
+		v:      s.v,
 	}
 }
 
@@ -596,7 +606,7 @@ type (
 	}
 
 	configReader struct {
-		c *Config
+		s *settings
 		v *configValueReader
 	}
 
@@ -639,7 +649,7 @@ func (r *configValueReader) Unmarshal(key string, val interface{}) error {
 }
 
 func (r *configReader) Config() Config {
-	return *r.c
+	return r.s.config
 }
 
 func (r *configReader) Name() string {
@@ -679,19 +689,19 @@ func (s *vaultSecret) isValid() bool {
 }
 
 func (r *configReader) GetSecret(ctx context.Context, key string, cacheDuration time.Duration, target interface{}) error {
-	return r.c.getSecret(ctx, r.v.Name()+"."+key, cacheDuration, target)
+	return r.s.getSecret(ctx, r.v.Name()+"."+key, cacheDuration, target)
 }
 
 func (r *configReader) InvalidateSecret(key string) {
-	r.c.invalidateSecret(r.v.Name() + "." + key)
+	r.s.invalidateSecret(r.v.Name() + "." + key)
 }
 
-func (c *Config) reader(opt serviceOpt) ConfigReader {
+func (s *settings) reader(opt serviceOpt) ConfigReader {
 	return &configReader{
-		c: c,
+		s: s,
 		v: &configValueReader{
 			opt: opt,
-			v:   c.config,
+			v:   s.v,
 		},
 	}
 }

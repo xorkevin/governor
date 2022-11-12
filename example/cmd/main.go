@@ -48,16 +48,16 @@ import (
 func main() {
 	vcsinfo := governor.ReadVCSBuildInfo()
 	opts := governor.Opts{
+		Appname: "governor",
 		Version: governor.Version{
 			Num:  vcsinfo.ModVersion,
 			Hash: vcsinfo.VCSStr(),
 		},
-		Appname:       "governor",
 		Description:   "Governor is a web server with user and auth capabilities",
 		DefaultFile:   "config",
+		EnvPrefix:     "gov",
 		ClientDefault: "client",
 		ClientPrefix:  "govc",
-		EnvPrefix:     "gov",
 	}
 
 	gov := governor.New(opts)

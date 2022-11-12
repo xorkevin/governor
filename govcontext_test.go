@@ -96,12 +96,10 @@ func TestContext(t *testing.T) {
 				assert := require.New(t)
 
 				logbuf := bytes.Buffer{}
-				l := newLogger(Config{
-					logger: configLogger{
-						level:  "INFO",
-						output: "TEST",
-					},
-					LogWriter: &logbuf,
+				l := newLogger(Config{}, configLogger{
+					level:  "INFO",
+					output: "TEST",
+					writer: &logbuf,
 				})
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
 				req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))

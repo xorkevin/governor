@@ -57,7 +57,7 @@ func (s *Server) Register(name string, url string, r Service) {
 		},
 		r: r,
 	})
-	r.Register(s.inj, s.config.registrar(name))
+	r.Register(s.inj, s.settings.registrar(name))
 }
 
 type (
@@ -68,7 +68,7 @@ type (
 
 func (s *Server) setupServices(ctx context.Context, reqsecret string, rsetup ReqSetup) error {
 	var secret secretSetup
-	if err := s.config.getSecret(ctx, "setupsecret", 0, &secret); err != nil {
+	if err := s.settings.getSecret(ctx, "setupsecret", 0, &secret); err != nil {
 		return kerrors.WithMsg(err, "Invalid setup secret")
 	}
 	if subtle.ConstantTimeCompare([]byte(reqsecret), []byte(secret.Secret)) != 1 {
@@ -111,7 +111,7 @@ func (s *Server) initServices(ctx context.Context) error {
 	s.log.Info(ctx, "Init all services begin", nil)
 	for _, i := range s.services {
 		l := klog.Sub(s.log.Logger, i.opt.name, klog.Fields{"gov.service": i.opt.name})
-		if err := i.r.Init(ctx, s.config.reader(i.opt), l, s.router(s.config.BaseURL+i.opt.url, l)); err != nil {
+		if err := i.r.Init(ctx, s.settings.reader(i.opt), l, s.router(s.settings.config.BaseURL+i.opt.url, l)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.opt.name,

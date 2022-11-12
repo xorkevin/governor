@@ -133,12 +133,12 @@ func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
 	v.SetConfigName(opts.ClientDefault)
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath(filepath.Join(".", "config"))
+	v.AddConfigPath("config")
 	if cfgdir, err := os.UserConfigDir(); err == nil {
 		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
 	}
 
-	v.SetEnvPrefix(opts.EnvPrefix)
+	v.SetEnvPrefix(opts.ClientPrefix)
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 

@@ -127,7 +127,7 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 }
 
 func (c *Cmd) serve(cmd *cobra.Command, args []string) {
-	if err := c.s.Start(); err != nil {
+	if err := c.s.Serve(); err != nil {
 		c.logFatal(err)
 	}
 }

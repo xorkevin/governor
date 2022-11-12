@@ -13,13 +13,13 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func newLogger(c Config) *klog.LevelLogger {
+func newLogger(c Config, cl configLogger) *klog.LevelLogger {
 	return klog.NewLevelLogger(klog.New(
-		klog.OptMinLevelStr(c.logger.level),
-		klog.OptSerializer(newZerologSerializer(c)),
+		klog.OptMinLevelStr(cl.level),
+		klog.OptSerializer(newZerologSerializer(cl)),
 		klog.OptFields(klog.Fields{
 			"gov.appname":  c.Appname,
-			"gov.version":  c.version.String(),
+			"gov.version":  c.Version.String(),
 			"gov.hostname": c.Hostname,
 			"gov.instance": c.Instance,
 		}),
@@ -62,14 +62,14 @@ func setZerologGlobals() {
 	zerolog.ErrorStackFieldName = "stacktrace"
 }
 
-func newZerologSerializer(c Config) klog.Serializer {
+func newZerologSerializer(c configLogger) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
-	w := c.LogWriter
+	w := c.writer
 	if w == nil {
-		w = logOutputFromString(c.logger.output)
+		w = logOutputFromString(c.output)
 	}
 	w = klog.NewSyncWriter(w)
-	isDebug := c.logger.level == klog.LevelDebug.String()
+	isDebug := c.level == klog.LevelDebug.String()
 	if isDebug {
 		w = zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {
 			cw.Out = w

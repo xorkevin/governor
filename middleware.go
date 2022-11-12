@@ -107,7 +107,7 @@ func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
 }
 
 func (s *Server) lreqID(count uint32) string {
-	return s.config.Instance + "-" + uid.ReqID(count)
+	return s.settings.config.Instance + "-" + uid.ReqID(count)
 }
 
 type (
