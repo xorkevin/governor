@@ -54,7 +54,6 @@ type (
 	configLogger struct {
 		level  string
 		output string
-		writer io.Writer
 	}
 
 	configHTTPServer struct {
@@ -79,16 +78,17 @@ type (
 	// environment variables
 	Config struct {
 		config       *viper.Viper
-		configReader io.Reader
+		ConfigReader io.Reader
 		vault        secretsClient
 		vaultCache   *sync.Map
-		vaultReader  []byte
+		VaultReader  io.Reader
 		Appname      string
 		version      Version
 		Hostname     string
 		Instance     string
 		showBanner   bool
 		logger       configLogger
+		LogWriter    io.Writer
 		addr         string
 		BaseURL      string
 		httpServer   configHTTPServer
@@ -244,12 +244,12 @@ func (c *Config) init() error {
 	}
 	c.Instance = u.Base32()
 
-	if c.configReader == nil {
-		if err := c.config.ReadInConfig(); err != nil {
+	if c.ConfigReader != nil {
+		if err := c.config.ReadConfig(c.ConfigReader); err != nil {
 			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 		}
 	} else {
-		if err := c.config.ReadConfig(c.configReader); err != nil {
+		if err := c.config.ReadInConfig(); err != nil {
 			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
 		}
 	}
@@ -300,8 +300,16 @@ type (
 )
 
 // newSecretsFileSource creates a new secretsFileSource
-func newSecretsFileSource(s string, b []byte) (secretsClient, error) {
-	if len(b) == 0 {
+func newSecretsFileSource(s string, r io.Reader) (secretsClient, error) {
+	var b []byte
+	if r != nil {
+		var err error
+		b, err = io.ReadAll(r)
+		if err != nil {
+			return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read secrets file source")
+		}
+		s = "io.Reader"
+	} else {
 		var err error
 		b, err = os.ReadFile(s)
 		if err != nil {
@@ -444,7 +452,7 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 
 func (c *Config) initsecrets() error {
 	if vsource := c.config.GetString("vault.filesource"); vsource != "" {
-		client, err := newSecretsFileSource(vsource, c.vaultReader)
+		client, err := newSecretsFileSource(vsource, c.VaultReader)
 		if err != nil {
 			return err
 		}

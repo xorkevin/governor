@@ -44,9 +44,8 @@ type (
 	// ClientConfig is the client config
 	ClientConfig struct {
 		config    *viper.Viper
-		logLevel  string
-		logOutput string
-		logWriter io.Writer
+		logger    configLogger
+		LogWriter io.Writer
 		Addr      string
 	}
 
@@ -246,8 +245,8 @@ func (c *Client) Init() error {
 		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
 	}
 
-	c.config.logLevel = c.config.config.GetString("loglevel")
-	c.config.logOutput = c.config.config.GetString("logoutput")
+	c.config.logger.level = c.config.config.GetString("loglevel")
+	c.config.logger.output = c.config.config.GetString("logoutput")
 	c.log = newPlaintextLogger(*c.config)
 
 	for _, i := range c.clients {

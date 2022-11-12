@@ -100,8 +100,8 @@ func TestContext(t *testing.T) {
 					logger: configLogger{
 						level:  "INFO",
 						output: "TEST",
-						writer: &logbuf,
 					},
+					LogWriter: &logbuf,
 				})
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
 				req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))

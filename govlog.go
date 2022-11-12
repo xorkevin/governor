@@ -69,9 +69,9 @@ func setZerologGlobals() {
 
 func newZerologSerializer(c Config) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
-	w := logOutputFromString(c.logger.output)
-	if c.logger.writer != nil {
-		w = c.logger.writer
+	w := c.LogWriter
+	if w != nil {
+		w = logOutputFromString(c.logger.output)
 	}
 	w = klog.NewSyncWriter(w)
 	isDebug := c.logger.level == klog.LevelDebug.String()
@@ -154,7 +154,7 @@ func (s *zerologSerializer) Log(level klog.Level, t, mt time.Time, caller *klog.
 
 func newPlaintextLogger(c ClientConfig) *klog.LevelLogger {
 	return klog.NewLevelLogger(klog.New(
-		klog.OptMinLevelStr(c.logLevel),
+		klog.OptMinLevelStr(c.logger.level),
 		klog.OptSerializer(newPlaintextSerializer(c)),
 	))
 }
@@ -166,9 +166,9 @@ type (
 )
 
 func newPlaintextSerializer(c ClientConfig) klog.Serializer {
-	w := logOutputFromString(c.logOutput)
-	if c.logWriter != nil {
-		w = c.logWriter
+	w := c.LogWriter
+	if w != nil {
+		w = logOutputFromString(c.logger.output)
 	}
 	return &plaintextSerializer{
 		w: klog.NewSyncWriter(w),
