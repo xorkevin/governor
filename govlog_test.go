@@ -67,9 +67,11 @@ func TestZerologLogger(t *testing.T) {
 
 			logbuf := bytes.Buffer{}
 			l := newLogger(Config{
-				logLevel:  tc.Level,
-				logOutput: "TEST",
-				logWriter: &logbuf,
+				logger: configLogger{
+					level:  tc.Level,
+					output: "TEST",
+					writer: &logbuf,
+				},
 			})
 
 			klog.Sub(l.Logger, "sublog", nil).Log(context.Background(), klog.LevelInfo, "", 1, "test message 1", tc.Fields)

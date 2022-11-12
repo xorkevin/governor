@@ -138,7 +138,7 @@ func wrapDBErr(err error, fallbackmsg string) error {
 	return kerrors.WithMsg(err, fallbackmsg)
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
 

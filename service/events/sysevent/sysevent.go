@@ -19,20 +19,26 @@ type (
 	// HandlerFuncGC is a type alias for a gc event consumer
 	HandlerFuncGC = func(ctx context.Context, props TimestampProps) error
 
+	SysChannels struct {
+		GC string
+	}
+
 	// SystemEvents is a subscriber for system events
 	SystemEvents struct {
-		SysChannels governor.SysChannels
+		SysChannels SysChannels
 		Pubsub      pubsub.Pubsub
 		Log         klog.Logger
 	}
 )
 
 // New creates a new [*SystemEvents]
-func New(c governor.SysChannels, ps pubsub.Pubsub, log klog.Logger) *SystemEvents {
+func New(c governor.Config, ps pubsub.Pubsub, log klog.Logger) *SystemEvents {
 	return &SystemEvents{
-		SysChannels: c,
-		Pubsub:      ps,
-		Log:         log,
+		SysChannels: SysChannels{
+			GC: c.Appname + ".sys.gc",
+		},
+		Pubsub: ps,
+		Log:    log,
 	}
 }
 

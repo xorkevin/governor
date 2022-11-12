@@ -30,12 +30,12 @@ type (
 		pubsub      pubsub.Pubsub
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
+		config      governor.ConfigReader
 		log         *klog.LevelLogger
 		rolens      string
 		scopens     string
 		channelns   string
 		opts        svcOpts
-		instance    string
 	}
 
 	router struct {
@@ -134,9 +134,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
-	s.instance = c.Instance
+	s.config = r
 
 	sr := s.router()
 	sr.mountRoutes(m)
@@ -214,7 +214,7 @@ func (s *Service) WatchPresence(location, group string, handler PresenceHandlerF
 			return kerrors.WithMsg(err, "Invalid presence message")
 		}
 		return handler(ctx, props)
-	}), s.instance)
+	}), s.config.Config().Instance)
 }
 
 func (s *Service) Watch(subject, group string, handler HandlerFunc) *pubsub.Watcher {
@@ -225,7 +225,7 @@ func (s *Service) Watch(subject, group string, handler HandlerFunc) *pubsub.Watc
 			return kerrors.WithMsg(err, "Failed decoding request message")
 		}
 		return handler(ctx, channel, userid, v)
-	}), s.instance)
+	}), s.config.Config().Instance)
 }
 
 func (s *Service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {

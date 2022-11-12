@@ -64,7 +64,7 @@ type (
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
-		instance    string
+		config      governor.ConfigReader
 		log         *klog.LevelLogger
 		scopens     string
 		streamns    string
@@ -136,9 +136,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
-	s.instance = c.Instance
+	s.config = r
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -266,7 +266,7 @@ func (s *Service) WatchOrgs(group string, opts events.ConsumerOpts, handler, dlq
 			return err
 		}
 		return handler(ctx, *props)
-	}), dlqfn, maxdeliver, s.instance)
+	}), dlqfn, maxdeliver, s.config.Config().Instance)
 }
 
 const (

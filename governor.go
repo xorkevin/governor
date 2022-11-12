@@ -79,18 +79,18 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(stripSlashesMiddleware)
 	s.log.Info(ctx, "Init strip slashes middleware", nil)
 
-	if len(s.config.proxies) > 0 {
-		proxies := make([]netip.Prefix, 0, len(s.config.proxies))
-		for _, i := range s.config.proxies {
+	if len(s.config.middleware.trustedproxies) > 0 {
+		trustedproxies := make([]netip.Prefix, 0, len(s.config.middleware.trustedproxies))
+		for _, i := range s.config.middleware.trustedproxies {
 			k, err := netip.ParsePrefix(i)
 			if err != nil {
 				return kerrors.WithMsg(err, "Invalid proxy CIDR")
 			}
-			proxies = append(proxies, k)
+			trustedproxies = append(trustedproxies, k)
 		}
-		i.Use(realIPMiddleware(proxies))
+		i.Use(realIPMiddleware(trustedproxies))
 		s.log.Info(ctx, "Init real ip middleware", klog.Fields{
-			"realip.proxies": strings.Join(s.config.proxies, ","),
+			"realip.trustedproxies": strings.Join(s.config.middleware.trustedproxies, ","),
 		})
 	} else {
 		i.Use(realIPMiddleware(nil))
@@ -100,36 +100,36 @@ func (s *Server) init(ctx context.Context) error {
 	i.Use(s.reqLoggerMiddleware)
 	s.log.Info(ctx, "Init request logger", nil)
 
-	if len(s.config.rewrite) > 0 {
-		k := make([]string, 0, len(s.config.rewrite))
-		for _, i := range s.config.rewrite {
+	if len(s.config.middleware.routerewrite) > 0 {
+		k := make([]string, 0, len(s.config.middleware.routerewrite))
+		for _, i := range s.config.middleware.routerewrite {
 			if err := i.init(); err != nil {
 				return err
 			}
 			k = append(k, i.String())
 		}
-		i.Use(routeRewriteMiddleware(s.config.rewrite))
+		i.Use(routeRewriteMiddleware(s.config.middleware.routerewrite))
 		s.log.Info(ctx, "Init route rewriter middleware", klog.Fields{
 			"routerrewrite.rules": strings.Join(k, "; "),
 		})
 	}
 
-	if len(s.config.allowpaths) > 0 {
-		k := make([]string, 0, len(s.config.allowpaths))
-		for _, i := range s.config.allowpaths {
+	if len(s.config.middleware.allowpaths) > 0 {
+		k := make([]string, 0, len(s.config.middleware.allowpaths))
+		for _, i := range s.config.middleware.allowpaths {
 			if err := i.init(); err != nil {
 				return err
 			}
 			k = append(k, i.pattern)
 		}
-		i.Use(corsPathsAllowAllMiddleware(s.config.allowpaths))
+		i.Use(corsPathsAllowAllMiddleware(s.config.middleware.allowpaths))
 		s.log.Info(ctx, "Init middleware allow all cors", klog.Fields{
 			"cors.paths": strings.Join(k, "; "),
 		})
 	}
-	if len(s.config.origins) > 0 {
+	if len(s.config.middleware.origins) > 0 {
 		i.Use(cors.Handler(cors.Options{
-			AllowedOrigins: s.config.origins,
+			AllowedOrigins: s.config.middleware.origins,
 			AllowedMethods: []string{
 				http.MethodHead,
 				http.MethodGet,
@@ -143,22 +143,22 @@ func (s *Server) init(ctx context.Context) error {
 			MaxAge:           300,
 		}))
 		s.log.Info(ctx, "Init middleware CORS", klog.Fields{
-			"cors.origins": strings.Join(s.config.origins, ", "),
+			"cors.origins": strings.Join(s.config.middleware.origins, ", "),
 		})
 	}
 
-	if limit, err := bytefmt.ToBytes(s.config.maxReqSize); err != nil {
+	if limit, err := bytefmt.ToBytes(s.config.httpServer.maxReqSize); err != nil {
 		s.log.Warn(ctx, "Invalid maxreqsize format for middlware body limit", klog.Fields{
-			"bodylimit.maxreqsize": s.config.maxReqSize,
+			"bodylimit.maxreqsize": s.config.httpServer.maxReqSize,
 		})
 	} else {
 		i.Use(s.bodyLimitMiddleware(limit))
 		s.log.Info(ctx, "Init middleware body limit", klog.Fields{
-			"bodylimit.maxreqsize": s.config.maxReqSize,
+			"bodylimit.maxreqsize": s.config.httpServer.maxReqSize,
 		})
 	}
 
-	i.Use(s.compressorMiddleware(s.config.compressibleTypes, s.config.preferredEncodings))
+	i.Use(s.compressorMiddleware(s.config.middleware.compressibleTypes, s.config.middleware.preferredEncodings))
 	s.log.Info(ctx, "Init middleware compressor", nil)
 
 	i.Use(s.recovererMiddleware)
@@ -206,41 +206,41 @@ func (s *Server) Start() error {
 	}
 
 	maxHeaderSize := defaultMaxHeaderSize
-	if limit, err := bytefmt.ToBytes(s.config.maxHeaderSize); err != nil {
+	if limit, err := bytefmt.ToBytes(s.config.httpServer.maxHeaderSize); err != nil {
 		s.log.Warn(ctx, "Invalid maxheadersize format for http server", klog.Fields{
-			"http.server.maxheadersize": s.config.maxReqSize,
+			"http.server.maxheadersize": s.config.httpServer.maxReqSize,
 		})
 	} else {
 		maxHeaderSize = int(limit)
 	}
 	maxConnRead := 5 * time.Second
-	if t, err := time.ParseDuration(s.config.maxConnRead); err != nil {
+	if t, err := time.ParseDuration(s.config.httpServer.maxConnRead); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnread time for http server", klog.Fields{
-			"http.server.maxconnread": s.config.maxConnRead,
+			"http.server.maxconnread": s.config.httpServer.maxConnRead,
 		})
 	} else {
 		maxConnRead = t
 	}
 	maxConnHeader := 2 * time.Second
-	if t, err := time.ParseDuration(s.config.maxConnHeader); err != nil {
+	if t, err := time.ParseDuration(s.config.httpServer.maxConnHeader); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnheader time for http server", klog.Fields{
-			"http.server.maxconnheader": s.config.maxConnHeader,
+			"http.server.maxconnheader": s.config.httpServer.maxConnHeader,
 		})
 	} else {
 		maxConnHeader = t
 	}
 	maxConnWrite := 5 * time.Second
-	if t, err := time.ParseDuration(s.config.maxConnWrite); err != nil {
+	if t, err := time.ParseDuration(s.config.httpServer.maxConnWrite); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.Fields{
-			"http.server.maxconnwrite": s.config.maxConnWrite,
+			"http.server.maxconnwrite": s.config.httpServer.maxConnWrite,
 		})
 	} else {
 		maxConnWrite = t
 	}
 	maxConnIdle := 5 * time.Second
-	if t, err := time.ParseDuration(s.config.maxConnIdle); err != nil {
+	if t, err := time.ParseDuration(s.config.httpServer.maxConnIdle); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnidle time for http server", klog.Fields{
-			"http.server.maxconnidle": s.config.maxConnIdle,
+			"http.server.maxconnidle": s.config.httpServer.maxConnIdle,
 		})
 	} else {
 		maxConnIdle = t

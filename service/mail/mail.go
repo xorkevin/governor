@@ -135,8 +135,7 @@ type (
 		mailBucket  objstore.Bucket
 		sendMailDir objstore.Dir
 		lc          *lifecycle.Lifecycle[mailSecrets]
-		instance    string
-		config      governor.SecretReader
+		config      governor.ConfigReader
 		log         *klog.LevelLogger
 		streamns    string
 		streammail  string
@@ -223,10 +222,9 @@ type (
 	}
 )
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.instance = c.Instance
 
 	s.host = r.GetStr("host")
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
@@ -381,7 +379,7 @@ func (s *Service) Start(ctx context.Context) error {
 		events.HandlerFunc(s.mailEventHandler),
 		nil,
 		0,
-		s.instance,
+		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to mail stream", nil)
 	return nil

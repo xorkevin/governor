@@ -86,7 +86,6 @@ type (
 	Service struct {
 		lc         *lifecycle.Lifecycle[kafkaClient]
 		clientname string
-		instance   string
 		addr       string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
@@ -140,11 +139,10 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	r.SetDefault("hbmaxfail", 3)
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname + "-" + c.Instance
-	s.instance = c.Instance
+	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	hbinterval, err := r.GetDuration("hbinterval")
@@ -351,7 +349,7 @@ func (s *Service) commonOpts(auth scram.Auth) []kgo.Opt {
 		KeepAlive: 5 * time.Second,
 	}
 	return []kgo.Opt{
-		kgo.ClientID(s.clientname + "-" + s.instance),
+		kgo.ClientID(s.clientname),
 		kgo.SeedBrokers(s.addr),
 		kgo.SASL(auth.AsSha512Mechanism()),
 		// connections

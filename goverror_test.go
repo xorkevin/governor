@@ -97,9 +97,11 @@ func TestError(t *testing.T) {
 
 				logbuf := bytes.Buffer{}
 				l := newLogger(Config{
-					logLevel:  "INFO",
-					logOutput: "TEST",
-					logWriter: &logbuf,
+					logger: configLogger{
+						level:  "INFO",
+						output: "TEST",
+						writer: &logbuf,
+					},
 				})
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
 				req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))

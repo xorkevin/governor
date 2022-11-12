@@ -76,7 +76,7 @@ type (
 		ws                 ws.WS
 		ratelimiter        ratelimit.Ratelimiter
 		gate               gate.Gate
-		instance           string
+		config             governor.ConfigReader
 		log                *klog.LevelLogger
 		scopens            string
 		channelns          string
@@ -87,7 +87,6 @@ type (
 		eventsize          int32
 		invitationDuration time.Duration
 		gcDuration         time.Duration
-		syschannels        governor.SysChannels
 		wg                 *ksync.WaitGroup
 	}
 
@@ -198,9 +197,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
-	s.instance = c.Instance
+	s.config = r
 
 	var err error
 	s.invitationDuration, err = r.GetDuration("invitationduration")
@@ -211,8 +210,6 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse gc duration")
 	}
-
-	s.syschannels = c.SysChannels
 
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"conduit.stream.size":        r.GetStr("streamsize"),
@@ -237,7 +234,7 @@ func (s *Service) Start(ctx context.Context) error {
 		events.HandlerFunc(s.conduitEventHandler),
 		nil,
 		0,
-		s.instance,
+		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to conduit stream", nil)
 
@@ -245,9 +242,9 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to users stream", nil)
 
-	sysEvents := sysevent.New(s.syschannels, s.pubsub, s.log.Logger)
+	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook, s.instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
+	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	s.wg.Add(1)

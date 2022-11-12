@@ -135,12 +135,13 @@ var (
 
 type smtpBackend struct {
 	service  *Service
+	instance string
 	log      *klog.LevelLogger
 	reqcount *atomic.Uint32
 }
 
 func (s *smtpBackend) lreqID() string {
-	return s.service.instance + "-" + uid.ReqID(s.reqcount.Add(1))
+	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
 }
 
 func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {

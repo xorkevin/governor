@@ -95,10 +95,10 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	r.SetDefault("hbmaxfail", 3)
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname + "-" + c.Instance
+	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	var err error

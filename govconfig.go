@@ -51,40 +51,48 @@ type (
 		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error)
 	}
 
-	// SysChannels are for system events
-	SysChannels struct {
-		GC string
+	configLogger struct {
+		level  string
+		output string
+		writer io.Writer
+	}
+
+	configHTTPServer struct {
+		maxReqSize    string
+		maxHeaderSize string
+		maxConnRead   string
+		maxConnHeader string
+		maxConnWrite  string
+		maxConnIdle   string
+	}
+
+	configMiddleware struct {
+		origins            []string
+		allowpaths         []*corsPathRule
+		routerewrite       []*rewriteRule
+		trustedproxies     []string
+		compressibleTypes  []string
+		preferredEncodings []string
 	}
 
 	// Config is the server configuration including those from a config file and
 	// environment variables
 	Config struct {
-		config             *viper.Viper
-		vault              secretsClient
-		vaultCache         *sync.Map
-		appname            string
-		version            Version
-		showBanner         bool
-		logLevel           string
-		logOutput          string
-		logWriter          io.Writer
-		addr               string
-		BaseURL            string
-		maxReqSize         string
-		maxHeaderSize      string
-		maxConnRead        string
-		maxConnHeader      string
-		maxConnWrite       string
-		maxConnIdle        string
-		origins            []string
-		allowpaths         []*corsPathRule
-		rewrite            []*rewriteRule
-		proxies            []string
-		compressibleTypes  []string
-		preferredEncodings []string
-		SysChannels        SysChannels
-		Hostname           string
-		Instance           string
+		config       *viper.Viper
+		configReader io.Reader
+		vault        secretsClient
+		vaultCache   *sync.Map
+		vaultReader  []byte
+		Appname      string
+		version      Version
+		Hostname     string
+		Instance     string
+		showBanner   bool
+		logger       configLogger
+		addr         string
+		BaseURL      string
+		httpServer   configHTTPServer
+		middleware   configMiddleware
 	}
 
 	corsPathRule struct {
@@ -151,23 +159,23 @@ func (r rewriteRule) String() string {
 
 func newConfig(opts Opts) *Config {
 	v := viper.New()
-	v.SetDefault("loglevel", "INFO")
-	v.SetDefault("logoutput", "STDERR")
+	v.SetDefault("logger.level", "INFO")
+	v.SetDefault("logger.output", "STDERR")
 	v.SetDefault("banner", true)
-	v.SetDefault("addr", ":8080")
-	v.SetDefault("baseurl", "/")
-	v.SetDefault("maxreqsize", "2M")
-	v.SetDefault("maxheadersize", "1M")
-	v.SetDefault("maxconnread", "5s")
-	v.SetDefault("maxconnheader", "2s")
-	v.SetDefault("maxconnwrite", "5s")
-	v.SetDefault("maxconnidle", "5s")
-	v.SetDefault("alloworigins", []string{})
-	v.SetDefault("allowpaths", []string{})
+	v.SetDefault("http.addr", ":8080")
+	v.SetDefault("http.baseurl", "/")
+	v.SetDefault("http.maxreqsize", "2M")
+	v.SetDefault("http.maxheadersize", "1M")
+	v.SetDefault("http.maxconnread", "5s")
+	v.SetDefault("http.maxconnheader", "2s")
+	v.SetDefault("http.maxconnwrite", "5s")
+	v.SetDefault("http.maxconnidle", "5s")
+	v.SetDefault("cors.alloworigins", []string{})
+	v.SetDefault("cors.allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
-	v.SetDefault("proxies", []string{})
-	v.SetDefault("compressibletypes", []string{})
-	v.SetDefault("preferredencodings", []string{})
+	v.SetDefault("trustedproxies", []string{})
+	v.SetDefault("compressor.compressibletypes", []string{})
+	v.SetDefault("compressor.preferredencodings", []string{})
 	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -178,7 +186,7 @@ func newConfig(opts Opts) *Config {
 	v.SetConfigName(opts.DefaultFile)
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath(filepath.Join(".", "config"))
+	v.AddConfigPath("config")
 	if cfgdir, err := os.UserConfigDir(); err == nil {
 		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
 	}
@@ -189,12 +197,9 @@ func newConfig(opts Opts) *Config {
 
 	return &Config{
 		config:     v,
-		appname:    opts.Appname,
+		Appname:    opts.Appname,
 		version:    opts.Version,
 		vaultCache: &sync.Map{},
-		SysChannels: SysChannels{
-			GC: opts.Appname + ".sys.gc",
-		},
 	}
 }
 
@@ -228,36 +233,6 @@ const (
 )
 
 func (c *Config) init() error {
-	if err := c.config.ReadInConfig(); err != nil {
-		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
-	}
-	c.showBanner = c.config.GetBool("banner")
-	c.logLevel = c.config.GetString("loglevel")
-	c.logOutput = c.config.GetString("logoutput")
-	c.addr = c.config.GetString("addr")
-	c.BaseURL = c.config.GetString("baseurl")
-	c.maxReqSize = c.config.GetString("maxreqsize")
-	c.maxHeaderSize = c.config.GetString("maxheadersize")
-	c.maxConnRead = c.config.GetString("maxconnread")
-	c.maxConnHeader = c.config.GetString("maxconnheader")
-	c.maxConnWrite = c.config.GetString("maxconnwrite")
-	c.maxConnIdle = c.config.GetString("maxconnidle")
-	c.origins = c.config.GetStringSlice("alloworigins")
-	allowPathPatterns := c.config.GetStringSlice("allowpaths")
-	c.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
-	for _, i := range allowPathPatterns {
-		c.allowpaths = append(c.allowpaths, &corsPathRule{
-			pattern: i,
-		})
-	}
-	rewrite := []*rewriteRule{}
-	if err := c.config.UnmarshalKey("routerewrite", &rewrite); err != nil {
-		return err
-	}
-	c.rewrite = rewrite
-	c.proxies = c.config.GetStringSlice("proxies")
-	c.compressibleTypes = c.config.GetStringSlice("compressibletypes")
-	c.preferredEncodings = c.config.GetStringSlice("preferredencodings")
 	var err error
 	c.Hostname, err = os.Hostname()
 	if err != nil {
@@ -268,6 +243,44 @@ func (c *Config) init() error {
 		return err
 	}
 	c.Instance = u.Base32()
+
+	if c.configReader == nil {
+		if err := c.config.ReadInConfig(); err != nil {
+			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+		}
+	} else {
+		if err := c.config.ReadConfig(c.configReader); err != nil {
+			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+		}
+	}
+
+	c.showBanner = c.config.GetBool("banner")
+	c.logger.level = c.config.GetString("logger.level")
+	c.logger.output = c.config.GetString("logger.output")
+	c.addr = c.config.GetString("http.addr")
+	c.BaseURL = c.config.GetString("http.baseurl")
+	c.httpServer.maxReqSize = c.config.GetString("http.maxreqsize")
+	c.httpServer.maxHeaderSize = c.config.GetString("http.maxheadersize")
+	c.httpServer.maxConnRead = c.config.GetString("http.maxconnread")
+	c.httpServer.maxConnHeader = c.config.GetString("http.maxconnheader")
+	c.httpServer.maxConnWrite = c.config.GetString("http.maxconnwrite")
+	c.httpServer.maxConnIdle = c.config.GetString("http.maxconnidle")
+	c.middleware.origins = c.config.GetStringSlice("cors.alloworigins")
+	allowPathPatterns := c.config.GetStringSlice("cors.allowpaths")
+	c.middleware.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
+	for _, i := range allowPathPatterns {
+		c.middleware.allowpaths = append(c.middleware.allowpaths, &corsPathRule{
+			pattern: i,
+		})
+	}
+	routerewrite := []*rewriteRule{}
+	if err := c.config.UnmarshalKey("routerewrite", &routerewrite); err != nil {
+		return err
+	}
+	c.middleware.routerewrite = routerewrite
+	c.middleware.trustedproxies = c.config.GetStringSlice("trustedproxies")
+	c.middleware.compressibleTypes = c.config.GetStringSlice("compressor.compressibletypes")
+	c.middleware.preferredEncodings = c.config.GetStringSlice("compressor.preferredencodings")
 	if err := c.initsecrets(); err != nil {
 		return err
 	}
@@ -287,10 +300,13 @@ type (
 )
 
 // newSecretsFileSource creates a new secretsFileSource
-func newSecretsFileSource(s string) (secretsClient, error) {
-	b, err := os.ReadFile(s)
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read secrets file source")
+func newSecretsFileSource(s string, b []byte) (secretsClient, error) {
+	if len(b) == 0 {
+		var err error
+		b, err = os.ReadFile(s)
+		if err != nil {
+			return nil, kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read secrets file source")
+		}
 	}
 	data := secretsFileData{}
 	if err := yaml.Unmarshal(b, &data); err != nil {
@@ -428,7 +444,7 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 
 func (c *Config) initsecrets() error {
 	if vsource := c.config.GetString("vault.filesource"); vsource != "" {
-		client, err := newSecretsFileSource(vsource)
+		client, err := newSecretsFileSource(vsource, c.vaultReader)
 		if err != nil {
 			return err
 		}
@@ -552,6 +568,7 @@ type (
 
 	// ConfigReader gets values from the config parser
 	ConfigReader interface {
+		Config() Config
 		ConfigValueReader
 		SecretReader
 	}
@@ -611,6 +628,10 @@ func (r *configValueReader) GetStrSlice(key string) []string {
 
 func (r *configValueReader) Unmarshal(key string, val interface{}) error {
 	return r.v.UnmarshalKey(r.opt.name+"."+key, val)
+}
+
+func (r *configReader) Config() Config {
+	return *r.c
 }
 
 func (r *configReader) Name() string {

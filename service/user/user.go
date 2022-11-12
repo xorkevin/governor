@@ -167,9 +167,7 @@ type (
 		gate         gate.Gate
 		tokenizer    token.Tokenizer
 		lc           *lifecycle.Lifecycle[otpCipher]
-		syschannels  governor.SysChannels
-		instance     string
-		config       governor.SecretReader
+		config       governor.ConfigReader
 		log          *klog.LevelLogger
 		rolens       string
 		scopens      string
@@ -327,11 +325,9 @@ type (
 	}
 )
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.instance = c.Instance
-	s.syschannels = c.SysChannels
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -343,8 +339,8 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	s.baseURL = c.BaseURL
-	s.authURL = c.BaseURL + r.URL() + authRoutePrefix
+	s.baseURL = r.Config().BaseURL
+	s.authURL = s.baseURL + r.URL() + authRoutePrefix
 	s.authsettings.accessDuration, err = r.GetDuration("accessduration")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse access duration")
@@ -566,9 +562,9 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to users stream", nil)
 
-	sysEvents := sysevent.New(s.syschannels, s.pubsub, s.log.Logger)
+	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC, s.instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
+	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
 
 	return nil
@@ -733,7 +729,7 @@ func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler, dl
 			return err
 		}
 		return handler(ctx, *props)
-	}), dlqfn, maxdeliver, s.instance)
+	}), dlqfn, maxdeliver, s.config.Config().Instance)
 }
 
 const (

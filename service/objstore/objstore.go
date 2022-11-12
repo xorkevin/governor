@@ -132,10 +132,10 @@ func (e errorNotFound) Error() string {
 	return "Object not found"
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname + "-" + c.Instance
+	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	s.sslmode = r.GetBool("sslmode")

@@ -148,7 +148,7 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	var err error
@@ -172,7 +172,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 	s.realm = r.GetStr("realm")
 	s.issuer = r.GetStr("issuer")
 	s.epauth = r.GetStr("epauthorize")
-	base := r.GetStr("ephost") + c.BaseURL + r.URL()
+	base := r.GetStr("ephost") + r.Config().BaseURL + r.URL()
 	s.eptoken = base + tokenRoute
 	s.epuserinfo = base + userinfoRoute
 	s.epjwks = base + jwksRoute

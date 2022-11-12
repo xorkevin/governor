@@ -78,7 +78,7 @@ type (
 		mailer       mail.Mailer
 		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
-		instance     string
+		config       governor.ConfigReader
 		log          *klog.LevelLogger
 		scopens      string
 		streamns     string
@@ -176,9 +176,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
-	s.instance = c.Instance
+	s.config = r
 
 	s.port = r.GetStr("port")
 	s.authdomain = r.GetStr("authdomain")
@@ -253,6 +253,7 @@ func (s *Service) Init(ctx context.Context, c governor.Config, r governor.Config
 func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service:  s,
+		instance: s.config.Config().Instance,
 		log:      klog.NewLevelLogger(klog.Sub(s.log.Logger, "smtpserver", nil)),
 		reqcount: &atomic.Uint32{},
 	}
@@ -278,7 +279,7 @@ func (s *Service) Start(ctx context.Context) error {
 		events.HandlerFunc(s.listEventHandler),
 		nil,
 		0,
-		s.instance,
+		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to mailinglist stream", nil)
 

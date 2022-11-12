@@ -1,15 +1,18 @@
-loglevel: DEBUG
-logoutput: STDERR
-addr: ':8080'
-baseurl: /api
-maxreqsize: 2M
-maxheadersize: 1M
-maxconnread: 5s
-maxconnheader: 2s
-maxconnwrite: 5s
-maxconnidle: 5s
-allowpaths:
-  - '^/api/oauth/(token|userinfo|jwks)$'
+logger:
+  level: DEBUG
+  output: STDERR
+http:
+  addr: ':8080'
+  baseurl: /api
+  maxreqsize: 2M
+  maxheadersize: 1M
+  maxconnread: 5s
+  maxconnheader: 2s
+  maxconnwrite: 5s
+  maxconnidle: 5s
+cors:
+  allowpaths:
+    - '^/api/oauth/(token|userinfo|jwks)$'
 routerewrite:
   - host: go.governor.dev.localhost:8080
     methods: ['GET']

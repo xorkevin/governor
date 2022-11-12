@@ -78,7 +78,7 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 }
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
 	ctx = klog.WithFields(ctx, klog.Fields{

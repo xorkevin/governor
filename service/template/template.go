@@ -71,7 +71,7 @@ const (
 	tplNoMatchErrorSubstring = "pattern matches no files"
 )
 
-func (s *Service) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	templateDir := os.DirFS(r.GetStr("dir"))
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))

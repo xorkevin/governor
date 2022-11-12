@@ -20,10 +20,10 @@ import (
 
 func newLogger(c Config) *klog.LevelLogger {
 	return klog.NewLevelLogger(klog.New(
-		klog.OptMinLevelStr(c.logLevel),
+		klog.OptMinLevelStr(c.logger.level),
 		klog.OptSerializer(newZerologSerializer(c)),
 		klog.OptFields(klog.Fields{
-			"gov.appname":  c.appname,
+			"gov.appname":  c.Appname,
 			"gov.version":  c.version.String(),
 			"gov.hostname": c.Hostname,
 			"gov.instance": c.Instance,
@@ -69,12 +69,12 @@ func setZerologGlobals() {
 
 func newZerologSerializer(c Config) klog.Serializer {
 	zerologInitOnce.Do(setZerologGlobals)
-	w := logOutputFromString(c.logOutput)
-	if c.logWriter != nil {
-		w = c.logWriter
+	w := logOutputFromString(c.logger.output)
+	if c.logger.writer != nil {
+		w = c.logger.writer
 	}
 	w = klog.NewSyncWriter(w)
-	isDebug := c.logLevel == klog.LevelDebug.String()
+	isDebug := c.logger.level == klog.LevelDebug.String()
 	if isDebug {
 		w = zerolog.NewConsoleWriter(func(cw *zerolog.ConsoleWriter) {
 			cw.Out = w
