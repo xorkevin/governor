@@ -47,6 +47,14 @@ func TestError(t *testing.T) {
 			},
 			String: "Too many requests. Try again after Sun, 25 Aug 1991 20:57:09 UTC.",
 		},
+		{
+			Err:    ErrorInvalidConfig,
+			String: "Invalid config",
+		},
+		{
+			Err:    ErrorVault,
+			String: "Failed vault request",
+		},
 	} {
 		tc := tc
 		assert.Equal(tc.String, tc.Err.Error())

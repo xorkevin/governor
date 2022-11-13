@@ -102,7 +102,7 @@ func TestContext(t *testing.T) {
 					writer: &logbuf,
 				})
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
-				req.Header.Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
+				req.Header.Set(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 				rec := httptest.NewRecorder()
 				c := NewContext(rec, req, l.Logger)
 				c.WriteError(tc.Err)

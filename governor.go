@@ -87,7 +87,7 @@ func (s *Server) Init(ctx context.Context) error {
 	i.Use(stripSlashesMiddleware)
 	s.log.Info(ctx, "Init strip slashes middleware", nil)
 
-	if len(s.settings.middleware.trustedproxies) > 0 {
+	{
 		trustedproxies := make([]netip.Prefix, 0, len(s.settings.middleware.trustedproxies))
 		for _, i := range s.settings.middleware.trustedproxies {
 			k, err := netip.ParsePrefix(i)
@@ -100,9 +100,6 @@ func (s *Server) Init(ctx context.Context) error {
 		s.log.Info(ctx, "Init real ip middleware", klog.Fields{
 			"realip.trustedproxies": strings.Join(s.settings.middleware.trustedproxies, ","),
 		})
-	} else {
-		i.Use(realIPMiddleware(nil))
-		s.log.Info(ctx, "Init real ip middleware", nil)
 	}
 
 	i.Use(s.reqLoggerMiddleware)
@@ -135,9 +132,9 @@ func (s *Server) Init(ctx context.Context) error {
 			"cors.paths": strings.Join(k, "; "),
 		})
 	}
-	if len(s.settings.middleware.origins) > 0 {
+	if len(s.settings.middleware.alloworigins) > 0 {
 		i.Use(cors.Handler(cors.Options{
-			AllowedOrigins: s.settings.middleware.origins,
+			AllowedOrigins: s.settings.middleware.alloworigins,
 			AllowedMethods: []string{
 				http.MethodHead,
 				http.MethodGet,
@@ -151,7 +148,7 @@ func (s *Server) Init(ctx context.Context) error {
 			MaxAge:           300,
 		}))
 		s.log.Info(ctx, "Init middleware CORS", klog.Fields{
-			"cors.origins": strings.Join(s.settings.middleware.origins, ", "),
+			"cors.alloworigins": strings.Join(s.settings.middleware.alloworigins, ", "),
 		})
 	}
 

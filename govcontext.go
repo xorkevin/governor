@@ -155,7 +155,7 @@ func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 	if c.r.ContentLength == 0 {
 		return ErrWithRes(nil, http.StatusBadRequest, "", "Empty request body")
 	}
-	mediaType, _, err := mime.ParseMediaType(c.Header("Content-Type"))
+	mediaType, _, err := mime.ParseMediaType(c.Header(headerContentType))
 	if err != nil {
 		return ErrWithRes(err, http.StatusBadRequest, "", "Invalid mime type")
 	}
@@ -198,7 +198,7 @@ func (c *Context) Redirect(status int, url string) {
 }
 
 func (c *Context) WriteString(status int, text string) {
-	c.w.Header().Set("Content-Type", mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
+	c.w.Header().Set(headerContentType, mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	if _, err := io.WriteString(c.w, text); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write string bytes"), nil)
@@ -215,7 +215,7 @@ func (c *Context) WriteJSON(status int, body interface{}) {
 		return
 	}
 
-	c.w.Header().Set("Content-Type", mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
+	c.w.Header().Set(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, &b); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json bytes"), nil)
@@ -248,7 +248,7 @@ func (c *Context) WriteError(err error) {
 }
 
 func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
-	c.w.Header().Set("Content-Type", contentType)
+	c.w.Header().Set(headerContentType, contentType)
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write file"), nil)

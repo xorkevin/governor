@@ -38,6 +38,7 @@ type (
 		ClientPrefix  string
 		ConfigReader  io.Reader
 		VaultReader   io.Reader
+		LogWriter     io.Writer
 	}
 )
 
@@ -82,7 +83,7 @@ type (
 	}
 
 	configMiddleware struct {
-		origins            []string
+		alloworigins       []string
 		allowpaths         []*corsPathRule
 		routerewrite       []*rewriteRule
 		trustedproxies     []string
@@ -180,8 +181,8 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("cors.allowpaths", []string{})
 	v.SetDefault("routerewrite", []*rewriteRule{})
 	v.SetDefault("trustedproxies", []string{})
-	v.SetDefault("compressor.compressibletypes", []string{})
-	v.SetDefault("compressor.preferredencodings", []string{})
+	v.SetDefault("compressor.compressibletypes", defaultCompressibleMediaTypes)
+	v.SetDefault("compressor.preferredencodings", defaultPreferredEncodings)
 	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
 	v.SetDefault("vault.k8s.auth", false)
@@ -209,6 +210,9 @@ func newSettings(opts Opts) *settings {
 		config: Config{
 			Appname: opts.Appname,
 			Version: opts.Version,
+		},
+		logger: configLogger{
+			writer: opts.LogWriter,
 		},
 	}
 }
@@ -275,7 +279,7 @@ func (s *settings) init(flags Flags) error {
 	s.httpServer.maxConnHeader = s.v.GetString("http.maxconnheader")
 	s.httpServer.maxConnWrite = s.v.GetString("http.maxconnwrite")
 	s.httpServer.maxConnIdle = s.v.GetString("http.maxconnidle")
-	s.middleware.origins = s.v.GetStringSlice("cors.alloworigins")
+	s.middleware.alloworigins = s.v.GetStringSlice("cors.alloworigins")
 	allowPathPatterns := s.v.GetStringSlice("cors.allowpaths")
 	s.middleware.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
 	for _, i := range allowPathPatterns {
@@ -461,7 +465,7 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 }
 
 func (s *settings) initsecrets() error {
-	if vsource := s.v.GetString("vault.filesource"); vsource != "" {
+	if vsource := s.v.GetString("vault.filesource"); s.vaultReader != nil || vsource != "" {
 		client, err := newSecretsFileSource(vsource, s.vaultReader)
 		if err != nil {
 			return err

@@ -505,15 +505,9 @@ func (s *Server) compressorMiddleware(compressibleTypes []string, preferredEncod
 			},
 		},
 	}
-	if len(compressibleTypes) == 0 {
-		compressibleTypes = defaultCompressibleMediaTypes
-	}
 	compressableMediaTypes := make(map[string]struct{}, len(compressibleTypes))
 	for _, i := range compressibleTypes {
 		compressableMediaTypes[i] = struct{}{}
-	}
-	if len(preferredEncodings) == 0 {
-		preferredEncodings = defaultPreferredEncodings
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
