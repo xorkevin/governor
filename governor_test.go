@@ -319,7 +319,7 @@ func TestServer(t *testing.T) {
 			Logs       []cloner
 		}{
 			{
-				Test:   "logs the error",
+				Test:   "handles a request",
 				Method: http.MethodPost,
 				Path:   "/api/servicea/ping/paramvalue",
 				Query: url.Values{
@@ -351,6 +351,67 @@ func TestServer(t *testing.T) {
 					},
 				},
 			},
+			{
+				Test:   "handles route rewrite",
+				Method: http.MethodPost,
+				Path:   "/.well-known/ping/paramvalue",
+				Query: url.Values{
+					"qparam": []string{"paramvalue"},
+					"iparam": []string{"314159"},
+					"bparam": []string{"t"},
+				},
+				Route: "/api/servicea/ping/{rparam}",
+				ReqHeaders: map[string]string{
+					headerContentType:   "application/json",
+					headerXForwardedFor: "192.168.0.3, 10.0.0.5, 10.0.0.4, 10.0.0.3",
+				},
+				RemoteAddr: "10.0.0.2:1234",
+				Username:   "admin",
+				Password:   "admin",
+				UserCookie: "admin",
+				Body:       strings.NewReader(`{"ping": "ping"}`),
+				Status:     http.StatusOK,
+				ResHeaders: map[string]string{
+					"Test-Custom-Header": "test-header-val",
+					headerContentType:    "application/json; charset=utf-8",
+				},
+				ResBody: testServiceAReq{
+					Ping: "pong",
+				},
+				Logs: []cloner{
+					testServiceAReq{
+						Ping: "pong",
+					},
+				},
+			},
+			{
+				Test:   "handles cors preflight",
+				Method: http.MethodOptions,
+				Path:   "/api/servicea/ping/paramvalue",
+				Route:  "",
+				ReqHeaders: map[string]string{
+					headerXForwardedFor:              "10.0.0.5, 10.0.0.4, 10.0.0.3",
+					"Origin":                         "http://localhost:3000",
+					"Access-Control-Request-Method":  http.MethodPost,
+					"Access-Control-Request-Headers": "origin",
+				},
+				RemoteAddr: "10.0.0.2:1234",
+				Status:     http.StatusOK,
+			},
+			{
+				Test:   "handles cors preflight",
+				Method: http.MethodOptions,
+				Path:   "/api/servicea/ping/allowall",
+				Route:  "",
+				ReqHeaders: map[string]string{
+					headerXForwardedFor:              "192.168.0.3, bogus, 10.0.0.5, 10.0.0.4, 10.0.0.3",
+					"Origin":                         "http://localhost:3000",
+					"Access-Control-Request-Method":  http.MethodPost,
+					"Access-Control-Request-Headers": "origin",
+				},
+				RemoteAddr: "10.0.0.2:1234",
+				Status:     http.StatusOK,
+			},
 		} {
 			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
@@ -375,12 +436,12 @@ cors:
 	alloworigins:
 		- 'http://localhost:3000'
 	allowpaths:
-		- '^/api/servicea/ping$'
+		- '^/api/servicea/ping/allowall$'
 routerewrite:
 	-
 		host: localhost:8080
 		methods: ['POST']
-		pattern: '^/.well-known/([A-Za-z0-9_-]{2,})$'
+		pattern: '^/.well-known/(.+)$'
 		replace: '/api/servicea/$1'
 trustedproxies:
 	- '10.0.0.0/8'

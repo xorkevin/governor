@@ -18,6 +18,10 @@ import (
 )
 
 func TestVaultSecretReader(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long mock vault test")
+	}
+
 	t.Parallel()
 
 	tabReplacer := strings.NewReplacer("\t", "  ")
