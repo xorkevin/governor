@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -149,8 +150,17 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 		return kerrors.WithMsg(err, "Invalid propobj")
 	}
 
+	m = m.GroupCtx("", func(next RouteHandler) RouteHandler {
+		return RouteHandlerFunc(func(c *Context) {
+			c.AddHeader("Test-Custom-Header", "test-header-val")
+			c.AddHeader("Test-Custom-Header", "another-header-val")
+			c.DelHeader("Test-Custom-Header")
+			c.AddHeader("Test-Custom-Header", "test-header-val")
+			next.ServeHTTPCtx(c)
+		})
+	})
 	mr := NewMethodRouter(m)
-	mr.PostCtx("/ping", s.ping)
+	mr.PostCtx("/ping/{rparam}", s.ping)
 
 	s.ranInit = true
 
@@ -179,6 +189,72 @@ func (s *testServiceA) Health(ctx context.Context) error {
 }
 
 func (s *testServiceA) ping(c *Context) {
+	if c.Log() != nil {
+		c.WriteError(ErrWithRes(nil, http.StatusInternalServerError, "", "No context logger"))
+		return
+	}
+	if c.LReqID() == "" {
+		c.WriteError(ErrWithRes(nil, http.StatusInternalServerError, "", "No local request id"))
+		return
+	}
+	username, password, ok := c.BasicAuth()
+	if !ok || username != "admin" || password != "admin" {
+		c.WriteError(ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid user auth"))
+		return
+	}
+	if c.RealIP() == nil || c.RealIP().String() != "192.168.0.3" {
+		c.WriteError(ErrWithRes(nil, http.StatusForbidden, "", "Invalid calling ip"))
+		return
+	}
+	if c.Param("rparam") != c.QueryDef("qparam", "unset") {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid path param"))
+		return
+	}
+	if c.QueryDef("bogus", "a-value") != "a-value" {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Bogus query param supplied"))
+		return
+	}
+	if c.QueryInt("qparam", -1) != -1 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid string param"))
+		return
+	}
+	if c.QueryInt64("qparam", -1) != -1 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid string param"))
+		return
+	}
+	if c.QueryInt("bogus", -1) != -1 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Bogus query param supplied"))
+		return
+	}
+	if c.QueryInt("iparam", -1) != 314159 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid int param"))
+		return
+	}
+	if c.QueryInt64("bogus", -1) != -1 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Bogus query param supplied"))
+		return
+	}
+	if c.QueryInt64("iparam", -1) != 314159 {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid int64 param"))
+		return
+	}
+	if c.QueryBool("bogus") {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Bogus query param supplied"))
+		return
+	}
+	if !c.QueryBool("bparam") {
+		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid bool param"))
+		return
+	}
+	cval, err := c.Cookie("user")
+	if err != nil {
+		c.WriteError(ErrWithRes(err, http.StatusUnauthorized, "", "Invalid user cookie"))
+		return
+	}
+	if cval.Value == "" {
+		c.WriteError(ErrWithRes(nil, http.StatusForbidden, "", "Invalid user cookie"))
+		return
+	}
 	var req testServiceAReq
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
@@ -190,6 +266,10 @@ func (s *testServiceA) ping(c *Context) {
 	}
 	s.log.Info(c.Ctx(), "Ping", klog.Fields{
 		"ping": "pong",
+	})
+	c.SetCookie(&http.Cookie{
+		Name:  "user",
+		Value: cval.Value,
 	})
 	c.WriteJSON(http.StatusOK, testServiceAReq{
 		Ping: "pong",
@@ -225,8 +305,13 @@ func TestServer(t *testing.T) {
 			Test       string
 			Method     string
 			Path       string
+			Query      url.Values
+			Route      string
 			ReqHeaders map[string]string
 			RemoteAddr string
+			Username   string
+			Password   string
+			UserCookie string
 			Body       io.Reader
 			Status     int
 			ResHeaders map[string]string
@@ -234,18 +319,28 @@ func TestServer(t *testing.T) {
 			Logs       []cloner
 		}{
 			{
-				Test: "logs the error",
+				Test:   "logs the error",
+				Method: http.MethodPost,
+				Path:   "/api/servicea/ping/paramvalue",
+				Query: url.Values{
+					"qparam": []string{"paramvalue"},
+					"iparam": []string{"314159"},
+					"bparam": []string{"t"},
+				},
+				Route: "/api/servicea/ping/{rparam}",
 				ReqHeaders: map[string]string{
 					headerContentType:   "application/json",
-					headerXForwardedFor: "10.0.0.5, 10.0.0.4, 10.0.0.3",
+					headerXForwardedFor: "192.168.0.3, 10.0.0.5, 10.0.0.4, 10.0.0.3",
 				},
 				RemoteAddr: "10.0.0.2:1234",
-				Method:     http.MethodPost,
-				Path:       "/api/servicea/ping/",
+				Username:   "admin",
+				Password:   "admin",
+				UserCookie: "admin",
 				Body:       strings.NewReader(`{"ping": "ping"}`),
 				Status:     http.StatusOK,
 				ResHeaders: map[string]string{
-					headerContentType: "application/json; charset=utf-8",
+					"Test-Custom-Header": "test-header-val",
+					headerContentType:    "application/json; charset=utf-8",
 				},
 				ResBody: testServiceAReq{
 					Ping: "pong",
@@ -343,11 +438,23 @@ data:
 				logbuf.Reset()
 
 				req := httptest.NewRequest(tc.Method, tc.Path, tc.Body)
+				if tc.Query != nil {
+					req.URL.RawQuery = tc.Query.Encode()
+				}
 				req.Host = "localhost:8080"
 				for k, v := range tc.ReqHeaders {
 					req.Header.Set(k, v)
 				}
 				req.RemoteAddr = tc.RemoteAddr
+				if tc.Username != "" {
+					req.SetBasicAuth(tc.Username, tc.Password)
+				}
+				if tc.UserCookie != "" {
+					req.AddCookie(&http.Cookie{
+						Name:  "user",
+						Value: tc.UserCookie,
+					})
+				}
 				rec := httptest.NewRecorder()
 				server.ServeHTTP(rec, req)
 
@@ -368,6 +475,14 @@ data:
 					assert.Equal(v, rec.Result().Header.Get(k))
 				}
 
+				var resUserCookieVal string
+				for _, i := range rec.Result().Cookies() {
+					if i.Name == "user" {
+						resUserCookieVal = i.Value
+					}
+				}
+				assert.Equal(tc.UserCookie, resUserCookieVal)
+
 				if tc.ResBody != nil {
 					res := tc.ResBody.CloneEmptyPointer()
 					assert.NoError(json.Unmarshal(rec.Body.Bytes(), res))
@@ -384,7 +499,7 @@ data:
 				assert.Equal(testLogEntryMsg{
 					Msg:     "HTTP response",
 					ReqPath: tc.Path,
-					Route:   tc.Path,
+					Route:   tc.Route,
 					Status:  tc.Status,
 				}, logEntry)
 

@@ -40,8 +40,8 @@ func NewContext(w http.ResponseWriter, r *http.Request, log klog.Logger) *Contex
 	}
 }
 
-func getCtxLocalReqID(ctx context.Context) string {
-	v := ctx.Value(ctxKeyLocalReqID{})
+func getCtxLocalReqID(c *Context) string {
+	v := c.Get(ctxKeyLocalReqID{})
 	if v == nil {
 		return ""
 	}
@@ -53,7 +53,7 @@ func setCtxLocalReqID(c *Context, lreqid string) {
 }
 
 func (c *Context) LReqID() string {
-	return getCtxLocalReqID(c.Ctx())
+	return getCtxLocalReqID(c)
 }
 
 func (c *Context) RealIP() *netip.Addr {
@@ -198,7 +198,7 @@ func (c *Context) Redirect(status int, url string) {
 }
 
 func (c *Context) WriteString(status int, text string) {
-	c.w.Header().Set(headerContentType, mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
+	c.SetHeader(headerContentType, mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	if _, err := io.WriteString(c.w, text); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write string bytes"), nil)
@@ -215,7 +215,7 @@ func (c *Context) WriteJSON(status int, body interface{}) {
 		return
 	}
 
-	c.w.Header().Set(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
+	c.SetHeader(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, &b); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json bytes"), nil)
@@ -248,7 +248,7 @@ func (c *Context) WriteError(err error) {
 }
 
 func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
-	c.w.Header().Set(headerContentType, contentType)
+	c.SetHeader(headerContentType, contentType)
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
 		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write file"), nil)
