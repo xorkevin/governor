@@ -24,7 +24,7 @@ func ReadVCSBuildInfo() VCSBuildInfo {
 		ModVersion:  "(devel)",
 		VCS:         "",
 		VCSRevision: "",
-		VCSTime:     time.Unix(0, 0),
+		VCSTime:     time.Time{},
 		VCSModified: true,
 	}
 	if info, ok := debug.ReadBuildInfo(); ok {

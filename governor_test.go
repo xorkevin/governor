@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/kerrors"
@@ -112,8 +113,40 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 		return kerrors.WithMsg(nil, "Invalid secret")
 	}
 
-	if err := r.GetSecret(ctx, "bogus", 60, &secret); err == nil {
+	r.InvalidateSecret("somesecret")
+
+	if err := r.GetSecret(ctx, "bogussecret", 60, &secret); err == nil {
 		return kerrors.WithMsg(nil, "Did not reject bogus secret")
+	}
+
+	if !r.GetBool("propbool") {
+		return kerrors.WithMsg(nil, "Invalid propbool")
+	}
+	if r.GetInt("propint") != 271828 {
+		return kerrors.WithMsg(nil, "Invalid propint")
+	}
+	if r.GetInt("propint") != 271828 {
+		return kerrors.WithMsg(nil, "Invalid propint")
+	}
+	dur, err := r.GetDuration("propdur")
+	if err != nil {
+		return kerrors.WithMsg(err, "Invalid propdur")
+	}
+	if dur != 24*time.Hour {
+		return kerrors.WithMsg(nil, "Invalid propdur")
+	}
+	if list := r.GetStrSlice("propstrslice"); len(list) != 2 || list[0] != "abc" || list[1] != "def" {
+		return kerrors.WithMsg(nil, "Invalid propstrslice")
+	}
+
+	var obj []struct {
+		Field1 string `json:"field1"`
+	}
+	if err := r.Unmarshal("propobj", &obj); err != nil {
+		return kerrors.WithMsg(err, "Invalid propobj")
+	}
+	if len(obj) != 1 || obj[0].Field1 != "abc" {
+		return kerrors.WithMsg(err, "Invalid propobj")
 	}
 
 	mr := NewMethodRouter(m)
@@ -208,7 +241,7 @@ func TestServer(t *testing.T) {
 				},
 				RemoteAddr: "10.0.0.2:1234",
 				Method:     http.MethodPost,
-				Path:       "/api/servicea/ping",
+				Path:       "/api/servicea/ping/",
 				Body:       strings.NewReader(`{"ping": "ping"}`),
 				Status:     http.StatusOK,
 				ResHeaders: map[string]string{
@@ -260,6 +293,16 @@ setupsecret: setupsecret
 servicea:
 	prop2: yetanothervalue
 	somesecret: s1secret
+	bogussecret: bogussecret
+	propbool: true
+	propint: 271828
+	propdur: 24h
+	propstrslice:
+		- abc
+		- def
+	propobj:
+		-
+			field1: abc
 `)),
 					VaultReader: strings.NewReader(tabReplacer.Replace(`
 data:
@@ -307,6 +350,8 @@ data:
 				req.RemoteAddr = tc.RemoteAddr
 				rec := httptest.NewRecorder()
 				server.ServeHTTP(rec, req)
+
+				tc.Path = strings.TrimRight(tc.Path, "/")
 
 				assert.Equal(tc.Status, rec.Code)
 
