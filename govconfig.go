@@ -50,7 +50,7 @@ type (
 	// secretsClient is a client that reads secrets
 	secretsClient interface {
 		Info() string
-		Init() error
+		Init(ctx context.Context) error
 		GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error)
 	}
 
@@ -185,6 +185,7 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("compressor.preferredencodings", defaultPreferredEncodings)
 	v.SetDefault("vault.filesource", "")
 	v.SetDefault("vault.addr", "")
+	v.SetDefault("vault.token", "")
 	v.SetDefault("vault.k8s.auth", false)
 	v.SetDefault("vault.k8s.role", "")
 	v.SetDefault("vault.k8s.loginpath", "/auth/kubernetes/login")
@@ -242,7 +243,7 @@ const (
 	instanceIDRandSize = 8
 )
 
-func (s *settings) init(flags Flags) error {
+func (s *settings) init(ctx context.Context, flags Flags) error {
 	if flags.ConfigFile != "" {
 		s.v.SetConfigFile(flags.ConfigFile)
 	}
@@ -295,7 +296,7 @@ func (s *settings) init(flags Flags) error {
 	s.middleware.trustedproxies = s.v.GetStringSlice("trustedproxies")
 	s.middleware.compressibleTypes = s.v.GetStringSlice("compressor.compressibletypes")
 	s.middleware.preferredEncodings = s.v.GetStringSlice("compressor.preferredencodings")
-	if err := s.initsecrets(); err != nil {
+	if err := s.initsecrets(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -344,7 +345,7 @@ func (s *secretsFileSource) Info() string {
 	return fmt.Sprintf("file source; path: %s", s.path)
 }
 
-func (s *secretsFileSource) Init() error {
+func (s *secretsFileSource) Init(ctx context.Context) error {
 	return nil
 }
 
@@ -360,6 +361,7 @@ type (
 	// secretsVaultSourceConfig is a vault secrets client config
 	secretsVaultSourceConfig struct {
 		Addr         string
+		AuthToken    string
 		K8SAuth      bool
 		K8SRole      string
 		K8SLoginPath string
@@ -398,14 +400,18 @@ func (s *secretsVaultSource) Info() string {
 	return fmt.Sprintf("vault source; addr: %s", s.address)
 }
 
-func (s *secretsVaultSource) Init() error {
+func (s *secretsVaultSource) Init(ctx context.Context) error {
+	if s.config.AuthToken != "" {
+		s.vault.SetToken(s.config.AuthToken)
+		return nil
+	}
 	if !s.config.K8SAuth {
 		return nil
 	}
 	if s.authVaultValid() {
 		return nil
 	}
-	return s.authVault()
+	return s.authVault(ctx)
 }
 
 func (s *secretsVaultSource) authVaultValidLocked() bool {
@@ -418,7 +424,7 @@ func (s *secretsVaultSource) authVaultValid() bool {
 	return s.authVaultValidLocked()
 }
 
-func (s *secretsVaultSource) authVault() error {
+func (s *secretsVaultSource) authVault(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -426,8 +432,7 @@ func (s *secretsVaultSource) authVault() error {
 		return nil
 	}
 
-	vault := s.vault.Logical()
-	authsecret, err := vault.Write(s.config.K8SLoginPath, map[string]interface{}{
+	authsecret, err := s.vault.Logical().WriteWithContext(ctx, s.config.K8SLoginPath, map[string]interface{}{
 		"jwt":  s.config.K8SJWT,
 		"role": s.config.K8SRole,
 	})
@@ -440,12 +445,11 @@ func (s *secretsVaultSource) authVault() error {
 }
 
 func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[string]interface{}, time.Time, error) {
-	if err := s.Init(); err != nil {
+	if err := s.Init(ctx); err != nil {
 		return nil, time.Time{}, err
 	}
 
-	vault := s.vault.Logical()
-	secret, err := vault.ReadWithContext(ctx, kvpath)
+	secret, err := s.vault.Logical().ReadWithContext(ctx, kvpath)
 	if err != nil {
 		return nil, time.Time{}, kerrors.WithKind(err, ErrorVault, "Failed to read vault secret")
 	}
@@ -464,7 +468,7 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 	return data, expire, nil
 }
 
-func (s *settings) initsecrets() error {
+func (s *settings) initsecrets(ctx context.Context) error {
 	if vsource := s.v.GetString("vault.filesource"); s.vaultReader != nil || vsource != "" {
 		client, err := newSecretsFileSource(vsource, s.vaultReader)
 		if err != nil {
@@ -477,7 +481,9 @@ func (s *settings) initsecrets() error {
 	if vaddr := s.v.GetString("vault.addr"); vaddr != "" {
 		config.Addr = vaddr
 	}
-	if s.v.GetBool("vault.k8s.auth") {
+	if token := s.v.GetString("vault.token"); token != "" {
+		config.AuthToken = token
+	} else if s.v.GetBool("vault.k8s.auth") {
 		config.K8SAuth = true
 
 		config.K8SRole = s.v.GetString("vault.k8s.role")
@@ -502,7 +508,7 @@ func (s *settings) initsecrets() error {
 	if err != nil {
 		return err
 	}
-	if err := vault.Init(); err != nil {
+	if err := vault.Init(ctx); err != nil {
 		return err
 	}
 	s.vault = vault

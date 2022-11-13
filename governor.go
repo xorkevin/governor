@@ -74,7 +74,7 @@ func (s *Server) Init(ctx context.Context) error {
 		"gov.service.phase": "init",
 	})
 
-	if err := s.settings.init(s.flags); err != nil {
+	if err := s.settings.init(ctx, s.flags); err != nil {
 		return err
 	}
 	s.log = newLogger(s.settings.config, s.settings.logger)

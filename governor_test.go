@@ -189,7 +189,7 @@ func (s *testServiceA) Health(ctx context.Context) error {
 }
 
 func (s *testServiceA) ping(c *Context) {
-	if c.Log() != nil {
+	if c.Log() == nil {
 		c.WriteError(ErrWithRes(nil, http.StatusInternalServerError, "", "No context logger"))
 		return
 	}
