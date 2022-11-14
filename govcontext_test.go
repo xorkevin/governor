@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -153,6 +154,64 @@ func TestContext(t *testing.T) {
 
 		assert.Equal("pong", c.FormValue("ping"))
 		assert.Equal("value", c.FormValue("other"))
+	})
+
+	t.Run("FormFile", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		var reqbody bytes.Buffer
+		reqwriter := multipart.NewWriter(&reqbody)
+		reqfilewriter, err := reqwriter.CreateFormFile("testfile", "testfilename")
+		assert.NoError(err)
+		_, err = io.Copy(reqfilewriter, strings.NewReader("test form file"))
+		assert.NoError(err)
+		assert.NoError(reqwriter.Close())
+		req, _, _, c := generateTestContext(http.MethodPost, "/api/path", &reqbody)
+		req.Header.Set(headerContentType, reqwriter.FormDataContentType())
+
+		file, header, err := c.FormFile("testfile")
+		assert.NoError(err)
+		t.Cleanup(func() {
+			assert.NoError(file.Close())
+		})
+		assert.Equal("testfilename", header.Filename)
+		body, err := io.ReadAll(file)
+		assert.NoError(err)
+		assert.Equal("test form file", string(body))
+	})
+
+	t.Run("WriteStatus", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		_, rec, _, c := generateTestContext(http.MethodPost, "/api/path", nil)
+		c.WriteStatus(http.StatusNoContent)
+		assert.Equal(http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("Redirect", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		_, rec, _, c := generateTestContext(http.MethodPost, "/api/path", nil)
+		c.Redirect(http.StatusTemporaryRedirect, "https://example.com")
+		assert.Equal(http.StatusTemporaryRedirect, rec.Code)
+		assert.Equal("https://example.com", rec.Result().Header.Get("Location"))
+	})
+
+	t.Run("WriteString", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		_, rec, _, c := generateTestContext(http.MethodPost, "/api/path", nil)
+		c.WriteString(http.StatusOK, "string response data")
+		assert.Equal(http.StatusOK, rec.Code)
+		assert.Equal("string response data", rec.Body.String())
 	})
 
 	t.Run("WriteError", func(t *testing.T) {

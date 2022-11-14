@@ -221,12 +221,17 @@ func (c *Context) Redirect(status int, url string) {
 	http.Redirect(c.w, c.r, url, status)
 }
 
-func (c *Context) WriteString(status int, text string) {
-	c.SetHeader(headerContentType, mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}))
+func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
+	c.SetHeader(headerContentType, contentType)
 	c.w.WriteHeader(status)
-	if _, err := io.WriteString(c.w, text); err != nil {
-		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write string bytes"), nil)
+	if _, err := io.Copy(c.w, r); err != nil {
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write response"), nil)
+		return
 	}
+}
+
+func (c *Context) WriteString(status int, text string) {
+	c.WriteFile(status, mime.FormatMediaType("text/plain", map[string]string{"charset": "utf-8"}), strings.NewReader(text))
 }
 
 func (c *Context) WriteJSON(status int, body interface{}) {
@@ -239,11 +244,7 @@ func (c *Context) WriteJSON(status int, body interface{}) {
 		return
 	}
 
-	c.SetHeader(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
-	c.w.WriteHeader(status)
-	if _, err := io.Copy(c.w, &b); err != nil {
-		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json bytes"), nil)
-	}
+	c.WriteFile(status, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}), &b)
 }
 
 func (c *Context) WriteError(err error) {
@@ -269,15 +270,6 @@ func (c *Context) WriteError(err error) {
 	}
 
 	c.WriteJSON(rerr.Status, rerr)
-}
-
-func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
-	c.SetHeader(headerContentType, contentType)
-	c.w.WriteHeader(status)
-	if _, err := io.Copy(c.w, r); err != nil {
-		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write file"), nil)
-		return
-	}
 }
 
 func (c *Context) Ctx() context.Context {
