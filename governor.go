@@ -163,7 +163,7 @@ func (s *Server) Init(ctx context.Context) error {
 		})
 	}
 
-	i.Use(s.compressorMiddleware(s.settings.middleware.compressibleTypes, s.settings.middleware.preferredEncodings))
+	i.Use(s.compressorMiddleware)
 	s.log.Info(ctx, "Init middleware compressor", nil)
 
 	i.Use(s.recovererMiddleware)

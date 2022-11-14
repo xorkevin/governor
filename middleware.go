@@ -6,10 +6,10 @@ import (
 	"mime"
 	"net/http"
 	"net/netip"
-	"net/url"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,20 +17,29 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
 	"github.com/klauspost/compress/zstd"
-	"go.uber.org/atomic"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
 
+type (
+	middlewareStripSlashes struct {
+		next http.Handler
+	}
+)
+
+func (m *middlewareStripSlashes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	if l := len(path); l > 1 && path[l-1] == '/' {
+		r.URL.Path = path[:l-1]
+	}
+	m.next.ServeHTTP(w, r)
+}
+
 func stripSlashesMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if l := len(path); l > 1 && path[l-1] == '/' {
-			r.URL.Path = path[:l-1]
-		}
-		next.ServeHTTP(w, r)
-	})
+	return &middlewareStripSlashes{
+		next: next,
+	}
 }
 
 const (
@@ -38,28 +47,28 @@ const (
 )
 
 type (
-	ctxKeyMiddlewareRealIP struct{}
+	middlewareRealIP struct {
+		proxies []netip.Prefix
+		next    http.Handler
+	}
 )
+
+func (m *middlewareRealIP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ip := getRealIP(r, m.proxies)
+	if ip != nil {
+		ctx = context.WithValue(ctx, ctxKeyRealIP{}, ip)
+	}
+	m.next.ServeHTTP(w, r.WithContext(ctx))
+}
 
 func realIPMiddleware(proxies []netip.Prefix) Middleware {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			ip := getRealIP(r, proxies)
-			if ip != nil {
-				ctx = context.WithValue(ctx, ctxKeyMiddlewareRealIP{}, ip)
-			}
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
+		return &middlewareRealIP{
+			proxies: proxies,
+			next:    next,
+		}
 	}
-}
-
-func getCtxMiddlewareRealIP(ctx context.Context) *netip.Addr {
-	k := ctx.Value(ctxKeyMiddlewareRealIP{})
-	if k == nil {
-		return nil
-	}
-	return k.(*netip.Addr)
 }
 
 func getRealIP(r *http.Request, proxies []netip.Prefix) *netip.Addr {
@@ -102,10 +111,6 @@ func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
 	return false
 }
 
-func (s *Server) lreqID(count uint32) string {
-	return s.settings.config.Instance + "-" + uid.ReqID(count)
-}
-
 type (
 	govResponseWriter struct {
 		http.ResponseWriter
@@ -135,101 +140,152 @@ func (w *govResponseWriter) isWS() bool {
 	return w.status == http.StatusSwitchingProtocols
 }
 
-func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
-	reqcount := atomic.Uint32{}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log.Logger)
-		lreqid := s.lreqID(reqcount.Add(1))
-		setCtxLocalReqID(c, lreqid)
-		var realip string
-		if ip := c.RealIP(); ip != nil {
-			realip = ip.String()
-		}
-		c.LogFields(klog.Fields{
-			"http.host":    c.Req().Host,
-			"http.method":  c.Req().Method,
-			"http.reqpath": c.Req().URL.EscapedPath(),
-			"http.remote":  c.Req().RemoteAddr,
-			"http.realip":  realip,
-			"http.lreqid":  lreqid,
-		})
-		w2 := &govResponseWriter{
-			ResponseWriter: w,
-			status:         0,
-		}
-		s.log.Info(c.Ctx(), "HTTP request", nil)
-		start := time.Now()
-		next.ServeHTTP(w2, c.Req())
-		duration := time.Since(start)
-		route := chi.RouteContext(c.Ctx()).RoutePattern()
-		if w2.isWS() {
-			s.log.Info(c.Ctx(), "WS close", klog.Fields{
-				"http.ws":          true,
-				"http.route":       route,
-				"http.status":      w2.status,
-				"http.duration_ms": duration.Milliseconds(),
-			})
-		} else {
-			s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
-				"http.ws":         false,
-				"http.route":      route,
-				"http.status":     w2.status,
-				"http.latency_us": duration.Microseconds(),
-			})
-		}
+type (
+	middlewareReqLogger struct {
+		s        *Server
+		reqcount *atomic.Uint32
+		next     http.Handler
+	}
+)
+
+func (m *middlewareReqLogger) lreqID() string {
+	return m.s.settings.config.Instance + "-" + uid.ReqID(m.reqcount.Add(1))
+}
+
+func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := NewContext(w, r, m.s.log.Logger)
+	lreqid := m.lreqID()
+	setCtxLocalReqID(c, lreqid)
+	var realip string
+	if ip := c.RealIP(); ip != nil {
+		realip = ip.String()
+	}
+	c.LogFields(klog.Fields{
+		"http.host":    c.Req().Host,
+		"http.method":  c.Req().Method,
+		"http.reqpath": c.Req().URL.EscapedPath(),
+		"http.remote":  c.Req().RemoteAddr,
+		"http.realip":  realip,
+		"http.lreqid":  lreqid,
 	})
+	w2 := &govResponseWriter{
+		ResponseWriter: w,
+		status:         0,
+	}
+	m.s.log.Info(c.Ctx(), "HTTP request", nil)
+	start := time.Now()
+	m.next.ServeHTTP(w2, c.Req())
+	duration := time.Since(start)
+	route := chi.RouteContext(c.Ctx()).RoutePattern()
+	if w2.isWS() {
+		m.s.log.Info(c.Ctx(), "WS close", klog.Fields{
+			"http.ws":          true,
+			"http.route":       route,
+			"http.status":      w2.status,
+			"http.duration_ms": duration.Milliseconds(),
+		})
+	} else {
+		m.s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
+			"http.ws":         false,
+			"http.route":      route,
+			"http.status":     w2.status,
+			"http.latency_us": duration.Microseconds(),
+		})
+	}
+}
+
+func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
+	return &middlewareReqLogger{
+		s:        s,
+		reqcount: &atomic.Uint32{},
+		next:     next,
+	}
+}
+
+type (
+	middlewareRouteRewrite struct {
+		rules []*rewriteRule
+		next  http.Handler
+	}
+)
+
+func (m *middlewareRouteRewrite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, i := range m.rules {
+		if i.match(r) {
+			r.URL.Path = i.replace(r.URL.Path)
+		}
+	}
+	m.next.ServeHTTP(w, r)
 }
 
 func routeRewriteMiddleware(rules []*rewriteRule) Middleware {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r2 := new(http.Request)
-			*r2 = *r
-			r2.URL = new(url.URL)
-			*r2.URL = *r.URL
-			for _, i := range rules {
-				if i.match(r2) {
-					r2.URL.Path = i.replace(r2.URL.Path)
-				}
-			}
-			next.ServeHTTP(w, r2)
-		})
+		return &middlewareRouteRewrite{
+			rules: rules,
+			next:  next,
+		}
+	}
+}
+
+type (
+	middlewareCorsPathsAllowAll struct {
+		rules    []*corsPathRule
+		corsNext http.Handler
+		next     http.Handler
+	}
+)
+
+func (m *middlewareCorsPathsAllowAll) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	isMatch := false
+	for _, i := range m.rules {
+		if i.match(r) {
+			isMatch = true
+			break
+		}
+	}
+	if isMatch {
+		m.corsNext.ServeHTTP(w, r)
+	} else {
+		m.next.ServeHTTP(w, r)
 	}
 }
 
 func corsPathsAllowAllMiddleware(rules []*corsPathRule) Middleware {
-	allowAll := cors.AllowAll()
 	return func(next http.Handler) http.Handler {
-		corsNext := allowAll.Handler(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			isMatch := false
-			for _, i := range rules {
-				if i.match(r) {
-					isMatch = true
-					break
-				}
-			}
-			if isMatch {
-				corsNext.ServeHTTP(w, r)
-			} else {
-				next.ServeHTTP(w, r)
-			}
-		})
+		return &middlewareCorsPathsAllowAll{
+			rules:    rules,
+			corsNext: cors.AllowAll().Handler(next),
+			next:     next,
+		}
 	}
+}
+
+type (
+	middlewareBodyLimit struct {
+		s     *Server
+		limit int64
+		next  http.Handler
+	}
+)
+
+func (m *middlewareBodyLimit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// ContentLength of -1 is unknown
+	if r.ContentLength > m.limit {
+		c := NewContext(w, r, m.s.log.Logger)
+		c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, m.limit)
+	m.next.ServeHTTP(w, r)
 }
 
 func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// ContentLength of -1 is unknown
-			if r.ContentLength > limit {
-				c := NewContext(w, r, s.log.Logger)
-				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
-				return
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
-			next.ServeHTTP(w, r)
-		})
+		return &middlewareBodyLimit{
+			s:     s,
+			limit: limit,
+			next:  next,
+		}
 	}
 }
 
@@ -468,85 +524,113 @@ func (w *pooledZlibWriter) Reset(wr io.Writer) {
 	w.w.Reset(wr)
 }
 
-func (s *Server) compressorMiddleware(compressibleTypes []string, preferredEncodings []string) Middleware {
-	allowedEncodings := map[string]*sync.Pool{
-		encodingKindZstd: {
-			New: func() interface{} {
-				w, _ := zstd.NewWriter(nil,
-					// 3 is a good tradeoff of size to speed
-					zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
-					zstd.WithEncoderConcurrency(1),
-				)
-				return &pooledZstdWriter{
-					w: w,
-				}
-			},
-		},
-		encodingKindGzip: {
-			New: func() interface{} {
-				// 5 is a good tradeoff of size to speed
-				w, _ := gzip.NewWriterLevel(nil, 5)
-				return &pooledGzipWriter{
-					w: w,
-				}
-			},
-		},
-		encodingKindZlib: {
-			New: func() interface{} {
-				// 5 is a good tradeoff of size to speed
-				w, _ := zlib.NewWriterLevel(nil, 5)
-				return &pooledZlibWriter{
-					w: w,
-				}
-			},
-		},
+type (
+	middlewareCompressor struct {
+		s                      *Server
+		allowedEncodings       map[string]*sync.Pool
+		compressableMediaTypes map[string]struct{}
+		preferredEncodings     []string
+		next                   http.Handler
 	}
+)
+
+func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w2 := &compressorWriter{
+		ResponseWriter: w,
+		r:              r,
+		status:         0,
+		writer: &identityWriter{
+			w: w,
+		},
+		compressableMediaTypes: m.compressableMediaTypes,
+		allowedEncodings:       m.allowedEncodings,
+		preferredEncodings:     m.preferredEncodings,
+		wroteHeader:            false,
+	}
+	defer func() {
+		if err := w2.Close(); err != nil {
+			m.s.log.Err(r.Context(), kerrors.WithMsg(err, "Failed to close compressor writer"), nil)
+		}
+	}()
+	m.next.ServeHTTP(w2, r)
+}
+
+func (s *Server) compressorMiddleware(next http.Handler) http.Handler {
+	compressibleTypes := s.settings.middleware.compressibleTypes
 	compressableMediaTypes := make(map[string]struct{}, len(compressibleTypes))
 	for _, i := range compressibleTypes {
 		compressableMediaTypes[i] = struct{}{}
 	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w2 := &compressorWriter{
-				ResponseWriter: w,
-				r:              r,
-				status:         0,
-				writer: &identityWriter{
-					w: w,
+	return &middlewareCompressor{
+		s: s,
+		allowedEncodings: map[string]*sync.Pool{
+			encodingKindZstd: {
+				New: func() interface{} {
+					w, _ := zstd.NewWriter(nil,
+						// 3 is a good tradeoff of size to speed
+						zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
+						zstd.WithEncoderConcurrency(1),
+					)
+					return &pooledZstdWriter{
+						w: w,
+					}
 				},
-				compressableMediaTypes: compressableMediaTypes,
-				allowedEncodings:       allowedEncodings,
-				preferredEncodings:     preferredEncodings,
-				wroteHeader:            false,
-			}
-			defer func() {
-				if err := w2.Close(); err != nil {
-					s.log.Err(r.Context(), kerrors.WithMsg(err, "Failed to close compressor writer"), nil)
-				}
-			}()
-			next.ServeHTTP(w2, r)
-		})
+			},
+			encodingKindGzip: {
+				New: func() interface{} {
+					// 5 is a good tradeoff of size to speed
+					w, _ := gzip.NewWriterLevel(nil, 5)
+					return &pooledGzipWriter{
+						w: w,
+					}
+				},
+			},
+			encodingKindZlib: {
+				New: func() interface{} {
+					// 5 is a good tradeoff of size to speed
+					w, _ := zlib.NewWriterLevel(nil, 5)
+					return &pooledZlibWriter{
+						w: w,
+					}
+				},
+			},
+		},
+		compressableMediaTypes: compressableMediaTypes,
+		preferredEncodings:     s.settings.middleware.preferredEncodings,
+		next:                   next,
 	}
 }
 
-func (s *Server) recovererMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := NewContext(w, r, s.log.Logger)
-		defer func() {
-			if re := recover(); re != nil {
-				if re == http.ErrAbortHandler {
-					// may not recover http.ErrAbortHandler so re-panic the error
-					panic(re)
-				}
+type (
+	middlewareRecoverer struct {
+		s    *Server
+		next http.Handler
+	}
+)
 
-				s.log.Error(r.Context(), "Panicked in http handler", klog.Fields{
-					"recovered":  re,
-					"stacktrace": debug.Stack(),
-				})
-
-				c.WriteError(ErrWithRes(kerrors.WithMsg(nil, "Panicked in http handler"), http.StatusInternalServerError, "", "Internal Server Error"))
+func (m *middlewareRecoverer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := NewContext(w, r, m.s.log.Logger)
+	defer func() {
+		if re := recover(); re != nil {
+			if re == http.ErrAbortHandler {
+				// may not recover http.ErrAbortHandler so re-panic the error
+				panic(re)
 			}
-		}()
-		next.ServeHTTP(c.R())
-	})
+
+			m.s.log.Error(r.Context(), "Panicked in http handler", klog.Fields{
+				"recovered":  re,
+				"stacktrace": debug.Stack(),
+			})
+
+			c.WriteError(ErrWithRes(kerrors.WithMsg(nil, "Panicked in http handler"), http.StatusInternalServerError, "", "Internal Server Error"))
+		}
+	}()
+	m.next.ServeHTTP(c.R())
+}
+
+func (s *Server) recovererMiddleware(next http.Handler) http.Handler {
+	return &middlewareRecoverer{
+		s:    s,
+		next: next,
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"mime"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,48 @@ func TestContext(t *testing.T) {
 
 	stackRegex := regexp.MustCompile(`Stack trace \[\S+ \S+:\d+\]`)
 	fullStackRegex := regexp.MustCompile(`^(?:\S+\n\t\S+:\d+ \(0x[0-9a-f]+\)\n)+$`)
+
+	t.Run("Request", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tc := range []struct {
+			Test       string
+			Path       string
+			ReqHeaders map[string]string
+			Body       io.Reader
+		}{
+			{
+				Test: "reads the entire body",
+				Path: "/api/path",
+				ReqHeaders: map[string]string{
+					headerContentType: "application/json",
+				},
+				Body: strings.NewReader("test body contents"),
+			},
+		} {
+			tc := tc
+			t.Run(tc.Test, func(t *testing.T) {
+				t.Parallel()
+
+				assert := require.New(t)
+
+				logbuf := bytes.Buffer{}
+				l := newLogger(Config{}, configLogger{
+					level:  "INFO",
+					output: "TEST",
+					writer: &logbuf,
+				})
+				req := httptest.NewRequest(http.MethodPost, tc.Path, tc.Body)
+				for k, v := range tc.ReqHeaders {
+					req.Header.Set(k, v)
+				}
+				rec := httptest.NewRecorder()
+				c := NewContext(rec, req, l.Logger)
+
+				assert.NotNil(c)
+			})
+		}
+	})
 
 	t.Run("WriteError", func(t *testing.T) {
 		t.Parallel()

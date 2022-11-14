@@ -321,7 +321,7 @@ func TestServer(t *testing.T) {
 			{
 				Test:   "handles a request",
 				Method: http.MethodPost,
-				Path:   "/api/servicea/ping/paramvalue",
+				Path:   "/api/servicea/ping/paramvalue/",
 				Query: url.Values{
 					"qparam": []string{"paramvalue"},
 					"iparam": []string{"314159"},

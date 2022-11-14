@@ -29,6 +29,8 @@ type (
 	}
 
 	ctxKeyLocalReqID struct{}
+
+	ctxKeyRealIP struct{}
 )
 
 // NewContext creates a Context
@@ -56,8 +58,16 @@ func (c *Context) LReqID() string {
 	return getCtxLocalReqID(c)
 }
 
+func getCtxMiddlewareRealIP(c *Context) *netip.Addr {
+	k := c.Get(ctxKeyRealIP{})
+	if k == nil {
+		return nil
+	}
+	return k.(*netip.Addr)
+}
+
 func (c *Context) RealIP() *netip.Addr {
-	return getCtxMiddlewareRealIP(c.Ctx())
+	return getCtxMiddlewareRealIP(c)
 }
 
 func (c *Context) Param(key string) string {
