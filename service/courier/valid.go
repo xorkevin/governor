@@ -77,7 +77,7 @@ func validURL(rawurl string) error {
 	if len(rawurl) > lengthCapURL {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Url must be shorter than 2048 characters")
 	}
-	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
+	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Hostname() == "" {
 		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Url is invalid")
 	}
 	return nil

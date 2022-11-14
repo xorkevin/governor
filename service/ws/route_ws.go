@@ -11,7 +11,6 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
-	"xorkevin.dev/klog"
 )
 
 func presenceChannelName(prefix, location string) string {
@@ -63,10 +62,10 @@ func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 		Location:  loc,
 	})
 	if err != nil {
-		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode presence msg")
+		return kerrors.WithMsg(err, "Failed to encode presence msg")
 	}
 	if err := s.s.pubsub.Publish(ctx, presenceChannelName(s.s.opts.PresenceChannel, loc), msg); err != nil {
-		return governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish presence msg")
+		return kerrors.WithMsg(err, "Failed to publish presence msg")
 	}
 	return nil
 }
@@ -74,9 +73,13 @@ func (s *router) sendPresenceUpdate(ctx context.Context, userid, loc string) err
 func (s *router) ws(c *governor.Context) {
 	userid := gate.GetCtxUserid(c)
 
-	conn, err := c.Websocket()
+	conn, err := c.Websocket([]string{governor.WSProtocolVersion})
 	if err != nil {
 		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+		return
+	}
+	if conn.Subprotocol() != governor.WSProtocolVersion {
+		conn.CloseError(governor.ErrWS(nil, int(websocket.StatusPolicyViolation), "Invalid ws subprotocol"))
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
@@ -84,19 +87,16 @@ func (s *router) ws(c *governor.Context) {
 	presenceLocation := ""
 
 	if err := s.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
-		conn.CloseError(err)
-		return
+		s.s.log.Err(c.Ctx(), err, nil)
 	}
 
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
 
-	ctx, tickCancel := context.WithCancel(c.Ctx())
-	defer tickCancel()
+	ctx, cancel := context.WithCancel(c.Ctx())
+	defer cancel()
 
 	subSuccess := make(chan struct{})
-
-	log := klog.NewLevelLogger(c.Log())
 
 	wg.Add(1)
 	go func() {
@@ -113,17 +113,18 @@ func (s *router) ws(c *governor.Context) {
 			func() {
 				sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
 				if err != nil {
-					log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
 					select {
 					case <-ctx.Done():
+						return
 					case <-time.After(delay):
 						delay = min(delay*2, 15*time.Second)
+						return
 					}
-					return
 				}
 				defer func() {
 					if err := sub.Close(ctx); err != nil {
-						log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
 					}
 				}()
 				delay = 250 * time.Millisecond
@@ -137,19 +138,27 @@ func (s *router) ws(c *governor.Context) {
 						if sub.IsPermanentlyClosed() {
 							return
 						}
-						log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(delay):
+							delay = min(delay*2, 15*time.Second)
+							continue
+						}
 					}
 					channel, _, err := decodeResMsg(m.Data)
 					if err != nil {
-						conn.CloseError(err)
-						return
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed decoding message"), nil)
+						continue
 					}
 					if channel == "" {
-						conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Malformed sent message"))
-						return
+						s.s.log.Err(ctx, kerrors.WithMsg(nil, "Malformed sent message"), nil)
+						continue
 					}
 					if err := conn.Write(ctx, true, m.Data); err != nil {
 						conn.CloseError(err)
+						cancel()
 						return
 					}
 					return
@@ -169,8 +178,7 @@ func (s *router) ws(c *governor.Context) {
 				return
 			case <-ticker.C:
 				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					conn.CloseError(err)
-					return
+					s.s.log.Err(ctx, err, nil)
 				}
 			}
 		}
@@ -183,12 +191,12 @@ func (s *router) ws(c *governor.Context) {
 	}
 
 	for {
-		t, b, err := conn.Read(ctx)
+		isText, b, err := conn.Read(ctx)
 		if err != nil {
 			conn.CloseError(err)
 			return
 		}
-		if !t {
+		if !isText {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}
@@ -212,8 +220,8 @@ func (s *router) ws(c *governor.Context) {
 				switch i.Op {
 				case ctlOpLoc:
 					{
-						args := &ctlLocOp{}
-						if err := kjson.Unmarshal(i.Args, args); err != nil {
+						var args ctlLocOp
+						if err := kjson.Unmarshal(i.Args, &args); err != nil {
 							conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl loc op format"))
 							return
 						}
@@ -227,19 +235,16 @@ func (s *router) ws(c *governor.Context) {
 			}
 			if presenceLocation != origLocation {
 				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					conn.CloseError(err)
-					return
+					s.s.log.Err(ctx, err, nil)
 				}
 			}
 		} else {
-			b, err := encodeReqMsg(channel, userid, msg)
-			if err != nil {
-				conn.CloseError(err)
-				return
-			}
-			if err := s.s.pubsub.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
-				conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to publish request msg"))
-				return
+			if b, err := encodeReqMsg(channel, userid, msg); err != nil {
+				s.s.log.Err(ctx, err, nil)
+			} else {
+				if err := s.s.pubsub.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish request msg"), nil)
+				}
 			}
 		}
 		select {
@@ -251,20 +256,24 @@ func (s *router) ws(c *governor.Context) {
 }
 
 func (s *router) echo(c *governor.Context) {
-	conn, err := c.Websocket()
+	conn, err := c.Websocket([]string{governor.WSProtocolVersion})
 	if err != nil {
 		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+		return
+	}
+	if conn.Subprotocol() != governor.WSProtocolVersion {
+		conn.CloseError(governor.ErrWS(nil, int(websocket.StatusPolicyViolation), "Invalid ws subprotocol"))
 		return
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
 
 	for {
-		t, b, err := conn.Read(c.Ctx())
+		isText, b, err := conn.Read(c.Ctx())
 		if err != nil {
 			conn.CloseError(err)
 			return
 		}
-		if !t {
+		if !isText {
 			conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
 			return
 		}

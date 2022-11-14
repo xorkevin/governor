@@ -2,6 +2,7 @@ package governor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,11 +10,15 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"nhooyr.io/websocket"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 )
 
@@ -23,6 +28,29 @@ type (
 
 func (e testErr) Error() string {
 	return "test struct err"
+}
+
+type (
+	threadSafeBuffer struct {
+		b *bytes.Buffer
+		m *sync.Mutex
+	}
+)
+
+func (b *threadSafeBuffer) Read(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Read(p)
+}
+func (b *threadSafeBuffer) Write(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Write(p)
+}
+func (b *threadSafeBuffer) String() string {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.String()
 }
 
 func TestContext(t *testing.T) {
@@ -280,7 +308,7 @@ func TestContext(t *testing.T) {
 
 				assert := require.New(t)
 
-				logbuf := bytes.Buffer{}
+				var logbuf bytes.Buffer
 				l := newLogger(Config{}, configLogger{
 					level:  "INFO",
 					output: "TEST",
@@ -321,5 +349,92 @@ func TestContext(t *testing.T) {
 				assert.False(d.More())
 			})
 		}
+	})
+
+	t.Run("Websocket", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		logbuf := threadSafeBuffer{
+			b: &bytes.Buffer{},
+			m: &sync.Mutex{},
+		}
+		l := newLogger(Config{}, configLogger{
+			level:  "INFO",
+			output: "TEST",
+			writer: &logbuf,
+		})
+
+		server := httptest.NewServer(toHTTPHandler(RouteHandlerFunc(func(c *Context) {
+			conn, err := c.Websocket([]string{WSProtocolVersion})
+			if err != nil {
+				l.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+				return
+			}
+			if conn.Subprotocol() != WSProtocolVersion {
+				conn.CloseError(ErrWS(nil, int(websocket.StatusPolicyViolation), "Invalid ws subprotocol"))
+				return
+			}
+			defer conn.Close(int(websocket.StatusInternalError), "Internal error")
+
+			for {
+				isText, b, err := conn.Read(c.Ctx())
+				if err != nil {
+					conn.CloseError(err)
+					return
+				}
+				if !isText {
+					conn.CloseError(ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg type binary"))
+					return
+				}
+				var req struct {
+					Channel string          `json:"channel"`
+					Value   json.RawMessage `json:"value"`
+				}
+				if err := kjson.Unmarshal(b, &req); err != nil {
+					conn.CloseError(ErrWS(err, int(websocket.StatusUnsupportedData), "Malformed request msg"))
+					return
+				}
+				if req.Channel != "echo" {
+					conn.CloseError(ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid msg channel"))
+					return
+				}
+				if err := conn.Write(c.Ctx(), true, b); err != nil {
+					conn.CloseError(err)
+					return
+				}
+			}
+		}), l.Logger))
+		t.Cleanup(func() {
+			server.Close()
+		})
+
+		wsurl, err := url.Parse(server.URL)
+		assert.NoError(err)
+		wsurl.Scheme = "ws"
+		conn, _, err := websocket.Dial(context.Background(), wsurl.String(), &websocket.DialOptions{
+			Subprotocols:    []string{WSProtocolVersion},
+			CompressionMode: websocket.CompressionContextTakeover,
+		})
+		assert.NoError(err)
+		t.Cleanup(func() {
+			conn.Close(websocket.StatusInternalError, "abort")
+		})
+
+		assert.NoError(conn.Write(context.Background(), websocket.MessageText, []byte(`{"channel":"echo","value":{"ping":"pong"}}`)))
+		msgType, resb, err := conn.Read(context.Background())
+		assert.NoError(err)
+		assert.Equal(websocket.MessageText, msgType)
+		var res struct {
+			Channel string `json:"channel"`
+			Value   struct {
+				Ping string `json:"ping"`
+			} `json:"value"`
+		}
+		assert.NoError(kjson.Unmarshal(resb, &res))
+		assert.Equal("echo", res.Channel)
+		assert.Equal("pong", res.Value.Ping)
+		conn.Close(websocket.StatusNormalClosure, "OK")
 	})
 }

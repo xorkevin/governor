@@ -94,7 +94,7 @@ func validURL(rawurl string) error {
 	if len(rawurl) > lengthCapURL {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "URL must be shorter than 513 characters")
 	}
-	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() {
+	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Hostname() == "" {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "URL is invalid")
 	}
 	return nil
@@ -107,7 +107,7 @@ func validRedirect(rawurl string) error {
 	if len(rawurl) > lengthCapRedirect {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Redirect URI must be shorter than 513 characters")
 	}
-	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Fragment != "" {
+	if u, err := url.Parse(rawurl); err != nil || !u.IsAbs() || u.Hostname() == "" || u.Fragment != "" {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Redirect URI is invalid")
 	}
 	return nil

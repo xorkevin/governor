@@ -143,7 +143,6 @@ func TestPlaintextLogger(t *testing.T) {
 
 			klog.Sub(l.Logger, "sublog", nil).Log(context.Background(), klog.LevelInfo, "", 1, "test message 1", tc.Fields)
 
-			t.Log(logbuf.String())
 			matches := plaintextLogRegex.FindStringSubmatch(logbuf.String())
 			assert.NotNil(matches)
 

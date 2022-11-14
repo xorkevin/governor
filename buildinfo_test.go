@@ -12,7 +12,6 @@ func TestVCSBuildInfo(t *testing.T) {
 	assert := require.New(t)
 
 	info := ReadVCSBuildInfo()
-	t.Log(info)
 
 	assert.Equal(VCSBuildInfo{
 		GoVersion:   info.GoVersion,

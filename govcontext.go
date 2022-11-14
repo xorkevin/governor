@@ -182,7 +182,7 @@ func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 					return err
 				}
 				// magic error string from encoding/json
-				if strings.Contains(err.Error(), "json: unknown field") {
+				if strings.Contains(strings.ToLower(err.Error()), "json: unknown field") {
 					return ErrWithRes(err, http.StatusBadRequest, "", "Unknown field")
 				}
 				return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
@@ -309,6 +309,11 @@ func (c *Context) R() (http.ResponseWriter, *http.Request) {
 }
 
 const (
+	// WSProtocolVersion is the websocket subprotocol
+	//
+	// May not contain any separators as defined by [RFC6455 section 4.1].
+	//
+	// [RFC6455 section 4.1]: https://www.rfc-editor.org/rfc/rfc6455#section-4.1
 	WSProtocolVersion  = "xorkevin.dev-governor_ws_v1alpha1"
 	WSReadLimitDefault = 32768
 )
@@ -321,9 +326,9 @@ type (
 	}
 )
 
-func (c *Context) Websocket() (*Websocket, error) {
+func (c *Context) Websocket(protocols []string) (*Websocket, error) {
 	conn, err := websocket.Accept(c.w, c.r, &websocket.AcceptOptions{
-		Subprotocols:    []string{WSProtocolVersion},
+		Subprotocols:    protocols,
 		CompressionMode: websocket.CompressionContextTakeover,
 	})
 	if err != nil {
@@ -333,12 +338,12 @@ func (c *Context) Websocket() (*Websocket, error) {
 		c:    c,
 		conn: conn,
 	}
-	if conn.Subprotocol() != WSProtocolVersion {
-		w.Close(int(websocket.StatusPolicyViolation), "Invalid ws subprotocol")
-		return nil, ErrWithRes(nil, http.StatusBadRequest, "", "Invalid ws subprotocol")
-	}
 	w.SetReadLimit(WSReadLimitDefault)
 	return w, nil
+}
+
+func (w *Websocket) Subprotocol() string {
+	return w.conn.Subprotocol()
 }
 
 func (w *Websocket) SetReadLimit(limit int64) {
@@ -419,8 +424,7 @@ func (w *Websocket) Close(status int, reason string) {
 
 func (w *Websocket) CloseError(err error) {
 	var werr *ErrorWS
-	isError := errors.As(err, &werr)
-	if !isError {
+	if !errors.As(err, &werr) {
 		werr = &ErrorWS{
 			Status: int(websocket.StatusInternalError),
 			Reason: "Internal error",

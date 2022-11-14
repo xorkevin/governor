@@ -173,7 +173,7 @@ func encodeResMsg(channel string, v interface{}) ([]byte, error) {
 func decodeResMsg(b []byte) (string, []byte, error) {
 	var m responseMsgBytes
 	if err := kjson.Unmarshal(b, &m); err != nil {
-		return "", nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Malformed response msg")
+		return "", nil, kerrors.WithMsg(err, "Malformed response msg")
 	}
 	return m.Channel, m.Value, nil
 }
@@ -193,7 +193,7 @@ func encodeReqMsg(channel string, userid string, v []byte) ([]byte, error) {
 		Value:   v,
 	})
 	if err != nil {
-		return nil, governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to encode request msg")
+		return nil, kerrors.WithMsg(err, "Failed to encode request msg")
 	}
 	return b, nil
 }
