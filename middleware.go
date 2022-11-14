@@ -2,6 +2,7 @@ package governor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -266,7 +267,29 @@ type (
 		limit int64
 		next  http.Handler
 	}
+
+	maxBytesBodyReader struct {
+		body io.ReadCloser
+	}
 )
+
+// Read implements [io.Reader] on top of a [http.MaxBytesReader]
+func (r *maxBytesBodyReader) Read(p []byte) (int, error) {
+	n, err := r.body.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		var rerr *http.MaxBytesError
+		if errors.As(err, &rerr) {
+			return n, ErrWithRes(err, http.StatusRequestEntityTooLarge, "", "Request too large")
+		}
+		return n, ErrWithRes(err, http.StatusBadRequest, "", "Failed reading request body")
+	}
+	return n, err
+}
+
+// Close implements [io.Closer] on top of a [http.MaxBytesReader]
+func (r *maxBytesBodyReader) Close() error {
+	return r.body.Close()
+}
 
 func (m *middlewareBodyLimit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ContentLength of -1 is unknown
@@ -275,7 +298,9 @@ func (m *middlewareBodyLimit) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, m.limit)
+	r.Body = &maxBytesBodyReader{
+		body: http.MaxBytesReader(w, r.Body, m.limit),
+	}
 	m.next.ServeHTTP(w, r)
 }
 

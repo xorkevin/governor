@@ -151,11 +151,11 @@ func (c *Context) BasicAuth() (string, string, bool) {
 func (c *Context) ReadAllBody() ([]byte, error) {
 	data, err := io.ReadAll(c.r.Body)
 	if err != nil {
-		var rerr *http.MaxBytesError
+		var rerr *ErrorRes
 		if errors.As(err, &rerr) {
-			return nil, ErrWithRes(err, http.StatusRequestEntityTooLarge, "", "Request too large")
+			return nil, err
 		}
-		return nil, ErrWithRes(err, http.StatusBadRequest, "", "Failed reading request")
+		return nil, ErrWithRes(err, http.StatusBadRequest, "", "Failed reading request body")
 	}
 	return data, nil
 }
@@ -167,25 +167,31 @@ func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 	}
 	mediaType, _, err := mime.ParseMediaType(c.Header(headerContentType))
 	if err != nil {
-		return ErrWithRes(err, http.StatusBadRequest, "", "Invalid mime type")
+		return ErrWithRes(err, http.StatusBadRequest, "", "No media type")
 	}
 	switch mediaType {
 	case "application/json":
-		d := json.NewDecoder(c.r.Body)
-		if !allowUnknown {
-			d.DisallowUnknownFields()
-		}
-		if err := d.Decode(i); err != nil {
-			// magic error string from encoding/json
-			if strings.Contains(err.Error(), "json: unknown field") {
-				return ErrWithRes(err, http.StatusBadRequest, "", "Unknown field")
+		{
+			d := json.NewDecoder(c.r.Body)
+			if !allowUnknown {
+				d.DisallowUnknownFields()
 			}
-			return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
+			if err := d.Decode(i); err != nil {
+				var rerr *ErrorRes
+				if errors.As(err, &rerr) {
+					return err
+				}
+				// magic error string from encoding/json
+				if strings.Contains(err.Error(), "json: unknown field") {
+					return ErrWithRes(err, http.StatusBadRequest, "", "Unknown field")
+				}
+				return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
+			}
+			if d.More() {
+				return ErrWithRes(nil, http.StatusBadRequest, "", "Invalid JSON")
+			}
+			return nil
 		}
-		if d.More() {
-			return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
-		}
-		return nil
 	default:
 		return ErrWithRes(nil, http.StatusUnsupportedMediaType, "", "Unsupported media type")
 	}
@@ -196,7 +202,15 @@ func (c *Context) FormValue(key string) string {
 }
 
 func (c *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
-	return c.r.FormFile(key)
+	file, header, err := c.r.FormFile(key)
+	if err != nil {
+		var rerr *ErrorRes
+		if errors.As(err, &rerr) {
+			return nil, nil, err
+		}
+		return nil, nil, ErrWithRes(err, http.StatusBadRequest, "", "Invalid form file")
+	}
+	return file, header, nil
 }
 
 func (c *Context) WriteStatus(status int) {

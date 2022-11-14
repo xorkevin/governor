@@ -30,22 +30,87 @@ func TestContext(t *testing.T) {
 	stackRegex := regexp.MustCompile(`Stack trace \[\S+ \S+:\d+\]`)
 	fullStackRegex := regexp.MustCompile(`^(?:\S+\n\t\S+:\d+ \(0x[0-9a-f]+\)\n)+$`)
 
-	t.Run("Request", func(t *testing.T) {
+	generateTestContext := func(method, path string, body io.Reader) (*http.Request, *httptest.ResponseRecorder, *bytes.Buffer, *Context) {
+		logbuf := &bytes.Buffer{}
+		l := newLogger(Config{}, configLogger{
+			level:  "INFO",
+			output: "TEST",
+			writer: logbuf,
+		})
+		req := httptest.NewRequest(method, path, body)
+		rec := httptest.NewRecorder()
+		return req, rec, logbuf, NewContext(rec, req, l.Logger)
+	}
+
+	t.Run("ReadAllBody", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		_, _, _, c := generateTestContext(http.MethodPost, "/api/path", strings.NewReader("test body contents"))
+
+		body, err := c.ReadAllBody()
+		assert.NoError(err)
+		assert.Equal([]byte("test body contents"), body)
+	})
+
+	t.Run("Bind", func(t *testing.T) {
 		t.Parallel()
 
 		for _, tc := range []struct {
-			Test       string
-			Path       string
-			ReqHeaders map[string]string
-			Body       io.Reader
+			Test         string
+			ContentType  string
+			Body         string
+			AllowUnknown bool
+			Value        string
+			Error        string
 		}{
 			{
-				Test: "reads the entire body",
-				Path: "/api/path",
-				ReqHeaders: map[string]string{
-					headerContentType: "application/json",
-				},
-				Body: strings.NewReader("test body contents"),
+				Test:         "may allow unknown fields",
+				ContentType:  "application/json",
+				Body:         `{"ping":"pong","unknown":"value"}`,
+				AllowUnknown: true,
+				Value:        "pong",
+			},
+			{
+				Test:         "may disallow unknown fields",
+				ContentType:  "application/json",
+				Body:         `{"ping":"pong","unknown":"value"}`,
+				AllowUnknown: false,
+				Error:        "Unknown field",
+			},
+			{
+				Test:         "errors on no media type",
+				Body:         `{"ping":"pong","unknown":"value"}`,
+				AllowUnknown: true,
+				Error:        "No media type",
+			},
+			{
+				Test:         "errors on unsupported media type",
+				Body:         `{"ping":"pong","unknown":"value"}`,
+				ContentType:  "text/plain",
+				AllowUnknown: true,
+				Error:        "Unsupported media type",
+			},
+			{
+				Test:         "errors on empty body",
+				ContentType:  "application/json",
+				AllowUnknown: true,
+				Error:        "Empty request body",
+			},
+			{
+				Test:         "errors on malformed json",
+				ContentType:  "application/json",
+				Body:         `{bogus}`,
+				AllowUnknown: true,
+				Error:        "Invalid JSON",
+			},
+			{
+				Test:         "errors on too much json",
+				ContentType:  "application/json",
+				Body:         `{"ping":"pong"}{"more":"stuff"}`,
+				AllowUnknown: true,
+				Error:        "Invalid JSON",
 			},
 		} {
 			tc := tc
@@ -54,22 +119,40 @@ func TestContext(t *testing.T) {
 
 				assert := require.New(t)
 
-				logbuf := bytes.Buffer{}
-				l := newLogger(Config{}, configLogger{
-					level:  "INFO",
-					output: "TEST",
-					writer: &logbuf,
-				})
-				req := httptest.NewRequest(http.MethodPost, tc.Path, tc.Body)
-				for k, v := range tc.ReqHeaders {
-					req.Header.Set(k, v)
+				var reqbody io.Reader
+				if tc.Body != "" {
+					reqbody = strings.NewReader(tc.Body)
 				}
-				rec := httptest.NewRecorder()
-				c := NewContext(rec, req, l.Logger)
+				req, _, _, c := generateTestContext(http.MethodPost, "/api/path", reqbody)
+				if tc.ContentType != "" {
+					req.Header.Set(headerContentType, tc.ContentType)
+				}
 
-				assert.NotNil(c)
+				var body struct {
+					Ping string `json:"ping"`
+				}
+				err := c.Bind(&body, tc.AllowUnknown)
+				if tc.Error == "" {
+					assert.NoError(err)
+					assert.Equal(tc.Value, body.Ping)
+					return
+				}
+				assert.Error(err)
+				assert.Contains(err.Error(), tc.Error)
 			})
 		}
+	})
+
+	t.Run("FormValue", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		req, _, _, c := generateTestContext(http.MethodPost, "/api/path", strings.NewReader("ping=pong&other=value"))
+		req.Header.Set(headerContentType, "application/x-www-form-urlencoded")
+
+		assert.Equal("pong", c.FormValue("ping"))
+		assert.Equal("value", c.FormValue("other"))
 	})
 
 	t.Run("WriteError", func(t *testing.T) {
