@@ -19,12 +19,27 @@ import (
 )
 
 type (
+	wrappedReader struct {
+		r io.Reader
+	}
+)
+
+func (r wrappedReader) Read(p []byte) (int, error) {
+	return r.r.Read(p)
+}
+
+type (
 	valuer interface {
 		Value() interface{}
 	}
 
 	cloner interface {
 		CloneEmptyPointer() valuer
+	}
+
+	testServiceACheck struct {
+		RealIP string
+		Status int
 	}
 
 	testServiceA struct {
@@ -35,6 +50,7 @@ type (
 		ranSetup bool
 		ranStop  bool
 		healthy  *atomic.Bool
+		check    testServiceACheck
 	}
 
 	testServiceASecret struct {
@@ -48,9 +64,10 @@ type (
 	ctxKeyTestServiceA struct{}
 )
 
-func newTestServiceA() *testServiceA {
+func newTestServiceA(check testServiceACheck) *testServiceA {
 	return &testServiceA{
 		healthy: &atomic.Bool{},
+		check:   check,
 	}
 }
 
@@ -161,6 +178,7 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 	})
 	mr := NewMethodRouter(m)
 	mr.PostCtx("/ping/{rparam}", s.ping)
+	mr.PostCtx("/customroute", s.customroute)
 
 	s.ranInit = true
 
@@ -276,6 +294,25 @@ func (s *testServiceA) ping(c *Context) {
 	})
 }
 
+func (s *testServiceA) customroute(c *Context) {
+	if s.check.RealIP != "" {
+		if c.RealIP() == nil || c.RealIP().String() != s.check.RealIP {
+			c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid real ip"))
+			return
+		}
+	} else {
+		if c.RealIP() != nil {
+			c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Invalid real ip"))
+			return
+		}
+	}
+	if _, err := c.ReadAllBody(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(s.check.Status)
+}
+
 func (r testServiceAReq) CloneEmptyPointer() valuer {
 	return &testServiceAReq{}
 }
@@ -291,7 +328,20 @@ type (
 		ReqPath string `json:"http.reqpath"`
 		Route   string `json:"http.route"`
 	}
+
+	testLogErrorMsg struct {
+		Msg     string `json:"msg"`
+		ReqPath string `json:"http.reqpath"`
+	}
 )
+
+func (r testLogErrorMsg) CloneEmptyPointer() valuer {
+	return &testLogErrorMsg{}
+}
+
+func (r *testLogErrorMsg) Value() interface{} {
+	return *r
+}
 
 func TestServer(t *testing.T) {
 	t.Parallel()
@@ -317,6 +367,8 @@ func TestServer(t *testing.T) {
 			ResHeaders map[string]string
 			ResBody    cloner
 			Logs       []cloner
+			MaxReqSize string
+			Check      testServiceACheck
 		}{
 			{
 				Test:   "handles a request",
@@ -412,12 +464,96 @@ func TestServer(t *testing.T) {
 				RemoteAddr: "10.0.0.2:1234",
 				Status:     http.StatusOK,
 			},
+			{
+				Test:   "realip checks remote addr for trust",
+				Method: http.MethodPost,
+				Path:   "/api/servicea/customroute",
+				Route:  "/api/servicea/customroute",
+				ReqHeaders: map[string]string{
+					headerXForwardedFor: "192.168.0.3, 10.0.0.5, 10.0.0.4, 10.0.0.3",
+				},
+				RemoteAddr: "192.168.0.5:1234",
+				Status:     http.StatusOK,
+				Check: testServiceACheck{
+					RealIP: "192.168.0.5",
+					Status: http.StatusOK,
+				},
+			},
+			{
+				Test:       "realip falls back to remote addr",
+				Method:     http.MethodPost,
+				Path:       "/api/servicea/customroute",
+				Route:      "/api/servicea/customroute",
+				RemoteAddr: "10.0.0.5:1234",
+				Status:     http.StatusOK,
+				Check: testServiceACheck{
+					RealIP: "10.0.0.5",
+					Status: http.StatusOK,
+				},
+			},
+			{
+				Test:       "realip handles failure to parse remote addr",
+				Method:     http.MethodPost,
+				Path:       "/api/servicea/customroute",
+				Route:      "/api/servicea/customroute",
+				RemoteAddr: "bogus",
+				Status:     http.StatusOK,
+				Check: testServiceACheck{
+					RealIP: "",
+					Status: http.StatusOK,
+				},
+			},
+			{
+				Test:       "max bytes reader limits request size for content length",
+				Method:     http.MethodPost,
+				Path:       "/api/servicea/customroute",
+				Route:      "",
+				RemoteAddr: "192.168.0.3:1234",
+				Body:       strings.NewReader("This is a string that is longer than 16 bytes"),
+				Status:     http.StatusRequestEntityTooLarge,
+				Logs: []cloner{
+					testLogErrorMsg{
+						Msg:     "Error response",
+						ReqPath: "/api/servicea/customroute",
+					},
+				},
+				Check: testServiceACheck{
+					RealIP: "192.168.0.3",
+					Status: http.StatusOK,
+				},
+				MaxReqSize: "16B",
+			},
+			{
+				Test:       "max bytes reader limits request size",
+				Method:     http.MethodPost,
+				Path:       "/api/servicea/customroute",
+				Route:      "/api/servicea/customroute",
+				RemoteAddr: "192.168.0.3:1234",
+				Body:       wrappedReader{strings.NewReader("This is a string that is longer than 16 bytes")},
+				Status:     http.StatusRequestEntityTooLarge,
+				Logs: []cloner{
+					testLogErrorMsg{
+						Msg:     "Error response",
+						ReqPath: "/api/servicea/customroute",
+					},
+				},
+				Check: testServiceACheck{
+					RealIP: "192.168.0.3",
+					Status: http.StatusOK,
+				},
+				MaxReqSize: "16B",
+			},
 		} {
 			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 
 				var logbuf bytes.Buffer
+
+				maxreqsize := "2MB"
+				if tc.MaxReqSize != "" {
+					maxreqsize = tc.MaxReqSize
+				}
 
 				server := New(Opts{
 					Appname: "govtest",
@@ -432,6 +568,7 @@ func TestServer(t *testing.T) {
 http:
 	addr: ':8080'
 	baseurl: /api
+	maxreqsize: ` + maxreqsize + `
 cors:
 	alloworigins:
 		- 'http://localhost:3000'
@@ -472,7 +609,7 @@ data:
 
 				assert := require.New(t)
 
-				serviceA := newTestServiceA()
+				serviceA := newTestServiceA(tc.Check)
 				server.Register("servicea", "/servicea", serviceA)
 
 				assert.Equal("servicea", serviceA.name)
