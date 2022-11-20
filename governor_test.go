@@ -2,6 +2,8 @@ package governor
 
 import (
 	"bytes"
+	"compress/gzip"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -38,8 +41,9 @@ type (
 	}
 
 	testServiceACheck struct {
-		RealIP string
-		Status int
+		RealIP  string
+		Status  int
+		ResBody interface{}
 	}
 
 	testServiceA struct {
@@ -310,7 +314,12 @@ func (s *testServiceA) customroute(c *Context) {
 		c.WriteError(err)
 		return
 	}
-	c.WriteStatus(s.check.Status)
+
+	if s.check.ResBody != nil {
+		c.WriteJSON(s.check.Status, s.check.ResBody)
+	} else {
+		c.WriteStatus(s.check.Status)
+	}
 }
 
 func (r testServiceAReq) CloneEmptyPointer() valuer {
@@ -366,6 +375,7 @@ func TestServer(t *testing.T) {
 			Status     int
 			ResHeaders map[string]string
 			ResBody    cloner
+			Compressed string
 			Logs       []cloner
 			MaxReqSize string
 			Check      testServiceACheck
@@ -543,6 +553,81 @@ func TestServer(t *testing.T) {
 				},
 				MaxReqSize: "16B",
 			},
+			{
+				Test:   "compressor compresses gzip",
+				Method: http.MethodPost,
+				Path:   "/api/servicea/customroute",
+				Route:  "/api/servicea/customroute",
+				ReqHeaders: map[string]string{
+					headerAcceptEncoding: encodingKindGzip + ", " + encodingKindZlib,
+				},
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+				ResHeaders: map[string]string{
+					headerContentType: "application/json; charset=utf-8",
+				},
+				ResBody: testServiceAReq{
+					Ping: "this is the ping field that should be compressed",
+				},
+				Compressed: encodingKindGzip,
+				Check: testServiceACheck{
+					RealIP: "192.168.0.3",
+					Status: http.StatusOK,
+					ResBody: testServiceAReq{
+						Ping: "this is the ping field that should be compressed",
+					},
+				},
+			},
+			{
+				Test:   "compressor compresses zlib",
+				Method: http.MethodPost,
+				Path:   "/api/servicea/customroute",
+				Route:  "/api/servicea/customroute",
+				ReqHeaders: map[string]string{
+					headerAcceptEncoding: encodingKindZlib,
+				},
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+				ResHeaders: map[string]string{
+					headerContentType: "application/json; charset=utf-8",
+				},
+				ResBody: testServiceAReq{
+					Ping: "this is the ping field that should be compressed",
+				},
+				Compressed: encodingKindZlib,
+				Check: testServiceACheck{
+					RealIP: "192.168.0.3",
+					Status: http.StatusOK,
+					ResBody: testServiceAReq{
+						Ping: "this is the ping field that should be compressed",
+					},
+				},
+			},
+			{
+				Test:   "compressor compresses zstd",
+				Method: http.MethodPost,
+				Path:   "/api/servicea/customroute",
+				Route:  "/api/servicea/customroute",
+				ReqHeaders: map[string]string{
+					headerAcceptEncoding: encodingKindZstd + ", " + encodingKindGzip + ", " + encodingKindZlib,
+				},
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+				ResHeaders: map[string]string{
+					headerContentType: "application/json; charset=utf-8",
+				},
+				ResBody: testServiceAReq{
+					Ping: "this is the ping field that should be compressed",
+				},
+				Compressed: encodingKindZstd,
+				Check: testServiceACheck{
+					RealIP: "192.168.0.3",
+					Status: http.StatusOK,
+					ResBody: testServiceAReq{
+						Ping: "this is the ping field that should be compressed",
+					},
+				},
+			},
 		} {
 			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
@@ -682,8 +767,46 @@ data:
 				assert.Equal(tc.UserCookie, resUserCookieVal)
 
 				if tc.ResBody != nil {
+					resbody := rec.Body.Bytes()
+
+					if tc.Compressed != "" {
+						assert.Equal(tc.Compressed, rec.Result().Header.Get(headerContentEncoding))
+
+						switch tc.Compressed {
+						case encodingKindZstd:
+							{
+								r, err := zstd.NewReader(bytes.NewReader(resbody))
+								assert.NoError(err)
+								var b bytes.Buffer
+								_, err = io.Copy(&b, r)
+								assert.NoError(err)
+								resbody = b.Bytes()
+							}
+						case encodingKindGzip:
+							{
+								r, err := gzip.NewReader(bytes.NewReader(resbody))
+								assert.NoError(err)
+								var b bytes.Buffer
+								_, err = io.Copy(&b, r)
+								assert.NoError(err)
+								resbody = b.Bytes()
+							}
+						case encodingKindZlib:
+							{
+								r, err := zlib.NewReader(bytes.NewReader(resbody))
+								assert.NoError(err)
+								var b bytes.Buffer
+								_, err = io.Copy(&b, r)
+								assert.NoError(err)
+								resbody = b.Bytes()
+							}
+						default:
+							assert.FailNow("test encoding kind unsupported")
+						}
+					}
+
 					res := tc.ResBody.CloneEmptyPointer()
-					assert.NoError(json.Unmarshal(rec.Body.Bytes(), res))
+					assert.NoError(json.Unmarshal(resbody, res))
 					assert.Equal(tc.ResBody, res.Value())
 				}
 
