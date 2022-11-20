@@ -18,10 +18,6 @@ TEST_PACKAGE?=./...
 COVERAGE_OUT?=cover.out
 COVERAGE_HTML?=coverage.html
 
-ifneq ($(TEST_RACE),)
-	TEST_ARGS+=-race
-endif
-
 ifneq ($(TEST_COVER),)
 	TEST_ARGS+=-cover -covermode atomic -coverprofile $(COVERAGE_OUT)
 endif
@@ -29,7 +25,7 @@ endif
 .PHONY: test coverage cover
 
 test: ## Run tests
-	go test -trimpath -ldflags "-w -s" $(TEST_ARGS) $(TEST_PACKAGE)
+	go test -trimpath -ldflags "-w -s" -race $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## View test coverage
 	go tool cover -html $(COVERAGE_OUT) -o $(COVERAGE_HTML)
