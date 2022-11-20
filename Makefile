@@ -14,16 +14,25 @@ all: test ## Default
 
 TEST_ARGS?=
 TEST_PACKAGE?=./...
-COVERAGE?=cover.out
-COVERAGEHTML?=coverage.html
+
+COVERAGE_OUT?=cover.out
+COVERAGE_HTML?=coverage.html
+
+ifneq ($(TEST_RACE),)
+	TEST_ARGS+=-race
+endif
+
+ifneq ($(TEST_COVER),)
+	TEST_ARGS+=-cover -covermode atomic -coverprofile $(COVERAGE_OUT)
+endif
 
 .PHONY: test coverage cover
 
 test: ## Run tests
-	go test -race -trimpath -ldflags "-w -s" -cover -covermode atomic -coverprofile $(COVERAGE) $(TEST_ARGS) $(TEST_PACKAGE)
+	go test -trimpath -ldflags "-w -s" $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## View test coverage
-	go tool cover -html $(COVERAGE) -o $(COVERAGEHTML)
+	go tool cover -html $(COVERAGE_OUT) -o $(COVERAGE_HTML)
 
 cover: test coverage ## Create coverage report
 
