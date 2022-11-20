@@ -15,6 +15,7 @@ all: test ## Default
 TEST_ARGS?=
 TEST_PACKAGE?=./...
 COVERAGE?=cover.out
+COVERAGEHTML?=coverage.html
 
 .PHONY: test coverage cover
 
@@ -22,7 +23,7 @@ test: ## Run tests
 	go test -race -trimpath -ldflags "-w -s" -cover -covermode atomic -coverprofile $(COVERAGE) $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## View test coverage
-	go tool cover -html $(COVERAGE)
+	go tool cover -html $(COVERAGE) -o $(COVERAGEHTML)
 
 cover: test coverage ## Create coverage report
 
