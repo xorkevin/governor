@@ -79,7 +79,7 @@ func TestVaultSecretReader(t *testing.T) {
 		ConfigReader: strings.NewReader(tabReplacer.Replace(`
 http:
 	addr: ':8080'
-	baseurl: /api
+	basepath: /api
 vault:
 	addr: ` + vaultserver.URL + `
 	token: ` + rootToken + `

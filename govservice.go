@@ -112,7 +112,7 @@ func (s *Server) initServices(ctx context.Context) error {
 	s.log.Info(ctx, "Init all services begin", nil)
 	for _, i := range s.services {
 		l := klog.Sub(s.log.Logger, i.opt.name, klog.Fields{"gov.service": i.opt.name})
-		if err := i.r.Init(ctx, s.settings.reader(i.opt), l, s.router(s.settings.config.BaseURL+i.opt.url, l)); err != nil {
+		if err := i.r.Init(ctx, s.settings.reader(i.opt), l, s.router(s.settings.config.BasePath+i.opt.url, l)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.Fields{
 				"gov.service": i.opt.name,

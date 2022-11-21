@@ -339,7 +339,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Invalid msg size")
 	}
 	s.eventsize = int32(eventsize)
-	s.baseURL = r.Config().BaseURL
+	s.baseURL = r.Config().BasePath
 	s.authURL = s.baseURL + r.URL() + authRoutePrefix
 	s.authsettings.accessDuration, err = r.GetDuration("accessduration")
 	if err != nil {

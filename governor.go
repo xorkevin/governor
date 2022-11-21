@@ -173,9 +173,9 @@ func (s *Server) Init(ctx context.Context) error {
 		"gov.secrets.source": s.settings.vault.Info(),
 	})
 
-	s.initSetup(s.router(s.settings.config.BaseURL+"/setupz", s.log.Logger))
+	s.initSetup(s.router(s.settings.config.BasePath+"/setupz", s.log.Logger))
 	s.log.Info(ctx, "Init setup routes", nil)
-	s.initHealth(s.router(s.settings.config.BaseURL+"/healthz", s.log.Logger))
+	s.initHealth(s.router(s.settings.config.BasePath+"/healthz", s.log.Logger))
 	s.log.Info(ctx, "Init health routes", nil)
 
 	if err := s.initServices(ctx); err != nil {

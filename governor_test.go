@@ -103,7 +103,7 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 		Hostname: r.Config().Hostname,
 		Instance: r.Config().Instance,
 		Addr:     ":8080",
-		BaseURL:  "/api",
+		BasePath: "/api",
 	}) {
 		return kerrors.WithMsg(nil, "Invalid config")
 	}
@@ -821,7 +821,7 @@ func TestServer(t *testing.T) {
 					ConfigReader: strings.NewReader(tabReplacer.Replace(`
 http:
 	addr: ':8080'
-	baseurl: /api
+	basepath: /api
 	maxreqsize: ` + maxreqsize + `
 cors:
 	alloworigins:

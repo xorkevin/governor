@@ -172,7 +172,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	s.realm = r.GetStr("realm")
 	s.issuer = r.GetStr("issuer")
 	s.epauth = r.GetStr("epauthorize")
-	base := r.GetStr("ephost") + r.Config().BaseURL + r.URL()
+	base := r.GetStr("ephost") + r.Config().BasePath + r.URL()
 	s.eptoken = base + tokenRoute
 	s.epuserinfo = base + userinfoRoute
 	s.epjwks = base + jwksRoute

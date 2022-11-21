@@ -3,7 +3,7 @@ logger:
   output: STDERR
 http:
   addr: ':8080'
-  baseurl: /api
+  basepath: /api
   maxreqsize: 2M
   maxheadersize: 1M
   maxconnread: 5s

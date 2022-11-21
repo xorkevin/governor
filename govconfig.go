@@ -99,7 +99,7 @@ type (
 		Hostname string
 		Instance string
 		Addr     string
-		BaseURL  string
+		BasePath string
 	}
 
 	corsPathRule struct {
@@ -170,7 +170,7 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("logger.output", "STDERR")
 	v.SetDefault("banner", true)
 	v.SetDefault("http.addr", ":8080")
-	v.SetDefault("http.baseurl", "/")
+	v.SetDefault("http.basepath", "/")
 	v.SetDefault("http.maxreqsize", "2M")
 	v.SetDefault("http.maxheadersize", "1M")
 	v.SetDefault("http.maxconnread", "5s")
@@ -273,7 +273,7 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	s.logger.level = s.v.GetString("logger.level")
 	s.logger.output = s.v.GetString("logger.output")
 	s.config.Addr = s.v.GetString("http.addr")
-	s.config.BaseURL = s.v.GetString("http.baseurl")
+	s.config.BasePath = s.v.GetString("http.basepath")
 	s.httpServer.maxReqSize = s.v.GetString("http.maxreqsize")
 	s.httpServer.maxHeaderSize = s.v.GetString("http.maxheadersize")
 	s.httpServer.maxConnRead = s.v.GetString("http.maxconnread")

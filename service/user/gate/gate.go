@@ -90,7 +90,6 @@ type (
 		roles     role.Roles
 		apikeys   apikey.Apikeys
 		tokenizer token.Tokenizer
-		baseurl   string
 		realm     string
 		log       *klog.LevelLogger
 	}
@@ -163,7 +162,6 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
-	s.baseurl = r.Config().BaseURL
 	s.realm = r.GetStr("realm")
 	s.log.Info(ctx, "Loaded config", klog.Fields{
 		"gate.realm": s.realm,
