@@ -69,7 +69,7 @@ type (
 
 func (s *Server) setupServices(ctx context.Context, reqsecret string, rsetup ReqSetup) error {
 	var secret secretSetup
-	if err := s.settings.getSecret(ctx, "setupsecret", 0, &secret); err != nil {
+	if err := s.settings.getSecret(ctx, "setupsecret", 60, &secret); err != nil {
 		return kerrors.WithMsg(err, "Invalid setup secret")
 	}
 	if subtle.ConstantTimeCompare([]byte(reqsecret), []byte(secret.Secret)) != 1 {

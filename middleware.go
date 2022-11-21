@@ -178,6 +178,9 @@ func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	m.next.ServeHTTP(w2, c.Req())
 	duration := time.Since(start)
 	route := chi.RouteContext(c.Ctx()).RoutePattern()
+	if l := len(route); l > 1 && route[l-1] == '/' {
+		route = route[:l-1]
+	}
 	if w2.isWS() {
 		m.s.log.Info(c.Ctx(), "WS close", klog.Fields{
 			"http.ws":          true,

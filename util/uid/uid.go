@@ -51,22 +51,6 @@ func New(size int) (*UID, error) {
 	}, nil
 }
 
-// FromBytes creates a new UID from an existing byte slice
-func FromBytes(b []byte) *UID {
-	return &UID{
-		u: b,
-	}
-}
-
-// FromBase64 creates a new UID from a base64 encoded string
-func FromBase64(ustring string) (*UID, error) {
-	b, err := base64.RawURLEncoding.DecodeString(ustring)
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidUID, "Invalid uid string")
-	}
-	return FromBytes(b), nil
-}
-
 // Bytes returns the full raw bytes of an UID
 func (u *UID) Bytes() []byte {
 	return u.u

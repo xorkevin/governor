@@ -52,8 +52,8 @@ func (s *Server) initSetup(r Router) {
 			c.WriteError(err)
 			return
 		}
-		c.WriteJSON(http.StatusCreated, &ResSetup{
-			Version: s.settings.config.Version.Num,
+		c.WriteJSON(http.StatusOK, &ResSetup{
+			Version: s.settings.config.Version.String(),
 		})
 	})
 }

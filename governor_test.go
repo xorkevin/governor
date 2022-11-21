@@ -347,7 +347,7 @@ type (
 		Route   string `json:"http.route"`
 	}
 
-	testLogErrorMsg struct {
+	testLogMsg struct {
 		Msg     string `json:"msg"`
 		ReqPath string `json:"http.reqpath"`
 	}
@@ -362,11 +362,11 @@ type (
 	}
 )
 
-func (r testLogErrorMsg) CloneEmptyPointer() valuer {
-	return &testLogErrorMsg{}
+func (r testLogMsg) CloneEmptyPointer() valuer {
+	return &testLogMsg{}
 }
 
-func (r *testLogErrorMsg) Value() interface{} {
+func (r *testLogMsg) Value() interface{} {
 	return *r
 }
 
@@ -411,6 +411,7 @@ func TestServer(t *testing.T) {
 			ResBody    cloner
 			Compressed string
 			Logs       []cloner
+			Setup      bool
 			MaxReqSize string
 			Check      testServiceACheck
 		}{
@@ -556,7 +557,7 @@ func TestServer(t *testing.T) {
 				Body:       strings.NewReader("This is a string that is longer than 16 bytes"),
 				Status:     http.StatusRequestEntityTooLarge,
 				Logs: []cloner{
-					testLogErrorMsg{
+					testLogMsg{
 						Msg:     "Error response",
 						ReqPath: "/api/servicea/customroute",
 					},
@@ -576,7 +577,7 @@ func TestServer(t *testing.T) {
 				Body:       wrappedReader{strings.NewReader("This is a string that is longer than 16 bytes")},
 				Status:     http.StatusRequestEntityTooLarge,
 				Logs: []cloner{
-					testLogErrorMsg{
+					testLogMsg{
 						Msg:     "Error response",
 						ReqPath: "/api/servicea/customroute",
 					},
@@ -676,11 +677,11 @@ func TestServer(t *testing.T) {
 					Msg: "Internal Server Error",
 				},
 				Logs: []cloner{
-					testLogErrorMsg{
+					testLogMsg{
 						Msg:     "Panicked in http handler",
 						ReqPath: "/api/servicea/runpanic",
 					},
-					testLogErrorMsg{
+					testLogMsg{
 						Msg:     "Error response",
 						ReqPath: "/api/servicea/runpanic",
 					},
@@ -710,7 +711,7 @@ func TestServer(t *testing.T) {
 				RemoteAddr: "192.168.0.3:1234",
 				Status:     http.StatusInternalServerError,
 				Logs: []cloner{
-					testLogErrorMsg{
+					testLogMsg{
 						Msg:     "Failed readiness check",
 						ReqPath: "/api/healthz/ready",
 					},
@@ -728,6 +729,72 @@ func TestServer(t *testing.T) {
 				Status:     http.StatusOK,
 				ResBody: testVersionRes{
 					Version: "test-dev",
+				},
+			},
+			{
+				Test:       "sets up services",
+				Method:     http.MethodPost,
+				Path:       "/api/setupz",
+				Route:      "/api/setupz",
+				RemoteAddr: "192.168.0.3:1234",
+				Username:   "setup",
+				Password:   "setupsecret",
+				Status:     http.StatusOK,
+				ResBody: testVersionRes{
+					Version: "test-dev",
+				},
+				Logs: []cloner{
+					testLogMsg{
+						Msg:     "Setup all services begin",
+						ReqPath: "/api/setupz",
+					},
+					testLogMsg{
+						Msg:     "Setup service success",
+						ReqPath: "/api/setupz",
+					},
+					testLogMsg{
+						Msg:     "Setup all services complete",
+						ReqPath: "/api/setupz",
+					},
+				},
+				Setup: true,
+			},
+			{
+				Test:       "checks setup username",
+				Method:     http.MethodPost,
+				Path:       "/api/setupz",
+				Route:      "/api/setupz",
+				RemoteAddr: "192.168.0.3:1234",
+				Username:   "bogus",
+				Password:   "setupsecret",
+				Status:     http.StatusForbidden,
+				ResBody: testServiceAErrorRes{
+					Msg: "Invalid setup secret",
+				},
+				Logs: []cloner{
+					testLogMsg{
+						Msg:     "Error response",
+						ReqPath: "/api/setupz",
+					},
+				},
+			},
+			{
+				Test:       "checks setup password",
+				Method:     http.MethodPost,
+				Path:       "/api/setupz",
+				Route:      "/api/setupz",
+				RemoteAddr: "192.168.0.3:1234",
+				Username:   "setup",
+				Password:   "bogus",
+				Status:     http.StatusForbidden,
+				ResBody: testServiceAErrorRes{
+					Msg: "Invalid setup secret",
+				},
+				Logs: []cloner{
+					testLogMsg{
+						Msg:     "Error response",
+						ReqPath: "/api/setupz",
+					},
 				},
 			},
 		} {
@@ -911,6 +978,8 @@ data:
 					assert.NoError(json.Unmarshal(resbody, res))
 					assert.Equal(tc.ResBody, res.Value())
 				}
+
+				assert.Equal(tc.Setup, serviceA.ranSetup)
 
 				for _, i := range tc.Logs {
 					logEntry := i.CloneEmptyPointer()
