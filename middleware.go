@@ -403,7 +403,7 @@ func (w *compressorWriter) shouldCompress() (string, bool) {
 		return "", false
 	}
 	if _, ok := w.compressableMediaTypes[contentType]; !ok {
-		// incompressible mimetype
+		// incompressable mimetype
 		return "", false
 	}
 	encodingSet := map[string]struct{}{}
@@ -580,6 +580,41 @@ func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	m.next.ServeHTTP(w2, r)
 }
 
+var (
+	defaultAllowedEncodings = map[string]*sync.Pool{
+		encodingKindZstd: {
+			New: func() interface{} {
+				w, _ := zstd.NewWriter(nil,
+					// 3 is a good tradeoff of size to speed
+					zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
+					zstd.WithEncoderConcurrency(1),
+				)
+				return &pooledZstdWriter{
+					w: w,
+				}
+			},
+		},
+		encodingKindGzip: {
+			New: func() interface{} {
+				// 5 is a good tradeoff of size to speed
+				w, _ := gzip.NewWriterLevel(nil, 5)
+				return &pooledGzipWriter{
+					w: w,
+				}
+			},
+		},
+		encodingKindZlib: {
+			New: func() interface{} {
+				// 5 is a good tradeoff of size to speed
+				w, _ := zlib.NewWriterLevel(nil, 5)
+				return &pooledZlibWriter{
+					w: w,
+				}
+			},
+		},
+	}
+)
+
 func (s *Server) compressorMiddleware(next http.Handler) http.Handler {
 	compressibleTypes := s.settings.middleware.compressibleTypes
 	compressableMediaTypes := make(map[string]struct{}, len(compressibleTypes))
@@ -587,39 +622,8 @@ func (s *Server) compressorMiddleware(next http.Handler) http.Handler {
 		compressableMediaTypes[i] = struct{}{}
 	}
 	return &middlewareCompressor{
-		s: s,
-		allowedEncodings: map[string]*sync.Pool{
-			encodingKindZstd: {
-				New: func() interface{} {
-					w, _ := zstd.NewWriter(nil,
-						// 3 is a good tradeoff of size to speed
-						zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
-						zstd.WithEncoderConcurrency(1),
-					)
-					return &pooledZstdWriter{
-						w: w,
-					}
-				},
-			},
-			encodingKindGzip: {
-				New: func() interface{} {
-					// 5 is a good tradeoff of size to speed
-					w, _ := gzip.NewWriterLevel(nil, 5)
-					return &pooledGzipWriter{
-						w: w,
-					}
-				},
-			},
-			encodingKindZlib: {
-				New: func() interface{} {
-					// 5 is a good tradeoff of size to speed
-					w, _ := zlib.NewWriterLevel(nil, 5)
-					return &pooledZlibWriter{
-						w: w,
-					}
-				},
-			},
-		},
+		s:                      s,
+		allowedEncodings:       defaultAllowedEncodings,
 		compressableMediaTypes: compressableMediaTypes,
 		preferredEncodings:     s.settings.middleware.preferredEncodings,
 		next:                   next,
