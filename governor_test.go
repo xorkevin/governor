@@ -41,9 +41,10 @@ type (
 	}
 
 	testServiceACheck struct {
-		RealIP  string
-		Status  int
-		ResBody interface{}
+		RealIP   string
+		Status   int
+		ResBody  interface{}
+		NotReady bool
 	}
 
 	testServiceA struct {
@@ -205,6 +206,9 @@ func (s *testServiceA) Setup(ctx context.Context, req ReqSetup) error {
 }
 
 func (s *testServiceA) Health(ctx context.Context) error {
+	if s.check.NotReady {
+		return kerrors.WithMsg(nil, "Service A unhealthy")
+	}
 	if !s.healthy.Load() {
 		return kerrors.WithMsg(nil, "Service A unhealthy")
 	}
@@ -352,6 +356,10 @@ type (
 		Msg  string `json:"message"`
 		Code string `json:"code"`
 	}
+
+	testVersionRes struct {
+		Version string `json:"version"`
+	}
 )
 
 func (r testLogErrorMsg) CloneEmptyPointer() valuer {
@@ -367,6 +375,14 @@ func (r testServiceAErrorRes) CloneEmptyPointer() valuer {
 }
 
 func (r *testServiceAErrorRes) Value() interface{} {
+	return *r
+}
+
+func (r testVersionRes) CloneEmptyPointer() valuer {
+	return &testVersionRes{}
+}
+
+func (r *testVersionRes) Value() interface{} {
 	return *r
 }
 
@@ -668,6 +684,50 @@ func TestServer(t *testing.T) {
 						Msg:     "Error response",
 						ReqPath: "/api/servicea/runpanic",
 					},
+				},
+			},
+			{
+				Test:       "handles liveness check",
+				Method:     http.MethodGet,
+				Path:       "/api/healthz/live",
+				Route:      "/api/healthz/live",
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+			},
+			{
+				Test:       "handles readiness check",
+				Method:     http.MethodGet,
+				Path:       "/api/healthz/ready",
+				Route:      "/api/healthz/ready",
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+			},
+			{
+				Test:       "handles readiness check error",
+				Method:     http.MethodGet,
+				Path:       "/api/healthz/ready",
+				Route:      "/api/healthz/ready",
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusInternalServerError,
+				Logs: []cloner{
+					testLogErrorMsg{
+						Msg:     "Failed readiness check",
+						ReqPath: "/api/healthz/ready",
+					},
+				},
+				Check: testServiceACheck{
+					NotReady: true,
+				},
+			},
+			{
+				Test:       "handles version check",
+				Method:     http.MethodGet,
+				Path:       "/api/healthz/version",
+				Route:      "/api/healthz/version",
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusOK,
+				ResBody: testVersionRes{
+					Version: "test-dev",
 				},
 			},
 		} {

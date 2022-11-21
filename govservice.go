@@ -3,6 +3,7 @@ package governor
 import (
 	"context"
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 
 	"xorkevin.dev/kerrors"
@@ -101,7 +102,7 @@ func (s *Server) checkHealthServices(ctx context.Context) []error {
 	var k []error
 	for _, i := range s.services {
 		if err := i.r.Health(ctx); err != nil {
-			k = append(k, err)
+			k = append(k, kerrors.WithMsg(err, fmt.Sprintf("Failed healthcheck for service %s", i.opt.name)))
 		}
 	}
 	return k
