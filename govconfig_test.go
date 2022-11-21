@@ -3,11 +3,12 @@ package governor
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/go-hclog"
+	hclog "github.com/hashicorp/go-hclog"
 	kv "github.com/hashicorp/vault-plugin-secrets-kv"
 	vaultapi "github.com/hashicorp/vault/api"
 	vaulthttp "github.com/hashicorp/vault/http"
@@ -23,6 +24,10 @@ func TestVaultSecretReader(t *testing.T) {
 	tabReplacer := strings.NewReplacer("\t", "  ")
 
 	assert := require.New(t)
+
+	// prevent github.com/hashicorp/vault/sdk log at /physical/error.go
+	// "creating error injector"
+	hclog.DefaultOutput = io.Discard
 
 	vaultcore, _, rootToken := vault.TestCoreUnsealedWithConfig(t, &vault.CoreConfig{
 		Logger:          hclog.NewNullLogger(),

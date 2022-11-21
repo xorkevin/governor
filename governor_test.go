@@ -183,6 +183,7 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 	mr := NewMethodRouter(m)
 	mr.PostCtx("/ping/{rparam}", s.ping)
 	mr.PostCtx("/customroute", s.customroute)
+	mr.PostCtx("/runpanic", s.runpanic)
 
 	s.ranInit = true
 
@@ -322,6 +323,10 @@ func (s *testServiceA) customroute(c *Context) {
 	}
 }
 
+func (s *testServiceA) runpanic(c *Context) {
+	panic("test panic")
+}
+
 func (r testServiceAReq) CloneEmptyPointer() valuer {
 	return &testServiceAReq{}
 }
@@ -342,6 +347,11 @@ type (
 		Msg     string `json:"msg"`
 		ReqPath string `json:"http.reqpath"`
 	}
+
+	testServiceAErrorRes struct {
+		Msg  string `json:"message"`
+		Code string `json:"code"`
+	}
 )
 
 func (r testLogErrorMsg) CloneEmptyPointer() valuer {
@@ -349,6 +359,14 @@ func (r testLogErrorMsg) CloneEmptyPointer() valuer {
 }
 
 func (r *testLogErrorMsg) Value() interface{} {
+	return *r
+}
+
+func (r testServiceAErrorRes) CloneEmptyPointer() valuer {
+	return &testServiceAErrorRes{}
+}
+
+func (r *testServiceAErrorRes) Value() interface{} {
 	return *r
 }
 
@@ -625,6 +643,30 @@ func TestServer(t *testing.T) {
 					Status: http.StatusOK,
 					ResBody: testServiceAReq{
 						Ping: "this is the ping field that should be compressed",
+					},
+				},
+			},
+			{
+				Test:       "recoverer catches errors",
+				Method:     http.MethodPost,
+				Path:       "/api/servicea/runpanic",
+				Route:      "/api/servicea/runpanic",
+				RemoteAddr: "192.168.0.3:1234",
+				Status:     http.StatusInternalServerError,
+				ResHeaders: map[string]string{
+					headerContentType: "application/json; charset=utf-8",
+				},
+				ResBody: testServiceAErrorRes{
+					Msg: "Internal Server Error",
+				},
+				Logs: []cloner{
+					testLogErrorMsg{
+						Msg:     "Panicked in http handler",
+						ReqPath: "/api/servicea/runpanic",
+					},
+					testLogErrorMsg{
+						Msg:     "Error response",
+						ReqPath: "/api/servicea/runpanic",
 					},
 				},
 			},
