@@ -30,23 +30,33 @@ type (
 
 	// Client is a server client
 	Client struct {
-		clients []clientDef
-		inj     Injector
-		cmds    []*cmdTree
-		config  *ClientConfig
-		log     *klog.LevelLogger
-		stdout  io.Writer
-		stdin   *bufio.Reader
-		httpc   *http.Client
-		flags   ClientFlags
+		clients  []clientDef
+		inj      Injector
+		cmds     []*cmdTree
+		settings *clientSettings
+		stdout   io.Writer
+		stdin    *bufio.Reader
+		log      *klog.LevelLogger
+		httpc    *HTTPFetcher
+		flags    ClientFlags
+	}
+
+	clientSettings struct {
+		v            *viper.Viper
+		configReader io.Reader
+		config       ClientConfig
+		logger       configLogger
+		httpClient   configHTTPClient
+	}
+
+	configHTTPClient struct {
+		baseurl string
+		timeout time.Duration
 	}
 
 	// ClientConfig is the client config
 	ClientConfig struct {
-		config    *viper.Viper
-		logger    configLogger
-		LogWriter io.Writer
-		Addr      string
+		BaseURL string
 	}
 
 	clientDef struct {
@@ -103,17 +113,15 @@ type (
 	}
 
 	HTTPClient interface {
-		NewRequest(method, path string, body io.Reader) (*http.Request, error)
-		NewJSONRequest(method, path string, data interface{}) (*http.Request, error)
-		DoRequest(ctx context.Context, r *http.Request) (*http.Response, error)
-		DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error)
-		DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error)
+		Req(method, path string, body io.Reader) (*http.Request, error)
+		Do(ctx context.Context, r *http.Request) (*http.Response, error)
+		Log() klog.Logger
 	}
 
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
-		Init(gc ClientConfig, r ConfigValueReader, log klog.Logger, cli CLI, m HTTPClient) error
+		Init(r ClientConfigReader, log klog.Logger, cli CLI, m HTTPClient) error
 	}
 
 	cmdRegistrar struct {
@@ -125,10 +133,10 @@ type (
 // NewClient creates a new Client
 func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
 	v := viper.New()
-	v.SetDefault("addr", "http://localhost:8080/api")
-	v.SetDefault("timeout", "5s")
-	v.SetDefault("loglevel", "INFO")
-	v.SetDefault("logoutput", "STDERR")
+	v.SetDefault("logger.level", "INFO")
+	v.SetDefault("logger.output", "STDERR")
+	v.SetDefault("http.addr", "http://localhost:8080/api")
+	v.SetDefault("http.timeout", "15s")
 
 	v.SetConfigName(opts.ClientDefault)
 	v.SetConfigType("yaml")
@@ -144,14 +152,11 @@ func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
 
 	return &Client{
 		inj: newInjector(context.Background()),
-		config: &ClientConfig{
-			config: v,
+		settings: &clientSettings{
+			v: v,
 		},
 		stdout: stdout,
 		stdin:  bufio.NewReader(stdin),
-		httpc: &http.Client{
-			Timeout: 15 * time.Second,
-		},
 	}
 }
 
@@ -163,11 +168,6 @@ func (f CmdHandlerFunc) Handle(args []string) error {
 // SetFlags sets Client flags
 func (c *Client) SetFlags(flags ClientFlags) {
 	c.flags = flags
-}
-
-// GetConfig returns the client config
-func (c *Client) GetConfig() ClientConfig {
-	return *c.config
 }
 
 func (c *Client) addCmd(cmd *cmdTree) {
@@ -220,7 +220,7 @@ func (c *Client) Register(name string, url string, cmd *CmdDesc, r ServiceClient
 	}
 	r.Register(c.inj, &configRegistrar{
 		prefix: name,
-		v:      c.config.config,
+		v:      c.settings.v,
 	}, cr)
 }
 
@@ -231,34 +231,18 @@ func (c *Client) GetCmds() []*cmdTree {
 
 // Init initializes the Client by reading a config
 func (c *Client) Init() error {
-	if file := c.flags.ConfigFile; file != "" {
-		c.config.config.SetConfigFile(file)
-	}
-	if err := c.config.config.ReadInConfig(); err != nil {
-		return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+	if err := c.settings.init(c.flags); err != nil {
+		return err
 	}
 
-	c.config.Addr = c.config.config.GetString("addr")
-	if t, err := time.ParseDuration(c.config.config.GetString("timeout")); err == nil {
-		c.httpc.Timeout = t
-	} else {
-		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
-	}
+	c.log = newPlaintextLogger(c.settings.logger)
 
-	c.config.logger.level = c.config.config.GetString("loglevel")
-	c.config.logger.output = c.config.config.GetString("logoutput")
-	c.log = newPlaintextLogger(*c.config)
+	httpc := newHTTPClient(c.settings.httpClient, c.log.Logger)
+	c.httpc = NewHTTPFetcher(httpc)
 
 	for _, i := range c.clients {
 		l := klog.Sub(c.log.Logger, i.opt.name, nil)
-		if err := i.r.Init(*c.config, &configValueReader{
-			opt: i.opt,
-			v:   c.config.config,
-		}, l, c, &httpClient{
-			log:   c.log,
-			httpc: c.httpc,
-			base:  c.config.Addr + i.opt.url,
-		}); err != nil {
+		if err := i.r.Init(c.settings.reader(i.opt), l, c, httpc.subclient(i.opt.url, l)); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
@@ -341,8 +325,26 @@ func (e errorServerRes) Error() string {
 	return "Error server response"
 }
 
-// NewRequest creates a new request
-func (c *httpClient) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
+func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
+	return &httpClient{
+		log: klog.NewLevelLogger(klog.Sub(l, "httpc", nil)),
+		httpc: &http.Client{
+			Timeout: c.timeout,
+		},
+		base: c.baseurl,
+	}
+}
+
+func (c *httpClient) subclient(path string, l klog.Logger) HTTPClient {
+	return &httpClient{
+		log:   klog.NewLevelLogger(klog.Sub(l, "httpc", nil)),
+		httpc: c.httpc,
+		base:  c.base + path,
+	}
+}
+
+// Req creates a new request
+func (c *httpClient) Req(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.base+path, body)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Malformed request")
@@ -350,23 +352,11 @@ func (c *httpClient) NewRequest(method, path string, body io.Reader) (*http.Requ
 	return req, nil
 }
 
-// NewJSONRequest creates a new json request
-func (c *httpClient) NewJSONRequest(method, path string, data interface{}) (*http.Request, error) {
-	b, err := kjson.Marshal(data)
-	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
-	}
-	body := bytes.NewReader(b)
-	req, err := c.NewRequest(method, path, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set(headerContentType, "application/json")
-	return req, nil
-}
-
-// DoRequest sends a request to the server and returns its response
-func (c *httpClient) DoRequest(ctx context.Context, r *http.Request) (*http.Response, error) {
+// Do sends a request to the server and returns its response
+func (c *httpClient) Do(ctx context.Context, r *http.Request) (*http.Response, error) {
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.httpc.url": r.URL.String(),
+	})
 	res, err := c.httpc.Do(r)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
@@ -391,9 +381,61 @@ func (c *httpClient) DoRequest(ctx context.Context, r *http.Request) (*http.Resp
 	return res, nil
 }
 
-// DoRequestNoContent sends a request to the server and discards the response body
-func (c *httpClient) DoRequestNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
-	res, err := c.DoRequest(ctx, r)
+func (c *httpClient) Log() klog.Logger {
+	return c.log.Logger
+}
+
+type (
+	// HTTPFetcher provides convenience HTTP client functionality
+	HTTPFetcher struct {
+		HTTPClient HTTPClient
+		log        *klog.LevelLogger
+	}
+)
+
+// NewHTTPFetcher creates a new [*HTTPFetcher]
+func NewHTTPFetcher(c HTTPClient) *HTTPFetcher {
+	return &HTTPFetcher{
+		HTTPClient: c,
+		log:        klog.NewLevelLogger(c.Log()),
+	}
+}
+
+// Req calls [HTTPClient] Req
+func (c *HTTPFetcher) Req(method, path string, body io.Reader) (*http.Request, error) {
+	return c.HTTPClient.Req(method, path, body)
+}
+
+// Do calls [HTTPClient] Do
+func (c *HTTPFetcher) Do(ctx context.Context, r *http.Request) (*http.Response, error) {
+	return c.HTTPClient.Do(ctx, r)
+}
+
+func (c *HTTPFetcher) Log() klog.Logger {
+	return c.log.Logger
+}
+
+// ReqJSON creates a new json request
+func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Request, error) {
+	b, err := kjson.Marshal(data)
+	if err != nil {
+		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
+	}
+	body := bytes.NewReader(b)
+	req, err := c.HTTPClient.Req(method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set(headerContentType, "application/json")
+	return req, nil
+}
+
+// DoNoContent sends a request to the server and discards the response body
+func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.httpc.url": r.URL.String(),
+	})
+	res, err := c.HTTPClient.Do(ctx, r)
 	if err != nil {
 		return res, err
 	}
@@ -410,9 +452,12 @@ func (c *httpClient) DoRequestNoContent(ctx context.Context, r *http.Request) (*
 	return res, nil
 }
 
-// DoRequestJSON sends a request to the server and decodes response json
-func (c *httpClient) DoRequestJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
-	res, err := c.DoRequest(ctx, r)
+// DoJSON sends a request to the server and decodes response json
+func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
+	ctx = klog.WithFields(ctx, klog.Fields{
+		"gov.httpc.url": r.URL.String(),
+	})
+	res, err := c.HTTPClient.Do(ctx, r)
 	if err != nil {
 		return res, false, err
 	}
@@ -453,18 +498,13 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 	if err := setupSecretValid(secret); err != nil {
 		return nil, err
 	}
-	httpc := httpClient{
-		log:   c.log,
-		httpc: c.httpc,
-		base:  c.config.Addr,
-	}
 	body := &ResSetup{}
-	r, err := httpc.NewRequest(http.MethodPost, "/setupz", nil)
+	r, err := c.httpc.Req(http.MethodPost, "/setupz", nil)
 	if err != nil {
 		return nil, err
 	}
 	r.SetBasicAuth("setup", secret)
-	_, decoded, err := httpc.DoRequestJSON(ctx, r, body)
+	_, decoded, err := c.httpc.DoJSON(ctx, r, body)
 	if err != nil {
 		return nil, err
 	}
@@ -475,4 +515,90 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 		"version": body.Version,
 	})
 	return body, nil
+}
+
+func (s *clientSettings) init(flags ClientFlags) error {
+	if file := flags.ConfigFile; file != "" {
+		s.v.SetConfigFile(file)
+	}
+	if s.configReader != nil {
+		if err := s.v.ReadConfig(s.configReader); err != nil {
+			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+		}
+	} else {
+		if err := s.v.ReadInConfig(); err != nil {
+			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+		}
+	}
+
+	s.logger.level = s.v.GetString("logger.level")
+	s.logger.output = s.v.GetString("logger.output")
+
+	s.config.BaseURL = s.v.GetString("http.baseurl")
+	s.httpClient.baseurl = s.config.BaseURL
+	if t, err := time.ParseDuration(s.v.GetString("http.timeout")); err == nil {
+		s.httpClient.timeout = t
+	} else {
+		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
+	}
+
+	return nil
+}
+
+type (
+	ClientConfigReader interface {
+		Config() ClientConfig
+		ConfigValueReader
+	}
+
+	clientConfigReader struct {
+		s *clientSettings
+		v *configValueReader
+	}
+)
+
+func (r *clientConfigReader) Config() ClientConfig {
+	return r.s.config
+}
+
+func (r *clientConfigReader) Name() string {
+	return r.v.Name()
+}
+
+func (r *clientConfigReader) URL() string {
+	return r.v.URL()
+}
+
+func (r *clientConfigReader) GetBool(key string) bool {
+	return r.v.GetBool(key)
+}
+
+func (r *clientConfigReader) GetInt(key string) int {
+	return r.v.GetInt(key)
+}
+
+func (r *clientConfigReader) GetDuration(key string) (time.Duration, error) {
+	return r.v.GetDuration(key)
+}
+
+func (r *clientConfigReader) GetStr(key string) string {
+	return r.v.GetStr(key)
+}
+
+func (r *clientConfigReader) GetStrSlice(key string) []string {
+	return r.v.GetStrSlice(key)
+}
+
+func (r *clientConfigReader) Unmarshal(key string, val interface{}) error {
+	return r.v.Unmarshal(key, val)
+}
+
+func (s *clientSettings) reader(opt serviceOpt) ClientConfigReader {
+	return &clientConfigReader{
+		s: s,
+		v: &configValueReader{
+			opt: opt,
+			v:   s.v,
+		},
+	}
 }

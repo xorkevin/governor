@@ -133,12 +133,10 @@ func TestPlaintextLogger(t *testing.T) {
 			assert := require.New(t)
 
 			logbuf := bytes.Buffer{}
-			l := newPlaintextLogger(ClientConfig{
-				logger: configLogger{
-					level:  tc.Level,
-					output: "TEST",
-				},
-				LogWriter: &logbuf,
+			l := newPlaintextLogger(configLogger{
+				level:  tc.Level,
+				output: "TEST",
+				writer: &logbuf,
 			})
 
 			klog.Sub(l.Logger, "sublog", nil).Log(context.Background(), klog.LevelInfo, "", 1, "test message 1", tc.Fields)

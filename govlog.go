@@ -147,9 +147,9 @@ func (s *zerologSerializer) Log(level klog.Level, t, mt time.Time, caller *klog.
 		Msg(msg)
 }
 
-func newPlaintextLogger(c ClientConfig) *klog.LevelLogger {
+func newPlaintextLogger(c configLogger) *klog.LevelLogger {
 	return klog.NewLevelLogger(klog.New(
-		klog.OptMinLevelStr(c.logger.level),
+		klog.OptMinLevelStr(c.level),
 		klog.OptSerializer(newPlaintextSerializer(c)),
 	))
 }
@@ -160,10 +160,10 @@ type (
 	}
 )
 
-func newPlaintextSerializer(c ClientConfig) klog.Serializer {
-	w := c.LogWriter
+func newPlaintextSerializer(c configLogger) klog.Serializer {
+	w := c.writer
 	if w == nil {
-		w = logOutputFromString(c.logger.output)
+		w = logOutputFromString(c.output)
 	}
 	return &plaintextSerializer{
 		w: klog.NewSyncWriter(w),

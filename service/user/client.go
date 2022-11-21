@@ -19,7 +19,7 @@ type (
 		gate          gate.Client
 		log           *klog.LevelLogger
 		cli           governor.CLI
-		http          governor.HTTPClient
+		httpc         *governor.HTTPFetcher
 		addAdminReq   reqAddAdmin
 		addAdminFlags addAdminFlags
 	}
@@ -95,10 +95,10 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.addAdmin))
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.log = klog.NewLevelLogger(log)
 	c.cli = cli
-	c.http = m
+	c.httpc = governor.NewHTTPFetcher(m)
 	return nil
 }
 
@@ -129,7 +129,7 @@ func (c *CmdClient) addAdmin(args []string) error {
 	if err := c.addAdminReq.valid(); err != nil {
 		return err
 	}
-	r, err := c.http.NewJSONRequest(http.MethodPost, "/user/admin", c.addAdminReq)
+	r, err := c.httpc.ReqJSON(http.MethodPost, "/user/admin", c.addAdminReq)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")
 	}
@@ -137,7 +137,7 @@ func (c *CmdClient) addAdmin(args []string) error {
 		return kerrors.WithMsg(err, "Failed to add systoken")
 	}
 	var body resUserUpdate
-	_, decoded, err := c.http.DoRequestJSON(context.Background(), r, &body)
+	_, decoded, err := c.httpc.DoJSON(context.Background(), r, &body)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed adding admin")
 	}

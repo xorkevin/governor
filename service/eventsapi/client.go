@@ -19,7 +19,7 @@ type (
 		gate         gate.Client
 		log          *klog.LevelLogger
 		cli          governor.CLI
-		http         governor.HTTPClient
+		httpc        *governor.HTTPFetcher
 		publishFlags publishFlags
 	}
 
@@ -65,10 +65,10 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.publishEvent))
 }
 
-func (c *CmdClient) Init(gc governor.ClientConfig, r governor.ConfigValueReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.log = klog.NewLevelLogger(log)
 	c.cli = cli
-	c.http = m
+	c.httpc = governor.NewHTTPFetcher(m)
 	return nil
 }
 
@@ -85,14 +85,14 @@ func (c *CmdClient) publishEvent(args []string) error {
 	}
 	var q url.Values
 	q.Add("subject", c.publishFlags.subject)
-	r, err := c.http.NewRequest(http.MethodPost, "/pubsub/publish?"+q.Encode(), &payload)
+	r, err := c.httpc.Req(http.MethodPost, "/pubsub/publish?"+q.Encode(), &payload)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create events api requeust")
 	}
 	if err := c.gate.AddSysToken(r); err != nil {
 		return kerrors.WithMsg(err, "Failed to add systoken")
 	}
-	if _, err := c.http.DoRequestNoContent(context.Background(), r); err != nil {
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
 		return kerrors.WithMsg(err, "Failed publishing event")
 	}
 	c.log.Info(context.Background(), "Published event", nil)
