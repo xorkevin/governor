@@ -25,7 +25,7 @@ type (
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
 		log           *klog.LevelLogger
-		cli           governor.CLI
+		cli           *governor.CLITerm
 		sysTokenFlags sysTokenFlags
 	}
 
@@ -98,7 +98,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
 	c.log = klog.NewLevelLogger(log)
-	c.cli = cli
+	c.cli = governor.NewCLITerm(cli)
 	return nil
 }
 

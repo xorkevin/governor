@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/writefs"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -30,15 +30,15 @@ type (
 
 	// Client is a server client
 	Client struct {
-		clients  []clientDef
-		inj      Injector
-		cmds     []*cmdTree
-		settings *clientSettings
-		stdout   io.Writer
-		stdin    *bufio.Reader
-		log      *klog.LevelLogger
-		httpc    *HTTPFetcher
-		flags    ClientFlags
+		clients   []clientDef
+		inj       Injector
+		cmds      []*cmdTree
+		settings  *clientSettings
+		configCLI *CLIConfig
+		cli       *CLITerm
+		log       *klog.LevelLogger
+		httpc     *HTTPFetcher
+		flags     ClientFlags
 	}
 
 	clientSettings struct {
@@ -103,21 +103,6 @@ type (
 		Group(cmd CmdDesc) CmdRegistrar
 	}
 
-	CLI interface {
-		Stdout() io.Writer
-		Stdin() io.Reader
-		ReadFile(name string) ([]byte, error)
-		WriteFile(name string, data []byte, mode fs.FileMode) error
-		ReadString(delim byte) (string, error)
-		ReadPassword() (string, error)
-	}
-
-	HTTPClient interface {
-		Req(method, path string, body io.Reader) (*http.Request, error)
-		Do(ctx context.Context, r *http.Request) (*http.Response, error)
-		Log() klog.Logger
-	}
-
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
@@ -131,7 +116,7 @@ type (
 )
 
 // NewClient creates a new Client
-func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
+func NewClient(opts Opts, cliConfig *CLIConfig) *Client {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("logger.output", "STDERR")
@@ -155,8 +140,7 @@ func NewClient(opts Opts, stdout io.Writer, stdin io.Reader) *Client {
 		settings: &clientSettings{
 			v: v,
 		},
-		stdout: stdout,
-		stdin:  bufio.NewReader(stdin),
+		configCLI: cliConfig,
 	}
 }
 
@@ -236,60 +220,203 @@ func (c *Client) Init() error {
 	}
 
 	c.log = newPlaintextLogger(c.settings.logger)
-
+	c.cli = NewCLITerm(newCLIClient(c.configCLI, c.log.Logger))
 	httpc := newHTTPClient(c.settings.httpClient, c.log.Logger)
 	c.httpc = NewHTTPFetcher(httpc)
 
 	for _, i := range c.clients {
 		l := klog.Sub(c.log.Logger, i.opt.name, nil)
-		if err := i.r.Init(c.settings.reader(i.opt), l, c, httpc.subclient(i.opt.url, l)); err != nil {
+		if err := i.r.Init(c.settings.reader(i.opt), l, c.cli.CLI, httpc.subclient(i.opt.url, l)); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
 	return nil
 }
 
-func (c *Client) Stdout() io.Writer {
-	return c.stdout
+type (
+	CLI interface {
+		Stdin() io.Reader
+		Stdout() io.Writer
+		Stderr() io.Writer
+		ReadLine() (string, error)
+		ReadPassword() (string, error)
+		FS() fs.FS
+		WFS() writefs.FS
+		Log() klog.Logger
+	}
+
+	CLIConfig struct {
+		StdinFd int
+		Stdin   io.Reader
+		Stdout  io.Writer
+		Stderr  io.Writer
+		Fsys    fs.FS
+		WFsys   writefs.FS
+	}
+
+	cliClient struct {
+		log     *klog.LevelLogger
+		stdinfd int
+		stdin   *bufio.Reader
+		stdout  io.Writer
+		stderr  io.Writer
+		fsys    fs.FS
+		wfsys   writefs.FS
+	}
+)
+
+func newCLIClient(config *CLIConfig, l klog.Logger) CLI {
+	if config == nil {
+		config = &CLIConfig{
+			StdinFd: int(os.Stdin.Fd()),
+			Stdin:   os.Stdin,
+			Stdout:  os.Stdout,
+			Stderr:  os.Stderr,
+			Fsys:    os.DirFS("."),
+			WFsys:   writefs.NewOSFS("."),
+		}
+	}
+	return &cliClient{
+		log:     klog.NewLevelLogger(klog.Sub(l, "cli", nil)),
+		stdinfd: config.StdinFd,
+		stdin:   bufio.NewReader(config.Stdin),
+		stdout:  config.Stdout,
+		stderr:  config.Stderr,
+		fsys:    config.Fsys,
+		wfsys:   config.WFsys,
+	}
 }
 
-func (c *Client) Stdin() io.Reader {
+func (c *cliClient) Stdin() io.Reader {
 	return c.stdin
 }
 
-func (c *Client) ReadFile(name string) ([]byte, error) {
-	b, err := os.ReadFile(name)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to read file")
-	}
-	return b, nil
+func (c *cliClient) Stdout() io.Writer {
+	return c.stdout
 }
 
-func (c *Client) WriteFile(name string, data []byte, mode fs.FileMode) error {
-	if err := os.WriteFile(name, data, mode); err != nil {
-		return kerrors.WithMsg(err, "Failed to write file")
-	}
-	return nil
+func (c *cliClient) Stderr() io.Writer {
+	return c.stderr
 }
 
-func (c *Client) ReadString(delim byte) (string, error) {
-	s, err := c.stdin.ReadString(delim)
+func (c *cliClient) ReadLine() (string, error) {
+	s, err := c.stdin.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		err = kerrors.WithMsg(err, "Failed to read stdin")
 	}
 	return s, err
 }
 
-func (c *Client) ReadPassword() (string, error) {
-	s, err := term.ReadPassword(0)
+func (c *cliClient) ReadPassword() (string, error) {
+	s, err := term.ReadPassword(c.stdinfd)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to read password")
 	}
-	fmt.Println()
+	if _, err := io.WriteString(c.stdout, "\n"); err != nil {
+		return "", kerrors.WithMsg(err, "Failed to write newline")
+	}
 	return string(s), nil
 }
 
+func (c *cliClient) FS() fs.FS {
+	return c.fsys
+}
+
+func (c *cliClient) WFS() writefs.FS {
+	return c.wfsys
+}
+
+func (c *cliClient) Log() klog.Logger {
+	return c.log.Logger
+}
+
 type (
+	// CLITerm provides convenience CLI functionality
+	CLITerm struct {
+		CLI CLI
+		log *klog.LevelLogger
+	}
+)
+
+func NewCLITerm(cli CLI) *CLITerm {
+	return &CLITerm{
+		CLI: cli,
+		log: klog.NewLevelLogger(cli.Log()),
+	}
+}
+
+func (c *CLITerm) Stdin() io.Reader {
+	return c.CLI.Stdin()
+}
+
+func (c *CLITerm) Stdout() io.Writer {
+	return c.CLI.Stdout()
+}
+
+func (c *CLITerm) Stderr() io.Writer {
+	return c.CLI.Stderr()
+}
+
+func (c *CLITerm) ReadLine() (string, error) {
+	return c.CLI.ReadLine()
+}
+
+func (c *CLITerm) ReadPassword() (string, error) {
+	return c.CLI.ReadPassword()
+}
+
+func (c *CLITerm) FS() fs.FS {
+	return c.CLI.FS()
+}
+
+func (c *CLITerm) WFS() writefs.FS {
+	return c.CLI.WFS()
+}
+
+func (c *CLITerm) Log() klog.Logger {
+	return c.log.Logger
+}
+
+func (c *CLITerm) ReadFile(name string) ([]byte, error) {
+	f, err := c.CLI.FS().Open(name)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to open file")
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"), nil)
+		}
+	}()
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to read file")
+	}
+	return b, nil
+}
+
+func (c *CLITerm) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	f, err := c.CLI.WFS().OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to open file")
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"), nil)
+		}
+	}()
+	if _, err := f.Write(data); err != nil {
+		return kerrors.WithMsg(err, "Failed to write file")
+	}
+	return nil
+}
+
+type (
+	HTTPClient interface {
+		Req(method, path string, body io.Reader) (*http.Request, error)
+		Do(ctx context.Context, r *http.Request) (*http.Response, error)
+		Log() klog.Logger
+	}
+
 	httpClient struct {
 		log   *klog.LevelLogger
 		httpc *http.Client
@@ -490,7 +617,7 @@ func isStatusDecodable(status int) bool {
 func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 	if secret == "-" {
 		var err error
-		secret, err = c.ReadString('\n')
+		secret, err = c.cli.ReadLine()
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, kerrors.WithMsg(err, "Failed reading setup secret")
 		}

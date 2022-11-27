@@ -26,7 +26,7 @@ type (
 		once         *ksync.Once[clientConfig]
 		systokenonce *ksync.Once[string]
 		config       governor.ConfigValueReader
-		cli          governor.CLI
+		cli          *governor.CLITerm
 	}
 
 	ctxKeyClient struct{}
@@ -61,7 +61,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
 	c.config = r
-	c.cli = cli
+	c.cli = governor.NewCLITerm(cli)
 	return nil
 }
 

@@ -105,7 +105,7 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli gov
 func (c *CmdClient) addAdmin(args []string) error {
 	if c.addAdminReq.Password == "-" {
 		var err error
-		c.addAdminReq.Password, err = c.cli.ReadString('\n')
+		c.addAdminReq.Password, err = c.cli.ReadLine()
 		if err != nil && !errors.Is(err, io.EOF) {
 			return kerrors.WithMsg(err, "Failed reading user password")
 		}
