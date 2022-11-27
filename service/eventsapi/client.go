@@ -18,7 +18,7 @@ type (
 	CmdClient struct {
 		gate         gate.Client
 		log          *klog.LevelLogger
-		cli          governor.CLI
+		term         *governor.Terminal
 		httpc        *governor.HTTPFetcher
 		publishFlags publishFlags
 	}
@@ -65,9 +65,9 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.publishEvent))
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.log = klog.NewLevelLogger(log)
-	c.cli = cli
+	c.term = governor.NewTerminal(term)
 	c.httpc = governor.NewHTTPFetcher(m)
 	return nil
 }
@@ -79,7 +79,7 @@ func (c *CmdClient) publishEvent(args []string) error {
 			return kerrors.WithMsg(err, "Failed creating event payload")
 		}
 	} else {
-		if _, err := io.Copy(&payload, c.cli.Stdin()); err != nil {
+		if _, err := io.Copy(&payload, c.term.Stdin()); err != nil {
 			return kerrors.WithMsg(err, "Failed reading event payload")
 		}
 	}

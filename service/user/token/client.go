@@ -25,7 +25,7 @@ type (
 		once          *ksync.Once[clientConfig]
 		config        governor.ConfigValueReader
 		log           *klog.LevelLogger
-		cli           *governor.CLITerm
+		term          *governor.Terminal
 		sysTokenFlags sysTokenFlags
 	}
 
@@ -95,10 +95,10 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.genSysToken))
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.config = r
 	c.log = klog.NewLevelLogger(log)
-	c.cli = governor.NewCLITerm(cli)
+	c.term = governor.NewTerminal(term)
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
-	skb, err := c.cli.ReadFile(c.sysTokenFlags.privkey)
+	skb, err := c.term.ReadFile(c.sysTokenFlags.privkey)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to read private key file")
 	}
@@ -164,12 +164,12 @@ func (c *CmdClient) genSysToken(args []string) error {
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
 	if c.sysTokenFlags.output != "" {
-		if err := c.cli.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0600); err != nil {
+		if err := c.term.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0600); err != nil {
 			return kerrors.WithMsg(err, "Failed to write token output to file")
 		}
 		return nil
 	}
-	out := bufio.NewWriter(c.cli.Stdout())
+	out := bufio.NewWriter(c.term.Stdout())
 	if _, err := out.WriteString(token + "\n"); err != nil {
 		return kerrors.WithMsg(err, "Failed to write token output")
 	}

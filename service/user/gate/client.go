@@ -26,7 +26,7 @@ type (
 		once         *ksync.Once[clientConfig]
 		systokenonce *ksync.Once[string]
 		config       governor.ConfigValueReader
-		cli          *governor.CLITerm
+		term         *governor.Terminal
 	}
 
 	ctxKeyClient struct{}
@@ -59,9 +59,9 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	r.SetDefault("systokenfile", "")
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.config = r
-	c.cli = governor.NewCLITerm(cli)
+	c.term = governor.NewTerminal(term)
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (c *CmdClient) GetSysToken() (string, error) {
 		if err != nil {
 			return nil, err
 		}
-		b, err := c.cli.ReadFile(fp)
+		b, err := c.term.ReadFile(fp)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to read systoken file")
 		}

@@ -18,7 +18,7 @@ type (
 	CmdClient struct {
 		gate          gate.Client
 		log           *klog.LevelLogger
-		cli           governor.CLI
+		term          *governor.Terminal
 		httpc         *governor.HTTPFetcher
 		addAdminReq   reqAddAdmin
 		addAdminFlags addAdminFlags
@@ -95,9 +95,9 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 	}, governor.CmdHandlerFunc(c.addAdmin))
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli governor.CLI, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.log = klog.NewLevelLogger(log)
-	c.cli = cli
+	c.term = governor.NewTerminal(term)
 	c.httpc = governor.NewHTTPFetcher(m)
 	return nil
 }
@@ -105,7 +105,7 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, cli gov
 func (c *CmdClient) addAdmin(args []string) error {
 	if c.addAdminReq.Password == "-" {
 		var err error
-		c.addAdminReq.Password, err = c.cli.ReadLine()
+		c.addAdminReq.Password, err = c.term.ReadLine()
 		if err != nil && !errors.Is(err, io.EOF) {
 			return kerrors.WithMsg(err, "Failed reading user password")
 		}
@@ -113,12 +113,12 @@ func (c *CmdClient) addAdmin(args []string) error {
 	if c.addAdminFlags.interactive && c.addAdminReq.Password == "" {
 		fmt.Print("Password: ")
 		var err error
-		c.addAdminReq.Password, err = c.cli.ReadPassword()
+		c.addAdminReq.Password, err = c.term.ReadPassword()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")
 		}
 		fmt.Print("Verify password: ")
-		passwordAgain, err := c.cli.ReadPassword()
+		passwordAgain, err := c.term.ReadPassword()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")
 		}
