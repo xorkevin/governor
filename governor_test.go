@@ -200,6 +200,7 @@ func (s *testServiceA) Start(ctx context.Context) error {
 func (s *testServiceA) Stop(ctx context.Context) {
 	s.ranStop = true
 }
+
 func (s *testServiceA) Setup(ctx context.Context, req ReqSetup) error {
 	s.ranSetup = true
 	return nil
