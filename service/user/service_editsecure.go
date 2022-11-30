@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
-	"xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -273,7 +273,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 		return governor.ErrWithRes(nil, http.StatusConflict, "", "Password reset not enabled")
 	}
 
-	var m *model.Model
+	var m *usermodel.Model
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {
@@ -475,7 +475,7 @@ func (s *Service) commitOTP(ctx context.Context, userid string, code string) err
 	return nil
 }
 
-func (s *Service) checkLoginRatelimit(ctx context.Context, m *model.Model) error {
+func (s *Service) checkLoginRatelimit(ctx context.Context, m *usermodel.Model) error {
 	var k time.Duration
 	if m.FailedLoginCount > 293 || m.FailedLoginCount < 0 {
 		k = 24 * time.Hour
@@ -498,7 +498,7 @@ func (e errorAuthenticate) Error() string {
 	return "Failed authenticating"
 }
 
-func (s *Service) checkOTPCode(ctx context.Context, m *model.Model, code string, backup string, ipaddr, useragent string) error {
+func (s *Service) checkOTPCode(ctx context.Context, m *usermodel.Model, code string, backup string, ipaddr, useragent string) error {
 	if code == "" {
 		cipher, err := s.getCipher(ctx)
 		if err != nil {
@@ -550,7 +550,7 @@ func (s *Service) markOTPCode(ctx context.Context, userid string, code string) {
 	}
 }
 
-func (s *Service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr, useragent string) {
+func (s *Service) incrLoginFailCount(ctx context.Context, m *usermodel.Model, ipaddr, useragent string) {
 	m.FailedLoginTime = time.Now().Round(0).Unix()
 	if m.FailedLoginCount < 0 {
 		m.FailedLoginCount = 0
@@ -575,7 +575,7 @@ func (s *Service) incrLoginFailCount(ctx context.Context, m *model.Model, ipaddr
 	}
 }
 
-func (s *Service) resetLoginFailCount(ctx context.Context, m *model.Model) {
+func (s *Service) resetLoginFailCount(ctx context.Context, m *usermodel.Model) {
 	m.FailedLoginTime = 0
 	m.FailedLoginCount = 0
 	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {

@@ -28,7 +28,6 @@ import (
 	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
-	usermodel "xorkevin.dev/governor/service/user/model"
 	"xorkevin.dev/governor/service/user/oauth"
 	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
 	oauthmodel "xorkevin.dev/governor/service/user/oauth/model"
@@ -40,6 +39,7 @@ import (
 	rolemodel "xorkevin.dev/governor/service/user/role/model"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/service/ws"
 )
 

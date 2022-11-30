@@ -7,7 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
-	usermodel "xorkevin.dev/governor/service/user/model"
+	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2"
 	"xorkevin.dev/kerrors"

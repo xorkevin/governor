@@ -16,12 +16,12 @@ import (
 	"xorkevin.dev/governor/service/user/apikey"
 	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/model"
 	resetmodel "xorkevin.dev/governor/service/user/reset/model"
 	"xorkevin.dev/governor/service/user/role"
 	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
 	sessionmodel "xorkevin.dev/governor/service/user/session/model"
 	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/ksync"
@@ -150,7 +150,7 @@ type (
 	}
 
 	Service struct {
-		users        model.Repo
+		users        usermodel.Repo
 		sessions     sessionmodel.Repo
 		approvals    approvalmodel.Repo
 		invitations  invitationmodel.Repo
@@ -214,7 +214,7 @@ func setCtxUser(inj governor.Injector, u Users) {
 // NewCtx creates a new [Users] service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
+		usermodel.GetCtxRepo(inj),
 		sessionmodel.GetCtxRepo(inj),
 		approvalmodel.GetCtxRepo(inj),
 		invitationmodel.GetCtxRepo(inj),
@@ -233,7 +233,7 @@ func NewCtx(inj governor.Injector) *Service {
 
 // New creates a new Users service
 func New(
-	users model.Repo,
+	users usermodel.Repo,
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
 	invitations invitationmodel.Repo,
