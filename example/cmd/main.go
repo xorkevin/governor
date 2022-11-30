@@ -25,19 +25,19 @@ import (
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/apikey"
-	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
-	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
+	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
+	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/oauth"
-	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
-	oauthmodel "xorkevin.dev/governor/service/user/oauth/model"
+	"xorkevin.dev/governor/service/user/oauth/oauthappmodel"
+	"xorkevin.dev/governor/service/user/oauth/oauthconnmodel"
 	"xorkevin.dev/governor/service/user/org"
-	orgmodel "xorkevin.dev/governor/service/user/org/model"
-	resetmodel "xorkevin.dev/governor/service/user/reset/model"
+	"xorkevin.dev/governor/service/user/org/orgmodel"
+	"xorkevin.dev/governor/service/user/resetmodel"
 	"xorkevin.dev/governor/service/user/role"
-	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
-	rolemodel "xorkevin.dev/governor/service/user/role/model"
-	sessionmodel "xorkevin.dev/governor/service/user/session/model"
+	"xorkevin.dev/governor/service/user/role/rolemodel"
+	"xorkevin.dev/governor/service/user/roleinvmodel"
+	"xorkevin.dev/governor/service/user/sessionmodel"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/service/ws"
@@ -101,7 +101,7 @@ func main() {
 		usermodel.NewInCtx(inj, "users")
 		sessionmodel.NewInCtx(inj, "usersessions")
 		approvalmodel.NewInCtx(inj, "userapprovals")
-		invitationmodel.NewInCtx(inj, "userroleinvitations")
+		roleinvmodel.NewInCtx(inj, "userroleinvitations")
 		resetmodel.NewInCtx(inj, "userresets")
 		kvstore.NewSubtreeInCtx(inj, "user")
 		ratelimit.NewSubtreeInCtx(inj, "user")
@@ -115,8 +115,8 @@ func main() {
 	}
 	{
 		inj := gov.Injector()
-		oauthmodel.NewInCtx(inj, "oauthapps")
-		connmodel.NewInCtx(inj, "oauthconnections")
+		oauthappmodel.NewInCtx(inj, "oauthapps")
+		oauthconnmodel.NewInCtx(inj, "oauthconnections")
 		kvstore.NewSubtreeInCtx(inj, "oauth")
 		objstore.NewBucketInCtx(inj, "oauth-app-logo")
 		ratelimit.NewSubtreeInCtx(inj, "oauth")

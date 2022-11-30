@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	apikeymodel "xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"

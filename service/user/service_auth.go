@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
-	sessionmodel "xorkevin.dev/governor/service/user/session/model"
+	"xorkevin.dev/governor/service/user/sessionmodel"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"

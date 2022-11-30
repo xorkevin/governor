@@ -14,12 +14,12 @@ import (
 	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/apikey"
-	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
+	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/service/user/gate"
-	resetmodel "xorkevin.dev/governor/service/user/reset/model"
+	"xorkevin.dev/governor/service/user/resetmodel"
 	"xorkevin.dev/governor/service/user/role"
-	invitationmodel "xorkevin.dev/governor/service/user/role/invitation/model"
-	sessionmodel "xorkevin.dev/governor/service/user/session/model"
+	"xorkevin.dev/governor/service/user/roleinvmodel"
+	"xorkevin.dev/governor/service/user/sessionmodel"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/bytefmt"
@@ -153,7 +153,7 @@ type (
 		users        usermodel.Repo
 		sessions     sessionmodel.Repo
 		approvals    approvalmodel.Repo
-		invitations  invitationmodel.Repo
+		invitations  roleinvmodel.Repo
 		resets       resetmodel.Repo
 		roles        role.RolesManager
 		apikeys      apikey.Apikeys
@@ -217,7 +217,7 @@ func NewCtx(inj governor.Injector) *Service {
 		usermodel.GetCtxRepo(inj),
 		sessionmodel.GetCtxRepo(inj),
 		approvalmodel.GetCtxRepo(inj),
-		invitationmodel.GetCtxRepo(inj),
+		roleinvmodel.GetCtxRepo(inj),
 		resetmodel.GetCtxRepo(inj),
 		role.GetCtxRolesManager(inj),
 		apikey.GetCtxApikeys(inj),
@@ -236,7 +236,7 @@ func New(
 	users usermodel.Repo,
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
-	invitations invitationmodel.Repo,
+	invitations roleinvmodel.Repo,
 	resets resetmodel.Repo,
 	roles role.RolesManager,
 	apikeys apikey.Apikeys,

@@ -6,7 +6,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -18,7 +18,7 @@ const (
 type (
 	// Apikeys manages apikeys
 	Apikeys interface {
-		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]model.Model, error)
+		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error)
 		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
 		Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
 		RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error)
@@ -28,7 +28,7 @@ type (
 	}
 
 	Service struct {
-		apikeys            model.Repo
+		apikeys            apikeymodel.Repo
 		kvkey              kvstore.KVStore
 		log                *klog.LevelLogger
 		scopeCacheDuration time.Duration
@@ -53,13 +53,13 @@ func setCtxApikeys(inj governor.Injector, a Apikeys) {
 
 // NewCtx returns a new Apikeys service from a context
 func NewCtx(inj governor.Injector) *Service {
-	apikeys := model.GetCtxRepo(inj)
+	apikeys := apikeymodel.GetCtxRepo(inj)
 	kv := kvstore.GetCtxKVStore(inj)
 	return New(apikeys, kv)
 }
 
 // New returns a new Apikeys service
-func New(apikeys model.Repo, kv kvstore.KVStore) *Service {
+func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) *Service {
 	return &Service{
 		apikeys: apikeys,
 		kvkey:   kv.Subtree("key"),

@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
-	"xorkevin.dev/governor/service/user/oauth/model"
+	"xorkevin.dev/governor/service/user/oauth/oauthappmodel"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -90,7 +90,7 @@ func (s *Service) getAppsBulk(ctx context.Context, clientids []string) (*resApps
 	}, nil
 }
 
-func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.Model, error) {
+func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oauthappmodel.Model, error) {
 	if clientstr, err := s.kvclient.Get(ctx, clientid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"), nil)
@@ -98,7 +98,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*model.
 	} else if clientstr == cacheValTombstone {
 		return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
 	} else {
-		cm := &model.Model{}
+		cm := &oauthappmodel.Model{}
 		if err := kjson.Unmarshal([]byte(clientstr), cm); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Malformed oauth client cache json"), nil)
 		} else {

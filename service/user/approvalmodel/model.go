@@ -1,4 +1,4 @@
-package model
+package approvalmodel
 
 import (
 	"context"

@@ -8,7 +8,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
-	"xorkevin.dev/governor/service/user/org/model"
+	"xorkevin.dev/governor/service/user/org/orgmodel"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 )
@@ -162,7 +162,7 @@ func (s *Service) getOrgsByID(ctx context.Context, orgids []string) (*resOrgs, e
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user orgs")
 	}
-	orgMap := map[string]model.Model{}
+	orgMap := map[string]orgmodel.Model{}
 	for _, i := range m {
 		orgMap[i.OrgID] = i
 	}

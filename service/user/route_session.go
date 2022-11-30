@@ -5,7 +5,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/session/model"
+	"xorkevin.dev/governor/service/user/sessionmodel"
 )
 
 type (
@@ -45,7 +45,7 @@ type (
 
 func (r *reqUserRmSessions) validUserid() error {
 	for _, i := range r.SessionIDs {
-		userid, err := model.ParseIDUserid(i)
+		userid, err := sessionmodel.ParseIDUserid(i)
 		if err != nil {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid session ids")
 		}

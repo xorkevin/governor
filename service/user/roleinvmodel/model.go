@@ -1,4 +1,4 @@
-package model
+package roleinvmodel
 
 import (
 	"context"

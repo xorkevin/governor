@@ -12,7 +12,7 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/org/model"
+	"xorkevin.dev/governor/service/user/org/orgmodel"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/ksync"
@@ -59,7 +59,7 @@ type (
 	}
 
 	Service struct {
-		orgs        model.Repo
+		orgs        orgmodel.Repo
 		users       user.Users
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
@@ -99,7 +99,7 @@ func setCtxOrgs(inj governor.Injector, o Orgs) {
 // NewCtx creates a new Orgs service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
+		orgmodel.GetCtxRepo(inj),
 		user.GetCtxUsers(inj),
 		events.GetCtxEvents(inj),
 		ratelimit.GetCtxRatelimiter(inj),
@@ -108,7 +108,7 @@ func NewCtx(inj governor.Injector) *Service {
 }
 
 // New returns a new Orgs service
-func New(orgs model.Repo, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+func New(orgs orgmodel.Repo, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
 	return &Service{
 		orgs:        orgs,
 		users:       users,
@@ -379,11 +379,11 @@ func (s *Service) userCreateRoleEventHandler(ctx context.Context, props user.Rol
 		return kerrors.WithMsg(err, "Failed to get orgs")
 	}
 
-	members := make([]*model.MemberModel, 0, len(memberorgids))
-	mods := make([]*model.MemberModel, 0, len(modorgids))
+	members := make([]*orgmodel.MemberModel, 0, len(memberorgids))
+	mods := make([]*orgmodel.MemberModel, 0, len(modorgids))
 	for _, i := range m {
 		if _, ok := memberorgids[i.OrgID]; ok {
-			members = append(members, &model.MemberModel{
+			members = append(members, &orgmodel.MemberModel{
 				OrgID:    i.OrgID,
 				Userid:   props.Userid,
 				Name:     i.Name,
@@ -391,7 +391,7 @@ func (s *Service) userCreateRoleEventHandler(ctx context.Context, props user.Rol
 			})
 		}
 		if _, ok := modorgids[i.OrgID]; ok {
-			mods = append(mods, &model.MemberModel{
+			mods = append(mods, &orgmodel.MemberModel{
 				OrgID:    i.OrgID,
 				Userid:   props.Userid,
 				Name:     i.Name,

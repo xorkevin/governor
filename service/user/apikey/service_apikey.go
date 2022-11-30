@@ -6,7 +6,7 @@ import (
 
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/user/apikey/model"
+	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -43,7 +43,7 @@ type (
 	}
 )
 
-func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]model.Model, error) {
+func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error) {
 	m, err := s.apikeys.GetUserKeys(ctx, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
@@ -91,7 +91,7 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 }
 
 func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
-	userid, err := model.ParseIDUserid(keyid)
+	userid, err := apikeymodel.ParseIDUserid(keyid)
 	if err != nil {
 		return "", "", kerrors.WithKind(err, ErrorInvalidKey, "Invalid key")
 	}
@@ -101,7 +101,7 @@ func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, stri
 		return "", "", err
 	}
 
-	m := model.Model{
+	m := apikeymodel.Model{
 		KeyHash: keyhash,
 	}
 	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil {

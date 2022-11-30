@@ -13,7 +13,7 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/mail"
-	approvalmodel "xorkevin.dev/governor/service/user/approval/model"
+	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"

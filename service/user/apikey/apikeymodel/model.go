@@ -1,4 +1,4 @@
-package model
+package apikeymodel
 
 import (
 	"context"

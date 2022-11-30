@@ -12,8 +12,8 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
-	connmodel "xorkevin.dev/governor/service/user/oauth/connection/model"
-	"xorkevin.dev/governor/service/user/oauth/model"
+	"xorkevin.dev/governor/service/user/oauth/oauthappmodel"
+	"xorkevin.dev/governor/service/user/oauth/oauthconnmodel"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
@@ -32,8 +32,8 @@ type (
 	}
 
 	Service struct {
-		apps            model.Repo
-		connections     connmodel.Repo
+		apps            oauthappmodel.Repo
+		connections     oauthconnmodel.Repo
 		tokenizer       token.Tokenizer
 		kvclient        kvstore.KVStore
 		oauthBucket     objstore.Bucket
@@ -86,8 +86,8 @@ func setCtxOAuth(inj governor.Injector, o OAuth) {
 // NewCtx creates a new OAuth service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
-		connmodel.GetCtxRepo(inj),
+		oauthappmodel.GetCtxRepo(inj),
+		oauthconnmodel.GetCtxRepo(inj),
 		token.GetCtxTokenizer(inj),
 		kvstore.GetCtxKVStore(inj),
 		objstore.GetCtxBucket(inj),
@@ -100,8 +100,8 @@ func NewCtx(inj governor.Injector) *Service {
 
 // New returns a new Apikey
 func New(
-	apps model.Repo,
-	connections connmodel.Repo,
+	apps oauthappmodel.Repo,
+	connections oauthconnmodel.Repo,
 	tokenizer token.Tokenizer,
 	kv kvstore.KVStore,
 	obj objstore.Bucket,

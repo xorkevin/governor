@@ -1,4 +1,4 @@
-package model
+package oauthconnmodel
 
 import (
 	"context"

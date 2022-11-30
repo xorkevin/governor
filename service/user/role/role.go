@@ -7,7 +7,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/user/role/model"
+	"xorkevin.dev/governor/service/user/role/rolemodel"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -30,7 +30,7 @@ type (
 	}
 
 	Service struct {
-		roles             model.Repo
+		roles             rolemodel.Repo
 		kvroleset         kvstore.KVStore
 		log               *klog.LevelLogger
 		roleCacheDuration time.Duration
@@ -65,14 +65,14 @@ func setCtxRolesManager(inj governor.Injector, r RolesManager) {
 // NewCtx creates a new RolesManager service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
+		rolemodel.GetCtxRepo(inj),
 		kvstore.GetCtxKVStore(inj),
 		events.GetCtxEvents(inj),
 	)
 }
 
 // New returns a new RolesManager
-func New(roles model.Repo, kv kvstore.KVStore, ev events.Events) *Service {
+func New(roles rolemodel.Repo, kv kvstore.KVStore, ev events.Events) *Service {
 	return &Service{
 		roles:     roles,
 		kvroleset: kv.Subtree("roleset"),
