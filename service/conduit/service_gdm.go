@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/conduit/gdm/model"
+	"xorkevin.dev/governor/service/conduit/gdmmodel"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -146,7 +146,7 @@ func (s *Service) createGDM(ctx context.Context, name string, theme string, requ
 	}, nil
 }
 
-func (s *Service) getGDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
+func (s *Service) getGDMByChatid(ctx context.Context, userid string, chatid string) (*gdmmodel.Model, error) {
 	members, err := s.gdms.GetMembers(ctx, chatid, []string{userid})
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chat members")
@@ -342,7 +342,7 @@ func (s *Service) getGDMsWithMembers(ctx context.Context, chatids []string) (*re
 	for _, i := range members {
 		memMap[i.Chatid] = append(memMap[i.Chatid], i.Userid)
 	}
-	chatMap := map[string]model.Model{}
+	chatMap := map[string]gdmmodel.Model{}
 	for _, i := range m {
 		chatMap[i.Chatid] = i
 	}

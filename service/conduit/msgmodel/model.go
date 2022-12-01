@@ -1,4 +1,4 @@
-package model
+package msgmodel
 
 import (
 	"context"

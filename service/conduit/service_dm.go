@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/conduit/dm/model"
+	"xorkevin.dev/governor/service/conduit/dmmodel"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -50,7 +50,7 @@ const (
 	chatMsgKindTxt = "t"
 )
 
-func (s *Service) getDMByChatid(ctx context.Context, userid string, chatid string) (*model.Model, error) {
+func (s *Service) getDMByChatid(ctx context.Context, userid string, chatid string) (*dmmodel.Model, error) {
 	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {

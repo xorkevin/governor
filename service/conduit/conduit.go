@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
-	invitationmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
-	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
-	gdmmodel "xorkevin.dev/governor/service/conduit/gdm/model"
-	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
-	servermodel "xorkevin.dev/governor/service/conduit/server/model"
+	"xorkevin.dev/governor/service/conduit/dmmodel"
+	"xorkevin.dev/governor/service/conduit/friendinvmodel"
+	"xorkevin.dev/governor/service/conduit/friendmodel"
+	"xorkevin.dev/governor/service/conduit/gdmmodel"
+	"xorkevin.dev/governor/service/conduit/msgmodel"
+	"xorkevin.dev/governor/service/conduit/servermodel"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/kvstore"
@@ -64,7 +64,7 @@ type (
 
 	Service struct {
 		friends            friendmodel.Repo
-		invitations        invitationmodel.Repo
+		invitations        friendinvmodel.Repo
 		dms                dmmodel.Repo
 		gdms               gdmmodel.Repo
 		servers            servermodel.Repo
@@ -124,9 +124,10 @@ func setCtxConduit(inj governor.Injector, c Conduit) {
 func NewCtx(inj governor.Injector) *Service {
 	return New(
 		friendmodel.GetCtxRepo(inj),
-		invitationmodel.GetCtxRepo(inj),
+		friendinvmodel.GetCtxRepo(inj),
 		dmmodel.GetCtxRepo(inj),
 		gdmmodel.GetCtxRepo(inj),
+		servermodel.GetCtxRepo(inj),
 		msgmodel.GetCtxRepo(inj),
 		kvstore.GetCtxKVStore(inj),
 		user.GetCtxUsers(inj),
@@ -141,9 +142,10 @@ func NewCtx(inj governor.Injector) *Service {
 // New creates a new Conduit service
 func New(
 	friends friendmodel.Repo,
-	invitations invitationmodel.Repo,
+	invitations friendinvmodel.Repo,
 	dms dmmodel.Repo,
 	gdms gdmmodel.Repo,
+	servers servermodel.Repo,
 	msgs msgmodel.Repo,
 	kv kvstore.KVStore,
 	users user.Users,
@@ -158,6 +160,7 @@ func New(
 		invitations: invitations,
 		dms:         dms,
 		gdms:        gdms,
+		servers:     servers,
 		msgs:        msgs,
 		kvpresence:  kv.Subtree("presence"),
 		users:       users,

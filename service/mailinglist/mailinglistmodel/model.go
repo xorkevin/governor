@@ -1,4 +1,4 @@
-package model
+package mailinglistmodel
 
 import (
 	"context"

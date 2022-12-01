@@ -8,7 +8,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/barcode"
-	"xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/courier/couriermodel"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/kvstore"
@@ -132,7 +132,7 @@ type (
 )
 
 func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandid string) (*resCreateLink, error) {
-	var m *model.LinkModel
+	var m *couriermodel.LinkModel
 	if len(linkid) == 0 {
 		var err error
 		m, err = s.repo.NewLinkAuto(creatorid, url)

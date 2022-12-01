@@ -1,4 +1,4 @@
-package model
+package couriermodel
 
 import (
 	"context"

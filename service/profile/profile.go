@@ -6,7 +6,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
-	"xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/profile/profilemodel"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
@@ -21,7 +21,7 @@ type (
 	}
 
 	Service struct {
-		profiles      model.Repo
+		profiles      profilemodel.Repo
 		profileBucket objstore.Bucket
 		profileDir    objstore.Dir
 		users         user.Users
@@ -58,7 +58,7 @@ func setCtxProfiles(inj governor.Injector, p Profiles) {
 // NewCtx creates a new Profiles service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
+		profilemodel.GetCtxRepo(inj),
 		objstore.GetCtxBucket(inj),
 		user.GetCtxUsers(inj),
 		ratelimit.GetCtxRatelimiter(inj),
@@ -67,7 +67,7 @@ func NewCtx(inj governor.Injector) *Service {
 }
 
 // New creates a new Profiles service
-func New(profiles model.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+func New(profiles profilemodel.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
 	return &Service{
 		profiles:      profiles,
 		profileBucket: obj,

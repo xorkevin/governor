@@ -1,4 +1,4 @@
-package model
+package friendmodel
 
 import (
 	"context"

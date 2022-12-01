@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/courier/couriermodel"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
@@ -26,7 +26,7 @@ type (
 	}
 
 	Service struct {
-		repo          model.Repo
+		repo          couriermodel.Repo
 		kvlinks       kvstore.KVStore
 		courierBucket objstore.Bucket
 		linkImgDir    objstore.Dir
@@ -69,7 +69,7 @@ func setCtxCourier(inj governor.Injector, c Courier) {
 // NewCtx creates a new Courier service from a context
 func NewCtx(inj governor.Injector) *Service {
 	return New(
-		model.GetCtxRepo(inj),
+		couriermodel.GetCtxRepo(inj),
 		kvstore.GetCtxKVStore(inj),
 		objstore.GetCtxBucket(inj),
 		user.GetCtxUsers(inj),
@@ -81,7 +81,7 @@ func NewCtx(inj governor.Injector) *Service {
 
 // New creates a new Courier service
 func New(
-	repo model.Repo,
+	repo couriermodel.Repo,
 	kv kvstore.KVStore,
 	obj objstore.Bucket,
 	users user.Users,

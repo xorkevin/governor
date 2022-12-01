@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/mail"
-	"xorkevin.dev/governor/service/mailinglist/model"
+	"xorkevin.dev/governor/service/mailinglist/mailinglistmodel"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
@@ -69,7 +69,7 @@ type (
 	}
 
 	Service struct {
-		lists        model.Repo
+		lists        mailinglistmodel.Repo
 		mailBucket   objstore.Bucket
 		rcvMailDir   objstore.Dir
 		events       events.Events
@@ -121,7 +121,7 @@ func setCtxMailingList(inj governor.Injector, m MailingList) {
 
 // NewCtx creates a new MailingList service from a context
 func NewCtx(inj governor.Injector) *Service {
-	lists := model.GetCtxRepo(inj)
+	lists := mailinglistmodel.GetCtxRepo(inj)
 	obj := objstore.GetCtxBucket(inj)
 	ev := events.GetCtxEvents(inj)
 	users := user.GetCtxUsers(inj)
@@ -133,7 +133,7 @@ func NewCtx(inj governor.Injector) *Service {
 }
 
 // New creates a new MailingList service
-func New(lists model.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
+func New(lists mailinglistmodel.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
 	return &Service{
 		lists:       lists,
 		mailBucket:  obj,

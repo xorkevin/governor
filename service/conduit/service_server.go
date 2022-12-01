@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/conduit/server/model"
+	"xorkevin.dev/governor/service/conduit/servermodel"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
 )
@@ -113,7 +113,7 @@ func (s *Service) createChannel(ctx context.Context, serverid, channelid string,
 	}, nil
 }
 
-func (s *Service) getServerChannel(ctx context.Context, serverid, channelid string) (*model.ChannelModel, error) {
+func (s *Service) getServerChannel(ctx context.Context, serverid, channelid string) (*servermodel.ChannelModel, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")

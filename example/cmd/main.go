@@ -3,23 +3,24 @@ package main
 import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit"
-	dmmodel "xorkevin.dev/governor/service/conduit/dm/model"
-	friendinvmodel "xorkevin.dev/governor/service/conduit/friend/invitation/model"
-	friendmodel "xorkevin.dev/governor/service/conduit/friend/model"
-	gdmmodel "xorkevin.dev/governor/service/conduit/gdm/model"
-	msgmodel "xorkevin.dev/governor/service/conduit/msg/model"
+	"xorkevin.dev/governor/service/conduit/dmmodel"
+	"xorkevin.dev/governor/service/conduit/friendinvmodel"
+	"xorkevin.dev/governor/service/conduit/friendmodel"
+	"xorkevin.dev/governor/service/conduit/gdmmodel"
+	"xorkevin.dev/governor/service/conduit/msgmodel"
+	"xorkevin.dev/governor/service/conduit/servermodel"
 	"xorkevin.dev/governor/service/courier"
-	couriermodel "xorkevin.dev/governor/service/courier/model"
+	"xorkevin.dev/governor/service/courier/couriermodel"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/eventsapi"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist"
-	mailinglistmodel "xorkevin.dev/governor/service/mailinglist/model"
+	"xorkevin.dev/governor/service/mailinglist/mailinglistmodel"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/profile"
-	profilemodel "xorkevin.dev/governor/service/profile/model"
+	"xorkevin.dev/governor/service/profile/profilemodel"
 	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/template"
@@ -143,6 +144,7 @@ func main() {
 		friendinvmodel.NewInCtx(inj, "friendinvitations")
 		dmmodel.NewInCtx(inj, "dms")
 		gdmmodel.NewInCtx(inj, "gdms", "gdmmembers", "gdmassocs")
+		servermodel.NewInCtx(inj, "servers", "serverchannels", "serverpresence")
 		msgmodel.NewInCtx(inj, "chatmsgs")
 		kvstore.NewSubtreeInCtx(inj, "conduit")
 		ratelimit.NewSubtreeInCtx(inj, "conduit")
