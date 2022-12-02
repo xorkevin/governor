@@ -30,7 +30,7 @@ func newClientSettings(opts Opts) *clientSettings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("logger.output", "STDERR")
-	v.SetDefault("http.addr", "http://localhost:8080/api")
+	v.SetDefault("http.baseurl", "http://localhost:8080/api")
 	v.SetDefault("http.timeout", "15s")
 
 	v.SetConfigName(opts.ClientDefault)
