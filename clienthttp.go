@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
@@ -19,10 +20,20 @@ type (
 		Log() klog.Logger
 	}
 
+	HTTPReqDoer interface {
+		Do(r *http.Request) (*http.Response, error)
+	}
+
 	httpClient struct {
 		log   *klog.LevelLogger
 		httpc *http.Client
 		base  string
+	}
+
+	configHTTPClient struct {
+		baseurl   string
+		timeout   time.Duration
+		transport http.RoundTripper
 	}
 )
 
@@ -58,7 +69,8 @@ func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
 	return &httpClient{
 		log: klog.NewLevelLogger(klog.Sub(l, "httpc", nil)),
 		httpc: &http.Client{
-			Timeout: c.timeout,
+			Transport: c.transport,
+			Timeout:   c.timeout,
 		},
 		base: c.baseurl,
 	}

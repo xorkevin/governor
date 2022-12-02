@@ -2,6 +2,9 @@ package governor
 
 import (
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -16,7 +19,43 @@ type (
 		logger       configLogger
 		httpClient   configHTTPClient
 	}
+
+	// ClientConfig is the client config
+	ClientConfig struct {
+		BaseURL string
+	}
 )
+
+func newClientSettings(opts Opts) *clientSettings {
+	v := viper.New()
+	v.SetDefault("logger.level", "INFO")
+	v.SetDefault("logger.output", "STDERR")
+	v.SetDefault("http.addr", "http://localhost:8080/api")
+	v.SetDefault("http.timeout", "15s")
+
+	v.SetConfigName(opts.ClientDefault)
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("config")
+	if cfgdir, err := os.UserConfigDir(); err == nil {
+		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
+	}
+
+	v.SetEnvPrefix(opts.ClientPrefix)
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
+
+	return &clientSettings{
+		v:            v,
+		configReader: opts.ConfigReader,
+		logger: configLogger{
+			writer: opts.LogWriter,
+		},
+		httpClient: configHTTPClient{
+			transport: opts.HTTPTransport,
+		},
+	}
+}
 
 func (s *clientSettings) init(flags ClientFlags) error {
 	if file := flags.ConfigFile; file != "" {

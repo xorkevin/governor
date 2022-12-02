@@ -39,6 +39,8 @@ type (
 		ConfigReader  io.Reader
 		VaultReader   io.Reader
 		LogWriter     io.Writer
+		HTTPTransport http.RoundTripper
+		TermConfig    *TermConfig
 	}
 )
 

@@ -5,12 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/spf13/viper"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -32,16 +27,6 @@ type (
 		log        *klog.LevelLogger
 		httpc      *HTTPFetcher
 		flags      ClientFlags
-	}
-
-	configHTTPClient struct {
-		baseurl string
-		timeout time.Duration
-	}
-
-	// ClientConfig is the client config
-	ClientConfig struct {
-		BaseURL string
 	}
 
 	clientDef struct {
@@ -101,31 +86,11 @@ type (
 )
 
 // NewClient creates a new Client
-func NewClient(opts Opts, termConfig *TermConfig) *Client {
-	v := viper.New()
-	v.SetDefault("logger.level", "INFO")
-	v.SetDefault("logger.output", "STDERR")
-	v.SetDefault("http.addr", "http://localhost:8080/api")
-	v.SetDefault("http.timeout", "15s")
-
-	v.SetConfigName(opts.ClientDefault)
-	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
-	v.AddConfigPath("config")
-	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
-	}
-
-	v.SetEnvPrefix(opts.ClientPrefix)
-	v.AutomaticEnv()
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
-
+func NewClient(opts Opts) *Client {
 	return &Client{
-		inj: newInjector(context.Background()),
-		settings: &clientSettings{
-			v: v,
-		},
-		configTerm: termConfig,
+		inj:        newInjector(context.Background()),
+		settings:   newClientSettings(opts),
+		configTerm: opts.TermConfig,
 	}
 }
 
