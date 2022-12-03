@@ -9,9 +9,7 @@ import (
 
 type (
 	// MapFS is an in memory [xorkevin.dev/governor/util/writefs.FS]
-	MapFS struct {
-		Files map[string]*MapFile
-	}
+	MapFS map[string]*MapFile
 
 	// MapFile is an in memory file
 	MapFile struct {
@@ -19,12 +17,6 @@ type (
 		Mode fs.FileMode
 	}
 )
-
-func NewMapFS() *MapFS {
-	return &MapFS{
-		Files: map[string]*MapFile{},
-	}
-}
 
 const (
 	rwFlagMask = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
@@ -43,7 +35,7 @@ func isReadWrite(flag int) (bool, bool) {
 	}
 }
 
-func (m *MapFS) OpenFile(name string, flag int, mode fs.FileMode) (io.ReadWriteCloser, error) {
+func (m MapFS) OpenFile(name string, flag int, mode fs.FileMode) (io.ReadWriteCloser, error) {
 	isRead, isWrite := isReadWrite(flag)
 	if isRead && isWrite {
 		// do not support both reading and writing for simplicity
@@ -61,7 +53,7 @@ func (m *MapFS) OpenFile(name string, flag int, mode fs.FileMode) (io.ReadWriteC
 		}
 	}
 
-	f := m.Files[name]
+	f := m[name]
 	if f == nil {
 		if flag&os.O_CREATE == 0 {
 			return nil, fs.ErrNotExist
@@ -121,7 +113,7 @@ type (
 		b    *bytes.Buffer
 		mode fs.FileMode
 		name string
-		fsys *MapFS
+		fsys MapFS
 	}
 )
 
@@ -141,7 +133,7 @@ func (w *mapFileReadWriter) Write(p []byte) (int, error) {
 
 func (w *mapFileReadWriter) Close() error {
 	if w.b != nil {
-		w.fsys.Files[w.name] = &MapFile{
+		w.fsys[w.name] = &MapFile{
 			Data: w.b.Bytes(),
 			Mode: w.mode,
 		}
