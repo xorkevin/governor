@@ -163,7 +163,7 @@ func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Requ
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
 	}
 	body := bytes.NewReader(b)
-	req, err := c.HTTPClient.Req(method, path, body)
+	req, err := c.Req(method, path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (*http.R
 	ctx = klog.WithFields(ctx, klog.Fields{
 		"gov.httpc.url": r.URL.String(),
 	})
-	res, err := c.HTTPClient.Do(ctx, r)
+	res, err := c.Do(ctx, r)
 	if err != nil {
 		return res, err
 	}
@@ -198,7 +198,7 @@ func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response inte
 	ctx = klog.WithFields(ctx, klog.Fields{
 		"gov.httpc.url": r.URL.String(),
 	})
-	res, err := c.HTTPClient.Do(ctx, r)
+	res, err := c.Do(ctx, r)
 	if err != nil {
 		return res, false, err
 	}

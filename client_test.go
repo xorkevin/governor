@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -40,6 +41,7 @@ func (s *testServiceC) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 
 	m1 := NewMethodRouter(m)
 	m1.AnyCtx("/echo", s.echo)
+	m1.AnyCtx("/fail", s.fail)
 	return nil
 }
 
@@ -66,6 +68,10 @@ func (s *testServiceC) echo(c *Context) {
 	})
 }
 
+func (s *testServiceC) fail(c *Context) {
+	c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Test fail"))
+}
+
 func (r testServiceCReq) CloneEmptyPointer() valuer {
 	return &testServiceCReq{}
 }
@@ -88,6 +94,7 @@ func (c *testClientC) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
 	c.ranRegister = true
 
 	r.SetDefault("prop1", "val1")
+
 	cr.Register(CmdDesc{}, CmdHandlerFunc(c.echo))
 }
 
@@ -160,6 +167,40 @@ func (c *testClientC) echo(args []string) error {
 		return err
 	}
 	return nil
+}
+
+func (c *testClientC) echoEmpty(args []string) error {
+	req, err := c.httpc.ReqJSON(http.MethodPost, "/echo", testServiceCReq{
+		Method: http.MethodPost,
+		Path:   "/api/servicec/echo",
+	})
+	if err != nil {
+		return err
+	}
+	res, err := c.httpc.DoNoContent(context.Background(), req)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(c.term.Stdout(), strconv.Itoa(res.StatusCode)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *testClientC) fail(args []string) error {
+	req, err := c.httpc.ReqJSON(http.MethodPost, "/fail", testServiceCReq{
+		Method: http.MethodPost,
+		Path:   "/api/servicec/fail",
+	})
+	if err != nil {
+		return err
+	}
+	var res testServiceCReq
+	_, _, err = c.httpc.DoJSON(context.Background(), req, &res)
+	if err != nil {
+		return err
+	}
+	return kerrors.WithMsg(nil, "Should have errored")
 }
 
 func TestClient(t *testing.T) {
@@ -264,4 +305,18 @@ servicec:
 		Method: http.MethodPost,
 		Path:   "/api/servicec/echo",
 	}, echoRes)
+	out.Reset()
+
+	assert.NoError(clientC.echoEmpty(nil))
+	status, err := strconv.Atoi(out.String())
+	assert.NoError(err)
+	assert.Equal(200, status)
+	out.Reset()
+
+	err = clientC.fail(nil)
+	assert.Error(err)
+	assert.ErrorIs(err, ErrorServerRes)
+	var kerr *kerrors.Error
+	assert.ErrorAs(err, &kerr)
+	assert.Equal("Test fail", kerr.Message)
 }

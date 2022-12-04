@@ -55,6 +55,18 @@ func TestError(t *testing.T) {
 			Err:    ErrorVault,
 			String: "Failed vault request",
 		},
+		{
+			Err:    ErrorInvalidClientReq,
+			String: "Invalid client request",
+		},
+		{
+			Err:    ErrorInvalidServerRes,
+			String: "Invalid server response",
+		},
+		{
+			Err:    ErrorServerRes,
+			String: "Error server response",
+		},
 	} {
 		tc := tc
 		assert.Equal(tc.String, tc.Err.Error())
