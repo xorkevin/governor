@@ -166,6 +166,15 @@ func (c *testClientC) echo(args []string) error {
 	if _, err := c.term.Stdout().Write(b); err != nil {
 		return err
 	}
+	c.term.Stdin()
+	c.term.Stderr()
+	f, err := c.term.ReadFile("test.txt")
+	if err != nil {
+		return kerrors.WithMsg(err, "Could not read file")
+	}
+	if err := c.term.WriteFile("testoutput.txt", f, 0644); err != nil {
+		return kerrors.WithMsg(err, "Could not write file")
+	}
 	return nil
 }
 
@@ -245,6 +254,7 @@ data:
 	})
 
 	var out bytes.Buffer
+	wfsys := writefstest.MapFS{}
 
 	client := NewClient(Opts{
 		Appname:      "govtest",
@@ -271,8 +281,14 @@ servicec:
 			Stdin:   strings.NewReader("setupsecret"),
 			Stdout:  klog.NewSyncWriter(&out),
 			Stderr:  io.Discard,
-			Fsys:    fstest.MapFS{},
-			WFsys:   writefstest.MapFS{},
+			Fsys: fstest.MapFS{
+				"test.txt": &fstest.MapFile{
+					Data:    []byte(`test file contents`),
+					Mode:    0644,
+					ModTime: time.Now(),
+				},
+			},
+			WFsys: wfsys,
 		},
 	})
 
@@ -306,6 +322,10 @@ servicec:
 		Path:   "/api/servicec/echo",
 	}, echoRes)
 	out.Reset()
+
+	outputFile := wfsys["testoutput.txt"]
+	assert.NotNil(outputFile)
+	assert.Equal([]byte("test file contents"), outputFile.Data)
 
 	assert.NoError(clientC.echoEmpty(nil))
 	status, err := strconv.Atoi(out.String())

@@ -159,7 +159,7 @@ func (c *Terminal) Log() klog.Logger {
 }
 
 func (c *Terminal) ReadFile(name string) ([]byte, error) {
-	f, err := c.Term.FS().Open(name)
+	f, err := c.FS().Open(name)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to open file")
 	}
@@ -176,7 +176,7 @@ func (c *Terminal) ReadFile(name string) ([]byte, error) {
 }
 
 func (c *Terminal) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	f, err := c.Term.WFS().OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	f, err := c.WFS().OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to open file")
 	}
