@@ -3,6 +3,7 @@ package governor
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -109,8 +110,14 @@ Calls the server setup endpoint.`,
 }
 
 func (c *Cmd) logFatal(v interface{}) {
-	fmt.Fprintln(os.Stderr, v)
-	os.Exit(1)
+	var errout io.Writer = os.Stderr
+	exit := os.Exit
+	if conf := c.opts.TermConfig; conf != nil {
+		errout = conf.Stderr
+		exit = conf.Exit
+	}
+	fmt.Fprintln(errout, v)
+	exit(1)
 }
 
 func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
@@ -129,15 +136,18 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 func (c *Cmd) serve(cmd *cobra.Command, args []string) {
 	if err := c.s.Serve(); err != nil {
 		c.logFatal(err)
+		return
 	}
 }
 
 func (c *Cmd) setup(cmd *cobra.Command, args []string) {
 	if err := c.c.Init(); err != nil {
 		c.logFatal(err)
+		return
 	}
 	if _, err := c.c.Setup(context.Background(), c.cmdFlags.setupSecret); err != nil {
 		c.logFatal(err)
+		return
 	}
 }
 
@@ -147,12 +157,14 @@ func (c *Cmd) docMan(cmd *cobra.Command, args []string) {
 		Section: "1",
 	}, c.cmdFlags.docOutputDir); err != nil {
 		c.logFatal(err)
+		return
 	}
 }
 
 func (c *Cmd) docMd(cmd *cobra.Command, args []string) {
 	if err := doc.GenMarkdownTree(c.cmd, c.cmdFlags.docOutputDir); err != nil {
 		c.logFatal(err)
+		return
 	}
 }
 
@@ -173,9 +185,11 @@ func (c *Cmd) addTree(t *cmdTree, parent *cobra.Command) {
 		cmd.Run = func(cmd *cobra.Command, args []string) {
 			if err := c.c.Init(); err != nil {
 				c.logFatal(err)
+				return
 			}
 			if err := t.Handler.Handle(args); err != nil {
 				c.logFatal(err)
+				return
 			}
 		}
 	}
@@ -247,9 +261,24 @@ func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
 	}
 }
 
+// ExecArgs runs the command with the provided arguments
+func (c *Cmd) ExecArgs(args []string) error {
+	c.cmd.SetArgs(args)
+	if conf := c.opts.TermConfig; conf != nil {
+		c.cmd.SetIn(conf.Stdin)
+		c.cmd.SetOut(conf.Stdout)
+		c.cmd.SetErr(conf.Stderr)
+	}
+	if err := c.cmd.Execute(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Execute runs the governor cmd
 func (c *Cmd) Execute() {
-	if err := c.cmd.Execute(); err != nil {
+	if err := c.ExecArgs(os.Args[1:]); err != nil {
 		c.logFatal(err)
+		return
 	}
 }

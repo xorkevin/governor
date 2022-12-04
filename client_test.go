@@ -72,14 +72,6 @@ func (s *testServiceC) fail(c *Context) {
 	c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Test fail"))
 }
 
-func (r testServiceCReq) CloneEmptyPointer() valuer {
-	return &testServiceCReq{}
-}
-
-func (r *testServiceCReq) Value() interface{} {
-	return *r
-}
-
 type (
 	testClientC struct {
 		log         *klog.LevelLogger
@@ -95,7 +87,12 @@ func (c *testClientC) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
 
 	r.SetDefault("prop1", "val1")
 
-	cr.Register(CmdDesc{}, CmdHandlerFunc(c.echo))
+	cr.Register(CmdDesc{
+		Usage: "echo",
+		Short: "echo input",
+		Long:  "test route that echos input",
+		Flags: nil,
+	}, CmdHandlerFunc(c.echo))
 }
 
 func (c *testClientC) Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error {
@@ -166,8 +163,7 @@ func (c *testClientC) echo(args []string) error {
 	if _, err := c.term.Stdout().Write(b); err != nil {
 		return err
 	}
-	c.term.Stdin()
-	c.term.Stderr()
+
 	f, err := c.term.ReadFile("test.txt")
 	if err != nil {
 		return kerrors.WithMsg(err, "Could not read file")
@@ -175,6 +171,7 @@ func (c *testClientC) echo(args []string) error {
 	if err := c.term.WriteFile("testoutput.txt", f, 0644); err != nil {
 		return kerrors.WithMsg(err, "Could not write file")
 	}
+
 	return nil
 }
 
@@ -289,6 +286,7 @@ servicec:
 				},
 			},
 			WFsys: wfsys,
+			Exit:  func(code int) {},
 		},
 	})
 

@@ -33,6 +33,7 @@ type (
 		Stderr  io.Writer
 		Fsys    fs.FS
 		WFsys   writefs.FS
+		Exit    func(code int)
 	}
 
 	termClient struct {
@@ -55,6 +56,7 @@ func newTermClient(config *TermConfig, l klog.Logger) Term {
 			Stderr:  os.Stderr,
 			Fsys:    os.DirFS("."),
 			WFsys:   writefs.NewOSFS("."),
+			Exit:    os.Exit,
 		}
 	}
 	return &termClient{
