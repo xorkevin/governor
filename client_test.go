@@ -6,10 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/governor/util/kjson"
@@ -74,7 +76,6 @@ func (r *testServiceCReq) Value() interface{} {
 
 type (
 	testClientC struct {
-		config      ClientConfigReader
 		log         *klog.LevelLogger
 		term        *Terminal
 		httpc       *HTTPFetcher
@@ -92,7 +93,43 @@ func (c *testClientC) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
 
 func (c *testClientC) Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error {
 	c.ranInit = true
-	c.config = r
+
+	if u, err := url.Parse(r.Config().BaseURL); err != nil {
+		return kerrors.WithMsg(err, "Invalid base url")
+	} else if u.Path != "/api" {
+		return kerrors.WithMsg(nil, "Mismatched client config")
+	}
+	if r.Name() != "servicec" {
+		return kerrors.WithMsg(nil, "Mismatched client name")
+	}
+	if r.URL() != "/servicec" {
+		return kerrors.WithMsg(nil, "Mismatched client url")
+	}
+	if !r.GetBool("propbool") {
+		return kerrors.WithMsg(nil, "Mismatched prop bool")
+	}
+	if r.GetInt("propint") != 123 {
+		return kerrors.WithMsg(nil, "Mismatched prop int")
+	}
+	if t, err := r.GetDuration("propdur"); err != nil {
+		return kerrors.WithMsg(err, "Mismatched prop int")
+	} else if t != 24*time.Hour {
+		return kerrors.WithMsg(nil, "Mismatched prop int")
+	}
+	if r.GetStr("prop1") != "value1" {
+		return kerrors.WithMsg(nil, "Mismatched prop str")
+	}
+	if k := r.GetStrSlice("propslice"); len(k) != 3 || k[0] != "abc" {
+		return kerrors.WithMsg(nil, "Mismatched prop str slice")
+	}
+	var propobj testServiceCReq
+	if err := r.Unmarshal("propobj", &propobj); err != nil || propobj != (testServiceCReq{
+		Method: "abc",
+		Path:   "def",
+	}) {
+		return kerrors.WithMsg(err, "Mismatched prop obj")
+	}
+
 	c.log = klog.NewLevelLogger(log)
 	c.term = NewTerminal(term)
 	c.httpc = NewHTTPFetcher(m)
@@ -174,6 +211,18 @@ data:
 		ConfigReader: strings.NewReader(tabReplacer.Replace(`
 http:
 	baseurl: ` + hserver.URL + `/api
+servicec:
+	propbool: true
+	propint: 123
+	propdur: 24h
+	prop1: value1
+	propslice:
+		- abc
+		- def
+		- ghi
+	propobj:
+		method: abc
+		path: def
 `)),
 		LogWriter: io.Discard,
 		TermConfig: &TermConfig{
