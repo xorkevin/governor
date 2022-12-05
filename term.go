@@ -161,16 +161,7 @@ func (c *Terminal) Log() klog.Logger {
 }
 
 func (c *Terminal) ReadFile(name string) ([]byte, error) {
-	f, err := c.FS().Open(name)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to open file")
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"), nil)
-		}
-	}()
-	b, err := io.ReadAll(f)
+	b, err := fs.ReadFile(c.FS(), name)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to read file")
 	}
