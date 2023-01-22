@@ -8,7 +8,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/blake2b"
 	"xorkevin.dev/kerrors"
 )
 
@@ -36,8 +37,8 @@ type (
 	repo struct {
 		table    *resetModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is the user reset request model
@@ -81,9 +82,9 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new user reset request repo
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewBlake2bHasher()
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := blake2b.New(blake2b.Config{})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &resetModelTable{
@@ -106,7 +107,7 @@ func (r *repo) New(userid, kind string) *Model {
 }
 
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
-	ok, err := r.verifier.Verify(code, m.CodeHash)
+	ok, err := r.verifier.Verify([]byte(code), m.CodeHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify code")
 	}
@@ -114,19 +115,19 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashCode(m *Model) (string, error) {
-	code, err := uid.New(keySize)
+	codebytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new code")
 	}
-	codestr := code.Base64()
-	codehash, err := r.hasher.Hash(codestr)
+	code := codebytes.Base64()
+	codehash, err := r.hasher.Hash([]byte(code))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash new code")
 	}
 	now := time.Now().Round(0).Unix()
 	m.CodeHash = codehash
 	m.CodeTime = now
-	return codestr, nil
+	return code, nil
 }
 
 func (r *repo) GetByID(ctx context.Context, userid, kind string) (*Model, error) {

@@ -8,7 +8,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/blake2b"
 	"xorkevin.dev/kerrors"
 )
 
@@ -38,8 +39,8 @@ type (
 	repo struct {
 		table    *connectionModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is an connected OAuth app to a user account
@@ -90,9 +91,9 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new OAuth connection repository
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewBlake2bHasher()
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := blake2b.New(blake2b.Config{})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &connectionModelTable{
@@ -105,12 +106,12 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string, authTime int64) (*Model, string, error) {
-	code, err := uid.New(keySize)
+	codebytes, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
-	codestr := code.Base64()
-	codehash, err := r.hasher.Hash(codestr)
+	code := codebytes.Base64()
+	codehash, err := r.hasher.Hash([]byte(code))
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to hash oauth authorization code")
 	}
@@ -128,14 +129,14 @@ func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod st
 		CodeTime:        now,
 		AccessTime:      now,
 		CreationTime:    now,
-	}, codestr, nil
+	}, code, nil
 }
 
 func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 	if m.CodeHash == "" {
 		return false, nil
 	}
-	ok, err := r.verifier.Verify(code, m.CodeHash)
+	ok, err := r.verifier.Verify([]byte(code), m.CodeHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify code")
 	}
@@ -143,24 +144,24 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashCode(m *Model) (string, error) {
-	code, err := uid.New(keySize)
+	codebytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
-	codestr := code.Base64()
-	codehash, err := r.hasher.Hash(codestr)
+	code := codebytes.Base64()
+	codehash, err := r.hasher.Hash([]byte(code))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash oauth authorization code")
 	}
 	m.CodeHash = codehash
-	return codestr, nil
+	return code, nil
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 	if m.KeyHash == "" {
 		return false, nil
 	}
-	ok, err := r.verifier.Verify(key, m.KeyHash)
+	ok, err := r.verifier.Verify([]byte(key), m.KeyHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
@@ -168,17 +169,17 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(m *Model) (string, error) {
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth session key")
 	}
-	keystr := key.Base64()
-	keyhash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	keyhash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash oauth session key")
 	}
 	m.KeyHash = keyhash
-	return keystr, nil
+	return key, nil
 }
 
 func (r *repo) GetByID(ctx context.Context, userid, clientid string) (*Model, error) {

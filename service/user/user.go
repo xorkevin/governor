@@ -27,7 +27,9 @@ import (
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/governor/util/rank"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2cipher"
+	"xorkevin.dev/hunter2/h2cipher/aes"
+	"xorkevin.dev/hunter2/h2cipher/chacha20poly1305"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -111,8 +113,8 @@ type (
 	}
 
 	otpCipher struct {
-		cipher    hunter2.Cipher
-		decrypter *hunter2.Decrypter
+		cipher  h2cipher.Cipher
+		keyring *h2cipher.Keyring
 	}
 
 	authSettings struct {
@@ -167,6 +169,7 @@ type (
 		gate         gate.Gate
 		tokenizer    token.Tokenizer
 		lc           *lifecycle.Lifecycle[otpCipher]
+		cipherAlgs   h2cipher.Algs
 		config       governor.ConfigReader
 		log          *klog.LevelLogger
 		rolens       string
@@ -248,6 +251,9 @@ func New(
 	tokenizer token.Tokenizer,
 	g gate.Gate,
 ) *Service {
+	cipherAlgs := h2cipher.NewAlgsMap()
+	chacha20poly1305.Register(cipherAlgs)
+	aes.Register(cipherAlgs)
 	return &Service{
 		users:       users,
 		sessions:    sessions,
@@ -265,6 +271,7 @@ func New(
 		ratelimiter: ratelimiter,
 		gate:        g,
 		tokenizer:   tokenizer,
+		cipherAlgs:  cipherAlgs,
 		hbfailed:    0,
 		wg:          ksync.NewWaitGroup(),
 	}
@@ -511,10 +518,10 @@ func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.Manager[otpC
 	if len(otpsecrets.Keys) == 0 {
 		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No otpkey present")
 	}
-	decrypter := hunter2.NewDecrypter()
-	var hcipher hunter2.Cipher
+	keyring := h2cipher.NewKeyring()
+	var hcipher h2cipher.Cipher
 	for n, i := range otpsecrets.Keys {
-		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		c, err := h2cipher.FromParams(i, s.cipherAlgs)
 		if err != nil {
 			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid cipher param")
 		}
@@ -525,19 +532,19 @@ func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.Manager[otpC
 			}
 			hcipher = c
 		}
-		decrypter.RegisterCipher(c)
+		keyring.Register(c)
 	}
 
 	m.Stop(ctx)
 
 	cipher := &otpCipher{
-		cipher:    hcipher,
-		decrypter: decrypter,
+		cipher:  hcipher,
+		keyring: keyring,
 	}
 
 	s.log.Info(ctx, "Refreshed otp secrets with new secrets", klog.Fields{
 		"user.otpcipher.kid":        cipher.cipher.ID(),
-		"user.otpcipher.numotpkeys": decrypter.Size(),
+		"user.otpcipher.numotpkeys": keyring.Size(),
 	})
 
 	m.Store(cipher)

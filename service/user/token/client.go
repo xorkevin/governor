@@ -9,7 +9,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2signer"
+	"xorkevin.dev/hunter2/h2signer/eddsa"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -23,6 +24,7 @@ type (
 	// CmdClient is a token cmd client
 	CmdClient struct {
 		once          *ksync.Once[clientConfig]
+		signingAlgs   h2signer.SigningKeyAlgs
 		config        governor.ConfigValueReader
 		log           *klog.LevelLogger
 		term          *governor.Terminal
@@ -40,8 +42,11 @@ type (
 
 // NewCmdClient creates a new [*CmdClient]
 func NewCmdClient() *CmdClient {
+	signingAlgs := h2signer.NewSigningKeysMap()
+	eddsa.RegisterSigner(signingAlgs)
 	return &CmdClient{
-		once: ksync.NewOnce[clientConfig](),
+		once:        ksync.NewOnce[clientConfig](),
+		signingAlgs: signingAlgs,
 	}
 }
 
@@ -131,11 +136,11 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to read private key file")
 	}
-	key, err := hunter2.SigningKeyFromParams(string(skb), hunter2.DefaultSigningKeyAlgs)
+	key, err := h2signer.SigningKeyFromParams(string(skb), c.signingAlgs)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse private key")
 	}
-	if key.Alg() != hunter2.SigningAlgEdDSA {
+	if key.Alg() != eddsa.SigID {
 		return kerrors.WithMsg(nil, "Invalid private key signature algorithm")
 	}
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, key.ID()))

@@ -9,7 +9,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/blake2b"
 	"xorkevin.dev/kerrors"
 )
 
@@ -44,8 +45,8 @@ type (
 	repo struct {
 		table    *sessionModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is the db User session model
@@ -96,9 +97,9 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new user session repository
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewBlake2bHasher()
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := blake2b.New(blake2b.Config{})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &sessionModelTable{
@@ -116,12 +117,12 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new session id")
 	}
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new session key")
 	}
-	keystr := key.Base64()
-	hash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	hash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to hash session key")
 	}
@@ -134,7 +135,7 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 		AuthTime:  now,
 		IPAddr:    ipaddr,
 		UserAgent: useragent,
-	}, keystr, nil
+	}, key, nil
 }
 
 // ParseIDUserid gets the userid from a keyid
@@ -148,7 +149,7 @@ func ParseIDUserid(sessionID string) (string, error) {
 
 // ValidateKey validates the key against a hash
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
-	ok, err := r.verifier.Verify(key, m.KeyHash)
+	ok, err := r.verifier.Verify([]byte(key), m.KeyHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
@@ -157,19 +158,19 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 
 // RehashKey generates a new key and saves its hash
 func (r *repo) RehashKey(m *Model) (string, error) {
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new session key")
 	}
-	keystr := key.Base64()
-	hash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	hash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash session key")
 	}
 	now := time.Now().Round(0).Unix()
 	m.KeyHash = hash
 	m.Time = now
-	return keystr, nil
+	return key, nil
 }
 
 // GetByID returns a user session model with the given id

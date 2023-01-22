@@ -9,7 +9,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/blake2b"
 	"xorkevin.dev/kerrors"
 )
 
@@ -42,8 +43,8 @@ type (
 	repo struct {
 		table    *apikeyModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is the db Apikey model
@@ -102,9 +103,9 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new apikey repository
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewBlake2bHasher()
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := blake2b.New(blake2b.Config{})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &apikeyModelTable{
@@ -121,12 +122,12 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new api key id")
 	}
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
-	keystr := key.Base64()
-	hash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	hash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to hash api key")
 	}
@@ -139,7 +140,7 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 		Name:    name,
 		Desc:    desc,
 		Time:    now,
-	}, keystr, nil
+	}, key, nil
 }
 
 // ParseIDUserid gets the userid from a keyid
@@ -152,7 +153,7 @@ func ParseIDUserid(keyid string) (string, error) {
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
-	ok, err := r.verifier.Verify(key, m.KeyHash)
+	ok, err := r.verifier.Verify([]byte(key), m.KeyHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
@@ -160,12 +161,12 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
-	keystr := key.Base64()
-	hash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	hash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash api key")
 	}
@@ -182,7 +183,7 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 	}
 	m.KeyHash = hash
 	m.Time = now
-	return keystr, nil
+	return key, nil
 }
 
 func (r *repo) GetByID(ctx context.Context, keyid string) (*Model, error) {

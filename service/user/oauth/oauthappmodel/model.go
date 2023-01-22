@@ -8,7 +8,8 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/blake2b"
 	"xorkevin.dev/kerrors"
 )
 
@@ -38,8 +39,8 @@ type (
 	repo struct {
 		table    *oauthappModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is the db OAuth app model
@@ -101,9 +102,9 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new OAuth app repository
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewBlake2bHasher()
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := blake2b.New(blake2b.Config{})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &oauthappModelTable{
@@ -122,12 +123,12 @@ func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, er
 	}
 	clientid := mUID.Base64()
 
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}
-	keystr := key.Base64()
-	hash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	hash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to hash oauth client secret")
 	}
@@ -142,11 +143,11 @@ func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, er
 		Time:         now,
 		CreationTime: now,
 		CreatorID:    creatorID,
-	}, keystr, nil
+	}, key, nil
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
-	ok, err := r.verifier.Verify(key, m.KeyHash)
+	ok, err := r.verifier.Verify([]byte(key), m.KeyHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify key")
 	}
@@ -154,12 +155,12 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
-	key, err := uid.New(keySize)
+	keybytes, err := uid.New(keySize)
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}
-	keystr := key.Base64()
-	keyhash, err := r.hasher.Hash(keystr)
+	key := keybytes.Base64()
+	keyhash, err := r.hasher.Hash([]byte(key))
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to hash oauth client secret")
 	}
@@ -176,7 +177,7 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 	}
 	m.KeyHash = keyhash
 	m.Time = now
-	return keystr, nil
+	return key, nil
 }
 
 func (r *repo) GetByID(ctx context.Context, clientid string) (*Model, error) {

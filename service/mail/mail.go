@@ -24,7 +24,11 @@ import (
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2cipher"
+	"xorkevin.dev/hunter2/h2cipher/aes"
+	"xorkevin.dev/hunter2/h2cipher/chacha20poly1305"
+	"xorkevin.dev/hunter2/h2streamcipher"
+	"xorkevin.dev/hunter2/h2streamcipher/chacha20"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -124,9 +128,9 @@ type (
 	}
 
 	mailSecrets struct {
-		auth      secretAuth
-		cipher    hunter2.Cipher
-		decrypter *hunter2.Decrypter
+		auth    secretAuth
+		cipher  h2cipher.Cipher
+		keyring *h2cipher.Keyring
 	}
 
 	Service struct {
@@ -135,6 +139,7 @@ type (
 		mailBucket  objstore.Bucket
 		sendMailDir objstore.Dir
 		lc          *lifecycle.Lifecycle[mailSecrets]
+		cipherAlgs  h2cipher.Algs
 		config      governor.ConfigReader
 		log         *klog.LevelLogger
 		streamns    string
@@ -188,11 +193,15 @@ func NewCtx(inj governor.Injector) *Service {
 
 // New creates a new Mailer
 func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service {
+	cipherAlgs := h2cipher.NewAlgsMap()
+	chacha20poly1305.Register(cipherAlgs)
+	aes.Register(cipherAlgs)
 	return &Service{
 		tpl:         tpl,
 		events:      ev,
 		mailBucket:  obj,
 		sendMailDir: obj.Subdir("sendmail"),
+		cipherAlgs:  cipherAlgs,
 		hbfailed:    0,
 		wg:          ksync.NewWaitGroup(),
 	}
@@ -321,10 +330,10 @@ func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mai
 	if len(maildataSecrets.Keys) == 0 {
 		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No mailkey present")
 	}
-	decrypter := hunter2.NewDecrypter()
-	var cipher hunter2.Cipher
+	keyring := h2cipher.NewKeyring()
+	var cipher h2cipher.Cipher
 	for n, i := range maildataSecrets.Keys {
-		c, err := hunter2.CipherFromParams(i, hunter2.DefaultCipherAlgs)
+		c, err := h2cipher.FromParams(i, s.cipherAlgs)
 		if err != nil {
 			return nil, kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid cipher param")
 		}
@@ -335,20 +344,20 @@ func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mai
 			}
 			cipher = c
 		}
-		decrypter.RegisterCipher(c)
+		keyring.Register(c)
 	}
 
 	m.Stop(ctx)
 
 	secrets := &mailSecrets{
-		auth:      auth,
-		cipher:    cipher,
-		decrypter: decrypter,
+		auth:    auth,
+		cipher:  cipher,
+		keyring: keyring,
 	}
 
 	s.log.Info(ctx, "Refreshed mailkey with new keys", klog.Fields{
 		"mail.datakey.kid":  secrets.cipher.ID(),
-		"mail.datakeys.num": strconv.Itoa(decrypter.Size()),
+		"mail.datakeys.num": strconv.Itoa(keyring.Size()),
 	})
 
 	m.Store(secrets)
@@ -502,7 +511,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 	var msg io.Reader
 
 	var tag string
-	var auth *hunter2.Poly1305Auth
+	var decStream *h2streamcipher.DecStreamReader
 
 	if emmsg.Kind == mailMsgKindFwd {
 		data := emmsg.FwdData
@@ -530,24 +539,25 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			if err != nil {
 				return err
 			}
-			data.Key, err = secrets.decrypter.Decrypt(data.Key)
+			dataKey, err := secrets.keyring.Decrypt(data.Key)
 			if err != nil {
 				return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail data key")
 			}
-			config, err := hunter2.ParseChaCha20Config(data.Key)
+			config, err := chacha20.ParseConfig(string(dataKey))
 			if err != nil {
 				return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
 			}
-			stream, err := hunter2.NewChaCha20Stream(*config)
+			stream, err := chacha20.NewStream(*config)
 			if err != nil {
 				return kerrors.WithMsg(err, "Failed to create decryption stream")
 			}
-			auth, err = hunter2.NewPoly1305Auth(*config)
+			auth, err := chacha20.NewPoly1305Auth(*config)
 			if err != nil {
 				return kerrors.WithMsg(err, "Failed to create decryption auth")
 			}
 			tag = data.Tag
-			msg = hunter2.NewDecStreamReader(stream, auth, msg)
+			decStream = h2streamcipher.NewDecStreamReader(stream, auth, msg)
+			msg = decStream
 		}
 	} else {
 		var msgid string
@@ -580,28 +590,30 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 				if err != nil {
 					return err
 				}
-				data.Subject, err = secrets.decrypter.Decrypt(data.Subject)
+				dataSubject, err := secrets.keyring.Decrypt(data.Subject)
 				if err != nil {
 					return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail subject")
 				}
-				data.Key, err = secrets.decrypter.Decrypt(data.Key)
+				data.Subject = string(dataSubject)
+				dataKey, err := secrets.keyring.Decrypt(data.Key)
 				if err != nil {
 					return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail data key")
 				}
-				config, err := hunter2.ParseChaCha20Config(data.Key)
+				config, err := chacha20.ParseConfig(string(dataKey))
 				if err != nil {
 					return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
 				}
-				stream, err := hunter2.NewChaCha20Stream(*config)
+				stream, err := chacha20.NewStream(*config)
 				if err != nil {
 					return kerrors.WithMsg(err, "Failed to create decryption stream")
 				}
-				auth, err = hunter2.NewPoly1305Auth(*config)
+				auth, err := chacha20.NewPoly1305Auth(*config)
 				if err != nil {
 					return kerrors.WithMsg(err, "Failed to create decryption auth")
 				}
 				tag = data.Tag
-				body = hunter2.NewDecStreamReader(stream, auth, body)
+				decStream = h2streamcipher.NewDecStreamReader(stream, auth, body)
+				body = decStream
 			}
 			subject = strings.NewReader(data.Subject)
 		} else if emmsg.Kind == mailMsgKindTpl {
@@ -617,10 +629,11 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 				if err != nil {
 					return err
 				}
-				data.Emdata, err = secrets.decrypter.Decrypt(data.Emdata)
+				dataEmdata, err := secrets.keyring.Decrypt(data.Emdata)
 				if err != nil {
 					return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail data")
 				}
+				data.Emdata = string(dataEmdata)
 			}
 			emdata := map[string]string{}
 			if err := kjson.Unmarshal([]byte(data.Emdata), &emdata); err != nil {
@@ -659,11 +672,13 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 		msg = b
 	}
 
-	if auth != nil {
-		if err := auth.WriteCount(); err != nil {
-			return kerrors.WithMsg(err, "Failed to write auth content length")
+	if decStream != nil {
+		if err := decStream.Close(); err != nil {
+			return kerrors.WithMsg(err, "Failed to close decryption stream")
 		}
-		if err := auth.Auth(tag); err != nil {
+		if ok, err := decStream.Verify(tag); err != nil {
+			return kerrors.WithKind(err, errorMailEvent{}, "Failed to authenticate mail body")
+		} else if !ok {
 			return kerrors.WithKind(err, errorMailEvent{}, "Mail body failed authentication")
 		}
 	}
@@ -829,7 +844,7 @@ func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 		if err != nil {
 			return err
 		}
-		datastring, err = secrets.cipher.Encrypt(datastring)
+		datastring, err = secrets.cipher.Encrypt(databytes)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data")
 		}
@@ -890,45 +905,46 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 
 	var key string
 	var tag string
-	var auth *hunter2.Poly1305Auth
+	var encStream *h2streamcipher.EncStreamReader
 	if encrypt {
 		secrets, err := s.getSecrets(ctx)
 		if err != nil {
 			return err
 		}
-		subject, err = secrets.cipher.Encrypt(subject)
+		subject, err = secrets.cipher.Encrypt([]byte(subject))
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail subject")
 		}
 
 		contentType = mediaTypeOctet
-		config, err := hunter2.NewChaCha20Config()
+		config, err := chacha20.NewConfig()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = secrets.cipher.Encrypt(config.String())
+		key, err = secrets.cipher.Encrypt([]byte(config.String()))
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, err := hunter2.NewChaCha20Stream(*config)
+		stream, err := chacha20.NewStream(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}
-		auth, err = hunter2.NewPoly1305Auth(*config)
+		auth, err := chacha20.NewPoly1305Auth(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
-		body = hunter2.NewEncStreamReader(stream, auth, body)
+		encStream = h2streamcipher.NewEncStreamReader(stream, auth, body)
+		body = encStream
 	}
 
 	if err := s.sendMailDir.Put(ctx, path, contentType, size, nil, body); err != nil {
 		return kerrors.WithMsg(err, "Failed to save mail body")
 	}
-	if auth != nil {
-		if err := auth.WriteCount(); err != nil {
-			return kerrors.WithMsg(err, "Failed to write auth content length")
+	if encStream != nil {
+		if err := encStream.Close(); err != nil {
+			return kerrors.WithMsg(err, "Failed to close encryption stream")
 		}
-		tag = auth.String()
+		tag = encStream.Tag()
 	}
 
 	if retpath == "" {
@@ -992,40 +1008,41 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 
 	var key string
 	var tag string
-	var auth *hunter2.Poly1305Auth
+	var encStream *h2streamcipher.EncStreamReader
 	if encrypt {
 		secrets, err := s.getSecrets(ctx)
 		if err != nil {
 			return err
 		}
 		contentType = mediaTypeOctet
-		config, err := hunter2.NewChaCha20Config()
+		config, err := chacha20.NewConfig()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
-		key, err = secrets.cipher.Encrypt(config.String())
+		key, err = secrets.cipher.Encrypt([]byte(config.String()))
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, err := hunter2.NewChaCha20Stream(*config)
+		stream, err := chacha20.NewStream(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}
-		auth, err = hunter2.NewPoly1305Auth(*config)
+		auth, err := chacha20.NewPoly1305Auth(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
-		body = hunter2.NewEncStreamReader(stream, auth, body)
+		encStream = h2streamcipher.NewEncStreamReader(stream, auth, body)
+		body = encStream
 	}
 
 	if err := s.sendMailDir.Put(ctx, path, contentType, size, nil, body); err != nil {
 		return kerrors.WithMsg(err, "Failed to save mail body")
 	}
-	if auth != nil {
-		if err := auth.WriteCount(); err != nil {
-			return kerrors.WithMsg(err, "Failed to write auth content length")
+	if encStream != nil {
+		if err := encStream.Close(); err != nil {
+			return kerrors.WithMsg(err, "Failed to close encryption stream")
 		}
-		tag = auth.String()
+		tag = encStream.Tag()
 	}
 
 	if retpath == "" {

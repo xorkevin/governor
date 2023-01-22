@@ -11,7 +11,10 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2signer"
+	"xorkevin.dev/hunter2/h2signer/eddsa"
+	"xorkevin.dev/hunter2/h2signer/hs512"
+	"xorkevin.dev/hunter2/h2signer/rs256"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -76,9 +79,9 @@ type (
 	tokenSigner struct {
 		signer          jose.Signer
 		extsigner       jose.Signer
-		signingkeys     *hunter2.SigningKeyring
-		extsigningkeys  *hunter2.SigningKeyring
-		sysverifierkeys *hunter2.VerifierKeyring
+		signingkeys     *h2signer.SigningKeyring
+		extsigningkeys  *h2signer.SigningKeyring
+		sysverifierkeys *h2signer.VerifierKeyring
 		jwks            []jose.JSONWebKey
 		hs512id         string
 		rs256id         string
@@ -86,15 +89,17 @@ type (
 	}
 
 	Service struct {
-		lc         *lifecycle.Lifecycle[tokenSigner]
-		issuer     string
-		audience   string
-		config     governor.SecretReader
-		log        *klog.LevelLogger
-		hbfailed   int
-		hbmaxfail  int
-		keyrefresh time.Duration
-		wg         *ksync.WaitGroup
+		lc           *lifecycle.Lifecycle[tokenSigner]
+		issuer       string
+		audience     string
+		signingAlgs  h2signer.SigningKeyAlgs
+		verifierAlgs h2signer.VerifierKeyAlgs
+		config       governor.SecretReader
+		log          *klog.LevelLogger
+		hbfailed     int
+		hbmaxfail    int
+		keyrefresh   time.Duration
+		wg           *ksync.WaitGroup
 	}
 
 	ctxKeyTokenizer struct{}
@@ -116,9 +121,17 @@ func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
 
 // New creates a new Tokenizer
 func New() *Service {
+	signingAlgs := h2signer.NewSigningKeysMap()
+	hs512.Register(signingAlgs)
+	rs256.Register(signingAlgs)
+	eddsa.RegisterSigner(signingAlgs)
+	verifierAlgs := h2signer.NewVerifierKeysMap()
+	eddsa.RegisterVerifier(verifierAlgs)
 	return &Service{
-		hbfailed: 0,
-		wg:       ksync.NewWaitGroup(),
+		signingAlgs:  signingAlgs,
+		verifierAlgs: verifierAlgs,
+		hbfailed:     0,
+		wg:           ksync.NewWaitGroup(),
 	}
 }
 
@@ -279,16 +292,16 @@ func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSign
 	return signer, nil
 }
 
-func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunter2.SigningKeyring, jose.Signer, string, error) {
-	var khs512 hunter2.SigningKey
-	signingkeys := hunter2.NewSigningKeyring()
+func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, error) {
+	var khs512 h2signer.SigningKey
+	signingkeys := h2signer.NewSigningKeyring()
 	for _, i := range secrets {
-		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
+		k, err := h2signer.SigningKeyFromParams(i, s.signingAlgs)
 		if err != nil {
 			return nil, nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case hunter2.SigningAlgHS512:
+		case hs512.SigID:
 			if khs512 == nil {
 				khs512 = k
 			}
@@ -298,7 +311,7 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunt
 			// signing keys
 			return current.signingkeys, current.signer, current.hs512id, nil
 		}
-		signingkeys.RegisterSigningKey(k)
+		signingkeys.Register(k)
 	}
 	if khs512 == nil {
 		return nil, nil, "", kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No token keys present")
@@ -310,17 +323,17 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*hunt
 	return signingkeys, sig, khs512.ID(), nil
 }
 
-func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter2.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
-	var krs256 hunter2.SigningKey
-	signingkeys := hunter2.NewSigningKeyring()
+func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
+	var krs256 h2signer.SigningKey
+	signingkeys := h2signer.NewSigningKeyring()
 	var jwks []jose.JSONWebKey
 	for _, i := range secrets {
-		k, err := hunter2.SigningKeyFromParams(i, hunter2.DefaultSigningKeyAlgs)
+		k, err := h2signer.SigningKeyFromParams(i, s.signingAlgs)
 		if err != nil {
 			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case hunter2.SigningAlgRS256:
+		case rs256.SigID:
 			jwks = append(jwks, jose.JSONWebKey{
 				Algorithm: "RS256",
 				KeyID:     k.ID(),
@@ -336,7 +349,7 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter
 			// signing keys
 			return current.extsigningkeys, current.extsigner, current.rs256id, current.jwks, nil
 		}
-		signingkeys.RegisterSigningKey(k)
+		signingkeys.Register(k)
 	}
 	if krs256 == nil {
 		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "No token keys present")
@@ -348,16 +361,16 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*hunter
 	return signingkeys, extsig, krs256.ID(), jwks, nil
 }
 
-func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) (*hunter2.VerifierKeyring, string, error) {
-	var keddsa hunter2.VerifierKey
-	sysverifierkeys := hunter2.NewVerifierKeyring()
+func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) (*h2signer.VerifierKeyring, string, error) {
+	var keddsa h2signer.VerifierKey
+	sysverifierkeys := h2signer.NewVerifierKeyring()
 	for _, i := range secrets {
-		k, err := hunter2.VerifierKeyFromParams(i, hunter2.DefaultVerifierKeyAlgs)
+		k, err := h2signer.VerifierKeyFromParams(i, s.verifierAlgs)
 		if err != nil {
 			return nil, "", kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case hunter2.SigningAlgEdDSA:
+		case eddsa.SigID:
 			if keddsa == nil {
 				keddsa = k
 			}
@@ -367,7 +380,7 @@ func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) 
 			// in verifier keys
 			return current.sysverifierkeys, current.eddsaid, nil
 		}
-		sysverifierkeys.RegisterVerifierKey(k)
+		sysverifierkeys.Register(k)
 	}
 	return sysverifierkeys, keddsa.ID(), nil
 }

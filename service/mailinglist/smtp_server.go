@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	gomail "net/mail"
+	"net/netip"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -144,37 +145,30 @@ func (s *smtpBackend) lreqID() string {
 	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
 }
 
-func (s *smtpBackend) Login(state *smtp.ConnectionState, username, password string) (smtp.Session, error) {
-	return nil, smtp.ErrAuthUnsupported
-}
-
-func (s *smtpBackend) AnonymousLogin(state *smtp.ConnectionState) (smtp.Session, error) {
+func (s *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	ctx := klog.WithFields(context.Background(), klog.Fields{
 		"smtp.cmd": "helo",
 	})
-	host, _, err := net.SplitHostPort(state.RemoteAddr.String())
+	addrport, err := netip.ParseAddrPort(c.Conn().RemoteAddr().String())
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp remote addr"), nil)
-		return nil, errSMTPConn
-	}
-	hostip := net.ParseIP(host)
-	if hostip == nil {
-		s.log.Warn(ctx, "Failed to parse smtp remote addr ip", klog.Fields{
-			"smtp.host": host,
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp remote addr"), klog.Fields{
+			"smtp.remoteaddr": c.Conn().RemoteAddr().String(),
 		})
 		return nil, errSMTPConn
 	}
+	addr := addrport.Addr()
+	hostname := c.Hostname()
 	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.session.ip":   hostip.String(),
-		"smtp.session.helo": state.Hostname,
+		"smtp.session.ip":   addr.String(),
+		"smtp.session.helo": hostname,
 	})
 	return &smtpSession{
 		service: s.service,
 		be:      s,
 		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "session", nil)),
 		ctx:     ctx,
-		srcip:   hostip,
-		helo:    state.Hostname,
+		srcip:   addr,
+		helo:    hostname,
 	}, nil
 }
 
@@ -183,7 +177,7 @@ type smtpSession struct {
 	be           *smtpBackend
 	log          *klog.LevelLogger
 	ctx          context.Context
-	srcip        net.IP
+	srcip        netip.Addr
 	helo         string
 	id           string
 	from         string
@@ -197,7 +191,7 @@ type smtpSession struct {
 }
 
 func (s *smtpSession) checkSPF(ctx context.Context, domain, from string) (authres.ResultValue, error, error) {
-	result, spfErr := spf.CheckHostWithSender(s.srcip, domain, from, spf.WithContext(ctx), spf.WithResolver(s.service.resolver))
+	result, spfErr := spf.CheckHostWithSender(net.IP(s.srcip.AsSlice()), domain, from, spf.WithContext(ctx), spf.WithResolver(s.service.resolver))
 	switch result {
 	case spf.Pass:
 		return authres.ResultPass, spfErr, nil
@@ -222,7 +216,11 @@ const (
 	mailidRandSize = 8
 )
 
-func (s *smtpSession) Mail(from string, opts smtp.MailOptions) error {
+func (s *smtpSession) AuthPlain(username, password string) error {
+	return smtp.ErrAuthUnsupported
+}
+
+func (s *smtpSession) Mail(from string, opts *smtp.MailOptions) error {
 	ctx := klog.WithFields(s.ctx, klog.Fields{
 		"smtp.cmd":      "mail",
 		"smtp.mailfrom": from,

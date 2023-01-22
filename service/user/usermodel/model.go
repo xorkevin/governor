@@ -9,7 +9,10 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2cipher"
+	"xorkevin.dev/hunter2/h2hash"
+	"xorkevin.dev/hunter2/h2hash/passhash/scrypt"
+	"xorkevin.dev/hunter2/h2otp"
 	"xorkevin.dev/kerrors"
 )
 
@@ -29,9 +32,9 @@ type (
 		New(username, password, email, firstname, lastname string) (*Model, error)
 		ValidatePass(password string, m *Model) (bool, error)
 		RehashPass(ctx context.Context, m *Model, password string) error
-		ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error)
-		ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error)
-		GenerateOTPSecret(ctx context.Context, cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
+		ValidateOTPCode(keyring *h2cipher.Keyring, m *Model, code string) (bool, error)
+		ValidateOTPBackup(keyring *h2cipher.Keyring, m *Model, backup string) (bool, error)
+		GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
 		EnableOTP(ctx context.Context, m *Model) error
 		DisableOTP(ctx context.Context, m *Model) error
 		UpdateLoginFailed(ctx context.Context, m *Model) error
@@ -51,8 +54,8 @@ type (
 	repo struct {
 		table    *userModelTable
 		db       db.Database
-		hasher   hunter2.Hasher
-		verifier *hunter2.Verifier
+		hasher   h2hash.Hasher
+		verifier *h2hash.Verifier
 	}
 
 	// Model is the db User model
@@ -145,9 +148,13 @@ func NewCtx(inj governor.Injector, table string) Repo {
 
 // New creates a new user repository
 func New(database db.Database, table string) Repo {
-	hasher := hunter2.NewScryptHasher(passHashLen, passSaltLen, hunter2.DefaultScryptConfig)
-	verifier := hunter2.NewVerifier()
-	verifier.RegisterHash(hasher)
+	hasher := scrypt.New(passHashLen, passSaltLen, scrypt.Config{
+		WorkFactor:     32768,
+		MemBlocksize:   8,
+		ParallelFactor: 1,
+	})
+	verifier := h2hash.NewVerifier()
+	verifier.Register(hasher)
 
 	return &repo{
 		table: &userModelTable{
@@ -166,7 +173,7 @@ func (r *repo) New(username, password, email, firstname, lastname string) (*Mode
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}
 
-	mHash, err := r.hasher.Hash(password)
+	mHash, err := r.hasher.Hash([]byte(password))
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to hash password")
 	}
@@ -184,7 +191,7 @@ func (r *repo) New(username, password, email, firstname, lastname string) (*Mode
 
 // ValidatePass validates the password against a hash
 func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
-	ok, err := r.verifier.Verify(password, m.PassHash)
+	ok, err := r.verifier.Verify([]byte(password), m.PassHash)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify password")
 	}
@@ -193,7 +200,7 @@ func (r *repo) ValidatePass(password string, m *Model) (bool, error) {
 
 // RehashPass updates the password with a new hash
 func (r *repo) RehashPass(ctx context.Context, m *Model, password string) error {
-	mHash, err := r.hasher.Hash(password)
+	mHash, err := r.hasher.Hash([]byte(password))
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to rehash password")
 	}
@@ -211,12 +218,12 @@ func (r *repo) RehashPass(ctx context.Context, m *Model, password string) error 
 }
 
 // ValidateOTPCode validates an otp code
-func (r *repo) ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code string) (bool, error) {
-	params, err := decrypter.Decrypt(m.OTPSecret)
+func (r *repo) ValidateOTPCode(keyring *h2cipher.Keyring, m *Model, code string) (bool, error) {
+	params, err := keyring.Decrypt(m.OTPSecret)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to decrypt otp secret")
 	}
-	ok, err := hunter2.TOTPVerify(params, code, hunter2.DefaultOTPHashes)
+	ok, err := h2otp.TOTPVerify(string(params), code, h2otp.DefaultHashes)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to verify otp code")
 	}
@@ -224,8 +231,8 @@ func (r *repo) ValidateOTPCode(decrypter *hunter2.Decrypter, m *Model, code stri
 }
 
 // ValidateOTPBackup validates an otp backup code
-func (r *repo) ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup string) (bool, error) {
-	code, err := decrypter.Decrypt(m.OTPBackup)
+func (r *repo) ValidateOTPBackup(keyring *h2cipher.Keyring, m *Model, backup string) (bool, error) {
+	code, err := keyring.Decrypt(m.OTPBackup)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to decrypt otp backup")
 	}
@@ -233,9 +240,9 @@ func (r *repo) ValidateOTPBackup(decrypter *hunter2.Decrypter, m *Model, backup 
 }
 
 // GenerateOTPSecret generates an otp secret
-func (r *repo) GenerateOTPSecret(ctx context.Context, cipher hunter2.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
-	params, uri, err := hunter2.TOTPGenerateSecret(totpSecretLen, hunter2.TOTPURI{
-		TOTPConfig: hunter2.TOTPConfig{
+func (r *repo) GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
+	params, uri, err := h2otp.TOTPGenerateSecret(totpSecretLen, h2otp.TOTPURI{
+		TOTPConfig: h2otp.TOTPConfig{
 			Alg:    alg,
 			Digits: digits,
 			Period: 30,
@@ -247,15 +254,15 @@ func (r *repo) GenerateOTPSecret(ctx context.Context, cipher hunter2.Cipher, m *
 	if err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to generate otp secret")
 	}
-	backup, err := hunter2.GenerateRandomCode(totpBackupLen)
+	backup, err := h2otp.GenerateRandomCode(totpBackupLen)
 	if err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to generate otp backup")
 	}
-	encryptedParams, err := cipher.Encrypt(params)
+	encryptedParams, err := cipher.Encrypt([]byte(params))
 	if err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to encrypt otp secret")
 	}
-	encryptedBackup, err := cipher.Encrypt(backup)
+	encryptedBackup, err := cipher.Encrypt([]byte(backup))
 	if err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to encrypt otp backup")
 	}

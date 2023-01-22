@@ -464,7 +464,7 @@ func (s *Service) commitOTP(ctx context.Context, userid string, code string) err
 	if err != nil {
 		return err
 	}
-	if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
+	if ok, err := s.users.ValidateOTPCode(cipher.keyring, m, code); err != nil {
 		return kerrors.WithMsg(err, "Failed to validate otp code")
 	} else if !ok {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Incorrect otp code")
@@ -504,7 +504,7 @@ func (s *Service) checkOTPCode(ctx context.Context, m *usermodel.Model, code str
 		if err != nil {
 			return err
 		}
-		if ok, err := s.users.ValidateOTPBackup(cipher.decrypter, m, backup); err != nil {
+		if ok, err := s.users.ValidateOTPBackup(cipher.keyring, m, backup); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp backup code")
 		} else if !ok {
 			return governor.ErrWithRes(kerrors.WithKind(nil, errorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
@@ -535,7 +535,7 @@ func (s *Service) checkOTPCode(ctx context.Context, m *usermodel.Model, code str
 		if err != nil {
 			return err
 		}
-		if ok, err := s.users.ValidateOTPCode(cipher.decrypter, m, code); err != nil {
+		if ok, err := s.users.ValidateOTPCode(cipher.keyring, m, code); err != nil {
 			return kerrors.WithMsg(err, "Failed to validate otp code")
 		} else if !ok {
 			return governor.ErrWithRes(kerrors.WithKind(nil, errorAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")

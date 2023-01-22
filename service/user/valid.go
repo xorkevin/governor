@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/hunter2"
+	"xorkevin.dev/hunter2/h2otp"
 )
 
 //go:generate forge validation
@@ -269,7 +269,7 @@ func validApikeyDesc(desc string) error {
 }
 
 func validOTPAlg(alg string) error {
-	_, ok := hunter2.DefaultOTPHashes[alg]
+	_, ok := h2otp.DefaultHashes[alg]
 	if !ok {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp hash alg")
 	}
