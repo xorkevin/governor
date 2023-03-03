@@ -225,7 +225,7 @@ func (c *Context) WriteFile(status int, contentType string, r io.Reader) {
 	c.SetHeader(headerContentType, contentType)
 	c.w.WriteHeader(status)
 	if _, err := io.Copy(c.w, r); err != nil {
-		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write response"), nil)
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write response"))
 		return
 	}
 }
@@ -239,7 +239,7 @@ func (c *Context) WriteJSON(status int, body interface{}) {
 	e := json.NewEncoder(&b)
 	e.SetEscapeHTML(false)
 	if err := e.Encode(body); err != nil {
-		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json"), nil)
+		c.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to write json"))
 		http.Error(c.w, "Failed to write response", http.StatusInternalServerError)
 		return
 	}
@@ -258,9 +258,9 @@ func (c *Context) WriteError(err error) {
 
 	if !errors.Is(err, ErrorNoLog) {
 		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
-			c.log.WarnErr(c.Ctx(), err, nil)
+			c.log.WarnErr(c.Ctx(), err)
 		} else {
-			c.log.Err(c.Ctx(), err, nil)
+			c.log.Err(c.Ctx(), err)
 		}
 	}
 
@@ -288,8 +288,8 @@ func (c *Context) Set(key, value interface{}) {
 	c.SetCtx(context.WithValue(c.Ctx(), key, value))
 }
 
-func (c *Context) LogFields(fields klog.Fields) {
-	c.SetCtx(klog.WithFields(c.Ctx(), fields))
+func (c *Context) LogAttrs(attrs ...klog.Attr) {
+	c.SetCtx(klog.CtxWithAttrs(c.Ctx(), attrs...))
 }
 
 func (c *Context) Log() klog.Logger {
@@ -418,7 +418,7 @@ func (w *Websocket) Close(status int, reason string) {
 			return
 		}
 		err = w.wrapWSErr(err, int(websocket.StatusInternalError), "Failed to close ws connection")
-		w.c.log.WarnErr(w.c.Ctx(), kerrors.WithMsg(err, "Failed to close ws connection"), nil)
+		w.c.log.WarnErr(w.c.Ctx(), kerrors.WithMsg(err, "Failed to close ws connection"))
 	}
 }
 
@@ -433,9 +433,9 @@ func (w *Websocket) CloseError(err error) {
 
 	if !errors.Is(err, ErrorNoLog) {
 		if werr.Status != int(websocket.StatusInternalError) {
-			w.c.log.WarnErr(w.c.Ctx(), err, nil)
+			w.c.log.WarnErr(w.c.Ctx(), err)
 		} else {
-			w.c.log.Err(w.c.Ctx(), err, nil)
+			w.c.log.Err(w.c.Ctx(), err)
 		}
 	}
 

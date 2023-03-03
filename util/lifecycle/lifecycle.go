@@ -75,7 +75,7 @@ func (l *Lifecycle[T]) Heartbeat(ctx context.Context, wg *ksync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
-			l.stopfn(klog.ExtendCtx(context.Background(), ctx, nil), l.aclient.Swap(nil))
+			l.stopfn(klog.ExtendCtx(context.Background(), ctx), l.aclient.Swap(nil))
 			return
 		case <-ticker.C:
 			l.heartbeatfn(ctx, m)
@@ -90,7 +90,7 @@ func (m *Manager[T]) Construct(ctx context.Context) (*T, error) {
 
 // Stop stops and removes an instance
 func (m *Manager[T]) Stop(ctx context.Context) {
-	m.l.stopfn(klog.ExtendCtx(context.Background(), ctx, nil), m.l.aclient.Swap(nil))
+	m.l.stopfn(klog.ExtendCtx(context.Background(), ctx), m.l.aclient.Swap(nil))
 }
 
 // Load returns the cached instance
