@@ -70,9 +70,7 @@ func (s *Server) Init(ctx context.Context) error {
 		return nil
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "init",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "init"))
 
 	if err := s.settings.init(ctx, s.flags); err != nil {
 		return err
@@ -82,10 +80,10 @@ func (s *Server) Init(ctx context.Context) error {
 	i := chi.NewRouter()
 	s.i = i
 
-	s.log.Info(ctx, "Init server instance", nil)
+	s.log.Info(ctx, "Init server instance")
 
 	i.Use(stripSlashesMiddleware)
-	s.log.Info(ctx, "Init strip slashes middleware", nil)
+	s.log.Info(ctx, "Init strip slashes middleware")
 
 	{
 		trustedproxies := make([]netip.Prefix, 0, len(s.settings.middleware.trustedproxies))
@@ -97,13 +95,11 @@ func (s *Server) Init(ctx context.Context) error {
 			trustedproxies = append(trustedproxies, k)
 		}
 		i.Use(realIPMiddleware(trustedproxies))
-		s.log.Info(ctx, "Init real ip middleware", klog.Fields{
-			"realip.trustedproxies": strings.Join(s.settings.middleware.trustedproxies, ","),
-		})
+		s.log.Info(ctx, "Init real ip middleware", klog.AString("trustedproxies", strings.Join(s.settings.middleware.trustedproxies, ",")))
 	}
 
 	i.Use(s.reqLoggerMiddleware)
-	s.log.Info(ctx, "Init request logger", nil)
+	s.log.Info(ctx, "Init request logger")
 
 	if len(s.settings.middleware.routerewrite) > 0 {
 		k := make([]string, 0, len(s.settings.middleware.routerewrite))
@@ -114,9 +110,7 @@ func (s *Server) Init(ctx context.Context) error {
 			k = append(k, i.String())
 		}
 		i.Use(routeRewriteMiddleware(s.settings.middleware.routerewrite))
-		s.log.Info(ctx, "Init route rewriter middleware", klog.Fields{
-			"routerrewrite.rules": strings.Join(k, "; "),
-		})
+		s.log.Info(ctx, "Init route rewriter middleware", klog.AString("rules", strings.Join(k, "; ")))
 	}
 
 	if len(s.settings.middleware.allowpaths) > 0 {
@@ -128,9 +122,7 @@ func (s *Server) Init(ctx context.Context) error {
 			k = append(k, i.pattern)
 		}
 		i.Use(corsPathsAllowAllMiddleware(s.settings.middleware.allowpaths))
-		s.log.Info(ctx, "Init middleware allow all cors", klog.Fields{
-			"cors.paths": strings.Join(k, "; "),
-		})
+		s.log.Info(ctx, "Init middleware allow all cors", klog.AString("paths", strings.Join(k, "; ")))
 	}
 	if len(s.settings.middleware.alloworigins) > 0 {
 		i.Use(cors.Handler(cors.Options{
@@ -147,44 +139,34 @@ func (s *Server) Init(ctx context.Context) error {
 			AllowCredentials: true,
 			MaxAge:           300,
 		}))
-		s.log.Info(ctx, "Init middleware CORS", klog.Fields{
-			"cors.alloworigins": strings.Join(s.settings.middleware.alloworigins, ", "),
-		})
+		s.log.Info(ctx, "Init middleware CORS", klog.AString("alloworigins", strings.Join(s.settings.middleware.alloworigins, ", ")))
 	}
 
 	if limit, err := bytefmt.ToBytes(s.settings.httpServer.maxReqSize); err != nil {
-		s.log.Warn(ctx, "Invalid maxreqsize format for middlware body limit", klog.Fields{
-			"bodylimit.maxreqsize": s.settings.httpServer.maxReqSize,
-		})
+		s.log.Warn(ctx, "Invalid maxreqsize format for middlware body limit", klog.AString("maxreqsize", s.settings.httpServer.maxReqSize))
 	} else {
 		i.Use(s.bodyLimitMiddleware(limit))
-		s.log.Info(ctx, "Init middleware body limit", klog.Fields{
-			"bodylimit.maxreqsize": s.settings.httpServer.maxReqSize,
-		})
+		s.log.Info(ctx, "Init middleware body limit", klog.AString("maxreqsize", s.settings.httpServer.maxReqSize))
 	}
 
 	i.Use(s.compressorMiddleware)
-	s.log.Info(ctx, "Init middleware compressor", nil)
+	s.log.Info(ctx, "Init middleware compressor")
 
 	i.Use(s.recovererMiddleware)
-	s.log.Info(ctx, "Init middleware recoverer", nil)
+	s.log.Info(ctx, "Init middleware recoverer")
 
-	s.log.Info(ctx, "Secrets source", klog.Fields{
-		"gov.secrets.source": s.settings.vault.Info(),
-	})
+	s.log.Info(ctx, "Secrets source", klog.AString("source", s.settings.vault.Info()))
 
 	s.initSetup(s.router(s.settings.config.BasePath+"/setupz", s.log.Logger))
-	s.log.Info(ctx, "Init setup routes", nil)
+	s.log.Info(ctx, "Init setup routes")
 	s.initHealth(s.router(s.settings.config.BasePath+"/healthz", s.log.Logger))
-	s.log.Info(ctx, "Init health routes", nil)
+	s.log.Info(ctx, "Init health routes")
 
 	if err := s.initServices(ctx); err != nil {
 		return err
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "start",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "start"))
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
@@ -215,62 +197,50 @@ func (s *Server) Serve() error {
 	defer cancel()
 	if err := s.Init(ctx); err != nil {
 		if s.log != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Init failed"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Init failed"))
 		}
 		return err
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "start",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "start"))
 	maxHeaderSize := defaultMaxHeaderSize
 	if limit, err := bytefmt.ToBytes(s.settings.httpServer.maxHeaderSize); err != nil {
-		s.log.Warn(ctx, "Invalid maxheadersize format for http server", klog.Fields{
-			"http.server.maxheadersize": s.settings.httpServer.maxReqSize,
-		})
+		s.log.Warn(ctx, "Invalid maxheadersize format for http server", klog.AString("maxheadersize", s.settings.httpServer.maxReqSize))
 	} else {
 		maxHeaderSize = int(limit)
 	}
 	maxConnRead := 5 * time.Second
 	if t, err := time.ParseDuration(s.settings.httpServer.maxConnRead); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnread time for http server", klog.Fields{
-			"http.server.maxconnread": s.settings.httpServer.maxConnRead,
-		})
+		s.log.Warn(ctx, "Invalid maxconnread time for http server", klog.AString("maxconnread", s.settings.httpServer.maxConnRead))
 	} else {
 		maxConnRead = t
 	}
 	maxConnHeader := 2 * time.Second
 	if t, err := time.ParseDuration(s.settings.httpServer.maxConnHeader); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnheader time for http server", klog.Fields{
-			"http.server.maxconnheader": s.settings.httpServer.maxConnHeader,
-		})
+		s.log.Warn(ctx, "Invalid maxconnheader time for http server", klog.AString("maxconnheader", s.settings.httpServer.maxConnHeader))
 	} else {
 		maxConnHeader = t
 	}
 	maxConnWrite := 5 * time.Second
 	if t, err := time.ParseDuration(s.settings.httpServer.maxConnWrite); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.Fields{
-			"http.server.maxconnwrite": s.settings.httpServer.maxConnWrite,
-		})
+		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.AString("maxconnwrite", s.settings.httpServer.maxConnWrite))
 	} else {
 		maxConnWrite = t
 	}
 	maxConnIdle := 5 * time.Second
 	if t, err := time.ParseDuration(s.settings.httpServer.maxConnIdle); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnidle time for http server", klog.Fields{
-			"http.server.maxconnidle": s.settings.httpServer.maxConnIdle,
-		})
+		s.log.Warn(ctx, "Invalid maxconnidle time for http server", klog.AString("maxconnidle", s.settings.httpServer.maxConnIdle))
 	} else {
 		maxConnIdle = t
 	}
-	s.log.Info(ctx, "Init http server with configuration", klog.Fields{
-		"http.server.addr":          s.settings.config.Addr,
-		"http.server.maxheadersize": strconv.Itoa(maxHeaderSize),
-		"http.server.maxconnread":   maxConnRead.String(),
-		"http.server.maxconnheader": maxConnHeader.String(),
-		"http.server.maxconnwrite":  maxConnWrite.String(),
-		"http.server.maxconnidle":   maxConnIdle.String(),
-	})
+	s.log.Info(ctx, "Init http server with configuration",
+		klog.AString("addr", s.settings.config.Addr),
+		klog.AString("maxheadersize", strconv.Itoa(maxHeaderSize)),
+		klog.AString("maxconnread", maxConnRead.String()),
+		klog.AString("maxconnheader", maxConnHeader.String()),
+		klog.AString("maxconnwrite", maxConnWrite.String()),
+		klog.AString("maxconnidle", maxConnIdle.String()),
+	)
 	srv := http.Server{
 		Addr:              s.settings.config.Addr,
 		Handler:           s,
@@ -285,23 +255,21 @@ func (s *Server) Serve() error {
 			fmt.Sprintf(banner, s.settings.config.Version.Num),
 		)
 	}
-	s.log.Info(ctx, "Starting server", nil)
+	s.log.Info(ctx, "Starting server")
 	go func() {
 		defer cancel()
 		if err := srv.ListenAndServe(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down server"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down server"))
 		}
 	}()
 	s.waitForInterrupt(ctx)
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "stop",
-	})
-	s.log.Info(ctx, "Shutdown process begin", nil)
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "stop"))
+	s.log.Info(ctx, "Shutdown process begin")
 	cancel()
-	shutdownCtx, shutdownCancel := context.WithTimeout(klog.ExtendCtx(context.Background(), ctx, nil), 16*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(klog.ExtendCtx(context.Background(), ctx), 16*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		s.log.Err(shutdownCtx, kerrors.WithMsg(err, "Shutdown server error"), nil)
+		s.log.Err(shutdownCtx, kerrors.WithMsg(err, "Shutdown server error"))
 	}
 	s.Stop(shutdownCtx)
 	return nil

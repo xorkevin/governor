@@ -175,7 +175,7 @@ func (c *Client) Init() error {
 	c.httpc = NewHTTPFetcher(httpc)
 
 	for _, i := range c.clients {
-		l := klog.Sub(c.log.Logger, i.opt.name, nil)
+		l := c.log.Logger.Sublogger(i.opt.name)
 		if err := i.r.Init(c.settings.reader(i.opt), l, c.term.Term, httpc.subclient(i.opt.url, l)); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
@@ -208,8 +208,6 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 	if !decoded {
 		return nil, kerrors.WithKind(nil, ErrorServerRes, "Non-decodable response")
 	}
-	c.log.Info(ctx, "Successfully setup governor", klog.Fields{
-		"version": body.Version,
-	})
+	c.log.Info(ctx, "Successfully setup governor", klog.AString("version", body.Version))
 	return body, nil
 }

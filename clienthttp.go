@@ -67,7 +67,7 @@ func (e errorServerRes) Error() string {
 
 func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
 	return &httpClient{
-		log: klog.NewLevelLogger(klog.Sub(l, "httpc", nil)),
+		log: klog.NewLevelLogger(l.Sublogger("httpc")),
 		httpc: &http.Client{
 			Transport: c.transport,
 			Timeout:   c.timeout,
@@ -78,7 +78,7 @@ func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
 
 func (c *httpClient) subclient(path string, l klog.Logger) HTTPClient {
 	return &httpClient{
-		log:   klog.NewLevelLogger(klog.Sub(l, "httpc", nil)),
+		log:   klog.NewLevelLogger(l.Sublogger("httpc")),
 		httpc: c.httpc,
 		base:  c.base + path,
 	}
@@ -95,9 +95,7 @@ func (c *httpClient) Req(method, path string, body io.Reader) (*http.Request, er
 
 // Do sends a request to the server and returns its response
 func (c *httpClient) Do(ctx context.Context, r *http.Request) (*http.Response, error) {
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.httpc.url": r.URL.String(),
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.httpc.Do(r)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
@@ -105,12 +103,12 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (*http.Response, e
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
 			if err := res.Body.Close(); err != nil {
-				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"))
 			}
 		}()
 		defer func() {
 			if _, err := io.Copy(io.Discard, res.Body); err != nil {
-				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
+				c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"))
 			}
 		}()
 		var errres ErrorRes
@@ -173,21 +171,19 @@ func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Requ
 
 // DoNoContent sends a request to the server and discards the response body
 func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (*http.Response, error) {
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.httpc.url": r.URL.String(),
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.Do(ctx, r)
 	if err != nil {
 		return res, err
 	}
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"))
 		}
 	}()
 	defer func() {
 		if _, err := io.Copy(io.Discard, res.Body); err != nil {
-			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"))
 		}
 	}()
 	return res, nil
@@ -195,21 +191,19 @@ func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (*http.R
 
 // DoJSON sends a request to the server and decodes response json
 func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response interface{}) (*http.Response, bool, error) {
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.httpc.url": r.URL.String(),
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.Do(ctx, r)
 	if err != nil {
 		return res, false, err
 	}
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"), nil)
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to close http response body"))
 		}
 	}()
 	defer func() {
 		if _, err := io.Copy(io.Discard, res.Body); err != nil {
-			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"), nil)
+			c.log.Err(ctx, kerrors.WithMsg(err, "Failed to discard http response body"))
 		}
 	}()
 

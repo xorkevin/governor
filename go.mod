@@ -18,7 +18,6 @@ require (
 	github.com/minio/minio-go/v7 v7.0.49
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nats-io/nats.go v1.24.0
-	github.com/rs/zerolog v1.29.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.2
@@ -31,7 +30,7 @@ require (
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.2.3
 	xorkevin.dev/kerrors v0.1.5
-	xorkevin.dev/klog v0.0.0-20230303053435-d99f76e9a3ed
+	xorkevin.dev/klog v0.0.0-20230304045710-ac776ecd6cf4
 )
 
 require (
@@ -60,8 +59,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
