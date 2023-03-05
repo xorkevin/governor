@@ -8,8 +8,7 @@ import (
 
 type (
 	// ReqSetup is a service setup request
-	ReqSetup struct {
-	}
+	ReqSetup struct{}
 )
 
 const (
@@ -36,9 +35,7 @@ type (
 func (s *Server) initSetup(r Router) {
 	m := NewMethodRouter(r)
 	m.PostCtx("", func(c *Context) {
-		c.LogFields(klog.Fields{
-			"gov.service.phase": "setup",
-		})
+		c.LogAttrs(klog.AString("gov.service.phase", "setup"))
 		username, password, ok := c.BasicAuth()
 		if !ok || username != "setup" {
 			c.WriteError(ErrWithRes(nil, http.StatusForbidden, "", "Invalid setup secret"))

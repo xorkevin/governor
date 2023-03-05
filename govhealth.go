@@ -27,9 +27,9 @@ func (s *Server) initHealth(r Router) {
 			for _, i := range errs {
 				errstrs = append(errstrs, i.Error())
 			}
-			s.log.Error(c.Ctx(), "Failed readiness check", klog.Fields{
-				"errors": errstrs,
-			})
+			s.log.Error(c.Ctx(), "Failed readiness check",
+				klog.AAny("errors", errstrs),
+			)
 		}
 		c.WriteStatus(status)
 	})

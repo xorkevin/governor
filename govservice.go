@@ -78,23 +78,19 @@ func (s *Server) setupServices(ctx context.Context, reqsecret string, rsetup Req
 
 	// To avoid partial setup, no request context is passed beyond this point
 
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 
-	s.log.Info(ctx, "Setup all services begin", nil)
+	s.log.Info(ctx, "Setup all services begin")
 	for _, i := range s.services {
 		if err := i.r.Setup(ctx, rsetup); err != nil {
 			err := kerrors.WithMsg(err, "Setup service failed")
-			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.opt.name,
-			})
+			s.log.Err(ctx, err, klog.AString("service", i.opt.name))
 			return err
 		}
-		s.log.Info(ctx, "Setup service success", klog.Fields{
-			"gov.service": i.opt.name,
-		})
+		s.log.Info(ctx, "Setup service success", klog.AString("service", i.opt.name))
 	}
 
-	s.log.Info(ctx, "Setup all services complete", nil)
+	s.log.Info(ctx, "Setup all services complete")
 	return nil
 }
 
@@ -109,51 +105,41 @@ func (s *Server) checkHealthServices(ctx context.Context) []error {
 }
 
 func (s *Server) initServices(ctx context.Context) error {
-	s.log.Info(ctx, "Init all services begin", nil)
+	s.log.Info(ctx, "Init all services begin")
 	for _, i := range s.services {
-		l := klog.Sub(s.log.Logger, i.opt.name, klog.Fields{"gov.service": i.opt.name})
+		l := s.log.Logger.Sublogger(i.opt.name, klog.AString("gov.service", i.opt.name))
 		if err := i.r.Init(ctx, s.settings.reader(i.opt), l, s.router(s.settings.config.BasePath+i.opt.url, l)); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
-			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.opt.name,
-			})
+			s.log.Err(ctx, err, klog.AString("service", i.opt.name))
 			return err
 		}
-		s.log.Info(ctx, "Init service success", klog.Fields{
-			"gov.service": i.opt.name,
-		})
+		s.log.Info(ctx, "Init service success", klog.AString("service", i.opt.name))
 	}
-	s.log.Info(ctx, "Init all services complete", nil)
+	s.log.Info(ctx, "Init all services complete")
 	return nil
 }
 
 func (s *Server) startServices(ctx context.Context) error {
-	s.log.Info(ctx, "Start all services begin", nil)
+	s.log.Info(ctx, "Start all services begin")
 	for _, i := range s.services {
 		if err := i.r.Start(ctx); err != nil {
 			err := kerrors.WithMsg(err, "Start service failed")
-			s.log.Err(ctx, err, klog.Fields{
-				"gov.service": i.opt.name,
-			})
+			s.log.Err(ctx, err, klog.AString("service", i.opt.name))
 			return err
 		}
-		s.log.Info(ctx, "Start service success", klog.Fields{
-			"gov.service": i.opt.name,
-		})
+		s.log.Info(ctx, "Start service success", klog.AString("service", i.opt.name))
 	}
-	s.log.Info(ctx, "Start all services complete", nil)
+	s.log.Info(ctx, "Start all services complete")
 	return nil
 }
 
 func (s *Server) stopServices(ctx context.Context) {
-	s.log.Info(ctx, "Stop all services begin", nil)
+	s.log.Info(ctx, "Stop all services begin")
 	sl := len(s.services)
 	for n := range s.services {
 		i := s.services[sl-n-1]
 		i.r.Stop(ctx)
-		s.log.Info(ctx, "Stop service", klog.Fields{
-			"gov.service": i.opt.name,
-		})
+		s.log.Info(ctx, "Stop service", klog.AString("service", i.opt.name))
 	}
-	s.log.Info(ctx, "Stop all services complete", nil)
+	s.log.Info(ctx, "Stop all services complete")
 }

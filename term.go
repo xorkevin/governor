@@ -60,7 +60,7 @@ func newTermClient(config *TermConfig, l klog.Logger) Term {
 		}
 	}
 	return &termClient{
-		log:     klog.NewLevelLogger(klog.Sub(l, "term", nil)),
+		log:     klog.NewLevelLogger(l.Sublogger("term")),
 		stdinfd: config.StdinFd,
 		stdin:   bufio.NewReader(config.Stdin),
 		stdout:  config.Stdout,
@@ -175,7 +175,7 @@ func (c *Terminal) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"), nil)
+			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"))
 		}
 	}()
 	if _, err := f.Write(data); err != nil {

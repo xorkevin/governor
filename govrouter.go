@@ -51,10 +51,8 @@ type (
 
 func (s *Server) router(path string, l klog.Logger) Router {
 	return &govrouter{
-		r: s.i.Route(path, func(r chi.Router) {}),
-		log: klog.Sub(l, "router", klog.Fields{
-			"gov.router.path": path,
-		}),
+		r:    s.i.Route(path, func(r chi.Router) {}),
+		log:  l.Sublogger("router", klog.AString("gov.router.path", path)),
 		path: path,
 	}
 }
@@ -71,10 +69,8 @@ func (r *govrouter) Group(path string, mw ...Middleware) Router {
 		sr = sr.With(mw...)
 	}
 	return &govrouter{
-		r: sr,
-		log: klog.Sub(r.log, "", klog.Fields{
-			"gov.router.path": cpath,
-		}),
+		r:    sr,
+		log:  r.log.Sublogger("", klog.AString("gov.router.path", cpath)),
 		path: cpath,
 	}
 }
@@ -140,9 +136,7 @@ func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 
 func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	cpath := r.path + path
-	l := klog.Sub(r.log, "", klog.Fields{
-		"gov.router.path": cpath,
-	})
+	l := r.log.Sublogger("", klog.AString("gov.router.path", cpath))
 	var sr chi.Router
 	if path == "" {
 		sr = r.r.Group(func(r chi.Router) {})
@@ -164,22 +158,31 @@ func (r *govrouter) MethodCtx(method string, path string, h RouteHandler, mw ...
 	if lmethod == "" {
 		lmethod = "ANY"
 	}
-	r.Method(method, path, toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
-		"gov.router.method": lmethod,
-		"gov.router.path":   r.path + path,
-	})))
+	r.Method(method, path, toHTTPHandler(
+		chainMiddlewareCtx(h, mw),
+		r.log.Sublogger("",
+			klog.AString("gov.router.method", lmethod),
+			klog.AString("gov.router.path", r.path+path),
+		),
+	))
 }
 
 func (r *govrouter) NotFoundCtx(h RouteHandler, mw ...MiddlewareCtx) {
-	r.NotFound(toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
-		"gov.router.notfound": true,
-	})))
+	r.NotFound(toHTTPHandler(
+		chainMiddlewareCtx(h, mw),
+		r.log.Sublogger("",
+			klog.ABool("gov.router.notfound", true),
+		),
+	))
 }
 
 func (r *govrouter) MethodNotAllowedCtx(h RouteHandler, mw ...MiddlewareCtx) {
-	r.MethodNotAllowed(toHTTPHandler(chainMiddlewareCtx(h, mw), klog.Sub(r.log, "", klog.Fields{
-		"gov.router.methodnotallowed": true,
-	})))
+	r.MethodNotAllowed(toHTTPHandler(
+		chainMiddlewareCtx(h, mw),
+		r.log.Sublogger("",
+			klog.ABool("gov.router.methodnotallowed", true),
+		)),
+	)
 }
 
 type (

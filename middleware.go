@@ -161,19 +161,19 @@ func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if ip := c.RealIP(); ip != nil {
 		realip = ip.String()
 	}
-	c.LogFields(klog.Fields{
-		"http.host":    c.Req().Host,
-		"http.method":  c.Req().Method,
-		"http.reqpath": c.Req().URL.EscapedPath(),
-		"http.remote":  c.Req().RemoteAddr,
-		"http.realip":  realip,
-		"http.lreqid":  lreqid,
-	})
+	c.LogAttrs(
+		klog.AString("http.host", c.Req().Host),
+		klog.AString("http.method", c.Req().Method),
+		klog.AString("http.reqpath", c.Req().URL.EscapedPath()),
+		klog.AString("http.remote", c.Req().RemoteAddr),
+		klog.AString("http.realip", realip),
+		klog.AString("http.lreqid", lreqid),
+	)
 	w2 := &govResponseWriter{
 		ResponseWriter: w,
 		status:         0,
 	}
-	m.s.log.Info(c.Ctx(), "HTTP request", nil)
+	m.s.log.Info(c.Ctx(), "HTTP request")
 	start := time.Now()
 	m.next.ServeHTTP(w2, c.Req())
 	duration := time.Since(start)
@@ -182,19 +182,18 @@ func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		route = route[:l-1]
 	}
 	if w2.isWS() {
-		m.s.log.Info(c.Ctx(), "WS close", klog.Fields{
-			"http.ws":          true,
-			"http.route":       route,
-			"http.status":      w2.status,
-			"http.duration_ms": duration.Milliseconds(),
-		})
+		m.s.log.Info(c.Ctx(), "WS close",
+			klog.ABool("http.ws", true),
+			klog.AString("http.route", route),
+			klog.AInt("http.status", w2.status),
+			klog.AInt64("http.duration_ms", duration.Milliseconds()),
+		)
 	} else {
-		m.s.log.Info(c.Ctx(), "HTTP response", klog.Fields{
-			"http.ws":         false,
-			"http.route":      route,
-			"http.status":     w2.status,
-			"http.latency_us": duration.Microseconds(),
-		})
+		m.s.log.Info(c.Ctx(), "HTTP response",
+			klog.AString("http.route", route),
+			klog.AInt("http.status", w2.status),
+			klog.AInt64("http.latency_us", duration.Microseconds()),
+		)
 	}
 }
 
@@ -325,22 +324,20 @@ const (
 	headerVary            = "Vary"
 )
 
-var (
-	defaultCompressibleMediaTypes = []string{
-		"application/atom+xml",
-		"application/json",
-		"application/rss+xml",
-		"application/xhtml+xml",
-		"application/xml",
-		"image/svg+xml",
-		"text/css",
-		"text/csv",
-		"text/html",
-		"text/javascript",
-		"text/plain",
-		"text/xml",
-	}
-)
+var defaultCompressibleMediaTypes = []string{
+	"application/atom+xml",
+	"application/json",
+	"application/rss+xml",
+	"application/xhtml+xml",
+	"application/xml",
+	"image/svg+xml",
+	"text/css",
+	"text/csv",
+	"text/html",
+	"text/javascript",
+	"text/plain",
+	"text/xml",
+}
 
 const (
 	encodingKindZstd = "zstd"
@@ -348,13 +345,11 @@ const (
 	encodingKindZlib = "deflate"
 )
 
-var (
-	defaultPreferredEncodings = []string{
-		encodingKindZstd,
-		encodingKindGzip,
-		encodingKindZlib,
-	}
-)
+var defaultPreferredEncodings = []string{
+	encodingKindZstd,
+	encodingKindGzip,
+	encodingKindZlib,
+}
 
 type (
 	compressWriter interface {
@@ -577,46 +572,44 @@ func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	defer func() {
 		if err := w2.Close(); err != nil {
-			m.s.log.Err(r.Context(), kerrors.WithMsg(err, "Failed to close compressor writer"), nil)
+			m.s.log.Err(r.Context(), kerrors.WithMsg(err, "Failed to close compressor writer"))
 		}
 	}()
 	m.next.ServeHTTP(w2, r)
 }
 
-var (
-	defaultAllowedEncodings = map[string]*sync.Pool{
-		encodingKindZstd: {
-			New: func() interface{} {
-				w, _ := zstd.NewWriter(nil,
-					// 3 is a good tradeoff of size to speed
-					zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
-					zstd.WithEncoderConcurrency(1),
-				)
-				return &pooledZstdWriter{
-					w: w,
-				}
-			},
+var defaultAllowedEncodings = map[string]*sync.Pool{
+	encodingKindZstd: {
+		New: func() interface{} {
+			w, _ := zstd.NewWriter(nil,
+				// 3 is a good tradeoff of size to speed
+				zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)),
+				zstd.WithEncoderConcurrency(1),
+			)
+			return &pooledZstdWriter{
+				w: w,
+			}
 		},
-		encodingKindGzip: {
-			New: func() interface{} {
-				// 5 is a good tradeoff of size to speed
-				w, _ := gzip.NewWriterLevel(nil, 5)
-				return &pooledGzipWriter{
-					w: w,
-				}
-			},
+	},
+	encodingKindGzip: {
+		New: func() interface{} {
+			// 5 is a good tradeoff of size to speed
+			w, _ := gzip.NewWriterLevel(nil, 5)
+			return &pooledGzipWriter{
+				w: w,
+			}
 		},
-		encodingKindZlib: {
-			New: func() interface{} {
-				// 5 is a good tradeoff of size to speed
-				w, _ := zlib.NewWriterLevel(nil, 5)
-				return &pooledZlibWriter{
-					w: w,
-				}
-			},
+	},
+	encodingKindZlib: {
+		New: func() interface{} {
+			// 5 is a good tradeoff of size to speed
+			w, _ := zlib.NewWriterLevel(nil, 5)
+			return &pooledZlibWriter{
+				w: w,
+			}
 		},
-	}
-)
+	},
+}
 
 func (s *Server) compressorMiddleware(next http.Handler) http.Handler {
 	compressibleTypes := s.settings.middleware.compressibleTypes
@@ -649,10 +642,10 @@ func (m *middlewareRecoverer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				panic(re)
 			}
 
-			m.s.log.Error(r.Context(), "Panicked in http handler", klog.Fields{
-				"recovered":  re,
-				"stacktrace": debug.Stack(),
-			})
+			m.s.log.Error(r.Context(), "Panicked in http handler",
+				klog.AAny("recovered", re),
+				klog.AString("stacktrace", string(debug.Stack())),
+			)
 
 			c.WriteError(ErrWithRes(kerrors.WithMsg(nil, "Panicked in http handler"), http.StatusInternalServerError, "", "Internal Server Error"))
 		}

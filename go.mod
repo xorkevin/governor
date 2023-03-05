@@ -30,7 +30,7 @@ require (
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.2.3
 	xorkevin.dev/kerrors v0.1.5
-	xorkevin.dev/klog v0.0.0-20230304045710-ac776ecd6cf4
+	xorkevin.dev/klog v0.0.0-20230305001845-27454ff3a979
 )
 
 require (

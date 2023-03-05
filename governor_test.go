@@ -292,9 +292,7 @@ func (s *testServiceA) ping(c *Context) {
 		c.WriteError(ErrWithRes(nil, http.StatusBadRequest, "", "Must ping with ping"))
 		return
 	}
-	s.log.Info(c.Ctx(), "Ping", klog.Fields{
-		"ping": "pong",
-	})
+	s.log.Info(c.Ctx(), "Ping", klog.AString("ping", "pong"))
 	c.SetCookie(&http.Cookie{
 		Name:  "user",
 		Value: cval.Value,

@@ -42,11 +42,13 @@ func (b *threadSafeBuffer) Read(p []byte) (n int, err error) {
 	defer b.m.Unlock()
 	return b.b.Read(p)
 }
+
 func (b *threadSafeBuffer) Write(p []byte) (n int, err error) {
 	b.m.Lock()
 	defer b.m.Unlock()
 	return b.b.Write(p)
 }
+
 func (b *threadSafeBuffer) String() string {
 	b.m.Lock()
 	defer b.m.Unlock()
@@ -56,8 +58,7 @@ func (b *threadSafeBuffer) String() string {
 func TestContext(t *testing.T) {
 	t.Parallel()
 
-	stackRegex := regexp.MustCompile(`Stack trace \[\S+ \S+:\d+\]`)
-	fullStackRegex := regexp.MustCompile(`^(?:\S+\n\t\S+:\d+ \(0x[0-9a-f]+\)\n)+$`)
+	stackRegex := regexp.MustCompile(`Stack trace\n\[\[\n\S+ \S+:\d+\n\]\]`)
 
 	generateTestContext := func(method, path string, body io.Reader) (*http.Request, *httptest.ResponseRecorder, *bytes.Buffer, *Context) {
 		logbuf := &bytes.Buffer{}
@@ -267,7 +268,7 @@ func TestContext(t *testing.T) {
 				Res:      `{"code":"err_code_890","message":"test error response message"}`,
 				Level:    "ERROR",
 				LogMsg:   "Error response",
-				LogError: "Error response [(500) test error response message [err_code_890]]: %!(STACKTRACE): test root error",
+				LogError: "Error response\n[[\n(500) test error response message [err_code_890]\n]]\n--\n%!(STACKTRACE)\n--\ntest root error",
 			},
 			{
 				Test:     "sends the nested error with a non zero status",
@@ -278,7 +279,7 @@ func TestContext(t *testing.T) {
 				Res:      `{"code":"test_err_code","message":"test error"}`,
 				Level:    "WARN",
 				LogMsg:   "some message",
-				LogError: "some message: Error response [(400) test error [test_err_code]]: %!(STACKTRACE): test struct err",
+				LogError: "some message\n--\nError response\n[[\n(400) test error [test_err_code]\n]]\n--\n%!(STACKTRACE)\n--\ntest struct err",
 			},
 			{
 				Test:     "can send arbitrary errors",
@@ -327,24 +328,23 @@ func TestContext(t *testing.T) {
 				}
 
 				var j struct {
-					Level      string `json:"level"`
-					UnixtimeUS int64  `json:"unixtimeus"`
-					Msg        string `json:"msg"`
-					Error      string `json:"error"`
-					StackTrace string `json:"stacktrace"`
+					Level string `json:"level"`
+					Msg   string `json:"msg"`
+					Err   struct {
+						Msg   string `json:"msg"`
+						Trace string `json:"trace"`
+					} `json:"err"`
 				}
 				d := json.NewDecoder(&logbuf)
 				assert.NoError(d.Decode(&j))
 				assert.Equal(tc.Level, j.Level)
-				assert.True(j.UnixtimeUS > 0)
 				assert.Equal(tc.LogMsg, j.Msg)
 				if tc.NoTrace {
-					assert.Equal(tc.LogError, j.Error)
-					assert.Equal("NONE", j.StackTrace)
+					assert.Equal(tc.LogError, j.Err.Msg)
+					assert.Equal("NONE", j.Err.Trace)
 				} else {
-					assert.Regexp(stackRegex, j.Error)
-					assert.Equal(tc.LogError, stackRegex.ReplaceAllString(j.Error, "%!(STACKTRACE)"))
-					assert.Regexp(fullStackRegex, j.StackTrace)
+					assert.Regexp(stackRegex, j.Err.Msg)
+					assert.Equal(tc.LogError, stackRegex.ReplaceAllString(j.Err.Msg, "%!(STACKTRACE)"))
 				}
 				assert.False(d.More())
 			})
@@ -369,7 +369,7 @@ func TestContext(t *testing.T) {
 		server := httptest.NewServer(toHTTPHandler(RouteHandlerFunc(func(c *Context) {
 			conn, err := c.Websocket([]string{WSProtocolVersion})
 			if err != nil {
-				l.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+				l.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"))
 				return
 			}
 			if conn.Subprotocol() != WSProtocolVersion {
