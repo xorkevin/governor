@@ -437,8 +437,8 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 
 	s.log.Info(ctx, "Loaded config",
-		klog.AString("stream_size", r.GetStr("streamsize")),
-		klog.AString("event_size", r.GetStr("eventsize")),
+		klog.AString("streamsize", r.GetStr("streamsize")),
+		klog.AString("eventsize", r.GetStr("eventsize")),
 		klog.AString("auth.accessduration", s.authsettings.accessDuration.String()),
 		klog.AString("auth.refreshduration", s.authsettings.refreshDuration.String()),
 		klog.AString("auth.refreshcache", s.authsettings.refreshCache.String()),

@@ -49,7 +49,7 @@ func (s *router) getAppLogo(c *governor.Context) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close app logo"), nil)
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close app logo"))
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)

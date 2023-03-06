@@ -59,8 +59,7 @@ type (
 	}
 
 	// Conduit is a service for messaging
-	Conduit interface {
-	}
+	Conduit interface{}
 
 	Service struct {
 		friends            friendmodel.Repo
@@ -214,15 +213,15 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse gc duration")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"conduit.stream.size":        r.GetStr("streamsize"),
-		"conduit.event.size":         r.GetStr("eventsize"),
-		"conduit.invitationduration": s.invitationDuration.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("streamsize", r.GetStr("streamsize")),
+		klog.AString("eventsize", r.GetStr("eventsize")),
+		klog.AString("invitationduration", s.invitationDuration.String()),
+	)
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 
@@ -239,31 +238,31 @@ func (s *Service) Start(ctx context.Context) error {
 		0,
 		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to conduit stream", nil)
+	s.log.Info(ctx, "Subscribed to conduit stream")
 
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 
 	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
 	s.wg.Add(1)
 	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel")
 
 	s.wg.Add(1)
 	go s.ws.WatchPresence(s.channelns+".>", s.streamns+"_WORKER_PRESENCE", s.presenceHandler).Watch(ctx, s.wg, pubsub.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to ws presence channel", nil)
+	s.log.Info(ctx, "Subscribed to ws presence channel")
 
 	s.wg.Add(1)
 	go s.ws.Watch(s.opts.PresenceQueryChannel, s.streamns+"_PRESENCE_QUERY", s.presenceQueryHandler).Watch(ctx, s.wg, pubsub.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to ws conduit presence query channel", nil)
+	s.log.Info(ctx, "Subscribed to ws conduit presence query channel")
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -271,23 +270,23 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.friends.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created conduit friend table", nil)
+	s.log.Info(ctx, "Created conduit friend table")
 	if err := s.invitations.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created conduit friend invitation table", nil)
+	s.log.Info(ctx, "Created conduit friend invitation table")
 	if err := s.dms.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created conduit dm table", nil)
+	s.log.Info(ctx, "Created conduit dm table")
 	if err := s.gdms.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created conduit gdm tables", nil)
+	s.log.Info(ctx, "Created conduit gdm tables")
 	if err := s.msgs.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created conduit msg table", nil)
+	s.log.Info(ctx, "Created conduit msg table")
 	if err := s.events.InitStream(ctx, s.streamconduit, events.StreamOpts{
 		Partitions:     16,
 		Replicas:       1,
@@ -298,7 +297,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init conduit stream")
 	}
-	s.log.Info(ctx, "Created conduit stream", nil)
+	s.log.Info(ctx, "Created conduit stream")
 	return nil
 }
 
@@ -451,6 +450,6 @@ func (s *Service) friendInvitationGCHook(ctx context.Context, props sysevent.Tim
 	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		return kerrors.WithMsg(err, "Failed to GC friend invitations")
 	}
-	s.log.Info(ctx, "GC friend invitations", nil)
+	s.log.Info(ctx, "GC friend invitations")
 	return nil
 }

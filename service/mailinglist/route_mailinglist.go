@@ -221,7 +221,7 @@ func (s *router) getListMsgContent(c *governor.Context) {
 	}
 	defer func() {
 		if err := msg.Close(); err != nil {
-			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close msg content"), nil)
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close msg content"))
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, msg)

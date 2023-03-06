@@ -49,7 +49,7 @@ func (s *Service) getLink(ctx context.Context, linkid string) (*resGetLink, erro
 func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error) {
 	if cachedURL, err := s.kvlinks.Get(ctx, linkid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get linkid url from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get linkid url from cache"))
 		}
 	} else if cachedURL == cacheValTombstone {
 		return "", governor.ErrWithRes(nil, http.StatusNotFound, "", "Link not found")
@@ -60,16 +60,16 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
 			if err := s.kvlinks.Set(ctx, linkid, cacheValTombstone, s.cacheDuration); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"))
 			}
 			return "", governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return "", kerrors.WithMsg(err, "Failed to get link")
 	}
 	if err := s.kvlinks.Set(ctx, linkid, res.URL, s.cacheDuration); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"), klog.Fields{
-			"courier.linkid": linkid,
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"),
+			klog.AString("linkid", linkid),
+		)
 	}
 	return res.URL, nil
 }
@@ -152,7 +152,7 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 			}
 			defer func() {
 				if err := brandimg.Close(); err != nil {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close brand image"), nil)
+					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close brand image"))
 				}
 			}()
 			if objinfo.ContentType != image.MediaTypePng {
@@ -221,11 +221,11 @@ func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) erro
 		return kerrors.WithMsg(err, "Failed to delete link")
 	}
 	// must give a best effort attempt to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.kvlinks.Del(ctx, linkid); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete linkid url"), klog.Fields{
-			"courier.linkid": linkid,
-		})
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete linkid url"),
+			klog.AString("linkid", linkid),
+		)
 	}
 	return nil
 }

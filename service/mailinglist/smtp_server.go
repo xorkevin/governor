@@ -146,26 +146,26 @@ func (s *smtpBackend) lreqID() string {
 }
 
 func (s *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
-	ctx := klog.WithFields(context.Background(), klog.Fields{
-		"smtp.cmd": "helo",
-	})
+	ctx := klog.CtxWithAttrs(context.Background(),
+		klog.AString("smtp.cmd", "helo"),
+	)
 	addrport, err := netip.ParseAddrPort(c.Conn().RemoteAddr().String())
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp remote addr"), klog.Fields{
-			"smtp.remoteaddr": c.Conn().RemoteAddr().String(),
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp remote addr"),
+			klog.AString("smtp.remoteaddr", c.Conn().RemoteAddr().String()),
+		)
 		return nil, errSMTPConn
 	}
 	addr := addrport.Addr()
 	hostname := c.Hostname()
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.session.ip":   addr.String(),
-		"smtp.session.helo": hostname,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("smtp.session.ip", addr.String()),
+		klog.AString("smtp.session.helo", hostname),
+	)
 	return &smtpSession{
 		service: s.service,
 		be:      s,
-		log:     klog.NewLevelLogger(klog.Sub(s.log.Logger, "session", nil)),
+		log:     klog.NewLevelLogger(s.log.Logger.Sublogger("session")),
 		ctx:     ctx,
 		srcip:   addr,
 		helo:    hostname,
@@ -221,32 +221,32 @@ func (s *smtpSession) AuthPlain(username, password string) error {
 }
 
 func (s *smtpSession) Mail(from string, opts *smtp.MailOptions) error {
-	ctx := klog.WithFields(s.ctx, klog.Fields{
-		"smtp.cmd":      "mail",
-		"smtp.mailfrom": from,
-	})
+	ctx := klog.CtxWithAttrs(s.ctx,
+		klog.AString("smtp.cmd", "mail"),
+		klog.AString("smtp.mailfrom", from),
+	)
 	id := s.be.lreqID()
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.id": id,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("reqid", id),
+	)
 	addr, err := gomail.ParseAddress(from)
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp from addr"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp from addr"))
 		return errSMTPFromAddr
 	}
 	localPart, domain, ok := strings.Cut(addr.Address, "@")
 	if !ok || localPart == "" || domain == "" {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp from addr parts"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp from addr parts"))
 		return errSMTPFromAddr
 	}
 	// DMARC requires checking RFC5321.MailFrom identity and not RFC5321.HELO
 	result, spfErr, err := s.checkSPF(ctx, domain, from)
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed smtp from addr spf check"), klog.Fields{
-			"smtp.from":       addr.Address,
-			"smtp.spf.result": string(result),
-			"smtp.spf.error":  spfErr.Error(),
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed smtp from addr spf check"),
+			klog.AString("smtp.from", addr.Address),
+			klog.AString("smtp.spf.result", string(result)),
+			klog.AString("smtp.spf.error", spfErr.Error()),
+		)
 		return err
 	}
 	s.id = id
@@ -267,42 +267,42 @@ const (
 
 func (s *smtpSession) Rcpt(to string) error {
 	if s.from == "" {
-		s.log.Warn(s.ctx, "Failed smtp command sequence", klog.Fields{
-			"smtp.cmd": "to",
-			"smtp.to":  to,
-		})
+		s.log.Warn(s.ctx, "Failed smtp command sequence",
+			klog.AString("smtp.cmd", "to"),
+			klog.AString("smtp.to", to),
+		)
 		return errSMTPSeq
 	}
-	ctx := klog.WithFields(s.ctx, klog.Fields{
-		"smtp.cmd":  "to",
-		"smtp.id":   s.id,
-		"smtp.from": s.from,
-		"smtp.to":   to,
-	})
+	ctx := klog.CtxWithAttrs(s.ctx,
+		klog.AString("smtp.cmd", "to"),
+		klog.AString("reqid", s.id),
+		klog.AString("smtp.from", s.from),
+		klog.AString("smtp.to", to),
+	)
 	if s.rcptTo != "" {
-		s.log.Warn(ctx, "Failed smtp rcpt count", klog.Fields{
-			"smtp.rcptto": s.rcptTo,
-		})
+		s.log.Warn(ctx, "Failed smtp rcpt count",
+			klog.AString("smtp.rcptto", s.rcptTo),
+		)
 		return errSMTPRcptCount
 	}
 	addr, err := gomail.ParseAddress(to)
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp to addr"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp to addr"))
 		return errSMTPRcptAddr
 	}
 	localPart, domain, ok := strings.Cut(addr.Address, "@")
 	if !ok {
-		s.log.Warn(ctx, "Failed to parse smtp to addr parts", nil)
+		s.log.Warn(ctx, "Failed to parse smtp to addr parts")
 		return errSMTPRcptAddr
 	}
 	listCreator, listname, ok := strings.Cut(localPart, mailboxKeySeparator)
 	if !ok {
-		s.log.Warn(ctx, "Failed to parse smtp to addr parts", nil)
+		s.log.Warn(ctx, "Failed to parse smtp to addr parts")
 		return errSMTPMailbox
 	}
 	isOrg := domain == s.service.orgdomain
 	if domain != s.service.usrdomain && !isOrg {
-		s.log.Warn(ctx, "Invalid smtp to domain", nil)
+		s.log.Warn(ctx, "Invalid smtp to domain")
 		return errSMTPSystem
 	}
 
@@ -311,10 +311,10 @@ func (s *smtpSession) Rcpt(to string) error {
 		creator, err := s.service.orgs.GetByName(ctx, listCreator)
 		if err != nil {
 			if errors.Is(err, org.ErrorNotFound) {
-				s.log.WarnErr(ctx, kerrors.WithMsg(err, "Owner org not found"), nil)
+				s.log.WarnErr(ctx, kerrors.WithMsg(err, "Owner org not found"))
 				return errSMTPMailbox
 			}
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get owner org by name"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get owner org by name"))
 			return errSMTPBase
 		}
 		listCreatorID = rank.ToOrgName(creator.OrgID)
@@ -322,33 +322,33 @@ func (s *smtpSession) Rcpt(to string) error {
 		creator, err := s.service.users.GetByUsername(ctx, listCreator)
 		if err != nil {
 			if errors.Is(err, user.ErrorNotFound) {
-				s.log.WarnErr(ctx, kerrors.WithMsg(err, "Owner user not found"), nil)
+				s.log.WarnErr(ctx, kerrors.WithMsg(err, "Owner user not found"))
 				return errSMTPMailbox
 			}
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get owner user by name"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get owner user by name"))
 			return errSMTPBase
 		}
 		listCreatorID = creator.Userid
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.list.owner": listCreatorID,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("list.owner", listCreatorID),
+	)
 
 	list, err := s.service.lists.GetList(ctx, listCreatorID, listname)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
-			s.log.WarnErr(ctx, kerrors.WithMsg(err, "Mailbox not found"), nil)
+			s.log.WarnErr(ctx, kerrors.WithMsg(err, "Mailbox not found"))
 			return errSMTPMailbox
 		}
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get mailbox"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get mailbox"))
 		return errSMTPBase
 	}
 
 	if list.Archive {
-		s.log.Warn(ctx, "Mailbox is archived", klog.Fields{
-			"smtp.list": list.ListID,
-		})
+		s.log.Warn(ctx, "Mailbox is archived",
+			klog.AString("list", list.ListID),
+		)
 		return errSMTPMailboxDisabled
 	}
 
@@ -378,83 +378,83 @@ func (s *smtpSession) isAligned(a, b string) bool {
 }
 
 func (s *smtpSession) checkListPolicy(ctx context.Context, senderid string, msgid string) error {
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.list.policy": s.senderPolicy,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("list.policy", s.senderPolicy),
+	)
 	switch s.senderPolicy {
 	case listSenderPolicyOwner:
 		if s.isOrg {
 			if ok, err := gate.AuthMember(ctx, s.service.gate, senderid, s.rcptOwner); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth org member"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth org member"))
 				return errSMTPBase
 			} else if !ok {
-				s.log.Warn(ctx, "Not allowed to send", nil)
+				s.log.Warn(ctx, "Not allowed to send")
 				return errSMTPAuthSend
 			}
 		} else {
 			if senderid != s.rcptOwner {
-				s.log.Warn(ctx, "Not allowed to send", nil)
+				s.log.Warn(ctx, "Not allowed to send")
 				return errSMTPAuthSend
 			}
 			if ok, err := gate.AuthUser(ctx, s.service.gate, senderid); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"))
 				return errSMTPBase
 			} else if !ok {
-				s.log.Warn(ctx, "Not allowed to send", nil)
+				s.log.Warn(ctx, "Not allowed to send")
 				return errSMTPAuthSend
 			}
 		}
 	case listSenderPolicyMember:
 		if ok, err := gate.AuthUser(ctx, s.service.gate, senderid); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"))
 			return errSMTPBase
 		} else if !ok {
-			s.log.Warn(ctx, "Not allowed to send", nil)
+			s.log.Warn(ctx, "Not allowed to send")
 			return errSMTPAuthSend
 		}
 		if _, err := s.service.lists.GetMember(ctx, s.rcptList, senderid); err != nil {
 			if errors.Is(err, db.ErrorNotFound) {
-				s.log.WarnErr(ctx, kerrors.WithMsg(err, "List member not found"), nil)
+				s.log.WarnErr(ctx, kerrors.WithMsg(err, "List member not found"))
 				return errSMTPAuthSend
 			}
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get list member"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get list member"))
 			return errSMTPBase
 		}
 	case listSenderPolicyUser:
 		if ok, err := gate.AuthUser(ctx, s.service.gate, senderid); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to auth user"))
 			return errSMTPBase
 		} else if !ok {
-			s.log.Warn(ctx, "Not allowed to send", nil)
+			s.log.Warn(ctx, "Not allowed to send")
 			return errSMTPAuthSend
 		}
 	default:
-		s.log.Warn(ctx, "Invalid mailbox sender policy", nil)
+		s.log.Warn(ctx, "Invalid mailbox sender policy")
 		return errSMTPMailboxConfig
 	}
 	return nil
 }
 
 func (s *smtpSession) Data(r io.Reader) error {
-	ctx := klog.WithFields(s.ctx, klog.Fields{
-		"smtp.cmd":  "data",
-		"smtp.id":   s.id,
-		"smtp.from": s.from,
-		"smtp.list": s.rcptList,
-	})
+	ctx := klog.CtxWithAttrs(s.ctx,
+		klog.AString("smtp.cmd", "data"),
+		klog.AString("reqid", s.id),
+		klog.AString("smtp.from", s.from),
+		klog.AString("smtp.list", s.rcptList),
+	)
 	if s.from == "" || s.rcptTo == "" {
-		s.log.Warn(ctx, "Failed smtp command sequence", nil)
+		s.log.Warn(ctx, "Failed smtp command sequence")
 		return errSMTPSeq
 	}
 
 	b := bytes.Buffer{}
 	if _, err := io.Copy(&b, r); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to read smtp data"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to read smtp data"))
 		return errSMTPBaseExists
 	}
 	m, err := message.Read(bytes.NewReader(b.Bytes()))
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp data"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse smtp data"))
 		return errMailBody
 	}
 	headers := emmail.Header{
@@ -463,58 +463,58 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 	msgid, err := headers.MessageID()
 	if err != nil || msgid == "" {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail msgid"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail msgid"))
 		return errMailBody
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.msgid": msgid,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("smtp.msgid", msgid),
+	)
 
 	contentType, _, err := headers.ContentType()
 	if err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail content type"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail content type"))
 		return errMailBody
 	}
 
 	fromAddrs, err := headers.AddressList(headerFrom)
 	if err != nil || len(fromAddrs) == 0 {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail header from"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to parse mail header from"))
 		return errMailBody
 	}
 	if len(fromAddrs) != 1 {
-		s.log.Warn(ctx, "Invalid mail header from", nil)
+		s.log.Warn(ctx, "Invalid mail header from")
 		return errSPFAlignment
 	}
 	fromAddr := fromAddrs[0].Address
 	localPart, fromAddrDomain, ok := strings.Cut(fromAddr, "@")
 	if !ok || localPart == "" || fromAddrDomain == "" {
-		s.log.Warn(ctx, "Failed to parse mail header from to parts", nil)
+		s.log.Warn(ctx, "Failed to parse mail header from to parts")
 		return errMailBody
 	}
 
 	if !s.isAligned(s.fromDomain, fromAddrDomain) {
-		s.log.Warn(ctx, "Failed spf alignment", klog.Fields{
-			"smtp.sender.addr": fromAddr,
-		})
+		s.log.Warn(ctx, "Failed spf alignment",
+			klog.AString("smtp.sender.addr", fromAddr),
+		)
 		return errSPFAlignment
 	}
 
 	sender, err := s.service.users.GetByEmail(ctx, fromAddr)
 	if err != nil {
 		if errors.Is(err, user.ErrorNotFound) {
-			s.log.WarnErr(ctx, kerrors.WithMsg(err, "Sender user not found"), klog.Fields{
-				"smtp.sender.addr": fromAddr,
-			})
+			s.log.WarnErr(ctx, kerrors.WithMsg(err, "Sender user not found"),
+				klog.AString("smtp.sender.addr", fromAddr),
+			)
 			return errSMTPAuthSend
 		}
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get sender user by email"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get sender user by email"))
 		return errSMTPBase
 	}
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"smtp.sender": sender.Userid,
-	})
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("sender", sender.Userid),
+	)
 
 	if err := s.checkListPolicy(ctx, sender.Userid, msgid); err != nil {
 		return err
@@ -616,9 +616,9 @@ func (s *smtpSession) Data(r io.Reader) error {
 		var res authres.ResultValue = authres.ResultPass
 		if !dmarcPassSPF && alignedDKIM == nil {
 			if dmarcRec.Policy != dmarc.PolicyNone {
-				s.log.Warn(ctx, "Failed spf alignment", klog.Fields{
-					"smtp.dmarc.policy": string(dmarcRec.Policy),
-				})
+				s.log.Warn(ctx, "Failed spf alignment",
+					klog.AString("smtp.dmarc.policy", string(dmarcRec.Policy)),
+				)
 				return errDMARCPolicy
 			}
 			res = authres.ResultFail
@@ -635,7 +635,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 	mb := &bytes.Buffer{}
 	if err := m.WriteTo(mb); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to write mail msg"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to write mail msg"))
 		return errSMTPBaseExists
 	}
 
@@ -644,33 +644,33 @@ func (s *smtpSession) Data(r io.Reader) error {
 		MsgID:  msgid,
 	})
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to encode list event to json"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to encode list event to json"))
 		return errSMTPBaseExists
 	}
 
 	if msg, err := s.service.lists.GetMsg(ctx, s.rcptList, msgid); err != nil {
 		if !errors.Is(err, db.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get list msg"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get list msg"))
 			return errSMTPBaseExists
 		}
 	} else {
 		// mail already exists for this list
 		if !msg.Processed {
 			if err := s.service.events.Publish(ctx, events.NewMsgs(s.service.streammail, s.rcptList, j)...); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"))
 				return errSMTPBaseExists
 			}
 			if err := s.service.lists.MarkMsgProcessed(ctx, s.rcptList, msgid); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark list message processed"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark list message processed"))
 			}
 		}
 		return nil
 	}
 
 	// must make a best effort to save the message and publish the event
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.service.rcvMailDir.Subdir(s.rcptList).Put(ctx, s.service.encodeMsgid(msgid), contentType, int64(mb.Len()), nil, bytes.NewReader(mb.Bytes())); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to store mail msg"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to store mail msg"))
 		return errSMTPBaseExists
 	}
 	msg := s.service.lists.NewMsg(s.rcptList, msgid, sender.Userid)
@@ -691,7 +691,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 	if err := s.service.lists.InsertMsg(ctx, msg); err != nil {
 		if !errors.Is(err, db.ErrorUnique) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to add list msg"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to add list msg"))
 			return errSMTPBaseExists
 		}
 		// Message has already been added for this list, but not guaranteed to be
@@ -699,13 +699,13 @@ func (s *smtpSession) Data(r io.Reader) error {
 		// message as processed.
 	}
 	if err := s.service.events.Publish(ctx, events.NewMsgs(s.service.streammail, s.rcptList, j)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish list event"))
 		return errSMTPBaseExists
 	}
 	if err := s.service.lists.MarkMsgProcessed(ctx, s.rcptList, msgid); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark list message processed"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark list message processed"))
 	}
-	s.log.Info(ctx, "Received mail", nil)
+	s.log.Info(ctx, "Received mail")
 	return nil
 }
 

@@ -152,10 +152,10 @@ func (s *Service) acceptFriendInvitation(ctx context.Context, userid, inviter st
 	}
 
 	// must make best effort attempt to publish friend event
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	u1, u2 := tupleSort(m.Userid, m2.Userid)
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamconduit, u1+"."+u2, b)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish friend event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish friend event"))
 	}
 	return nil
 }

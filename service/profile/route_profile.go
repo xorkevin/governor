@@ -155,7 +155,7 @@ func (s *router) getProfileImage(c *governor.Context) {
 	}
 	defer func() {
 		if err := image.Close(); err != nil {
-			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close profile image"), nil)
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close profile image"))
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, image)

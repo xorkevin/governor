@@ -95,6 +95,6 @@ func (c *CmdClient) publishEvent(args []string) error {
 	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
 		return kerrors.WithMsg(err, "Failed publishing event")
 	}
-	c.log.Info(context.Background(), "Published event", nil)
+	c.log.Info(context.Background(), "Published event")
 	return nil
 }

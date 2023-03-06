@@ -28,8 +28,7 @@ const (
 
 type (
 	// OAuth manages OAuth apps
-	OAuth interface {
-	}
+	OAuth interface{}
 
 	Service struct {
 		apps            oauthappmodel.Repo
@@ -188,24 +187,24 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		s.tplpicture = t
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"oauth.codeduration":           s.codeDuration.String(),
-		"oauth.accessduration":         s.accessDuration.String(),
-		"oauth.refreshduration":        s.refreshDuration.String(),
-		"oauth.keycache":               s.keyCache.String(),
-		"oauth.issuer":                 s.issuer,
-		"oauth.authorization_endpoint": s.epauth,
-		"oauth.token_endpoint":         s.eptoken,
-		"oauth.userinfo_endpoint":      s.epuserinfo,
-		"oauth.jwks_uri":               s.epjwks,
-		"oauth.profile_endpoint":       r.GetStr("epprofile"),
-		"oauth.picture_endpoint":       r.GetStr("eppicture"),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("codeduration", s.codeDuration.String()),
+		klog.AString("accessduration", s.accessDuration.String()),
+		klog.AString("refreshduration", s.refreshDuration.String()),
+		klog.AString("keycache", s.keyCache.String()),
+		klog.AString("issuer", s.issuer),
+		klog.AString("authorization_endpoint", s.epauth),
+		klog.AString("token_endpoint", s.eptoken),
+		klog.AString("userinfo_endpoint", s.epuserinfo),
+		klog.AString("jwks_uri", s.epjwks),
+		klog.AString("profile_endpoint", r.GetStr("epprofile")),
+		klog.AString("picture_endpoint", r.GetStr("eppicture")),
+	)
 
 	sr := s.router()
 	sr.mountOidRoutes(m)
 	sr.mountAppRoutes(m.Group("/app"))
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 
 	return nil
 }
@@ -213,13 +212,13 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -227,17 +226,17 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.apps.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created oauthapps table", nil)
+	s.log.Info(ctx, "Created oauthapps table")
 
 	if err := s.connections.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created oauthconnections table", nil)
+	s.log.Info(ctx, "Created oauthconnections table")
 
 	if err := s.oauthBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init oauth bucket")
 	}
-	s.log.Info(ctx, "Created oauth bucket", nil)
+	s.log.Info(ctx, "Created oauth bucket")
 
 	return nil
 }

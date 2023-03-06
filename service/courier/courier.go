@@ -22,8 +22,7 @@ import (
 
 type (
 	// Courier is a service for sharing information
-	Courier interface {
-	}
+	Courier interface{}
 
 	Service struct {
 		repo          couriermodel.Repo
@@ -131,43 +130,43 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse cache time")
 	}
 	if s.fallbackLink == "" {
-		s.log.Warn(ctx, "fallbacklink is not set", nil)
+		s.log.Warn(ctx, "fallbacklink is not set")
 	} else if err := validURL(s.fallbackLink); err != nil {
 		return kerrors.WithMsg(err, "Invalid fallbacklink")
 	}
 	if s.linkPrefix == "" {
-		s.log.Warn(ctx, "linkprefix is not set", nil)
+		s.log.Warn(ctx, "linkprefix is not set")
 	} else if err := validURL(s.linkPrefix); err != nil {
 		return kerrors.WithMsg(err, "Invalid linkprefix")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"courier.fallbacklink": s.fallbackLink,
-		"courier.linkprefix":   s.linkPrefix,
-		"courier.cachetime":    s.cacheDuration.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("fallbacklink", s.fallbackLink),
+		klog.AString("linkprefix", s.linkPrefix),
+		klog.AString("cachetime", s.cacheDuration.String()),
+	)
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 
 	s.wg.Add(1)
 	go s.orgs.WatchOrgs(s.streamns+".worker.orgs", events.ConsumerOpts{}, s.orgEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to orgs stream", nil)
+	s.log.Info(ctx, "Subscribed to orgs stream")
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -175,12 +174,12 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.repo.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created courierlinks table", nil)
+	s.log.Info(ctx, "Created courierlinks table")
 
 	if err := s.courierBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init courier bucket")
 	}
-	s.log.Info(ctx, "Created courier bucket", nil)
+	s.log.Info(ctx, "Created courier bucket")
 	return nil
 }
 
@@ -240,9 +239,9 @@ func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid strin
 			return kerrors.WithMsg(err, "Failed to delete links")
 		}
 		if err := s.kvlinks.Del(ctx, linkids...); err != nil {
-			s.log.Error(ctx, "Failed to delete linkid urls", klog.Fields{
-				"courier.creatorid": creatorid,
-			})
+			s.log.Error(ctx, "Failed to delete linkid urls",
+				klog.AString("creatorid", creatorid),
+			)
 		}
 		if len(linkids) < linkDeleteBatchSize {
 			break

@@ -65,8 +65,7 @@ type (
 	}
 
 	// MailingList is a mailing list service
-	MailingList interface {
-	}
+	MailingList interface{}
 
 	Service struct {
 		lists        mailinglistmodel.Repo
@@ -205,9 +204,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		if err != nil {
 			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid mockdns source")
 		}
-		s.log.Info(ctx, "Use mockdns", klog.Fields{
-			"mailinglist.mockdns.source": src,
-		})
+		s.log.Info(ctx, "Use mockdns",
+			klog.AString("source", src),
+		)
 	}
 
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -220,32 +219,30 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.eventsize = int32(eventsize)
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"mailinglist.smtp.port":    s.port,
-		"mailinglist.authdomain":   s.authdomain,
-		"mailinglist.usrdomain":    s.usrdomain,
-		"mailinglist.orgdomain":    s.orgdomain,
-		"mailinglist.maxmsgsize":   r.GetStr("maxmsgsize"),
-		"mailinglist.readtimeout":  s.readtimeout.String(),
-		"mailinglist.writetimeout": s.writetimeout.String(),
-		"mailinglist.stream.size":  r.GetStr("streamsize"),
-		"mailinglist.event.size":   r.GetStr("eventsize"),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("smtp.port", s.port),
+		klog.AString("authdomain", s.authdomain),
+		klog.AString("usrdomain", s.usrdomain),
+		klog.AString("orgdomain", s.orgdomain),
+		klog.AString("maxmsgsize", r.GetStr("maxmsgsize")),
+		klog.AString("readtimeout", s.readtimeout.String()),
+		klog.AString("writetimeout", s.writetimeout.String()),
+		klog.AString("streamsize", r.GetStr("streamsize")),
+		klog.AString("eventsize", r.GetStr("eventsize")),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.server = s.createSMTPServer()
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down mailinglist SMTP server"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down mailinglist SMTP server"))
 		}
 	}()
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 
 	return nil
 }
@@ -254,7 +251,7 @@ func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service:  s,
 		instance: s.config.Config().Instance,
-		log:      klog.NewLevelLogger(klog.Sub(s.log.Logger, "smtpserver", nil)),
+		log:      klog.NewLevelLogger(s.log.Logger.Sublogger("smtpserver")),
 		reqcount: &atomic.Uint32{},
 	}
 	server := smtp.NewServer(be)
@@ -281,15 +278,15 @@ func (s *Service) Start(ctx context.Context) error {
 		0,
 		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to mailinglist stream", nil)
+	s.log.Info(ctx, "Subscribed to mailinglist stream")
 
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 
 	s.wg.Add(1)
 	go s.orgs.WatchOrgs(s.streamns+".worker.orgs", events.ConsumerOpts{}, s.orgEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to orgs stream", nil)
+	s.log.Info(ctx, "Subscribed to orgs stream")
 
 	return nil
 }
@@ -299,16 +296,16 @@ func (s *Service) Stop(ctx context.Context) {
 	go func() {
 		defer close(done)
 		if err := s.server.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Shutdown mailing list SMTP server error"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Shutdown mailing list SMTP server error"))
 		}
 	}()
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 	select {
 	case <-done:
 	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"))
 	}
 }
 
@@ -316,11 +313,11 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.lists.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created mailing list tables", nil)
+	s.log.Info(ctx, "Created mailing list tables")
 	if err := s.mailBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
-	s.log.Info(ctx, "Created mail bucket", nil)
+	s.log.Info(ctx, "Created mail bucket")
 	if err := s.events.InitStream(ctx, s.streammail, events.StreamOpts{
 		Partitions:     16,
 		Replicas:       1,
@@ -331,7 +328,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mailinglist stream")
 	}
-	s.log.Info(ctx, "Created mailinglist stream", nil)
+	s.log.Info(ctx, "Created mailinglist stream")
 	return nil
 }
 

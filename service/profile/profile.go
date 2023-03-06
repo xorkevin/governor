@@ -17,8 +17,7 @@ import (
 
 type (
 	// Profiles is a user profile management service
-	Profiles interface {
-	}
+	Profiles interface{}
 
 	Service struct {
 		profiles      profilemodel.Repo
@@ -97,20 +96,20 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 
 	sr := s.router()
 	sr.mountProfileRoutes(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -118,11 +117,11 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.profiles.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created profile table", nil)
+	s.log.Info(ctx, "Created profile table")
 	if err := s.profileBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init profile image bucket")
 	}
-	s.log.Info(ctx, "Created profile bucket", nil)
+	s.log.Info(ctx, "Created profile bucket")
 	return nil
 }
 

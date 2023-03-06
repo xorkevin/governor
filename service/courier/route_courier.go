@@ -53,7 +53,7 @@ func (s *router) getLinkImage(c *governor.Context) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close link image"), nil)
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close link image"))
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)
@@ -165,7 +165,7 @@ func (s *router) getBrandImage(c *governor.Context) {
 	}
 	defer func() {
 		if err := img.Close(); err != nil {
-			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close brand image"), nil)
+			s.s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close brand image"))
 		}
 	}()
 	c.WriteFile(http.StatusOK, contentType, img)

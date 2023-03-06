@@ -19,12 +19,12 @@ func (s *Service) publishDMMsgEvent(ctx context.Context, userids []string, v int
 
 	present, err := s.getPresence(ctx, locDM, userids)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"))
 		return
 	}
 	for _, i := range present {
 		if err := s.ws.Publish(ctx, i, s.opts.DMMsgChannel, v); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm msg event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm msg event"))
 		}
 	}
 }
@@ -36,12 +36,12 @@ func (s *Service) publishDMSettingsEvent(ctx context.Context, userids []string, 
 
 	present, err := s.getPresence(ctx, locDM, userids)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence"))
 		return
 	}
 	for _, i := range present {
 		if err := s.ws.Publish(ctx, i, s.opts.DMSettingsChannel, v); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm settings event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish dm settings event"))
 		}
 	}
 }
@@ -81,7 +81,7 @@ func (s *Service) updateDM(ctx context.Context, userid string, chatid string, na
 		return kerrors.WithMsg(err, "Failed to update dm")
 	}
 	// must make a best effort attempt to publish dm settings event
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.publishDMSettingsEvent(ctx, []string{m.Userid1, m.Userid2}, resDMID{
 		Chatid: m.Chatid,
 	})
@@ -233,7 +233,7 @@ func (s *Service) createDMMsg(ctx context.Context, userid string, chatid string,
 		Value:  m.Value,
 	}
 	// must make a best effort attempt to publish dm msg event
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.publishDMMsgEvent(ctx, []string{dm.Userid1, dm.Userid2}, res)
 	return &res, nil
 }

@@ -93,14 +93,14 @@ func (s *Service) getAppsBulk(ctx context.Context, clientids []string) (*resApps
 func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oauthappmodel.Model, error) {
 	if clientstr, err := s.kvclient.Get(ctx, clientid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"))
 		}
 	} else if clientstr == cacheValTombstone {
 		return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
 	} else {
 		cm := &oauthappmodel.Model{}
 		if err := kjson.Unmarshal([]byte(clientstr), cm); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Malformed oauth client cache json"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Malformed oauth client cache json"))
 		} else {
 			return cm, nil
 		}
@@ -110,7 +110,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oautha
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
 			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCache); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"))
 			}
 			return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
 		}
@@ -118,9 +118,9 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oautha
 	}
 
 	if clientbytes, err := kjson.Marshal(m); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal client to json"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal client to json"))
 	} else if err := s.kvclient.Set(ctx, clientid, string(clientbytes), s.keyCache); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"))
 	}
 
 	return m, nil
@@ -160,7 +160,7 @@ func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate
 		return nil, kerrors.WithMsg(err, "Failed to rotate client key")
 	}
 	// must make a best effort attempt to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, clientid)
 	return &resCreate{
 		ClientID: clientid,
@@ -183,7 +183,7 @@ func (s *Service) updateApp(ctx context.Context, clientid string, name, url, red
 		return kerrors.WithMsg(err, "Failed to update oauth app")
 	}
 	// must make a best effort attempt to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, clientid)
 	return nil
 }
@@ -223,7 +223,7 @@ func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Ima
 		return kerrors.WithMsg(err, "Failed to update oauth app")
 	}
 	// must make a best effort attempt to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, clientid)
 	return nil
 }
@@ -247,7 +247,7 @@ func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 		return kerrors.WithMsg(err, "Failed to delete oauth app")
 	}
 	// must make a best effort attempt to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, clientid)
 	return nil
 }
@@ -295,6 +295,6 @@ func (s *Service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, 
 
 func (s *Service) clearCache(ctx context.Context, clientid string) {
 	if err := s.kvclient.Del(ctx, clientid); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear oauth client from cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear oauth client from cache"))
 	}
 }

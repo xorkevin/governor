@@ -52,7 +52,7 @@ func (s *Service) getPresence(ctx context.Context, loc string, userids []string)
 		k, err := i.Result()
 		if err != nil {
 			if !errors.Is(err, kvstore.ErrorNotFound) {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence result"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get presence result"))
 			}
 			continue
 		}
@@ -73,12 +73,12 @@ type (
 func (s *Service) presenceQueryHandler(ctx context.Context, topic string, userid string, msgdata []byte) error {
 	var req reqGetPresence
 	if err := kjson.Unmarshal(msgdata, &req); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Invalid get presence request"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Invalid get presence request"))
 		return nil
 	}
 	req.Userid = userid
 	if err := req.valid(); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Invalid get presence request"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Invalid get presence request"))
 		return nil
 	}
 

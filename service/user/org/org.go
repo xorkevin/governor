@@ -151,14 +151,14 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.eventsize = int32(eventsize)
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"org.stream.size": r.GetStr("streamsize"),
-		"org.event.size":  r.GetStr("eventsize"),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("streamsize", r.GetStr("streamsize")),
+		klog.AString("eventsize", r.GetStr("eventsize")),
+	)
 
 	sr := s.router()
 	sr.mountRoute(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 
 	return nil
 }
@@ -166,18 +166,18 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.WatchOrgs(s.streamns+".worker", events.ConsumerOpts{}, s.orgEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to orgs stream", nil)
+	s.log.Info(ctx, "Subscribed to orgs stream")
 
 	s.wg.Add(1)
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -192,12 +192,12 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init org stream")
 	}
-	s.log.Info(ctx, "Created org stream", nil)
+	s.log.Info(ctx, "Created org stream")
 
 	if err := s.orgs.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userorgs table", nil)
+	s.log.Info(ctx, "Created userorgs table")
 
 	return nil
 }
@@ -206,10 +206,8 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-var (
-	// ErrorOrgEvent is returned when the org event is malformed
-	ErrorOrgEvent errorOrgEvent
-)
+// ErrorOrgEvent is returned when the org event is malformed
+var ErrorOrgEvent errorOrgEvent
 
 type (
 	errorOrgEvent struct{}

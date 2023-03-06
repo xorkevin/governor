@@ -571,7 +571,7 @@ func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
 	ml, err := s.lists.GetListByID(ctx, props.ListID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"))
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -579,7 +579,7 @@ func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
 	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"))
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get list msg")
@@ -659,7 +659,7 @@ const (
 func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 	if _, err := s.lists.GetListByID(ctx, props.ListID); err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"))
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -667,7 +667,7 @@ func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"))
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get list msg")
@@ -687,7 +687,7 @@ func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 		}
 		defer func() {
 			if err := obj.Close(); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close msg content"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close msg content"))
 			}
 		}()
 		if _, err := io.Copy(mb, obj); err != nil {
@@ -696,7 +696,7 @@ func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 		return nil
 	}(); err != nil {
 		if errors.Is(err, objstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Msg content not found"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Msg content not found"))
 			if err := s.lists.MarkMsgSent(ctx, m.ListID, m.Msgid); err != nil {
 				return kerrors.WithMsg(err, "Failed to mark list message sent")
 			}
