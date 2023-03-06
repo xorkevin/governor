@@ -149,15 +149,13 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"db.connopts":   s.connopts,
-		"db.hbinterval": hbinterval.String(),
-		"db.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("connopts", s.connopts),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -175,7 +173,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[sqldbClie
 	// Check db auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create db client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create db client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a db client,
 	// if there is a db client then ping the db. This allows vault to be
@@ -192,16 +190,16 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[sqldbClie
 	// Failed a heartbeat
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping db"), klog.Fields{
-			"db.connopts": s.connopts,
-			"db.username": username,
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping db"),
+			klog.AString("connopts", s.connopts),
+			klog.AString("username", username),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to db"), klog.Fields{
-		"db.connopts": s.connopts,
-		"db.username": username,
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to db"),
+		klog.AString("connopts", s.connopts),
+		klog.AString("username", username),
+	)
 
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -240,10 +238,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 	}
 	if err := dbClient.PingContext(ctx); err != nil {
 		if err := dbClient.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"), klog.Fields{
-				"db.connopts": s.connopts,
-				"db.username": auth.Username,
-			})
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"),
+				klog.AString("connopts", s.connopts),
+				klog.AString("username", auth.Username),
+			)
 		}
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrorConn, "Failed to ping db")
@@ -251,10 +249,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to db", klog.Fields{
-		"db.connopts": s.connopts,
-		"db.username": auth.Username,
-	})
+	s.log.Info(ctx, "Established connection to db",
+		klog.AString("connopts", s.connopts),
+		klog.AString("username", auth.Username),
+	)
 
 	client := &sqldbClient{
 		client: &sqldb{
@@ -271,15 +269,15 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 func (s *Service) closeClient(ctx context.Context, client *sqldbClient) {
 	if client != nil {
 		if err := client.client.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"), klog.Fields{
-				"db.connopts": s.connopts,
-				"db.username": client.auth.Username,
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close db client"),
+				klog.AString("connopts", s.connopts),
+				klog.AString("username", client.auth.Username),
+			)
 		} else {
-			s.log.Info(ctx, "Closed db client", klog.Fields{
-				"db.connopts": s.connopts,
-				"db.username": client.auth.Username,
-			})
+			s.log.Info(ctx, "Closed db client",
+				klog.AString("connopts", s.connopts),
+				klog.AString("username", client.auth.Username),
+			)
 		}
 	}
 }
@@ -290,7 +288,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -383,7 +381,7 @@ func (s *sqldb) QueryContext(ctx context.Context, query string, args ...interfac
 	}
 	return &sqlrows{
 		log:  s.log,
-		ctx:  klog.ExtendCtx(context.Background(), ctx, nil),
+		ctx:  klog.ExtendCtx(context.Background(), ctx),
 		rows: rows,
 	}, nil
 }
@@ -436,7 +434,7 @@ func (r *sqlrows) Err() error {
 func (r *sqlrows) Close() error {
 	if err := r.rows.Close(); err != nil {
 		err := wrapDBErr(err, "Failed closing rows")
-		r.log.Err(r.ctx, kerrors.WithMsg(err, "Failed closing rows"), nil)
+		r.log.Err(r.ctx, kerrors.WithMsg(err, "Failed closing rows"))
 		return err
 	}
 	return nil

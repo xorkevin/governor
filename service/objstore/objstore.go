@@ -146,17 +146,15 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"obj.addr":       s.addr,
-		"obj.sslmode":    s.sslmode,
-		"obj.location":   s.location,
-		"obj.hbinterval": hbinterval.String(),
-		"obj.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("addr", s.addr),
+		klog.ABool("sslmode", s.sslmode),
+		klog.AString("location", s.location),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -174,7 +172,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[objstoreC
 	// Check client auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create objstore client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create objstore client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
@@ -188,16 +186,16 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[objstoreC
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping objstore"), klog.Fields{
-			"obj.addr":     s.addr,
-			"obj.username": s.auth.Username,
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping objstore"),
+			klog.AString("addr", s.addr),
+			klog.AString("username", s.auth.Username),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to objstore"), klog.Fields{
-		"obj.addr":     s.addr,
-		"obj.username": s.auth.Username,
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to objstore"),
+		klog.AString("addr", s.addr),
+		klog.AString("username", s.auth.Username),
+	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
 	// will use refreshed auth
@@ -243,10 +241,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[objs
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to objstore", klog.Fields{
-		"obj.addr":     s.addr,
-		"obj.username": s.auth.Username,
-	})
+	s.log.Info(ctx, "Established connection to objstore",
+		klog.AString("addr", s.addr),
+		klog.AString("username", s.auth.Username),
+	)
 
 	client := &objstoreClient{
 		client: objClient,
@@ -267,7 +265,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 

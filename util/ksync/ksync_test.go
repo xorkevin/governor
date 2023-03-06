@@ -132,7 +132,7 @@ func TestSingleFlight(t *testing.T) {
 
 		assert := require.New(t)
 
-		sf := NewSingleFlight[testobj]()
+		var sf SingleFlight[testobj]
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -176,7 +176,7 @@ func TestSingleFlight(t *testing.T) {
 
 		assert := require.New(t)
 
-		sf := NewSingleFlight[testobj]()
+		var sf SingleFlight[testobj]
 
 		block := make(chan struct{})
 		count := &atomic.Int64{}
@@ -221,7 +221,7 @@ func TestSingleFlight(t *testing.T) {
 
 		assert := require.New(t)
 
-		sf := NewSingleFlight[testobj]()
+		var sf SingleFlight[testobj]
 
 		block := make(chan struct{})
 		count := &atomic.Int64{}

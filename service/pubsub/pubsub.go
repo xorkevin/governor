@@ -108,15 +108,13 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"pubsub.addr":       s.addr,
-		"pubsub.hbinterval": s.hbinterval.String(),
-		"pubsub.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("addr", s.addr),
+		klog.AString("hbinterval", s.hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -134,7 +132,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 	// Check client auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create pubsub client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create pubsub client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the pubsub server. This allows vault to be
@@ -148,14 +146,10 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping pubsub server"), klog.Fields{
-			"pubsub.addr": s.addr,
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping pubsub server"), klog.AString("addr", s.addr))
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"), klog.Fields{
-		"pubsub.addr": s.addr,
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"), klog.AString("addr", s.addr))
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
 	// will use refreshed auth
@@ -224,9 +218,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
-		"pubsub.addr": s.addr,
-	})
+	s.log.Info(ctx, "Established connection to event stream", klog.AString("addr", s.addr))
 
 	client := &pubsubClient{
 		client: conn,
@@ -240,9 +232,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 func (s *Service) closeClient(ctx context.Context, client *pubsubClient) {
 	if client != nil && !client.client.IsClosed() {
 		client.client.Close()
-		s.log.Info(ctx, "Closed pubsub connection", klog.Fields{
-			"pubsub.addr": s.addr,
-		})
+		s.log.Info(ctx, "Closed pubsub connection", klog.AString("addr", s.addr))
 	}
 }
 
@@ -264,7 +254,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -314,14 +304,14 @@ func (s *Service) Subscribe(ctx context.Context, subject, group string) (Subscri
 	sub := &subscription{
 		subject: subject,
 		group:   group,
-		log: klog.NewLevelLogger(klog.Sub(s.log.Logger, "subscriber", klog.Fields{
-			"pubsub.subject": subject,
-			"pubsub.group":   group,
-		})),
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber",
+			klog.AString("pubsub.subject", subject),
+			klog.AString("pubsub.group", group),
+		)),
 		client: client,
 		sub:    nsub,
 	}
-	sub.log.Info(ctx, "Added subscription", nil)
+	sub.log.Info(ctx, "Added subscription")
 	return sub, nil
 }
 
@@ -345,7 +335,7 @@ func (s *subscription) Close(ctx context.Context) error {
 	if err := s.sub.Unsubscribe(); err != nil {
 		return kerrors.WithKind(err, ErrorClient, "Failed to close subscription to subject")
 	}
-	s.log.Info(ctx, "Closed subscription", nil)
+	s.log.Info(ctx, "Closed subscription")
 	return nil
 }
 
@@ -383,7 +373,7 @@ type (
 		group       string
 		handler     Handler
 		reqidprefix string
-		reqcount    *atomic.Uint32
+		reqcount    atomic.Uint32
 	}
 )
 
@@ -396,15 +386,15 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 func NewWatcher(ps Pubsub, log klog.Logger, subject, group string, handler Handler, reqidprefix string) *Watcher {
 	return &Watcher{
 		ps: ps,
-		log: klog.NewLevelLogger(klog.Sub(log, "watcher", klog.Fields{
-			"pubsub.subject": subject,
-			"pubsub.group":   group,
-		})),
+		log: klog.NewLevelLogger(log.Sublogger("watcher",
+			klog.AString("pubsub.subject", subject),
+			klog.AString("pubsub.group", group),
+		)),
 		subject:     subject,
 		group:       group,
 		handler:     handler,
 		reqidprefix: reqidprefix,
-		reqcount:    &atomic.Uint32{},
+		reqcount:    atomic.Uint32{},
 	}
 }
 
@@ -434,7 +424,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 		func() {
 			sub, err := w.ps.Subscribe(ctx, w.subject, w.group)
 			if err != nil {
-				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
+				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"))
 				select {
 				case <-ctx.Done():
 					return
@@ -445,7 +435,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			}
 			defer func() {
 				if err := sub.Close(ctx); err != nil {
-					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"), nil)
+					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"))
 				}
 			}()
 			delay = watchStartDelay
@@ -456,7 +446,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					if sub.IsPermanentlyClosed() {
 						return
 					}
-					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
 					select {
 					case <-ctx.Done():
 						return
@@ -465,16 +455,16 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						continue
 					}
 				}
-				msgctx := klog.WithFields(ctx, klog.Fields{
-					"pubsub.subject": m.Subject,
-					"pubsub.lreqid":  w.lreqID(),
-				})
+				msgctx := klog.CtxWithAttrs(ctx,
+					klog.AString("pubsub.subject", m.Subject),
+					klog.AString("pubsub.lreqid", w.lreqID()),
+				)
 				start := time.Now()
 				if err := w.handler.Handle(msgctx, *m); err != nil {
 					duration := time.Since(start)
-					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
-						"pubsub.duration_ms": duration.Milliseconds(),
-					})
+					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"),
+						klog.AInt64("duration_ms", duration.Milliseconds()),
+					)
 					select {
 					case <-msgctx.Done():
 						return
@@ -484,9 +474,9 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					}
 				}
 				duration := time.Since(start)
-				w.log.Info(msgctx, "Handled subscription message", klog.Fields{
-					"pubsub.duration_ms": duration.Milliseconds(),
-				})
+				w.log.Info(msgctx, "Handled subscription message",
+					klog.AInt64("duration_ms", duration.Milliseconds()),
+				)
 				delay = watchStartDelay
 			}
 		}()

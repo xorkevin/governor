@@ -74,15 +74,13 @@ func (s *NatsService) Init(ctx context.Context, c governor.Config, r governor.Co
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"events.addr":       s.addr,
-		"events.hbinterval": s.hbinterval.String(),
-		"events.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("addr", s.addr),
+		klog.AString("hbinterval", s.hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -100,7 +98,7 @@ func (s *NatsService) handlePing(ctx context.Context, m *lifecycle.Manager[natsC
 	// Check client auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the events server. This allows vault to be
@@ -114,14 +112,14 @@ func (s *NatsService) handlePing(ctx context.Context, m *lifecycle.Manager[natsC
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping events server"), klog.Fields{
-			"events.addr": s.addr,
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping events server"),
+			klog.AString("addr", s.addr),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to events server"), klog.Fields{
-		"events.addr": s.addr,
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to events server"),
+		klog.AString("addr", s.addr),
+	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
 	// will use refreshed auth
@@ -173,9 +171,9 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
-		"events.addr": s.addr,
-	})
+	s.log.Info(ctx, "Established connection to event stream",
+		klog.AString("addr", s.addr),
+	)
 
 	client := &natsClient{
 		client:    conn,
@@ -190,9 +188,9 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 func (s *NatsService) closeClient(ctx context.Context, client *natsClient) {
 	if client != nil && !client.client.IsClosed() {
 		client.client.Close()
-		s.log.Info(ctx, "Closed events connection", klog.Fields{
-			"events.addr": s.addr,
-		})
+		s.log.Info(ctx, "Closed events connection",
+			klog.AString("addr", s.addr),
+		)
 	}
 }
 
@@ -214,7 +212,7 @@ func (s *NatsService) Start(ctx context.Context) error {
 
 func (s *NatsService) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -233,9 +231,7 @@ const (
 	natsMsgKeyHeader = "events.key"
 )
 
-var (
-	natsStreamNameReplacer = strings.NewReplacer(".", "_")
-)
+var natsStreamNameReplacer = strings.NewReplacer(".", "_")
 
 // Publish publishes to a subject
 func (s *NatsService) Publish(ctx context.Context, msgs ...PublishMsg) error {
@@ -301,14 +297,14 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 	sub := &natsSubscription{
 		topic: topic,
 		group: group,
-		log: klog.NewLevelLogger(klog.Sub(s.log.Logger, "subscriber", klog.Fields{
-			"events.topic": topic,
-			"events.group": group,
-		})),
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber",
+			klog.AString("events.topic", topic),
+			klog.AString("events.group", group),
+		)),
 		client: client,
 		sub:    nsub,
 	}
-	sub.log.Info(ctx, "Added subscription", nil)
+	sub.log.Info(ctx, "Added subscription")
 	return sub, nil
 }
 
@@ -364,7 +360,7 @@ func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 		return kerrors.WithKind(nil, ErrorInvalidMsg, "Invalid message")
 	}
 	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
-		s.log.Err(ctx, kerrors.WithKind(nil, ErrorClient, "Failed to ack message"), nil)
+		s.log.Err(ctx, kerrors.WithKind(nil, ErrorClient, "Failed to ack message"))
 	}
 	return nil
 }
@@ -377,7 +373,7 @@ func (s *natsSubscription) Close(ctx context.Context) error {
 	if err := s.sub.Unsubscribe(); err != nil {
 		return kerrors.WithKind(err, ErrorClient, "Failed to close subscription")
 	}
-	s.log.Info(ctx, "Closed subscription", nil)
+	s.log.Info(ctx, "Closed subscription")
 	return nil
 }
 

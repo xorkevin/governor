@@ -41,7 +41,7 @@ func LoadOpenFile(c *governor.Context, formField string, mimeTypes map[string]st
 	defer func() {
 		if shouldClose {
 			if err := file.Close(); err != nil {
-				l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"), nil)
+				l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"))
 			}
 		}
 	}()

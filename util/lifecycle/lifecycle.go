@@ -17,8 +17,8 @@ type (
 
 	// Lifecycle manages the lifecycle of connecting to external services
 	Lifecycle[T any] struct {
-		aclient       *atomic.Pointer[T]
-		sf            *ksync.SingleFlight[T]
+		aclient       atomic.Pointer[T]
+		sf            ksync.SingleFlight[T]
 		doctx         context.Context
 		constructorfn func(ctx context.Context, m *Manager[T]) (*T, error)
 		stopfn        func(ctx context.Context, client *T)
@@ -36,8 +36,8 @@ func New[T any](
 	hbinterval time.Duration,
 ) *Lifecycle[T] {
 	return &Lifecycle[T]{
-		aclient:       &atomic.Pointer[T]{},
-		sf:            ksync.NewSingleFlight[T](),
+		aclient:       atomic.Pointer[T]{},
+		sf:            ksync.SingleFlight[T]{},
 		doctx:         doctx,
 		constructorfn: constructorfn,
 		stopfn:        stopfn,

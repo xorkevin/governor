@@ -18,17 +18,17 @@ type (
 	// WaitGroup waits on multiple completions
 	WaitGroup struct {
 		done  chan struct{}
-		once  *sync.Once
-		count *atomic.Int32
+		once  sync.Once
+		count atomic.Int32
 	}
 )
 
-// NewWaitGroup creates a new [*WaitGroup]
+// NewWaitGroup creates a new [WaitGroup]
 func NewWaitGroup() *WaitGroup {
 	return &WaitGroup{
 		done:  make(chan struct{}),
-		once:  &sync.Once{},
-		count: &atomic.Int32{},
+		once:  sync.Once{},
+		count: atomic.Int32{},
 	}
 }
 
@@ -80,7 +80,7 @@ func (w *WaitGroup) Wait(ctx context.Context) error {
 type (
 	// Once performs an action once
 	Once[T any] struct {
-		once *sync.Once
+		once sync.Once
 		val  *T
 		err  error
 	}
@@ -89,7 +89,7 @@ type (
 // NewOnce creates a new [*Once]
 func NewOnce[T any]() *Once[T] {
 	return &Once[T]{
-		once: &sync.Once{},
+		once: sync.Once{},
 	}
 }
 
@@ -113,17 +113,10 @@ type (
 	// given time, and the results of that function call may be shared among any
 	// callers waiting on its completion
 	SingleFlight[T any] struct {
-		mu   *sync.Mutex
+		mu   sync.Mutex
 		call *flightCall[T]
 	}
 )
-
-// NewSingleFlight creates a new [*SingleFlight]
-func NewSingleFlight[T any]() *SingleFlight[T] {
-	return &SingleFlight[T]{
-		mu: &sync.Mutex{},
-	}
-}
 
 func (s *SingleFlight[T]) doCall(fullctx context.Context, c *flightCall[T], fn func(ctx context.Context) (*T, error)) {
 	defer func() {

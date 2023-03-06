@@ -122,13 +122,11 @@ const (
 	MediaTypeGif = "image/gif"
 )
 
-var (
-	allowedMediaTypes = map[string]struct{}{
-		MediaTypePng:  {},
-		MediaTypeJpeg: {},
-		MediaTypeGif:  {},
-	}
-)
+var allowedMediaTypes = map[string]struct{}{
+	MediaTypePng:  {},
+	MediaTypeJpeg: {},
+	MediaTypeGif:  {},
+}
 
 // LoadImage returns an image file from a Context
 func LoadImage(c *governor.Context, formField string) (Image, error) {
@@ -139,7 +137,7 @@ func LoadImage(c *governor.Context, formField string) (Image, error) {
 	l := klog.NewLevelLogger(c.Log())
 	defer func() {
 		if err := file.Close(); err != nil {
-			l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"), nil)
+			l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"))
 		}
 	}()
 	switch mediaType {

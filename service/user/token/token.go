@@ -172,17 +172,15 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse keyrefresh")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"token.issuer":     issuer,
-		"token.audience":   audience,
-		"token.hbinterval": hbinterval.String(),
-		"token.hbmaxfail":  s.hbmaxfail,
-		"token.keyrefresh": s.keyrefresh.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("issuer", issuer),
+		klog.AString("audience", audience),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+		klog.AString("keyrefresh", s.keyrefresh.String()),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -204,10 +202,10 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[tokenSign
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh token keys"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh token keys"))
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"))
 	s.hbfailed = 0
 	// clear the cached signer because its secret may be invalid
 	m.Stop(ctx)
@@ -277,15 +275,15 @@ func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSign
 		eddsaid:         eddsaid,
 	}
 
-	s.log.Info(ctx, "Refreshed token keys with new keys", klog.Fields{
-		"token.hs512kid":        signer.hs512id,
-		"token.rs256kid":        signer.rs256id,
-		"token.eddsakid":        signer.eddsaid,
-		"token.numjwks":         len(jwks),
-		"token.numtokensigners": signingkeys.Size(),
-		"token.numextsigners":   extsigningkeys.Size(),
-		"token.numsysverifiers": sysverifierkeys.Size(),
-	})
+	s.log.Info(ctx, "Refreshed token keys with new keys",
+		klog.AString("hs512kid", signer.hs512id),
+		klog.AString("rs256kid", signer.rs256id),
+		klog.AString("eddsakid", signer.eddsaid),
+		klog.AInt("numjwks", len(jwks)),
+		klog.AInt("numtokensigners", signingkeys.Size()),
+		klog.AInt("numextsigners", extsigningkeys.Size()),
+		klog.AInt("numsysverifiers", sysverifierkeys.Size()),
+	)
 
 	m.Store(signer)
 
@@ -403,7 +401,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -529,7 +527,7 @@ func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
 		return false, nil
 	}
 	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
@@ -565,7 +563,7 @@ func (s *Service) GetClaims(ctx context.Context, kind Kind, tokenString string) 
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
 		return false, nil
 	}
 	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
@@ -599,7 +597,7 @@ func (s *Service) GetClaimsExt(ctx context.Context, kind Kind, tokenString strin
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
 		return false, nil
 	}
 	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)

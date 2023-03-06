@@ -191,16 +191,14 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"kv.addr":       s.addr,
-		"kv.dbname":     strconv.Itoa(s.dbname),
-		"kv.hbinterval": hbinterval.String(),
-		"kv.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("addr", s.addr),
+		klog.AString("dbname", strconv.Itoa(s.dbname)),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -218,7 +216,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kvstoreCl
 	// Check client auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
@@ -232,16 +230,16 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kvstoreCl
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping kvstore"), klog.Fields{
-			"kv.addr":   s.addr,
-			"kv.dbname": strconv.Itoa(s.dbname),
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping kvstore"),
+			klog.AString("addr", s.addr),
+			klog.AString("dbname", strconv.Itoa(s.dbname)),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to kvstore"), klog.Fields{
-		"kv.addr":   s.addr,
-		"kv.dbname": strconv.Itoa(s.dbname),
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to kvstore"),
+		klog.AString("addr", s.addr),
+		klog.AString("dbname", strconv.Itoa(s.dbname)),
+	)
 
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -280,10 +278,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 	})
 	if _, err := kvClient.Ping(ctx).Result(); err != nil {
 		if err := kvClient.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"), klog.Fields{
-				"kv.addr":   s.addr,
-				"kv.dbname": strconv.Itoa(s.dbname),
-			})
+			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"),
+				klog.AString("addr", s.addr),
+				klog.AString("dbname", strconv.Itoa(s.dbname)),
+			)
 		}
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrorConn, "Failed to ping kvstore")
@@ -291,10 +289,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to kvstore", klog.Fields{
-		"kv.addr":   s.addr,
-		"kv.dbname": strconv.Itoa(s.dbname),
-	})
+	s.log.Info(ctx, "Established connection to kvstore",
+		klog.AString("addr", s.addr),
+		klog.AString("dbname", strconv.Itoa(s.dbname)),
+	)
 
 	client := &kvstoreClient{
 		client: kvClient,
@@ -308,15 +306,15 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 func (s *Service) closeClient(ctx context.Context, client *kvstoreClient) {
 	if client != nil {
 		if err := client.client.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"), klog.Fields{
-				"kv.addr":   s.addr,
-				"kv.dbname": strconv.Itoa(s.dbname),
-			})
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"),
+				klog.AString("addr", s.addr),
+				klog.AString("dbname", strconv.Itoa(s.dbname)),
+			)
 		} else {
-			s.log.Info(ctx, "Closed kvstore connection", klog.Fields{
-				"kv.addr":   s.addr,
-				"kv.dbname": strconv.Itoa(s.dbname),
-			})
+			s.log.Info(ctx, "Closed kvstore connection",
+				klog.AString("addr", s.addr),
+				klog.AString("dbname", strconv.Itoa(s.dbname)),
+			)
 		}
 	}
 }
@@ -327,7 +325,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 

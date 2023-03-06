@@ -151,15 +151,13 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.hbmaxfail = r.GetInt("hbmaxfail")
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"events.addr":       s.addr,
-		"events.hbinterval": hbinterval.String(),
-		"events.hbmaxfail":  s.hbmaxfail,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("addr", s.addr),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -177,7 +175,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kafkaClie
 	// Check client auth expiry, and reinit client if about to be expired
 	client, err := m.Construct(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create events client"))
 	}
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the event stream. This allows vault to be
@@ -193,16 +191,16 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kafkaClie
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping event stream"), klog.Fields{
-			"events.addr":     s.addr,
-			"events.username": username,
-		})
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping event stream"),
+			klog.AString("addr", s.addr),
+			klog.AString("username", username),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to event stream"), klog.Fields{
-		"events.addr":     s.addr,
-		"events.username": username,
-	})
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to event stream"),
+		klog.AString("addr", s.addr),
+		klog.AString("username", username),
+	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
 	// will use refreshed auth
@@ -328,10 +326,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kafk
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to event stream", klog.Fields{
-		"events.addr":     s.addr,
-		"events.username": secret.Username,
-	})
+	s.log.Info(ctx, "Established connection to event stream",
+		klog.AString("addr", s.addr),
+		klog.AString("username", secret.Username),
+	)
 
 	client := &kafkaClient{
 		client:    kClient,
@@ -383,10 +381,10 @@ func (s *Service) ping(ctx context.Context, client *kgo.Client) error {
 func (s *Service) closeClient(ctx context.Context, client *kafkaClient) {
 	if client != nil {
 		client.client.Close()
-		s.log.Info(ctx, "Closed event stream connection", klog.Fields{
-			"events.addr":     s.addr,
-			"events.username": client.auth.Username,
-		})
+		s.log.Info(ctx, "Closed event stream connection",
+			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
+		)
 	}
 }
 
@@ -408,7 +406,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -486,10 +484,10 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	sub := &subscription{
 		topic: topic,
 		group: group,
-		log: klog.NewLevelLogger(klog.Sub(s.log.Logger, "subscriber", klog.Fields{
-			"events.topic": topic,
-			"events.group": group,
-		})),
+		log: klog.NewLevelLogger(s.log.Logger.Sublogger("subscriber",
+			klog.AString("events.topic", topic),
+			klog.AString("events.group", group),
+		)),
 		mu:       &sync.RWMutex{},
 		assigned: map[int32]struct{}{},
 		closed:   false,
@@ -533,7 +531,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 
 	sub.reader = reader
 
-	sub.log.Info(ctx, "Added subscriber", nil)
+	sub.log.Info(ctx, "Added subscriber")
 	return sub, nil
 }
 
@@ -585,7 +583,7 @@ func (s *subscription) onRevoked(ctx context.Context, client *kgo.Client, revoke
 	}()
 	// must commit any marked but uncommitted messages
 	if err := client.CommitUncommittedOffsets(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithKind(err, ErrorClient, "Failed to commit offsets on revoke"), nil)
+		s.log.Err(ctx, kerrors.WithKind(err, ErrorClient, "Failed to commit offsets on revoke"))
 	}
 }
 
@@ -660,7 +658,7 @@ func (s *subscription) Close(ctx context.Context) error {
 	}
 	s.reader.Close()
 	s.closed = true
-	s.log.Info(ctx, "Closed subscriber", nil)
+	s.log.Info(ctx, "Closed subscriber")
 	return nil
 }
 
@@ -755,9 +753,9 @@ func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts)
 				return kerrors.WithKind(resTopic.Err, ErrorClient, "Failed to update topic partitions")
 			}
 		} else if opts.Partitions < numPartitions {
-			s.log.Warn(ctx, "May not specify fewer partitions", klog.Fields{
-				"events.topic": topic,
-			})
+			s.log.Warn(ctx, "May not specify fewer partitions",
+				klog.AString("topic", topic),
+			)
 		}
 	}
 	return nil
@@ -834,10 +832,10 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqhandler Handler, maxdeliver int, reqidprefix string) *Watcher {
 	return &Watcher{
 		ev: ev,
-		log: klog.NewLevelLogger(klog.Sub(log, "watcher", klog.Fields{
-			"events.topic": topic,
-			"events.group": group,
-		})),
+		log: klog.NewLevelLogger(log.Sublogger("watcher",
+			klog.AString("events.topic", topic),
+			klog.AString("events.group", group),
+		)),
 		topic:       topic,
 		group:       group,
 		opts:        opts,
@@ -875,7 +873,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 		func() {
 			sub, err := w.ev.Subscribe(ctx, w.topic, w.group, w.opts)
 			if err != nil {
-				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"), nil)
+				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"))
 				select {
 				case <-ctx.Done():
 					return
@@ -886,7 +884,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			}
 			defer func() {
 				if err := sub.Close(ctx); err != nil {
-					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"), nil)
+					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"))
 				}
 			}()
 			delay = watchStartDelay
@@ -897,7 +895,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					if errors.Is(err, ErrorClientClosed) {
 						return
 					}
-					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
 					select {
 					case <-ctx.Done():
 						return
@@ -909,22 +907,22 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 
 				count := 1
 				for {
-					msgctx := klog.WithFields(ctx, klog.Fields{
-						"events.topic":     m.Topic,
-						"events.partition": m.Partition,
-						"events.offset":    m.Offset,
-						"events.time":      m.Time.UTC().Format(time.RFC3339Nano),
-						"events.delivered": count,
-						"events.lreqid":    w.lreqID(),
-					})
+					msgctx := klog.CtxWithAttrs(ctx,
+						klog.AString("events.topic", m.Topic),
+						klog.AInt("events.partition", m.Partition),
+						klog.AInt("events.offset", m.Offset),
+						klog.AString("events.time", m.Time.UTC().Format(time.RFC3339Nano)),
+						klog.AInt("events.delivered", count),
+						klog.AString("events.lreqid", w.lreqID()),
+					)
 					if w.dlqhandler != nil && count > w.maxdeliver {
 						count++
 						start := time.Now()
 						if err := w.dlqhandler.Handle(msgctx, *m); err != nil {
 							duration := time.Since(start)
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"), klog.Fields{
-								"events.duration_ms": duration.Milliseconds(),
-							})
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing dlq handler"),
+								klog.AInt64("duration_ms", duration.Milliseconds()),
+							)
 							select {
 							case <-msgctx.Done():
 								return
@@ -934,11 +932,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 							}
 						}
 						duration := time.Since(start)
-						w.log.Info(msgctx, "DLQ handled message", klog.Fields{
-							"events.duration_ms": duration.Milliseconds(),
-						})
+						w.log.Info(msgctx, "DLQ handled message",
+							klog.AInt64("duration_ms", duration.Milliseconds()),
+						)
 						if err := sub.Commit(msgctx, *m); err != nil {
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"))
 							if errors.Is(err, ErrorClientClosed) {
 								return
 							}
@@ -953,15 +951,15 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								continue
 							}
 						}
-						w.log.Info(msgctx, "Committed message", nil)
+						w.log.Info(msgctx, "Committed message")
 					} else {
 						count++
 						start := time.Now()
 						if err := w.handler.Handle(msgctx, *m); err != nil {
 							duration := time.Since(start)
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"), klog.Fields{
-								"events.duration_ms": duration.Milliseconds(),
-							})
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"),
+								klog.AInt64("duration_ms", duration.Milliseconds()),
+							)
 							select {
 							case <-msgctx.Done():
 								return
@@ -971,11 +969,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 							}
 						}
 						duration := time.Since(start)
-						w.log.Info(msgctx, "Handled subscription message", klog.Fields{
-							"events.duration_ms": duration.Milliseconds(),
-						})
+						w.log.Info(msgctx, "Handled subscription message",
+							klog.AInt64("duration_ms", duration.Milliseconds()),
+						)
 						if err := sub.Commit(msgctx, *m); err != nil {
-							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"), nil)
+							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"))
 							if errors.Is(err, ErrorClientClosed) {
 								return
 							}
@@ -990,7 +988,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 								continue
 							}
 						}
-						w.log.Info(msgctx, "Committed message", nil)
+						w.log.Info(msgctx, "Committed message")
 						break
 					}
 				}
