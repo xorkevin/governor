@@ -77,9 +77,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
 	if err != nil {
 		if strings.Contains(err.Error(), tplNoMatchErrorSubstring) {
-			s.log.Warn(ctx, "No txt templates loaded", klog.Fields{
-				"tpl.local.txtfile.pattern": r.GetStr("txtglob"),
-			})
+			s.log.Warn(ctx, "No txt templates loaded",
+				klog.AString("pattern", r.GetStr("txtglob")),
+			)
 			tt = textTemplate.New("default")
 		} else {
 			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Failed to load templates")
@@ -89,9 +89,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	ht, err := htmlTemplate.ParseFS(templateDir, r.GetStr("htmlglob"))
 	if err != nil {
 		if strings.Contains(err.Error(), tplNoMatchErrorSubstring) {
-			s.log.Warn(ctx, "No html templates loaded", klog.Fields{
-				"tpl.local.htmlfile.pattern": r.GetStr("htmlglob"),
-			})
+			s.log.Warn(ctx, "No html templates loaded",
+				klog.AString("pattern", r.GetStr("htmlglob")),
+			)
 			ht = htmlTemplate.New("default")
 		} else {
 			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Failed to load templates")
@@ -100,14 +100,14 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	s.ht = ht
 
 	if k := tt.DefinedTemplates(); k != "" {
-		s.log.Info(ctx, "Loaded text templates", klog.Fields{
-			"tpl.local.txttemplates": strings.TrimLeft(k, "; "),
-		})
+		s.log.Info(ctx, "Loaded text templates",
+			klog.AString("templates", strings.TrimLeft(k, "; ")),
+		)
 	}
 	if k := ht.DefinedTemplates(); k != "" {
-		s.log.Info(ctx, "Loaded html templates", klog.Fields{
-			"tpl.local.htmltemplates": strings.TrimLeft(k, "; "),
-		})
+		s.log.Info(ctx, "Loaded html templates",
+			klog.AString("templates", strings.TrimLeft(k, "; ")),
+		)
 	}
 	return nil
 }

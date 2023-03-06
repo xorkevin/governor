@@ -261,22 +261,20 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse authrefresh")
 	}
 
-	s.log.Info(ctx, "Initialize mail service", klog.Fields{
-		"mail.smtp.addr":      s.addr,
-		"mail.msgiddomain":    s.msgiddomain,
-		"mail.returnpath":     s.returnpath,
-		"mail.sender.address": s.fromAddress,
-		"mail.sender.name":    s.fromName,
-		"mail.streamsize":     r.GetStr("streamsize"),
-		"mail.eventsize":      r.GetStr("eventsize"),
-		"mail.hbinterval":     hbinterval.String(),
-		"mail.hbmaxfail":      s.hbmaxfail,
-		"mail.authrefresh":    s.authrefresh.String(),
-	})
+	s.log.Info(ctx, "Initialize mail service",
+		klog.AString("smtp.addr", s.addr),
+		klog.AString("msgiddomain", s.msgiddomain),
+		klog.AString("returnpath", s.returnpath),
+		klog.AString("sender.address", s.fromAddress),
+		klog.AString("sender.name", s.fromName),
+		klog.AString("streamsize", r.GetStr("streamsize")),
+		klog.AString("eventsize", r.GetStr("eventsize")),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+		klog.AString("authrefresh", s.authrefresh.String()),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -298,10 +296,10 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[mailSecre
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh mail keys"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh mail keys"))
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"))
 	s.hbfailed = 0
 	// clear the cached cipher because its secret may be invalid
 	m.Stop(ctx)
@@ -318,9 +316,9 @@ func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mai
 		return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty mail auth")
 	}
 	if currentSecrets != nil && auth != currentSecrets.auth {
-		s.log.Info(ctx, "Refreshed smtp auth", klog.Fields{
-			"mail.smtp.username": auth.Username,
-		})
+		s.log.Info(ctx, "Refreshed smtp auth",
+			klog.AString("username", auth.Username),
+		)
 	}
 
 	var maildataSecrets secretMaildata
@@ -355,10 +353,10 @@ func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mai
 		keyring: keyring,
 	}
 
-	s.log.Info(ctx, "Refreshed mailkey with new keys", klog.Fields{
-		"mail.datakey.kid":  secrets.cipher.ID(),
-		"mail.datakeys.num": strconv.Itoa(keyring.Size()),
-	})
+	s.log.Info(ctx, "Refreshed mailkey with new keys",
+		klog.AString("kid", secrets.cipher.ID()),
+		klog.AString("numkeys", strconv.Itoa(keyring.Size())),
+	)
 
 	m.Store(secrets)
 
@@ -390,13 +388,13 @@ func (s *Service) Start(ctx context.Context) error {
 		0,
 		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to mail stream", nil)
+	s.log.Info(ctx, "Subscribed to mail stream")
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -404,7 +402,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.mailBucket.Init(ctx); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mail bucket")
 	}
-	s.log.Info(ctx, "Created mail bucket", nil)
+	s.log.Info(ctx, "Created mail bucket")
 	if err := s.events.InitStream(ctx, s.streammail, events.StreamOpts{
 		Partitions:     16,
 		Replicas:       1,
@@ -415,7 +413,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init mail stream")
 	}
-	s.log.Info(ctx, "Created mail stream", nil)
+	s.log.Info(ctx, "Created mail stream")
 	return nil
 }
 
@@ -443,23 +441,23 @@ func (s *Service) handleSendMail(ctx context.Context, from string, to []string, 
 	if err := smtp.SendMail(s.addr, auth, from, to, msg); err != nil {
 		return kerrors.WithKind(err, errorSendMail{}, "Failed to send mail")
 	}
-	s.log.Info(ctx, "Mail sent", klog.Fields{
-		"mail.smtp.addr":     s.addr,
-		"mail.smtp.username": secrets.auth.Username,
-	})
-	s.log.Debug(ctx, "Mail sent", klog.Fields{
-		"mail.smtp.addr":     s.addr,
-		"mail.smtp.username": secrets.auth.Username,
-		"mail.from":          from,
-		"mail.to":            to,
-	})
+	s.log.Info(ctx, "Mail sent",
+		klog.AString("addr", s.addr),
+		klog.AString("username", secrets.auth.Username),
+	)
+	if s.log.Logger.Enabled(ctx, klog.LevelDebug) {
+		s.log.Debug(ctx, "Mail sent",
+			klog.AString("addr", s.addr),
+			klog.AString("username", secrets.auth.Username),
+			klog.AString("mail_from", from),
+			klog.AAny("mail_to", to),
+		)
+	}
 	return nil
 }
 
-var (
-	// ErrorInvalidMail is returned when the mail message is invalid
-	ErrorInvalidMail errorInvalidMail
-)
+// ErrorInvalidMail is returned when the mail message is invalid
+var ErrorInvalidMail errorInvalidMail
 
 type (
 	// errorMailEvent is returned when the mail event is malformed
@@ -515,22 +513,22 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 
 	if emmsg.Kind == mailMsgKindFwd {
 		data := emmsg.FwdData
-		ctx = klog.WithFields(ctx, klog.Fields{
-			"mail.msg.kind":      "fwd",
-			"mail.msg.data.path": data.Path,
-		})
-		s.log.Info(ctx, "Received mail msg to send", nil)
+		ctx = klog.CtxWithAttrs(ctx,
+			klog.AString("mail.msg.kind", "fwd"),
+			klog.AString("mail.msg.data.path", data.Path),
+		)
+		s.log.Info(ctx, "Received mail msg to send")
 		b1, _, err := s.sendMailDir.Get(ctx, data.Path)
 		if err != nil {
 			if errors.Is(err, objstore.ErrorNotFound) {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Mail body content not found"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Mail body content not found"))
 				return nil
 			}
 			return kerrors.WithKind(err, errorMailEvent{}, "Failed to get mail body")
 		}
 		defer func() {
 			if err := b1.Close(); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"))
 			}
 		}()
 		msg = b1
@@ -565,23 +563,23 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 		if emmsg.Kind == mailMsgKindRaw {
 			data := emmsg.RawData
 			msgid = data.MsgID
-			ctx = klog.WithFields(ctx, klog.Fields{
-				"mail.msg.kind":      "raw",
-				"mail.msg.data.path": data.Path,
-				"mail.msg.id":        msgid,
-			})
-			s.log.Info(ctx, "Received mail msg to send", nil)
+			ctx = klog.CtxWithAttrs(ctx,
+				klog.AString("mail.msg.kind", "raw"),
+				klog.AString("mail.msg.data.path", data.Path),
+				klog.AString("mail.msg.id", msgid),
+			)
+			s.log.Info(ctx, "Received mail msg to send")
 			b1, _, err := s.sendMailDir.Get(ctx, data.Path)
 			if err != nil {
 				if errors.Is(err, objstore.ErrorNotFound) {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Mail body content not found"), nil)
+					s.log.Err(ctx, kerrors.WithMsg(err, "Mail body content not found"))
 					return nil
 				}
 				return kerrors.WithKind(err, errorMailEvent{}, "Failed to get mail body")
 			}
 			defer func() {
 				if err := b1.Close(); err != nil {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"), nil)
+					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"))
 				}
 			}()
 			body = b1
@@ -619,11 +617,11 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 		} else if emmsg.Kind == mailMsgKindTpl {
 			data := emmsg.TplData
 			msgid = data.MsgID
-			ctx = klog.WithFields(ctx, klog.Fields{
-				"mail.msg.kind": "tpl",
-				"mail.msg.id":   msgid,
-			})
-			s.log.Info(ctx, "Received mail msg to send", nil)
+			ctx = klog.CtxWithAttrs(ctx,
+				klog.AString("mail.msg.kind", "tpl"),
+				klog.AString("mail.msg.id", msgid),
+			)
+			s.log.Info(ctx, "Received mail msg to send")
 			if data.Encrypted {
 				secrets, err := s.getSecrets(ctx)
 				if err != nil {
@@ -653,9 +651,9 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			body = b1
 			if err := s.tpl.ExecuteHTML(b2, data.Tpl.Kind, data.Tpl.Name+".html", emdata); err != nil {
 				if !errors.Is(err, template.ErrorTemplateDNE) {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to execute mail html body template"), klog.Fields{
-						"mail.tpl.body": data.Tpl.Name + ".html",
-					})
+					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to execute mail html body template"),
+						klog.AString("tplbody", data.Tpl.Name+".html"),
+					)
 				}
 				htmlbody = nil
 			} else {
@@ -694,7 +692,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 }
 
 func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
-	h := emmail.Header{}
+	var h emmail.Header
 	h.SetMessageID(msgid)
 	h.SetDate(time.Now().Round(0).UTC())
 	subj := strings.Builder{}
@@ -725,7 +723,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := mw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing plain mail writer"), nil)
+				log.Err(ctx, kerrors.WithMsg(err, "Failed closing plain mail writer"))
 			}
 		}()
 		if _, err := io.Copy(mw, body); err != nil {
@@ -740,7 +738,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 	}
 	defer func() {
 		if err := mw.Close(); err != nil {
-			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail writer"), nil)
+			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail writer"))
 		}
 	}()
 
@@ -750,12 +748,12 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 	}
 	defer func() {
 		if err := bw.Close(); err != nil {
-			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body writer"), nil)
+			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body writer"))
 		}
 	}()
 
 	if err := func() error {
-		hh := emmail.InlineHeader{}
+		var hh emmail.InlineHeader
 		hh.SetContentType(mediaTypeTextPlain, map[string]string{"charset": "utf-8"})
 		pw, err := bw.CreatePart(hh)
 		if err != nil {
@@ -763,7 +761,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"), nil)
+				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
 			}
 		}()
 		if _, err := io.Copy(pw, body); err != nil {
@@ -775,7 +773,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 	}
 
 	if err := func() error {
-		hh := emmail.InlineHeader{}
+		var hh emmail.InlineHeader
 		hh.SetContentType(mediaTypeTextHTML, map[string]string{"charset": "utf-8"})
 		pw, err := bw.CreatePart(hh)
 		if err != nil {
@@ -783,7 +781,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"), nil)
+				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
 			}
 		}()
 		if _, err := io.Copy(pw, htmlbody); err != nil {
