@@ -63,8 +63,8 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	setCtxTemplate(inj, s)
 
 	r.SetDefault("dir", "templates")
-	r.SetDefault("txtglob", "*.txt")
-	r.SetDefault("htmlglob", "*.html")
+	r.SetDefault("txtglob", "*.txt.tmpl")
+	r.SetDefault("htmlglob", "*.html.tmpl")
 }
 
 const (

@@ -49,33 +49,33 @@ vars:
     policymaxttl: 24h
 
   templates:
-    - emailchange.html
-    - emailchangenotify.html
-    - emailchangenotify_subject.txt
-    - emailchangenotify.txt
-    - emailchange_subject.txt
-    - emailchange.txt
-    - forgotpass.html
-    - forgotpass_subject.txt
-    - forgotpass.txt
-    - newlogin.html
-    - newlogin_subject.txt
-    - newlogin.txt
-    - newuser.html
-    - newuser_subject.txt
-    - newuser.txt
-    - otpbackupused.html
-    - otpbackupused_subject.txt
-    - otpbackupused.txt
-    - otpratelimit.html
-    - otpratelimit_subject.txt
-    - otpratelimit.txt
-    - passchange.html
-    - passchange_subject.txt
-    - passchange.txt
-    - passreset.html
-    - passreset_subject.txt
-    - passreset.txt
+    - emailchange.html.tmpl
+    - emailchangenotify.html.tmpl
+    - emailchangenotify_subject.txt.tmpl
+    - emailchangenotify.txt.tmpl
+    - emailchange_subject.txt.tmpl
+    - emailchange.txt.tmpl
+    - forgotpass.html.tmpl
+    - forgotpass_subject.txt.tmpl
+    - forgotpass.txt.tmpl
+    - newlogin.html.tmpl
+    - newlogin_subject.txt.tmpl
+    - newlogin.txt.tmpl
+    - newuser.html.tmpl
+    - newuser_subject.txt.tmpl
+    - newuser.txt.tmpl
+    - otpbackupused.html.tmpl
+    - otpbackupused_subject.txt.tmpl
+    - otpbackupused.txt.tmpl
+    - otpratelimit.html.tmpl
+    - otpratelimit_subject.txt.tmpl
+    - otpratelimit.txt.tmpl
+    - passchange.html.tmpl
+    - passchange_subject.txt.tmpl
+    - passchange.txt.tmpl
+    - passreset.html.tmpl
+    - passreset_subject.txt.tmpl
+    - passreset.txt.tmpl
 
   registerdir: secrets/register
   policydir: secrets/vault/policy

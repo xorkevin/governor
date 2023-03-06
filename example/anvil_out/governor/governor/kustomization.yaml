@@ -7,33 +7,33 @@ configMapGenerator:
       - config.yaml
   - name: governor-templates
     files:
-      - templates/emailchange.html
-      - templates/emailchangenotify.html
-      - templates/emailchangenotify_subject.txt
-      - templates/emailchangenotify.txt
-      - templates/emailchange_subject.txt
-      - templates/emailchange.txt
-      - templates/forgotpass.html
-      - templates/forgotpass_subject.txt
-      - templates/forgotpass.txt
-      - templates/newlogin.html
-      - templates/newlogin_subject.txt
-      - templates/newlogin.txt
-      - templates/newuser.html
-      - templates/newuser_subject.txt
-      - templates/newuser.txt
-      - templates/otpbackupused.html
-      - templates/otpbackupused_subject.txt
-      - templates/otpbackupused.txt
-      - templates/otpratelimit.html
-      - templates/otpratelimit_subject.txt
-      - templates/otpratelimit.txt
-      - templates/passchange.html
-      - templates/passchange_subject.txt
-      - templates/passchange.txt
-      - templates/passreset.html
-      - templates/passreset_subject.txt
-      - templates/passreset.txt
+      - templates/emailchange.html.tmpl
+      - templates/emailchangenotify.html.tmpl
+      - templates/emailchangenotify_subject.txt.tmpl
+      - templates/emailchangenotify.txt.tmpl
+      - templates/emailchange_subject.txt.tmpl
+      - templates/emailchange.txt.tmpl
+      - templates/forgotpass.html.tmpl
+      - templates/forgotpass_subject.txt.tmpl
+      - templates/forgotpass.txt.tmpl
+      - templates/newlogin.html.tmpl
+      - templates/newlogin_subject.txt.tmpl
+      - templates/newlogin.txt.tmpl
+      - templates/newuser.html.tmpl
+      - templates/newuser_subject.txt.tmpl
+      - templates/newuser.txt.tmpl
+      - templates/otpbackupused.html.tmpl
+      - templates/otpbackupused_subject.txt.tmpl
+      - templates/otpbackupused.txt.tmpl
+      - templates/otpratelimit.html.tmpl
+      - templates/otpratelimit_subject.txt.tmpl
+      - templates/otpratelimit.txt.tmpl
+      - templates/passchange.html.tmpl
+      - templates/passchange_subject.txt.tmpl
+      - templates/passchange.txt.tmpl
+      - templates/passreset.html.tmpl
+      - templates/passreset_subject.txt.tmpl
+      - templates/passreset.txt.tmpl
 resources:
   - service.yaml
   - ingressroute.yaml

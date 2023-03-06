@@ -133,6 +133,12 @@ type (
 		keyring *h2cipher.Keyring
 	}
 
+	tplSuffix struct {
+		subject string
+		text    string
+		html    string
+	}
+
 	Service struct {
 		tpl         template.Template
 		events      events.Events
@@ -150,6 +156,7 @@ type (
 		returnpath  string
 		fromAddress string
 		fromName    string
+		tplSuffix   tplSuffix
 		streamsize  int64
 		eventsize   int32
 		hbfailed    int
@@ -218,6 +225,9 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	r.SetDefault("msgiddomain", "")
 	r.SetDefault("fromaddress", "")
 	r.SetDefault("fromname", "")
+	r.SetDefault("tplsuffix.subject", "_subject.txt.tmpl")
+	r.SetDefault("tplsuffix.text", ".txt.tmpl")
+	r.SetDefault("tplsuffix.html", ".html.tmpl")
 	r.SetDefault("streamsize", "200M")
 	r.SetDefault("eventsize", "16K")
 	r.SetDefault("hbinterval", "5s")
@@ -241,6 +251,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	s.returnpath = r.GetStr("returnpath")
 	s.fromAddress = r.GetStr("fromaddress")
 	s.fromName = r.GetStr("fromname")
+	s.tplSuffix.subject = r.GetStr("tplsuffix.subject")
+	s.tplSuffix.text = r.GetStr("tplsuffix.text")
+	s.tplSuffix.html = r.GetStr("tplsuffix.html")
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
 	if err != nil {
@@ -267,6 +280,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		klog.AString("returnpath", s.returnpath),
 		klog.AString("sender.address", s.fromAddress),
 		klog.AString("sender.name", s.fromName),
+		klog.AString("tplsuffix.subject", s.tplSuffix.subject),
+		klog.AString("tplsuffix.text", s.tplSuffix.text),
+		klog.AString("tplsuffix.html", s.tplSuffix.html),
 		klog.AString("streamsize", r.GetStr("streamsize")),
 		klog.AString("eventsize", r.GetStr("eventsize")),
 		klog.AString("hbinterval", hbinterval.String()),
@@ -641,18 +657,18 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			s1 := &bytes.Buffer{}
 			b1 := &bytes.Buffer{}
 			b2 := &bytes.Buffer{}
-			if err := s.tpl.Execute(s1, data.Tpl.Kind, data.Tpl.Name+"_subject.txt", emdata); err != nil {
+			if err := s.tpl.Execute(s1, data.Tpl.Kind, data.Tpl.Name+s.tplSuffix.subject, emdata); err != nil {
 				return kerrors.WithMsg(err, "Failed to execute mail subject template")
 			}
 			subject = s1
-			if err := s.tpl.Execute(b1, data.Tpl.Kind, data.Tpl.Name+".txt", emdata); err != nil {
+			if err := s.tpl.Execute(b1, data.Tpl.Kind, data.Tpl.Name+s.tplSuffix.text, emdata); err != nil {
 				return kerrors.WithMsg(err, "Failed to execute mail body template")
 			}
 			body = b1
-			if err := s.tpl.ExecuteHTML(b2, data.Tpl.Kind, data.Tpl.Name+".html", emdata); err != nil {
+			if err := s.tpl.ExecuteHTML(b2, data.Tpl.Kind, data.Tpl.Name+s.tplSuffix.html, emdata); err != nil {
 				if !errors.Is(err, template.ErrorTemplateDNE) {
 					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to execute mail html body template"),
-						klog.AString("tplbody", data.Tpl.Name+".html"),
+						klog.AString("tplbody", data.Tpl.Name+s.tplSuffix.html),
 					)
 				}
 				htmlbody = nil
