@@ -38,9 +38,7 @@ func GetCtxUserid(c *governor.Context) string {
 
 func setCtxUserid(c *governor.Context, userid string) {
 	c.Set(ctxKeyUserid{}, userid)
-	c.LogFields(klog.Fields{
-		"gate.userid": userid,
-	})
+	c.LogAttrs(klog.AString("gate.userid", userid))
 }
 
 // GetCtxClaims returns token claims from the context
@@ -55,10 +53,10 @@ func GetCtxClaims(c *governor.Context) *token.Claims {
 func setCtxClaims(c *governor.Context, claims *token.Claims) {
 	c.Set(ctxKeyUserid{}, claims.Subject)
 	c.Set(ctxKeyClaims{}, claims)
-	c.LogFields(klog.Fields{
-		"gate.userid":    claims.Subject,
-		"gate.sessionid": claims.ID,
-	})
+	c.LogAttrs(
+		klog.AString("gate.userid", claims.Subject),
+		klog.AString("gate.sessionid", claims.ID),
+	)
 }
 
 // GetCtxSysUserid returns a system userid from the context
@@ -72,10 +70,10 @@ func GetCtxSysUserid(c *governor.Context) string {
 
 func setCtxSystem(c *governor.Context, claims *token.Claims) {
 	c.Set(ctxKeySysUserid{}, claims.Subject)
-	c.LogFields(klog.Fields{
-		"gate.sysuserid":    claims.Subject,
-		"gate.syssessionid": claims.ID,
-	})
+	c.LogAttrs(
+		klog.AString("gate.sysuserid", claims.Subject),
+		klog.AString("gate.syssessionid", claims.ID),
+	)
 }
 
 type (
@@ -163,9 +161,9 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.realm = r.GetStr("realm")
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"gate.realm": s.realm,
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("realm", s.realm),
+	)
 	return nil
 }
 
@@ -235,7 +233,7 @@ func (r *authctx) Ctx() *governor.Context {
 func (r *authctx) Intersect(ctx context.Context, roles rank.Rank) (rank.Rank, error) {
 	k, err := r.s.Authorize(ctx, r.userid, roles)
 	if err != nil {
-		r.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user roles"), nil)
+		r.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user roles"))
 		return nil, err
 	}
 	return k, nil
@@ -356,9 +354,9 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 						return
 					}
 					setCtxUserid(c, userid)
-					c.LogFields(klog.Fields{
-						"gate.keyid": keyid,
-					})
+					c.LogAttrs(
+						klog.AString("gate.keyid", keyid),
+					)
 				}
 			} else {
 				accessToken, err := getAuthHeader(c)

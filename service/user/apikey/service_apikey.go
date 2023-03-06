@@ -54,14 +54,14 @@ func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset 
 func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string, error) {
 	if result, err := s.kvkey.Get(ctx, keyid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get apikey key from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get apikey key from cache"))
 		}
 	} else if result == cacheValTombstone {
 		return "", "", kerrors.WithKind(nil, ErrorNotFound, "Apikey not found")
 	} else {
 		var kvVal keyhashKVVal
 		if err := kjson.Unmarshal([]byte(result), &kvVal); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to decode apikey from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to decode apikey from cache"))
 		} else {
 			return kvVal.Hash, kvVal.Scope, nil
 		}
@@ -71,7 +71,7 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 	if err != nil {
 		if errors.Is(err, db.ErrorNotFound) {
 			if err := s.kvkey.Set(ctx, keyid, cacheValTombstone, s.scopeCacheDuration); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"))
 			}
 			return "", "", kerrors.WithKind(err, ErrorNotFound, "Apikey not found")
 		}
@@ -82,9 +82,9 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 		Hash:  m.KeyHash,
 		Scope: m.Scope,
 	}); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal json for apikey"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to marshal json for apikey"))
 	} else if err := s.kvkey.Set(ctx, keyid, string(kvVal), s.scopeCacheDuration); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"))
 	}
 
 	return m.KeyHash, m.Scope, nil
@@ -129,7 +129,7 @@ func (s *Service) Insert(ctx context.Context, userid string, scope string, name,
 		return nil, kerrors.WithMsg(err, "Failed to create apikey")
 	}
 	// must make a best effort to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
@@ -150,7 +150,7 @@ func (s *Service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel,
 		return nil, kerrors.WithMsg(err, "Failed to rotate apikey")
 	}
 	// must make a best effort to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, m.Keyid)
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
@@ -173,7 +173,7 @@ func (s *Service) UpdateKey(ctx context.Context, keyid string, scope string, nam
 		return kerrors.WithMsg(err, "Failed to update apikey")
 	}
 	// must make a best effort to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, m.Keyid)
 	return nil
 }
@@ -190,7 +190,7 @@ func (s *Service) DeleteKey(ctx context.Context, keyid string) error {
 		return kerrors.WithMsg(err, "Failed to delete apikey")
 	}
 	// must make a best effort to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, m.Keyid)
 	return nil
 }
@@ -203,13 +203,13 @@ func (s *Service) DeleteKeys(ctx context.Context, keyids []string) error {
 		return kerrors.WithMsg(err, "Failed to delete apikeys")
 	}
 	// must make a best effort to clear the cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearCache(ctx, keyids...)
 	return nil
 }
 
 func (s *Service) clearCache(ctx context.Context, keyids ...string) {
 	if err := s.kvkey.Del(ctx, keyids...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear keys from cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to clear keys from cache"))
 	}
 }

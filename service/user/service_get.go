@@ -13,10 +13,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-var (
-	// ErrorNotFound is returned when the user does not exist
-	ErrorNotFound errorNotFound
-)
+// ErrorNotFound is returned when the user does not exist
+var ErrorNotFound errorNotFound
 
 type (
 	errorNotFound struct{}
@@ -323,7 +321,7 @@ const (
 func (s *Service) CheckUserExists(ctx context.Context, userid string) (bool, error) {
 	if v, err := s.kvusers.Get(ctx, userid); err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user exists from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user exists from cache"))
 		}
 	} else {
 		if v == cacheValY {
@@ -345,7 +343,7 @@ func (s *Service) CheckUserExists(ctx context.Context, userid string) (bool, err
 		v = cacheValY
 	}
 	if err := s.kvusers.Set(ctx, userid, v, s.authsettings.userCacheDuration); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set user exists in cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set user exists in cache"))
 	}
 
 	return exists, nil
@@ -374,21 +372,21 @@ func (s *Service) CheckUsersExist(ctx context.Context, userids []string) ([]stri
 	dneInCache := userids
 
 	if multiget, err := s.kvusers.Multi(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"))
 	} else {
 		results := make([]kvstore.Resulter, 0, len(userids))
 		for _, i := range userids {
 			results = append(results, multiget.Get(ctx, i))
 		}
 		if err := multiget.Exec(ctx); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get userids from cache"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get userids from cache"))
 			goto end
 		}
 		dneInCache = make([]string, 0, len(userids))
 		for n, i := range results {
 			if v, err := i.Result(); err != nil {
 				if !errors.Is(err, kvstore.ErrorNotFound) {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user exists from cache"), nil)
+					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user exists from cache"))
 				}
 				dneInCache = append(dneInCache, userids[n])
 			} else {
@@ -417,7 +415,7 @@ end:
 
 	multiset, err := s.kvusers.Multi(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"))
 		return res, nil
 	}
 	for _, i := range dneInCache {
@@ -428,7 +426,7 @@ end:
 		}
 	}
 	if err := multiset.Exec(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set users exist in cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set users exist in cache"))
 	}
 
 	return res, nil

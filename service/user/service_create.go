@@ -255,20 +255,20 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	}
 
 	// must make a best effort attempt to add roles, publish new user event, and clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 
 	if err := s.roles.InsertRoles(ctx, m.Userid, rank.BaseUser()); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create user roles")
 	}
 
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b0, b1)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"))
 	}
 
-	s.log.Info(ctx, "Created user", klog.Fields{
-		"user.userid":   m.Userid,
-		"user.username": m.Username,
-	})
+	s.log.Info(ctx, "Created user",
+		klog.AString("userid", m.Userid),
+		klog.AString("username", m.Username),
+	)
 
 	s.clearUserExists(ctx, userid)
 
@@ -326,7 +326,7 @@ func (s *Service) deleteUser(ctx context.Context, userid string, username string
 	}
 
 	// must make a best effort to clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.clearUserExists(ctx, userid)
 	return nil
 }
@@ -362,20 +362,20 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate
 	}
 
 	// must make best effort to add roles, publish new user event, and clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 
 	if err := s.roles.InsertRoles(ctx, madmin.Userid, rank.Admin()); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to add user roles")
 	}
 
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, madmin.Userid, b0, b1)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"))
 	}
 
-	s.log.Info(ctx, "Added admin", klog.Fields{
-		"user.username": madmin.Username,
-		"user.userid":   madmin.Userid,
-	})
+	s.log.Info(ctx, "Added admin",
+		klog.AString("username", madmin.Username),
+		klog.AString("userid", madmin.Userid),
+	)
 
 	s.clearUserExists(ctx, madmin.Userid)
 
@@ -387,6 +387,6 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate
 
 func (s *Service) clearUserExists(ctx context.Context, userid string) {
 	if err := s.kvusers.Del(ctx, userid); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete user exists in cache"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete user exists in cache"))
 	}
 }

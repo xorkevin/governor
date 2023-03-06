@@ -144,9 +144,9 @@ func (c *CmdClient) addAdmin(args []string) error {
 	if !decoded {
 		return kerrors.WithKind(nil, governor.ErrorServerRes, "Non-decodable response")
 	}
-	c.log.Info(context.Background(), "Created admin user", klog.Fields{
-		"userid":   body.Userid,
-		"username": body.Username,
-	})
+	c.log.Info(context.Background(), "Created admin user",
+		klog.AString("userid", body.Userid),
+		klog.AString("username", body.Username),
+	)
 	return nil
 }

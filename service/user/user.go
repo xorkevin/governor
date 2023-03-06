@@ -436,44 +436,42 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse gcduration")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"user.stream.size":               r.GetStr("streamsize"),
-		"user.event.size":                r.GetStr("eventsize"),
-		"user.auth.accessduration":       s.authsettings.accessDuration.String(),
-		"user.auth.refreshduration":      s.authsettings.refreshDuration.String(),
-		"user.auth.refreshcache":         s.authsettings.refreshCache.String(),
-		"user.confirmduration":           s.authsettings.confirmDuration.String(),
-		"user.emailconfirmduration":      s.authsettings.emailConfirmDuration.String(),
-		"user.passwordresetallowed":      s.authsettings.passwordReset,
-		"user.passwordresetduration":     s.authsettings.passwordResetDuration.String(),
-		"user.passresetdelay":            s.authsettings.passResetDelay.String(),
-		"user.invitationduration":        s.authsettings.invitationDuration.String(),
-		"user.cacheduration":             s.authsettings.userCacheDuration.String(),
-		"user.newlogin.email":            s.authsettings.newLoginEmail,
-		"user.passwordminsize":           s.authsettings.passwordMinSize,
-		"user.approvalrequired":          s.authsettings.userApproval,
-		"user.otpissuer":                 s.otpIssuer,
-		"user.rolesummary":               s.rolesummary.String(),
-		"user.tplname.emailchange":       s.tplname.emailchange,
-		"user.tplname.emailchangenotify": s.tplname.emailchangenotify,
-		"user.tplname.passchange":        s.tplname.passchange,
-		"user.tplname.forgotpass":        s.tplname.forgotpass,
-		"user.tplname.passreset":         s.tplname.passreset,
-		"user.tplname.loginratelimit":    s.tplname.loginratelimit,
-		"user.tplname.otpbackupused":     s.tplname.otpbackupused,
-		"user.emailurlbase":              s.emailurl.base,
-		"user.tpl.emailchange":           r.GetStr("email.url.emailchange"),
-		"user.tpl.forgotpass":            r.GetStr("email.url.forgotpass"),
-		"user.tpl.newuser":               r.GetStr("email.url.newuser"),
-		"user.hbinterval":                hbinterval.String(),
-		"user.hbmaxfail":                 s.hbmaxfail,
-		"user.otprefresh":                s.otprefresh.String(),
-		"user.gcduration":                s.gcDuration.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("stream_size", r.GetStr("streamsize")),
+		klog.AString("event_size", r.GetStr("eventsize")),
+		klog.AString("auth.accessduration", s.authsettings.accessDuration.String()),
+		klog.AString("auth.refreshduration", s.authsettings.refreshDuration.String()),
+		klog.AString("auth.refreshcache", s.authsettings.refreshCache.String()),
+		klog.AString("confirmduration", s.authsettings.confirmDuration.String()),
+		klog.AString("emailconfirmduration", s.authsettings.emailConfirmDuration.String()),
+		klog.ABool("passwordresetallowed", s.authsettings.passwordReset),
+		klog.AString("passwordresetduration", s.authsettings.passwordResetDuration.String()),
+		klog.AString("passresetdelay", s.authsettings.passResetDelay.String()),
+		klog.AString("invitationduration", s.authsettings.invitationDuration.String()),
+		klog.AString("cacheduration", s.authsettings.userCacheDuration.String()),
+		klog.ABool("newlogin_email", s.authsettings.newLoginEmail),
+		klog.AInt("passwordminsize", s.authsettings.passwordMinSize),
+		klog.ABool("approvalrequired", s.authsettings.userApproval),
+		klog.AString("otpissuer", s.otpIssuer),
+		klog.AString("rolesummary", s.rolesummary.String()),
+		klog.AString("tplname.emailchange", s.tplname.emailchange),
+		klog.AString("tplname.emailchangenotify", s.tplname.emailchangenotify),
+		klog.AString("tplname.passchange", s.tplname.passchange),
+		klog.AString("tplname.forgotpass", s.tplname.forgotpass),
+		klog.AString("tplname.passreset", s.tplname.passreset),
+		klog.AString("tplname.loginratelimit", s.tplname.loginratelimit),
+		klog.AString("tplname.otpbackupused", s.tplname.otpbackupused),
+		klog.AString("emailurlbase", s.emailurl.base),
+		klog.AString("tpl.emailchange", r.GetStr("email.url.emailchange")),
+		klog.AString("tpl.forgotpass", r.GetStr("email.url.forgotpass")),
+		klog.AString("tpl.newuser", r.GetStr("email.url.newuser")),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+		klog.AString("otprefresh", s.otprefresh.String()),
+		klog.AString("gcduration", s.gcDuration.String()),
+	)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	s.lc = lifecycle.New(
 		ctx,
@@ -488,7 +486,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	sr.mountRoute(m.GroupCtx("/user"))
 	sr.mountAuth(m.GroupCtx(authRoutePrefix, sr.rt))
 	sr.mountApikey(m.GroupCtx("/apikey"))
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 
@@ -500,10 +498,10 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[otpCipher
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh otp secrets"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh otp secrets"))
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"), nil)
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"))
 	s.hbfailed = 0
 	// clear the cached cipher because its secret may be invalid
 	m.Stop(ctx)
@@ -542,10 +540,10 @@ func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.Manager[otpC
 		keyring: keyring,
 	}
 
-	s.log.Info(ctx, "Refreshed otp secrets with new secrets", klog.Fields{
-		"user.otpcipher.kid":        cipher.cipher.ID(),
-		"user.otpcipher.numotpkeys": keyring.Size(),
-	})
+	s.log.Info(ctx, "Refreshed otp secrets with new secrets",
+		klog.AString("kid", cipher.cipher.ID()),
+		klog.AInt("numkeys", keyring.Size()),
+	)
 
 	m.Store(cipher)
 
@@ -567,19 +565,19 @@ func (s *Service) getCipher(ctx context.Context) (*otpCipher, error) {
 func (s *Service) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to users stream", nil)
+	s.log.Info(ctx, "Subscribed to users stream")
 
 	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
 	s.wg.Add(1)
 	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
-	s.log.Info(ctx, "Subscribed to gov sys gc channel", nil)
+	s.log.Info(ctx, "Subscribed to gov sys gc channel")
 
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) {
 	if err := s.wg.Wait(ctx); err != nil {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"), nil)
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
 	}
 }
 
@@ -594,32 +592,32 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init user stream")
 	}
-	s.log.Info(ctx, "Created user stream", nil)
+	s.log.Info(ctx, "Created user stream")
 
 	if err := s.users.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created user table", nil)
+	s.log.Info(ctx, "Created user table")
 
 	if err := s.sessions.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created usersessions table", nil)
+	s.log.Info(ctx, "Created usersessions table")
 
 	if err := s.approvals.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userapprovals table", nil)
+	s.log.Info(ctx, "Created userapprovals table")
 
 	if err := s.invitations.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userroleinvitations table", nil)
+	s.log.Info(ctx, "Created userroleinvitations table")
 
 	if err := s.resets.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userresets table", nil)
+	s.log.Info(ctx, "Created userresets table")
 
 	return nil
 }
@@ -631,10 +629,8 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-var (
-	// ErrorUserEvent is returned when the user event is malformed
-	ErrorUserEvent errorUserEvent
-)
+// ErrorUserEvent is returned when the user event is malformed
+var ErrorUserEvent errorUserEvent
 
 type (
 	errorUserEvent struct{}
@@ -771,7 +767,7 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 			return err
 		}
 		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, props.Userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish delete roles event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish delete roles event"))
 		}
 		if err := s.roles.DeleteRoles(ctx, props.Userid, r); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user roles")
@@ -804,19 +800,19 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 
 func (s *Service) userEventHandlerGC(ctx context.Context, props sysevent.TimestampProps) error {
 	if err := s.approvals.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC approvals"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC approvals"))
 	} else {
-		s.log.Info(ctx, "GC user approvals", nil)
+		s.log.Info(ctx, "GC user approvals")
 	}
 	if err := s.resets.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC resets"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC resets"))
 	} else {
-		s.log.Info(ctx, "GC user resets", nil)
+		s.log.Info(ctx, "GC user resets")
 	}
 	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC inviations"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC inviations"))
 	} else {
-		s.log.Info(ctx, "GC user invitations", nil)
+		s.log.Info(ctx, "GC user invitations")
 	}
 	return nil
 }

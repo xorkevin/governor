@@ -10,8 +10,7 @@ import (
 )
 
 type (
-	EventsAPI interface {
-	}
+	EventsAPI interface{}
 
 	getSecretRes struct {
 		secret string
@@ -81,13 +80,11 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 
-	ctx = klog.WithFields(ctx, klog.Fields{
-		"gov.service.phase": "run",
-	})
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 
 	sr := s.router()
 	sr.mountRoutes(governor.NewMethodRouter(m))
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 

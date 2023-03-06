@@ -45,7 +45,7 @@ func (s *Service) getUserSessions(ctx context.Context, userid string, limit, off
 
 func (s *Service) killCacheSessions(ctx context.Context, sessionids []string) {
 	if err := s.kvsessions.Del(ctx, sessionids...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete session keys"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete session keys"))
 	}
 }
 
@@ -54,7 +54,7 @@ func (s *Service) killSessions(ctx context.Context, sessionids []string) error {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 	// must make a best effort to remove cached sessions
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.killCacheSessions(ctx, sessionids)
 	return nil
 }

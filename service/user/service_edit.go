@@ -47,9 +47,9 @@ func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPu
 
 	if updUsername {
 		// must make a best effort to publish username update
-		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+		ctx = klog.ExtendCtx(context.Background(), ctx)
 		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"))
 		}
 	}
 	return nil
@@ -105,9 +105,9 @@ func (s *Service) updateRoles(ctx context.Context, userid string, updaterid stri
 		}
 
 		// must make a best effort attempt to publish role update event
-		ectx := klog.ExtendCtx(context.Background(), ctx, nil)
+		ectx := klog.ExtendCtx(context.Background(), ctx)
 		if err := s.events.Publish(ectx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"))
 		}
 	}
 
@@ -118,10 +118,10 @@ func (s *Service) updateRoles(ctx context.Context, userid string, updaterid stri
 		return kerrors.WithMsg(err, "Failed to add role invitations")
 	}
 	if editAddRoles.Has(rank.TagAdmin) {
-		s.log.Info(ctx, "Invite add admin role", klog.Fields{
-			"user.userid":   m.Userid,
-			"user.username": m.Username,
-		})
+		s.log.Info(ctx, "Invite add admin role",
+			klog.AString("userid", m.Userid),
+			klog.AString("username", m.Username),
+		)
 	}
 
 	if editRemoveRoles.Len() > 0 {
@@ -139,16 +139,16 @@ func (s *Service) updateRoles(ctx context.Context, userid string, updaterid stri
 		}
 
 		if editRemoveRoles.Has(rank.TagAdmin) {
-			s.log.Info(ctx, "Remove admin role", klog.Fields{
-				"user.userid":   m.Userid,
-				"user.username": m.Username,
-			})
+			s.log.Info(ctx, "Remove admin role",
+				klog.AString("userid", m.Userid),
+				klog.AString("username", m.Username),
+			)
 		}
 
 		// must make a best effort attempt to publish role update events
-		ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+		ctx = klog.ExtendCtx(context.Background(), ctx)
 		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"))
 		}
 	}
 
@@ -274,15 +274,15 @@ func (s *Service) acceptRoleInvitation(ctx context.Context, userid, role string)
 	}
 
 	if inv.Role == rank.TagAdmin {
-		s.log.Info(ctx, "Add admin role", klog.Fields{
-			"user.userid":   m.Userid,
-			"user.username": m.Username,
-		})
+		s.log.Info(ctx, "Add admin role",
+			klog.AString("userid", m.Userid),
+			klog.AString("username", m.Username),
+		)
 	}
 	// must make a best effort attempt to publish role update events
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"))
 	}
 	return nil
 }

@@ -136,10 +136,10 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse auth ratelimit params")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"ratelimit.params.base": s.paramsBase.String(),
-		"ratelimit.params.auth": s.paramsAuth.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("base", s.paramsBase.String()),
+		klog.AString("auth", s.paramsAuth.String()),
+	)
 
 	return nil
 }
@@ -179,15 +179,15 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 			if len(tags) > 0 {
 				multiget, err := kv.Tx(c.Ctx())
 				if err != nil {
-					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to create kvstore multi"), nil)
+					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to create kvstore multi"))
 					goto end
 				}
 				sums := make([]tagSum, 0, len(tags))
 				for _, i := range tags {
 					if i.Params.Period <= 0 {
-						s.log.Error(c.Ctx(), "Invalid ratelimit period", klog.Fields{
-							"ratelimit.tag.period": i.Params.Period,
-						})
+						s.log.Error(c.Ctx(), "Invalid ratelimit period",
+							klog.AInt64("period", i.Params.Period),
+						)
 						continue
 					}
 					t := now / i.Params.Period
@@ -206,7 +206,7 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 					})
 				}
 				if err := multiget.Exec(c.Ctx()); err != nil {
-					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tags from cache"), nil)
+					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tags from cache"))
 					goto end
 				}
 				for _, i := range sums {
@@ -215,7 +215,7 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 						k, err := j.Result()
 						if err != nil {
 							if !errors.Is(err, kvstore.ErrorNotFound) {
-								s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"), nil)
+								s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
 							}
 							continue
 						}

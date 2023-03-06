@@ -36,9 +36,9 @@ func (s *Service) InsertRoles(ctx context.Context, userid string, roles rank.Ran
 	}
 
 	// must make a best effort attempt to publish role update events
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"))
 	}
 	return nil
 }
@@ -67,9 +67,9 @@ func (s *Service) DeleteRolesByRole(ctx context.Context, roleName string, userid
 	}
 
 	// must make a best effort attempt to publish role update events
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.events.Publish(ctx, msgs...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish user roles event"))
 	}
 	return nil
 }

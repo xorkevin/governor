@@ -140,7 +140,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 
 	sr := s.router()
 	sr.mountRoutes(m)
-	s.log.Info(ctx, "Mounted http routes", nil)
+	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 

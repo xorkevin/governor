@@ -69,7 +69,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		return nil, kerrors.WithMsg(err, "Failed to validate password")
 	} else if !ok {
 		// must make a best effort to increment login failures
-		s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx, nil), m, ipaddr, useragent)
+		s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx), m, ipaddr, useragent)
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid username or password")
 	}
 
@@ -81,14 +81,14 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		if err := s.checkOTPCode(ctx, m, code, backup, ipaddr, useragent); err != nil {
 			if errors.Is(err, errorAuthenticate{}) {
 				// must make a best effort to increment login failures
-				s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx, nil), m, ipaddr, useragent)
+				s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx), m, ipaddr, useragent)
 			}
 			return nil, err
 		}
 	}
 
 	// must make a best effort to reset login failures
-	s.resetLoginFailCount(klog.ExtendCtx(context.Background(), ctx, nil), m)
+	s.resetLoginFailCount(klog.ExtendCtx(context.Background(), ctx), m)
 
 	sessionExists := false
 	var sm *sessionmodel.Model
@@ -160,7 +160,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 			UserAgent: sm.UserAgent,
 		}
 		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(newLoginTemplate), emdata, false); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send new login email"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send new login email"))
 		}
 	}
 
@@ -175,11 +175,11 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	}
 
 	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"))
 	}
 
 	// must make a best effort to mark otp code as used
-	s.markOTPCode(klog.ExtendCtx(context.Background(), ctx, nil), userid, code)
+	s.markOTPCode(klog.ExtendCtx(context.Background(), ctx), userid, code)
 
 	return &resUserAuth{
 		Valid:        true,
@@ -206,7 +206,7 @@ func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 	keyhash, err := s.kvsessions.Get(ctx, claims.ID)
 	if err != nil {
 		if !errors.Is(err, kvstore.ErrorNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get cached session"), nil)
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get cached session"))
 		}
 		return s.refreshToken(ctx, refreshToken, ipaddr, useragent)
 	}
@@ -315,7 +315,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 	}
 
 	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"), nil)
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"))
 	}
 
 	return &resUserAuth{
@@ -353,7 +353,7 @@ func (s *Service) logout(ctx context.Context, refreshToken string) (string, erro
 		return "", kerrors.WithMsg(err, "Failed to delete session")
 	}
 	// must make a best effort to remove cached sessions
-	ctx = klog.ExtendCtx(context.Background(), ctx, nil)
+	ctx = klog.ExtendCtx(context.Background(), ctx)
 	s.killCacheSessions(ctx, []string{claims.ID})
 
 	return claims.Subject, nil

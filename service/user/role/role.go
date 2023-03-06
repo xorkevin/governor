@@ -94,9 +94,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse role cache duration")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"role.cacheduration": s.roleCacheDuration.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("cacheduration", s.roleCacheDuration.String()),
+	)
 
 	return nil
 }
@@ -112,7 +112,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.roles.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userrole table", nil)
+	s.log.Info(ctx, "Created userrole table")
 
 	return nil
 }

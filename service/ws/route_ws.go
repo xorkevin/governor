@@ -75,7 +75,7 @@ func (s *router) ws(c *governor.Context) {
 
 	conn, err := c.Websocket([]string{governor.WSProtocolVersion})
 	if err != nil {
-		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"))
 		return
 	}
 	if conn.Subprotocol() != governor.WSProtocolVersion {
@@ -87,7 +87,7 @@ func (s *router) ws(c *governor.Context) {
 	presenceLocation := ""
 
 	if err := s.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
-		s.s.log.Err(c.Ctx(), err, nil)
+		s.s.log.Err(c.Ctx(), err)
 	}
 
 	wg := &sync.WaitGroup{}
@@ -113,7 +113,7 @@ func (s *router) ws(c *governor.Context) {
 			func() {
 				sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
 				if err != nil {
-					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"), nil)
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"))
 					select {
 					case <-ctx.Done():
 						return
@@ -124,7 +124,7 @@ func (s *router) ws(c *governor.Context) {
 				}
 				defer func() {
 					if err := sub.Close(ctx); err != nil {
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"))
 					}
 				}()
 				delay = 250 * time.Millisecond
@@ -138,7 +138,7 @@ func (s *router) ws(c *governor.Context) {
 						if sub.IsPermanentlyClosed() {
 							return
 						}
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
 						select {
 						case <-ctx.Done():
 							return
@@ -149,11 +149,11 @@ func (s *router) ws(c *governor.Context) {
 					}
 					channel, _, err := decodeResMsg(m.Data)
 					if err != nil {
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed decoding message"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed decoding message"))
 						continue
 					}
 					if channel == "" {
-						s.s.log.Err(ctx, kerrors.WithMsg(nil, "Malformed sent message"), nil)
+						s.s.log.Err(ctx, kerrors.WithMsg(nil, "Malformed sent message"))
 						continue
 					}
 					if err := conn.Write(ctx, true, m.Data); err != nil {
@@ -178,7 +178,7 @@ func (s *router) ws(c *governor.Context) {
 				return
 			case <-ticker.C:
 				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					s.s.log.Err(ctx, err, nil)
+					s.s.log.Err(ctx, err)
 				}
 			}
 		}
@@ -235,15 +235,15 @@ func (s *router) ws(c *governor.Context) {
 			}
 			if presenceLocation != origLocation {
 				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					s.s.log.Err(ctx, err, nil)
+					s.s.log.Err(ctx, err)
 				}
 			}
 		} else {
 			if b, err := encodeReqMsg(channel, userid, msg); err != nil {
-				s.s.log.Err(ctx, err, nil)
+				s.s.log.Err(ctx, err)
 			} else {
 				if err := s.s.pubsub.Publish(ctx, serviceChannelName(s.s.opts.UserRcvChannelPrefix, channel), b); err != nil {
-					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish request msg"), nil)
+					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish request msg"))
 				}
 			}
 		}
@@ -258,7 +258,7 @@ func (s *router) ws(c *governor.Context) {
 func (s *router) echo(c *governor.Context) {
 	conn, err := c.Websocket([]string{governor.WSProtocolVersion})
 	if err != nil {
-		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"), nil)
+		s.s.log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"))
 		return
 	}
 	if conn.Subprotocol() != governor.WSProtocolVersion {

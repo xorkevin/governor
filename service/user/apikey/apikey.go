@@ -81,9 +81,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(err, "Failed to parse scope cache time")
 	}
 
-	s.log.Info(ctx, "Loaded config", klog.Fields{
-		"apikey.scopecache": s.scopeCacheDuration.String(),
-	})
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("scopecache", s.scopeCacheDuration.String()),
+	)
 
 	return nil
 }
@@ -99,7 +99,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.apikeys.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userapikeys table", nil)
+	s.log.Info(ctx, "Created userapikeys table")
 
 	return nil
 }
