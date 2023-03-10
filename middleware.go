@@ -435,7 +435,6 @@ func (w *compressorWriter) WriteHeader(status int) {
 	w.status = status
 	if encoding, ok := w.shouldCompress(); ok {
 		w.ResponseWriter.Header().Set(headerContentEncoding, encoding)
-		w.ResponseWriter.Header().Add(headerVary, headerAcceptEncoding)
 		// compressed length is unknown
 		w.ResponseWriter.Header().Del(headerContentLength)
 		w.writer = w.allowedEncodings[encoding].Get().(compressWriter)
@@ -575,6 +574,12 @@ func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			m.s.log.Err(r.Context(), kerrors.WithMsg(err, "Failed to close compressor writer"))
 		}
 	}()
+
+	// According to RFC7232 section 4.1, server must send same Cache-Control,
+	// Content-Location, Date, ETag, Expires, and Vary headers for 304 response
+	// as 200 response.
+	w2.ResponseWriter.Header().Add(headerVary, headerAcceptEncoding)
+
 	m.next.ServeHTTP(w2, r)
 }
 
