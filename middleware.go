@@ -435,7 +435,7 @@ func (w *compressorWriter) WriteHeader(status int) {
 	w.status = status
 	if encoding, ok := w.shouldCompress(); ok {
 		w.ResponseWriter.Header().Set(headerContentEncoding, encoding)
-		w.ResponseWriter.Header().Add(headerVary, headerContentEncoding)
+		w.ResponseWriter.Header().Add(headerVary, headerAcceptEncoding)
 		// compressed length is unknown
 		w.ResponseWriter.Header().Del(headerContentLength)
 		w.writer = w.allowedEncodings[encoding].Get().(compressWriter)
