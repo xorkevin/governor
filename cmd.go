@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+	"xorkevin.dev/governor/util/ksignal"
 )
 
 type (
@@ -120,6 +122,36 @@ func (c *Cmd) logFatal(v interface{}) {
 	exit(1)
 }
 
+func (c *Cmd) runInt(f func(ctx context.Context) error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+
+	var ferr error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer cancel()
+		ferr = f(ctx)
+	}()
+
+	var signals []os.Signal
+	if conf := c.opts.TermConfig; conf != nil {
+		signals = conf.TermSignals
+	}
+	if len(signals) == 0 {
+		signals = []os.Signal{os.Interrupt}
+	}
+	ksignal.Wait(ctx, signals...)
+
+	cancel()
+	wg.Wait()
+
+	if ferr != nil {
+		c.logFatal(ferr)
+	}
+}
+
 func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 	if c.s != nil {
 		c.s.SetFlags(Flags{
@@ -134,10 +166,7 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 }
 
 func (c *Cmd) serve(cmd *cobra.Command, args []string) {
-	if err := c.s.Serve(); err != nil {
-		c.logFatal(err)
-		return
-	}
+	c.runInt(c.s.Serve)
 }
 
 func (c *Cmd) setup(cmd *cobra.Command, args []string) {

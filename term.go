@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"syscall"
 
 	"golang.org/x/term"
 	"xorkevin.dev/governor/util/writefs"
@@ -27,13 +28,14 @@ type (
 	}
 
 	TermConfig struct {
-		StdinFd int
-		Stdin   io.Reader
-		Stdout  io.Writer
-		Stderr  io.Writer
-		Fsys    fs.FS
-		WFsys   writefs.FS
-		Exit    func(code int)
+		StdinFd     int
+		Stdin       io.Reader
+		Stdout      io.Writer
+		Stderr      io.Writer
+		Fsys        fs.FS
+		WFsys       writefs.FS
+		Exit        func(code int)
+		TermSignals []os.Signal
 	}
 
 	termClient struct {
@@ -50,13 +52,14 @@ type (
 func newTermClient(config *TermConfig, l klog.Logger) Term {
 	if config == nil {
 		config = &TermConfig{
-			StdinFd: int(os.Stdin.Fd()),
-			Stdin:   os.Stdin,
-			Stdout:  os.Stdout,
-			Stderr:  os.Stderr,
-			Fsys:    os.DirFS("."),
-			WFsys:   writefs.NewOSFS("."),
-			Exit:    os.Exit,
+			StdinFd:     int(os.Stdin.Fd()),
+			Stdin:       os.Stdin,
+			Stdout:      os.Stdout,
+			Stderr:      os.Stderr,
+			Fsys:        os.DirFS("."),
+			WFsys:       writefs.NewOSFS("."),
+			Exit:        os.Exit,
+			TermSignals: []os.Signal{os.Interrupt, syscall.SIGTERM},
 		}
 	}
 	return &termClient{

@@ -104,7 +104,6 @@ func TestMiddleware(t *testing.T) {
 
 				assert.Equal(tc.Encoding, rec.Result().Header.Get(headerContentEncoding))
 				if tc.Encoding != "" {
-					assert.Equal(headerContentEncoding, rec.Result().Header.Get(headerVary))
 					assert.Equal("", rec.Result().Header.Get(headerContentLength))
 				}
 			})

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
-	"os"
-	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,8 +190,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Serve starts the registered services and the server
-func (s *Server) Serve() error {
-	ctx, cancel := context.WithCancel(context.Background())
+func (s *Server) Serve(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	if err := s.Init(ctx); err != nil {
 		if s.log != nil {
@@ -262,10 +260,9 @@ func (s *Server) Serve() error {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down server"))
 		}
 	}()
-	s.waitForInterrupt(ctx)
+	<-ctx.Done()
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "stop"))
 	s.log.Info(ctx, "Shutdown process begin")
-	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(klog.ExtendCtx(context.Background(), ctx), 16*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -273,10 +270,4 @@ func (s *Server) Serve() error {
 	}
 	s.Stop(shutdownCtx)
 	return nil
-}
-
-func (s *Server) waitForInterrupt(ctx context.Context) {
-	notifyCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
-	defer stop()
-	<-notifyCtx.Done()
 }
