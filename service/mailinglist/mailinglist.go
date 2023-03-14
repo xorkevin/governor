@@ -305,7 +305,7 @@ func (s *Service) Stop(ctx context.Context) {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		s.log.WarnErr(ctx, kerrors.WithMsg(ctx.Err(), "Failed to stop"))
+		s.log.Warn(ctx, "Failed to stop")
 	}
 }
 
