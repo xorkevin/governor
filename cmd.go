@@ -139,9 +139,6 @@ func (c *Cmd) runInt(f func(ctx context.Context) error) {
 	if conf := c.opts.TermConfig; conf != nil {
 		signals = conf.TermSignals
 	}
-	if len(signals) == 0 {
-		signals = []os.Signal{os.Interrupt}
-	}
 	ksignal.Wait(ctx, signals...)
 
 	cancel()
