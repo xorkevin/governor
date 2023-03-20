@@ -51,7 +51,7 @@ func (e *ErrorRes) WriteError(b io.Writer) {
 
 // Error implements error
 func (e *ErrorRes) Error() string {
-	b := strings.Builder{}
+	var b strings.Builder
 	e.WriteError(&b)
 	return b.String()
 }

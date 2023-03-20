@@ -54,7 +54,7 @@ type (
 )
 
 func (p Params) String() string {
-	b := strings.Builder{}
+	var b strings.Builder
 	b.WriteString("expiration:")
 	b.WriteString(strconv.FormatInt(p.Expiration, 10))
 	b.WriteString(",period:")

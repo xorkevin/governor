@@ -358,7 +358,7 @@ type (
 )
 
 func (e *ErrorWS) Error() string {
-	b := strings.Builder{}
+	var b strings.Builder
 	b.WriteString("(")
 	b.WriteString(strconv.Itoa(e.Status))
 	b.WriteString(")")

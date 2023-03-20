@@ -75,9 +75,7 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term go
 func (c *CmdClient) publishEvent(args []string) error {
 	var payload bytes.Buffer
 	if c.publishFlags.payload != "" {
-		if _, err := io.WriteString(&payload, c.publishFlags.payload); err != nil {
-			return kerrors.WithMsg(err, "Failed creating event payload")
-		}
+		io.WriteString(&payload, c.publishFlags.payload)
 	} else {
 		if _, err := io.Copy(&payload, c.term.Stdin()); err != nil {
 			return kerrors.WithMsg(err, "Failed reading event payload")
