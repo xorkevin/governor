@@ -146,6 +146,7 @@ type (
 		sendMailDir objstore.Dir
 		lc          *lifecycle.Lifecycle[mailSecrets]
 		cipherAlgs  h2cipher.Algs
+		streamAlgs  h2streamcipher.Algs
 		config      governor.ConfigReader
 		log         *klog.LevelLogger
 		streamns    string
@@ -203,12 +204,15 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 	cipherAlgs := h2cipher.NewAlgsMap()
 	chacha20poly1305.Register(cipherAlgs)
 	aes.Register(cipherAlgs)
+	streamAlgs := h2streamcipher.NewAlgsMap()
+	chacha20.Register(streamAlgs)
 	return &Service{
 		tpl:         tpl,
 		events:      ev,
 		mailBucket:  obj,
 		sendMailDir: obj.Subdir("sendmail"),
 		cipherAlgs:  cipherAlgs,
+		streamAlgs:  streamAlgs,
 		hbfailed:    0,
 		wg:          ksync.NewWaitGroup(),
 	}
@@ -557,20 +561,14 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			if err != nil {
 				return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail data key")
 			}
-			config, err := chacha20.ParseConfig(string(dataKey))
+			tag = data.Tag
+			decStream, err = h2streamcipher.NewDecStreamReaderFromParams(string(dataKey), s.streamAlgs, msg)
 			if err != nil {
-				return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
-			}
-			stream, err := chacha20.NewStream(*config)
-			if err != nil {
+				if errors.Is(err, h2streamcipher.ErrorKeyInvalid) {
+					return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
+				}
 				return kerrors.WithMsg(err, "Failed to create decryption stream")
 			}
-			auth, err := chacha20.NewPoly1305Auth(*config)
-			if err != nil {
-				return kerrors.WithMsg(err, "Failed to create decryption auth")
-			}
-			tag = data.Tag
-			decStream = h2streamcipher.NewDecStreamReader(stream, auth, msg)
 			msg = decStream
 		}
 	} else {
@@ -613,20 +611,14 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 				if err != nil {
 					return kerrors.WithKind(err, errorMailEvent{}, "Failed to decrypt mail data key")
 				}
-				config, err := chacha20.ParseConfig(string(dataKey))
+				tag = data.Tag
+				decStream, err = h2streamcipher.NewDecStreamReaderFromParams(string(dataKey), s.streamAlgs, msg)
 				if err != nil {
-					return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
-				}
-				stream, err := chacha20.NewStream(*config)
-				if err != nil {
+					if errors.Is(err, h2streamcipher.ErrorKeyInvalid) {
+						return kerrors.WithKind(err, errorMailEvent{}, "Failed to parse mail data key")
+					}
 					return kerrors.WithMsg(err, "Failed to create decryption stream")
 				}
-				auth, err := chacha20.NewPoly1305Auth(*config)
-				if err != nil {
-					return kerrors.WithMsg(err, "Failed to create decryption auth")
-				}
-				tag = data.Tag
-				decStream = h2streamcipher.NewDecStreamReader(stream, auth, body)
 				body = decStream
 			}
 			subject = strings.NewReader(data.Subject)
@@ -939,13 +931,9 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, err := chacha20.NewStream(*config)
+		stream, auth, err := chacha20.NewFromConfig(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
-		}
-		auth, err := chacha20.NewPoly1305Auth(*config)
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
 		encStream = h2streamcipher.NewEncStreamReader(stream, auth, body)
 		body = encStream
@@ -1037,13 +1025,9 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, err := chacha20.NewStream(*config)
+		stream, auth, err := chacha20.NewFromConfig(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
-		}
-		auth, err := chacha20.NewPoly1305Auth(*config)
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to create encryption auth")
 		}
 		encStream = h2streamcipher.NewEncStreamReader(stream, auth, body)
 		body = encStream
