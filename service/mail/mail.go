@@ -564,7 +564,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) (retErr error
 			tag = data.Tag
 			decStream, err = h2streamcipher.NewDecStreamReaderFromParams(string(dataKey), s.streamAlgs, msg)
 			if err != nil {
-				if errors.Is(err, h2streamcipher.ErrorKeyInvalid) {
+				if errors.Is(err, h2streamcipher.ErrKeyInvalid) {
 					return kerrors.WithKind(err, errMailEvent{}, "Failed to parse mail data key")
 				}
 				return kerrors.WithMsg(err, "Failed to create decryption stream")
@@ -614,7 +614,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) (retErr error
 				tag = data.Tag
 				decStream, err = h2streamcipher.NewDecStreamReaderFromParams(string(dataKey), s.streamAlgs, msg)
 				if err != nil {
-					if errors.Is(err, h2streamcipher.ErrorKeyInvalid) {
+					if errors.Is(err, h2streamcipher.ErrKeyInvalid) {
 						return kerrors.WithKind(err, errMailEvent{}, "Failed to parse mail data key")
 					}
 					return kerrors.WithMsg(err, "Failed to create decryption stream")

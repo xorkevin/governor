@@ -702,8 +702,8 @@ nhooyr.io/websocket v1.8.7/go.mod h1:B70DZP8IakI65RVQ51MsWP/8jndNma26DVA/nFSCgW0
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=
-xorkevin.dev/hunter2 v0.2.4 h1:G3dQYru+td19NbRav5hlN/SSwODhVWPHjUwPrh9RvFo=
-xorkevin.dev/hunter2 v0.2.4/go.mod h1:eBwMewfDwh7BMHMLnYWvy1ephSoaDk61LbvSBqhIZZ0=
+xorkevin.dev/hunter2 v0.2.5 h1:X4W5IPSHLs3SIH6nuxEpEjTnx+XZaSXLg3N3qo4IYpE=
+xorkevin.dev/hunter2 v0.2.5/go.mod h1:eBwMewfDwh7BMHMLnYWvy1ephSoaDk61LbvSBqhIZZ0=
 xorkevin.dev/kerrors v0.1.5 h1:vszMcLbQjGn2DuqaQZNZNTbGw17qKvfH3X6E1s+1Iac=
 xorkevin.dev/kerrors v0.1.5/go.mod h1:HnfCCdUvvu5aXhHxO8TPa8KU3r5X2c2QZRbfE+HBLvc=
 xorkevin.dev/klog v0.0.0-20230305001845-27454ff3a979 h1:FqXoUWATf04gJMbGR0npe77XfTfx4/j+gtZeJey6NgI=
