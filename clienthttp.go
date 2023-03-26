@@ -38,29 +38,29 @@ type (
 
 // Client http errors
 var (
-	// ErrorInvalidClientReq is returned when the client request could not be made
-	ErrorInvalidClientReq errorInvalidClientReq
-	// ErrorInvalidServerRes is returned on an invalid server response
-	ErrorInvalidServerRes errorInvalidServerRes
-	// ErrorServerRes is a returned server error
-	ErrorServerRes errorServerRes
+	// ErrInvalidClientReq is returned when the client request could not be made
+	ErrInvalidClientReq errInvalidClientReq
+	// ErrInvalidServerRes is returned on an invalid server response
+	ErrInvalidServerRes errInvalidServerRes
+	// ErrServerRes is a returned server error
+	ErrServerRes errServerRes
 )
 
 type (
-	errorInvalidClientReq struct{}
-	errorInvalidServerRes struct{}
-	errorServerRes        struct{}
+	errInvalidClientReq struct{}
+	errInvalidServerRes struct{}
+	errServerRes        struct{}
 )
 
-func (e errorInvalidClientReq) Error() string {
+func (e errInvalidClientReq) Error() string {
 	return "Invalid client request"
 }
 
-func (e errorInvalidServerRes) Error() string {
+func (e errInvalidServerRes) Error() string {
 	return "Invalid server response"
 }
 
-func (e errorServerRes) Error() string {
+func (e errServerRes) Error() string {
 	return "Error server response"
 }
 
@@ -85,7 +85,7 @@ func (c *httpClient) subclient(path string, l klog.Logger) HTTPClient {
 func (c *httpClient) Req(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.base+path, body)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Malformed request")
+		return nil, kerrors.WithKind(err, ErrInvalidClientReq, "Malformed request")
 	}
 	return req, nil
 }
@@ -95,7 +95,7 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.httpc.Do(r)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed request")
+		return nil, kerrors.WithKind(err, ErrInvalidClientReq, "Failed request")
 	}
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
@@ -110,9 +110,9 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 		}()
 		var errres ErrorRes
 		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
-			return res, kerrors.WithKind(err, ErrorInvalidServerRes, "Failed decoding response")
+			return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
 		}
-		return res, kerrors.WithKind(nil, ErrorServerRes, errres.Message)
+		return res, kerrors.WithKind(nil, ErrServerRes, errres.Message)
 	}
 	return res, nil
 }
@@ -145,7 +145,7 @@ func (c *HTTPFetcher) Do(ctx context.Context, r *http.Request) (*http.Response, 
 func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Request, error) {
 	b, err := kjson.Marshal(data)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorInvalidClientReq, "Failed to encode body to json")
+		return nil, kerrors.WithKind(err, ErrInvalidClientReq, "Failed to encode body to json")
 	}
 	body := bytes.NewReader(b)
 	req, err := c.Req(method, path, body)
@@ -197,7 +197,7 @@ func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response inte
 	decoded := false
 	if response != nil && isStatusDecodable(res.StatusCode) {
 		if err := json.NewDecoder(res.Body).Decode(response); err != nil {
-			return res, false, kerrors.WithKind(err, ErrorInvalidServerRes, "Failed decoding response")
+			return res, false, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
 		}
 		decoded = true
 	}

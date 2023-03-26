@@ -18,11 +18,11 @@ func TestError(t *testing.T) {
 		String string
 	}{
 		{
-			Err:    ErrorNoLog,
+			Err:    ErrNoLog,
 			String: "No log",
 		},
 		{
-			Err:    ErrorUnreachable,
+			Err:    ErrUnreachable,
 			String: "Unreachable code. Invariant violated",
 		},
 		{
@@ -48,23 +48,23 @@ func TestError(t *testing.T) {
 			String: "Too many requests. Try again after Sun, 25 Aug 1991 20:57:09 UTC.",
 		},
 		{
-			Err:    ErrorInvalidConfig,
+			Err:    ErrInvalidConfig,
 			String: "Invalid config",
 		},
 		{
-			Err:    ErrorVault,
+			Err:    ErrVault,
 			String: "Failed vault request",
 		},
 		{
-			Err:    ErrorInvalidClientReq,
+			Err:    ErrInvalidClientReq,
 			String: "Invalid client request",
 		},
 		{
-			Err:    ErrorInvalidServerRes,
+			Err:    ErrInvalidServerRes,
 			String: "Invalid server response",
 		},
 		{
-			Err:    ErrorServerRes,
+			Err:    ErrServerRes,
 			String: "Error server response",
 		},
 	} {

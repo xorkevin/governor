@@ -13,22 +13,22 @@ import (
 )
 
 var (
-	// ErrorNotFound is returned when an apikey is not found
-	ErrorNotFound errorNotFound
-	// ErrorInvalidKey is returned when an apikey is invalid
-	ErrorInvalidKey errorInvalidKey
+	// ErrNotFound is returned when an apikey is not found
+	ErrNotFound errNotFound
+	// ErrInvalidKey is returned when an apikey is invalid
+	ErrInvalidKey errInvalidKey
 )
 
 type (
-	errorNotFound   struct{}
-	errorInvalidKey struct{}
+	errNotFound   struct{}
+	errInvalidKey struct{}
 )
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "Apikey not found"
 }
 
-func (e errorInvalidKey) Error() string {
+func (e errInvalidKey) Error() string {
 	return "Invalid apikey"
 }
 
@@ -53,11 +53,11 @@ func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset 
 
 func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string, error) {
 	if result, err := s.kvkey.Get(ctx, keyid); err != nil {
-		if !errors.Is(err, kvstore.ErrorNotFound) {
+		if !errors.Is(err, kvstore.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get apikey key from cache"))
 		}
 	} else if result == cacheValTombstone {
-		return "", "", kerrors.WithKind(nil, ErrorNotFound, "Apikey not found")
+		return "", "", kerrors.WithKind(nil, ErrNotFound, "Apikey not found")
 	} else {
 		var kvVal keyhashKVVal
 		if err := kjson.Unmarshal([]byte(result), &kvVal); err != nil {
@@ -69,11 +69,11 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			if err := s.kvkey.Set(ctx, keyid, cacheValTombstone, s.scopeCacheDuration); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set apikey key in cache"))
 			}
-			return "", "", kerrors.WithKind(err, ErrorNotFound, "Apikey not found")
+			return "", "", kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return "", "", kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -93,7 +93,7 @@ func (s *Service) getKeyHash(ctx context.Context, keyid string) (string, string,
 func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
 	userid, err := apikeymodel.ParseIDUserid(keyid)
 	if err != nil {
-		return "", "", kerrors.WithKind(err, ErrorInvalidKey, "Invalid key")
+		return "", "", kerrors.WithKind(err, ErrInvalidKey, "Invalid key")
 	}
 
 	keyhash, keyscope, err := s.getKeyHash(ctx, keyid)
@@ -107,7 +107,7 @@ func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, stri
 	if ok, err := s.apikeys.ValidateKey(key, &m); err != nil {
 		return "", "", kerrors.WithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return "", "", kerrors.WithKind(err, ErrorInvalidKey, "Invalid key")
+		return "", "", kerrors.WithKind(err, ErrInvalidKey, "Invalid key")
 	}
 	return userid, keyscope, nil
 }
@@ -140,8 +140,8 @@ func (s *Service) Insert(ctx context.Context, userid string, scope string, name,
 func (s *Service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
-			return nil, kerrors.WithKind(err, ErrorNotFound, "Apikey not found")
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -161,8 +161,8 @@ func (s *Service) RotateKey(ctx context.Context, keyid string) (*ResApikeyModel,
 func (s *Service) UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
-			return kerrors.WithKind(err, ErrorNotFound, "Apikey not found")
+		if errors.Is(err, db.ErrNotFound) {
+			return kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -181,8 +181,8 @@ func (s *Service) UpdateKey(ctx context.Context, keyid string, scope string, nam
 func (s *Service) DeleteKey(ctx context.Context, keyid string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
-			return kerrors.WithKind(err, ErrorNotFound, "Apikey not found")
+		if errors.Is(err, db.ErrNotFound) {
+			return kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")
 	}

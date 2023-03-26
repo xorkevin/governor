@@ -229,7 +229,7 @@ func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid strin
 		linkids := make([]string, 0, len(links.Links))
 		for _, i := range links.Links {
 			if err := s.linkImgDir.Del(ctx, i.LinkID); err != nil {
-				if !errors.Is(err, objstore.ErrorNotFound) {
+				if !errors.Is(err, objstore.ErrNotFound) {
 					return kerrors.WithMsg(err, "Failed to delete qr code image")
 				}
 			}
@@ -258,7 +258,7 @@ func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid strin
 		brandids := make([]string, 0, len(brands.Brands))
 		for _, i := range brands.Brands {
 			if err := s.brandImgDir.Del(ctx, i.BrandID); err != nil {
-				if !errors.Is(err, objstore.ErrorNotFound) {
+				if !errors.Is(err, objstore.ErrNotFound) {
 					return kerrors.WithMsg(err, "Failed to delete brand image")
 				}
 			}

@@ -168,7 +168,7 @@ func (c *testClientC) echo(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Could not read file")
 	}
-	if err := c.term.WriteFile("testoutput.txt", f, 0644); err != nil {
+	if err := c.term.WriteFile("testoutput.txt", f, 0o644); err != nil {
 		return kerrors.WithMsg(err, "Could not write file")
 	}
 
@@ -281,7 +281,7 @@ servicec:
 			Fsys: fstest.MapFS{
 				"test.txt": &fstest.MapFile{
 					Data:    []byte(`test file contents`),
-					Mode:    0644,
+					Mode:    0o644,
 					ModTime: time.Now(),
 				},
 			},
@@ -333,7 +333,7 @@ servicec:
 
 	err = clientC.fail(nil)
 	assert.Error(err)
-	assert.ErrorIs(err, ErrorServerRes)
+	assert.ErrorIs(err, ErrServerRes)
 	var kerr *kerrors.Error
 	assert.ErrorAs(err, &kerr)
 	assert.Equal("Test fail", kerr.Message)

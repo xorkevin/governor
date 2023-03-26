@@ -66,7 +66,7 @@ type (
 
 func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUpdate, error) {
 	if _, err := s.users.GetByUsername(ctx, ruser.Username); err != nil {
-		if !errors.Is(err, db.ErrorNotFound) {
+		if !errors.Is(err, db.ErrNotFound) {
 			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -74,7 +74,7 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 	}
 
 	if _, err := s.users.GetByEmail(ctx, ruser.Email); err != nil {
-		if !errors.Is(err, db.ErrorNotFound) {
+		if !errors.Is(err, db.ErrNotFound) {
 			return nil, kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -153,7 +153,7 @@ func (s *Service) getUserApprovals(ctx context.Context, limit, offset int) (*res
 func (s *Service) approveUser(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user request")
@@ -174,7 +174,7 @@ func (s *Service) approveUser(ctx context.Context, userid string) error {
 func (s *Service) deleteUserApproval(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user request")
@@ -205,7 +205,7 @@ func (s *Service) sendNewUserEmail(ctx context.Context, code string, m *approval
 func (s *Service) commitUser(ctx context.Context, userid string, key string) (*resUserUpdate, error) {
 	am, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user request")
@@ -248,7 +248,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	}
 
 	if err := s.users.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique) {
+		if errors.Is(err, db.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Username or email already in use by another account")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create user")
@@ -281,7 +281,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 func (s *Service) deleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")

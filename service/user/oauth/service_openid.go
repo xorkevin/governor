@@ -154,7 +154,7 @@ func (s *Service) authCode(ctx context.Context, userid, clientid, scope, nonce, 
 	})
 
 	if _, err := s.getCachedClient(ctx, clientid); err != nil {
-		if errors.Is(err, errorNotFound{}) {
+		if errors.Is(err, errNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -162,7 +162,7 @@ func (s *Service) authCode(ctx context.Context, userid, clientid, scope, nonce, 
 
 	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
-		if !errors.Is(err, db.ErrorNotFound) {
+		if !errors.Is(err, db.ErrNotFound) {
 			return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
 		}
 		m, code, err := s.connections.New(userid, clientid, scope, nonce, challenge, method, authTime)
@@ -170,7 +170,7 @@ func (s *Service) authCode(ctx context.Context, userid, clientid, scope, nonce, 
 			return nil, kerrors.WithMsg(err, "Failed to create oauth app connection")
 		}
 		if err := s.connections.Insert(ctx, m); err != nil {
-			if errors.Is(err, db.ErrorUnique) {
+			if errors.Is(err, db.ErrUnique) {
 				return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "OAuth app already connected")
 			}
 			return nil, kerrors.WithMsg(err, "Failed to connect oauth app")
@@ -285,7 +285,7 @@ func (s *Service) getUserinfoClaims(ctx context.Context, userid string, scopes m
 func (s *Service) checkClientKey(ctx context.Context, clientid, key, redirect string) error {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, errorNotFound{}) {
+		if errors.Is(err, errNotFound{}) {
 			return governor.ErrWithRes(err, http.StatusUnauthorized, oidErrorInvalidClient, "Invalid client")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -307,7 +307,7 @@ func (s *Service) authTokenCode(ctx context.Context, clientid, secret, redirect,
 	}
 	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, oidErrorInvalidGrant, "Invalid code")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
@@ -447,7 +447,7 @@ func (s *Service) getConnections(ctx context.Context, userid string, amount, off
 func (s *Service) getConnection(ctx context.Context, userid string, clientid string) (*resConnection, error) {
 	m, err := s.connections.GetByID(ctx, userid, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not connected")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app connection")
@@ -463,7 +463,7 @@ func (s *Service) getConnection(ctx context.Context, userid string, clientid str
 
 func (s *Service) delConnection(ctx context.Context, userid string, clientid string) error {
 	if _, err := s.connections.GetByID(ctx, userid, clientid); err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not connected")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app connection")

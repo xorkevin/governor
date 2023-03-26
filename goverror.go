@@ -13,17 +13,17 @@ import (
 
 // Sentinel errors
 var (
-	// ErrorNoLog is an error kind to prevent logging
-	ErrorNoLog errorNoLog
-	// ErrorUnreachable is an error kind to mark unreachable code
-	ErrorUnreachable errorUnreachable
+	// ErrNoLog is an error kind to prevent logging
+	ErrNoLog errNoLog
+	// ErrUnreachable is an error kind to mark unreachable code
+	ErrUnreachable errUnreachable
 )
 
 type (
-	errorNoLog struct{}
+	errNoLog struct{}
 )
 
-func (e errorNoLog) Error() string {
+func (e errNoLog) Error() string {
 	return "No log"
 }
 
@@ -57,10 +57,10 @@ func (e *ErrorRes) Error() string {
 }
 
 type (
-	errorUnreachable struct{}
+	errUnreachable struct{}
 )
 
-func (e errorUnreachable) Error() string {
+func (e errUnreachable) Error() string {
 	return "Unreachable code. Invariant violated"
 }
 
@@ -89,7 +89,7 @@ func (e *ErrorTooManyRequests) RetryAfterTime() string {
 func ErrWithNoLog(err error) error {
 	return kerrors.New(
 		kerrors.OptMsg("No log"),
-		kerrors.OptKind(ErrorNoLog),
+		kerrors.OptKind(ErrNoLog),
 		kerrors.OptInner(err),
 		kerrors.OptSkip(1),
 	)
@@ -113,7 +113,7 @@ func ErrWithRes(err error, status int, code string, resmsg string) error {
 func ErrWithUnreachable(err error, msg string) error {
 	return kerrors.New(
 		kerrors.OptMsg(msg),
-		kerrors.OptKind(ErrorUnreachable),
+		kerrors.OptKind(ErrUnreachable),
 		kerrors.OptInner(err),
 		kerrors.OptSkip(1),
 	)

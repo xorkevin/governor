@@ -34,7 +34,7 @@ func (s *Service) createProfile(ctx context.Context, userid, email, bio string) 
 	m := s.profiles.New(userid, email, bio)
 
 	if err := s.profiles.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique) {
+		if errors.Is(err, db.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Profile already created")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create profile")
@@ -48,7 +48,7 @@ func (s *Service) createProfile(ctx context.Context, userid, email, bio string) 
 func (s *Service) updateProfile(ctx context.Context, userid, email, bio string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
@@ -73,7 +73,7 @@ const (
 func (s *Service) updateImage(ctx context.Context, userid string, img image.Image) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
@@ -105,14 +105,14 @@ func (s *Service) updateImage(ctx context.Context, userid string, img image.Imag
 func (s *Service) deleteProfile(ctx context.Context, userid string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
 	}
 
 	if err := s.profileDir.Del(ctx, userid); err != nil {
-		if !errors.Is(err, objstore.ErrorNotFound) {
+		if !errors.Is(err, objstore.ErrNotFound) {
 			return kerrors.WithMsg(err, "Failed to delete profile picture")
 		}
 	}
@@ -126,7 +126,7 @@ func (s *Service) deleteProfile(ctx context.Context, userid string) error {
 func (s *Service) getProfile(ctx context.Context, userid string) (*resProfileModel, error) {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get profile")
@@ -142,7 +142,7 @@ func (s *Service) getProfile(ctx context.Context, userid string) (*resProfileMod
 func (s *Service) statProfileImage(ctx context.Context, userid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.profileDir.Stat(ctx, userid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound) {
+		if errors.Is(err, objstore.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Profile image not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get profile image")
@@ -153,7 +153,7 @@ func (s *Service) statProfileImage(ctx context.Context, userid string) (*objstor
 func (s *Service) getProfileImage(ctx context.Context, userid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.profileDir.Get(ctx, userid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound) {
+		if errors.Is(err, objstore.ErrNotFound) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Profile image not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get profile image")

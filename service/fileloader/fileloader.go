@@ -11,22 +11,22 @@ import (
 )
 
 var (
-	// ErrorInvalidFile is returned when the uploaded file is invalid
-	ErrorInvalidFile errorInvalidFile
-	// ErrorUnsupportedMIME is returned when the uploaded file type is unsupported
-	ErrorUnsupportedMIME errorUnsupportedMIME
+	// ErrInvalidFile is returned when the uploaded file is invalid
+	ErrInvalidFile errInvalidFile
+	// ErrUnsupportedMIME is returned when the uploaded file type is unsupported
+	ErrUnsupportedMIME errUnsupportedMIME
 )
 
 type (
-	errorInvalidFile     struct{}
-	errorUnsupportedMIME struct{}
+	errInvalidFile     struct{}
+	errUnsupportedMIME struct{}
 )
 
-func (e errorInvalidFile) Error() string {
+func (e errInvalidFile) Error() string {
 	return "Invalid file"
 }
 
-func (e errorUnsupportedMIME) Error() string {
+func (e errUnsupportedMIME) Error() string {
 	return "Invalid file mime"
 }
 
@@ -47,11 +47,11 @@ func LoadOpenFile(c *governor.Context, formField string, mimeTypes map[string]st
 
 	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
-		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrorInvalidFile, "No media type"), http.StatusBadRequest, "", "File does not have a media type")
+		return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(err, ErrInvalidFile, "No media type"), http.StatusBadRequest, "", "File does not have a media type")
 	}
 	if len(mimeTypes) > 0 {
 		if _, ok := mimeTypes[mediaType]; !ok {
-			return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(nil, ErrorUnsupportedMIME, "Unsupported MIME type"), http.StatusUnsupportedMediaType, "", mediaType+" is unsupported")
+			return nil, "", 0, governor.ErrWithRes(kerrors.WithKind(nil, ErrUnsupportedMIME, "Unsupported MIME type"), http.StatusUnsupportedMediaType, "", mediaType+" is unsupported")
 		}
 	}
 	shouldClose = false

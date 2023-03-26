@@ -306,18 +306,18 @@ func (s *Service) Health(ctx context.Context) error {
 }
 
 type (
-	// errorConduitEvent is returned when the conduit event is malformed
-	errorConduitEvent struct{}
+	// errConduitEvent is returned when the conduit event is malformed
+	errConduitEvent struct{}
 )
 
-func (e errorConduitEvent) Error() string {
+func (e errConduitEvent) Error() string {
 	return "Malformed conduit event"
 }
 
 func decodeConduitEvent(msgdata []byte) (*conduitEvent, error) {
 	var m conduitEventDec
 	if err := kjson.Unmarshal(msgdata, &m); err != nil {
-		return nil, kerrors.WithKind(err, errorConduitEvent{}, "Failed to decode conduit event")
+		return nil, kerrors.WithKind(err, errConduitEvent{}, "Failed to decode conduit event")
 	}
 	props := &conduitEvent{
 		Kind: m.Kind,
@@ -325,14 +325,14 @@ func decodeConduitEvent(msgdata []byte) (*conduitEvent, error) {
 	switch m.Kind {
 	case conduitEventKindFriend:
 		if err := kjson.Unmarshal(m.Payload, &props.Friend); err != nil {
-			return nil, kerrors.WithKind(err, errorConduitEvent{}, "Failed to decode friend event")
+			return nil, kerrors.WithKind(err, errConduitEvent{}, "Failed to decode friend event")
 		}
 	case conduitEventKindUnfriend:
 		if err := kjson.Unmarshal(m.Payload, &props.Unfriend); err != nil {
-			return nil, kerrors.WithKind(err, errorConduitEvent{}, "Failed to decode unfriend event")
+			return nil, kerrors.WithKind(err, errConduitEvent{}, "Failed to decode unfriend event")
 		}
 	default:
-		return nil, kerrors.WithKind(nil, errorConduitEvent{}, "Invalid user event kind")
+		return nil, kerrors.WithKind(nil, errConduitEvent{}, "Invalid user event kind")
 	}
 	return props, nil
 }

@@ -161,22 +161,22 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 
 // Pubsub client errors
 var (
-	// ErrorConn is returned on a connection error
-	ErrorConn errorConn
-	// ErrorClient is returned for unknown client errors
-	ErrorClient errorClient
+	// ErrConn is returned on a connection error
+	ErrConn errConn
+	// ErrClient is returned for unknown client errors
+	ErrClient errClient
 )
 
 type (
-	errorConn   struct{}
-	errorClient struct{}
+	errConn   struct{}
+	errClient struct{}
 )
 
-func (e errorConn) Error() string {
+func (e errConn) Error() string {
 	return "Pubsub connection error"
 }
 
-func (e errorClient) Error() string {
+func (e errClient) Error() string {
 	return "Pubsub client error"
 }
 
@@ -194,7 +194,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if secret.Password == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
 		if secret == s.auth {
 			return client, nil
@@ -208,12 +208,12 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 	)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to connect to pubsub")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to connect to pubsub")
 	}
 	if _, err := conn.RTT(); err != nil {
 		conn.Close()
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrorConn, "Failed to connect to pubsub")
+		return nil, kerrors.WithKind(err, ErrConn, "Failed to connect to pubsub")
 	}
 
 	m.Stop(ctx)
@@ -264,7 +264,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn, "Pubsub service not ready")
+		return kerrors.WithKind(nil, ErrConn, "Pubsub service not ready")
 	}
 	return nil
 }
@@ -276,7 +276,7 @@ func (s *Service) Publish(ctx context.Context, subject string, msgdata []byte) e
 		return err
 	}
 	if err := client.Publish(subject, msgdata); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to publish message to subject")
+		return kerrors.WithKind(err, ErrClient, "Failed to publish message to subject")
 	}
 	return nil
 }
@@ -292,13 +292,13 @@ func (s *Service) Subscribe(ctx context.Context, subject, group string) (Subscri
 		var err error
 		nsub, err = client.SubscribeSync(subject)
 		if err != nil {
-			return nil, kerrors.WithKind(err, ErrorClient, "Failed to create subscription to subject")
+			return nil, kerrors.WithKind(err, ErrClient, "Failed to create subscription to subject")
 		}
 	} else {
 		var err error
 		nsub, err = client.QueueSubscribeSync(subject, group)
 		if err != nil {
-			return nil, kerrors.WithKind(err, ErrorClient, "Failed to create subscription to subject as queue group")
+			return nil, kerrors.WithKind(err, ErrClient, "Failed to create subscription to subject as queue group")
 		}
 	}
 	sub := &subscription{
@@ -319,7 +319,7 @@ func (s *Service) Subscribe(ctx context.Context, subject, group string) (Subscri
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	m, err := s.sub.NextMsgWithContext(ctx)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get message")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")
 	}
 	return &Msg{
 		Subject: m.Subject,
@@ -333,7 +333,7 @@ func (s *subscription) Close(ctx context.Context) error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to close subscription to subject")
+		return kerrors.WithKind(err, ErrClient, "Failed to close subscription to subject")
 	}
 	s.log.Info(ctx, "Closed subscription")
 	return nil

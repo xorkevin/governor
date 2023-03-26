@@ -146,36 +146,36 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 }
 
 var (
-	// ErrorConn is returned on a kvstore connection error
-	ErrorConn errorConn
-	// ErrorClient is returned for unknown client errors
-	ErrorClient errorClient
-	// ErrorNotFound is returned when a key is not found
-	ErrorNotFound errorNotFound
-	// ErrorVal is returned for invalid value errors
-	ErrorVal errorVal
+	// ErrConn is returned on a kvstore connection error
+	ErrConn errConn
+	// ErrClient is returned for unknown client errors
+	ErrClient errClient
+	// ErrNotFound is returned when a key is not found
+	ErrNotFound errNotFound
+	// ErrVal is returned for invalid value errors
+	ErrVal errVal
 )
 
 type (
-	errorConn     struct{}
-	errorClient   struct{}
-	errorNotFound struct{}
-	errorVal      struct{}
+	errConn     struct{}
+	errClient   struct{}
+	errNotFound struct{}
+	errVal      struct{}
 )
 
-func (e errorConn) Error() string {
+func (e errConn) Error() string {
 	return "KVStore connection error"
 }
 
-func (e errorClient) Error() string {
+func (e errClient) Error() string {
 	return "KVStore client error"
 }
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "Key not found"
 }
 
-func (e errorVal) Error() string {
+func (e errVal) Error() string {
 	return "Invalid value"
 }
 
@@ -264,7 +264,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if secret.Password == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
 		if client != nil && secret == client.auth {
 			return client, nil
@@ -278,13 +278,13 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 	})
 	if _, err := kvClient.Ping(ctx).Result(); err != nil {
 		if err := kvClient.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"),
+			s.log.Err(ctx, kerrors.WithKind(err, ErrConn, "Failed to close db after failed initial ping"),
 				klog.AString("addr", s.addr),
 				klog.AString("dbname", strconv.Itoa(s.dbname)),
 			)
 		}
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrorConn, "Failed to ping kvstore")
+		return nil, kerrors.WithKind(err, ErrConn, "Failed to ping kvstore")
 	}
 
 	m.Stop(ctx)
@@ -335,7 +335,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn, "KVStore service not ready")
+		return kerrors.WithKind(nil, ErrConn, "KVStore service not ready")
 	}
 	return nil
 }
@@ -359,7 +359,7 @@ func (s *Service) Ping(ctx context.Context) error {
 		return err
 	}
 	if _, err := client.Ping(ctx).Result(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to ping kvstore")
+		return kerrors.WithKind(err, ErrClient, "Failed to ping kvstore")
 	}
 	return nil
 }
@@ -372,9 +372,9 @@ func (s *Service) Get(ctx context.Context, key string) (string, error) {
 	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return "", kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return "", kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return val, nil
 }
@@ -387,13 +387,13 @@ func (s *Service) GetInt(ctx context.Context, key string) (int64, error) {
 	val, err := client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrorVal, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrVal, "Invalid int value")
 	}
 	return num, nil
 }
@@ -404,7 +404,7 @@ func (s *Service) Set(ctx context.Context, key, val string, duration time.Durati
 		return err
 	}
 	if err := client.Set(ctx, key, val, duration).Err(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to set key")
+		return kerrors.WithKind(err, ErrClient, "Failed to set key")
 	}
 	return nil
 }
@@ -416,7 +416,7 @@ func (s *Service) SetNX(ctx context.Context, key, val string, duration time.Dura
 	}
 	ok, err := client.SetNX(ctx, key, val, duration).Result()
 	if err != nil {
-		return false, kerrors.WithKind(err, ErrorClient, "Failed to setnx key")
+		return false, kerrors.WithKind(err, ErrClient, "Failed to setnx key")
 	}
 	return ok, nil
 }
@@ -432,7 +432,7 @@ func (s *Service) Del(ctx context.Context, key ...string) error {
 	}
 
 	if err := client.Del(ctx, key...).Err(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to delete key")
+		return kerrors.WithKind(err, ErrClient, "Failed to delete key")
 	}
 	return nil
 }
@@ -444,7 +444,7 @@ func (s *Service) Incr(ctx context.Context, key string, delta int64) (int64, err
 	}
 	val, err := client.IncrBy(ctx, key, delta).Result()
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrorClient, "Failed to incr key")
+		return 0, kerrors.WithKind(err, ErrClient, "Failed to incr key")
 	}
 	return val, nil
 }
@@ -455,7 +455,7 @@ func (s *Service) Expire(ctx context.Context, key string, duration time.Duration
 		return err
 	}
 	if err := client.Expire(ctx, key, duration).Err(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to set expire key")
+		return kerrors.WithKind(err, ErrClient, "Failed to set expire key")
 	}
 	return nil
 }
@@ -564,7 +564,7 @@ func (t *baseMulti) Subtree(prefix string) Multi {
 func (t *baseMulti) Exec(ctx context.Context) error {
 	if _, err := t.base.Exec(ctx); err != nil {
 		if !errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrorNotFound, "Failed to execute multi")
+			return kerrors.WithKind(err, ErrNotFound, "Failed to execute multi")
 		}
 	}
 	return nil
@@ -703,9 +703,9 @@ func (r *resulter) Result() (string, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return "", kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return "", kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return "", kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return val, nil
 }
@@ -720,9 +720,9 @@ func (r *intCmdResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return val, nil
 }
@@ -737,13 +737,13 @@ func (r *intResulter) Result() (int64, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return 0, kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return 0, kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return 0, kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	num, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return 0, kerrors.WithKind(err, ErrorVal, "Invalid int value")
+		return 0, kerrors.WithKind(err, ErrVal, "Invalid int value")
 	}
 	return num, nil
 }
@@ -758,9 +758,9 @@ func (r *boolCmdResulter) Result() (bool, error) {
 	val, err := r.res.Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return false, kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return false, kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return false, kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return false, kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return val, nil
 }
@@ -774,9 +774,9 @@ type (
 func (r *statusCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return nil
 }
@@ -790,9 +790,9 @@ type (
 func (r *intCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return kerrors.WithKind(err, ErrorNotFound, "Key not found")
+			return kerrors.WithKind(err, ErrNotFound, "Key not found")
 		}
-		return kerrors.WithKind(err, ErrorClient, "Failed to get key")
+		return kerrors.WithKind(err, ErrClient, "Failed to get key")
 	}
 	return nil
 }

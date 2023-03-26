@@ -63,11 +63,11 @@ func (s *clientSettings) init(flags ClientFlags) error {
 	}
 	if s.configReader != nil {
 		if err := s.v.ReadConfig(s.configReader); err != nil {
-			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
 	} else {
 		if err := s.v.ReadInConfig(); err != nil {
-			return kerrors.WithKind(err, ErrorInvalidConfig, "Failed to read in config")
+			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
 	}
 
@@ -79,7 +79,7 @@ func (s *clientSettings) init(flags ClientFlags) error {
 	if t, err := time.ParseDuration(s.v.GetString("http.timeout")); err == nil {
 		s.httpClient.timeout = t
 	} else {
-		return kerrors.WithKind(err, ErrorInvalidConfig, "Invalid http client timeout")
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid http client timeout")
 	}
 
 	return nil

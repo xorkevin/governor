@@ -19,22 +19,22 @@ type (
 )
 
 var (
-	// ErrorRand is returned when failing to read random bytes
-	ErrorRand errorRand
-	// ErrorInvalidUID is returned on an invalid uid
-	ErrorInvalidUID errorInvalidUID
+	// ErrRand is returned when failing to read random bytes
+	ErrRand errRand
+	// ErrInvalidUID is returned on an invalid uid
+	ErrInvalidUID errInvalidUID
 )
 
 type (
-	errorRand       struct{}
-	errorInvalidUID struct{}
+	errRand       struct{}
+	errInvalidUID struct{}
 )
 
-func (e errorRand) Error() string {
+func (e errRand) Error() string {
 	return "Error reading rand"
 }
 
-func (e errorInvalidUID) Error() string {
+func (e errInvalidUID) Error() string {
 	return "Invalid uid"
 }
 
@@ -43,7 +43,7 @@ func New(size int) (*UID, error) {
 	u := make([]byte, size)
 	_, err := rand.Read(u)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorRand, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrRand, "Failed reading crypto/rand")
 	}
 
 	return &UID{
@@ -79,7 +79,7 @@ func NewSnowflake(randsize int) (*Snowflake, error) {
 	binary.BigEndian.PutUint64(u[:timeSize], now)
 	_, err := rand.Read(u[timeSize:])
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorRand, "Failed reading crypto/rand")
+		return nil, kerrors.WithKind(err, ErrRand, "Failed reading crypto/rand")
 	}
 	return &Snowflake{
 		u: u,
@@ -91,9 +91,7 @@ func (s *Snowflake) Bytes() []byte {
 	return s.u
 }
 
-var (
-	base32RawHexEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
-)
+var base32RawHexEncoding = base32.HexEncoding.WithPadding(base32.NoPadding)
 
 // Base32 returns the full raw bytes of a snowflake in unpadded base32hex
 func (s *Snowflake) Base32() string {

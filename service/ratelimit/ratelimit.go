@@ -214,7 +214,7 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 					for _, j := range i.periods {
 						k, err := j.Result()
 						if err != nil {
-							if !errors.Is(err, kvstore.ErrorNotFound) {
+							if !errors.Is(err, kvstore.ErrNotFound) {
 								s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
 							}
 							continue

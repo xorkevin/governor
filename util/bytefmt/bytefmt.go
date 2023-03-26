@@ -1,16 +1,23 @@
 package bytefmt
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"xorkevin.dev/kerrors"
 )
 
-var (
-	// ErrorFmt is returned when failing to parse human byte representations
-	ErrorFmt = errors.New("Invalid byte format")
+// ErrFmt is returned when failing to parse human byte representations
+var ErrFmt errFmt
+
+type (
+	errFmt struct{}
 )
+
+func (e errFmt) Error() string {
+	return "Invalid byte format"
+}
 
 // Byte constants for every 2^(10*n) bytes
 const (
@@ -29,13 +36,16 @@ func ToBytes(s string) (int64, error) {
 	i := strings.IndexFunc(s, unicode.IsLetter)
 
 	if i < 0 {
-		return 0, ErrorFmt
+		return 0, kerrors.WithKind(nil, ErrFmt, "No unit")
 	}
 
 	bytesString, multiple := s[:i], s[i:]
 	bytes, err := strconv.ParseInt(bytesString, 10, 64)
-	if err != nil || bytes < 0 {
-		return 0, ErrorFmt
+	if err != nil {
+		return 0, kerrors.WithKind(err, ErrFmt, "Failed to parse number")
+	}
+	if bytes < 0 {
+		return 0, kerrors.WithKind(nil, ErrFmt, "Bytes must be positive")
 	}
 
 	switch multiple {
@@ -52,6 +62,6 @@ func ToBytes(s string) (int64, error) {
 	case "B":
 		return bytes, nil
 	default:
-		return 0, ErrorFmt
+		return 0, kerrors.WithKind(nil, ErrFmt, "Invalid unit")
 	}
 }

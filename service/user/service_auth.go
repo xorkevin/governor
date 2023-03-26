@@ -45,18 +45,18 @@ type (
 )
 
 type (
-	// errorDiscardSession is returned when the login session should be discarded
-	errorDiscardSession struct{}
+	// errDiscardSession is returned when the login session should be discarded
+	errDiscardSession struct{}
 )
 
-func (e errorDiscardSession) Error() string {
+func (e errDiscardSession) Error() string {
 	return "Discard session"
 }
 
 func (s *Service) login(ctx context.Context, userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -79,7 +79,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 
 		if err := s.checkOTPCode(ctx, m, code, backup, ipaddr, useragent); err != nil {
-			if errors.Is(err, errorAuthenticate{}) {
+			if errors.Is(err, errAuthenticate{}) {
 				// must make a best effort to increment login failures
 				s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx), m, ipaddr, useragent)
 			}
@@ -94,7 +94,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	var sm *sessionmodel.Model
 	if len(sessionID) > 0 {
 		if m, err := s.sessions.GetByID(ctx, sessionID); err != nil {
-			if !errors.Is(err, db.ErrorNotFound) {
+			if !errors.Is(err, db.ErrNotFound) {
 				return nil, kerrors.WithMsg(err, "Failed to get user session")
 			}
 		} else {
@@ -205,7 +205,7 @@ func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, usera
 
 	keyhash, err := s.kvsessions.Get(ctx, claims.ID)
 	if err != nil {
-		if !errors.Is(err, kvstore.ErrorNotFound) {
+		if !errors.Is(err, kvstore.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get cached session"))
 		}
 		return s.refreshToken(ctx, refreshToken, ipaddr, useragent)
@@ -251,7 +251,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 
 	sm, err := s.sessions.GetByID(ctx, claims.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return &resUserAuth{
 				Valid: false,
 				Claims: &token.Claims{
@@ -259,7 +259,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 						Subject: claims.Subject,
 					},
 				},
-			}, governor.ErrWithRes(kerrors.WithKind(err, errorDiscardSession{}, "No session"), http.StatusUnauthorized, "", "Invalid token")
+			}, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "No session"), http.StatusUnauthorized, "", "Invalid token")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get session")
 	}
@@ -273,7 +273,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 					Subject: claims.Subject,
 				},
 			},
-		}, governor.ErrWithRes(kerrors.WithKind(err, errorDiscardSession{}, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
+		}, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
 	}
 
 	sessionKey, err := s.sessions.RehashKey(sm)
@@ -338,7 +338,7 @@ func (s *Service) logout(ctx context.Context, refreshToken string) (string, erro
 
 	sm, err := s.sessions.GetByID(ctx, claims.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid token")
 		}
 		return "", kerrors.WithMsg(err, "Failed to get session")

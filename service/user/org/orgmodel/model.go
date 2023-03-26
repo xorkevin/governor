@@ -163,6 +163,7 @@ func (r *repo) GetByName(ctx context.Context, orgname string) (*Model, error) {
 	}
 	return m, nil
 }
+
 func (r *repo) GetAllOrgs(ctx context.Context, limit, offset int) ([]Model, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
@@ -419,19 +420,19 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org member model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMods.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org mod model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}

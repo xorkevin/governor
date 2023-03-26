@@ -13,16 +13,14 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
-var (
-	// ErrorNotFound is returned when the org is not found
-	ErrorNotFound errorNotFound
-)
+// ErrNotFound is returned when the org is not found
+var ErrNotFound errNotFound
 
 type (
-	errorNotFound struct{}
+	errNotFound struct{}
 )
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "Org not found"
 }
 
@@ -52,8 +50,8 @@ type (
 func (s *Service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound, "Org not found"), http.StatusNotFound, "", "Org not found")
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound, "Org not found"), http.StatusNotFound, "", "Org not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -69,8 +67,8 @@ func (s *Service) GetByID(ctx context.Context, orgid string) (*ResOrg, error) {
 func (s *Service) GetByName(ctx context.Context, name string) (*ResOrg, error) {
 	m, err := s.orgs.GetByName(ctx, name)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
-			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrorNotFound, "Org not found"), http.StatusNotFound, "", "Org not found")
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, governor.ErrWithRes(kerrors.WithKind(err, ErrNotFound, "Org not found"), http.StatusNotFound, "", "Org not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -207,7 +205,7 @@ func (s *Service) createOrg(ctx context.Context, userid, displayName, desc strin
 		return nil, kerrors.WithMsg(err, "Failed to create org")
 	}
 	if err := s.orgs.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique) {
+		if errors.Is(err, db.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Org name must be unique")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to insert org")
@@ -228,7 +226,7 @@ func (s *Service) createOrg(ctx context.Context, userid, displayName, desc strin
 func (s *Service) updateOrg(ctx context.Context, orgid, name, displayName, desc string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Org not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get org")
@@ -238,7 +236,7 @@ func (s *Service) updateOrg(ctx context.Context, orgid, name, displayName, desc 
 	m.DisplayName = displayName
 	m.Desc = desc
 	if err := s.orgs.Update(ctx, m); err != nil {
-		if errors.Is(err, db.ErrorUnique) {
+		if errors.Is(err, db.ErrUnique) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Org name must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update org")
@@ -254,7 +252,7 @@ func (s *Service) updateOrg(ctx context.Context, orgid, name, displayName, desc 
 func (s *Service) deleteOrg(ctx context.Context, orgid string) error {
 	m, err := s.orgs.GetByID(ctx, orgid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Org not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get org")

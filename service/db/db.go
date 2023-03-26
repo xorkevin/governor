@@ -73,66 +73,66 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 }
 
 var (
-	// ErrorConn is returned on a db connection error
-	ErrorConn errorConn
-	// ErrorClient is returned for unknown client errors
-	ErrorClient errorClient
-	// ErrorNotFound is returned when a row is not found
-	ErrorNotFound errorNotFound
-	// ErrorUnique is returned when a unique constraint is violated
-	ErrorUnique errorUnique
-	// ErrorUndefinedTable is returned when a table does not exist yet
-	ErrorUndefinedTable errorUndefinedTable
-	// ErrorAuthz is returned when not authorized
-	ErrorAuthz errorAuthz
+	// ErrConn is returned on a db connection error
+	ErrConn errConn
+	// ErrClient is returned for unknown client errors
+	ErrClient errClient
+	// ErrNotFound is returned when a row is not found
+	ErrNotFound errNotFound
+	// ErrUnique is returned when a unique constraint is violated
+	ErrUnique errUnique
+	// ErrUndefinedTable is returned when a table does not exist yet
+	ErrUndefinedTable errUndefinedTable
+	// ErrAuthz is returned when not authorized
+	ErrAuthz errAuthz
 )
 
 type (
-	errorConn           struct{}
-	errorClient         struct{}
-	errorNotFound       struct{}
-	errorUnique         struct{}
-	errorUndefinedTable struct{}
-	errorAuthz          struct{}
+	errConn           struct{}
+	errClient         struct{}
+	errNotFound       struct{}
+	errUnique         struct{}
+	errUndefinedTable struct{}
+	errAuthz          struct{}
 )
 
-func (e errorConn) Error() string {
+func (e errConn) Error() string {
 	return "DB connection error"
 }
 
-func (e errorClient) Error() string {
+func (e errClient) Error() string {
 	return "DB client error"
 }
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "Row not found"
 }
 
-func (e errorUnique) Error() string {
+func (e errUnique) Error() string {
 	return "Unique constraint violated"
 }
 
-func (e errorUndefinedTable) Error() string {
+func (e errUndefinedTable) Error() string {
 	return "Undefined table"
 }
 
-func (e errorAuthz) Error() string {
+func (e errAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
 func wrapDBErr(err error, fallbackmsg string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return kerrors.WithKind(err, ErrorNotFound, "Not found")
+		return kerrors.WithKind(err, ErrNotFound, "Not found")
 	}
 	var perr *pq.Error
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return kerrors.WithKind(err, ErrorUnique, "Unique constraint violated")
+			return kerrors.WithKind(err, ErrUnique, "Unique constraint violated")
 		case "42P01": // undefined_table
-			return kerrors.WithKind(err, ErrorUndefinedTable, "Table not defined")
+			return kerrors.WithKind(err, ErrUndefinedTable, "Table not defined")
 		case "42501": // insufficient_privilege
-			return kerrors.WithKind(err, ErrorAuthz, "Unauthorized")
+			return kerrors.WithKind(err, ErrAuthz, "Unauthorized")
 		}
 	}
 	return kerrors.WithMsg(err, fallbackmsg)
@@ -225,7 +225,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if auth.Username == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
 		if client != nil && auth == client.auth {
 			return client, nil
@@ -234,17 +234,17 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqld
 
 	dbClient, err := sql.Open("postgres", fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to init db conn")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to init db conn")
 	}
 	if err := dbClient.PingContext(ctx); err != nil {
 		if err := dbClient.Close(); err != nil {
-			s.log.Err(ctx, kerrors.WithKind(err, ErrorConn, "Failed to close db after failed initial ping"),
+			s.log.Err(ctx, kerrors.WithKind(err, ErrConn, "Failed to close db after failed initial ping"),
 				klog.AString("connopts", s.connopts),
 				klog.AString("username", auth.Username),
 			)
 		}
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrorConn, "Failed to ping db")
+		return nil, kerrors.WithKind(err, ErrConn, "Failed to ping db")
 	}
 
 	m.Stop(ctx)
@@ -298,7 +298,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn, "DB service not ready")
+		return kerrors.WithKind(nil, ErrConn, "DB service not ready")
 	}
 	return nil
 }

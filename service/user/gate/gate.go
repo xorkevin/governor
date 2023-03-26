@@ -310,7 +310,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 				} else {
 					userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
 					if err != nil {
-						if !errors.Is(err, apikey.ErrorInvalidKey) && !errors.Is(err, apikey.ErrorNotFound) {
+						if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
 							c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
 							return
 						}

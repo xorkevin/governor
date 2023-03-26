@@ -30,22 +30,22 @@ type (
 )
 
 var (
-	// ErrorNotFound is returned when a record is not found
-	ErrorNotFound errorNotFound
-	// ErrorInvalid is returned when a record is invalid
-	ErrorInvalid errorInvalid
+	// ErrNotFound is returned when a record is not found
+	ErrNotFound errNotFound
+	// ErrInvalid is returned when a record is invalid
+	ErrInvalid errInvalid
 )
 
 type (
-	errorNotFound struct{}
-	errorInvalid  struct{}
+	errNotFound struct{}
+	errInvalid  struct{}
 )
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "DNS record not found"
 }
 
-func (e errorInvalid) Error() string {
+func (e errInvalid) Error() string {
 	return "DNS record is invalid"
 }
 
@@ -81,13 +81,13 @@ func NewMockResolverFromFile(s string) (Resolver, error) {
 }
 
 func (r *MockResolver) LookupAddr(ctx context.Context, addr string) ([]string, error) {
-	return nil, ErrorNotFound
+	return nil, ErrNotFound
 }
 
 func (r *MockResolver) LookupCNAME(ctx context.Context, host string) (cname string, err error) {
 	z, ok := r.Zones[FQDN(host)]
 	if !ok {
-		return "", ErrorNotFound
+		return "", ErrNotFound
 	}
 	return z.CNAME, nil
 }
@@ -96,13 +96,13 @@ func (r *MockResolver) targetZone(name string) (MockZone, error) {
 	name = FQDN(name)
 	z, ok := r.Zones[name]
 	if !ok {
-		return MockZone{}, ErrorNotFound
+		return MockZone{}, ErrNotFound
 	}
 	for z.CNAME != "" {
 		name = z.CNAME
 		z, ok = r.Zones[name]
 		if !ok {
-			return MockZone{}, ErrorNotFound
+			return MockZone{}, ErrNotFound
 		}
 	}
 	return z, nil
@@ -117,7 +117,7 @@ func (r *MockResolver) LookupHost(ctx context.Context, host string) ([]string, e
 	res = append(res, z.A...)
 	res = append(res, z.AAAA...)
 	if len(res) == 0 {
-		return nil, ErrorNotFound
+		return nil, ErrNotFound
 	}
 	return res, err
 }
@@ -131,7 +131,7 @@ func (r *MockResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPA
 	for _, i := range addrs {
 		ip := net.ParseIP(i)
 		if ip == nil {
-			return nil, kerrors.WithKind(nil, ErrorInvalid, fmt.Sprintf("Invalid IP %s", i))
+			return nil, kerrors.WithKind(nil, ErrInvalid, fmt.Sprintf("Invalid IP %s", i))
 		}
 		res = append(res, net.IPAddr{IP: ip})
 	}

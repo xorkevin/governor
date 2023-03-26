@@ -211,57 +211,57 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kafkaClie
 }
 
 var (
-	// ErrorConn is returned on a connection error
-	ErrorConn errorConn
-	// ErrorClient is returned for unknown client errors
-	ErrorClient errorClient
-	// ErrorClientClosed is returned when the client has been closed
-	ErrorClientClosed errorClientClosed
-	// ErrorPartitionUnassigned is returned when the client has been unassigned the partition
-	ErrorPartitionUnassigned errorPartitionUnassigned
-	// ErrorInvalidMsg is returned when the message is malformed
-	ErrorInvalidMsg errorInvalidMsg
-	// ErrorReadEmpty is returned when no messages have been read
-	ErrorReadEmpty errorReadEmpty
-	// ErrorNotFound is returned when the object is not found
-	ErrorNotFound errorNotFound
+	// ErrConn is returned on a connection error
+	ErrConn errConn
+	// ErrClient is returned for unknown client errors
+	ErrClient errClient
+	// ErrClientClosed is returned when the client has been closed
+	ErrClientClosed errClientClosed
+	// ErrPartitionUnassigned is returned when the client has been unassigned the partition
+	ErrPartitionUnassigned errPartitionUnassigned
+	// ErrInvalidMsg is returned when the message is malformed
+	ErrInvalidMsg errInvalidMsg
+	// ErrReadEmpty is returned when no messages have been read
+	ErrReadEmpty errReadEmpty
+	// ErrNotFound is returned when the object is not found
+	ErrNotFound errNotFound
 )
 
 type (
-	errorConn                struct{}
-	errorClient              struct{}
-	errorClientClosed        struct{}
-	errorPartitionUnassigned struct{}
-	errorInvalidMsg          struct{}
-	errorReadEmpty           struct{}
-	errorNotFound            struct{}
+	errConn                struct{}
+	errClient              struct{}
+	errClientClosed        struct{}
+	errPartitionUnassigned struct{}
+	errInvalidMsg          struct{}
+	errReadEmpty           struct{}
+	errNotFound            struct{}
 )
 
-func (e errorConn) Error() string {
+func (e errConn) Error() string {
 	return "Events connection error"
 }
 
-func (e errorClient) Error() string {
+func (e errClient) Error() string {
 	return "Events client error"
 }
 
-func (e errorClientClosed) Error() string {
+func (e errClientClosed) Error() string {
 	return "Events client closed"
 }
 
-func (e errorPartitionUnassigned) Error() string {
+func (e errPartitionUnassigned) Error() string {
 	return "Partition unassigned"
 }
 
-func (e errorInvalidMsg) Error() string {
+func (e errInvalidMsg) Error() string {
 	return "Invalid message"
 }
 
-func (e errorReadEmpty) Error() string {
+func (e errReadEmpty) Error() string {
 	return "No messages"
 }
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "Not found"
 }
 
@@ -280,7 +280,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kafk
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if secret.Username == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
 		if client != nil && secret == client.auth {
 			return client, nil
@@ -316,7 +316,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kafk
 		kgo.UnknownTopicRetries(3),
 	}...)...)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to create event stream client")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to create event stream client")
 	}
 	if err := s.ping(ctx, kClient); err != nil {
 		kClient.Close()
@@ -373,7 +373,7 @@ func (s *Service) ping(ctx context.Context, client *kgo.Client) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx); err != nil {
-		return kerrors.WithKind(err, ErrorConn, "Failed to connect to event stream")
+		return kerrors.WithKind(err, ErrConn, "Failed to connect to event stream")
 	}
 	return nil
 }
@@ -416,7 +416,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn, "Events service not ready")
+		return kerrors.WithKind(nil, ErrConn, "Events service not ready")
 	}
 	return nil
 }
@@ -463,7 +463,7 @@ func (s *Service) Publish(ctx context.Context, msgs ...PublishMsg) error {
 		})
 	}
 	if err := client.client.ProduceSync(ctx, recs...).FirstErr(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to publish messages to event stream")
+		return kerrors.WithKind(err, ErrClient, "Failed to publish messages to event stream")
 	}
 	return nil
 }
@@ -526,7 +526,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		kgo.RequireStableFetchOffsets(),              // do not allow offsets past uncommitted transaction
 	}...)...)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to create event stream client")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to create event stream client")
 	}
 
 	sub.reader = reader
@@ -583,7 +583,7 @@ func (s *subscription) onRevoked(ctx context.Context, client *kgo.Client, revoke
 	}()
 	// must commit any marked but uncommitted messages
 	if err := client.CommitUncommittedOffsets(ctx); err != nil {
-		s.log.Err(ctx, kerrors.WithKind(err, ErrorClient, "Failed to commit offsets on revoke"))
+		s.log.Err(ctx, kerrors.WithKind(err, ErrClient, "Failed to commit offsets on revoke"))
 	}
 }
 
@@ -603,20 +603,20 @@ func (s *subscription) onLost(ctx context.Context, client *kgo.Client, lost map[
 // ReadMsg reads a message
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	if s.isClosed() {
-		return nil, kerrors.WithKind(nil, ErrorClientClosed, "Client closed")
+		return nil, kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
 
 	fetches := s.reader.PollRecords(ctx, 1)
 	if err := fetches.Err0(); err != nil {
-		err = kerrors.WithKind(err, ErrorClient, "Failed to read message")
+		err = kerrors.WithKind(err, ErrClient, "Failed to read message")
 		if !kerr.IsRetriable(err) {
-			return nil, kerrors.WithKind(err, ErrorClientClosed, "Client closed")
+			return nil, kerrors.WithKind(err, ErrClientClosed, "Client closed")
 		}
 		return nil, err
 	}
 	iter := fetches.RecordIter()
 	if iter.Done() {
-		return nil, kerrors.WithKind(nil, ErrorReadEmpty, "No messages")
+		return nil, kerrors.WithKind(nil, ErrReadEmpty, "No messages")
 	}
 	m := iter.Next()
 	return &Msg{
@@ -633,13 +633,13 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
 	if s.isClosed() {
-		return kerrors.WithKind(nil, ErrorClientClosed, "Client closed")
+		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
 	if !s.IsAssigned(msg) {
-		return kerrors.WithKind(nil, ErrorPartitionUnassigned, "Unassigned partition")
+		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
 	}
 	if msg.record == nil {
-		return kerrors.WithKind(nil, ErrorInvalidMsg, "Invalid message")
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	s.reader.MarkCommitRecords(msg.record)
 	return nil
@@ -674,17 +674,17 @@ func optInt(a int) *string {
 func (s *Service) checkStream(ctx context.Context, client *kadm.Client, topic string) (*kadm.TopicDetail, error) {
 	res, err := client.ListTopics(ctx, topic)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get topic info")
 	}
 	resTopic := res[topic]
 	if resTopic.Topic != topic {
-		return nil, kerrors.WithKind(nil, ErrorNotFound, "Topic not found")
+		return nil, kerrors.WithKind(nil, ErrNotFound, "Topic not found")
 	}
 	if err := resTopic.Err; err != nil {
 		if errors.Is(err, kerr.UnknownTopicOrPartition) {
-			return nil, kerrors.WithKind(err, ErrorNotFound, "Topic not found")
+			return nil, kerrors.WithKind(err, ErrNotFound, "Topic not found")
 		}
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get topic info")
 	}
 	return &resTopic, nil
 }
@@ -696,7 +696,7 @@ func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts)
 		return err
 	}
 	if info, err := s.checkStream(ctx, client.admclient, topic); err != nil {
-		if !errors.Is(err, ErrorNotFound) {
+		if !errors.Is(err, ErrNotFound) {
 			return err
 		}
 		res, err := client.admclient.CreateTopics(ctx, int32(opts.Partitions), int16(opts.Replicas), map[string]*string{
@@ -706,14 +706,14 @@ func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts)
 			"max.message.bytes":   optInt(opts.MaxMsgBytes),
 		}, topic)
 		if err != nil {
-			return kerrors.WithKind(err, ErrorClient, "Failed to create topic")
+			return kerrors.WithKind(err, ErrClient, "Failed to create topic")
 		}
 		resTopic := res[topic]
 		if resTopic.Topic != topic {
-			return kerrors.WithKind(nil, ErrorClient, "Failed to create topic")
+			return kerrors.WithKind(nil, ErrClient, "Failed to create topic")
 		}
 		if resTopic.Err != nil {
-			return kerrors.WithKind(resTopic.Err, ErrorClient, "Failed to create topic")
+			return kerrors.WithKind(resTopic.Err, ErrClient, "Failed to create topic")
 		}
 	} else {
 		res, err := client.admclient.AlterTopicConfigs(ctx, []kadm.AlterConfig{
@@ -723,7 +723,7 @@ func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts)
 			{Op: kadm.SetConfig, Name: "max.message.bytes", Value: optInt(opts.MaxMsgBytes)},
 		}, topic)
 		if err != nil {
-			return kerrors.WithKind(err, ErrorClient, "Failed to update topic")
+			return kerrors.WithKind(err, ErrClient, "Failed to update topic")
 		}
 		var resTopic *kadm.AlterConfigsResponse
 		for _, i := range res {
@@ -734,23 +734,23 @@ func (s *Service) InitStream(ctx context.Context, topic string, opts StreamOpts)
 			}
 		}
 		if resTopic == nil {
-			return kerrors.WithKind(nil, ErrorClient, "Failed to update topic")
+			return kerrors.WithKind(nil, ErrClient, "Failed to update topic")
 		}
 		if resTopic.Err != nil {
-			return kerrors.WithKind(resTopic.Err, ErrorClient, "Failed to update topic")
+			return kerrors.WithKind(resTopic.Err, ErrClient, "Failed to update topic")
 		}
 		numPartitions := len(info.Partitions)
 		if opts.Partitions > numPartitions {
 			res, err := client.admclient.UpdatePartitions(ctx, opts.Partitions, topic)
 			if err != nil {
-				return kerrors.WithKind(err, ErrorClient, "Failed to update topic partitions")
+				return kerrors.WithKind(err, ErrClient, "Failed to update topic partitions")
 			}
 			resTopic := res[topic]
 			if resTopic.Topic != topic {
-				return kerrors.WithKind(nil, ErrorClient, "Failed to update topic partitions")
+				return kerrors.WithKind(nil, ErrClient, "Failed to update topic partitions")
 			}
 			if resTopic.Err != nil {
-				return kerrors.WithKind(resTopic.Err, ErrorClient, "Failed to update topic partitions")
+				return kerrors.WithKind(resTopic.Err, ErrClient, "Failed to update topic partitions")
 			}
 		} else if opts.Partitions < numPartitions {
 			s.log.Warn(ctx, "May not specify fewer partitions",
@@ -768,21 +768,21 @@ func (s *Service) DeleteStream(ctx context.Context, topic string) error {
 		return err
 	}
 	if _, err := s.checkStream(ctx, client.admclient, topic); err != nil {
-		if !errors.Is(err, ErrorNotFound) {
+		if !errors.Is(err, ErrNotFound) {
 			return err
 		}
 		return nil
 	}
 	res, err := client.admclient.DeleteTopics(ctx, topic)
 	if err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to delete topic")
+		return kerrors.WithKind(err, ErrClient, "Failed to delete topic")
 	}
 	resTopic := res[topic]
 	if resTopic.Topic != topic {
-		return kerrors.WithKind(err, ErrorClient, "Failed to delete topic")
+		return kerrors.WithKind(err, ErrClient, "Failed to delete topic")
 	}
 	if resTopic.Err != nil {
-		return kerrors.WithKind(resTopic.Err, ErrorClient, "Failed to delete topic")
+		return kerrors.WithKind(resTopic.Err, ErrClient, "Failed to delete topic")
 	}
 	return nil
 }
@@ -892,7 +892,7 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
-					if errors.Is(err, ErrorClientClosed) {
+					if errors.Is(err, ErrClientClosed) {
 						return
 					}
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
@@ -937,10 +937,10 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						)
 						if err := sub.Commit(msgctx, *m); err != nil {
 							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"))
-							if errors.Is(err, ErrorClientClosed) {
+							if errors.Is(err, ErrClientClosed) {
 								return
 							}
-							if errors.Is(err, ErrorPartitionUnassigned) || errors.Is(err, ErrorInvalidMsg) {
+							if errors.Is(err, ErrPartitionUnassigned) || errors.Is(err, ErrInvalidMsg) {
 								break
 							}
 							select {
@@ -974,10 +974,10 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						)
 						if err := sub.Commit(msgctx, *m); err != nil {
 							w.log.Err(msgctx, kerrors.WithMsg(err, "Failed to commit message"))
-							if errors.Is(err, ErrorClientClosed) {
+							if errors.Is(err, ErrClientClosed) {
 								return
 							}
-							if errors.Is(err, ErrorPartitionUnassigned) || errors.Is(err, ErrorInvalidMsg) {
+							if errors.Is(err, ErrPartitionUnassigned) || errors.Is(err, ErrInvalidMsg) {
 								break
 							}
 							select {

@@ -105,7 +105,7 @@ func (s *router) writeOAuthTokenError(c *governor.Context, err error) {
 		}
 	}
 
-	if !errors.Is(err, governor.ErrorNoLog) {
+	if !errors.Is(err, governor.ErrNoLog) {
 		if rerr.Status >= http.StatusBadRequest && rerr.Status < http.StatusInternalServerError {
 			s.s.log.WarnErr(c.Ctx(), err)
 		} else {

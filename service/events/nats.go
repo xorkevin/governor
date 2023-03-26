@@ -143,7 +143,7 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
 		if secret.Password == "" {
-			return client, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Empty auth")
+			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
 		if secret == s.auth {
 			return client, nil
@@ -157,16 +157,16 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 	)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to connect to events")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to connect to events")
 	}
 	if _, err := conn.RTT(); err != nil {
 		conn.Close()
 		s.config.InvalidateSecret("auth")
-		return nil, kerrors.WithKind(err, ErrorConn, "Failed to connect to events")
+		return nil, kerrors.WithKind(err, ErrConn, "Failed to connect to events")
 	}
 	jetstream, err := conn.JetStream()
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to connect to events stream")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to connect to events stream")
 	}
 
 	m.Stop(ctx)
@@ -222,7 +222,7 @@ func (s *NatsService) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *NatsService) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, ErrorConn, "Events service not ready")
+		return kerrors.WithKind(nil, ErrConn, "Events service not ready")
 	}
 	return nil
 }
@@ -251,7 +251,7 @@ func (s *NatsService) Publish(ctx context.Context, msgs ...PublishMsg) error {
 			Header:  header,
 			Data:    i.Value,
 		}, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient, "Failed to publish message to event stream")
+			return kerrors.WithKind(err, ErrClient, "Failed to publish message to event stream")
 		}
 	}
 	return nil
@@ -281,7 +281,7 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 		MaxAckPending: 1,               // only one ack pending to prevent out of order deliveries
 		MaxWaiting:    1,               // only one pull fetch request in flight
 	}); err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to create consumer")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to create consumer")
 	}
 
 	nsub, err := jetstream.PullSubscribe(
@@ -291,7 +291,7 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 		nats.ManualAck(),
 	)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to create subscription")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to create subscription")
 	}
 
 	sub := &natsSubscription{
@@ -327,15 +327,15 @@ func (s *natsSubscription) IsAssigned(msg Msg) bool {
 func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	msgs, err := s.sub.Fetch(1, nats.Context(ctx))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get message")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")
 	}
 	if len(msgs) != 1 {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get message")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")
 	}
 	m := msgs[0]
 	meta, err := m.Metadata()
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrorClient, "Failed to get message metadata")
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message metadata")
 	}
 	return &Msg{
 		Topic:     m.Subject,
@@ -351,16 +351,16 @@ func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 // Commit commits a new message offset
 func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 	if s.isClosed() {
-		return kerrors.WithKind(nil, ErrorClientClosed, "Client closed")
+		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
 	if !s.IsAssigned(msg) {
-		return kerrors.WithKind(nil, ErrorPartitionUnassigned, "Unassigned partition")
+		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
 	}
 	if msg.natsmsg == nil {
-		return kerrors.WithKind(nil, ErrorInvalidMsg, "Invalid message")
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
-		s.log.Err(ctx, kerrors.WithKind(nil, ErrorClient, "Failed to ack message"))
+		s.log.Err(ctx, kerrors.WithKind(nil, ErrClient, "Failed to ack message"))
 	}
 	return nil
 }
@@ -371,7 +371,7 @@ func (s *natsSubscription) Close(ctx context.Context) error {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to close subscription")
+		return kerrors.WithKind(err, ErrClient, "Failed to close subscription")
 	}
 	s.log.Info(ctx, "Closed subscription")
 	return nil
@@ -402,14 +402,14 @@ func (s *NatsService) InitStream(ctx context.Context, topic string, opts StreamO
 	}
 	if _, err := jetstream.StreamInfo(streamName, nats.Context(ctx)); err != nil {
 		if !errors.Is(err, nats.ErrStreamNotFound) {
-			return kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+			return kerrors.WithKind(err, ErrClient, "Failed to get topic info")
 		}
 		if _, err := jetstream.AddStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient, "Failed to create topic")
+			return kerrors.WithKind(err, ErrClient, "Failed to create topic")
 		}
 	} else {
 		if _, err := jetstream.UpdateStream(cfg, nats.Context(ctx)); err != nil {
-			return kerrors.WithKind(err, ErrorClient, "Failed to update topic")
+			return kerrors.WithKind(err, ErrClient, "Failed to update topic")
 		}
 	}
 	return nil
@@ -423,12 +423,12 @@ func (s *NatsService) DeleteStream(ctx context.Context, topic string) error {
 	}
 	if _, err := jetstream.StreamInfo(topic, nats.Context(ctx)); err != nil {
 		if !errors.Is(err, nats.ErrStreamNotFound) {
-			return kerrors.WithKind(err, ErrorClient, "Failed to get topic info")
+			return kerrors.WithKind(err, ErrClient, "Failed to get topic info")
 		}
 		return nil
 	}
 	if err := jetstream.DeleteStream(topic, nats.Context(ctx)); err != nil {
-		return kerrors.WithKind(err, ErrorClient, "Failed to delete topic")
+		return kerrors.WithKind(err, ErrClient, "Failed to delete topic")
 	}
 	return nil
 }

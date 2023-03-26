@@ -206,21 +206,21 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-// ErrorOrgEvent is returned when the org event is malformed
-var ErrorOrgEvent errorOrgEvent
+// ErrOrgEvent is returned when the org event is malformed
+var ErrOrgEvent errOrgEvent
 
 type (
-	errorOrgEvent struct{}
+	errOrgEvent struct{}
 )
 
-func (e errorOrgEvent) Error() string {
+func (e errOrgEvent) Error() string {
 	return "Malformed org event"
 }
 
 func decodeOrgEvent(msgdata []byte) (*OrgEvent, error) {
 	var m orgEventDec
 	if err := kjson.Unmarshal(msgdata, m); err != nil {
-		return nil, kerrors.WithKind(err, ErrorOrgEvent, "Failed to decode org event")
+		return nil, kerrors.WithKind(err, ErrOrgEvent, "Failed to decode org event")
 	}
 	props := &OrgEvent{
 		Kind: m.Kind,
@@ -228,10 +228,10 @@ func decodeOrgEvent(msgdata []byte) (*OrgEvent, error) {
 	switch m.Kind {
 	case OrgEventKindDelete:
 		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
-			return nil, kerrors.WithKind(err, ErrorOrgEvent, "Failed to decode delete org event")
+			return nil, kerrors.WithKind(err, ErrOrgEvent, "Failed to decode delete org event")
 		}
 	default:
-		return nil, kerrors.WithKind(nil, ErrorOrgEvent, "Invalid org event kind")
+		return nil, kerrors.WithKind(nil, ErrOrgEvent, "Invalid org event kind")
 	}
 	return props, nil
 }
@@ -344,7 +344,7 @@ func (s *Service) userRoleEventHandler(ctx context.Context, props user.RolesProp
 func (s *Service) userCreateRoleEventHandler(ctx context.Context, props user.RolesProps) error {
 	u, err := s.users.GetByID(ctx, props.Userid)
 	if err != nil {
-		if errors.Is(err, user.ErrorNotFound) {
+		if errors.Is(err, user.ErrNotFound) {
 			return nil
 		}
 		return kerrors.WithMsg(err, "Failed to get user")

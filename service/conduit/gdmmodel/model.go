@@ -440,19 +440,19 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm member model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableAssoc.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm assoc model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}

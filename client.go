@@ -206,7 +206,7 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 		return nil, err
 	}
 	if !decoded {
-		return nil, kerrors.WithKind(nil, ErrorServerRes, "Non-decodable response")
+		return nil, kerrors.WithKind(nil, ErrServerRes, "Non-decodable response")
 	}
 	c.log.Info(ctx, "Successfully setup governor", klog.AString("version", body.Version))
 	return body, nil

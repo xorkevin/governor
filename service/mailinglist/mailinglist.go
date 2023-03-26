@@ -195,14 +195,14 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}
 	s.writetimeout, err = r.GetDuration("writetimeout")
 	if err != nil {
-		return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid write timeout for mail server")
+		return kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid write timeout for mail server")
 	}
 
 	if src := r.GetStr("mockdnssource"); src != "" {
 		var err error
 		s.resolver, err = dns.NewMockResolverFromFile(src)
 		if err != nil {
-			return kerrors.WithKind(err, governor.ErrorInvalidConfig, "Invalid mockdns source")
+			return kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid mockdns source")
 		}
 		s.log.Info(ctx, "Use mockdns",
 			klog.AString("source", src),
@@ -337,18 +337,18 @@ func (s *Service) Health(ctx context.Context) error {
 }
 
 type (
-	// errorListEvent is returned when the mailinglist message is malformed
-	errorListEvent struct{}
+	// errListEvent is returned when the mailinglist message is malformed
+	errListEvent struct{}
 )
 
-func (e errorListEvent) Error() string {
+func (e errListEvent) Error() string {
 	return "Malformed mailinglist message"
 }
 
 func decodeListEvent(msgdata []byte) (*listEvent, error) {
 	var m listEventDec
 	if err := kjson.Unmarshal(msgdata, &m); err != nil {
-		return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode mailinglist event")
+		return nil, kerrors.WithKind(err, errListEvent{}, "Failed to decode mailinglist event")
 	}
 	props := &listEvent{
 		Kind: m.Kind,
@@ -356,18 +356,18 @@ func decodeListEvent(msgdata []byte) (*listEvent, error) {
 	switch m.Kind {
 	case listEventKindMail:
 		if err := kjson.Unmarshal(m.Payload, &props.Mail); err != nil {
-			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode mail event")
+			return nil, kerrors.WithKind(err, errListEvent{}, "Failed to decode mail event")
 		}
 	case listEventKindSend:
 		if err := kjson.Unmarshal(m.Payload, &props.Send); err != nil {
-			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode send event")
+			return nil, kerrors.WithKind(err, errListEvent{}, "Failed to decode send event")
 		}
 	case listEventKindDelete:
 		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
-			return nil, kerrors.WithKind(err, errorListEvent{}, "Failed to decode delete event")
+			return nil, kerrors.WithKind(err, errListEvent{}, "Failed to decode delete event")
 		}
 	default:
-		return nil, kerrors.WithKind(nil, errorListEvent{}, "Invalid list event kind")
+		return nil, kerrors.WithKind(nil, errListEvent{}, "Invalid list event kind")
 	}
 	return props, nil
 }

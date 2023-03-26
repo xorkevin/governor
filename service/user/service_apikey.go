@@ -65,7 +65,7 @@ func (s *Service) createApikey(ctx context.Context, userid string, scope string,
 func (s *Service) rotateApikey(ctx context.Context, keyid string) (*resApikeyModel, error) {
 	m, err := s.apikeys.RotateKey(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, apikey.ErrorNotFound) {
+		if errors.Is(err, apikey.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to rotate apikey")
@@ -78,7 +78,7 @@ func (s *Service) rotateApikey(ctx context.Context, keyid string) (*resApikeyMod
 
 func (s *Service) updateApikey(ctx context.Context, keyid string, scope string, name, desc string) error {
 	if err := s.apikeys.UpdateKey(ctx, keyid, scope, name, desc); err != nil {
-		if errors.Is(err, apikey.ErrorNotFound) {
+		if errors.Is(err, apikey.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to update apikey")
@@ -88,7 +88,7 @@ func (s *Service) updateApikey(ctx context.Context, keyid string, scope string, 
 
 func (s *Service) deleteApikey(ctx context.Context, keyid string) error {
 	if err := s.apikeys.DeleteKey(ctx, keyid); err != nil {
-		if errors.Is(err, apikey.ErrorNotFound) {
+		if errors.Is(err, apikey.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to delete apikey")

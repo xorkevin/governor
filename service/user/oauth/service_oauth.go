@@ -18,11 +18,11 @@ import (
 )
 
 type (
-	// errorNotFound is returned when an oauth app is not found
-	errorNotFound struct{}
+	// errNotFound is returned when an oauth app is not found
+	errNotFound struct{}
 )
 
-func (e errorNotFound) Error() string {
+func (e errNotFound) Error() string {
 	return "OAuth app not found"
 }
 
@@ -92,11 +92,11 @@ func (s *Service) getAppsBulk(ctx context.Context, clientids []string) (*resApps
 
 func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oauthappmodel.Model, error) {
 	if clientstr, err := s.kvclient.Get(ctx, clientid); err != nil {
-		if !errors.Is(err, kvstore.ErrorNotFound) {
+		if !errors.Is(err, kvstore.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get oauth client from cache"))
 		}
 	} else if clientstr == cacheValTombstone {
-		return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
+		return nil, kerrors.WithKind(err, errNotFound{}, "OAuth app not found")
 	} else {
 		cm := &oauthappmodel.Model{}
 		if err := kjson.Unmarshal([]byte(clientstr), cm); err != nil {
@@ -108,11 +108,11 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oautha
 
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCache); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"))
 			}
-			return nil, kerrors.WithKind(err, errorNotFound{}, "OAuth app not found")
+			return nil, kerrors.WithKind(err, errNotFound{}, "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
@@ -150,7 +150,7 @@ func (s *Service) createApp(ctx context.Context, name, url, redirectURI, creator
 func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -171,7 +171,7 @@ func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate
 func (s *Service) updateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -197,7 +197,7 @@ const (
 func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Image) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -231,14 +231,14 @@ func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Ima
 func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrorNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
 	}
 
 	if err := s.logoImgDir.Del(ctx, clientid); err != nil {
-		if !errors.Is(err, objstore.ErrorNotFound) {
+		if !errors.Is(err, objstore.ErrNotFound) {
 			return kerrors.WithMsg(err, "Unable to delete app logo")
 		}
 	}
@@ -255,7 +255,7 @@ func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 func (s *Service) getApp(ctx context.Context, clientid string) (*resApp, error) {
 	m, err := s.getCachedClient(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, errorNotFound{}) {
+		if errors.Is(err, errNotFound{}) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -274,7 +274,7 @@ func (s *Service) getApp(ctx context.Context, clientid string) (*resApp, error) 
 func (s *Service) statLogo(ctx context.Context, clientid string) (*objstore.ObjectInfo, error) {
 	objinfo, err := s.logoImgDir.Stat(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound) {
+		if errors.Is(err, objstore.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app logo not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app logo")
@@ -285,7 +285,7 @@ func (s *Service) statLogo(ctx context.Context, clientid string) (*objstore.Obje
 func (s *Service) getLogo(ctx context.Context, clientid string) (io.ReadCloser, string, error) {
 	obj, objinfo, err := s.logoImgDir.Get(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, objstore.ErrorNotFound) {
+		if errors.Is(err, objstore.ErrNotFound) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app logo not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get app logo")

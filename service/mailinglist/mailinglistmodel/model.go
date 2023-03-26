@@ -506,6 +506,7 @@ func (r *repo) NewMsg(listid, msgid, userid string) *MsgModel {
 		CreationTime: now,
 	}
 }
+
 func (r *repo) GetMsg(ctx context.Context, listid, msgid string) (*MsgModel, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
@@ -829,31 +830,31 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.tableLists.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list member model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMsgs.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list message model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableSent.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list sent message model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableTree.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list message model")
-		if !errors.Is(err, db.ErrorAuthz) {
+		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}
 	}

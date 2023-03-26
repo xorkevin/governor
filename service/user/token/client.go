@@ -114,10 +114,10 @@ func (c *CmdClient) initConfig() (*clientConfig, error) {
 			audience: c.config.GetStr("audience"),
 		}
 		if cc.issuer == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Token issuer is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token issuer is not set")
 		}
 		if cc.audience == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrorInvalidConfig, "Token audience is not set")
+			return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token audience is not set")
 		}
 		return cc, nil
 	})
@@ -169,7 +169,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
 	if c.sysTokenFlags.output != "" {
-		if err := c.term.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0600); err != nil {
+		if err := c.term.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0o600); err != nil {
 			return kerrors.WithMsg(err, "Failed to write token output to file")
 		}
 		return nil
