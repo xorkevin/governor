@@ -447,7 +447,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return errSMTPSeq
 	}
 
-	b := bytes.Buffer{}
+	var b bytes.Buffer
 	if _, err := io.Copy(&b, r); err != nil {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to read smtp data"))
 		return errSMTPBaseExists
@@ -633,8 +633,8 @@ func (s *smtpSession) Data(r io.Reader) error {
 	m.Header.Add(headerReceivedSPF, spfHeader)
 	m.Header.Add(headerReceived, fmt.Sprintf("from %s (%s [%s]) by %s with %s id %s for %s; %s", s.helo, s.helo, s.srcip.String(), s.service.authdomain, "ESMTPS", s.id, s.rcptTo, time.Now().Round(0).UTC().Format(time.RFC1123Z)))
 
-	mb := &bytes.Buffer{}
-	if err := m.WriteTo(mb); err != nil {
+	var mb bytes.Buffer
+	if err := m.WriteTo(&mb); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to write mail msg"))
 		return errSMTPBaseExists
 	}

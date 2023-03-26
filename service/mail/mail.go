@@ -520,7 +520,7 @@ func (s *Service) mailEventHandler(ctx context.Context, msg events.Msg) error {
 	}
 }
 
-func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
+func (s *Service) mailHandler(ctx context.Context, msgdata []byte) (retErr error) {
 	var emmsg mailmsg
 	if err := kjson.Unmarshal(msgdata, &emmsg); err != nil {
 		return kerrors.WithKind(err, errorMailEvent{}, "Failed to decode mail message")
@@ -548,7 +548,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 		}
 		defer func() {
 			if err := b1.Close(); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close mail body"))
 			}
 		}()
 		msg = b1
@@ -593,7 +593,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) error {
 			}
 			defer func() {
 				if err := b1.Close(); err != nil {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close mail body"))
+					retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close mail body"))
 				}
 			}()
 			body = b1

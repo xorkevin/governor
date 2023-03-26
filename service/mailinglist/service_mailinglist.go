@@ -679,18 +679,18 @@ func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 		return nil
 	}
 
-	mb := &bytes.Buffer{}
-	if err := func() error {
+	var mb bytes.Buffer
+	if err := func() (retErr error) {
 		obj, _, err := s.rcvMailDir.Subdir(m.ListID).Get(ctx, s.encodeMsgid(m.Msgid))
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to get msg content")
 		}
 		defer func() {
 			if err := obj.Close(); err != nil {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close msg content"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close msg content"))
 			}
 		}()
-		if _, err := io.Copy(mb, obj); err != nil {
+		if _, err := io.Copy(&mb, obj); err != nil {
 			return kerrors.WithMsg(err, "Failed to read msg content")
 		}
 		return nil

@@ -264,11 +264,11 @@ func (s *Service) getUserinfoClaims(ctx context.Context, userid string, scopes m
 			Userid:   user.Userid,
 			Username: user.Username,
 		}
-		bprofile := bytes.Buffer{}
+		var bprofile bytes.Buffer
 		if err := s.tplprofile.Execute(&bprofile, data); err != nil {
 			return nil, kerrors.WithMsg(err, "Failed executing profile url template")
 		}
-		bpicture := bytes.Buffer{}
+		var bpicture bytes.Buffer
 		if err := s.tplpicture.Execute(&bpicture, data); err != nil {
 			return nil, kerrors.WithMsg(err, "Failed executing profile picture url template")
 		}

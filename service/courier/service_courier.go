@@ -145,14 +145,14 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 
 	var brand image.Image
 	if brandid != "" {
-		if err := func() error {
+		if err := func() (retErr error) {
 			brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(ctx, brandid)
 			if err != nil {
 				return kerrors.WithMsg(err, "Failed to get brand image")
 			}
 			defer func() {
 				if err := brandimg.Close(); err != nil {
-					s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close brand image"))
+					retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close brand image"))
 				}
 			}()
 			if objinfo.ContentType != image.MediaTypePng {

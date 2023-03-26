@@ -59,8 +59,8 @@ func (e *emailEmailChange) query() queryEmailEmailChange {
 }
 
 func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) error {
-	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, e.query()); err != nil {
+	var b bytes.Buffer
+	if err := tpl.Execute(&b, e.query()); err != nil {
 		return kerrors.WithMsg(err, "Failed executing email change url template")
 	}
 	e.URL = base + b.String()

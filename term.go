@@ -2,7 +2,6 @@ package governor
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -171,14 +170,14 @@ func (c *Terminal) ReadFile(name string) ([]byte, error) {
 	return b, nil
 }
 
-func (c *Terminal) WriteFile(name string, data []byte, perm fs.FileMode) error {
+func (c *Terminal) WriteFile(name string, data []byte, perm fs.FileMode) (retErr error) {
 	f, err := c.WFS().OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to open file")
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to close open file"))
+			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close open file"))
 		}
 	}()
 	if _, err := f.Write(data); err != nil {

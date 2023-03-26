@@ -3,6 +3,7 @@ package image
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	goimg "image"
 	"image/color"
 	"image/gif"
@@ -15,7 +16,6 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/fileloader"
 	"xorkevin.dev/kerrors"
-	"xorkevin.dev/klog"
 )
 
 type (
@@ -129,15 +129,14 @@ var allowedMediaTypes = map[string]struct{}{
 }
 
 // LoadImage returns an image file from a Context
-func LoadImage(c *governor.Context, formField string) (Image, error) {
+func LoadImage(c *governor.Context, formField string) (_ Image, retErr error) {
 	file, mediaType, _, err := fileloader.LoadOpenFile(c, formField, allowedMediaTypes)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Invalid image file")
 	}
-	l := klog.NewLevelLogger(c.Log())
 	defer func() {
 		if err := file.Close(); err != nil {
-			l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"))
+			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close open file on request"))
 		}
 	}()
 	switch mediaType {

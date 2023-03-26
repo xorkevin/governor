@@ -62,7 +62,7 @@ func TestJSONLogger(t *testing.T) {
 
 			assert := require.New(t)
 
-			logbuf := bytes.Buffer{}
+			var logbuf bytes.Buffer
 			l := newLogger(Config{}, configLogger{
 				level:  tc.Level,
 				output: "TEST",

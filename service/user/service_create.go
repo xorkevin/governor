@@ -49,8 +49,8 @@ func (e *emailNewUser) query() queryEmailNewUser {
 }
 
 func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error {
-	b := &bytes.Buffer{}
-	if err := tpl.Execute(b, e.query()); err != nil {
+	var b bytes.Buffer
+	if err := tpl.Execute(&b, e.query()); err != nil {
 		return kerrors.WithMsg(err, "Failed executing new user url template")
 	}
 	e.URL = base + b.String()

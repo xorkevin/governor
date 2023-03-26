@@ -1,13 +1,13 @@
 package fileloader
 
 import (
+	"errors"
 	"io"
 	"mime"
 	"net/http"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/kerrors"
-	"xorkevin.dev/klog"
 )
 
 var (
@@ -31,17 +31,16 @@ func (e errorUnsupportedMIME) Error() string {
 }
 
 // LoadOpenFile returns an open file from a Context
-func LoadOpenFile(c *governor.Context, formField string, mimeTypes map[string]struct{}) (io.ReadSeekCloser, string, int64, error) {
+func LoadOpenFile(c *governor.Context, formField string, mimeTypes map[string]struct{}) (_ io.ReadSeekCloser, _ string, _ int64, retErr error) {
 	file, header, err := c.FormFile(formField)
 	if err != nil {
 		return nil, "", 0, err
 	}
-	l := klog.NewLevelLogger(c.Log())
 	shouldClose := true
 	defer func() {
 		if shouldClose {
 			if err := file.Close(); err != nil {
-				l.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to close open file on request"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close open file on request"))
 			}
 		}
 	}()

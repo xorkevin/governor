@@ -7,7 +7,7 @@ import (
 
 // Marshal marshals json without escaping html
 func Marshal(v interface{}) ([]byte, error) {
-	b := bytes.Buffer{}
+	var b bytes.Buffer
 	j := json.NewEncoder(&b)
 	j.SetEscapeHTML(false)
 	if err := j.Encode(v); err != nil {
