@@ -659,7 +659,7 @@ func (r *repo) DeleteMsgs(ctx context.Context, listid string, msgids []string) e
 	return nil
 }
 
-func (r *repo) GetUnsentMsgs(ctx context.Context, listid, msgid string, limit int) ([]string, error) {
+func (r *repo) GetUnsentMsgs(ctx context.Context, listid, msgid string, limit int) (_ []string, retErr error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
@@ -671,6 +671,7 @@ func (r *repo) GetUnsentMsgs(ctx context.Context, listid, msgid string, limit in
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
+			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close db rows"))
 		}
 	}()
 	for rows.Next() {
