@@ -30,7 +30,7 @@ require (
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.2.5
 	xorkevin.dev/kerrors v0.1.5
-	xorkevin.dev/klog v0.0.0-20230305001845-27454ff3a979
+	xorkevin.dev/klog v0.0.0-20230408090513-cffae1892d50
 )
 
 require (
@@ -82,7 +82,7 @@ require (
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.4.0 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
-	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect

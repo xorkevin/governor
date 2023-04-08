@@ -78,7 +78,7 @@ func TestJSONLogger(t *testing.T) {
 					Fn  string `json:"fn"`
 					Src string `json:"src"`
 				} `json:"caller"`
-				Path      string `json:"path"`
+				Mod       string `json:"mod"`
 				Msg       string `json:"msg"`
 				TestField string `json:"some_test_field"`
 			}
@@ -87,7 +87,7 @@ func TestJSONLogger(t *testing.T) {
 			assert.Equal(klog.LevelInfo.String(), j.Level)
 			assert.Contains(j.Caller.Fn, "xorkevin.dev/governor.TestJSONLogger")
 			assert.Contains(j.Caller.Src, "xorkevin.dev/governor/govlog_test.go")
-			assert.Equal(".sublog", j.Path)
+			assert.Equal(".sublog", j.Mod)
 			assert.Equal("test message 1", j.Msg)
 			assert.Equal("some test value", j.TestField)
 			assert.False(d.More())
