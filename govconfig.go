@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -194,12 +193,7 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("vault.k8s.jwtpath", "/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 	v.SetConfigName(opts.DefaultFile)
-	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath("config")
-	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
-	}
 
 	v.SetEnvPrefix(opts.EnvPrefix)
 	v.AutomaticEnv()
@@ -262,6 +256,7 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	s.config.Instance = u.Base32()
 
 	if s.configReader != nil {
+		s.v.SetConfigType("yaml")
 		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}

@@ -2,8 +2,6 @@ package governor
 
 import (
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,12 +32,7 @@ func newClientSettings(opts Opts) *clientSettings {
 	v.SetDefault("http.timeout", "15s")
 
 	v.SetConfigName(opts.ClientDefault)
-	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
-	v.AddConfigPath("config")
-	if cfgdir, err := os.UserConfigDir(); err == nil {
-		v.AddConfigPath(filepath.Join(cfgdir, opts.Appname))
-	}
 
 	v.SetEnvPrefix(opts.ClientPrefix)
 	v.AutomaticEnv()
@@ -62,6 +55,7 @@ func (s *clientSettings) init(flags ClientFlags) error {
 		s.v.SetConfigFile(file)
 	}
 	if s.configReader != nil {
+		s.v.SetConfigType("yaml")
 		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
