@@ -26,9 +26,9 @@ import (
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2cipher"
 	"xorkevin.dev/hunter2/h2cipher/aes"
-	"xorkevin.dev/hunter2/h2cipher/chacha20poly1305"
+	"xorkevin.dev/hunter2/h2cipher/xchacha20poly1305"
 	"xorkevin.dev/hunter2/h2streamcipher"
-	"xorkevin.dev/hunter2/h2streamcipher/chacha20"
+	"xorkevin.dev/hunter2/h2streamcipher/xchacha20"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -202,10 +202,10 @@ func NewCtx(inj governor.Injector) *Service {
 // New creates a new Mailer
 func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service {
 	cipherAlgs := h2cipher.NewAlgsMap()
-	chacha20poly1305.Register(cipherAlgs)
+	xchacha20poly1305.Register(cipherAlgs)
 	aes.Register(cipherAlgs)
 	streamAlgs := h2streamcipher.NewAlgsMap()
-	chacha20.Register(streamAlgs)
+	xchacha20.Register(streamAlgs)
 	return &Service{
 		tpl:         tpl,
 		events:      ev,
@@ -923,7 +923,7 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		}
 
 		contentType = mediaTypeOctet
-		config, err := chacha20.NewConfig()
+		config, err := xchacha20.NewConfig()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
@@ -931,7 +931,7 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, auth, err := chacha20.NewFromConfig(*config)
+		stream, auth, err := xchacha20.NewFromConfig(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}
@@ -1017,7 +1017,7 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 			return err
 		}
 		contentType = mediaTypeOctet
-		config, err := chacha20.NewConfig()
+		config, err := xchacha20.NewConfig()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create mail data key")
 		}
@@ -1025,7 +1025,7 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encrypt mail data key")
 		}
-		stream, auth, err := chacha20.NewFromConfig(*config)
+		stream, auth, err := xchacha20.NewFromConfig(*config)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to create encryption stream")
 		}

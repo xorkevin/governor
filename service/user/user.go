@@ -29,7 +29,7 @@ import (
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2/h2cipher"
 	"xorkevin.dev/hunter2/h2cipher/aes"
-	"xorkevin.dev/hunter2/h2cipher/chacha20poly1305"
+	"xorkevin.dev/hunter2/h2cipher/xchacha20poly1305"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -252,7 +252,7 @@ func New(
 	g gate.Gate,
 ) *Service {
 	cipherAlgs := h2cipher.NewAlgsMap()
-	chacha20poly1305.Register(cipherAlgs)
+	xchacha20poly1305.Register(cipherAlgs)
 	aes.Register(cipherAlgs)
 	return &Service{
 		users:       users,

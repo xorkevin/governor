@@ -28,7 +28,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/yaml.v3 v3.0.1
 	nhooyr.io/websocket v1.8.7
-	xorkevin.dev/hunter2 v0.2.5
+	xorkevin.dev/hunter2 v0.2.7
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/klog v0.0.0-20230408090513-cffae1892d50
 )
