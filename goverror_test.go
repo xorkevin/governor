@@ -60,6 +60,10 @@ func TestError(t *testing.T) {
 			String: "Invalid client request",
 		},
 		{
+			Err:    ErrSendClientReq,
+			String: "Failed sending client request",
+		},
+		{
 			Err:    ErrInvalidServerRes,
 			String: "Invalid server response",
 		},

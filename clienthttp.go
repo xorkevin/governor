@@ -38,8 +38,10 @@ type (
 
 // Client http errors
 var (
-	// ErrInvalidClientReq is returned when the client request could not be made
+	// ErrInvalidClientReq is returned when failing to construct the client request
 	ErrInvalidClientReq errInvalidClientReq
+	// ErrSendClientReq is returned when failing to send the client request
+	ErrSendClientReq errSendClientReq
 	// ErrInvalidServerRes is returned on an invalid server response
 	ErrInvalidServerRes errInvalidServerRes
 	// ErrServerRes is a returned server error
@@ -48,12 +50,17 @@ var (
 
 type (
 	errInvalidClientReq struct{}
+	errSendClientReq    struct{}
 	errInvalidServerRes struct{}
 	errServerRes        struct{}
 )
 
 func (e errInvalidClientReq) Error() string {
 	return "Invalid client request"
+}
+
+func (e errSendClientReq) Error() string {
+	return "Failed sending client request"
 }
 
 func (e errInvalidServerRes) Error() string {
@@ -95,7 +102,7 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.httpc.Do(r)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrInvalidClientReq, "Failed request")
+		return nil, kerrors.WithKind(err, ErrSendClientReq, "Failed request")
 	}
 	if res.StatusCode >= http.StatusBadRequest {
 		defer func() {
