@@ -106,7 +106,7 @@ func validTheme(theme string) error {
 	if len(theme) > lengthCapTheme {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme must be shorter than 4096 characters")
 	}
-	if err := json.Valid([]byte(theme)); err != nil {
+	if !json.Valid([]byte(theme)) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme is invalid JSON")
 	}
 	return nil

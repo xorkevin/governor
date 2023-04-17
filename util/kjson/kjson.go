@@ -3,6 +3,7 @@ package kjson
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 )
 
 // Marshal marshals json without escaping html
@@ -16,7 +17,15 @@ func Marshal(v interface{}) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// Unmarshal is [encoding/json.Unmarshal]
+// Unmarshal unmarshals json with the option UseNumber
 func Unmarshal(data []byte, v interface{}) error {
-	return json.Unmarshal(data, v)
+	if !json.Valid(data) {
+		return errors.New("Invalid json")
+	}
+	j := json.NewDecoder(bytes.NewReader(data))
+	j.UseNumber()
+	if err := j.Decode(v); err != nil {
+		return err
+	}
+	return nil
 }
