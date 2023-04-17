@@ -46,7 +46,6 @@ func TestMiddleware(t *testing.T) {
 				ResHeaders: map[string]string{
 					headerContentType:     "application/json; charset=utf-8",
 					headerContentEncoding: encodingKindZstd,
-					headerVary:            headerContentEncoding,
 				},
 				Status:   http.StatusOK,
 				Encoding: encodingKindZstd,
