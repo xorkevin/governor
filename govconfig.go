@@ -332,6 +332,8 @@ func newSecretsFileSource(s string, r io.Reader) (secretsClient, error) {
 	if err := yaml.Unmarshal(b, &data); err != nil {
 		return nil, kerrors.WithKind(err, ErrInvalidConfig, "Invalid secrets file source file")
 	}
+	// yaml unmarshal attempts decode with int, and is safe to
+	// mapstructure.Decode
 	return &secretsFileSource{
 		path: s,
 		data: data,
@@ -451,6 +453,8 @@ func (s *secretsVaultSource) GetSecret(ctx context.Context, kvpath string) (map[
 		return nil, time.Time{}, kerrors.WithKind(err, ErrVault, "Failed to read vault secret")
 	}
 	data := secret.Data
+	// vault uses json decoder with option UseNumber, and is safe to
+	// mapstructure.Decode
 	if v, ok := data["data"].(map[string]interface{}); ok {
 		data = v
 	}

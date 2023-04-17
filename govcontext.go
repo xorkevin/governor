@@ -172,11 +172,11 @@ func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 	switch mediaType {
 	case "application/json":
 		{
-			d := json.NewDecoder(c.r.Body)
+			dec := json.NewDecoder(c.r.Body)
 			if !allowUnknown {
-				d.DisallowUnknownFields()
+				dec.DisallowUnknownFields()
 			}
-			if err := d.Decode(i); err != nil {
+			if err := dec.Decode(i); err != nil {
 				var rerr *ErrorRes
 				if errors.As(err, &rerr) {
 					return err
@@ -187,7 +187,7 @@ func (c *Context) Bind(i interface{}, allowUnknown bool) error {
 				}
 				return ErrWithRes(err, http.StatusBadRequest, "", "Invalid JSON")
 			}
-			if d.More() {
+			if dec.More() {
 				return ErrWithRes(nil, http.StatusBadRequest, "", "Invalid JSON")
 			}
 			return nil

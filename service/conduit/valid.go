@@ -1,11 +1,11 @@
 package conduit
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/util/kjson"
 )
 
 //go:generate forge validation
@@ -24,9 +24,7 @@ const (
 	amountCap          = 255
 )
 
-var (
-	channelRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
-)
+var channelRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 func validhasChatid(chatid string) error {
 	if len(chatid) == 0 {
@@ -108,7 +106,7 @@ func validTheme(theme string) error {
 	if len(theme) > lengthCapTheme {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme must be shorter than 4096 characters")
 	}
-	if err := kjson.Unmarshal([]byte(theme), &struct{}{}); err != nil {
+	if err := json.Valid([]byte(theme)); err != nil {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Theme is invalid JSON")
 	}
 	return nil

@@ -203,7 +203,11 @@ func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response inte
 
 	decoded := false
 	if response != nil && isStatusDecodable(res.StatusCode) {
-		if err := json.NewDecoder(res.Body).Decode(response); err != nil {
+		dec := json.NewDecoder(res.Body)
+		if err := dec.Decode(response); err != nil {
+			return res, false, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
+		}
+		if dec.More() {
 			return res, false, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
 		}
 		decoded = true
