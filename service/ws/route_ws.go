@@ -10,6 +10,7 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/governor/util/ktime"
 	"xorkevin.dev/kerrors"
 )
 
@@ -114,13 +115,11 @@ func (s *router) ws(c *governor.Context) {
 				sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
 				if err != nil {
 					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"))
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(delay):
-						delay = min(delay*2, 15*time.Second)
+					if err := ktime.After(ctx, delay); err != nil {
 						return
 					}
+					delay = min(delay*2, 15*time.Second)
+					return
 				}
 				defer func() {
 					if err := sub.Close(ctx); err != nil {
@@ -139,13 +138,11 @@ func (s *router) ws(c *governor.Context) {
 							return
 						}
 						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
-						select {
-						case <-ctx.Done():
+						if err := ktime.After(ctx, delay); err != nil {
 							return
-						case <-time.After(delay):
-							delay = min(delay*2, 15*time.Second)
-							continue
 						}
+						delay = min(delay*2, 15*time.Second)
+						continue
 					}
 					channel, _, err := decodeResMsg(m.Data)
 					if err != nil {
@@ -247,10 +244,8 @@ func (s *router) ws(c *governor.Context) {
 				}
 			}
 		}
-		select {
-		case <-ctx.Done():
+		if err := ktime.After(ctx, 64*time.Millisecond); err != nil {
 			return
-		case <-time.After(64 * time.Millisecond):
 		}
 	}
 }

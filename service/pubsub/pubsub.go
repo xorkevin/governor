@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/ksync"
+	"xorkevin.dev/governor/util/ktime"
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -425,13 +426,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			sub, err := w.ps.Subscribe(ctx, w.subject, w.group)
 			if err != nil {
 				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"))
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-					delay = min(delay*2, opts.MaxBackoff)
+				if err := ktime.After(ctx, delay); err != nil {
 					return
 				}
+				delay = min(delay*2, opts.MaxBackoff)
+				return
 			}
 			defer func() {
 				if err := sub.Close(ctx); err != nil {
@@ -447,13 +446,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 						return
 					}
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
-					select {
-					case <-ctx.Done():
+					if err := ktime.After(ctx, delay); err != nil {
 						return
-					case <-time.After(delay):
-						delay = min(delay*2, opts.MaxBackoff)
-						continue
 					}
+					delay = min(delay*2, opts.MaxBackoff)
+					continue
 				}
 				msgctx := klog.CtxWithAttrs(ctx,
 					klog.AString("pubsub.subject", m.Subject),
@@ -465,13 +462,11 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"),
 						klog.AInt64("duration_ms", duration.Milliseconds()),
 					)
-					select {
-					case <-msgctx.Done():
+					if err := ktime.After(msgctx, delay); err != nil {
 						return
-					case <-time.After(delay):
-						delay = min(delay*2, opts.MaxBackoff)
-						continue
 					}
+					delay = min(delay*2, opts.MaxBackoff)
+					continue
 				}
 				duration := time.Since(start)
 				w.log.Info(msgctx, "Handled subscription message",
