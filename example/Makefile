@@ -10,69 +10,67 @@ help: ## Print this help
 
 all: build ## Default
 
-## DEV ENV
+## KUBE DEV ENV
 
-ANVIL_SRC=anvil
-ANVIL_MAIN=$(ANVIL_SRC)/component.yaml
-ANVIL_OUT=anvil_out
-ANVIL_POLICIES=$(ANVIL_OUT)/secrets/vault/policy
-ANVIL_ROLES=$(ANVIL_OUT)/secrets/vault/roles
-VAULT_ADDR=http://vault.dev.localhost:8080/
-VAULT_TOKEN=$(shell cat ~/.vault-token)
-ANVIL_REGISTER=$(ANVIL_OUT)/secrets/register/governor
-ANVIL_BASE=$(ANVIL_OUT)/governor
-ANVIL_NS=$(ANVIL_BASE)/namespace.yaml
+KUBE_ANVIL_SRC=anvil/kube
+KUBE_ANVIL_MAIN=$(KUBE_ANVIL_SRC)/component.yaml
+KUBE_ANVIL_OUT=anvil_out
+KUBE_ANVIL_POLICIES=$(KUBE_ANVIL_OUT)/secrets/vault/policy
+KUBE_ANVIL_ROLES=$(KUBE_ANVIL_OUT)/secrets/vault/roles
+KUBE_VAULT_ADDR=http://vault.dev.localhost:8080/
+KUBE_VAULT_TOKEN=$(shell cat ~/.vault-token)
+KUBE_ANVIL_REGISTER=$(KUBE_ANVIL_OUT)/secrets/register/governor
+KUBE_ANVIL_BASE=$(KUBE_ANVIL_OUT)/governor
+KUBE_ANVIL_NS=$(KUBE_ANVIL_BASE)/namespace.yaml
 
-.PHONY: devgen devsecrets devregister devunregister devinit devconfig
+.PHONY: kubegen kubesecrets kuberegister kubeunregister kubeinit kubeconfig
 
-devgen: ## Generate k8s resources
-	if [ -d $(ANVIL_OUT) ]; then rm -r $(ANVIL_OUT); fi
-	anvil component -i $(ANVIL_SRC) -o $(ANVIL_OUT) -c $(ANVIL_MAIN)
+kubegen: ## Generate k8s resources
+	if [ -d $(KUBE_ANVIL_OUT) ]; then rm -r $(KUBE_ANVIL_OUT); fi
+	anvil component -i $(KUBE_ANVIL_SRC) -o $(KUBE_ANVIL_OUT) -c $(KUBE_ANVIL_MAIN)
 
-devsecrets: ## Register vault resources
-	@VAULT_ADDR=$(VAULT_ADDR) VAULT_TOKEN=$(VAULT_TOKEN) anvil secret --vault-policies=$(ANVIL_POLICIES) --vault-roles=$(ANVIL_ROLES)
+kubesecrets: ## Register vault resources
+	@VAULT_ADDR=$(KUBE_VAULT_ADDR) VAULT_TOKEN=$(KUBE_VAULT_TOKEN) anvil secret --vault-policies=$(KUBE_ANVIL_POLICIES) --vault-roles=$(KUBE_ANVIL_ROLES)
 
-devregister: ## Register k8s resources
-	kubectl apply -f $(ANVIL_NS)
-	kubectl apply -k $(ANVIL_REGISTER)
+kuberegister: ## Register k8s resources
+	kubectl apply -f $(KUBE_ANVIL_NS)
+	kubectl apply -k $(KUBE_ANVIL_REGISTER)
 
-devunregister: ## Unregister k8s resources
-	kubectl delete -k $(ANVIL_REGISTER)
+kubeunregister: ## Unregister k8s resources
+	kubectl delete -k $(KUBE_ANVIL_REGISTER)
 
-devinit: devgen devsecrets devregister ## Init resources
+kubeinit: kubegen kubesecrets kuberegister ## Init resources
 
-devconfig: ## Set app config
+kubeconfig: ## Set app config
 	./setsmtpauth.sh
 
-.PHONY: devup devdown devnsdown
+.PHONY: kubeup kubedown kubensdown
 
-devup: ## Deploy k8s resources to cluster
-	kubectl apply -k $(ANVIL_OUT)/governor
+kubeup: ## Deploy k8s resources to cluster
+	kubectl apply -k $(KUBE_ANVIL_OUT)/governor
 
-devdown: ## Destroy k8s resources
-	kubectl delete -k $(ANVIL_OUT)/governor
+kubedown: ## Destroy k8s resources
+	kubectl delete -k $(KUBE_ANVIL_OUT)/governor
 
-devnsdown: ## Destroy k8s namespace
-	kubectl delete -f $(ANVIL_NS)
+kubensdown: ## Destroy k8s namespace
+	kubectl delete -f $(KUBE_ANVIL_NS)
 
 ## DOCKER COMPOSE DEV ENV
 
-DC_ANVIL_SRC=dc.anvil
-DC_ANVIL_MAIN=$(DC_ANVIL_SRC)/component.yaml
-DC_ANVIL_OUT=dc.anvil_out
-DC_PROJECT=governor
+ANVIL_COMPOSE_INP=compose/anvil/main.jsonnet
+ANVIL_COMPOSE_OUT=compose/anvil_out
 
-.PHONY: dc-devgen dc-devup dc-devdown
+.PHONY: devgen devup devdown
 
-dc-devgen: ## Generate docker compose resources
-	if [ -d $(DC_ANVIL_OUT) ]; then rm -r $(DC_ANVIL_OUT); fi
-	anvil component -i $(DC_ANVIL_SRC) -o $(DC_ANVIL_OUT) -c $(DC_ANVIL_MAIN)
+devgen: ## Generate docker compose resources
+	if [ -d $(ANVIL_COMPOSE_OUT) ]; then rm -r $(ANVIL_COMPOSE_OUT); fi
+	anvil component --input $(ANVIL_COMPOSE_INP) --output $(ANVIL_COMPOSE_OUT)
 
-dc-devup: ## Deploy docker-compose resources
-	docker-compose -p $(DC_PROJECT) -f $(DC_ANVIL_OUT)/governor/docker-compose.yaml up -d
+devup: ## Deploy docker compose resources
+	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml up --detach --wait
 
-dc-devdown: ## Destroy docker-compose resources
-	docker-compose -p $(DC_PROJECT) -f $(DC_ANVIL_OUT)/governor/docker-compose.yaml down
+devdown: ## Destroy docker compose resources
+	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml down
 
 ## APP BUILD
 
@@ -152,7 +150,7 @@ setup: build ## Run app setup
 .PHONY: serve run runrace runsetup
 
 serve: ## Serves app
-	$(BIN_PATH) serve --config $(DC_ANVIL_OUT)/governor/config.yaml
+	$(BIN_PATH) serve --config $(ANVIL_COMPOSE_OUT)/governor/config.yaml
 
 run: build serve ## Runs app locally
 
