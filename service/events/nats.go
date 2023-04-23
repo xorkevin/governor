@@ -113,11 +113,13 @@ func (s *NatsService) handlePing(ctx context.Context, m *lifecycle.Manager[natsC
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping events server"),
 			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to events server"),
 		klog.AString("addr", s.addr),
+		klog.AString("username", client.auth.Username),
 	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -130,28 +132,29 @@ func (s *NatsService) handlePing(ctx context.Context, m *lifecycle.Manager[natsC
 
 type (
 	natsauth struct {
+		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
 
 func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[natsClient]) (*natsClient, error) {
-	var secret natsauth
+	var auth natsauth
 	{
 		client := m.Load(ctx)
-		if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
+		if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
-		if secret.Password == "" {
+		if auth.Username == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if secret == client.auth {
+		if auth == client.auth {
 			return client, nil
 		}
 	}
 
 	conn, err := nats.Connect(fmt.Sprintf("nats://%s", s.addr),
 		nats.Name(s.clientname),
-		nats.Token(secret.Password),
+		nats.UserInfo(auth.Username, auth.Password),
 		nats.PingInterval(s.hbinterval),
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 	)
@@ -172,12 +175,13 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 
 	s.log.Info(ctx, "Established connection to event stream",
 		klog.AString("addr", s.addr),
+		klog.AString("username", auth.Username),
 	)
 
 	client := &natsClient{
 		client:    conn,
 		jetstream: jetstream,
-		auth:      secret,
+		auth:      auth,
 	}
 	m.Store(client)
 
@@ -189,6 +193,7 @@ func (s *NatsService) closeClient(ctx context.Context, client *natsClient) {
 		client.client.Close()
 		s.log.Info(ctx, "Closed events connection",
 			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
 		)
 	}
 }

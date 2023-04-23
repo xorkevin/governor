@@ -146,10 +146,16 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
-		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping pubsub server"), klog.AString("addr", s.addr))
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping pubsub server"),
+			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
+		)
 		return
 	}
-	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"), klog.AString("addr", s.addr))
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"),
+		klog.AString("addr", s.addr),
+		klog.AString("username", client.auth.Username),
+	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
 	// will use refreshed auth
@@ -182,28 +188,29 @@ func (e errClient) Error() string {
 
 type (
 	natsauth struct {
+		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
 
 func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubsubClient]) (*pubsubClient, error) {
-	var secret natsauth
+	var auth natsauth
 	{
 		client := m.Load(ctx)
-		if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
+		if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
-		if secret.Password == "" {
+		if auth.Username == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if secret == client.auth {
+		if auth == client.auth {
 			return client, nil
 		}
 	}
 
 	conn, err := nats.Connect(fmt.Sprintf("nats://%s", s.addr),
 		nats.Name(s.clientname),
-		nats.Token(secret.Password),
+		nats.UserInfo(auth.Username, auth.Password),
 		nats.PingInterval(s.hbinterval),
 		nats.MaxPingsOutstanding(s.hbmaxfail),
 	)
@@ -218,11 +225,14 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to event stream", klog.AString("addr", s.addr))
+	s.log.Info(ctx, "Established connection to event stream",
+		klog.AString("addr", s.addr),
+		klog.AString("username", auth.Username),
+	)
 
 	client := &pubsubClient{
 		client: conn,
-		auth:   secret,
+		auth:   auth,
 	}
 	m.Store(client)
 
@@ -232,7 +242,10 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 func (s *Service) closeClient(ctx context.Context, client *pubsubClient) {
 	if client != nil && !client.client.IsClosed() {
 		client.client.Close()
-		s.log.Info(ctx, "Closed pubsub connection", klog.AString("addr", s.addr))
+		s.log.Info(ctx, "Closed pubsub connection",
+			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
+		)
 	}
 }
 
