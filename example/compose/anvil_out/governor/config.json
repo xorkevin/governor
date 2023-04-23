@@ -1,0 +1,213 @@
+{
+   "apikey": {
+      "scopecache": "24h"
+   },
+   "conduit": {
+      "eventsize": "2K",
+      "gcduration": "72h",
+      "invitationduration": "72h",
+      "streamsize": "200M"
+   },
+   "cors": {
+      "allowpaths": [
+         "^/api/oauth/(token|userinfo|jwks)$"
+      ]
+   },
+   "courier": {
+      "cacheduration": "24h",
+      "fallbacklink": "http://governor.dev.localhost:8080",
+      "linkprefix": "http://go.governor.dev.localhost:8080"
+   },
+   "database": {
+      "auth": "dbauth",
+      "dbname": "postgres",
+      "hbinterval": "5s",
+      "hbmaxfail": 5,
+      "host": "localhost",
+      "port": 5432,
+      "sslmode": "disable"
+   },
+   "events": {
+      "auth": "eventsauth",
+      "hbinterval": "5s",
+      "hbmaxfail": 3,
+      "host": "localhost",
+      "port": 4222
+   },
+   "gate": {
+      "realm": "governor"
+   },
+   "http": {
+      "addr": ":8080",
+      "basepath": "/api",
+      "maxconnheader": "2s",
+      "maxconnidle": "5s",
+      "maxconnread": "5s",
+      "maxconnwrite": "5s",
+      "maxheadersize": "1M",
+      "maxreqsize": "2M"
+   },
+   "kvstore": {
+      "auth": "kvauth",
+      "dbname": 0,
+      "hbinterval": "5s",
+      "hbmaxfail": 5,
+      "host": "localhost",
+      "port": 6379
+   },
+   "logger": {
+      "level": "DEBUG",
+      "output": "STDERR"
+   },
+   "mail": {
+      "auth": "mailauth",
+      "authrefresh": "1m",
+      "eventsize": "2K",
+      "fromaddress": "no-reply@xorkevin.com",
+      "fromname": "Governor",
+      "hbinterval": "5s",
+      "hbmaxfail": 6,
+      "host": "localhost",
+      "mailkey": "mailkey",
+      "msgiddomain": "xorkevin.com",
+      "port": 1025,
+      "returnpath": "no-reply@mail.xorkevin.com",
+      "streamsize": "200M"
+   },
+   "mailinglist": {
+      "authdomain": "lists.governor.dev.localhost",
+      "eventsize": "2K",
+      "maxmsgsize": "2M",
+      "mockdnssource": "governor/mockdns.yaml",
+      "orgdomain": "org.lists.governor.dev.localhost",
+      "port": 2525,
+      "readtimeout": "5s",
+      "streamsize": "200M",
+      "usrdomain": "lists.governor.dev.localhost",
+      "writetimeout": "5s"
+   },
+   "oauth": {
+      "accessduration": "5m",
+      "codeduration": "1m",
+      "epauthorize": "http://localhost:3000/oauth/auth",
+      "ephost": "http://governor.dev.localhost:8080",
+      "eppicture": "http://localhost:3000/api/profile/id/{{.Userid}}/image",
+      "epprofile": "http://localhost:3000/u/{{.Username}}",
+      "issuer": "http://governor.dev.localhost:8080",
+      "keycache": "24h",
+      "realm": "governor",
+      "refreshduration": "168h"
+   },
+   "objstore": {
+      "auth": "objauth",
+      "hbinterval": "5s",
+      "hbmaxfail": 5,
+      "host": "localhost",
+      "location": "us-east-1",
+      "port": 9000,
+      "sslmode": false
+   },
+   "org": {
+      "eventsize": "2K",
+      "streamsize": "200M"
+   },
+   "pubsub": {
+      "auth": "pubsubauth",
+      "hbinterval": "5s",
+      "hbmaxfail": 3,
+      "host": "localhost",
+      "port": 4222
+   },
+   "ratelimit": {
+      "params": {
+         "auth": {
+            "expiration": 60,
+            "limit": 120,
+            "period": 15
+         },
+         "base": {
+            "expiration": 60,
+            "limit": 240,
+            "period": 15
+         }
+      }
+   },
+   "role": {
+      "rolecacheduration": "24h"
+   },
+   "routerewrite": [
+      {
+         "host": "go.governor.dev.localhost:8080",
+         "methods": [
+            "GET"
+         ],
+         "pattern": "^/([A-Za-z0-9_-]{2,}(?:/image)?)$",
+         "replace": "/api/courier/link/id/$1"
+      },
+      {
+         "host": "governor.dev.localhost:8080",
+         "methods": [
+            "GET"
+         ],
+         "pattern": "^/\\.well-known/openid-configuration$",
+         "replace": "/api/oauth/openid-configuration"
+      }
+   ],
+   "setupsecret": "setupsecret",
+   "template": {
+      "dir": "governor/templates"
+   },
+   "token": {
+      "audience": "governor",
+      "hbinterval": "5s",
+      "hbmaxfail": 6,
+      "issuer": "http://governor.dev.localhost:8080",
+      "keyrefresh": "1m",
+      "rsakey": "rsakey",
+      "tokensecret": "tokensecret"
+   },
+   "user": {
+      "accessduration": "5m",
+      "confirmduration": "24h",
+      "email": {
+         "url": {
+            "base": "http://localhost:3000",
+            "emailchange": "/a/confirm/email?key={{.Userid}}.{{.Key}}",
+            "forgotpass": "/x/resetpass?key={{.Userid}}.{{.Key}}",
+            "newuser": "/x/confirm?userid={{.Userid}}&key={{.Key}}"
+         }
+      },
+      "emailconfirmduration": "24h",
+      "eventsize": "2K",
+      "gcduration": "72h",
+      "hbinterval": "5s",
+      "hbmaxfail": 6,
+      "invitationduration": "24h",
+      "newloginemail": true,
+      "otpissuer": "Governor",
+      "otpkey": "otpkey",
+      "otprefresh": "1m",
+      "passresetdelay": "0s",
+      "passwordminsize": 8,
+      "passwordreset": true,
+      "passwordresetduration": "24h",
+      "refreshcache": "24h",
+      "refreshduration": "4380h",
+      "rolesummary": [
+         "user",
+         "admin",
+         "usr.gov.user",
+         "mod.gov.user",
+         "usr.gov.oauth",
+         "mod.gov.oauth",
+         "usr.gov.ws",
+         "mod.gov.ws"
+      ],
+      "streamsize": "200M",
+      "userapproval": false,
+      "usercacheduration": "24h"
+   },
+   "vault": {
+      "filesource": "governor/secrets.yaml"
+   }
+}

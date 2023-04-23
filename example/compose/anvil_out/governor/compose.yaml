@@ -1,0 +1,117 @@
+name: governor
+services:
+    mailhog:
+        image: mailhog/mailhog:v1.0.1
+        ports:
+            - mode: host
+              protocol: tcp
+              published: "1025"
+              target: 1025
+            - mode: host
+              protocol: tcp
+              published: "8025"
+              target: 8025
+    minio:
+        command:
+            - server
+            - /var/lib/minio/data
+            - --console-address
+            - :9001
+        entrypoint:
+            - minio
+        environment:
+            MINIO_ROOT_PASSWORD: admin
+            MINIO_ROOT_USER: minioadmin
+        image: minio/minio:RELEASE.2023-04-20T17-56-55Z
+        ports:
+            - mode: host
+              protocol: tcp
+              published: "9000"
+              target: 9000
+            - mode: host
+              protocol: tcp
+              published: "9001"
+              target: 9001
+        volumes:
+            - read_only: false
+              source: miniodata
+              target: /var/lib/minio
+              type: volume
+    nats:
+        command:
+            - -c
+            - /etc/nats/nats.conf
+        depends_on:
+            nats_init:
+                condition: service_completed_successfully
+                restart: true
+        entrypoint:
+            - nats-server
+        image: nats:2.9.16-alpine3.17
+        ports:
+            - mode: host
+              protocol: tcp
+              published: "4222"
+              target: 4222
+        volumes:
+            - read_only: true
+              source: natsconf
+              target: /etc/nats
+              type: volume
+            - read_only: false
+              source: natsdata
+              target: /var/lib/nats
+              type: volume
+    nats_init:
+        image: xorkevin/anvil:latest
+        volumes:
+            - read_only: true
+              source: ./natsconf
+              target: /home/anvil/workflows
+              type: bind
+            - read_only: false
+              source: natsconf
+              target: /home/anvil/output
+              type: volume
+    postgres:
+        environment:
+            LANG: C
+            PGDATA: /var/lib/postgresql/data/pgdata
+            POSTGRES_DB: postgres
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+            POSTGRES_INITDB_ARGS: --encoding UTF8 --locale=C --auth-local=trust --auth-host=scram-sha-256
+            POSTGRES_PASSWORD: admin
+            POSTGRES_USER: postgres
+        image: postgres:15.2-alpine3.17
+        ports:
+            - mode: host
+              protocol: tcp
+              published: "5432"
+              target: 5432
+        volumes:
+            - read_only: false
+              source: pgdata
+              target: /var/lib/postgresql/data
+              type: volume
+    redis:
+        command:
+            - /etc/redis/redis.conf
+        entrypoint:
+            - redis-server
+        image: redis:7.0.11-alpine3.17
+        ports:
+            - mode: host
+              protocol: tcp
+              published: "6379"
+              target: 6379
+        volumes:
+            - read_only: true
+              source: ./redisetc
+              target: /etc/redis
+              type: bind
+volumes:
+    miniodata: {}
+    natsconf: {}
+    natsdata: {}
+    pgdata: {}
+

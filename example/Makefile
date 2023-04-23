@@ -157,4 +157,4 @@ run: build serve ## Runs app locally
 runrace: buildrace serve ## Runs app locally with data race detection
 
 runsetup: build ## Runs setup locally
-	$(BIN_PATH) setup --secret "setupsecret"
+	$(BIN_PATH) setup --secret "admin"

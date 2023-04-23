@@ -1,9 +1,11 @@
 ping_interval: "5s"
 ping_max: 4
 authorization {
-  token: "admin"
+  users: [
+    {user: "{{.username}}", password: "{{.password}}"}
+  ]
 }
 jetstream {
   store_dir: "/var/lib/nats/data"
-  max_file: 2G
+  max_file: 2GB
 }
