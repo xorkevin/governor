@@ -35,7 +35,6 @@ type (
 	Service struct {
 		lc         *lifecycle.Lifecycle[objstoreClient]
 		clientname string
-		auth       minioauth
 		addr       string
 		sslmode    bool
 		location   string
@@ -188,13 +187,13 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[objstoreC
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping objstore"),
 			klog.AString("addr", s.addr),
-			klog.AString("username", s.auth.Username),
+			klog.AString("username", client.auth.Username),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to objstore"),
 		klog.AString("addr", s.addr),
-		klog.AString("username", s.auth.Username),
+		klog.AString("username", client.auth.Username),
 	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -243,7 +242,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[objs
 
 	s.log.Info(ctx, "Established connection to objstore",
 		klog.AString("addr", s.addr),
-		klog.AString("username", s.auth.Username),
+		klog.AString("username", auth.Username),
 	)
 
 	client := &objstoreClient{

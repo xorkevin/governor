@@ -73,7 +73,7 @@ type (
 
 	kvstoreClient struct {
 		client *redis.Client
-		auth   secretAuth
+		auth   redisauth
 	}
 
 	Service struct {
@@ -232,12 +232,14 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kvstoreCl
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping kvstore"),
 			klog.AString("addr", s.addr),
+			klog.AString("username", client.auth.Username),
 			klog.AString("dbname", strconv.Itoa(s.dbname)),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to kvstore"),
 		klog.AString("addr", s.addr),
+		klog.AString("username", client.auth.Username),
 		klog.AString("dbname", strconv.Itoa(s.dbname)),
 	)
 
@@ -251,35 +253,38 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[kvstoreCl
 }
 
 type (
-	secretAuth struct {
+	redisauth struct {
+		Username string `mapstructure:"username"`
 		Password string `mapstructure:"password"`
 	}
 )
 
 func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvstoreClient]) (*kvstoreClient, error) {
-	var secret secretAuth
+	var auth redisauth
 	{
 		client := m.Load(ctx)
-		if err := s.config.GetSecret(ctx, "auth", 0, &secret); err != nil {
+		if err := s.config.GetSecret(ctx, "auth", 0, &auth); err != nil {
 			return client, kerrors.WithMsg(err, "Invalid secret")
 		}
-		if secret.Password == "" {
+		if auth.Username == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if client != nil && secret == client.auth {
+		if client != nil && auth == client.auth {
 			return client, nil
 		}
 	}
 
 	kvClient := redis.NewClient(&redis.Options{
 		Addr:     s.addr,
-		Password: secret.Password,
+		Username: auth.Username,
+		Password: auth.Password,
 		DB:       s.dbname,
 	})
 	if _, err := kvClient.Ping(ctx).Result(); err != nil {
 		if err := kvClient.Close(); err != nil {
 			s.log.Err(ctx, kerrors.WithKind(err, ErrConn, "Failed to close db after failed initial ping"),
 				klog.AString("addr", s.addr),
+				klog.AString("username", auth.Username),
 				klog.AString("dbname", strconv.Itoa(s.dbname)),
 			)
 		}
@@ -291,12 +296,13 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvst
 
 	s.log.Info(ctx, "Established connection to kvstore",
 		klog.AString("addr", s.addr),
+		klog.AString("username", auth.Username),
 		klog.AString("dbname", strconv.Itoa(s.dbname)),
 	)
 
 	client := &kvstoreClient{
 		client: kvClient,
-		auth:   secret,
+		auth:   auth,
 	}
 	m.Store(client)
 
@@ -308,11 +314,13 @@ func (s *Service) closeClient(ctx context.Context, client *kvstoreClient) {
 		if err := client.client.Close(); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close kvstore connection"),
 				klog.AString("addr", s.addr),
+				klog.AString("username", client.auth.Username),
 				klog.AString("dbname", strconv.Itoa(s.dbname)),
 			)
 		} else {
 			s.log.Info(ctx, "Closed kvstore connection",
 				klog.AString("addr", s.addr),
+				klog.AString("username", client.auth.Username),
 				klog.AString("dbname", strconv.Itoa(s.dbname)),
 			)
 		}

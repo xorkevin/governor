@@ -25,7 +25,6 @@ type (
 	NatsService struct {
 		lc         *lifecycle.Lifecycle[natsClient]
 		clientname string
-		auth       natsauth
 		addr       string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
@@ -145,7 +144,7 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 		if secret.Password == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if secret == s.auth {
+		if secret == client.auth {
 			return client, nil
 		}
 	}
