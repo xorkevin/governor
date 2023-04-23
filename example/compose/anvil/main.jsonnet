@@ -98,7 +98,7 @@ local server = {
     },
     {
       kind: 'jsonnet',
-      path: 'secrets.jsonnet',
+      path: 'secretsfile.jsonnet',
       output: '%s/secrets.json' % outputdir,
     },
     {

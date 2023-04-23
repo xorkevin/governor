@@ -37,7 +37,7 @@ local args = anvil.getargs();
     },
   ],
   vault: {
-    filesource: '%s/secrets.yaml' % args.outputdir,
+    filesource: '%s/secrets.json' % args.outputdir,
   },
   setupsecret: 'setupsecret',
 
@@ -108,7 +108,7 @@ local args = anvil.getargs();
     maxmsgsize: '2M',
     readtimeout: '5s',
     writetimeout: '5s',
-    mockdnssource: '%s/mockdns.yaml' % args.outputdir,
+    mockdnssource: '%s/mockdns.json' % args.outputdir,
     streamsize: '200M',
     eventsize: '2K',
   },

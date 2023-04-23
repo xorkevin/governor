@@ -30,12 +30,12 @@ local secrets = import 'secrets.libsonnet';
     },
     otpkey: {
       secrets: [
-        '$cc20p$XudfGvCqdVdpmTCXlJ_QmauZZLyMS2kWtecv0HEoOhQ',
+        '$xc20p$XudfGvCqdVdpmTCXlJ_QmauZZLyMS2kWtecv0HEoOhQ',
       ],
     },
     mailkey: {
       secrets: [
-        '$cc20p$XudfGvCqdVdpmTCXlJ_QmauZZLyMS2kWtecv0HEoOhQ',
+        '$xc20p$XudfGvCqdVdpmTCXlJ_QmauZZLyMS2kWtecv0HEoOhQ',
       ],
     },
   },

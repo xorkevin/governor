@@ -78,7 +78,7 @@
       "authdomain": "lists.governor.dev.localhost",
       "eventsize": "2K",
       "maxmsgsize": "2M",
-      "mockdnssource": "governor/mockdns.yaml",
+      "mockdnssource": "governor/mockdns.json",
       "orgdomain": "org.lists.governor.dev.localhost",
       "port": 2525,
       "readtimeout": "5s",
@@ -208,6 +208,6 @@
       "usercacheduration": "24h"
    },
    "vault": {
-      "filesource": "governor/secrets.yaml"
+      "filesource": "governor/secrets.json"
    }
 }
