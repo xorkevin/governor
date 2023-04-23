@@ -15,4 +15,4 @@ save ""
 
 # ACL
 user default off
-user {{.username}} +@connection +@read +@write +@keyspace allkeys on #{{.passhash}}
+user {{.username}} +@connection +@read +@write +@transaction +@keyspace allkeys on #{{.passhash}}
