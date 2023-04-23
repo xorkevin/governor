@@ -7,17 +7,17 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
 )
 
 type (
 	MockZone struct {
-		A     []string `yaml:"A"`
-		AAAA  []string `yaml:"AAAA"`
-		MX    []net.MX `yaml:"MX"`
-		TXT   []string `yaml:"TXT"`
-		CNAME string   `yaml:"CNAME"`
+		A     []string `json:"A"`
+		AAAA  []string `json:"AAAA"`
+		MX    []net.MX `json:"MX"`
+		TXT   []string `json:"TXT"`
+		CNAME string   `json:"CNAME"`
 	}
 
 	MockResolver struct {
@@ -25,7 +25,7 @@ type (
 	}
 
 	zoneData struct {
-		Data map[string]MockZone `yaml:"data"`
+		Data map[string]MockZone `json:"data"`
 	}
 )
 
@@ -72,7 +72,7 @@ func NewMockResolverFromFile(s string) (Resolver, error) {
 		return nil, kerrors.WithMsg(err, fmt.Sprintf("Failed to read mockdns file %s", s))
 	}
 	data := zoneData{}
-	if err := yaml.Unmarshal(b, &data); err != nil {
+	if err := kjson.Unmarshal(b, &data); err != nil {
 		return nil, kerrors.WithMsg(err, fmt.Sprintf("Invalid mockdns file %s", s))
 	}
 	return &MockResolver{

@@ -212,8 +212,6 @@ func (c *testClientC) fail(args []string) error {
 func TestClient(t *testing.T) {
 	t.Parallel()
 
-	tabReplacer := strings.NewReplacer("\t", "  ")
-
 	server := New(Opts{
 		Appname: "govtest",
 		Version: Version{
@@ -223,17 +221,24 @@ func TestClient(t *testing.T) {
 		Description:  "test gov server",
 		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
-		ConfigReader: strings.NewReader(tabReplacer.Replace(`
-http:
-	addr: ':8080'
-	basepath: /api
-setupsecret: setupsecret
-`)),
-		VaultReader: strings.NewReader(tabReplacer.Replace(`
-data:
-	setupsecret:
-		secret: setupsecret
-`)),
+		ConfigReader: strings.NewReader(`
+{
+  "http": {
+    "addr": ":8080",
+    "basepath": "/api"
+  },
+  "setupsecret": "setupsecret"
+}
+`),
+		VaultReader: strings.NewReader(`
+{
+  "data": {
+    "setupsecret": {
+      "secret": "setupsecret"
+    }
+  }
+}
+`),
 		LogWriter: io.Discard,
 	})
 
@@ -256,22 +261,28 @@ data:
 	client := NewClient(Opts{
 		Appname:      "govtest",
 		ClientPrefix: "govc",
-		ConfigReader: strings.NewReader(tabReplacer.Replace(`
-http:
-	baseurl: ` + hserver.URL + `/api
-servicec:
-	propbool: true
-	propint: 123
-	propdur: 24h
-	prop1: value1
-	propslice:
-		- abc
-		- def
-		- ghi
-	propobj:
-		method: abc
-		path: def
-`)),
+		ConfigReader: strings.NewReader(`
+{
+  "http": {
+    "baseurl": "` + hserver.URL + `/api"
+  },
+  "servicec": {
+    "propbool": true,
+    "propint": 123,
+    "propdur": "24h",
+    "prop1": "value1",
+    "propslice": [
+      "abc",
+      "def",
+      "ghi"
+    ],
+    "propobj": {
+      "method": "abc",
+      "path": "def"
+    }
+  }
+}
+`),
 		LogWriter: io.Discard,
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),

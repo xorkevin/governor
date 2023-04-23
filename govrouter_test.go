@@ -158,8 +158,6 @@ func (r *testServiceBReq) Value() interface{} {
 func TestRouter(t *testing.T) {
 	t.Parallel()
 
-	tabReplacer := strings.NewReplacer("\t", "  ")
-
 	t.Run("ServeHTTP", func(t *testing.T) {
 		t.Parallel()
 
@@ -496,17 +494,24 @@ func TestRouter(t *testing.T) {
 					Description:  "test gov server",
 					EnvPrefix:    "gov",
 					ClientPrefix: "govc",
-					ConfigReader: strings.NewReader(tabReplacer.Replace(`
-http:
-	addr: ':8080'
-	basepath: /api
-setupsecret: setupsecret
-`)),
-					VaultReader: strings.NewReader(tabReplacer.Replace(`
-data:
-	setupsecret:
-		secret: setupsecret
-`)),
+					ConfigReader: strings.NewReader(`
+{
+  "http": {
+    "addr": ":8080",
+    "basepath": "/api"
+  },
+  "setupsecret": "setupsecret"
+}
+`),
+					VaultReader: strings.NewReader(`
+{
+  "data": {
+    "setupsecret": {
+      "secret": "setupsecret"
+    }
+  }
+}
+`),
 					LogWriter: io.Discard,
 				})
 

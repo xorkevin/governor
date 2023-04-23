@@ -14,7 +14,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -256,7 +256,7 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	s.config.Instance = u.Base32()
 
 	if s.configReader != nil {
-		s.v.SetConfigType("yaml")
+		s.v.SetConfigType("json")
 		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
@@ -307,7 +307,7 @@ type (
 	}
 
 	secretsFileData struct {
-		Data map[string]map[string]interface{} `yaml:"data"`
+		Data map[string]map[string]interface{} `json:"data"`
 	}
 )
 
@@ -328,12 +328,10 @@ func newSecretsFileSource(s string, r io.Reader) (secretsClient, error) {
 			return nil, kerrors.WithKind(err, ErrInvalidConfig, "Failed to read secrets file source")
 		}
 	}
-	data := secretsFileData{}
-	if err := yaml.Unmarshal(b, &data); err != nil {
+	var data secretsFileData
+	if err := kjson.Unmarshal(b, &data); err != nil {
 		return nil, kerrors.WithKind(err, ErrInvalidConfig, "Invalid secrets file source file")
 	}
-	// yaml unmarshal attempts decode with int, and is safe to
-	// mapstructure.Decode
 	return &secretsFileSource{
 		path: s,
 		data: data,

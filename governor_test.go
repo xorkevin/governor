@@ -388,8 +388,6 @@ func (r *testVersionRes) Value() interface{} {
 func TestServer(t *testing.T) {
 	t.Parallel()
 
-	tabReplacer := strings.NewReplacer("\t", "  ")
-
 	t.Run("ServeHTTP", func(t *testing.T) {
 		t.Parallel()
 
@@ -801,6 +799,8 @@ func TestServer(t *testing.T) {
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 
+				assert := require.New(t)
+
 				var logbuf bytes.Buffer
 
 				maxreqsize := "2MB"
@@ -817,50 +817,66 @@ func TestServer(t *testing.T) {
 					Description:  "test gov server",
 					EnvPrefix:    "gov",
 					ClientPrefix: "govc",
-					ConfigReader: strings.NewReader(tabReplacer.Replace(`
-http:
-	addr: ':8080'
-	basepath: /api
-	maxreqsize: ` + maxreqsize + `
-cors:
-	alloworigins:
-		- 'http://localhost:3000'
-	allowpaths:
-		- '^/api/servicea/ping/allowall$'
-routerewrite:
-	-
-		host: localhost:8080
-		methods: ['POST']
-		pattern: '^/.well-known/(.+)$'
-		replace: '/api/servicea/$1'
-trustedproxies:
-	- '10.0.0.0/8'
-setupsecret: setupsecret
-servicea:
-	prop2: yetanothervalue
-	somesecret: s1secret
-	bogussecret: bogussecret
-	propbool: true
-	propint: 271828
-	propdur: 24h
-	propstrslice:
-		- abc
-		- def
-	propobj:
-		-
-			field1: abc
-`)),
-					VaultReader: strings.NewReader(tabReplacer.Replace(`
-data:
-	setupsecret:
-		secret: setupsecret
-	s1secret:
-		secret: secretval
-`)),
+					ConfigReader: strings.NewReader(`
+{
+  "http": {
+    "addr": ":8080",
+    "basepath": "/api",
+    "maxreqsize": "` + maxreqsize + `"
+  },
+  "cors": {
+    "alloworigins": [
+      "http://localhost:3000"
+    ],
+    "allowpaths": [
+      "^/api/servicea/ping/allowall$"
+    ]
+  },
+  "routerewrite": [
+    {
+      "host": "localhost:8080",
+      "methods": ["POST"],
+      "pattern": "^/.well-known/(.+)$",
+      "replace": "/api/servicea/$1"
+    }
+  ],
+  "trustedproxies": [
+    "10.0.0.0/8"
+  ],
+  "setupsecret": "setupsecret",
+  "servicea": {
+    "prop2": "yetanothervalue",
+    "somesecret": "s1secret",
+    "bogussecret": "bogussecret",
+    "propbool": true,
+    "propint": 271828,
+    "propdur": "24h",
+    "propstrslice": [
+      "abc",
+      "def"
+    ],
+    "propobj": [
+      {
+        "field1": "abc"
+      }
+    ]
+  }
+}
+`),
+					VaultReader: strings.NewReader(`
+{
+  "data": {
+    "setupsecret": {
+      "secret": "setupsecret"
+    },
+    "s1secret": {
+      "secret": "secretval"
+    }
+  }
+}
+`),
 					LogWriter: &logbuf,
 				})
-
-				assert := require.New(t)
 
 				serviceA := newTestServiceA(tc.Check)
 				server.Register("servicea", "/servicea", serviceA)
