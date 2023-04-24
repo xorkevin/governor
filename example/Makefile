@@ -55,43 +55,6 @@ kubedown: ## Destroy k8s resources
 kubensdown: ## Destroy k8s namespace
 	kubectl delete -f $(KUBE_ANVIL_NS)
 
-## DOCKER COMPOSE DEV ENV
-
-ANVIL_COMPOSE_INP=compose/anvil/main.jsonnet
-ANVIL_COMPOSE_OUT=compose/anvil_out
-
-.PHONY: devgen devup devdown
-
-devgen: ## Generate docker compose resources
-	if [ -d $(ANVIL_COMPOSE_OUT) ]; then rm -r $(ANVIL_COMPOSE_OUT); fi
-	anvil component --input $(ANVIL_COMPOSE_INP) --output $(ANVIL_COMPOSE_OUT)
-
-devup: ## Deploy docker compose resources
-	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml up --detach --wait
-
-devdown: ## Destroy docker compose resources
-	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml down
-
-## APP BUILD
-
-BIN_NAME=governor
-MAIN_PATH=./cmd
-BIN_DIR=./bin
-BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
-
-.PHONY: clean build buildrace
-
-clean: ## Remove build artifacts
-	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
-
-build: ## Build app
-	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
-
-buildrace: ## Build app with data race detection
-	mkdir -p $(BIN_DIR)
-	CGO_ENABLED=1 go build -race -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
-
 ## DOCKER
 
 DOCKER_NAME=docker.pkg.dev.localhost:8080/governor
@@ -122,12 +85,12 @@ docker: build-docker publish-docker ## Release new image
 skaffoldinit: ## Initialize skaffold
 	skaffold config set -g update-check false
 
-.PHONY: dev devstop tail setupfirst setup
+.PHONY: kubedev kubedevstop kubetail kubesetupfirst kubesetup
 
-dev: build ## Deploy app to cluster
+kubedev: build ## Deploy app to cluster
 	skaffold run
 
-devstop: ## Stop running app
+kubedevstop: ## Stop running app
 	skaffold delete
 
 NAMESPACE=governor
@@ -136,25 +99,60 @@ DEVPOD=$(shell kubectl -n $(NAMESPACE) get pods -o=name --sort-by=.metadata.crea
 DEVCONTAINER=governor
 TAILLINES?=64
 
-tail: ## Tail log lines
+kubetail: ## Tail log lines
 	kubectl -n $(NAMESPACE) logs -f --tail=$(TAILLINES) $(DEVPOD) $(DEVCONTAINER)
 
-setupfirst: build ## Run app first setup
+kubesetupfirst: build ## Run app first setup
 	$(BIN_PATH) setup --first
 
-setup: build ## Run app setup
+kubesetup: build ## Run app setup
 	./setup.sh "$(BIN_PATH)"
 
 ## LOCAL DEV
 
-.PHONY: serve run runrace runsetup
+BIN_NAME=governor
+MAIN_PATH=./cmd
+BIN_DIR=./bin
+BIN_PATH=$(BIN_DIR)/$(BIN_NAME)
 
-serve: ## Serves app
-	$(BIN_PATH) serve --config $(ANVIL_COMPOSE_OUT)/governor/config.yaml
+.PHONY: clean build buildrace
 
-run: build serve ## Runs app locally
+clean: ## Remove build artifacts
+	if [ -d $(BIN_DIR) ]; then rm -r $(BIN_DIR); fi
 
-runrace: buildrace serve ## Runs app locally with data race detection
+build: ## Build app
+	mkdir -p $(BIN_DIR)
+	CGO_ENABLED=0 go build -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
 
-runsetup: build ## Runs setup locally
-	$(BIN_PATH) setup --secret "admin"
+buildrace: ## Build app with data race detection
+	mkdir -p $(BIN_DIR)
+	CGO_ENABLED=1 go build -race -trimpath -ldflags "-w -s" -o $(BIN_PATH) $(MAIN_PATH)
+
+.PHONY: run dev devrace devsetup
+
+run: ## Serves app
+	$(BIN_PATH) serve --config $(ANVIL_COMPOSE_OUT)/governor/config.json
+
+dev: build run ## Runs app locally
+
+devrace: buildrace run ## Runs app locally with data race detection
+
+devsetup: build ## Runs setup locally
+	$(BIN_PATH) setup --config $(ANVIL_COMPOSE_OUT)/governor/client.json --secret "admin"
+
+## DOCKER COMPOSE DEV ENV
+
+ANVIL_COMPOSE_INP=compose/anvil/main.jsonnet
+ANVIL_COMPOSE_OUT=compose/anvil_out
+
+.PHONY: devgen devup devdown
+
+devgen: ## Generate docker compose resources
+	if [ -d $(ANVIL_COMPOSE_OUT) ]; then rm -r $(ANVIL_COMPOSE_OUT); fi
+	anvil component --input $(ANVIL_COMPOSE_INP) --output $(ANVIL_COMPOSE_OUT)
+
+devup: ## Deploy docker compose resources
+	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml up --detach --wait
+
+devdown: ## Destroy docker compose resources
+	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml down

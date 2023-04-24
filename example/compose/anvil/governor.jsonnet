@@ -37,7 +37,7 @@ local args = anvil.getargs();
     },
   ],
   vault: {
-    filesource: '%s/secrets.json' % args.outputdir,
+    filesource: anvil.pathJoin([args.outputdir, 'secrets.json']),
   },
   setupsecret: 'setupsecret',
 
@@ -83,7 +83,7 @@ local args = anvil.getargs();
     hbmaxfail: 3,
   },
   template: {
-    dir: '%s/templates' % args.outputdir,
+    dir: anvil.pathJoin([args.outputdir, 'templates']),
   },
   mail: {
     auth: 'mailauth',
@@ -108,7 +108,7 @@ local args = anvil.getargs();
     maxmsgsize: '2M',
     readtimeout: '5s',
     writetimeout: '5s',
-    mockdnssource: '%s/mockdns.json' % args.outputdir,
+    mockdnssource: anvil.pathJoin([args.outputdir, 'mockdns.json']),
     streamsize: '200M',
     eventsize: '2K',
   },
@@ -128,7 +128,7 @@ local args = anvil.getargs();
     tokensecret: 'tokensecret',
     rsakey: 'rsakey',
     issuer: args.server.baseurl,
-    audience: 'governor',
+    audience: args.server.tokenaudience,
     hbinterval: '5s',
     hbmaxfail: 6,
     keyrefresh: '1m',

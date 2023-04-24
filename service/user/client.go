@@ -111,13 +111,13 @@ func (c *CmdClient) addAdmin(args []string) error {
 		}
 	}
 	if c.addAdminFlags.interactive && c.addAdminReq.Password == "" {
-		fmt.Fprint(c.term.Stdout(), "Password: ")
+		fmt.Fprint(c.term.Stderr(), "Password: ")
 		var err error
 		c.addAdminReq.Password, err = c.term.ReadPassword()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")
 		}
-		fmt.Fprint(c.term.Stdout(), "Verify password: ")
+		fmt.Fprint(c.term.Stderr(), "Verify password: ")
 		passwordAgain, err := c.term.ReadPassword()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")

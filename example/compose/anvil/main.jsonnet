@@ -49,6 +49,7 @@ local server = {
   mailspfdomain: 'mail.xorkevin.com',
   mailinglistdomain: 'lists.%s' % self.hostname,
   orgmailinglistdomain: 'org.%s' % self.mailinglistdomain,
+  tokenaudience: 'governor',
 };
 
 {
@@ -89,12 +90,12 @@ local server = {
     },
     {
       kind: 'jsonnet',
-      path: 'config.jsonnet',
+      path: 'governor.jsonnet',
       args: {
-        outputdir: outputdir,
+        outputdir: anvil.pathJoin(['compose', outputdir]),
         server: server,
       },
-      output: '%s/config.json' % outputdir,
+      output: '%s/governor.json' % outputdir,
     },
     {
       kind: 'jsonnet',
@@ -105,6 +106,14 @@ local server = {
       kind: 'jsonnet',
       path: 'mockdns.jsonnet',
       output: '%s/mockdns.json' % outputdir,
+    },
+    {
+      kind: 'jsonnet',
+      path: 'client.jsonnet',
+      args: {
+        server: server,
+      },
+      output: '%s/client.json' % outputdir,
     },
   ],
 }

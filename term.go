@@ -97,7 +97,7 @@ func (c *termClient) ReadPassword() (string, error) {
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to read password")
 	}
-	if _, err := io.WriteString(c.stdout, "\n"); err != nil {
+	if _, err := io.WriteString(c.stderr, "\n"); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to write newline")
 	}
 	return string(s), nil

@@ -1,0 +1,10 @@
+{
+   "http": {
+      "baseurl": "http://governor.dev.localhost:8080/api",
+      "timeout": "5s"
+   },
+   "token": {
+      "audience": "governor",
+      "issuer": "http://governor.dev.localhost:8080"
+   }
+}

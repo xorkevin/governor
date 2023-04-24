@@ -53,7 +53,7 @@ func main() {
 			Hash: vcsinfo.VCSStr(),
 		},
 		Description:   "Governor is a web server with user and auth capabilities",
-		DefaultFile:   "config",
+		DefaultFile:   "governor",
 		EnvPrefix:     "gov",
 		ClientDefault: "client",
 		ClientPrefix:  "govc",
