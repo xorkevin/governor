@@ -177,7 +177,7 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 			now := time.Now().Round(0).Unix()
 			tags := tagger(c)
 			if len(tags) > 0 {
-				multiget, err := kv.Tx(c.Ctx())
+				multiget, err := kv.Multi(c.Ctx())
 				if err != nil {
 					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to create kvstore multi"))
 					goto end
@@ -205,10 +205,14 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 						end:     (t + 1) * i.Params.Period,
 					})
 				}
+				if len(sums) == 0 {
+					goto end
+				}
 				if err := multiget.Exec(c.Ctx()); err != nil {
 					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tags from cache"))
 					goto end
 				}
+				var minRatelimitEnd int64 = 0
 				for _, i := range sums {
 					var sum int64 = 0
 					for _, j := range i.periods {
@@ -221,10 +225,16 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 						}
 						sum += k
 					}
-					if sum > i.limit {
-						c.WriteError(governor.ErrWithTooManyRequests(nil, time.Unix(i.end, 0).UTC(), "", "Hit rate limit"))
-						return
+					if sum <= i.limit {
+						goto end
 					}
+					if minRatelimitEnd == 0 || i.end < minRatelimitEnd {
+						minRatelimitEnd = i.end
+					}
+				}
+				if minRatelimitEnd > 0 {
+					c.WriteError(governor.ErrWithTooManyRequests(nil, time.Unix(minRatelimitEnd, 0).UTC(), "", "Hit rate limit"))
+					return
 				}
 			}
 		end:

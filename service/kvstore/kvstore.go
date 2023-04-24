@@ -67,7 +67,6 @@ type (
 		Expire(ctx context.Context, key string, duration time.Duration) error
 		Subkey(keypath ...string) string
 		Multi(ctx context.Context) (Multi, error)
-		Tx(ctx context.Context) (Multi, error)
 		Subtree(prefix string) KVStore
 	}
 
@@ -485,16 +484,6 @@ func (s *Service) Multi(ctx context.Context) (Multi, error) {
 	}, nil
 }
 
-func (s *Service) Tx(ctx context.Context) (Multi, error) {
-	client, err := s.getClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &baseMulti{
-		base: client.TxPipeline(),
-	}, nil
-}
-
 func (s *Service) Subtree(prefix string) KVStore {
 	return &tree{
 		prefix: prefix,
@@ -680,14 +669,6 @@ func (t *tree) Subkey(keypath ...string) string {
 
 func (t *tree) Multi(ctx context.Context) (Multi, error) {
 	tx, err := t.base.Multi(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return tx.Subtree(t.prefix), nil
-}
-
-func (t *tree) Tx(ctx context.Context) (Multi, error) {
-	tx, err := t.base.Tx(ctx)
 	if err != nil {
 		return nil, err
 	}
