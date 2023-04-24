@@ -12,7 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/twmb/franz-go/pkg/kadm"
-	"github.com/twmb/franz-go/pkg/kerr"
+	kafkaerr "github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"xorkevin.dev/governor"
@@ -610,7 +610,7 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	fetches := s.reader.PollRecords(ctx, 1)
 	if err := fetches.Err0(); err != nil {
 		err = kerrors.WithKind(err, ErrClient, "Failed to read message")
-		if !kerr.IsRetriable(err) {
+		if !kafkaerr.IsRetriable(err) {
 			return nil, kerrors.WithKind(err, ErrClientClosed, "Client closed")
 		}
 		return nil, err
@@ -682,7 +682,7 @@ func (s *Service) checkStream(ctx context.Context, client *kadm.Client, topic st
 		return nil, kerrors.WithKind(nil, ErrNotFound, "Topic not found")
 	}
 	if err := resTopic.Err; err != nil {
-		if errors.Is(err, kerr.UnknownTopicOrPartition) {
+		if errors.Is(err, kafkaerr.UnknownTopicOrPartition) {
 			return nil, kerrors.WithKind(err, ErrNotFound, "Topic not found")
 		}
 		return nil, kerrors.WithKind(err, ErrClient, "Failed to get topic info")
@@ -891,6 +891,9 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
+					if errors.Is(err, context.DeadlineExceeded) {
+						continue
+					}
 					if errors.Is(err, ErrClientClosed) {
 						return
 					}

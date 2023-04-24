@@ -78,7 +78,7 @@
       "authdomain": "lists.governor.dev.localhost",
       "eventsize": "2K",
       "maxmsgsize": "2M",
-      "mockdnssource": "compose/governor/mockdns.json",
+      "mockdnssource": "compose/anvil_out/governor/mockdns.json",
       "orgdomain": "org.lists.governor.dev.localhost",
       "port": 2525,
       "readtimeout": "5s",
@@ -155,7 +155,7 @@
    ],
    "setupsecret": "setupsecret",
    "template": {
-      "dir": "compose/governor/templates"
+      "dir": "compose/anvil_out/governor/templates"
    },
    "token": {
       "audience": "governor",
@@ -208,6 +208,6 @@
       "usercacheduration": "24h"
    },
    "vault": {
-      "filesource": "compose/governor/secrets.json"
+      "filesource": "compose/anvil_out/governor/secrets.json"
    }
 }

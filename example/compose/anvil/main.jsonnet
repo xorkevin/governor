@@ -92,7 +92,7 @@ local server = {
       kind: 'jsonnet',
       path: 'governor.jsonnet',
       args: {
-        outputdir: anvil.pathJoin(['compose', outputdir]),
+        outputdir: anvil.pathJoin(['compose', 'anvil_out', outputdir]),
         server: server,
       },
       output: '%s/governor.json' % outputdir,

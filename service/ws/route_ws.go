@@ -3,11 +3,13 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/ktime"
@@ -134,7 +136,10 @@ func (s *router) ws(c *governor.Context) {
 				for {
 					m, err := sub.ReadMsg(ctx)
 					if err != nil {
-						if sub.IsPermanentlyClosed() {
+						if errors.Is(err, context.DeadlineExceeded) {
+							continue
+						}
+						if errors.Is(err, pubsub.ErrClientClosed) {
 							return
 						}
 						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))

@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -27,7 +28,6 @@ type (
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
 		Close(ctx context.Context) error
-		IsPermanentlyClosed() bool
 	}
 
 	Pubsub interface {
@@ -137,24 +137,26 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[pubsubCli
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the pubsub server. This allows vault to be
 	// temporarily unavailable without disrupting the client connections.
+	username := ""
 	if client != nil {
 		_, err = client.client.RTT()
 		if err == nil {
 			s.hbfailed = 0
 			return
 		}
+		username = client.auth.Username
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping pubsub server"),
 			klog.AString("addr", s.addr),
-			klog.AString("username", client.auth.Username),
+			klog.AString("username", username),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to pubsub server"),
 		klog.AString("addr", s.addr),
-		klog.AString("username", client.auth.Username),
+		klog.AString("username", username),
 	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -171,11 +173,14 @@ var (
 	ErrConn errConn
 	// ErrClient is returned for unknown client errors
 	ErrClient errClient
+	// ErrClientClosed is returned when the client has been closed
+	ErrClientClosed errClientClosed
 )
 
 type (
-	errConn   struct{}
-	errClient struct{}
+	errConn         struct{}
+	errClient       struct{}
+	errClientClosed struct{}
 )
 
 func (e errConn) Error() string {
@@ -184,6 +189,10 @@ func (e errConn) Error() string {
 
 func (e errClient) Error() string {
 	return "Pubsub client error"
+}
+
+func (e errClientClosed) Error() string {
+	return "Pubsub client closed"
 }
 
 type (
@@ -203,7 +212,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 		if auth.Username == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if auth == client.auth {
+		if client != nil && auth == client.auth {
 			return client, nil
 		}
 	}
@@ -225,7 +234,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[pubs
 
 	m.Stop(ctx)
 
-	s.log.Info(ctx, "Established connection to event stream",
+	s.log.Info(ctx, "Established connection to pubsub",
 		klog.AString("addr", s.addr),
 		klog.AString("username", auth.Username),
 	)
@@ -328,11 +337,23 @@ func (s *Service) Subscribe(ctx context.Context, subject, group string) (Subscri
 	return sub, nil
 }
 
+func (s *subscription) isClosed() bool {
+	return !s.sub.IsValid()
+}
+
 // ReadMsg reads a message
 func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
+	if s.isClosed() {
+		return nil, kerrors.WithKind(nil, ErrClientClosed, "Client closed")
+	}
+
 	m, err := s.sub.NextMsgWithContext(ctx)
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")
+		err = kerrors.WithKind(err, ErrClient, "Failed to get message")
+		if errors.Is(err, nats.ErrConnectionClosed) {
+			return nil, kerrors.WithKind(err, ErrClientClosed, "Client closed")
+		}
+		return nil, err
 	}
 	return &Msg{
 		Subject: m.Subject,
@@ -342,7 +363,7 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 
 // Close closes the subscription
 func (s *subscription) Close(ctx context.Context) error {
-	if !s.sub.IsValid() {
+	if s.isClosed() {
 		return nil
 	}
 	if err := s.sub.Unsubscribe(); err != nil {
@@ -350,11 +371,6 @@ func (s *subscription) Close(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Closed subscription")
 	return nil
-}
-
-// IsPermanentlyClosed returns if the client is closed
-func (s *subscription) IsPermanentlyClosed() bool {
-	return s.client.IsClosed()
 }
 
 func min(a, b time.Duration) time.Duration {
@@ -454,7 +470,10 @@ func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 			for {
 				m, err := sub.ReadMsg(ctx)
 				if err != nil {
-					if sub.IsPermanentlyClosed() {
+					if errors.Is(err, context.DeadlineExceeded) {
+						continue
+					}
+					if errors.Is(err, ErrClientClosed) {
 						return
 					}
 					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))

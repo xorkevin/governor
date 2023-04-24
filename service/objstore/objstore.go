@@ -176,24 +176,26 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[objstoreC
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the store. This allows vault to be temporarily
 	// unavailable without disrupting the client connections.
+	var username string
 	if client != nil {
 		err = s.clientPing(ctx, client.client)
 		if err == nil {
 			s.hbfailed = 0
 			return
 		}
+		username = client.auth.Username
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping objstore"),
 			klog.AString("addr", s.addr),
-			klog.AString("username", client.auth.Username),
+			klog.AString("username", username),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to objstore"),
 		klog.AString("addr", s.addr),
-		klog.AString("username", client.auth.Username),
+		klog.AString("username", username),
 	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client

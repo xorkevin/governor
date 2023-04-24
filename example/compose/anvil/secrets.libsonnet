@@ -9,7 +9,7 @@
   },
   minio: {
     username: 'minioadmin',
-    password: 'admin',
+    password: 'administrator',  // min length req
   },
   nats: {
     username: 'natsadmin',

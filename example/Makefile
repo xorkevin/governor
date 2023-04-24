@@ -130,29 +130,33 @@ buildrace: ## Build app with data race detection
 
 .PHONY: run dev devrace devsetup
 
-run: ## Serves app
-	$(BIN_PATH) serve --config $(ANVIL_COMPOSE_OUT)/governor/config.json
+run: ## Runs built app locally
+	$(BIN_PATH) serve --config $(ANVIL_COMPOSE_OUT)/governor/governor.json
 
 dev: build run ## Runs app locally
 
 devrace: buildrace run ## Runs app locally with data race detection
 
-devsetup: build ## Runs setup locally
+devsetup: build ## Runs local app setup
 	$(BIN_PATH) setup --config $(ANVIL_COMPOSE_OUT)/governor/client.json --secret "admin"
 
 ## DOCKER COMPOSE DEV ENV
 
 ANVIL_COMPOSE_INP=compose/anvil/main.jsonnet
 ANVIL_COMPOSE_OUT=compose/anvil_out
+ANVIL_COMPOSE_FILE=$(ANVIL_COMPOSE_OUT)/governor/compose.yaml
 
-.PHONY: devgen devup devdown
+.PHONY: devgen devup devdown devtail
 
 devgen: ## Generate docker compose resources
 	if [ -d $(ANVIL_COMPOSE_OUT) ]; then rm -r $(ANVIL_COMPOSE_OUT); fi
 	anvil component --input $(ANVIL_COMPOSE_INP) --output $(ANVIL_COMPOSE_OUT)
 
 devup: ## Deploy docker compose resources
-	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml up --detach --wait
+	docker compose --file $(ANVIL_COMPOSE_FILE) up --detach --wait
 
 devdown: ## Destroy docker compose resources
-	docker compose --file $(ANVIL_COMPOSE_OUT)/governor/compose.yaml down
+	docker compose --file $(ANVIL_COMPOSE_FILE) down
+
+devtail: ## Tail docker compose logs
+	docker compose --file $(ANVIL_COMPOSE_FILE) logs --follow

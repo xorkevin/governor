@@ -108,7 +108,7 @@ anvil.yamlMarshal({
     nats: {
       image: img(args.images.nats),
       entrypoint: ['nats-server'],
-      command: ['-c', '/etc/nats/nats.conf'],
+      command: ['--config', '/etc/nats/nats.conf'],
       ports: [
         {
           target: 4222,

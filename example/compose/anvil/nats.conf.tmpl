@@ -2,7 +2,7 @@ ping_interval: "5s"
 ping_max: 4
 authorization {
   users: [
-    {user: "{{.username}}", password: "{{.password}}"}
+    {user: "{{.username}}", password: "{{.passhash}}"}
   ]
 }
 jetstream {

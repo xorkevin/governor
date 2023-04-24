@@ -65,7 +65,7 @@ func main() {
 	gov.Register("kvstore", "/null/kv", kvstore.New())
 	gov.Register("objstore", "/null/obj", objstore.New())
 	gov.Register("pubsub", "/null/pubsub", pubsub.New())
-	gov.Register("events", "/null/events", events.New())
+	gov.Register("events", "/null/events", events.NewNats())
 	gov.Register("template", "/null/tpl", template.New())
 	{
 		inj := gov.Injector()

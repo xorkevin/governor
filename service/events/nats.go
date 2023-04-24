@@ -60,10 +60,10 @@ func (s *NatsService) Register(inj governor.Injector, r governor.ConfigRegistrar
 	r.SetDefault("hbmaxfail", 3)
 }
 
-func (s *NatsService) Init(ctx context.Context, c governor.Config, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+func (s *NatsService) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = c.Hostname + "-" + c.Instance
+	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	var err error
@@ -102,24 +102,26 @@ func (s *NatsService) handlePing(ctx context.Context, m *lifecycle.Manager[natsC
 	// Regardless of whether we were able to successfully retrieve a client, if
 	// there is a client then ping the events server. This allows vault to be
 	// temporarily unavailable without disrupting the client connections.
+	var username string
 	if client != nil {
 		_, err = client.client.RTT()
 		if err == nil {
 			s.hbfailed = 0
 			return
 		}
+		username = client.auth.Username
 	}
 	s.hbfailed++
 	if s.hbfailed < s.hbmaxfail {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to ping events server"),
 			klog.AString("addr", s.addr),
-			klog.AString("username", client.auth.Username),
+			klog.AString("username", username),
 		)
 		return
 	}
 	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max pings to events server"),
 		klog.AString("addr", s.addr),
-		klog.AString("username", client.auth.Username),
+		klog.AString("username", username),
 	)
 	s.hbfailed = 0
 	// first invalidate cached secret in order to ensure that construct client
@@ -147,7 +149,7 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 		if auth.Username == "" {
 			return client, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Empty auth")
 		}
-		if auth == client.auth {
+		if client != nil && auth == client.auth {
 			return client, nil
 		}
 	}
@@ -166,7 +168,7 @@ func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[
 		s.config.InvalidateSecret("auth")
 		return nil, kerrors.WithKind(err, ErrConn, "Failed to connect to events")
 	}
-	jetstream, err := conn.JetStream()
+	jetstream, err := conn.JetStream(nats.MaxWait(time.Hour))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrClient, "Failed to connect to events stream")
 	}
@@ -276,16 +278,23 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 
 	streamName := natsStreamNameReplacer.Replace(topic)
 	consumerName := natsStreamNameReplacer.Replace(group)
-	now := time.Now().Round(0)
-	if _, err := jetstream.AddConsumer(streamName, &nats.ConsumerConfig{
-		Durable:       consumerName,
-		OptStartTime:  &now,
-		AckPolicy:     nats.AckExplicitPolicy,
-		AckWait:       time.Nanosecond, // redeliver immediately to prevent out of order deliveries
-		MaxAckPending: 1,               // only one ack pending to prevent out of order deliveries
-		MaxWaiting:    1,               // only one pull fetch request in flight
-	}); err != nil {
-		return nil, kerrors.WithKind(err, ErrClient, "Failed to create consumer")
+	if _, err := jetstream.ConsumerInfo(streamName, consumerName, nats.Context(ctx)); err != nil {
+		if !errors.Is(err, nats.ErrConsumerNotFound) {
+			return nil, kerrors.WithKind(err, ErrClient, "Failed to get consumer info")
+		}
+		now := time.Now().Round(0)
+		if _, err := jetstream.AddConsumer(streamName, &nats.ConsumerConfig{
+			Name:          consumerName,
+			Durable:       consumerName,
+			DeliverPolicy: nats.DeliverByStartTimePolicy,
+			OptStartTime:  &now,
+			AckPolicy:     nats.AckExplicitPolicy,
+			AckWait:       time.Nanosecond, // redeliver immediately to prevent out of order deliveries
+			MaxAckPending: 1,               // only one ack pending to prevent out of order deliveries
+			MaxWaiting:    1,               // only one pull fetch request in flight
+		}, nats.Context(ctx)); err != nil {
+			return nil, kerrors.WithKind(err, ErrClient, "Failed to create consumer")
+		}
 	}
 
 	nsub, err := jetstream.PullSubscribe(
@@ -313,7 +322,7 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 }
 
 func (s *natsSubscription) isClosed() bool {
-	return s.sub.IsValid()
+	return !s.sub.IsValid()
 }
 
 // IsAssigned returns if a message is assigned to the consumer
@@ -329,9 +338,19 @@ func (s *natsSubscription) IsAssigned(msg Msg) bool {
 
 // ReadMsg reads a message
 func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
+	if s.isClosed() {
+		return nil, kerrors.WithKind(nil, ErrClientClosed, "Client closed")
+	}
+
+	// nats will fall back on to jetstream client max wait which is configured by
+	// this package to be 1 hour
 	msgs, err := s.sub.Fetch(1, nats.Context(ctx))
 	if err != nil {
-		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")
+		err = kerrors.WithKind(err, ErrClient, "Failed to get message")
+		if errors.Is(err, nats.ErrConnectionClosed) {
+			return nil, kerrors.WithKind(err, ErrClientClosed, "Client closed")
+		}
+		return nil, err
 	}
 	if len(msgs) != 1 {
 		return nil, kerrors.WithKind(err, ErrClient, "Failed to get message")

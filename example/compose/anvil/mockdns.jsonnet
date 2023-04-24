@@ -8,7 +8,9 @@ local dkimtxt = importstr 'mockdnsdkim.txt';
       ],
     },
     'tests._domainkey.governor.dev.localhost.': {
-      TXT: dkimtxt,
+      TXT: [
+        dkimtxt,
+      ],
     },
   },
 }

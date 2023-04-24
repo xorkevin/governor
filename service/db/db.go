@@ -178,7 +178,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[sqldbClie
 	// Regardless of whether we were able to successfully retrieve a db client,
 	// if there is a db client then ping the db. This allows vault to be
 	// temporarily unavailable without disrupting the DB connections.
-	username := ""
+	var username string
 	if client != nil {
 		err = client.client.PingContext(ctx)
 		if err == nil {
