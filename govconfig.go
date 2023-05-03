@@ -362,7 +362,7 @@ type (
 		K8SAuth      bool
 		K8SRole      string
 		K8SLoginPath string
-		K8SJWT       string
+		K8SJWTPath   string
 	}
 
 	// secretsVaultSource is a secretsClient reading from vault
@@ -429,8 +429,12 @@ func (s *secretsVaultSource) authVault(ctx context.Context) error {
 		return nil
 	}
 
+	jwtbytes, err := os.ReadFile(s.config.K8SJWTPath)
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read vault k8s service account jwt")
+	}
 	authsecret, err := s.vault.Logical().WriteWithContext(ctx, s.config.K8SLoginPath, map[string]interface{}{
-		"jwt":  s.config.K8SJWT,
+		"jwt":  string(jwtbytes),
 		"role": s.config.K8SRole,
 	})
 	if err != nil {
@@ -487,21 +491,16 @@ func (s *settings) initsecrets(ctx context.Context) error {
 
 		config.K8SRole = s.v.GetString("vault.k8s.role")
 		config.K8SLoginPath = s.v.GetString("vault.k8s.loginpath")
-		jwtpath := s.v.GetString("vault.k8s.jwtpath")
+		config.K8SJWTPath = s.v.GetString("vault.k8s.jwtpath")
 		if config.K8SRole == "" {
 			return kerrors.WithKind(nil, ErrInvalidConfig, "No vault role set")
 		}
 		if config.K8SLoginPath == "" {
 			return kerrors.WithKind(nil, ErrInvalidConfig, "No vault k8s login path set")
 		}
-		if jwtpath == "" {
+		if config.K8SJWTPath == "" {
 			return kerrors.WithKind(nil, ErrInvalidConfig, "No path for vault k8s service account jwt auth")
 		}
-		jwtbytes, err := os.ReadFile(jwtpath)
-		if err != nil {
-			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read vault k8s service account jwt")
-		}
-		config.K8SJWT = string(jwtbytes)
 	}
 	vault, err := newSecretsVaultSource(config)
 	if err != nil {
