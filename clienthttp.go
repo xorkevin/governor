@@ -100,7 +100,7 @@ func (c *httpClient) Req(method, path string, body io.Reader) (*http.Request, er
 // Do sends a request to the server and returns its response
 func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response, retErr error) {
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
-	res, err := c.httpc.Do(r)
+	res, err := c.httpc.Do(r.WithContext(ctx))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrSendClientReq, "Failed request")
 	}
