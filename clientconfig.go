@@ -55,7 +55,7 @@ func (s *clientSettings) init(flags ClientFlags) error {
 		s.v.SetConfigFile(file)
 	}
 	if s.configReader != nil {
-		s.v.SetConfigType("yaml")
+		s.v.SetConfigType("json")
 		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}

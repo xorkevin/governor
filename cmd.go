@@ -54,7 +54,7 @@ caching, object storage, emailing, message queues and more.`,
 		PersistentPreRun:  c.prerun,
 		DisableAutoGenTag: true,
 	}
-	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.yaml for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
+	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.json for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
 
 	serveCmd := &cobra.Command{
 		Use:   "serve",
