@@ -29,6 +29,7 @@ require (
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/hunter2 v0.2.7
 	xorkevin.dev/kerrors v0.1.5
+	xorkevin.dev/kfs v0.1.0
 	xorkevin.dev/klog v0.0.0-20230408090513-cffae1892d50
 )
 

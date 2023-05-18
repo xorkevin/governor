@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"io/fs"
 	"net/http"
 
 	"xorkevin.dev/governor"
@@ -90,7 +91,7 @@ func (c *CmdClient) GetSysToken() (string, error) {
 		if err != nil {
 			return nil, err
 		}
-		b, err := c.term.ReadFile(fp)
+		b, err := fs.ReadFile(c.term.FS(), fp)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to read systoken file")
 		}

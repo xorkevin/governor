@@ -9,8 +9,8 @@ import (
 	"syscall"
 
 	"golang.org/x/term"
-	"xorkevin.dev/governor/util/writefs"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/kfs"
 	"xorkevin.dev/klog"
 )
 
@@ -22,7 +22,6 @@ type (
 		ReadLine() (string, error)
 		ReadPassword() (string, error)
 		FS() fs.FS
-		WFS() writefs.FS
 		Log() klog.Logger
 	}
 
@@ -32,7 +31,6 @@ type (
 		Stdout      io.Writer
 		Stderr      io.Writer
 		Fsys        fs.FS
-		WFsys       writefs.FS
 		Exit        func(code int)
 		TermSignals []os.Signal
 	}
@@ -44,7 +42,6 @@ type (
 		stdout  io.Writer
 		stderr  io.Writer
 		fsys    fs.FS
-		wfsys   writefs.FS
 	}
 )
 
@@ -55,8 +52,7 @@ func newTermClient(config *TermConfig, l klog.Logger) Term {
 			Stdin:       os.Stdin,
 			Stdout:      os.Stdout,
 			Stderr:      os.Stderr,
-			Fsys:        os.DirFS("."),
-			WFsys:       writefs.NewOSFS("."),
+			Fsys:        kfs.DirFS("."),
 			Exit:        os.Exit,
 			TermSignals: []os.Signal{os.Interrupt, syscall.SIGTERM},
 		}
@@ -68,7 +64,6 @@ func newTermClient(config *TermConfig, l klog.Logger) Term {
 		stdout:  config.Stdout,
 		stderr:  config.Stderr,
 		fsys:    config.Fsys,
-		wfsys:   config.WFsys,
 	}
 }
 
@@ -105,10 +100,6 @@ func (c *termClient) ReadPassword() (string, error) {
 
 func (c *termClient) FS() fs.FS {
 	return c.fsys
-}
-
-func (c *termClient) WFS() writefs.FS {
-	return c.wfsys
 }
 
 func (c *termClient) Log() klog.Logger {
@@ -154,34 +145,6 @@ func (c *Terminal) FS() fs.FS {
 	return c.Term.FS()
 }
 
-func (c *Terminal) WFS() writefs.FS {
-	return c.Term.WFS()
-}
-
 func (c *Terminal) Log() klog.Logger {
 	return c.log.Logger
-}
-
-func (c *Terminal) ReadFile(name string) ([]byte, error) {
-	b, err := fs.ReadFile(c.FS(), name)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to read file")
-	}
-	return b, nil
-}
-
-func (c *Terminal) WriteFile(name string, data []byte, perm fs.FileMode) (retErr error) {
-	f, err := c.WFS().OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to open file")
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close open file"))
-		}
-	}()
-	if _, err := f.Write(data); err != nil {
-		return kerrors.WithMsg(err, "Failed to write file")
-	}
-	return nil
 }

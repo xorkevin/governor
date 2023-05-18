@@ -10,8 +10,8 @@ import (
 	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
-	"xorkevin.dev/governor/util/writefs/writefstest"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/kfs/kfstest"
 	"xorkevin.dev/klog"
 )
 
@@ -123,8 +123,7 @@ func TestCmd(t *testing.T) {
 			Stdin:   strings.NewReader("test input content"),
 			Stdout:  io.Discard,
 			Stderr:  stderr,
-			Fsys:    fstest.MapFS{},
-			WFsys:   writefstest.MapFS{},
+			Fsys:    &kfstest.MapFS{Fsys: fstest.MapFS{}},
 			Exit:    func(code int) {},
 		},
 	})

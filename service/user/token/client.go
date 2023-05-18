@@ -2,6 +2,7 @@ package token
 
 import (
 	"bufio"
+	"io/fs"
 	"time"
 
 	"gopkg.in/square/go-jose.v2"
@@ -12,6 +13,7 @@ import (
 	"xorkevin.dev/hunter2/h2signer"
 	"xorkevin.dev/hunter2/h2signer/eddsa"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/kfs"
 	"xorkevin.dev/klog"
 )
 
@@ -132,7 +134,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
-	skb, err := c.term.ReadFile(c.sysTokenFlags.privkey)
+	skb, err := fs.ReadFile(c.term.FS(), c.sysTokenFlags.privkey)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to read private key file")
 	}
@@ -169,7 +171,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
 	if c.sysTokenFlags.output != "" {
-		if err := c.term.WriteFile(c.sysTokenFlags.output, []byte(token+"\n"), 0o600); err != nil {
+		if err := kfs.WriteFile(c.term.FS(), c.sysTokenFlags.output, []byte(token+"\n"), 0o600); err != nil {
 			return kerrors.WithMsg(err, "Failed to write token output to file")
 		}
 		return nil

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,8 +17,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/governor/util/kjson"
-	"xorkevin.dev/governor/util/writefs/writefstest"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/kfs"
+	"xorkevin.dev/kfs/kfstest"
 	"xorkevin.dev/klog"
 )
 
@@ -164,11 +166,11 @@ func (c *testClientC) echo(args []string) error {
 		return err
 	}
 
-	f, err := c.term.ReadFile("test.txt")
+	f, err := fs.ReadFile(c.term.FS(), "test.txt")
 	if err != nil {
 		return kerrors.WithMsg(err, "Could not read file")
 	}
-	if err := c.term.WriteFile("testoutput.txt", f, 0o644); err != nil {
+	if err := kfs.WriteFile(c.term.FS(), "testoutput.txt", f, 0o644); err != nil {
 		return kerrors.WithMsg(err, "Could not write file")
 	}
 
@@ -256,7 +258,15 @@ func TestClient(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	wfsys := writefstest.MapFS{}
+	fsys := &kfstest.MapFS{
+		Fsys: fstest.MapFS{
+			"test.txt": &fstest.MapFile{
+				Data:    []byte(`test file contents`),
+				Mode:    0o644,
+				ModTime: time.Now(),
+			},
+		},
+	}
 
 	client := NewClient(Opts{
 		Appname:      "govtest",
@@ -289,15 +299,8 @@ func TestClient(t *testing.T) {
 			Stdin:   strings.NewReader("setupsecret"),
 			Stdout:  klog.NewSyncWriter(&out),
 			Stderr:  io.Discard,
-			Fsys: fstest.MapFS{
-				"test.txt": &fstest.MapFile{
-					Data:    []byte(`test file contents`),
-					Mode:    0o644,
-					ModTime: time.Now(),
-				},
-			},
-			WFsys: wfsys,
-			Exit:  func(code int) {},
+			Fsys:    fsys,
+			Exit:    func(code int) {},
 		},
 	})
 
@@ -332,7 +335,7 @@ func TestClient(t *testing.T) {
 	}, echoRes)
 	out.Reset()
 
-	outputFile := wfsys["testoutput.txt"]
+	outputFile := fsys.Fsys["testoutput.txt"]
 	assert.NotNil(outputFile)
 	assert.Equal([]byte("test file contents"), outputFile.Data)
 
