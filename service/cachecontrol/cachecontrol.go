@@ -19,7 +19,7 @@ type (
 	// Directive is a cache control directive
 	Directive string
 
-	//Directives are a list of directives
+	// Directives are a list of directives
 	Directives []Directive
 )
 
@@ -96,11 +96,6 @@ func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(
 				etag = etagToValue(tag)
 			}
 
-			if val := c.Header(headerIfNoneMatch); etag != "" && val == etag {
-				c.WriteStatus(http.StatusNotModified)
-				return
-			}
-
 			finalDirectives := make([]string, 0, 2+len(directives))
 			if public {
 				finalDirectives = append(finalDirectives, string(DirPublic))
@@ -112,9 +107,20 @@ func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(
 				finalDirectives = append(finalDirectives, string(i))
 			}
 
+			ccHeader := strings.Join(finalDirectives, ", ")
+
+			if val := c.Header(headerIfNoneMatch); etag != "" && val == etag {
+				c.SetHeader(headerCacheControl, ccHeader)
+				if etag != "" {
+					c.SetHeader(headerETag, etag)
+				}
+				c.WriteStatus(http.StatusNotModified)
+				return
+			}
+
 			w2 := &cacheControlWriter{
 				ResponseWriter: c.Res(),
-				valCC:          strings.Join(finalDirectives, ", "),
+				valCC:          ccHeader,
 				valETag:        etag,
 				wroteHeader:    false,
 			}
