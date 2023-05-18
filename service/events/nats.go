@@ -139,7 +139,7 @@ type (
 	}
 )
 
-func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.Manager[natsClient]) (*natsClient, error) {
+func (s *NatsService) handleGetClient(ctx context.Context, m *lifecycle.State[natsClient]) (*natsClient, error) {
 	var auth natsauth
 	{
 		client := m.Load(ctx)

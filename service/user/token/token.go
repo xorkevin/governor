@@ -239,7 +239,7 @@ type (
 	}
 )
 
-func (s *Service) getSecrets(ctx context.Context, m *lifecycle.Manager[tokenSigner]) (*tokenSigner, error) {
+func (s *Service) getSecrets(ctx context.Context, m *lifecycle.State[tokenSigner]) (*tokenSigner, error) {
 	currentSigner := m.Load(ctx)
 	var tokenSecrets secretToken
 	if err := s.config.GetSecret(ctx, "tokensecret", s.keyrefresh, &tokenSecrets); err != nil {

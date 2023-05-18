@@ -507,7 +507,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[otpCipher
 	m.Stop(ctx)
 }
 
-func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.Manager[otpCipher]) (*otpCipher, error) {
+func (s *Service) handleGetCipher(ctx context.Context, m *lifecycle.State[otpCipher]) (*otpCipher, error) {
 	currentCipher := m.Load(ctx)
 	var otpsecrets secretOTP
 	if err := s.config.GetSecret(ctx, "otpkey", s.otprefresh, &otpsecrets); err != nil {

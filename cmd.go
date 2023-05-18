@@ -56,28 +56,32 @@ caching, object storage, emailing, message queues and more.`,
 	}
 	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.json for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
 
-	serveCmd := &cobra.Command{
-		Use:   "serve",
-		Short: "starts the http server and runs all services",
-		Long: `Starts the http server and runs all services
+	if c.s != nil {
+		serveCmd := &cobra.Command{
+			Use:   "serve",
+			Short: "starts the http server and runs all services",
+			Long: `Starts the http server and runs all services
 
 The server first runs all init procedures for all services before starting.`,
-		Run:               c.serve,
-		DisableAutoGenTag: true,
+			Run:               c.serve,
+			DisableAutoGenTag: true,
+		}
+		rootCmd.AddCommand(serveCmd)
 	}
-	rootCmd.AddCommand(serveCmd)
 
-	setupCmd := &cobra.Command{
-		Use:   "setup",
-		Short: "runs the setup procedures for all services",
-		Long: `Runs the setup procedures for all services
+	if c.c != nil {
+		setupCmd := &cobra.Command{
+			Use:   "setup",
+			Short: "runs the setup procedures for all services",
+			Long: `Runs the setup procedures for all services
 
 Calls the server setup endpoint.`,
-		Run:               c.setup,
-		DisableAutoGenTag: true,
+			Run:               c.setup,
+			DisableAutoGenTag: true,
+		}
+		setupCmd.PersistentFlags().StringVar(&c.cmdFlags.setupSecret, "secret", "", "setup secret")
+		rootCmd.AddCommand(setupCmd)
 	}
-	setupCmd.PersistentFlags().StringVar(&c.cmdFlags.setupSecret, "secret", "", "setup secret")
-	rootCmd.AddCommand(setupCmd)
 
 	docCmd := &cobra.Command{
 		Use:               "doc",
@@ -106,7 +110,9 @@ Calls the server setup endpoint.`,
 	}
 	docCmd.AddCommand(docMdCmd)
 
-	c.addTrees(c.c.GetCmds(), rootCmd)
+	if c.c != nil {
+		c.addTrees(c.c.GetCmds(), rootCmd)
+	}
 
 	c.cmd = rootCmd
 }

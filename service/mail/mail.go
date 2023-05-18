@@ -325,7 +325,7 @@ func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[mailSecre
 	m.Stop(ctx)
 }
 
-func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.Manager[mailSecrets]) (*mailSecrets, error) {
+func (s *Service) handleGetSecrets(ctx context.Context, m *lifecycle.State[mailSecrets]) (*mailSecrets, error) {
 	currentSecrets := m.Load(ctx)
 
 	var auth secretAuth

@@ -213,7 +213,7 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[objstoreClient]) (*objstoreClient, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[objstoreClient]) (*objstoreClient, error) {
 	var auth minioauth
 	{
 		client := m.Load(ctx)

@@ -17,8 +17,6 @@ func TestInjector(t *testing.T) {
 
 	assert := require.New(t)
 
-	tabReplacer := strings.NewReplacer("\t", "  ")
-
 	server := New(Opts{
 		Appname: "govtest",
 		Version: Version{
@@ -28,18 +26,9 @@ func TestInjector(t *testing.T) {
 		Description:  "test gov server",
 		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
-		ConfigReader: strings.NewReader(tabReplacer.Replace(`
-http:
-	addr: ':8080'
-	basepath: /api
-setupsecret: setupsecret
-`)),
-		VaultReader: strings.NewReader(tabReplacer.Replace(`
-data:
-	setupsecret:
-		secret: setupsecret
-`)),
-		LogWriter: io.Discard,
+		ConfigReader: strings.NewReader("{}"),
+		VaultReader:  strings.NewReader("{}"),
+		LogWriter:    io.Discard,
 	})
 
 	pathA := server.Injector()

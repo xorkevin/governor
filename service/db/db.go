@@ -217,7 +217,7 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[sqldbClient]) (*sqldbClient, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[sqldbClient]) (*sqldbClient, error) {
 	var auth pgAuth
 	{
 		client := m.Load(ctx)

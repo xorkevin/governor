@@ -111,17 +111,18 @@ func TestCmd(t *testing.T) {
 	assert := require.New(t)
 
 	var out bytes.Buffer
+	stderr := klog.NewSyncWriter(&out)
 
 	client := NewClient(Opts{
 		Appname:      "govtest",
 		ClientPrefix: "govc",
-		ConfigReader: strings.NewReader(""),
+		ConfigReader: strings.NewReader("{}"),
 		LogWriter:    io.Discard,
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
 			Stdin:   strings.NewReader("test input content"),
 			Stdout:  io.Discard,
-			Stderr:  klog.NewSyncWriter(&out),
+			Stderr:  stderr,
 			Fsys:    fstest.MapFS{},
 			WFsys:   writefstest.MapFS{},
 			Exit:    func(code int) {},
@@ -146,7 +147,7 @@ func TestCmd(t *testing.T) {
 			StdinFd: int(os.Stdin.Fd()),
 			Stdin:   strings.NewReader(""),
 			Stdout:  io.Discard,
-			Stderr:  io.Discard,
+			Stderr:  stderr,
 			Exit:    func(code int) {},
 		},
 	}, nil, client)

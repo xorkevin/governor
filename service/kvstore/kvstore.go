@@ -260,7 +260,7 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kvstoreClient]) (*kvstoreClient, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[kvstoreClient]) (*kvstoreClient, error) {
 	var auth redisauth
 	{
 		client := m.Load(ctx)

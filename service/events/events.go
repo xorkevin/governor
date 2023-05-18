@@ -273,7 +273,7 @@ type (
 	}
 )
 
-func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.Manager[kafkaClient]) (*kafkaClient, error) {
+func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[kafkaClient]) (*kafkaClient, error) {
 	var secret secretAuth
 	{
 		client := m.Load(ctx)
