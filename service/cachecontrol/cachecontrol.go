@@ -1,7 +1,9 @@
 package cachecontrol
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -84,6 +86,12 @@ func (w *cacheControlWriter) Write(p []byte) (int, error) {
 
 func (w *cacheControlWriter) Unwrap() http.ResponseWriter {
 	return w.w
+}
+
+// Hijack added for backwards compatibility for websocket lib which relies on
+// type assertions
+func (w *cacheControlWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(w.w).Hijack()
 }
 
 func etagToValue(etag string) string {

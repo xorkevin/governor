@@ -1,10 +1,12 @@
 package governor
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/netip"
 	"runtime/debug"
@@ -143,6 +145,12 @@ func (w *govResponseWriter) Write(p []byte) (int, error) {
 
 func (w *govResponseWriter) Unwrap() http.ResponseWriter {
 	return w.w
+}
+
+// Hijack added for backwards compatibility for websocket lib which relies on
+// type assertions
+func (w *govResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(w.w).Hijack()
 }
 
 func (w *govResponseWriter) isWS() bool {
@@ -465,6 +473,12 @@ func (w *compressorWriter) Write(p []byte) (int, error) {
 
 func (w *compressorWriter) Unwrap() http.ResponseWriter {
 	return w.w
+}
+
+// Hijack added for backwards compatibility for websocket lib which relies on
+// type assertions
+func (w *compressorWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(w.w).Hijack()
 }
 
 func (w *compressorWriter) Close() error {
