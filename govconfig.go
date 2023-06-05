@@ -78,7 +78,6 @@ type (
 		maxReqSize    string
 		maxHeaderSize string
 		maxConnRead   string
-		maxConnHeader string
 		maxConnWrite  string
 		maxConnIdle   string
 	}
@@ -175,7 +174,6 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("http.maxreqsize", "2M")
 	v.SetDefault("http.maxheadersize", "1M")
 	v.SetDefault("http.maxconnread", "5s")
-	v.SetDefault("http.maxconnheader", "2s")
 	v.SetDefault("http.maxconnwrite", "5s")
 	v.SetDefault("http.maxconnidle", "5s")
 	v.SetDefault("cors.alloworigins", []string{})
@@ -274,7 +272,6 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	s.httpServer.maxReqSize = s.v.GetString("http.maxreqsize")
 	s.httpServer.maxHeaderSize = s.v.GetString("http.maxheadersize")
 	s.httpServer.maxConnRead = s.v.GetString("http.maxconnread")
-	s.httpServer.maxConnHeader = s.v.GetString("http.maxconnheader")
 	s.httpServer.maxConnWrite = s.v.GetString("http.maxconnwrite")
 	s.httpServer.maxConnIdle = s.v.GetString("http.maxconnidle")
 	s.middleware.alloworigins = s.v.GetStringSlice("cors.alloworigins")

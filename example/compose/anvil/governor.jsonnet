@@ -13,7 +13,6 @@ local args = anvil.getargs();
     maxreqsize: '2M',
     maxheadersize: '1M',
     maxconnread: '5s',
-    maxconnheader: '2s',
     maxconnwrite: '5s',
     maxconnidle: '5s',
   },

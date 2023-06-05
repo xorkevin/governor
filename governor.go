@@ -213,12 +213,6 @@ func (s *Server) Serve(ctx context.Context) error {
 	} else {
 		maxConnRead = t
 	}
-	maxConnHeader := 2 * time.Second
-	if t, err := time.ParseDuration(s.settings.httpServer.maxConnHeader); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnheader time for http server", klog.AString("maxconnheader", s.settings.httpServer.maxConnHeader))
-	} else {
-		maxConnHeader = t
-	}
 	maxConnWrite := 5 * time.Second
 	if t, err := time.ParseDuration(s.settings.httpServer.maxConnWrite); err != nil {
 		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.AString("maxconnwrite", s.settings.httpServer.maxConnWrite))
@@ -235,18 +229,16 @@ func (s *Server) Serve(ctx context.Context) error {
 		klog.AString("addr", s.settings.config.Addr),
 		klog.AString("maxheadersize", strconv.Itoa(maxHeaderSize)),
 		klog.AString("maxconnread", maxConnRead.String()),
-		klog.AString("maxconnheader", maxConnHeader.String()),
 		klog.AString("maxconnwrite", maxConnWrite.String()),
 		klog.AString("maxconnidle", maxConnIdle.String()),
 	)
 	srv := http.Server{
-		Addr:              s.settings.config.Addr,
-		Handler:           s,
-		ReadTimeout:       maxConnRead,
-		ReadHeaderTimeout: maxConnHeader,
-		WriteTimeout:      maxConnWrite,
-		IdleTimeout:       maxConnIdle,
-		MaxHeaderBytes:    maxHeaderSize,
+		Addr:           s.settings.config.Addr,
+		Handler:        s,
+		ReadTimeout:    maxConnRead,
+		WriteTimeout:   maxConnWrite,
+		IdleTimeout:    maxConnIdle,
+		MaxHeaderBytes: maxHeaderSize,
 	}
 	if s.settings.showBanner {
 		fmt.Printf("%s\n",
