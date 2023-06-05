@@ -85,9 +85,9 @@ func TestMiddleware(t *testing.T) {
 				}
 				rec := httptest.NewRecorder()
 				w := compressorWriter{
-					ResponseWriter: rec,
-					r:              req,
-					status:         0,
+					w:      rec,
+					r:      req,
+					status: 0,
 					writer: &identityWriter{
 						w: rec,
 					},

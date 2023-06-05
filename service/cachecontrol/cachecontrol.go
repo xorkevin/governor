@@ -39,7 +39,7 @@ const (
 
 type (
 	cacheControlWriter struct {
-		http.ResponseWriter
+		w           http.ResponseWriter
 		valCC       string
 		valETag     string
 		wroteHeader bool
@@ -50,32 +50,40 @@ func (w *cacheControlWriter) shouldAddHeaders(status int) bool {
 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		return false
 	}
-	if w.ResponseWriter.Header().Get(headerCacheControl) != "" {
+	if w.Header().Get(headerCacheControl) != "" {
 		return false
 	}
 	return w.valCC != ""
 }
 
+func (w *cacheControlWriter) Header() http.Header {
+	return w.w.Header()
+}
+
 func (w *cacheControlWriter) WriteHeader(status int) {
 	if w.wroteHeader {
-		w.ResponseWriter.WriteHeader(status)
+		w.w.WriteHeader(status)
 		return
 	}
 	if w.shouldAddHeaders(status) {
-		w.ResponseWriter.Header().Set(headerCacheControl, w.valCC)
+		w.Header().Set(headerCacheControl, w.valCC)
 		if w.valETag != "" {
-			w.ResponseWriter.Header().Set(headerETag, w.valETag)
+			w.Header().Set(headerETag, w.valETag)
 		}
 	}
 	w.wroteHeader = true
-	w.ResponseWriter.WriteHeader(status)
+	w.w.WriteHeader(status)
 }
 
 func (w *cacheControlWriter) Write(p []byte) (int, error) {
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(p)
+	return w.w.Write(p)
+}
+
+func (w *cacheControlWriter) Unwrap() http.ResponseWriter {
+	return w.w
 }
 
 func etagToValue(etag string) string {
@@ -119,10 +127,10 @@ func ControlCtx(public bool, directives Directives, maxage int64, etagfunc func(
 			}
 
 			w2 := &cacheControlWriter{
-				ResponseWriter: c.Res(),
-				valCC:          ccHeader,
-				valETag:        etag,
-				wroteHeader:    false,
+				w:           c.Res(),
+				valCC:       ccHeader,
+				valETag:     etag,
+				wroteHeader: false,
 			}
 
 			c = governor.NewContext(w2, c.Req(), c.Log())

@@ -114,27 +114,35 @@ func ipnetsContain(ip netip.Addr, ipnet []netip.Prefix) bool {
 
 type (
 	govResponseWriter struct {
-		http.ResponseWriter
+		w           http.ResponseWriter
 		status      int
 		wroteHeader bool
 	}
 )
 
+func (w *govResponseWriter) Header() http.Header {
+	return w.w.Header()
+}
+
 func (w *govResponseWriter) WriteHeader(status int) {
 	if w.wroteHeader {
-		w.ResponseWriter.WriteHeader(status)
+		w.w.WriteHeader(status)
 		return
 	}
 	w.status = status
 	w.wroteHeader = true
-	w.ResponseWriter.WriteHeader(status)
+	w.w.WriteHeader(status)
 }
 
 func (w *govResponseWriter) Write(p []byte) (int, error) {
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(p)
+	return w.w.Write(p)
+}
+
+func (w *govResponseWriter) Unwrap() http.ResponseWriter {
+	return w.w
 }
 
 func (w *govResponseWriter) isWS() bool {
@@ -170,8 +178,8 @@ func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		klog.AString("http.lreqid", lreqid),
 	)
 	w2 := &govResponseWriter{
-		ResponseWriter: w,
-		status:         0,
+		w:      w,
+		status: 0,
 	}
 	m.s.log.Info(c.Ctx(), "HTTP request")
 	start := time.Now()
@@ -359,7 +367,7 @@ type (
 	}
 
 	compressorWriter struct {
-		http.ResponseWriter
+		w                      http.ResponseWriter
 		r                      *http.Request
 		status                 int
 		writer                 compressWriter
@@ -387,7 +395,7 @@ type (
 )
 
 func (w *compressorWriter) shouldCompress() (string, bool) {
-	if w.ResponseWriter.Header().Get(headerContentEncoding) != "" {
+	if w.Header().Get(headerContentEncoding) != "" {
 		// do not re-compress compressed data
 		return "", false
 	}
@@ -395,7 +403,7 @@ func (w *compressorWriter) shouldCompress() (string, bool) {
 		// do not compress switched protocols, e.g. websockets
 		return "", false
 	}
-	contentType, _, err := mime.ParseMediaType(w.ResponseWriter.Header().Get(headerContentType))
+	contentType, _, err := mime.ParseMediaType(w.Header().Get(headerContentType))
 	if err != nil {
 		// invalid media type
 		return "", false
@@ -427,21 +435,25 @@ func (w *compressorWriter) shouldCompress() (string, bool) {
 	return encoding, true
 }
 
+func (w *compressorWriter) Header() http.Header {
+	return w.w.Header()
+}
+
 func (w *compressorWriter) WriteHeader(status int) {
 	if w.wroteHeader {
-		w.ResponseWriter.WriteHeader(status)
+		w.w.WriteHeader(status)
 		return
 	}
 	w.status = status
 	if encoding, ok := w.shouldCompress(); ok {
-		w.ResponseWriter.Header().Set(headerContentEncoding, encoding)
+		w.Header().Set(headerContentEncoding, encoding)
 		// compressed length is unknown
-		w.ResponseWriter.Header().Del(headerContentLength)
+		w.Header().Del(headerContentLength)
 		w.writer = w.allowedEncodings[encoding].Get().(compressWriter)
-		w.writer.Reset(w.ResponseWriter)
+		w.writer.Reset(w.w)
 	}
 	w.wroteHeader = true
-	w.ResponseWriter.WriteHeader(status)
+	w.w.WriteHeader(status)
 }
 
 func (w *compressorWriter) Write(p []byte) (int, error) {
@@ -449,6 +461,10 @@ func (w *compressorWriter) Write(p []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 	return w.writer.Write(p)
+}
+
+func (w *compressorWriter) Unwrap() http.ResponseWriter {
+	return w.w
 }
 
 func (w *compressorWriter) Close() error {
@@ -558,9 +574,9 @@ type (
 
 func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w2 := &compressorWriter{
-		ResponseWriter: w,
-		r:              r,
-		status:         0,
+		w:      w,
+		r:      r,
+		status: 0,
 		writer: &identityWriter{
 			w: w,
 		},
@@ -578,7 +594,7 @@ func (m *middlewareCompressor) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	// According to RFC7232 section 4.1, server must send same Cache-Control,
 	// Content-Location, Date, ETag, Expires, and Vary headers for 304 response
 	// as 200 response.
-	w2.ResponseWriter.Header().Add(headerVary, headerAcceptEncoding)
+	w2.Header().Add(headerVary, headerAcceptEncoding)
 
 	m.next.ServeHTTP(w2, r)
 }
