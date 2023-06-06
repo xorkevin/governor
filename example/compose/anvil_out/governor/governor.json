@@ -40,6 +40,7 @@
    "http": {
       "addr": ":8080",
       "basepath": "/api",
+      "maxconnheader": "5s",
       "maxconnidle": "5s",
       "maxconnread": "5s",
       "maxconnwrite": "5s",

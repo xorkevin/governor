@@ -14,6 +14,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/viper"
+	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -75,11 +76,12 @@ type (
 	}
 
 	configHTTPServer struct {
-		maxReqSize    string
-		maxHeaderSize string
-		maxConnRead   string
-		maxConnWrite  string
-		maxConnIdle   string
+		maxReqSize    int
+		maxHeaderSize int
+		maxConnRead   time.Duration
+		maxConnHeader time.Duration
+		maxConnWrite  time.Duration
+		maxConnIdle   time.Duration
 	}
 
 	configMiddleware struct {
@@ -174,6 +176,7 @@ func newSettings(opts Opts) *settings {
 	v.SetDefault("http.maxreqsize", "2M")
 	v.SetDefault("http.maxheadersize", "1M")
 	v.SetDefault("http.maxconnread", "5s")
+	v.SetDefault("http.maxconnheader", "5s")
 	v.SetDefault("http.maxconnwrite", "5s")
 	v.SetDefault("http.maxconnidle", "5s")
 	v.SetDefault("cors.alloworigins", []string{})
@@ -269,11 +272,30 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	s.logger.output = s.v.GetString("logger.output")
 	s.config.Addr = s.v.GetString("http.addr")
 	s.config.BasePath = s.v.GetString("http.basepath")
-	s.httpServer.maxReqSize = s.v.GetString("http.maxreqsize")
-	s.httpServer.maxHeaderSize = s.v.GetString("http.maxheadersize")
-	s.httpServer.maxConnRead = s.v.GetString("http.maxconnread")
-	s.httpServer.maxConnWrite = s.v.GetString("http.maxconnwrite")
-	s.httpServer.maxConnIdle = s.v.GetString("http.maxconnidle")
+	s.httpServer.maxReqSize, err = s.getByteSize("http.maxreqsize")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max req size")
+	}
+	s.httpServer.maxHeaderSize, err = s.getByteSize("http.maxheadersize")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max header size")
+	}
+	s.httpServer.maxConnRead, err = s.getDuration("http.maxconnread")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max conn read duration")
+	}
+	s.httpServer.maxConnHeader, err = s.getDuration("http.maxconnheader")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max conn header read duration")
+	}
+	s.httpServer.maxConnWrite, err = s.getDuration("http.maxconnwrite")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max conn write duration")
+	}
+	s.httpServer.maxConnIdle, err = s.getDuration("http.maxconnidle")
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidConfig, "Invalid max conn idle duration")
+	}
 	s.middleware.alloworigins = s.v.GetStringSlice("cors.alloworigins")
 	allowPathPatterns := s.v.GetStringSlice("cors.allowpaths")
 	s.middleware.allowpaths = make([]*corsPathRule, 0, len(allowPathPatterns))
@@ -294,6 +316,15 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 		return err
 	}
 	return nil
+}
+
+func (s *settings) getDuration(key string) (time.Duration, error) {
+	return time.ParseDuration(s.v.GetString(key))
+}
+
+func (s *settings) getByteSize(key string) (int, error) {
+	v, err := bytefmt.ToBytes(s.v.GetString(key))
+	return int(v), err
 }
 
 type (

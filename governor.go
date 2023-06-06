@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -140,12 +138,8 @@ func (s *Server) Init(ctx context.Context) error {
 		s.log.Info(ctx, "Init middleware CORS", klog.AString("alloworigins", strings.Join(s.settings.middleware.alloworigins, ", ")))
 	}
 
-	if limit, err := bytefmt.ToBytes(s.settings.httpServer.maxReqSize); err != nil {
-		s.log.Warn(ctx, "Invalid maxreqsize format for middlware body limit", klog.AString("maxreqsize", s.settings.httpServer.maxReqSize))
-	} else {
-		i.Use(s.bodyLimitMiddleware(limit))
-		s.log.Info(ctx, "Init middleware body limit", klog.AString("maxreqsize", s.settings.httpServer.maxReqSize))
-	}
+	i.Use(s.bodyLimitMiddleware())
+	s.log.Info(ctx, "Init middleware body limit", klog.AInt("maxreqsize", s.settings.httpServer.maxReqSize))
 
 	i.Use(s.compressorMiddleware)
 	s.log.Info(ctx, "Init middleware compressor")
@@ -201,44 +195,22 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "start"))
-	maxHeaderSize := defaultMaxHeaderSize
-	if limit, err := bytefmt.ToBytes(s.settings.httpServer.maxHeaderSize); err != nil {
-		s.log.Warn(ctx, "Invalid maxheadersize format for http server", klog.AString("maxheadersize", s.settings.httpServer.maxReqSize))
-	} else {
-		maxHeaderSize = int(limit)
-	}
-	maxConnRead := 5 * time.Second
-	if t, err := time.ParseDuration(s.settings.httpServer.maxConnRead); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnread time for http server", klog.AString("maxconnread", s.settings.httpServer.maxConnRead))
-	} else {
-		maxConnRead = t
-	}
-	maxConnWrite := 5 * time.Second
-	if t, err := time.ParseDuration(s.settings.httpServer.maxConnWrite); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnwrite time for http server", klog.AString("maxconnwrite", s.settings.httpServer.maxConnWrite))
-	} else {
-		maxConnWrite = t
-	}
-	maxConnIdle := 5 * time.Second
-	if t, err := time.ParseDuration(s.settings.httpServer.maxConnIdle); err != nil {
-		s.log.Warn(ctx, "Invalid maxconnidle time for http server", klog.AString("maxconnidle", s.settings.httpServer.maxConnIdle))
-	} else {
-		maxConnIdle = t
-	}
 	s.log.Info(ctx, "Init http server with configuration",
 		klog.AString("addr", s.settings.config.Addr),
-		klog.AString("maxheadersize", strconv.Itoa(maxHeaderSize)),
-		klog.AString("maxconnread", maxConnRead.String()),
-		klog.AString("maxconnwrite", maxConnWrite.String()),
-		klog.AString("maxconnidle", maxConnIdle.String()),
+		klog.AInt("maxheadersize", s.settings.httpServer.maxHeaderSize),
+		klog.AString("maxconnread", s.settings.httpServer.maxConnRead.String()),
+		klog.AString("maxconnheader", s.settings.httpServer.maxConnHeader.String()),
+		klog.AString("maxconnwrite", s.settings.httpServer.maxConnWrite.String()),
+		klog.AString("maxconnidle", s.settings.httpServer.maxConnIdle.String()),
 	)
 	srv := http.Server{
-		Addr:           s.settings.config.Addr,
-		Handler:        s,
-		ReadTimeout:    maxConnRead,
-		WriteTimeout:   maxConnWrite,
-		IdleTimeout:    maxConnIdle,
-		MaxHeaderBytes: maxHeaderSize,
+		Addr:              s.settings.config.Addr,
+		Handler:           s,
+		ReadTimeout:       s.settings.httpServer.maxConnRead,
+		ReadHeaderTimeout: s.settings.httpServer.maxConnHeader,
+		WriteTimeout:      s.settings.httpServer.maxConnWrite,
+		IdleTimeout:       s.settings.httpServer.maxConnIdle,
+		MaxHeaderBytes:    s.settings.httpServer.maxHeaderSize,
 	}
 	if s.settings.showBanner {
 		fmt.Printf("%s\n",

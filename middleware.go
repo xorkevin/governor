@@ -280,12 +280,6 @@ func corsPathsAllowAllMiddleware(rules []*corsPathRule) Middleware {
 }
 
 type (
-	middlewareBodyLimit struct {
-		s     *Server
-		limit int64
-		next  http.Handler
-	}
-
 	maxBytesBodyReader struct {
 		body io.ReadCloser
 	}
@@ -309,27 +303,54 @@ func (r *maxBytesBodyReader) Close() error {
 	return r.body.Close()
 }
 
-func (m *middlewareBodyLimit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// ContentLength of -1 is unknown
-	if r.ContentLength > m.limit {
-		c := NewContext(w, r, m.s.log.Logger)
-		c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
-		return
+// MiddlewareBodyLimitCtx limits http request body size
+func MiddlewareBodyLimitCtx(limit int) MiddlewareCtx {
+	limit64 := int64(limit)
+	return func(next RouteHandler) RouteHandler {
+		return RouteHandlerFunc(func(c *Context) {
+			// ContentLength of -1 is unknown
+			if c.Req().ContentLength > limit64 {
+				c.WriteError(ErrWithRes(nil, http.StatusRequestEntityTooLarge, "", "Request too large"))
+				return
+			}
+			w, r := c.R()
+			r.Body = &maxBytesBodyReader{
+				body: http.MaxBytesReader(w, r.Body, limit64),
+			}
+			next.ServeHTTPCtx(c)
+		})
 	}
-	r.Body = &maxBytesBodyReader{
-		body: http.MaxBytesReader(w, r.Body, m.limit),
-	}
-	m.next.ServeHTTP(w, r)
 }
 
-func (s *Server) bodyLimitMiddleware(limit int64) Middleware {
-	return func(next http.Handler) http.Handler {
-		return &middlewareBodyLimit{
-			s:     s,
-			limit: limit,
-			next:  next,
-		}
+func MiddlewareBodyLimit(log klog.Logger, limit int) Middleware {
+	return MiddlewareFromCtx(log, MiddlewareBodyLimitCtx(limit))
+}
+
+func (s *Server) bodyLimitMiddleware() Middleware {
+	return MiddlewareBodyLimit(s.log.Logger, s.settings.httpServer.maxReqSize)
+}
+
+// MiddlewareReqTimeoutCtx limits http request duration
+func MiddlewareReqTimeoutCtx(readTimeout, writeTimeout time.Duration) MiddlewareCtx {
+	return func(next RouteHandler) RouteHandler {
+		return RouteHandlerFunc(func(c *Context) {
+			if readTimeout >= 0 || writeTimeout >= 0 {
+				rc := http.NewResponseController(c.Res())
+				t := time.Now().Round(0)
+				if readTimeout >= 0 {
+					rc.SetReadDeadline(t.Add(readTimeout))
+				}
+				if writeTimeout >= 0 {
+					rc.SetWriteDeadline(t.Add(writeTimeout))
+				}
+			}
+			next.ServeHTTPCtx(c)
+		})
 	}
+}
+
+func MiddlewareReqTimeout(log klog.Logger, readTimeout, writeTimeout time.Duration) Middleware {
+	return MiddlewareFromCtx(log, MiddlewareReqTimeoutCtx(readTimeout, writeTimeout))
 }
 
 const (
