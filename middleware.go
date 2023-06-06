@@ -25,6 +25,10 @@ import (
 	"xorkevin.dev/klog"
 )
 
+func middlewareNoop(next RouteHandler) RouteHandler {
+	return next
+}
+
 type (
 	middlewareStripSlashes struct {
 		next http.Handler
@@ -305,6 +309,10 @@ func (r *maxBytesBodyReader) Close() error {
 
 // MiddlewareBodyLimitCtx limits http request body size
 func MiddlewareBodyLimitCtx(limit int) MiddlewareCtx {
+	if limit < 0 {
+		return middlewareNoop
+	}
+
 	limit64 := int64(limit)
 	return func(next RouteHandler) RouteHandler {
 		return RouteHandlerFunc(func(c *Context) {
@@ -332,17 +340,19 @@ func (s *Server) bodyLimitMiddleware() Middleware {
 
 // MiddlewareReqTimeoutCtx limits http request duration
 func MiddlewareReqTimeoutCtx(readTimeout, writeTimeout time.Duration) MiddlewareCtx {
+	if readTimeout < 0 && writeTimeout < 0 {
+		return middlewareNoop
+	}
+
 	return func(next RouteHandler) RouteHandler {
 		return RouteHandlerFunc(func(c *Context) {
-			if readTimeout >= 0 || writeTimeout >= 0 {
-				rc := http.NewResponseController(c.Res())
-				t := time.Now().Round(0)
-				if readTimeout >= 0 {
-					rc.SetReadDeadline(t.Add(readTimeout))
-				}
-				if writeTimeout >= 0 {
-					rc.SetWriteDeadline(t.Add(writeTimeout))
-				}
+			rc := http.NewResponseController(c.Res())
+			t := time.Now().Round(0)
+			if readTimeout >= 0 {
+				rc.SetReadDeadline(t.Add(readTimeout))
+			}
+			if writeTimeout >= 0 {
+				rc.SetWriteDeadline(t.Add(writeTimeout))
 			}
 			next.ServeHTTPCtx(c)
 		})
