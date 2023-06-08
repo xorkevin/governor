@@ -14,6 +14,8 @@ import (
 type (
 	// Repo is an acl repository
 	Repo interface {
+		Check(ctx context.Context, objns, objkey string, pred string, subns, subkey string) (bool, error)
+		Read(ctx context.Context, ns, key string, pred string, limit, offset int) ([]Subject, error)
 		Setup(ctx context.Context) error
 	}
 
@@ -25,12 +27,20 @@ type (
 	// Model is the db acl entry model
 	//forge:model acl
 	Model struct {
-		ObjNS   string `model:"obj_ns,VARCHAR(255)"`
-		ObjKey  string `model:"obj_key,VARCHAR(255);index,sub_ns,sub_key,sub_pred,obj_pred,obj_ns"`
-		ObjPred string `model:"obj_pred,VARCHAR(255)"`
-		SubNS   string `model:"sub_ns,VARCHAR(255)"`
-		SubKey  string `model:"sub_key,VARCHAR(255)"`
-		SubPred string `model:"sub_pred,VARCHAR(255), PRIMARY KEY (obj_ns, obj_key, obj_pred, sub_ns, sub_key, sub_pred)"`
+		ObjNS   string `model:"obj_ns,VARCHAR(255)" query:"obj_ns"`
+		ObjKey  string `model:"obj_key,VARCHAR(255);index,sub_ns,sub_key,sub_pred,obj_pred,obj_ns" query:"obj_key"`
+		ObjPred string `model:"obj_pred,VARCHAR(255)" query:"obj_pred"`
+		SubNS   string `model:"sub_ns,VARCHAR(255)" query:"sub_ns"`
+		SubKey  string `model:"sub_key,VARCHAR(255)" query:"sub_key"`
+		SubPred string `model:"sub_pred,VARCHAR(255), PRIMARY KEY (obj_ns, obj_key, obj_pred, sub_ns, sub_key, sub_pred)" query:"sub_pred"`
+	}
+
+	//forge:model:query acl
+	Subject struct {
+		// TODO order by multiple fields
+		SubNS   string `query:"sub_ns;getoneeq,obj_ns,obj_key,obj_pred,sub_ns,sub_key,sub_pred;getgroupeq,obj_ns,obj_key,obj_pred"`
+		SubKey  string `query:"sub_key"`
+		SubPred string `query:"sub_pred"`
 	}
 
 	ctxKeyRepo struct{}
@@ -69,6 +79,32 @@ func New(database db.Database, table string) Repo {
 		},
 		db: database,
 	}
+}
+
+func (r *repo) Check(ctx context.Context, objns, objkey string, pred string, subns, subkey string) (bool, error) {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return false, err
+	}
+	if _, err := r.table.GetSubjectEqObjNSEqObjKeyEqObjPredEqSubNSEqSubKeyEqSubPred(ctx, d, objns, objkey, pred, subns, subkey, ""); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return false, nil
+		}
+		return false, kerrors.WithMsg(err, "Failed to check acl tuple")
+	}
+	return true, nil
+}
+
+func (r *repo) Read(ctx context.Context, ns, key string, pred string, limit, offset int) ([]Subject, error) {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m, err := r.table.GetSubjectEqObjNSEqObjKeyEqObjPredOrdSubNS(ctx, d, ns, key, pred, true, limit, offset)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to get acl tuple")
+	}
+	return m, nil
 }
 
 // Setup creates a new acl table
