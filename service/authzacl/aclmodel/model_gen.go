@@ -4,7 +4,6 @@ package aclmodel
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -56,38 +55,20 @@ func (t *aclModelTable) InsertBulk(ctx context.Context, d db.SQLExecutor, models
 	return nil
 }
 
+func (t *aclModelTable) DelEqObjNSEqObjKey(ctx context.Context, d db.SQLExecutor, objns string, objkey string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE obj_ns = $1 AND obj_key = $2;", objns, objkey)
+	return err
+}
+
+func (t *aclModelTable) DelEqSubNSEqSubKeyEqSubPred(ctx context.Context, d db.SQLExecutor, subns string, subkey string, subpred string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sub_ns = $1 AND sub_key = $2 AND sub_pred = $3;", subns, subkey, subpred)
+	return err
+}
+
 func (t *aclModelTable) GetSubjectEqObjNSEqObjKeyEqObjPredEqSubNSEqSubKeyEqSubPred(ctx context.Context, d db.SQLExecutor, objns string, objkey string, objpred string, subns string, subkey string, subpred string) (*Subject, error) {
 	m := &Subject{}
 	if err := d.QueryRowContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+t.TableName+" WHERE obj_ns = $1 AND obj_key = $2 AND obj_pred = $3 AND sub_ns = $4 AND sub_key = $5 AND sub_pred = $6;", objns, objkey, objpred, subns, subkey, subpred).Scan(&m.SubNS, &m.SubKey, &m.SubPred); err != nil {
 		return nil, err
 	}
 	return m, nil
-}
-
-func (t *aclModelTable) GetSubjectEqObjNSEqObjKeyEqObjPredOrdSubNS(ctx context.Context, d db.SQLExecutor, objns string, objkey string, objpred string, orderasc bool, limit, offset int) (_ []Subject, retErr error) {
-	order := "DESC"
-	if orderasc {
-		order = "ASC"
-	}
-	res := make([]Subject, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+t.TableName+" WHERE obj_ns = $3 AND obj_key = $4 AND obj_pred = $5 ORDER BY sub_ns "+order+" LIMIT $1 OFFSET $2;", limit, offset, objns, objkey, objpred)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			retErr = errors.Join(retErr, fmt.Errorf("Failed to close db rows: %w", err))
-		}
-	}()
-	for rows.Next() {
-		var m Subject
-		if err := rows.Scan(&m.SubNS, &m.SubKey, &m.SubPred); err != nil {
-			return nil, err
-		}
-		res = append(res, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
 }
