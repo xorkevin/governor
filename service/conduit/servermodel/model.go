@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
@@ -281,7 +282,7 @@ func (r *repo) DeleteChannels(ctx context.Context, serverid string, channelids [
 	return nil
 }
 
-func (t *presenceModelTable) UpsertPresence(ctx context.Context, d db.SQLExecutor, serverid string, userid string, ti int64) error {
+func (t *presenceModelTable) UpsertPresence(ctx context.Context, d sqldb.Executor, serverid string, userid string, ti int64) error {
 	if _, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (serverid, userid, last_updated) VALUES ($1, $2, $3) ON CONFLICT (serverid, userid) DO UPDATE SET last_updated = EXCLUDED.last_updated;", serverid, userid, t); err != nil {
 		return err
 	}

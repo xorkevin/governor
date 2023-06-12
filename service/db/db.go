@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/lib/pq"
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
@@ -21,7 +22,7 @@ type (
 	}
 
 	sqldbClient struct {
-		client *sqldb
+		client *sqldbclient
 		auth   pgAuth
 	}
 
@@ -255,7 +256,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[sqldbC
 	)
 
 	client := &sqldbClient{
-		client: &sqldb{
+		client: &sqldbclient{
 			log:    s.log,
 			client: dbClient,
 		},
@@ -318,37 +319,13 @@ func (s *Service) DB(ctx context.Context) (SQLDB, error) {
 }
 
 type (
-	// SQLExecutor is the interface of the subset of methods shared by [database/sql.DB] and [database/sql.Tx]
-	SQLExecutor interface {
-		ExecContext(ctx context.Context, query string, args ...interface{}) (SQLResult, error)
-		QueryContext(ctx context.Context, query string, args ...interface{}) (SQLRows, error)
-		QueryRowContext(ctx context.Context, query string, args ...interface{}) SQLRow
-	}
-
-	// SQLResult is [sql.Result]
-	SQLResult = sql.Result
-
-	// SQLRows is the interface boundary of [database/sql.Rows]
-	SQLRows interface {
-		Next() bool
-		Scan(dest ...interface{}) error
-		Err() error
-		Close() error
-	}
-
-	// SQLRow is the interface boundary of [database/sql.Row]
-	SQLRow interface {
-		Scan(dest ...interface{}) error
-		Err() error
-	}
-
 	// SQLDB is the interface boundary of a [database/sql.DB]
 	SQLDB interface {
-		SQLExecutor
+		sqldb.Executor
 		PingContext(ctx context.Context) error
 	}
 
-	sqldb struct {
+	sqldbclient struct {
 		log    *klog.LevelLogger
 		client *sql.DB
 	}
@@ -365,7 +342,7 @@ type (
 )
 
 // ExecContext implements [SQLExecutor]
-func (s *sqldb) ExecContext(ctx context.Context, query string, args ...interface{}) (SQLResult, error) {
+func (s *sqldbclient) ExecContext(ctx context.Context, query string, args ...interface{}) (sqldb.Result, error) {
 	r, err := s.client.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, wrapDBErr(err, "Failed executing command")
@@ -374,7 +351,7 @@ func (s *sqldb) ExecContext(ctx context.Context, query string, args ...interface
 }
 
 // QueryContext implements [SQLExecutor]
-func (s *sqldb) QueryContext(ctx context.Context, query string, args ...interface{}) (SQLRows, error) {
+func (s *sqldbclient) QueryContext(ctx context.Context, query string, args ...interface{}) (sqldb.Rows, error) {
 	rows, err := s.client.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, wrapDBErr(err, "Failed executing query")
@@ -387,14 +364,14 @@ func (s *sqldb) QueryContext(ctx context.Context, query string, args ...interfac
 }
 
 // QueryRowContext implements [SQLExecutor]
-func (s *sqldb) QueryRowContext(ctx context.Context, query string, args ...interface{}) SQLRow {
+func (s *sqldbclient) QueryRowContext(ctx context.Context, query string, args ...interface{}) sqldb.Row {
 	return &sqlrow{
 		row: s.client.QueryRowContext(ctx, query, args...),
 	}
 }
 
 // PingContext implements [SQLDB]
-func (s *sqldb) PingContext(ctx context.Context) error {
+func (s *sqldbclient) PingContext(ctx context.Context) error {
 	if err := s.client.PingContext(ctx); err != nil {
 		return wrapDBErr(err, "Failed to ping db")
 	}
@@ -402,7 +379,7 @@ func (s *sqldb) PingContext(ctx context.Context) error {
 }
 
 // Close closes the db client
-func (s *sqldb) Close() error {
+func (s *sqldbclient) Close() error {
 	if err := s.client.Close(); err != nil {
 		return wrapDBErr(err, "Failed to close db client")
 	}

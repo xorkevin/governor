@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
@@ -92,7 +93,7 @@ func New(database db.Database, table string) Repo {
 	}
 }
 
-func (r *repo) getSubjectsByObjPred(ctx context.Context, d db.SQLExecutor, objns string, objkey string, objpred string, limit, offset int) (_ []Subject, retErr error) {
+func (r *repo) getSubjectsByObjPred(ctx context.Context, d sqldb.Executor, objns string, objkey string, objpred string, limit, offset int) (_ []Subject, retErr error) {
 	res := make([]Subject, 0, limit)
 	rows, err := d.QueryContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+r.table.TableName+" WHERE obj_ns = $3 AND obj_key = $4 AND obj_pred = $5 ORDER BY sub_ns ASC, sub_key ASC, sub_pred ASC LIMIT $1 OFFSET $2;", limit, offset, objns, objkey, objpred)
 	if err != nil {
@@ -143,7 +144,7 @@ func (r *repo) Insert(ctx context.Context, m []*Model) error {
 	return nil
 }
 
-func (r *repo) delSubTuples(ctx context.Context, d db.SQLExecutor, sub Subject, objs []Object) error {
+func (r *repo) delSubTuples(ctx context.Context, d sqldb.Executor, sub Subject, objs []Object) error {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(objs)*3)
 	args = append(args, sub.SubNS, sub.SubKey, sub.SubPred)
@@ -176,7 +177,7 @@ func (r *repo) DeleteForSub(ctx context.Context, sub Subject, objs []Object) err
 	return nil
 }
 
-func (r *repo) delObjTuples(ctx context.Context, d db.SQLExecutor, obj Object, subs []Subject) error {
+func (r *repo) delObjTuples(ctx context.Context, d sqldb.Executor, obj Object, subs []Subject) error {
 	paramCount := 3
 	args := make([]interface{}, 0, paramCount+len(subs)*3)
 	args = append(args, obj.ObjNS, obj.ObjKey, obj.ObjPred)

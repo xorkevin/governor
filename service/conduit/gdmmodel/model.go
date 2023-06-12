@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
@@ -262,7 +263,7 @@ func (r *repo) GetUserChats(ctx context.Context, userid string, chatids []string
 	return res, nil
 }
 
-func (t *memberModelTable) CountMembersEqChatid(ctx context.Context, d db.SQLExecutor, chatid string) (int, error) {
+func (t *memberModelTable) CountMembersEqChatid(ctx context.Context, d sqldb.Executor, chatid string) (int, error) {
 	var count int
 	if err := d.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+t.TableName+" WHERE chatid = $1;", chatid).Scan(&count); err != nil {
 		return 0, err

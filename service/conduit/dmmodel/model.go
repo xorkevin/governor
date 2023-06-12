@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
@@ -156,7 +157,7 @@ func (r *repo) GetByChatID(ctx context.Context, chatid string) (*Model, error) {
 	return m, nil
 }
 
-func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, limit int) (_ []Model, retErr error) {
+func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d sqldb.Executor, userid string, limit int) (_ []Model, retErr error) {
 	res := make([]Model, 0, limit)
 	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) ORDER BY last_updated DESC LIMIT $1;", limit, userid)
 	if err != nil {
@@ -180,7 +181,7 @@ func (t *dmModelTable) GetDMsEqUserOrdLastUpdated(ctx context.Context, d db.SQLE
 	return res, nil
 }
 
-func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d db.SQLExecutor, userid string, before int64, limit int) (_ []Model, retErr error) {
+func (t *dmModelTable) GetDMsEqUserLtBeforeOrdLastUpdated(ctx context.Context, d sqldb.Executor, userid string, before int64, limit int) (_ []Model, retErr error) {
 	res := make([]Model, 0, limit)
 	rows, err := d.QueryContext(ctx, "SELECT userid_1, userid_2, chatid, name, theme, last_updated, creation_time FROM "+t.TableName+" WHERE (userid_1 = $2 OR userid_2 = $2) AND last_updated < $3 ORDER BY last_updated DESC LIMIT $1;", limit, userid, before)
 	if err != nil {
@@ -225,7 +226,7 @@ func (r *repo) GetLatest(ctx context.Context, userid string, before int64, limit
 	return m, nil
 }
 
-func (t *dmModelTable) GetDMsEqUserHasUser(ctx context.Context, d db.SQLExecutor, userid string, userids []string) (_ []DMInfo, retErr error) {
+func (t *dmModelTable) GetDMsEqUserHasUser(ctx context.Context, d sqldb.Executor, userid string, userids []string) (_ []DMInfo, retErr error) {
 	args := make([]interface{}, 0, len(userids)*2)
 	var placeholdersid string
 	{

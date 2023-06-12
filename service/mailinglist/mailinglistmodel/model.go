@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
@@ -594,7 +595,7 @@ func (r *repo) UpdateMsgChildren(ctx context.Context, listid, parentid, threadid
 	return nil
 }
 
-func (t *msgModelTable) UpdMsgThreadEqListidEqInReplyTo(ctx context.Context, d db.SQLExecutor, listid, parentid, threadid string) error {
+func (t *msgModelTable) UpdMsgThreadEqListidEqInReplyTo(ctx context.Context, d sqldb.Executor, listid, parentid, threadid string) error {
 	if _, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (thread_id) = ROW($3) WHERE listid = $1 AND thread_id IN (SELECT msgid FROM "+t.TableName+" WHERE listid = $1 AND thread_id = '' AND in_reply_to = $2);", listid, parentid, threadid); err != nil {
 		return err
 	}
@@ -784,7 +785,7 @@ func (r *repo) InsertTree(ctx context.Context, m *TreeModel) error {
 	return nil
 }
 
-func (t *treeModelTable) InsertTreeParentClosures(ctx context.Context, d db.SQLExecutor, listid, msgid, parentid string) error {
+func (t *treeModelTable) InsertTreeParentClosures(ctx context.Context, d sqldb.Executor, listid, msgid, parentid string) error {
 	if _, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (listid, msgid, parent_id, depth, creation_time) SELECT c.listid, c.msgid, p.parent_id, p.depth+c.depth+1, c.creation_time FROM "+t.TableName+" p INNER JOIN "+t.TableName+" c ON p.listid = c.listid WHERE p.listid = $1 AND p.msgid = $2 AND c.parent_id = $3 ON CONFLICT DO NOTHING;", listid, parentid, msgid); err != nil {
 		return err
 	}

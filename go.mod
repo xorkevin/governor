@@ -18,7 +18,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nats-io/nats.go v1.24.0
 	github.com/redis/go-redis/v9 v9.0.2
-	github.com/spf13/cobra v1.6.1
+	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.2
 	github.com/twmb/franz-go v1.13.0
@@ -27,10 +27,11 @@ require (
 	golang.org/x/term v0.6.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 	nhooyr.io/websocket v1.8.7
+	xorkevin.dev/forge v0.4.3
 	xorkevin.dev/hunter2 v0.2.7
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/kfs v0.1.0
-	xorkevin.dev/klog v0.0.0-20230408090513-cffae1892d50
+	xorkevin.dev/klog v0.0.0-20230422031314-3f827239fa5d
 )
 
 require (
@@ -55,7 +56,7 @@ require (
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
-	github.com/inconshreveable/mousetrap v1.0.1 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

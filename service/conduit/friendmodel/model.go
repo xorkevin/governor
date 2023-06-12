@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
@@ -145,7 +146,7 @@ func (r *repo) Insert(ctx context.Context, userid1, userid2 string, username1, u
 	return nil
 }
 
-func (t *friendModelTable) DelFriendPairs(ctx context.Context, d db.SQLExecutor, userid1, userid2 string) error {
+func (t *friendModelTable) DelFriendPairs(ctx context.Context, d sqldb.Executor, userid1, userid2 string) error {
 	if _, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE (userid_1 = $1 AND userid_2 = $2) OR (userid_1 = $2 AND userid_2 = $1);", userid1, userid2); err != nil {
 		return err
 	}
