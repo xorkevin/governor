@@ -341,7 +341,7 @@ type (
 	}
 )
 
-// ExecContext implements [SQLExecutor]
+// ExecContext implements [sqldb.Executor]
 func (s *sqldbclient) ExecContext(ctx context.Context, query string, args ...interface{}) (sqldb.Result, error) {
 	r, err := s.client.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -350,7 +350,7 @@ func (s *sqldbclient) ExecContext(ctx context.Context, query string, args ...int
 	return r, nil
 }
 
-// QueryContext implements [SQLExecutor]
+// QueryContext implements [sqldb.Executor]
 func (s *sqldbclient) QueryContext(ctx context.Context, query string, args ...interface{}) (sqldb.Rows, error) {
 	rows, err := s.client.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -363,7 +363,7 @@ func (s *sqldbclient) QueryContext(ctx context.Context, query string, args ...in
 	}, nil
 }
 
-// QueryRowContext implements [SQLExecutor]
+// QueryRowContext implements [sqldb.Executor]
 func (s *sqldbclient) QueryRowContext(ctx context.Context, query string, args ...interface{}) sqldb.Row {
 	return &sqlrow{
 		row: s.client.QueryRowContext(ctx, query, args...),
@@ -386,12 +386,12 @@ func (s *sqldbclient) Close() error {
 	return nil
 }
 
-// Next implements [SQLRows]
+// Next implements [sqldb.Rows]
 func (r *sqlrows) Next() bool {
 	return r.rows.Next()
 }
 
-// Scan implements [SQLRows]
+// Scan implements [sqldb.Rows]
 func (r *sqlrows) Scan(dest ...interface{}) error {
 	if err := r.rows.Scan(dest...); err != nil {
 		return wrapDBErr(err, "Failed scanning row")
@@ -399,7 +399,7 @@ func (r *sqlrows) Scan(dest ...interface{}) error {
 	return nil
 }
 
-// Err implements [SQLRows]
+// Err implements [sqldb.Rows]
 func (r *sqlrows) Err() error {
 	if err := r.rows.Err(); err != nil {
 		return wrapDBErr(err, "Failed iterating rows")
@@ -407,7 +407,7 @@ func (r *sqlrows) Err() error {
 	return nil
 }
 
-// Close implements [SQLRows]
+// Close implements [sqldb.Rows]
 func (r *sqlrows) Close() error {
 	if err := r.rows.Close(); err != nil {
 		err := wrapDBErr(err, "Failed closing rows")
@@ -417,7 +417,7 @@ func (r *sqlrows) Close() error {
 	return nil
 }
 
-// Scan implements [SQLRow]
+// Scan implements [sqldb.Row]
 func (r *sqlrow) Scan(dest ...interface{}) error {
 	if err := r.row.Scan(dest...); err != nil {
 		return wrapDBErr(err, "Failed scanning row")
@@ -425,7 +425,7 @@ func (r *sqlrow) Scan(dest ...interface{}) error {
 	return nil
 }
 
-// Err implements [SQLRow]
+// Err implements [sqldb.Row]
 func (r *sqlrow) Err() error {
 	if err := r.row.Err(); err != nil {
 		return wrapDBErr(err, "Failed executing query")
