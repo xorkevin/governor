@@ -641,12 +641,11 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	}
 
 	fetches := s.reader.PollRecords(ctx, 1)
+	if fetches.IsClientClosed() {
+		return nil, kerrors.WithKind(nil, ErrClientClosed, "Client closed")
+	}
 	if err := fetches.Err0(); err != nil {
-		err = kerrors.WithKind(err, ErrClient, "Failed to read message")
-		if !kafkaerr.IsRetriable(err) {
-			return nil, kerrors.WithKind(err, ErrClientClosed, "Client closed")
-		}
-		return nil, err
+		return nil, kerrors.WithKind(err, ErrClient, "Failed to read message")
 	}
 	iter := fetches.RecordIter()
 	if iter.Done() {
@@ -689,6 +688,10 @@ func (s *subscription) Close(ctx context.Context) error {
 	defer s.mu.Unlock()
 	if s.closed {
 		return nil
+	}
+	// must commit any marked but uncommitted messages
+	if err := s.reader.CommitMarkedOffsets(ctx); err != nil {
+		s.log.Err(ctx, kerrors.WithKind(err, ErrClient, "Failed to commit offsets on revoke"))
 	}
 	s.reader.Close()
 	s.closed = true
