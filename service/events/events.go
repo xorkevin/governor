@@ -87,6 +87,8 @@ type (
 	Service struct {
 		lc         *lifecycle.Lifecycle[kafkaClient]
 		clientname string
+		appname    string
+		appversion string
 		addr       string
 		config     governor.SecretReader
 		log        *klog.LevelLogger
@@ -143,7 +145,9 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
 	s.log = klog.NewLevelLogger(log)
 	s.config = r
-	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
+	s.clientname = r.Config().Instance
+	s.appname = r.Config().Appname
+	s.appversion = r.Config().Version.String()
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	hbinterval, err := r.GetDuration("hbinterval")
@@ -294,12 +298,15 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[kafkaC
 
 	kClient, err := kgo.NewClient(append(s.commonOpts(authMechanism), []kgo.Opt{
 		// producer requests
-		kgo.RecordPartitioner(
-			// partition by murmur2 hash of key if exists
-			// if not exists, batch requests to a random partition and switch
-			// partitions every 65KB
-			kgo.UniformBytesPartitioner(1<<16, true, true, nil),
-		),
+
+		// using default of:
+		// kgo.RecordPartitioner(
+		// 	kgo.UniformBytesPartitioner(1<<16, true, true, nil),
+		// ),
+		// partition by murmur2 hash of key if exists
+		// if not exists, batch requests to a random partition and switch
+		// partitions every 64KB
+
 		kgo.ProducerBatchCompression(
 			// in order of preference
 			kgo.ZstdCompression(),
@@ -308,13 +315,27 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[kafkaC
 			kgo.GzipCompression(),
 			kgo.NoCompression(),
 		),
-		kgo.MaxBufferedRecords(8192),
-		kgo.ProduceRequestTimeout(10 * time.Second), // in addition to RequestTimeoutOverhead
-		kgo.ProducerBatchMaxBytes(1 << 20),          // 1MB
-		kgo.RecordDeliveryTimeout(30 * time.Second),
-		kgo.RecordRetries(16),
-		kgo.RequiredAcks(kgo.AllISRAcks()), // require all in-sync replicas to ack
-		kgo.UnknownTopicRetries(3),
+
+		// using default of:
+		// kgo.MaxBufferedRecords(10000),
+		// record production will block until the buffered records are flushed
+
+		// using default of:
+		// kgo.ProduceRequestTimeout(10 * time.Second),
+		// in addition to RequestTimeoutOverhead, this tracks how long kafka
+		// brokers have to respond to a produced record
+
+		// using default of:
+		// kgo.ProducerBatchMaxBytes(1000012), // 1MB
+		// maximum message bytes, i.e. max message size for any topic and partition
+
+		kgo.RecordDeliveryTimeout(10 * time.Second), // timeout on overall produce request on batch
+		kgo.RecordRetries(32),                       // retry limit on producing records on failure
+		kgo.RequiredAcks(kgo.AllISRAcks()),          // require all in-sync replicas to ack
+
+		// using default of:
+		// kgo.UnknownTopicRetries(4),
+		// fail record production on receiving consecutive UNKNOWN_TOPIC_OR_PARTITION errors
 	}...)...)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrClient, "Failed to create event stream client")
@@ -349,21 +370,35 @@ func (s *Service) commonOpts(auth scram.Auth) []kgo.Opt {
 	}
 	return []kgo.Opt{
 		kgo.ClientID(s.clientname),
+		kgo.SoftwareNameAndVersion(s.appname, s.appversion),
 		kgo.SeedBrokers(s.addr),
 		kgo.SASL(auth.AsSha512Mechanism()),
+
 		// connections
 		kgo.Dialer(netDialer.DialContext),
-		kgo.ConnIdleTimeout(30 * time.Second),
+
+		// using default of:
+		// kgo.ConnIdleTimeout(20 * time.Second),
+		// minimum idle time before the connection is closed
+
 		// reading and writing data
-		kgo.BrokerMaxReadBytes(1 << 25),  // 32MB
-		kgo.BrokerMaxWriteBytes(1 << 25), // 32MB
-		// need to set otherwise error with max fetch greater than broker max read
-		kgo.FetchMaxBytes(int32(1 << 20)), // 1MB
+
+		// using default of:
+		// kgo.BrokerMaxReadBytes(100MiB),
+		// maximum response size from the broker
+
+		// using default of:
+		// kgo.BrokerMaxWriteBytes(100MiB),
+		// maximum request size to the broker
+
 		kgo.RequestRetries(16),
 		kgo.RequestTimeoutOverhead(10 * time.Second), // request.timeout.ms
+
 		// do not specify RetryBackoffFn use default exponential backoff with
 		// jitter, 250ms to 2.5s max
+
 		kgo.RetryTimeout(30 * time.Second), // retry requests for this long
+
 		// metadata
 		kgo.MetadataMaxAge(1 * time.Minute),         // cache metadata for up to 1 min
 		kgo.MetadataMinAge(2500 * time.Millisecond), // cache metadata for at least 2.5 seconds
@@ -501,6 +536,7 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 	reader, err := kgo.NewClient(append(s.commonOpts(authMechanism), []kgo.Opt{
 		// consumer topic
 		kgo.ConsumeTopics(topic),
+
 		// consumer group
 		kgo.ConsumerGroup(group),
 		kgo.Balancers(kgo.CooperativeStickyBalancer()),
@@ -511,17 +547,21 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 		kgo.OnPartitionsAssigned(sub.onAssigned),
 		kgo.OnPartitionsRevoked(sub.onRevoked),
 		kgo.OnPartitionsLost(sub.onLost),
+
 		// liveness
 		kgo.HeartbeatInterval(3 * time.Second),
-		kgo.SessionTimeout(15 * time.Second),
+		kgo.SessionTimeout(30 * time.Second),
+
 		// commits
 		kgo.AutoCommitInterval(2500 * time.Millisecond),
 		kgo.AutoCommitMarks(), // only commit marked messages
+
 		// consumer requests
 		kgo.FetchMinBytes(1),
 		kgo.FetchMaxBytes(int32(opts.MaxBytes)),
 		kgo.FetchMaxPartitionBytes(int32(opts.MaxBytes)),
 		kgo.FetchMaxWait(5 * time.Second),
+
 		// transactions
 		kgo.FetchIsolationLevel(kgo.ReadCommitted()), // only read committed transactions
 		kgo.RequireStableFetchOffsets(),              // do not allow offsets past uncommitted transaction
@@ -570,28 +610,21 @@ func (s *subscription) onAssigned(ctx context.Context, client *kgo.Client, assig
 }
 
 func (s *subscription) onRevoked(ctx context.Context, client *kgo.Client, revoked map[string][]int32) {
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		for topic, partitions := range revoked {
-			if topic != s.topic {
-				continue
-			}
-			for _, i := range partitions {
-				delete(s.assigned, i)
-			}
-		}
-	}()
+	s.rmPartitions(revoked)
 	// must commit any marked but uncommitted messages
-	if err := client.CommitUncommittedOffsets(ctx); err != nil {
+	if err := client.CommitMarkedOffsets(ctx); err != nil {
 		s.log.Err(ctx, kerrors.WithKind(err, ErrClient, "Failed to commit offsets on revoke"))
 	}
 }
 
 func (s *subscription) onLost(ctx context.Context, client *kgo.Client, lost map[string][]int32) {
+	s.rmPartitions(lost)
+}
+
+func (s *subscription) rmPartitions(partitions map[string][]int32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for topic, partitions := range lost {
+	for topic, partitions := range partitions {
 		if topic != s.topic {
 			continue
 		}
