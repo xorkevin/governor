@@ -539,7 +539,10 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 
 		// consumer group
 		kgo.ConsumerGroup(group),
-		kgo.Balancers(kgo.CooperativeStickyBalancer()),
+
+		// using default of:
+		// kgo.Balancers(kgo.CooperativeStickyBalancer()),
+
 		kgo.ConsumeResetOffset(
 			kgo.NewOffset().AfterMilli(time.Now().Round(0).UnixMilli()),
 		), // consume requests after now
