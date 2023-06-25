@@ -21,7 +21,7 @@ func (t *aclModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_sub_ns__sub_key__sub_pred__obj_pred__obj_ns__obj_key_index ON "+t.TableName+" (sub_ns, sub_key, sub_pred, obj_pred, obj_ns, obj_key);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_sub_ns__sub_key__sub_pred__obj_ns__obj_key__obj_pred_index ON "+t.TableName+" (sub_ns, sub_key, sub_pred, obj_ns, obj_key, obj_pred);")
 	if err != nil {
 		return err
 	}
@@ -60,15 +60,7 @@ func (t *aclModelTable) DelEqObjNSEqObjKey(ctx context.Context, d sqldb.Executor
 	return err
 }
 
-func (t *aclModelTable) DelEqSubNSEqSubKeyEqSubPred(ctx context.Context, d sqldb.Executor, subns string, subkey string, subpred string) error {
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sub_ns = $1 AND sub_key = $2 AND sub_pred = $3;", subns, subkey, subpred)
+func (t *aclModelTable) DelEqSubNSEqSubKey(ctx context.Context, d sqldb.Executor, subns string, subkey string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sub_ns = $1 AND sub_key = $2;", subns, subkey)
 	return err
-}
-
-func (t *aclModelTable) GetSubjectEqObjNSEqObjKeyEqObjPredEqSubNSEqSubKeyEqSubPred(ctx context.Context, d sqldb.Executor, objns string, objkey string, objpred string, subns string, subkey string, subpred string) (*Subject, error) {
-	m := &Subject{}
-	if err := d.QueryRowContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+t.TableName+" WHERE obj_ns = $1 AND obj_key = $2 AND obj_pred = $3 AND sub_ns = $4 AND sub_key = $5 AND sub_pred = $6;", objns, objkey, objpred, subns, subkey, subpred).Scan(&m.SubNS, &m.SubKey, &m.SubPred); err != nil {
-		return nil, err
-	}
-	return m, nil
 }
