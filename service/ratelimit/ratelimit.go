@@ -122,7 +122,7 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 	r.SetDefault("params.auth", map[string]interface{}{
 		"expiration": 60,
 		"period":     15,
-		"limit":      120,
+		"limit":      240,
 	})
 }
 
@@ -262,8 +262,7 @@ func (s *Service) BaseCtx() governor.MiddlewareCtx {
 	return Compose(
 		s,
 		IPAddress("ip", s.paramsBase),
-		Userid("id", s.paramsBase),
-		UseridIPAddress("id_ip", s.paramsAuth),
+		Userid("id", s.paramsAuth),
 	)
 }
 
@@ -346,30 +345,6 @@ func Userid(key string, params Params) Tagger {
 			{
 				Key:    key,
 				Value:  userid,
-				Params: params,
-			},
-		}
-	}
-}
-
-// UseridIPAddress tags userid ip tuples
-func UseridIPAddress(key string, params Params) Tagger {
-	if params.Period <= 0 {
-		panic("period must be positive")
-	}
-	return func(c *governor.Context) []Tag {
-		userid := gate.GetCtxUserid(c)
-		if userid == "" {
-			return nil
-		}
-		ip := c.RealIP()
-		if ip == nil {
-			return nil
-		}
-		return []Tag{
-			{
-				Key:    key,
-				Value:  userid + "_" + ip.String(),
 				Params: params,
 			},
 		}
