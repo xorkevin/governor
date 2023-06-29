@@ -11,14 +11,25 @@ import (
 
 type (
 	Obj struct {
+		NS  string `json:"ns"`
+		Key string `json:"key"`
+	}
+
+	ObjRel struct {
+		NS   string `json:"ns"`
+		Key  string `json:"key"`
+		Pred string `json:"pred"`
+	}
+
+	Sub struct {
 		NS   string `json:"ns"`
 		Key  string `json:"key"`
 		Pred string `json:"pred"`
 	}
 
 	Relation struct {
-		Obj Obj `json:"obj"`
-		Sub Obj `json:"sub"`
+		Obj ObjRel `json:"obj"`
+		Sub Sub    `json:"sub"`
 	}
 
 	ACL interface{}

@@ -54,13 +54,3 @@ func (t *aclModelTable) InsertBulk(ctx context.Context, d sqldb.Executor, models
 	}
 	return nil
 }
-
-func (t *aclModelTable) DelEqObjNSEqObjKey(ctx context.Context, d sqldb.Executor, objns string, objkey string) error {
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE obj_ns = $1 AND obj_key = $2;", objns, objkey)
-	return err
-}
-
-func (t *aclModelTable) DelEqSubNSEqSubKey(ctx context.Context, d sqldb.Executor, subns string, subkey string) error {
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sub_ns = $1 AND sub_key = $2;", subns, subkey)
-	return err
-}

@@ -17,13 +17,11 @@ import (
 type (
 	// Repo is an acl repository
 	Repo interface {
-		Read(ctx context.Context, obj Object, limit int, after Subject) ([]Subject, error)
-		ReadBySub(ctx context.Context, sub Subject, limit int, after Object) ([]Object, error)
+		Read(ctx context.Context, obj Object, limit int, afterPred string, after Subject) ([]Subject, error)
+		ReadBySub(ctx context.Context, sub Subject, limit int, after ObjectRel) ([]ObjectRel, error)
 		Insert(ctx context.Context, m []*Model) error
 		Delete(ctx context.Context, m []Model) error
-		DeleteAllByObj(ctx context.Context, objns, objkey string) error
-		DeleteAllBySub(ctx context.Context, subns, subkey string) error
-		Check(ctx context.Context, obj Object, sub Subject) (bool, error)
+		Check(ctx context.Context, obj Object, pred string, sub Subject) (bool, error)
 		Setup(ctx context.Context) error
 	}
 
@@ -34,9 +32,8 @@ type (
 
 	// Model is the db acl entry model
 	//forge:model acl
-	//forge:model:query acl
 	Model struct {
-		ObjNS   string `model:"obj_ns,VARCHAR(255)" query:"obj_ns;deleq,obj_ns,obj_key;deleq,sub_ns,sub_key"`
+		ObjNS   string `model:"obj_ns,VARCHAR(255)" query:"obj_ns"`
 		ObjKey  string `model:"obj_key,VARCHAR(255)" query:"obj_key"`
 		ObjPred string `model:"obj_pred,VARCHAR(255);index,sub_ns,sub_key,sub_pred,obj_ns,obj_key" query:"obj_pred"`
 		SubNS   string `model:"sub_ns,VARCHAR(255)" query:"sub_ns"`
@@ -51,6 +48,11 @@ type (
 	}
 
 	Object struct {
+		ObjNS  string `query:"obj_ns"`
+		ObjKey string `query:"obj_key"`
+	}
+
+	ObjectRel struct {
 		ObjNS   string `query:"obj_ns"`
 		ObjKey  string `query:"obj_key"`
 		ObjPred string `query:"obj_pred"`
@@ -94,9 +96,9 @@ func New(database db.Database, table string) Repo {
 	}
 }
 
-func (r *repo) getSubjectsByObjPred(ctx context.Context, d sqldb.Executor, obj Object, limit int, sub Subject) (_ []Subject, retErr error) {
+func (r *repo) getSubjectsByObjPred(ctx context.Context, d sqldb.Executor, obj Object, limit int, pred string, sub Subject) (_ []Subject, retErr error) {
 	res := make([]Subject, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+r.table.TableName+" WHERE obj_ns = $2 AND obj_key = $3 AND obj_pred = $4 AND (sub_ns > $5 OR (sub_ns = $5 AND sub_key > $6) OR (sub_ns = $5 AND sub_key = $6 AND sub_pred > $7)) ORDER BY sub_ns ASC, sub_key ASC, sub_pred ASC LIMIT $1;", limit, obj.ObjNS, obj.ObjKey, obj.ObjPred, sub.SubNS, sub.SubKey, sub.SubPred)
+	rows, err := d.QueryContext(ctx, "SELECT sub_ns, sub_key, sub_pred FROM "+r.table.TableName+" WHERE obj_ns = $2 AND obj_key = $3 AND (obj_pred > $4 OR (obj_pred = $4 AND sub_ns > $5) OR (obj_pred = $4 AND sub_ns = $5 AND sub_key > $6) OR (obj_pred = $4 AND sub_ns = $5 AND sub_key = $6 AND sub_pred > $7)) ORDER BY obj_pred ASC, sub_ns ASC, sub_key ASC, sub_pred ASC LIMIT $1;", limit, obj.ObjNS, obj.ObjKey, pred, sub.SubNS, sub.SubKey, sub.SubPred)
 	if err != nil {
 		return nil, err
 	}
@@ -118,20 +120,20 @@ func (r *repo) getSubjectsByObjPred(ctx context.Context, d sqldb.Executor, obj O
 	return res, nil
 }
 
-func (r *repo) Read(ctx context.Context, obj Object, limit int, after Subject) ([]Subject, error) {
+func (r *repo) Read(ctx context.Context, obj Object, limit int, afterPred string, after Subject) ([]Subject, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.getSubjectsByObjPred(ctx, d, obj, limit, after)
+	m, err := r.getSubjectsByObjPred(ctx, d, obj, limit, afterPred, after)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get acl tuples")
 	}
 	return m, nil
 }
 
-func (r *repo) getObjectsBySubPred(ctx context.Context, d sqldb.Executor, sub Subject, limit int, obj Object) (_ []Object, retErr error) {
-	res := make([]Object, 0, limit)
+func (r *repo) getObjectsBySubPred(ctx context.Context, d sqldb.Executor, sub Subject, limit int, obj ObjectRel) (_ []ObjectRel, retErr error) {
+	res := make([]ObjectRel, 0, limit)
 	rows, err := d.QueryContext(ctx, "SELECT obj_ns, obj_key, obj_pred FROM "+r.table.TableName+" WHERE sub_ns = $2 AND sub_key = $3 AND sub_pred = $4 AND (obj_ns > $5 OR (obj_ns = $5 AND obj_key > $6) OR (obj_ns = $5 AND obj_key = $6 AND obj_pred > $7)) ORDER BY obj_ns ASC, obj_key ASC, obj_pred ASC LIMIT $1;", limit, sub.SubNS, sub.SubKey, sub.SubPred, obj.ObjNS, obj.ObjKey, obj.ObjPred)
 	if err != nil {
 		return nil, err
@@ -142,7 +144,7 @@ func (r *repo) getObjectsBySubPred(ctx context.Context, d sqldb.Executor, sub Su
 		}
 	}()
 	for rows.Next() {
-		var m Object
+		var m ObjectRel
 		if err := rows.Scan(&m.ObjNS, &m.ObjKey, &m.ObjPred); err != nil {
 			return nil, err
 		}
@@ -154,7 +156,7 @@ func (r *repo) getObjectsBySubPred(ctx context.Context, d sqldb.Executor, sub Su
 	return res, nil
 }
 
-func (r *repo) ReadBySub(ctx context.Context, sub Subject, limit int, after Object) ([]Object, error) {
+func (r *repo) ReadBySub(ctx context.Context, sub Subject, limit int, after ObjectRel) ([]ObjectRel, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
@@ -213,42 +215,20 @@ func (r *repo) Delete(ctx context.Context, m []Model) error {
 	return nil
 }
 
-func (r *repo) DeleteAllByObj(ctx context.Context, objns, objkey string) error {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.table.DelEqObjNSEqObjKey(ctx, d, objns, objkey); err != nil {
-		return kerrors.WithMsg(err, "Failed deleting acl tuples")
-	}
-	return nil
-}
-
-func (r *repo) DeleteAllBySub(ctx context.Context, subns, subkey string) error {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.table.DelEqSubNSEqSubKey(ctx, d, subns, subkey); err != nil {
-		return kerrors.WithMsg(err, "Failed deleting acl tuples")
-	}
-	return nil
-}
-
-func (r *repo) checkRelation(ctx context.Context, d sqldb.Executor, obj Object, sub Subject) (bool, error) {
+func (r *repo) checkRelation(ctx context.Context, d sqldb.Executor, obj Object, pred string, sub Subject) (bool, error) {
 	var exists bool
-	if err := d.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM "+r.table.TableName+" WHERE obj_ns = $1 AND obj_key = $2 AND obj_pred = $3 AND sub_ns = $4 AND sub_key = $5 AND sub_pred = $6);", obj.ObjNS, obj.ObjKey, obj.ObjPred, sub.SubNS, sub.SubKey, sub.SubPred).Scan(&exists); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM "+r.table.TableName+" WHERE obj_ns = $1 AND obj_key = $2 AND obj_pred = $3 AND sub_ns = $4 AND sub_key = $5 AND sub_pred = $6);", obj.ObjNS, obj.ObjKey, pred, sub.SubNS, sub.SubKey, sub.SubPred).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil
 }
 
-func (r *repo) Check(ctx context.Context, obj Object, sub Subject) (bool, error) {
+func (r *repo) Check(ctx context.Context, obj Object, pred string, sub Subject) (bool, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return false, err
 	}
-	if _, err := r.checkRelation(ctx, d, obj, sub); err != nil {
+	if _, err := r.checkRelation(ctx, d, obj, pred, sub); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return false, nil
 		}

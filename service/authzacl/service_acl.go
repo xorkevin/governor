@@ -99,21 +99,7 @@ func (s *Service) DeleteRelations(ctx context.Context, rels []Relation) error {
 	return nil
 }
 
-func (s *Service) DeleteAllByObj(ctx context.Context, objns, objkey string) error {
-	if err := s.repo.DeleteAllByObj(ctx, objns, objkey); err != nil {
-		return kerrors.WithMsg(err, "Failed to remove relations for obj")
-	}
-	return nil
-}
-
-func (s *Service) DeleteAllBySub(ctx context.Context, subns, subkey string) error {
-	if err := s.repo.DeleteAllBySub(ctx, subns, subkey); err != nil {
-		return kerrors.WithMsg(err, "Failed to remove relations for sub")
-	}
-	return nil
-}
-
-func (s *Service) Read(ctx context.Context, obj Obj, limit int, after *Obj) ([]Obj, error) {
+func (s *Service) Read(ctx context.Context, obj Obj, limit int, afterPred string, after *Sub) ([]Sub, error) {
 	var cursor aclmodel.Subject
 	if after != nil {
 		cursor = aclmodel.Subject{
@@ -123,16 +109,15 @@ func (s *Service) Read(ctx context.Context, obj Obj, limit int, after *Obj) ([]O
 		}
 	}
 	m, err := s.repo.Read(ctx, aclmodel.Object{
-		ObjNS:   obj.NS,
-		ObjKey:  obj.Key,
-		ObjPred: obj.Pred,
-	}, limit, cursor)
+		ObjNS:  obj.NS,
+		ObjKey: obj.Key,
+	}, limit, afterPred, cursor)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get object relations")
 	}
-	res := make([]Obj, 0, len(m))
+	res := make([]Sub, 0, len(m))
 	for _, i := range m {
-		res = append(res, Obj{
+		res = append(res, Sub{
 			NS:   i.SubNS,
 			Key:  i.SubKey,
 			Pred: i.SubPred,
@@ -141,10 +126,10 @@ func (s *Service) Read(ctx context.Context, obj Obj, limit int, after *Obj) ([]O
 	return res, nil
 }
 
-func (s *Service) ReadBySub(ctx context.Context, sub Obj, limit int, after *Obj) ([]Obj, error) {
-	var cursor aclmodel.Object
+func (s *Service) ReadBySub(ctx context.Context, sub Sub, limit int, after *ObjRel) ([]ObjRel, error) {
+	var cursor aclmodel.ObjectRel
 	if after != nil {
-		cursor = aclmodel.Object{
+		cursor = aclmodel.ObjectRel{
 			ObjNS:   after.NS,
 			ObjKey:  after.Key,
 			ObjPred: after.Pred,
@@ -158,9 +143,9 @@ func (s *Service) ReadBySub(ctx context.Context, sub Obj, limit int, after *Obj)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get subject relations")
 	}
-	res := make([]Obj, 0, len(m))
+	res := make([]ObjRel, 0, len(m))
 	for _, i := range m {
-		res = append(res, Obj{
+		res = append(res, ObjRel{
 			NS:   i.ObjNS,
 			Key:  i.ObjKey,
 			Pred: i.ObjPred,
@@ -169,16 +154,20 @@ func (s *Service) ReadBySub(ctx context.Context, sub Obj, limit int, after *Obj)
 	return res, nil
 }
 
-func (s *Service) Check(ctx context.Context, obj Obj, sub Obj) (bool, error) {
-	ok, err := s.repo.Check(ctx, aclmodel.Object{
-		ObjNS:   obj.NS,
-		ObjKey:  obj.Key,
-		ObjPred: obj.Pred,
-	}, aclmodel.Subject{
-		SubNS:   sub.NS,
-		SubKey:  sub.Key,
-		SubPred: sub.Pred,
-	})
+func (s *Service) Check(ctx context.Context, obj Obj, pred string, sub Sub) (bool, error) {
+	ok, err := s.repo.Check(
+		ctx,
+		aclmodel.Object{
+			ObjNS:  obj.NS,
+			ObjKey: obj.Key,
+		},
+		pred,
+		aclmodel.Subject{
+			SubNS:   sub.NS,
+			SubKey:  sub.Key,
+			SubPred: sub.Pred,
+		},
+	)
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to check acl relation")
 	}
