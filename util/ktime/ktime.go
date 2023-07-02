@@ -2,7 +2,6 @@ package ktime
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -11,7 +10,7 @@ func After(ctx context.Context, d time.Duration) error {
 	defer t.Stop()
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("Context closed: %w", context.Cause(ctx))
+		return ctx.Err()
 	case <-t.C:
 		return nil
 	}
