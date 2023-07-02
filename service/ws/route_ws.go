@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -87,72 +88,31 @@ func (s *router) ws(c *governor.Context) {
 	}
 	defer conn.Close(int(websocket.StatusInternalError), "Internal error")
 
-	presenceLocation := ""
-
-	if err := s.sendPresenceUpdate(c.Ctx(), userid, presenceLocation); err != nil {
-		s.s.log.Err(c.Ctx(), err)
-	}
-
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
 	defer wg.Wait()
 
 	ctx, cancel := context.WithCancel(c.Ctx())
 	defer cancel()
 
-	subSuccess := make(chan struct{})
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	{
 		userChannel := userChannelName(s.s.opts.UserSendChannelPrefix, userid)
-		first := true
-		delay := 250 * time.Millisecond
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
-			if err != nil {
-				s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"))
-				if err := ktime.After(ctx, delay); err != nil {
-					return
-				}
-				delay = min(delay*2, 15*time.Second)
-				return
-			}
-			delay = 250 * time.Millisecond
-			if first {
-				first = false
-				close(subSuccess)
-			}
-			s.consumeSend(ctx, cancel, conn, sub)
+		sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
+		if err != nil {
+			conn.CloseError(governor.ErrWS(err, int(websocket.StatusInternalError), "Failed to subscribe to ws user msg channels"))
+			return
 		}
-	}()
+		wg.Add(1)
+		go s.consumeSend(ctx, cancel, &wg, conn, sub)
+	}
+
+	var presenceLocation atomic.Pointer[string]
+	{
+		var emptystr string
+		presenceLocation.Store(&emptystr)
+	}
 
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					s.s.log.Err(ctx, err)
-				}
-			}
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-subSuccess:
-	}
+	go s.presenceHeartbeat(ctx, &wg, userid, &presenceLocation)
 
 	for {
 		isText, b, err := conn.Read(ctx)
@@ -174,33 +134,9 @@ func (s *router) ws(c *governor.Context) {
 			return
 		}
 		if channel == ctlChannel {
-			var o ctlOps
-			if err := kjson.Unmarshal(msg, &o); err != nil {
-				conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl op format"))
+			if err := s.handleCtlMsg(ctx, conn, msg, userid, &presenceLocation); err != nil {
+				conn.CloseError(err)
 				return
-			}
-			origLocation := presenceLocation
-			for _, i := range o.Ops {
-				switch i.Op {
-				case ctlOpLoc:
-					{
-						var args ctlLocOp
-						if err := kjson.Unmarshal(i.Args, &args); err != nil {
-							conn.CloseError(governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl loc op format"))
-							return
-						}
-						if len(args.Location) > 127 {
-							conn.CloseError(governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid location"))
-							return
-						}
-						presenceLocation = args.Location
-					}
-				}
-			}
-			if presenceLocation != origLocation {
-				if err := s.sendPresenceUpdate(ctx, userid, presenceLocation); err != nil {
-					s.s.log.Err(ctx, err)
-				}
 			}
 		} else {
 			if b, err := encodeReqMsg(channel, userid, msg); err != nil {
@@ -217,7 +153,8 @@ func (s *router) ws(c *governor.Context) {
 	}
 }
 
-func (s *router) consumeSend(ctx context.Context, cancel context.CancelFunc, conn *governor.Websocket, sub pubsub.Subscription) {
+func (s *router) consumeSend(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitGroup, conn *governor.Websocket, sub pubsub.Subscription) {
+	defer wg.Done()
 	defer func() {
 		if err := sub.Close(ctx); err != nil {
 			s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"))
@@ -226,12 +163,19 @@ func (s *router) consumeSend(ctx context.Context, cancel context.CancelFunc, con
 
 	delay := 250 * time.Millisecond
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		m, err := sub.ReadMsg(ctx)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				continue
 			}
 			if errors.Is(err, pubsub.ErrClientClosed) {
+				conn.CloseError(governor.ErrWS(nil, int(websocket.StatusInternalError), "Subscription to user msg channels closed"))
+				cancel()
 				return
 			}
 			s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
@@ -257,6 +201,60 @@ func (s *router) consumeSend(ctx context.Context, cancel context.CancelFunc, con
 			return
 		}
 	}
+}
+
+func (s *router) presenceHeartbeat(ctx context.Context, wg *sync.WaitGroup, userid string, loc *atomic.Pointer[string]) {
+	defer wg.Done()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	if err := s.sendPresenceUpdate(ctx, userid, *loc.Load()); err != nil {
+		s.s.log.Err(ctx, err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.sendPresenceUpdate(ctx, userid, *loc.Load()); err != nil {
+				s.s.log.Err(ctx, err)
+			}
+		}
+	}
+}
+
+func (s *router) handleCtlMsg(ctx context.Context, conn *governor.Websocket, msg []byte, userid string, loc *atomic.Pointer[string]) error {
+	var o ctlOps
+	if err := kjson.Unmarshal(msg, &o); err != nil {
+		return governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl op format")
+	}
+	changedLocation := false
+	curLocation := *loc.Load()
+	nextLocation := ""
+	for _, i := range o.Ops {
+		switch i.Op {
+		case ctlOpLoc:
+			{
+				var args ctlLocOp
+				if err := kjson.Unmarshal(i.Args, &args); err != nil {
+					return governor.ErrWS(err, int(websocket.StatusUnsupportedData), "Invalid ctl loc op format")
+				}
+				if len(args.Location) > 127 {
+					return governor.ErrWS(nil, int(websocket.StatusUnsupportedData), "Invalid location")
+				}
+				if args.Location != curLocation {
+					changedLocation = true
+					nextLocation = args.Location
+				}
+			}
+		}
+	}
+	if changedLocation {
+		loc.Store(&nextLocation)
+		if err := s.sendPresenceUpdate(ctx, userid, nextLocation); err != nil {
+			s.s.log.Err(ctx, err)
+		}
+	}
+	return nil
 }
 
 func (s *router) echo(c *governor.Context) {

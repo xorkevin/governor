@@ -28,6 +28,7 @@ type (
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
 		Close(ctx context.Context) error
+		IsClosed() bool
 	}
 
 	// Pubsub is an events service with at most once semantics
@@ -372,6 +373,10 @@ func (s *subscription) Close(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Closed subscription")
 	return nil
+}
+
+func (s *subscription) IsClosed() bool {
+	return s.isClosed()
 }
 
 func min(a, b time.Duration) time.Duration {
