@@ -1022,27 +1022,51 @@ func (w *Watcher) consumeMsg(ctx context.Context, sub Subscription, m Msg, opts 
 
 	delay := opts.MinBackoff
 	count := 0
+	handledMsg := false
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		count++
-		isDlq := w.dlqhandler != nil && count > w.maxdeliver
-		var handler Handler
-		if isDlq {
-			handler = w.dlqhandler
-		} else {
-			handler = w.handler
-		}
+		if !handledMsg {
+			count++
+			isDlq := w.dlqhandler != nil && count > w.maxdeliver
+			var handler Handler
+			if isDlq {
+				handler = w.dlqhandler
+			} else {
+				handler = w.handler
+			}
 
-		start := time.Now()
-		if err := w.handleMsg(ctx, sub, handler, m, start); err != nil {
+			msgctx := klog.CtxWithAttrs(ctx,
+				klog.ABool("events.dlq", isDlq),
+				klog.AInt("events.delivered", count),
+			)
+			start := time.Now()
+			if err := handler.Handle(msgctx, m); err != nil {
+				duration := time.Since(start)
+				w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing handler"),
+					klog.AInt64("duration_ms", duration.Milliseconds()),
+				)
+				if errors.Is(context.Cause(msgctx), ErrPartitionUnassigned) {
+					return
+				}
+				if err := ktime.After(msgctx, delay); err != nil {
+					return
+				}
+				delay = min(delay*2, opts.MaxBackoff)
+				continue
+			}
 			duration := time.Since(start)
-			w.log.Err(ctx, err,
+			handledMsg = true
+			delay = opts.MinBackoff
+			w.log.Info(msgctx, "Handled message",
 				klog.AInt64("duration_ms", duration.Milliseconds()),
 			)
+		}
+		if err := sub.Commit(ctx, m); err != nil {
+			w.log.Err(ctx, kerrors.WithMsg(err, "Failed to commit message"))
 			if errors.Is(err, ErrClientClosed) {
 				return
 			}
@@ -1055,21 +1079,7 @@ func (w *Watcher) consumeMsg(ctx context.Context, sub Subscription, m Msg, opts 
 			delay = min(delay*2, opts.MaxBackoff)
 			continue
 		}
+		w.log.Info(ctx, "Committed message")
 		return
 	}
-}
-
-func (w *Watcher) handleMsg(ctx context.Context, sub Subscription, handler Handler, m Msg, start time.Time) error {
-	if err := handler.Handle(ctx, m); err != nil {
-		return kerrors.WithMsg(err, "Failed executing handler")
-	}
-	duration := time.Since(start)
-	w.log.Info(ctx, "Handled message",
-		klog.AInt64("duration_ms", duration.Milliseconds()),
-	)
-	if err := sub.Commit(ctx, m); err != nil {
-		return kerrors.WithMsg(err, "Failed to commit message")
-	}
-	w.log.Info(ctx, "Committed message")
-	return nil
 }
