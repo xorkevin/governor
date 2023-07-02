@@ -113,59 +113,21 @@ func (s *router) ws(c *governor.Context) {
 				return
 			default:
 			}
-			func() {
-				sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
-				if err != nil {
-					s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"))
-					if err := ktime.After(ctx, delay); err != nil {
-						return
-					}
-					delay = min(delay*2, 15*time.Second)
+			sub, err := s.s.pubsub.Subscribe(ctx, userChannel, "")
+			if err != nil {
+				s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to subscribe to ws user msg channels"))
+				if err := ktime.After(ctx, delay); err != nil {
 					return
 				}
-				defer func() {
-					if err := sub.Close(ctx); err != nil {
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"))
-					}
-				}()
-				delay = 250 * time.Millisecond
-				if first {
-					first = false
-					close(subSuccess)
-				}
-				for {
-					m, err := sub.ReadMsg(ctx)
-					if err != nil {
-						if errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						if errors.Is(err, pubsub.ErrClientClosed) {
-							return
-						}
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
-						if err := ktime.After(ctx, delay); err != nil {
-							return
-						}
-						delay = min(delay*2, 15*time.Second)
-						continue
-					}
-					channel, _, err := decodeResMsg(m.Data)
-					if err != nil {
-						s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed decoding message"))
-						continue
-					}
-					if channel == "" {
-						s.s.log.Err(ctx, kerrors.WithMsg(nil, "Malformed sent message"))
-						continue
-					}
-					if err := conn.Write(ctx, true, m.Data); err != nil {
-						conn.CloseError(err)
-						cancel()
-						return
-					}
-					return
-				}
-			}()
+				delay = min(delay*2, 15*time.Second)
+				return
+			}
+			delay = 250 * time.Millisecond
+			if first {
+				first = false
+				close(subSuccess)
+			}
+			s.consumeSend(ctx, cancel, conn, sub)
 		}
 	}()
 
@@ -250,6 +212,48 @@ func (s *router) ws(c *governor.Context) {
 			}
 		}
 		if err := ktime.After(ctx, 64*time.Millisecond); err != nil {
+			return
+		}
+	}
+}
+
+func (s *router) consumeSend(ctx context.Context, cancel context.CancelFunc, conn *governor.Websocket, sub pubsub.Subscription) {
+	defer func() {
+		if err := sub.Close(ctx); err != nil {
+			s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed to close ws user event subscription"))
+		}
+	}()
+
+	delay := 250 * time.Millisecond
+	for {
+		m, err := sub.ReadMsg(ctx)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			if errors.Is(err, pubsub.ErrClientClosed) {
+				return
+			}
+			s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
+			if err := ktime.After(ctx, delay); err != nil {
+				return
+			}
+			delay = min(delay*2, 15*time.Second)
+			continue
+		}
+		delay = 250 * time.Millisecond
+		channel, _, err := decodeResMsg(m.Data)
+		if err != nil {
+			s.s.log.Err(ctx, kerrors.WithMsg(err, "Failed decoding message"))
+			continue
+		}
+		if channel == "" {
+			s.s.log.Err(ctx, kerrors.WithMsg(nil, "Malformed sent message"))
+			continue
+		}
+		if err := conn.Write(ctx, true, m.Data); err != nil {
+			conn.CloseError(err)
+			cancel()
 			return
 		}
 	}
