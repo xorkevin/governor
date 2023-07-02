@@ -336,6 +336,20 @@ func (s *natsSubscription) IsAssigned(msg Msg) bool {
 	return true
 }
 
+func (s *natsSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
+	if msg.natsmsg == nil || msg.natsmsg.Subject != s.topic {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	if s.isClosed() {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return make(chan struct{})
+}
+
 // ReadMsg reads a message
 func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	if s.isClosed() {
@@ -400,8 +414,8 @@ func (s *natsSubscription) Close(ctx context.Context) error {
 	return nil
 }
 
-// IsPermanentlyClosed returns if the client is closed
-func (s *natsSubscription) IsPermanentlyClosed() bool {
+// IsClosed returns if the client is closed
+func (s *natsSubscription) IsClosed() bool {
 	return s.isClosed()
 }
 

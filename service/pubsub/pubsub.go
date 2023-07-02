@@ -30,6 +30,7 @@ type (
 		Close(ctx context.Context) error
 	}
 
+	// Pubsub is an events service with at most once semantics
 	Pubsub interface {
 		Subscribe(ctx context.Context, subject, group string) (Subscription, error)
 		Publish(ctx context.Context, subject string, data []byte) error
@@ -391,6 +392,7 @@ type (
 
 	// WatchOpts are options for watching a subscription
 	WatchOpts struct {
+		MinBackoff time.Duration
 		MaxBackoff time.Duration
 	}
 
@@ -431,80 +433,95 @@ func (w *Watcher) lreqID() string {
 	return w.reqidprefix + "-" + uid.ReqID(w.reqcount.Add(1))
 }
 
-const (
-	watchStartDelay = 1 * time.Second
-)
-
 // Watch watches over a subscription
 func (w *Watcher) Watch(ctx context.Context, wg ksync.Waiter, opts WatchOpts) {
 	defer wg.Done()
 
+	if opts.MinBackoff == 0 {
+		opts.MinBackoff = 1 * time.Second
+	}
 	if opts.MaxBackoff == 0 {
 		opts.MaxBackoff = 15 * time.Second
 	}
 
-	delay := watchStartDelay
+	delay := opts.MinBackoff
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		func() {
-			sub, err := w.ps.Subscribe(ctx, w.subject, w.group)
-			if err != nil {
-				w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"))
-				if err := ktime.After(ctx, delay); err != nil {
-					return
-				}
-				delay = min(delay*2, opts.MaxBackoff)
+		sub, err := w.ps.Subscribe(ctx, w.subject, w.group)
+		if err != nil {
+			w.log.Err(ctx, kerrors.WithMsg(err, "Error subscribing"))
+			if err := ktime.After(ctx, delay); err != nil {
+				continue
+			}
+			delay = min(delay*2, opts.MaxBackoff)
+			continue
+		}
+		w.consume(ctx, sub, opts)
+		delay = opts.MinBackoff
+	}
+}
+
+func (w *Watcher) consume(ctx context.Context, sub Subscription, opts WatchOpts) {
+	defer func() {
+		if err := sub.Close(ctx); err != nil {
+			w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"))
+		}
+	}()
+
+	delay := opts.MinBackoff
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		m, err := sub.ReadMsg(ctx)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue
+			}
+			if errors.Is(err, ErrClientClosed) {
 				return
 			}
-			defer func() {
-				if err := sub.Close(ctx); err != nil {
-					w.log.Err(ctx, kerrors.WithMsg(err, "Error closing watched subscription"))
-				}
-			}()
-			delay = watchStartDelay
-
-			for {
-				m, err := sub.ReadMsg(ctx)
-				if err != nil {
-					if errors.Is(err, context.DeadlineExceeded) {
-						continue
-					}
-					if errors.Is(err, ErrClientClosed) {
-						return
-					}
-					w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
-					if err := ktime.After(ctx, delay); err != nil {
-						return
-					}
-					delay = min(delay*2, opts.MaxBackoff)
-					continue
-				}
-				msgctx := klog.CtxWithAttrs(ctx,
-					klog.AString("pubsub.subject", m.Subject),
-					klog.AString("pubsub.lreqid", w.lreqID()),
-				)
-				start := time.Now()
-				if err := w.handler.Handle(msgctx, *m); err != nil {
-					duration := time.Since(start)
-					w.log.Err(msgctx, kerrors.WithMsg(err, "Failed executing subscription handler"),
-						klog.AInt64("duration_ms", duration.Milliseconds()),
-					)
-					if err := ktime.After(msgctx, delay); err != nil {
-						return
-					}
-					delay = min(delay*2, opts.MaxBackoff)
-					continue
-				}
-				duration := time.Since(start)
-				w.log.Info(msgctx, "Handled subscription message",
-					klog.AInt64("duration_ms", duration.Milliseconds()),
-				)
-				delay = watchStartDelay
+			w.log.Err(ctx, kerrors.WithMsg(err, "Failed reading message"))
+			if err := ktime.After(ctx, delay); err != nil {
+				return
 			}
-		}()
+			delay = min(delay*2, opts.MaxBackoff)
+			continue
+		}
+		if err := w.consumeMsg(ctx, sub, *m); err != nil {
+			if err := ktime.After(ctx, delay); err != nil {
+				return
+			}
+			delay = min(delay*2, opts.MaxBackoff)
+			continue
+		}
+		delay = opts.MinBackoff
 	}
+}
+
+func (w *Watcher) consumeMsg(ctx context.Context, sub Subscription, m Msg) error {
+	ctx = klog.CtxWithAttrs(ctx,
+		klog.AString("pubsub.subject", m.Subject),
+		klog.AString("pubsub.lreqid", w.lreqID()),
+	)
+
+	start := time.Now()
+	if err := w.handler.Handle(ctx, m); err != nil {
+		duration := time.Since(start)
+		w.log.Err(ctx, kerrors.WithMsg(err, "Failed executing subscription handler"),
+			klog.AInt64("duration_ms", duration.Milliseconds()),
+		)
+		return err
+	}
+	duration := time.Since(start)
+	w.log.Info(ctx, "Handled subscription message",
+		klog.AInt64("duration_ms", duration.Milliseconds()),
+	)
+	return nil
 }

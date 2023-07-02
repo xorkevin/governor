@@ -71,7 +71,7 @@ type (
 		IsClosed() bool
 	}
 
-	// Events is a service wrapper around an event stream client
+	// Events is an events service with at least once semantics
 	Events interface {
 		Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error)
 		Publish(ctx context.Context, msgs ...PublishMsg) error
