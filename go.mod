@@ -11,6 +11,7 @@ require (
 	github.com/emersion/go-smtp v0.16.0
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
+	github.com/go-jose/go-jose/v3 v3.0.0
 	github.com/hashicorp/vault/api v1.9.0
 	github.com/klauspost/compress v1.16.3
 	github.com/lib/pq v1.10.7
