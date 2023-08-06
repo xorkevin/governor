@@ -34,11 +34,6 @@ func NewWaitGroup() *WaitGroup {
 
 // C returns the done channel
 func (w *WaitGroup) C() <-chan struct{} {
-	if w.count.Load() < 1 {
-		closedChan := make(chan struct{})
-		close(closedChan)
-		return closedChan
-	}
 	return w.done
 }
 

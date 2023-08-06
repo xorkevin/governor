@@ -19,13 +19,13 @@ func TestWaitGroup(t *testing.T) {
 
 		wg := NewWaitGroup()
 		func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 			defer cancel()
 			assert.NoError(wg.Wait(ctx))
 			select {
 			case <-ctx.Done():
-				assert.Fail("Failed to close done channel")
 			case <-wg.C():
+				assert.Fail("Prematurely closed done channel")
 			}
 		}()
 	})

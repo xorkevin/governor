@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-jose/go-jose/v3"
@@ -10,6 +11,7 @@ import (
 	"xorkevin.dev/hunter2/h2signer"
 	"xorkevin.dev/hunter2/h2signer/eddsa"
 	"xorkevin.dev/hunter2/h2signer/rs256"
+	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
 
@@ -107,14 +109,13 @@ type (
 	Gate interface{}
 
 	tokenSigner struct {
-		signer          jose.Signer
-		extsigner       jose.Signer
-		signingkeys     *h2signer.SigningKeyring
-		extsigningkeys  *h2signer.SigningKeyring
-		sysverifierkeys *h2signer.VerifierKeyring
-		jwks            []jose.JSONWebKey
-		eddsaid         string
-		rs256id         string
+		signer         jose.Signer
+		extsigner      jose.Signer
+		signingkeys    *h2signer.SigningKeyring
+		extsigningkeys *h2signer.SigningKeyring
+		jwks           []jose.JSONWebKey
+		eddsaid        string
+		rs256id        string
 	}
 
 	Service struct {
@@ -161,4 +162,247 @@ func New() *Service {
 		hbfailed:     0,
 		wg:           ksync.NewWaitGroup(),
 	}
+}
+
+func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
+	setCtxGate(inj, s)
+
+	r.SetDefault("tokensecret", "")
+	r.SetDefault("issuer", "governor")
+	r.SetDefault("audience", "governor")
+	r.SetDefault("hbinterval", "5s")
+	r.SetDefault("hbmaxfail", 6)
+	r.SetDefault("keyrefresh", "1m")
+}
+
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
+	s.log = klog.NewLevelLogger(log)
+	s.config = r
+
+	s.issuer = r.GetStr("issuer")
+	if s.issuer == "" {
+		return kerrors.WithMsg(nil, "Token issuer is not set")
+	}
+
+	s.audience = r.GetStr("audience")
+	if s.audience == "" {
+		return kerrors.WithMsg(nil, "Token audience is not set")
+	}
+
+	hbinterval, err := r.GetDuration("hbinterval")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse hbinterval")
+	}
+	s.hbmaxfail = r.GetInt("hbmaxfail")
+	s.keyrefresh, err = r.GetDuration("keyrefresh")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse keyrefresh")
+	}
+
+	s.log.Info(ctx, "Loaded config",
+		klog.AString("issuer", s.issuer),
+		klog.AString("audience", s.audience),
+		klog.AString("hbinterval", hbinterval.String()),
+		klog.AInt("hbmaxfail", s.hbmaxfail),
+		klog.AString("keyrefresh", s.keyrefresh.String()),
+	)
+
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
+
+	s.lc = lifecycle.New(
+		ctx,
+		s.getKeys,
+		s.closeKeys,
+		s.handlePing,
+		hbinterval,
+	)
+	go s.lc.Heartbeat(ctx, s.wg)
+
+	return nil
+}
+
+func (s *Service) handlePing(ctx context.Context, m *lifecycle.Manager[tokenSigner]) {
+	_, err := m.Construct(ctx)
+	if err == nil {
+		s.hbfailed = 0
+		return
+	}
+	s.hbfailed++
+	if s.hbfailed < s.hbmaxfail {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to refresh token keys"))
+		return
+	}
+	s.log.Err(ctx, kerrors.WithMsg(err, "Failed max refresh attempts"))
+	s.hbfailed = 0
+	// clear the cached signer because its secret may be invalid
+	m.Stop(ctx)
+}
+
+var (
+	// ErrSigner is returned when failing to create a signer
+	ErrSigner errSigner
+	// ErrGenerate is returned when failing to generate a token
+	ErrGenerate errGenerate
+)
+
+type (
+	errSigner   struct{}
+	errGenerate struct{}
+)
+
+func (e errSigner) Error() string {
+	return "Error creating signer"
+}
+
+func (e errGenerate) Error() string {
+	return "Error generating token"
+}
+
+type (
+	secretToken struct {
+		Keys    []string `mapstructure:"keys"`
+		ExtKeys []string `mapstructure:"extkeys"`
+	}
+)
+
+func (s *Service) getKeys(ctx context.Context, m *lifecycle.State[tokenSigner]) (*tokenSigner, error) {
+	currentSigner := m.Load(ctx)
+	var tokenSecrets secretToken
+	if err := s.config.GetSecret(ctx, "tokensecret", s.keyrefresh, &tokenSecrets); err != nil {
+		return nil, kerrors.WithMsg(err, "Invalid token secret")
+	}
+	signingkeys, sig, eddsaid, err := s.getSigningKeys(tokenSecrets.Keys, currentSigner)
+	if err != nil {
+		return nil, err
+	}
+	extsigningkeys, extsig, rs256id, jwks, err := s.getExtSigningKeys(tokenSecrets.ExtKeys, currentSigner)
+	if err != nil {
+		return nil, err
+	}
+	if currentSigner != nil && eddsaid == currentSigner.eddsaid && rs256id == currentSigner.rs256id {
+		return currentSigner, nil
+	}
+
+	m.Stop(ctx)
+
+	signer := &tokenSigner{
+		signer:         sig,
+		extsigner:      extsig,
+		signingkeys:    signingkeys,
+		extsigningkeys: extsigningkeys,
+		jwks:           jwks,
+		eddsaid:        eddsaid,
+		rs256id:        rs256id,
+	}
+
+	s.log.Info(ctx, "Refreshed token keys with new keys",
+		klog.AString("eddsakid", signer.eddsaid),
+		klog.AString("rs256kid", signer.rs256id),
+		klog.AInt("numjwks", len(jwks)),
+		klog.AInt("numtokensigners", signingkeys.Size()),
+		klog.AInt("numextsigners", extsigningkeys.Size()),
+	)
+
+	m.Store(signer)
+
+	return signer, nil
+}
+
+func (s *Service) getSigningKeys(keys []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, error) {
+	var keddsa h2signer.SigningKey
+	signingkeys := h2signer.NewSigningKeyring()
+	for _, i := range keys {
+		k, err := h2signer.SigningKeyFromParams(i, s.signingAlgs)
+		if err != nil {
+			return nil, nil, "", kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid key param")
+		}
+		switch k.Alg() {
+		case eddsa.SigID:
+			if keddsa == nil {
+				keddsa = k
+			}
+		}
+		if current != nil && keddsa != nil && keddsa.ID() == current.eddsaid {
+			// first verifier key matches current verifier key, therefore no change
+			// in verifier keys
+			return current.signingkeys, current.signer, current.eddsaid, nil
+		}
+		signingkeys.Register(k)
+	}
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: keddsa.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, keddsa.ID()))
+	if err != nil {
+		return nil, nil, "", kerrors.WithKind(err, ErrSigner, "Failed to create new jwt HS512 signer")
+	}
+	return signingkeys, sig, keddsa.ID(), nil
+}
+
+func (s *Service) getExtSigningKeys(keys []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
+	var krs256 h2signer.SigningKey
+	signingkeys := h2signer.NewSigningKeyring()
+	var jwks []jose.JSONWebKey
+	for _, i := range keys {
+		k, err := h2signer.SigningKeyFromParams(i, s.signingAlgs)
+		if err != nil {
+			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid key param")
+		}
+		switch k.Alg() {
+		case rs256.SigID:
+			jwks = append(jwks, jose.JSONWebKey{
+				Algorithm: "RS256",
+				KeyID:     k.ID(),
+				Key:       k.Public(),
+				Use:       "sig",
+			})
+			if krs256 == nil {
+				krs256 = k
+			}
+		}
+		if current != nil && krs256 != nil && krs256.ID() == current.rs256id {
+			// first signing key matches current signing key, therefore no change in
+			// signing keys
+			return current.extsigningkeys, current.extsigner, current.rs256id, current.jwks, nil
+		}
+		signingkeys.Register(k)
+	}
+	if krs256 == nil {
+		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "No token keys present")
+	}
+	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
+	if err != nil {
+		return nil, nil, "", nil, kerrors.WithKind(err, ErrSigner, "Failed to create new jwt RS256 signer")
+	}
+	return signingkeys, extsig, krs256.ID(), jwks, nil
+}
+
+func (s *Service) closeKeys(ctx context.Context, signer *tokenSigner) {
+	// nothing to close
+}
+
+func (s *Service) getSigner(ctx context.Context) (*tokenSigner, error) {
+	if signer := s.lc.Load(ctx); signer != nil {
+		return signer, nil
+	}
+
+	return s.lc.Construct(ctx)
+}
+
+func (s *Service) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *Service) Stop(ctx context.Context) {
+	if err := s.wg.Wait(ctx); err != nil {
+		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
+	}
+}
+
+func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *Service) Health(ctx context.Context) error {
+	if s.lc.Load(ctx) == nil {
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token service not ready")
+	}
+	return nil
 }
