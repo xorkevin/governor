@@ -2,9 +2,11 @@ package gate
 
 import (
 	"context"
+	"crypto"
 	"time"
 
 	"github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
@@ -37,14 +39,8 @@ const (
 	KindAccess Kind = "access"
 	// KindRefresh is a refresh token kind
 	KindRefresh = "refresh"
-	// KindSystem is a system token kind
-	KindSystem = "system"
-	// KindOAuthAccess is an oauth access token kind
-	KindOAuthAccess = "oauth:access"
-	// KindOAuthRefresh is an oauth refresh token kind
-	KindOAuthRefresh = "oauth:refresh"
-	// KindOAuthID is an openid id token kind
-	KindOAuthID = "oauth:id"
+	// kindOpenID is an openid id token kind
+	kindOpenID = "openid"
 )
 
 const (
@@ -62,9 +58,9 @@ type (
 		IssuedAt  int64    `json:"iat,omitempty"`
 		ID        string   `json:"jti,omitempty"`
 		// Custom fields
-		Kind      string `json:"kind,omitempty"`
-		SessionID string `json:"sess,omitempty"`
-		AuthTime  int64  `json:"aat,omitempty"`
+		Kind      Kind   `json:"k,omitempty"`
+		SessionID string `json:"sid,omitempty"`
+		AuthAt    int64  `json:"aat,omitempty"`
 		Scope     string `json:"scope,omitempty"`
 		Key       string `json:"key,omitempty"`
 	}
@@ -121,7 +117,6 @@ type (
 	Service struct {
 		lc           *lifecycle.Lifecycle[tokenSigner]
 		issuer       string
-		audience     string
 		signingAlgs  h2signer.SigningKeyAlgs
 		verifierAlgs h2signer.VerifierKeyAlgs
 		config       governor.SecretReader
@@ -169,7 +164,6 @@ func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
 
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
-	r.SetDefault("audience", "governor")
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
 	r.SetDefault("keyrefresh", "1m")
@@ -184,11 +178,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 		return kerrors.WithMsg(nil, "Token issuer is not set")
 	}
 
-	s.audience = r.GetStr("audience")
-	if s.audience == "" {
-		return kerrors.WithMsg(nil, "Token audience is not set")
-	}
-
 	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
@@ -201,7 +190,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 
 	s.log.Info(ctx, "Loaded config",
 		klog.AString("issuer", s.issuer),
-		klog.AString("audience", s.audience),
 		klog.AString("hbinterval", hbinterval.String()),
 		klog.AInt("hbmaxfail", s.hbmaxfail),
 		klog.AString("keyrefresh", s.keyrefresh.String()),
@@ -405,4 +393,142 @@ func (s *Service) Health(ctx context.Context) error {
 		return kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token service not ready")
 	}
 	return nil
+}
+
+// GetJWKS returns an RFC 7517 representation of the public signing key
+func (s *Service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &jose.JSONWebKeySet{
+		Keys: signer.jwks,
+	}, nil
+}
+
+// Generate returns a new jwt token from a user model
+func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Duration) (string, error) {
+	if claims.Kind != KindAccess && claims.Kind != KindRefresh {
+		return "", kerrors.WithKind(nil, ErrGenerate, "Invalid token kind")
+	}
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().Round(0).UTC()
+	claims.IssuedAt = now.Unix()
+	claims.Expiry = now.Add(duration).Unix()
+	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
+	if err != nil {
+		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
+	}
+	return token, nil
+}
+
+// GenerateExt creates a new id token
+func (s *Service) GenerateExt(ctx context.Context, baseClaims Claims, duration time.Duration, otherClaims interface{}) (string, error) {
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().Round(0).UTC()
+	baseClaims.Kind = kindOpenID
+	baseClaims.Issuer = s.issuer
+	baseClaims.IssuedAt = now.Unix()
+	baseClaims.Expiry = now.Add(duration).Unix()
+	token, err := jwt.Signed(signer.extsigner).Claims(baseClaims).Claims(otherClaims).CompactSerialize()
+	if err != nil {
+		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
+	}
+	return token, nil
+}
+
+func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool) {
+	switch kind {
+	case KindAccess, KindRefresh:
+		if key, ok := s.signingkeys.Get(keyid); ok {
+			return key.Public(), true
+		}
+	case kindOpenID:
+		if key, ok := s.extsigningkeys.Get(keyid); ok {
+			return key.Public(), true
+		}
+	}
+	return nil, false
+}
+
+func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
+	if kind == kindOpenID {
+		return false, nil
+	}
+	token, err := jwt.ParseSigned(tokenString)
+	if err != nil {
+		return false, nil
+	}
+	if len(token.Headers) != 1 {
+		return false, nil
+	}
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
+		return false, nil
+	}
+	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
+	if !ok {
+		return false, nil
+	}
+	claims := &Claims{}
+	var jwtclaims jwt.Claims
+	if err := token.Claims(pubkey, claims, &jwtclaims); err != nil {
+		return false, nil
+	}
+	if claims.Kind != kind {
+		return false, nil
+	}
+	now := time.Now().Round(0).UTC()
+	if err := jwtclaims.ValidateWithLeeway(jwt.Expected{
+		Time: now,
+	}, 0); err != nil {
+		return false, nil
+	}
+	return true, claims
+}
+
+func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClaims interface{}) (bool, *Claims) {
+	token, err := jwt.ParseSigned(tokenString)
+	if err != nil {
+		return false, nil
+	}
+	if len(token.Headers) != 1 {
+		return false, nil
+	}
+	signer, err := s.getSigner(ctx)
+	if err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
+		return false, nil
+	}
+	pubkey, ok := signer.getPubKey(kindOpenID, token.Headers[0].KeyID)
+	if !ok {
+		return false, nil
+	}
+	claims := &Claims{}
+	var jwtclaims jwt.Claims
+	if otherClaims == nil {
+		var empty struct{}
+		otherClaims = &empty
+	}
+	if err := token.Claims(pubkey, claims, &jwtclaims, otherClaims); err != nil {
+		return false, nil
+	}
+	if claims.Kind != kindOpenID {
+		return false, nil
+	}
+	now := time.Now().Round(0).UTC()
+	if err := jwtclaims.ValidateWithLeeway(jwt.Expected{
+		Issuer: s.issuer,
+		Time:   now,
+	}, 0); err != nil {
+		return false, nil
+	}
+	return true, claims
 }
