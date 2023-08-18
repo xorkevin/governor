@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"syscall"
 
 	"golang.org/x/term"
 	"xorkevin.dev/kerrors"
@@ -26,13 +25,11 @@ type (
 	}
 
 	TermConfig struct {
-		StdinFd     int
-		Stdin       io.Reader
-		Stdout      io.Writer
-		Stderr      io.Writer
-		Fsys        fs.FS
-		Exit        func(code int)
-		TermSignals []os.Signal
+		StdinFd int
+		Stdin   io.Reader
+		Stdout  io.Writer
+		Stderr  io.Writer
+		Fsys    fs.FS
 	}
 
 	termClient struct {
@@ -48,13 +45,11 @@ type (
 func newTermClient(config *TermConfig, l klog.Logger) Term {
 	if config == nil {
 		config = &TermConfig{
-			StdinFd:     int(os.Stdin.Fd()),
-			Stdin:       os.Stdin,
-			Stdout:      os.Stdout,
-			Stderr:      os.Stderr,
-			Fsys:        kfs.DirFS("."),
-			Exit:        os.Exit,
-			TermSignals: []os.Signal{os.Interrupt, syscall.SIGTERM},
+			StdinFd: int(os.Stdin.Fd()),
+			Stdin:   os.Stdin,
+			Stdout:  os.Stdout,
+			Stderr:  os.Stderr,
+			Fsys:    kfs.DirFS("."),
 		}
 	}
 	return &termClient{

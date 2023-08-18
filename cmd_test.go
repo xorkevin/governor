@@ -124,7 +124,6 @@ func TestCmd(t *testing.T) {
 			Stdout:  io.Discard,
 			Stderr:  stderr,
 			Fsys:    &kfstest.MapFS{Fsys: fstest.MapFS{}},
-			Exit:    func(code int) {},
 		},
 	})
 
@@ -147,7 +146,6 @@ func TestCmd(t *testing.T) {
 			Stdin:   strings.NewReader(""),
 			Stdout:  io.Discard,
 			Stderr:  stderr,
-			Exit:    func(code int) {},
 		},
 	}, nil, client)
 

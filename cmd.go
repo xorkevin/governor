@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -119,13 +120,11 @@ Calls the server setup endpoint.`,
 
 func (c *Cmd) logFatal(v interface{}) {
 	var errout io.Writer = os.Stderr
-	exit := os.Exit
 	if conf := c.opts.TermConfig; conf != nil {
 		errout = conf.Stderr
-		exit = conf.Exit
 	}
 	fmt.Fprintln(errout, v)
-	exit(1)
+	os.Exit(1)
 }
 
 func (c *Cmd) runInt(f func(ctx context.Context) error) {
@@ -141,11 +140,7 @@ func (c *Cmd) runInt(f func(ctx context.Context) error) {
 		ferr = f(ctx)
 	}()
 
-	var signals []os.Signal
-	if conf := c.opts.TermConfig; conf != nil {
-		signals = conf.TermSignals
-	}
-	ksignal.Wait(ctx, signals...)
+	ksignal.Wait(ctx, os.Interrupt, syscall.SIGTERM)
 
 	cancel()
 	wg.Wait()

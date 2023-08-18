@@ -300,7 +300,6 @@ func TestClient(t *testing.T) {
 			Stdout:  klog.NewSyncWriter(&out),
 			Stderr:  io.Discard,
 			Fsys:    fsys,
-			Exit:    func(code int) {},
 		},
 	})
 
