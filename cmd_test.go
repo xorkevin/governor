@@ -24,7 +24,7 @@ type (
 
 type (
 	testClientD struct {
-		term  *Terminal
+		term  Term
 		flags struct {
 			key       string
 			unlock    bool
@@ -77,7 +77,7 @@ func (c *testClientD) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
 }
 
 func (c *testClientD) Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error {
-	c.term = NewTerminal(term)
+	c.term = term
 	return nil
 }
 

@@ -29,7 +29,7 @@ type (
 		signingAlgs   h2signer.SigningKeyAlgs
 		config        governor.ConfigValueReader
 		log           *klog.LevelLogger
-		term          *governor.Terminal
+		term          governor.Term
 		sysTokenFlags sysTokenFlags
 	}
 
@@ -105,7 +105,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.config = r
 	c.log = klog.NewLevelLogger(log)
-	c.term = governor.NewTerminal(term)
+	c.term = term
 	return nil
 }
 

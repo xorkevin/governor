@@ -77,7 +77,7 @@ func (s *testServiceC) fail(c *Context) {
 type (
 	testClientC struct {
 		log         *klog.LevelLogger
-		term        *Terminal
+		term        Term
 		httpc       *HTTPFetcher
 		ranRegister bool
 		ranInit     bool
@@ -137,7 +137,7 @@ func (c *testClientC) Init(r ClientConfigReader, log klog.Logger, term Term, m H
 	}
 
 	c.log = klog.NewLevelLogger(log)
-	c.term = NewTerminal(term)
+	c.term = term
 	c.httpc = NewHTTPFetcher(m)
 	return nil
 }

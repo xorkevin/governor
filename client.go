@@ -23,7 +23,7 @@ type (
 		cmds       []*cmdTree
 		settings   *clientSettings
 		configTerm *TermConfig
-		term       *Terminal
+		term       Term
 		log        *klog.LevelLogger
 		httpc      *HTTPFetcher
 		flags      ClientFlags
@@ -170,13 +170,13 @@ func (c *Client) Init() error {
 	}
 
 	c.log = newPlaintextLogger(c.settings.logger)
-	c.term = NewTerminal(newTermClient(c.configTerm, c.log.Logger))
+	c.term = newTermClient(c.configTerm, c.log.Logger)
 	httpc := newHTTPClient(c.settings.httpClient, c.log.Logger)
 	c.httpc = NewHTTPFetcher(httpc)
 
 	for _, i := range c.clients {
 		l := c.log.Logger.Sublogger(i.opt.name)
-		if err := i.r.Init(c.settings.reader(i.opt), l, c.term.Term, httpc.subclient(i.opt.url, l)); err != nil {
+		if err := i.r.Init(c.settings.reader(i.opt), l, c.term, httpc.subclient(i.opt.url, l)); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}

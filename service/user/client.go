@@ -18,7 +18,7 @@ type (
 	CmdClient struct {
 		gate          gate.Client
 		log           *klog.LevelLogger
-		term          *governor.Terminal
+		term          governor.Term
 		httpc         *governor.HTTPFetcher
 		addAdminReq   reqAddAdmin
 		addAdminFlags addAdminFlags
@@ -97,7 +97,7 @@ func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, 
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
 	c.log = klog.NewLevelLogger(log)
-	c.term = governor.NewTerminal(term)
+	c.term = term
 	c.httpc = governor.NewHTTPFetcher(m)
 	return nil
 }
