@@ -512,7 +512,6 @@ func TestRouter(t *testing.T) {
   }
 }
 `),
-					LogWriter: io.Discard,
 				})
 
 				assert := require.New(t)
@@ -520,9 +519,7 @@ func TestRouter(t *testing.T) {
 				serviceB := &testServiceB{}
 				server.Register("serviceb", "/serviceb", serviceB)
 
-				server.SetFlags(Flags{})
-
-				assert.NoError(server.Init(context.Background()))
+				assert.NoError(server.Init(context.Background(), Flags{}, klog.Discard{}))
 
 				t.Cleanup(func() {
 					server.Stop(context.Background())

@@ -117,7 +117,6 @@ func TestCmd(t *testing.T) {
 		Appname:      "govtest",
 		ClientPrefix: "govc",
 		ConfigReader: strings.NewReader("{}"),
-		LogWriter:    io.Discard,
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
 			Stdin:   strings.NewReader("test input content"),
@@ -147,6 +146,8 @@ func TestCmd(t *testing.T) {
 			Stdout:  io.Discard,
 			Stderr:  stderr,
 		},
+	}, CmdOpts{
+		LogWriter: io.Discard,
 	}, nil, client)
 
 	assert.NoError(cmd.ExecArgs([]string{

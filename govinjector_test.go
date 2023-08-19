@@ -1,7 +1,6 @@
 package governor
 
 import (
-	"io"
 	"strings"
 	"testing"
 
@@ -28,7 +27,6 @@ func TestInjector(t *testing.T) {
 		ClientPrefix: "govc",
 		ConfigReader: strings.NewReader("{}"),
 		VaultReader:  strings.NewReader("{}"),
-		LogWriter:    io.Discard,
 	})
 
 	pathA := server.Injector()

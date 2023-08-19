@@ -1,6 +1,8 @@
 module xorkevin.dev/governor
 
-go 1.19
+go 1.21
+
+toolchain go1.21.0
 
 require (
 	blitiri.com.ar/go/spf v1.5.1
@@ -32,7 +34,7 @@ require (
 	xorkevin.dev/hunter2 v0.2.7
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/kfs v0.1.0
-	xorkevin.dev/klog v0.0.0-20230422031314-3f827239fa5d
+	xorkevin.dev/klog v0.1.0
 )
 
 require (
@@ -84,7 +86,6 @@ require (
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.4.0 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect

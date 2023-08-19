@@ -27,7 +27,6 @@ type (
 func newClientSettings(opts Opts) *clientSettings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
-	v.SetDefault("logger.output", "STDERR")
 	v.SetDefault("http.baseurl", "http://localhost:8080/api")
 	v.SetDefault("http.timeout", "15s")
 
@@ -41,9 +40,6 @@ func newClientSettings(opts Opts) *clientSettings {
 	return &clientSettings{
 		v:            v,
 		configReader: opts.ConfigReader,
-		logger: configLogger{
-			writer: opts.LogWriter,
-		},
 		httpClient: configHTTPClient{
 			transport: opts.HTTPTransport,
 		},
@@ -66,7 +62,6 @@ func (s *clientSettings) init(flags ClientFlags) error {
 	}
 
 	s.logger.level = s.v.GetString("logger.level")
-	s.logger.output = s.v.GetString("logger.output")
 
 	s.config.BaseURL = s.v.GetString("http.baseurl")
 	s.httpClient.baseurl = s.config.BaseURL

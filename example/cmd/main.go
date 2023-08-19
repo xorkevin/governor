@@ -176,6 +176,6 @@ func main() {
 		Long:  "manage users",
 	}, user.NewCmdClientCtx(client.Injector()))
 
-	cmd := governor.NewCmd(opts, gov, client)
+	cmd := governor.NewCmd(opts, governor.CmdOpts{}, gov, client)
 	cmd.Execute()
 }

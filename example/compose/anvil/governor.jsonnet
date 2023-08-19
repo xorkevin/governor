@@ -5,7 +5,6 @@ local args = anvil.getargs();
   // middleware
   logger: {
     level: 'DEBUG',
-    output: 'STDERR',
   },
   http: {
     addr: ':8080',

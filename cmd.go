@@ -11,32 +11,42 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 	"xorkevin.dev/governor/util/ksignal"
+	"xorkevin.dev/klog"
 )
 
 type (
 	// Cmd is the governor cli with both the server and client
 	Cmd struct {
-		s          *Server
-		c          *Client
-		cmd        *cobra.Command
-		opts       Opts
-		configFile string
-		cmdFlags   cmdTopLevelFlags
+		s        *Server
+		c        *Client
+		cmd      *cobra.Command
+		log      *klog.LevelLogger
+		opts     Opts
+		cmdOpts  CmdOpts
+		cmdFlags cmdTopLevelFlags
 	}
 
 	cmdTopLevelFlags struct {
+		configFile   string
+		logLevel     string
+		logPlain     bool
 		setupSecret  string
 		docOutputDir string
+	}
+
+	// CmdOpts are cmd options
+	CmdOpts struct {
+		LogWriter io.Writer
 	}
 )
 
 // NewCmd creates a new Cmd
-func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
+func NewCmd(opts Opts, cmdOpts CmdOpts, s *Server, c *Client) *Cmd {
 	cmd := &Cmd{
-		s:          s,
-		c:          c,
-		opts:       opts,
-		configFile: "",
+		s:       s,
+		c:       c,
+		opts:    opts,
+		cmdOpts: cmdOpts,
 	}
 	cmd.initCmd()
 	return cmd
@@ -44,18 +54,16 @@ func NewCmd(opts Opts, s *Server, c *Client) *Cmd {
 
 func (c *Cmd) initCmd() {
 	rootCmd := &cobra.Command{
-		Use:   c.opts.Appname,
-		Short: c.opts.Description,
-		Long: c.opts.Description + `
-
-It is built on the governor microservice framework which handles config
-management, logging, health checks, setup procedures, authentication, db,
-caching, object storage, emailing, message queues and more.`,
+		Use:               c.opts.Appname,
+		Short:             c.opts.Description,
+		Long:              c.opts.Description,
 		Version:           c.opts.Version.String(),
 		PersistentPreRun:  c.prerun,
 		DisableAutoGenTag: true,
 	}
-	rootCmd.PersistentFlags().StringVar(&c.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.json for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
+	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.json for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
+	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.logLevel, "log-level", "info", "log level")
+	rootCmd.PersistentFlags().BoolVar(&c.cmdFlags.logPlain, "log-plain", false, "output plain text logs")
 
 	if c.s != nil {
 		serveCmd := &cobra.Command{
@@ -64,7 +72,7 @@ caching, object storage, emailing, message queues and more.`,
 			Long: `Starts the http server and runs all services
 
 The server first runs all init procedures for all services before starting.`,
-			Run:               c.serve,
+			Run:               c.execServe,
 			DisableAutoGenTag: true,
 		}
 		rootCmd.AddCommand(serveCmd)
@@ -77,7 +85,7 @@ The server first runs all init procedures for all services before starting.`,
 			Long: `Runs the setup procedures for all services
 
 Calls the server setup endpoint.`,
-			Run:               c.setup,
+			Run:               c.execSetup,
 			DisableAutoGenTag: true,
 		}
 		setupCmd.PersistentFlags().StringVar(&c.cmdFlags.setupSecret, "secret", "", "setup secret")
@@ -118,12 +126,8 @@ Calls the server setup endpoint.`,
 	c.cmd = rootCmd
 }
 
-func (c *Cmd) logFatal(v interface{}) {
-	var errout io.Writer = os.Stderr
-	if conf := c.opts.TermConfig; conf != nil {
-		errout = conf.Stderr
-	}
-	fmt.Fprintln(errout, v)
+func (c *Cmd) logFatal(err error) {
+	c.log.Err(context.Background(), err)
 	os.Exit(1)
 }
 
@@ -147,31 +151,56 @@ func (c *Cmd) runInt(f func(ctx context.Context) error) {
 
 	if ferr != nil {
 		c.logFatal(ferr)
+		return
 	}
 }
 
 func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
-	if c.s != nil {
-		c.s.SetFlags(Flags{
-			ConfigFile: c.configFile,
-		})
+	logWriter := c.cmdOpts.LogWriter
+	if logWriter == nil {
+		logWriter = os.Stderr
+		if c.opts.TermConfig != nil && c.opts.TermConfig.Stderr != nil {
+			logWriter = c.opts.TermConfig.Stderr
+		}
 	}
-	if c.c != nil {
-		c.c.SetFlags(ClientFlags{
-			ConfigFile: c.configFile,
-		})
+	logWriter = klog.NewSyncWriter(logWriter)
+	var handler *klog.SlogHandler
+	if c.cmdFlags.logPlain {
+		handler = klog.NewTextSlogHandler(logWriter)
+		handler.FieldTimeInfo = ""
+		handler.FieldCaller = ""
+		handler.FieldMod = ""
+	} else {
+		handler = klog.NewJSONSlogHandler(logWriter)
 	}
+	c.log = klog.NewLevelLogger(klog.New(
+		klog.OptHandler(handler),
+		klog.OptMinLevelStr(c.cmdFlags.logLevel),
+	))
 }
 
-func (c *Cmd) serve(cmd *cobra.Command, args []string) {
-	c.runInt(c.s.Serve)
+func (c *Cmd) serve(ctx context.Context) error {
+	return c.s.Serve(ctx, Flags{
+		ConfigFile: c.cmdFlags.configFile,
+		LogPlain:   c.cmdFlags.logPlain,
+	}, c.log.Logger)
 }
 
-func (c *Cmd) setup(cmd *cobra.Command, args []string) {
-	if err := c.c.Init(); err != nil {
+func (c *Cmd) execServe(cmd *cobra.Command, args []string) {
+	c.runInt(c.serve)
+}
+
+func (c *Cmd) clientInit() {
+	if err := c.c.Init(ClientFlags{
+		ConfigFile: c.cmdFlags.configFile,
+	}, c.log.Logger); err != nil {
 		c.logFatal(err)
 		return
 	}
+}
+
+func (c *Cmd) execSetup(cmd *cobra.Command, args []string) {
+	c.clientInit()
 	if _, err := c.c.Setup(context.Background(), c.cmdFlags.setupSecret); err != nil {
 		c.logFatal(err)
 		return
@@ -210,10 +239,7 @@ func (c *Cmd) addTree(t *cmdTree, parent *cobra.Command) {
 	}
 	if t.Handler != nil {
 		cmd.Run = func(cmd *cobra.Command, args []string) {
-			if err := c.c.Init(); err != nil {
-				c.logFatal(err)
-				return
-			}
+			c.clientInit()
 			if err := t.Handler.Handle(args); err != nil {
 				c.logFatal(err)
 				return
@@ -305,7 +331,12 @@ func (c *Cmd) ExecArgs(args []string) error {
 // Execute runs the governor cmd
 func (c *Cmd) Execute() {
 	if err := c.ExecArgs(os.Args[1:]); err != nil {
-		c.logFatal(err)
+		var w io.Writer = os.Stderr
+		if c.opts.TermConfig != nil && c.opts.TermConfig.Stderr != nil {
+			w = c.opts.TermConfig.Stderr
+		}
+		fmt.Fprintln(w, err)
+		os.Exit(1)
 		return
 	}
 }

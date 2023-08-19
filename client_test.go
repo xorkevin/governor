@@ -241,7 +241,6 @@ func TestClient(t *testing.T) {
   }
 }
 `),
-		LogWriter: io.Discard,
 	})
 
 	serviceC := &testServiceC{}
@@ -249,7 +248,7 @@ func TestClient(t *testing.T) {
 
 	assert := require.New(t)
 
-	assert.NoError(server.Init(context.Background()))
+	assert.NoError(server.Init(context.Background(), Flags{}, klog.Discard{}))
 
 	hserver := httptest.NewServer(server)
 	t.Cleanup(func() {
@@ -293,7 +292,6 @@ func TestClient(t *testing.T) {
   }
 }
 `),
-		LogWriter: io.Discard,
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
 			Stdin:   strings.NewReader("setupsecret"),
@@ -313,7 +311,7 @@ func TestClient(t *testing.T) {
 		Flags: nil,
 	}, clientC)
 
-	assert.NoError(client.Init())
+	assert.NoError(client.Init(ClientFlags{}, klog.Discard{}))
 
 	setupres, err := client.Setup(context.Background(), "-")
 	assert.NoError(err)

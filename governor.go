@@ -27,39 +27,32 @@ type (
 	// Flags are flags for the server cmd
 	Flags struct {
 		ConfigFile string
+		LogPlain   bool
 	}
 
 	// Server is a governor server to which services may be registered
 	Server struct {
 		services []serviceDef
 		inj      Injector
-		flags    Flags
 		settings *settings
 		log      *klog.LevelLogger
 		i        chi.Router
 		running  bool
-		mu       *sync.Mutex
+		mu       sync.Mutex
 	}
 )
 
 // New creates a new Server
 func New(opts Opts) *Server {
 	return &Server{
-		services: []serviceDef{},
 		inj:      newInjector(context.Background()),
 		settings: newSettings(opts),
-		mu:       &sync.Mutex{},
 	}
-}
-
-// SetFlags sets server flags
-func (s *Server) SetFlags(flags Flags) {
-	s.flags = flags
 }
 
 // Init initializes the config, initializes the server and its registered
 // services, and starts all services
-func (s *Server) Init(ctx context.Context) error {
+func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running {
@@ -68,10 +61,29 @@ func (s *Server) Init(ctx context.Context) error {
 
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "init"))
 
-	if err := s.settings.init(ctx, s.flags); err != nil {
+	if err := s.settings.init(ctx, flags); err != nil {
 		return err
 	}
-	s.log = newLogger(s.settings.config, s.settings.logger)
+
+	{
+		logOpts := []klog.LoggerOpt{
+			klog.OptHandler(log.Handler()),
+			klog.OptMinLevelStr(s.settings.logger.level),
+		}
+		if !flags.LogPlain {
+			logOpts = append(logOpts,
+				klog.OptSubhandler("",
+					klog.AGroup("gov",
+						klog.AString("appname", s.settings.config.Appname),
+						klog.AString("version", s.settings.config.Version.String()),
+						klog.AString("hostname", s.settings.config.Hostname),
+						klog.AString("instance", s.settings.config.Instance),
+					),
+				),
+			)
+		}
+		s.log = klog.NewLevelLogger(klog.New(logOpts...))
+	}
 
 	i := chi.NewRouter()
 	s.i = i
@@ -184,13 +196,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Serve starts the registered services and the server
-func (s *Server) Serve(ctx context.Context) error {
+func (s *Server) Serve(ctx context.Context, flags Flags, log klog.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if err := s.Init(ctx); err != nil {
-		if s.log != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Init failed"))
-		}
+	if err := s.Init(ctx, flags, log); err != nil {
 		return err
 	}
 

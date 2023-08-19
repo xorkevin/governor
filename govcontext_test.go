@@ -20,6 +20,7 @@ import (
 	"nhooyr.io/websocket"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/klog"
 )
 
 type (
@@ -32,8 +33,8 @@ func (e testErr) Error() string {
 
 type (
 	threadSafeBuffer struct {
-		b *bytes.Buffer
-		m *sync.Mutex
+		b bytes.Buffer
+		m sync.Mutex
 	}
 )
 
@@ -62,14 +63,12 @@ func TestContext(t *testing.T) {
 
 	generateTestContext := func(method, path string, body io.Reader) (*http.Request, *httptest.ResponseRecorder, *bytes.Buffer, *Context) {
 		logbuf := &bytes.Buffer{}
-		l := newLogger(Config{}, configLogger{
-			level:  "INFO",
-			output: "TEST",
-			writer: logbuf,
-		})
+		log := klog.New(
+			klog.OptHandler(klog.NewJSONSlogHandler(klog.NewSyncWriter(logbuf))),
+		)
 		req := httptest.NewRequest(method, path, body)
 		rec := httptest.NewRecorder()
-		return req, rec, logbuf, NewContext(rec, req, l.Logger)
+		return req, rec, logbuf, NewContext(rec, req, log)
 	}
 
 	t.Run("ReadAllBody", func(t *testing.T) {
@@ -310,15 +309,13 @@ func TestContext(t *testing.T) {
 				assert := require.New(t)
 
 				var logbuf bytes.Buffer
-				l := newLogger(Config{}, configLogger{
-					level:  "INFO",
-					output: "TEST",
-					writer: &logbuf,
-				})
+				log := klog.New(
+					klog.OptHandler(klog.NewJSONSlogHandler(klog.NewSyncWriter(&logbuf))),
+				)
 				req := httptest.NewRequest(http.MethodPost, tc.Path, strings.NewReader(tc.Body))
 				req.Header.Set(headerContentType, mime.FormatMediaType("application/json", map[string]string{"charset": "utf-8"}))
 				rec := httptest.NewRecorder()
-				c := NewContext(rec, req, l.Logger)
+				c := NewContext(rec, req, log)
 				c.WriteError(tc.Err)
 				assert.Equal(tc.Status, rec.Code)
 				assert.Equal(tc.Res, strings.TrimSpace(rec.Body.String()))
@@ -356,20 +353,15 @@ func TestContext(t *testing.T) {
 
 		assert := require.New(t)
 
-		logbuf := threadSafeBuffer{
-			b: &bytes.Buffer{},
-			m: &sync.Mutex{},
-		}
-		l := newLogger(Config{}, configLogger{
-			level:  "INFO",
-			output: "TEST",
-			writer: &logbuf,
-		})
+		var logbuf threadSafeBuffer
+		log := klog.NewLevelLogger(klog.New(
+			klog.OptHandler(klog.NewJSONSlogHandler(klog.NewSyncWriter(&logbuf))),
+		))
 
 		server := httptest.NewServer(toHTTPHandler(RouteHandlerFunc(func(c *Context) {
 			conn, err := c.Websocket([]string{WSProtocolVersion})
 			if err != nil {
-				l.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"))
+				log.WarnErr(c.Ctx(), kerrors.WithMsg(err, "Failed to accept WS conn upgrade"))
 				return
 			}
 			if conn.Subprotocol() != WSProtocolVersion {
@@ -405,7 +397,7 @@ func TestContext(t *testing.T) {
 					return
 				}
 			}
-		}), l.Logger))
+		}), log.Logger))
 		t.Cleanup(func() {
 			server.Close()
 		})

@@ -38,7 +38,6 @@ type (
 		ClientPrefix  string
 		ConfigReader  io.Reader
 		VaultReader   io.Reader
-		LogWriter     io.Writer
 		HTTPTransport http.RoundTripper
 		TermConfig    *TermConfig
 	}
@@ -70,9 +69,7 @@ type (
 	}
 
 	configLogger struct {
-		level  string
-		output string
-		writer io.Writer
+		level string
 	}
 
 	configHTTPServer struct {
@@ -169,7 +166,6 @@ func (r rewriteRule) String() string {
 func newSettings(opts Opts) *settings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
-	v.SetDefault("logger.output", "STDERR")
 	v.SetDefault("banner", true)
 	v.SetDefault("http.addr", ":8080")
 	v.SetDefault("http.basepath", "/")
@@ -208,9 +204,6 @@ func newSettings(opts Opts) *settings {
 		config: Config{
 			Appname: opts.Appname,
 			Version: opts.Version,
-		},
-		logger: configLogger{
-			writer: opts.LogWriter,
 		},
 	}
 }
@@ -269,7 +262,6 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 
 	s.showBanner = s.v.GetBool("banner")
 	s.logger.level = s.v.GetString("logger.level")
-	s.logger.output = s.v.GetString("logger.output")
 	s.config.Addr = s.v.GetString("http.addr")
 	s.config.BasePath = s.v.GetString("http.basepath")
 	s.httpServer.maxReqSize, err = s.getByteSize("http.maxreqsize")

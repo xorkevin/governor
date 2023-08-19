@@ -164,12 +164,15 @@ func (c *Client) GetCmds() []*cmdTree {
 }
 
 // Init initializes the Client by reading a config
-func (c *Client) Init() error {
+func (c *Client) Init(flags ClientFlags, log klog.Logger) error {
 	if err := c.settings.init(c.flags); err != nil {
 		return err
 	}
 
-	c.log = newPlaintextLogger(c.settings.logger)
+	c.log = klog.NewLevelLogger(klog.New(
+		klog.OptHandler(log.Handler()),
+		klog.OptMinLevelStr(c.settings.logger.level),
+	))
 	c.term = newTermClient(c.configTerm, c.log.Logger)
 	httpc := newHTTPClient(c.settings.httpClient, c.log.Logger)
 	c.httpc = NewHTTPFetcher(httpc)

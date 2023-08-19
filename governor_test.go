@@ -875,7 +875,6 @@ func TestServer(t *testing.T) {
   }
 }
 `),
-					LogWriter: &logbuf,
 				})
 
 				serviceA := newTestServiceA(tc.Check)
@@ -883,11 +882,12 @@ func TestServer(t *testing.T) {
 
 				assert.Equal("servicea", serviceA.name)
 
-				server.SetFlags(Flags{})
-
-				assert.NoError(server.Init(context.Background()))
+				log := klog.New(
+					klog.OptHandler(klog.NewJSONSlogHandler(klog.NewSyncWriter(&logbuf))),
+				)
+				assert.NoError(server.Init(context.Background(), Flags{}, log))
 				// does not reinit if already init-ed
-				assert.NoError(server.Init(context.Background()))
+				assert.NoError(server.Init(context.Background(), Flags{}, log))
 
 				assert.True(serviceA.ranInit)
 				assert.True(serviceA.ranStart)
