@@ -36,10 +36,11 @@ type (
 		EnvPrefix     string
 		ClientDefault string
 		ClientPrefix  string
-		ConfigReader  io.Reader
-		VaultReader   io.Reader
-		HTTPTransport http.RoundTripper
-		TermConfig    *TermConfig
+	}
+
+	ServerOpts struct {
+		ConfigReader io.Reader
+		VaultReader  io.Reader
 	}
 )
 
@@ -163,7 +164,7 @@ func (r rewriteRule) String() string {
 	return fmt.Sprintf("Host: %s, Methods: %s, Pattern: %s, Replace: %s", r.Host, strings.Join(r.Methods, " "), r.Pattern, r.Replace)
 }
 
-func newSettings(opts Opts) *settings {
+func newSettings(opts Opts, serverOpts ServerOpts) *settings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("banner", true)
@@ -198,9 +199,9 @@ func newSettings(opts Opts) *settings {
 
 	return &settings{
 		v:            v,
-		configReader: opts.ConfigReader,
+		configReader: serverOpts.ConfigReader,
 		vaultCache:   &sync.Map{},
-		vaultReader:  opts.VaultReader,
+		vaultReader:  serverOpts.VaultReader,
 		config: Config{
 			Appname: opts.Appname,
 			Version: opts.Version,

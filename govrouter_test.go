@@ -494,6 +494,7 @@ func TestRouter(t *testing.T) {
 					Description:  "test gov server",
 					EnvPrefix:    "gov",
 					ClientPrefix: "govc",
+				}, &ServerOpts{
 					ConfigReader: strings.NewReader(`
 {
   "http": {

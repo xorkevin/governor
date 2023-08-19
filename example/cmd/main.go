@@ -59,7 +59,7 @@ func main() {
 		ClientPrefix:  "govc",
 	}
 
-	gov := governor.New(opts)
+	gov := governor.New(opts, nil)
 
 	gov.Register("database", "/null/db", db.New())
 	gov.Register("kvstore", "/null/kv", kvstore.New())
@@ -158,7 +158,7 @@ func main() {
 		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
 	}
 
-	client := governor.NewClient(opts)
+	client := governor.NewClient(opts, nil)
 	client.Register("token", "/null/token", &governor.CmdDesc{
 		Usage: "token",
 		Short: "manage tokens",
@@ -176,6 +176,6 @@ func main() {
 		Long:  "manage users",
 	}, user.NewCmdClientCtx(client.Injector()))
 
-	cmd := governor.NewCmd(opts, governor.CmdOpts{}, gov, client)
+	cmd := governor.NewCmd(opts, nil, gov, client)
 	cmd.Execute()
 }

@@ -43,10 +43,13 @@ type (
 )
 
 // New creates a new Server
-func New(opts Opts) *Server {
+func New(opts Opts, serverOpts *ServerOpts) *Server {
+	if serverOpts == nil {
+		serverOpts = &ServerOpts{}
+	}
 	return &Server{
 		inj:      newInjector(context.Background()),
-		settings: newSettings(opts),
+		settings: newSettings(opts, *serverOpts),
 	}
 }
 

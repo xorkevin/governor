@@ -116,6 +116,7 @@ func TestCmd(t *testing.T) {
 	client := NewClient(Opts{
 		Appname:      "govtest",
 		ClientPrefix: "govc",
+	}, &ClientOpts{
 		ConfigReader: strings.NewReader("{}"),
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
@@ -140,13 +141,7 @@ func TestCmd(t *testing.T) {
 			Hash: "dev",
 		},
 		Description: "test gov server",
-		TermConfig: &TermConfig{
-			StdinFd: int(os.Stdin.Fd()),
-			Stdin:   strings.NewReader(""),
-			Stdout:  io.Discard,
-			Stderr:  stderr,
-		},
-	}, CmdOpts{
+	}, &CmdOpts{
 		LogWriter: io.Discard,
 	}, nil, client)
 
@@ -164,6 +159,11 @@ func TestCmd(t *testing.T) {
 		"2",
 		"-t",
 		"1",
+	}, &TermConfig{
+		StdinFd: int(os.Stdin.Fd()),
+		Stdin:   strings.NewReader(""),
+		Stdout:  io.Discard,
+		Stderr:  stderr,
 	}))
 	assert.Equal("test input content", out.String())
 	out.Reset()

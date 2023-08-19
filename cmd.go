@@ -28,6 +28,7 @@ type (
 
 	cmdTopLevelFlags struct {
 		configFile   string
+		clientConfig string
 		logLevel     string
 		logPlain     bool
 		setupSecret  string
@@ -41,12 +42,15 @@ type (
 )
 
 // NewCmd creates a new Cmd
-func NewCmd(opts Opts, cmdOpts CmdOpts, s *Server, c *Client) *Cmd {
+func NewCmd(opts Opts, cmdOpts *CmdOpts, s *Server, c *Client) *Cmd {
+	if cmdOpts == nil {
+		cmdOpts = &CmdOpts{}
+	}
 	cmd := &Cmd{
 		s:       s,
 		c:       c,
 		opts:    opts,
-		cmdOpts: cmdOpts,
+		cmdOpts: *cmdOpts,
 	}
 	cmd.initCmd()
 	return cmd
@@ -61,7 +65,8 @@ func (c *Cmd) initCmd() {
 		PersistentPreRun:  c.prerun,
 		DisableAutoGenTag: true,
 	}
-	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.configFile, "config", "", fmt.Sprintf("config file (default is $XDG_CONFIG_HOME/%s/{%s|%s}.json for server and client respectively)", c.opts.Appname, c.opts.DefaultFile, c.opts.ClientDefault))
+	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.configFile, "config", "", fmt.Sprintf("config file (default is %s.json)", c.opts.DefaultFile))
+	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.clientConfig, "client-config", "", fmt.Sprintf("client config file (default is %s.json)", c.opts.ClientDefault))
 	rootCmd.PersistentFlags().StringVar(&c.cmdFlags.logLevel, "log-level", "info", "log level")
 	rootCmd.PersistentFlags().BoolVar(&c.cmdFlags.logPlain, "log-plain", false, "output plain text logs")
 
@@ -159,9 +164,6 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 	logWriter := c.cmdOpts.LogWriter
 	if logWriter == nil {
 		logWriter = os.Stderr
-		if c.opts.TermConfig != nil && c.opts.TermConfig.Stderr != nil {
-			logWriter = c.opts.TermConfig.Stderr
-		}
 	}
 	logWriter = klog.NewSyncWriter(logWriter)
 	var handler *klog.SlogHandler
@@ -192,7 +194,7 @@ func (c *Cmd) execServe(cmd *cobra.Command, args []string) {
 
 func (c *Cmd) clientInit() {
 	if err := c.c.Init(ClientFlags{
-		ConfigFile: c.cmdFlags.configFile,
+		ConfigFile: c.cmdFlags.clientConfig,
 	}, c.log.Logger); err != nil {
 		c.logFatal(err)
 		return
@@ -315,12 +317,12 @@ func (c *Cmd) addFlags(cmd *cobra.Command, flags []CmdFlag) {
 }
 
 // ExecArgs runs the command with the provided arguments
-func (c *Cmd) ExecArgs(args []string) error {
+func (c *Cmd) ExecArgs(args []string, termConfig *TermConfig) error {
 	c.cmd.SetArgs(args)
-	if conf := c.opts.TermConfig; conf != nil {
-		c.cmd.SetIn(conf.Stdin)
-		c.cmd.SetOut(conf.Stdout)
-		c.cmd.SetErr(conf.Stderr)
+	if termConfig != nil {
+		c.cmd.SetIn(termConfig.Stdin)
+		c.cmd.SetOut(termConfig.Stdout)
+		c.cmd.SetErr(termConfig.Stderr)
 	}
 	if err := c.cmd.Execute(); err != nil {
 		return err
@@ -330,12 +332,8 @@ func (c *Cmd) ExecArgs(args []string) error {
 
 // Execute runs the governor cmd
 func (c *Cmd) Execute() {
-	if err := c.ExecArgs(os.Args[1:]); err != nil {
-		var w io.Writer = os.Stderr
-		if c.opts.TermConfig != nil && c.opts.TermConfig.Stderr != nil {
-			w = c.opts.TermConfig.Stderr
-		}
-		fmt.Fprintln(w, err)
+	if err := c.ExecArgs(os.Args[1:], nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 		return
 	}

@@ -2,6 +2,7 @@ package governor
 
 import (
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -22,9 +23,15 @@ type (
 	ClientConfig struct {
 		BaseURL string
 	}
+
+	ClientOpts struct {
+		ConfigReader  io.Reader
+		HTTPTransport http.RoundTripper
+		TermConfig    *TermConfig
+	}
 )
 
-func newClientSettings(opts Opts) *clientSettings {
+func newClientSettings(opts Opts, clientOpts ClientOpts) *clientSettings {
 	v := viper.New()
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("http.baseurl", "http://localhost:8080/api")
@@ -39,9 +46,9 @@ func newClientSettings(opts Opts) *clientSettings {
 
 	return &clientSettings{
 		v:            v,
-		configReader: opts.ConfigReader,
+		configReader: clientOpts.ConfigReader,
 		httpClient: configHTTPClient{
-			transport: opts.HTTPTransport,
+			transport: clientOpts.HTTPTransport,
 		},
 	}
 }

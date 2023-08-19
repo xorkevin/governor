@@ -223,6 +223,7 @@ func TestClient(t *testing.T) {
 		Description:  "test gov server",
 		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
+	}, &ServerOpts{
 		ConfigReader: strings.NewReader(`
 {
   "http": {
@@ -270,6 +271,7 @@ func TestClient(t *testing.T) {
 	client := NewClient(Opts{
 		Appname:      "govtest",
 		ClientPrefix: "govc",
+	}, &ClientOpts{
 		ConfigReader: strings.NewReader(`
 {
   "http": {

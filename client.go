@@ -86,11 +86,14 @@ type (
 )
 
 // NewClient creates a new Client
-func NewClient(opts Opts) *Client {
+func NewClient(opts Opts, clientOpts *ClientOpts) *Client {
+	if clientOpts == nil {
+		clientOpts = &ClientOpts{}
+	}
 	return &Client{
 		inj:        newInjector(context.Background()),
-		settings:   newClientSettings(opts),
-		configTerm: opts.TermConfig,
+		settings:   newClientSettings(opts, *clientOpts),
+		configTerm: clientOpts.TermConfig,
 	}
 }
 
