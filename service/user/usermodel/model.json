@@ -1,0 +1,83 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "user": {
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByUsername",
+            "conditions": [{"col": "username"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByEmail",
+            "conditions": [{"col": "email"}]
+          }
+        ],
+        "Info": [
+          {
+            "kind": "getgroup",
+            "name": "All",
+            "order": [{"col": "username"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUsernamePrefix",
+            "conditions": [{"col": "userid", "cond": "like"}]
+          }
+        ],
+        "userProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ],
+        "userEmail": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ],
+        "userPassHash": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ],
+        "userGenOTP": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ],
+        "userFailLogin": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ]
+      }
+    }
+  }
+}

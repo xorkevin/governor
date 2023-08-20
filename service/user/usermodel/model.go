@@ -62,60 +62,60 @@ type (
 	//forge:model user
 	//forge:model:query user
 	Model struct {
-		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;deleq,userid"`
-		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE" query:"username;getoneeq,username"`
-		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
-		OTPEnabled       bool   `model:"otp_enabled,BOOLEAN NOT NULL" query:"otp_enabled"`
-		OTPSecret        string `model:"otp_secret,VARCHAR(255) NOT NULL" query:"otp_secret"`
-		OTPBackup        string `model:"otp_backup,VARCHAR(255) NOT NULL" query:"otp_backup"`
-		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE" query:"email;getoneeq,email"`
-		FirstName        string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
-		LastName         string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
-		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
-		FailedLoginTime  int64  `model:"failed_login_time,BIGINT NOT NULL" query:"failed_login_time"`
-		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL" query:"failed_login_count"`
+		Userid           string `model:"userid,VARCHAR(31) PRIMARY KEY"`
+		Username         string `model:"username,VARCHAR(255) NOT NULL UNIQUE"`
+		PassHash         string `model:"pass_hash,VARCHAR(255) NOT NULL"`
+		OTPEnabled       bool   `model:"otp_enabled,BOOLEAN NOT NULL"`
+		OTPSecret        string `model:"otp_secret,VARCHAR(255) NOT NULL"`
+		OTPBackup        string `model:"otp_backup,VARCHAR(255) NOT NULL"`
+		Email            string `model:"email,VARCHAR(255) NOT NULL UNIQUE"`
+		FirstName        string `model:"first_name,VARCHAR(255) NOT NULL"`
+		LastName         string `model:"last_name,VARCHAR(255) NOT NULL"`
+		CreationTime     int64  `model:"creation_time,BIGINT NOT NULL"`
+		FailedLoginTime  int64  `model:"failed_login_time,BIGINT NOT NULL"`
+		FailedLoginCount int    `model:"failed_login_count,INT NOT NULL"`
 	}
 
 	// Info is the metadata of a user
 	//forge:model:query user
 	Info struct {
-		Userid    string `query:"userid;getgroup;getgroupeq,userid|in"`
-		Username  string `query:"username;getgroupeq,username|like"`
-		Email     string `query:"email"`
-		FirstName string `query:"first_name"`
-		LastName  string `query:"last_name"`
+		Userid    string `model:"userid"`
+		Username  string `model:"username"`
+		Email     string `model:"email"`
+		FirstName string `model:"first_name"`
+		LastName  string `model:"last_name"`
 	}
 
 	//forge:model:query user
 	userProps struct {
-		Username  string `query:"username;updeq,userid"`
-		FirstName string `query:"first_name"`
-		LastName  string `query:"last_name"`
+		Username  string `model:"username"`
+		FirstName string `model:"first_name"`
+		LastName  string `model:"last_name"`
 	}
 
 	//forge:model:query user
 	userEmail struct {
-		Email string `query:"email;updeq,userid"`
+		Email string `model:"email"`
 	}
 
 	//forge:model:query user
 	userPassHash struct {
-		PassHash string `query:"pass_hash;updeq,userid"`
+		PassHash string `model:"pass_hash"`
 	}
 
 	//forge:model:query user
 	userGenOTP struct {
-		OTPEnabled       bool   `query:"otp_enabled;updeq,userid"`
-		OTPSecret        string `query:"otp_secret"`
-		OTPBackup        string `query:"otp_backup"`
-		FailedLoginTime  int64  `query:"failed_login_time"`
-		FailedLoginCount int    `query:"failed_login_count"`
+		OTPEnabled       bool   `model:"otp_enabled"`
+		OTPSecret        string `model:"otp_secret"`
+		OTPBackup        string `model:"otp_backup"`
+		FailedLoginTime  int64  `model:"failed_login_time"`
+		FailedLoginCount int    `model:"failed_login_count"`
 	}
 
 	//forge:model:query user
 	userFailLogin struct {
-		FailedLoginTime  int64 `query:"failed_login_time;updeq,userid"`
-		FailedLoginCount int   `query:"failed_login_count"`
+		FailedLoginTime  int64 `model:"failed_login_time"`
+		FailedLoginCount int   `model:"failed_login_count"`
 	}
 
 	ctxKeyRepo struct{}
@@ -208,7 +208,7 @@ func (r *repo) RehashPass(ctx context.Context, m *Model, password string) error 
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserPassHashEqUserid(ctx, d, &userPassHash{
+	if err := r.table.UpduserPassHashByID(ctx, d, &userPassHash{
 		PassHash: mHash,
 	}, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update user")
@@ -270,7 +270,7 @@ func (r *repo) GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m 
 	if err != nil {
 		return "", "", err
 	}
-	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+	if err := r.table.UpduserGenOTPByID(ctx, d, &userGenOTP{
 		OTPEnabled:       false,
 		OTPSecret:        encryptedParams,
 		OTPBackup:        encryptedBackup,
@@ -293,7 +293,7 @@ func (r *repo) EnableOTP(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+	if err := r.table.UpduserGenOTPByID(ctx, d, &userGenOTP{
 		OTPEnabled:       true,
 		OTPSecret:        m.OTPSecret,
 		OTPBackup:        m.OTPBackup,
@@ -314,7 +314,7 @@ func (r *repo) DisableOTP(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserGenOTPEqUserid(ctx, d, &userGenOTP{
+	if err := r.table.UpduserGenOTPByID(ctx, d, &userGenOTP{
 		OTPEnabled:       false,
 		OTPSecret:        "",
 		OTPBackup:        "",
@@ -337,7 +337,7 @@ func (r *repo) UpdateLoginFailed(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserFailLoginEqUserid(ctx, d, &userFailLogin{
+	if err := r.table.UpduserFailLoginByID(ctx, d, &userFailLogin{
 		FailedLoginTime:  m.FailedLoginTime,
 		FailedLoginCount: m.FailedLoginCount,
 	}, m.Userid); err != nil {
@@ -352,7 +352,7 @@ func (r *repo) GetGroup(ctx context.Context, limit, offset int) ([]Info, error) 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetInfoOrdUserid(ctx, d, true, limit, offset)
+	m, err := r.table.GetInfoAll(ctx, d, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user info")
 	}
@@ -368,7 +368,7 @@ func (r *repo) GetBulk(ctx context.Context, userids []string) ([]Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetInfoHasUseridOrdUserid(ctx, d, userids, true, len(userids), 0)
+	m, err := r.table.GetInfoByIDs(ctx, d, userids, len(userids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user info of userids")
 	}
@@ -381,7 +381,7 @@ func (r *repo) GetByUsernamePrefix(ctx context.Context, prefix string, limit, of
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetInfoLikeUsernameOrdUsername(ctx, d, prefix+"%", true, limit, offset)
+	m, err := r.table.GetInfoByUsernamePrefix(ctx, d, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user info of username prefix")
 	}
@@ -394,7 +394,7 @@ func (r *repo) GetByID(ctx context.Context, userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid(ctx, d, userid)
+	m, err := r.table.GetModelByID(ctx, d, userid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
@@ -407,7 +407,7 @@ func (r *repo) GetByUsername(ctx context.Context, username string) (*Model, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUsername(ctx, d, username)
+	m, err := r.table.GetModelByUsername(ctx, d, username)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user by username")
 	}
@@ -420,7 +420,7 @@ func (r *repo) GetByEmail(ctx context.Context, email string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqEmail(ctx, d, email)
+	m, err := r.table.GetModelByEmail(ctx, d, email)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user by email")
 	}
@@ -445,7 +445,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserPropsEqUserid(ctx, d, &userProps{
+	if err := r.table.UpduserPropsByID(ctx, d, &userProps{
 		Username:  m.Username,
 		FirstName: m.FirstName,
 		LastName:  m.LastName,
@@ -461,7 +461,7 @@ func (r *repo) UpdateEmail(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpduserEmailEqUserid(ctx, d, &userEmail{
+	if err := r.table.UpduserEmailByID(ctx, d, &userEmail{
 		Email: m.Email,
 	}, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update user email")
@@ -475,7 +475,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, m.Userid); err != nil {
+	if err := r.table.DelByID(ctx, d, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user")
 	}
 	return nil
