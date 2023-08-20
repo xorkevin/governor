@@ -1,0 +1,66 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "inv": {
+      "model": {
+        "constraints": [{"kind": "PRIMARY KEY", "columns": ["userid", "role"]}],
+        "indicies": [
+          {"columns": ["creation_time"]},
+          {"columns": ["userid", "creation_time"]},
+          {"columns": ["role", "creation_time"]}
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByUserRole",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "role"},
+              {"col": "creation_time", "cond": "gt"}
+            ]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserRole",
+            "conditions": [{"col": "userid"}, {"col": "role"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserRoles",
+            "conditions": [{"col": "userid"}, {"col": "role", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByRole",
+            "conditions": [{"col": "role"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "creation_time", "cond": "gt"}
+            ],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByRole",
+            "conditions": [
+              {"col": "role"},
+              {"col": "creation_time", "cond": "gt"}
+            ],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "BeforeCreationTime",
+            "conditions": [{"col": "creation_time", "cond": "leq"}]
+          }
+        ]
+      }
+    }
+  }
+}

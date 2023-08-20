@@ -35,10 +35,10 @@ type (
 	//forge:model inv
 	//forge:model:query inv
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31)" query:"userid"`
-		Role         string `model:"role,VARCHAR(255), PRIMARY KEY (userid, role)" query:"role;getoneeq,userid,role,creation_time|gt;deleq,userid,role;deleq,userid,role|in;deleq,role"`
-		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL" query:"invited_by"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,role" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,role,creation_time|gt;deleq,creation_time|leq"`
+		Userid       string `model:"userid,VARCHAR(31)"`
+		Role         string `model:"role,VARCHAR(255)"`
+		InvitedBy    string `model:"invited_by,VARCHAR(31) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -84,7 +84,7 @@ func (r *repo) GetByID(ctx context.Context, userid, role string, after int64) (*
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridEqRoleGtCreationTime(ctx, d, userid, role, after)
+	m, err := r.table.GetModelByUserRole(ctx, d, userid, role, after)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitation")
 	}
@@ -97,7 +97,7 @@ func (r *repo) GetByUser(ctx context.Context, userid string, after int64, limit,
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridGtCreationTimeOrdCreationTime(ctx, d, userid, after, false, limit, offset)
+	m, err := r.table.GetModelByUserid(ctx, d, userid, after, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
@@ -110,7 +110,7 @@ func (r *repo) GetByRole(ctx context.Context, role string, after int64, limit, o
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqRoleGtCreationTimeOrdCreationTime(ctx, d, role, after, false, limit, offset)
+	m, err := r.table.GetModelByRole(ctx, d, role, after, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
@@ -148,7 +148,7 @@ func (r *repo) DeleteByID(ctx context.Context, userid, role string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridEqRole(ctx, d, userid, role); err != nil {
+	if err := r.table.DelByUserRole(ctx, d, userid, role); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitation")
 	}
 	return nil
@@ -164,7 +164,7 @@ func (r *repo) DeleteByRoles(ctx context.Context, userid string, roles rank.Rank
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridHasRole(ctx, d, userid, roles.ToSlice()); err != nil {
+	if err := r.table.DelByUserRoles(ctx, d, userid, roles.ToSlice()); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
@@ -175,7 +175,7 @@ func (r *repo) DeleteRole(ctx context.Context, role string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqRole(ctx, d, role); err != nil {
+	if err := r.table.DelByRole(ctx, d, role); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
@@ -186,7 +186,7 @@ func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelLeqCreationTime(ctx, d, t); err != nil {
+	if err := r.table.DelBeforeCreationTime(ctx, d, t); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
