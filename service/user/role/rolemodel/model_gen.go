@@ -152,7 +152,7 @@ func (t *roleModelTable) GetModelByUserRoles(ctx context.Context, d sqldb.Execut
 
 func (t *roleModelTable) GetModelByUserRolePrefix(ctx context.Context, d sqldb.Executor, userid string, rolePrefix string, limit, offset int) (_ []Model, retErr error) {
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role LIKE $4 LIMIT $1 OFFSET $2;", limit, offset, userid, rolePrefix)
+	rows, err := d.QueryContext(ctx, "SELECT userid, role FROM "+t.TableName+" WHERE userid = $3 AND role LIKE $4 ORDER BY role LIMIT $1 OFFSET $2;", limit, offset, userid, rolePrefix)
 	if err != nil {
 		return nil, err
 	}

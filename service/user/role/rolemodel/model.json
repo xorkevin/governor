@@ -40,7 +40,8 @@
           {
             "kind": "getgroupeq",
             "name": "ByUserRolePrefix",
-            "conditions": [{"col": "userid"}, {"col": "role", "cond": "like"}]
+            "conditions": [{"col": "userid"}, {"col": "role", "cond": "like"}],
+            "order": [{"col": "role"}]
           },
           {
             "kind": "deleq",
