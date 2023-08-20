@@ -33,7 +33,6 @@ type (
 		RehashKey(m *Model) (string, error)
 		GetByID(ctx context.Context, sessionid string) (*Model, error)
 		GetUserSessions(ctx context.Context, userid string, limit, offset int) ([]Model, error)
-		GetUserSessionIDs(ctx context.Context, userid string, limit, offset int) ([]string, error)
 		Insert(ctx context.Context, m *Model) error
 		Update(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
@@ -53,18 +52,13 @@ type (
 	//forge:model session
 	//forge:model:query session
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(63) PRIMARY KEY;index,userid" query:"sessionid;getoneeq,sessionid;updeq,sessionid;deleq,sessionid;deleq,sessionid|in"`
-		Userid    string `model:"userid,VARCHAR(31) NOT NULL" query:"userid;deleq,userid"`
-		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
-		Time      int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
-		AuthTime  int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
-		IPAddr    string `model:"ipaddr,VARCHAR(63)" query:"ipaddr"`
-		UserAgent string `model:"user_agent,VARCHAR(1023)" query:"user_agent"`
-	}
-
-	//forge:model:query session
-	qID struct {
-		SessionID string `query:"sessionid;getgroupeq,userid"`
+		SessionID string `model:"sessionid,VARCHAR(63) PRIMARY KEY"`
+		Userid    string `model:"userid,VARCHAR(31) NOT NULL"`
+		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
+		Time      int64  `model:"time,BIGINT NOT NULL"`
+		AuthTime  int64  `model:"auth_time,BIGINT NOT NULL"`
+		IPAddr    string `model:"ipaddr,VARCHAR(63)"`
+		UserAgent string `model:"user_agent,VARCHAR(1023)"`
 	}
 
 	ctxKeyRepo struct{}
@@ -179,7 +173,7 @@ func (r *repo) GetByID(ctx context.Context, sessionID string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqSessionID(ctx, d, sessionID)
+	m, err := r.table.GetModelByID(ctx, d, sessionID)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get session")
 	}
@@ -192,28 +186,11 @@ func (r *repo) GetUserSessions(ctx context.Context, userid string, limit, offset
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridOrdTime(ctx, d, userid, false, limit, offset)
+	m, err := r.table.GetModelByUserid(ctx, d, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user sessions")
 	}
 	return m, nil
-}
-
-// GetUserSessionIDs returns all the session ids of a user
-func (r *repo) GetUserSessionIDs(ctx context.Context, userid string, limit, offset int) ([]string, error) {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m, err := r.table.GetqIDEqUseridOrdSessionID(ctx, d, userid, true, limit, offset)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get user session ids")
-	}
-	res := make([]string, 0, len(m))
-	for _, i := range m {
-		res = append(res, i.SessionID)
-	}
-	return res, nil
 }
 
 // Insert inserts the model into the db
@@ -234,7 +211,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqSessionID(ctx, d, m, m.SessionID); err != nil {
+	if err := r.table.UpdModelByID(ctx, d, m, m.SessionID); err != nil {
 		return kerrors.WithMsg(err, "Failed to update session")
 	}
 	return nil
@@ -246,7 +223,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqSessionID(ctx, d, m.SessionID); err != nil {
+	if err := r.table.DelByID(ctx, d, m.SessionID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete session")
 	}
 	return nil
@@ -261,7 +238,7 @@ func (r *repo) DeleteSessions(ctx context.Context, sessionids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelHasSessionID(ctx, d, sessionids); err != nil {
+	if err := r.table.DelByIDs(ctx, d, sessionids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete sessions")
 	}
 	return nil
@@ -273,7 +250,7 @@ func (r *repo) DeleteUserSessions(ctx context.Context, userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+	if err := r.table.DelByUserid(ctx, d, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete sessions")
 	}
 	return nil

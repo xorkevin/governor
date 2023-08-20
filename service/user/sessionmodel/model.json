@@ -1,0 +1,48 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "session": {
+      "model": {
+        "indicies": [
+          {"columns": ["userid", "sessionid"]},
+          {"columns": ["userid", "time"]}
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "sessionid"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "sessionid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "sessionid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByIDs",
+            "conditions": [{"col": "sessionid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "time", "dir": "DESC"}]
+          }
+        ]
+      }
+    }
+  }
+}
