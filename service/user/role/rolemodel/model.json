@@ -1,0 +1,64 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "role": {
+      "model": {
+        "constraints": [
+          {"kind": "PRIMARY KEY", "columns": ["userid", "role"]},
+          {"kind": "UNIQUE", "columns": ["role", "userid"]}
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getgroupeq",
+            "name": "ByRole",
+            "conditions": [{"col": "role"}],
+            "order": [{"col": "userid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByUserRole",
+            "conditions": [{"col": "userid"}, {"col": "role"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "role"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserRoles",
+            "conditions": [{"col": "userid"}, {"col": "role", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserRolePrefix",
+            "conditions": [{"col": "userid"}, {"col": "role", "cond": "like"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByRoleUsers",
+            "conditions": [{"col": "role"}, {"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserRole",
+            "conditions": [{"col": "userid"}, {"col": "role"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserRoles",
+            "conditions": [{"col": "userid"}, {"col": "role", "cond": "in"}]
+          }
+        ]
+      }
+    }
+  }
+}
