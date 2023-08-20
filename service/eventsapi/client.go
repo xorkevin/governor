@@ -83,7 +83,7 @@ func (c *CmdClient) publishEvent(args []string) error {
 	}
 	var q url.Values
 	q.Add("subject", c.publishFlags.subject)
-	r, err := c.httpc.Req(http.MethodPost, "/pubsub/publish?"+q.Encode(), &payload)
+	r, err := c.httpc.HTTPClient.Req(http.MethodPost, "/pubsub/publish?"+q.Encode(), &payload)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create events api requeust")
 	}

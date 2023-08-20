@@ -177,12 +177,15 @@ func (c *Client) Init(flags ClientFlags, log klog.Logger) error {
 		klog.OptMinLevelStr(c.settings.logger.level),
 	))
 	c.term = newTermClient(c.configTerm, c.log.Logger)
-	httpc := newHTTPClient(c.settings.httpClient, c.log.Logger)
-	c.httpc = NewHTTPFetcher(httpc)
+	c.httpc = NewHTTPFetcher(newHTTPClient(c.settings.httpClient))
 
 	for _, i := range c.clients {
-		l := c.log.Logger.Sublogger(i.opt.name)
-		if err := i.r.Init(c.settings.reader(i.opt), l, c.term, httpc.subclient(i.opt.url, l)); err != nil {
+		if err := i.r.Init(
+			c.settings.reader(i.opt),
+			c.log.Logger.Sublogger(i.opt.name),
+			c.term,
+			c.httpc.HTTPClient.Subclient(i.opt.url),
+		); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}
 	}
@@ -202,7 +205,7 @@ func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
 		return nil, err
 	}
 	body := &ResSetup{}
-	r, err := c.httpc.Req(http.MethodPost, "/setupz", nil)
+	r, err := c.httpc.HTTPClient.Req(http.MethodPost, "/setupz", nil)
 	if err != nil {
 		return nil, err
 	}

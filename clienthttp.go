@@ -18,10 +18,7 @@ type (
 	HTTPClient interface {
 		Req(method, path string, body io.Reader) (*http.Request, error)
 		Do(ctx context.Context, r *http.Request) (*http.Response, error)
-	}
-
-	HTTPReqDoer interface {
-		Do(r *http.Request) (*http.Response, error)
+		Subclient(path string) HTTPClient
 	}
 
 	httpClient struct {
@@ -71,7 +68,7 @@ func (e errServerRes) Error() string {
 	return "Error server response"
 }
 
-func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
+func newHTTPClient(c configHTTPClient) *httpClient {
 	return &httpClient{
 		httpc: &http.Client{
 			Transport: c.transport,
@@ -81,7 +78,7 @@ func newHTTPClient(c configHTTPClient, l klog.Logger) *httpClient {
 	}
 }
 
-func (c *httpClient) subclient(path string, l klog.Logger) HTTPClient {
+func (c *httpClient) Subclient(path string) HTTPClient {
 	return &httpClient{
 		httpc: c.httpc,
 		base:  c.base + path,
@@ -138,16 +135,6 @@ func NewHTTPFetcher(c HTTPClient) *HTTPFetcher {
 	}
 }
 
-// Req calls [HTTPClient] Req
-func (c *HTTPFetcher) Req(method, path string, body io.Reader) (*http.Request, error) {
-	return c.HTTPClient.Req(method, path, body)
-}
-
-// Do calls [HTTPClient] Do
-func (c *HTTPFetcher) Do(ctx context.Context, r *http.Request) (*http.Response, error) {
-	return c.HTTPClient.Do(ctx, r)
-}
-
 // ReqJSON creates a new json request
 func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Request, error) {
 	b, err := kjson.Marshal(data)
@@ -155,7 +142,7 @@ func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Requ
 		return nil, kerrors.WithKind(err, ErrInvalidClientReq, "Failed to encode body to json")
 	}
 	body := bytes.NewReader(b)
-	req, err := c.Req(method, path, body)
+	req, err := c.HTTPClient.Req(method, path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +153,7 @@ func (c *HTTPFetcher) ReqJSON(method, path string, data interface{}) (*http.Requ
 // DoNoContent sends a request to the server and discards the response body
 func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (_ *http.Response, retErr error) {
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
-	res, err := c.Do(ctx, r)
+	res, err := c.HTTPClient.Do(ctx, r)
 	if err != nil {
 		return res, err
 	}
@@ -186,7 +173,7 @@ func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (_ *http
 // DoJSON sends a request to the server and decodes response json
 func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response interface{}) (_ *http.Response, _ bool, retErr error) {
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
-	res, err := c.Do(ctx, r)
+	res, err := c.HTTPClient.Do(ctx, r)
 	if err != nil {
 		return res, false, err
 	}
