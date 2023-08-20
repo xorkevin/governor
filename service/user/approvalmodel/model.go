@@ -47,16 +47,16 @@ type (
 	//forge:model approval
 	//forge:model:query approval
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;updeq,userid;deleq,userid"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL" query:"username"`
-		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL" query:"pass_hash"`
-		Email        string `model:"email,VARCHAR(255) NOT NULL" query:"email"`
-		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL" query:"first_name"`
-		LastName     string `model:"last_name,VARCHAR(255) NOT NULL" query:"last_name"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup;deleq,creation_time|lt"`
-		Approved     bool   `model:"approved,BOOL NOT NULL" query:"approved"`
-		CodeHash     string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
-		CodeTime     int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
+		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL"`
+		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL"`
+		Email        string `model:"email,VARCHAR(255) NOT NULL"`
+		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL"`
+		LastName     string `model:"last_name,VARCHAR(255) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
+		Approved     bool   `model:"approved,BOOL NOT NULL"`
+		CodeHash     string `model:"code_hash,VARCHAR(255) NOT NULL"`
+		CodeTime     int64  `model:"code_time,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -160,7 +160,7 @@ func (r *repo) GetByID(ctx context.Context, userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid(ctx, d, userid)
+	m, err := r.table.GetModelByID(ctx, d, userid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user")
 	}
@@ -172,7 +172,7 @@ func (r *repo) GetGroup(ctx context.Context, limit, offset int) ([]Model, error)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelOrdCreationTime(ctx, d, true, limit, offset)
+	m, err := r.table.GetModelAll(ctx, d, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user approvals")
 	}
@@ -195,7 +195,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqUserid(ctx, d, m, m.Userid); err != nil {
+	if err := r.table.UpdModelByID(ctx, d, m, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update user approval")
 	}
 	return nil
@@ -206,7 +206,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, m.Userid); err != nil {
+	if err := r.table.DelByID(ctx, d, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user approval")
 	}
 	return nil
@@ -217,7 +217,7 @@ func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelLtCreationTime(ctx, d, t); err != nil {
+	if err := r.table.DelBeforeCreationTime(ctx, d, t); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user approvals")
 	}
 	return nil

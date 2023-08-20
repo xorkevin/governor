@@ -1,0 +1,39 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "approval": {
+      "model": {
+        "indicies": [{"columns": ["creation_time"]}]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getgroup",
+            "name": "All",
+            "order": [{"col": "creation_time"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "BeforeCreationTime",
+            "conditions": [{"col": "creation_time", "cond": "lt"}]
+          }
+        ]
+      }
+    }
+  }
+}
