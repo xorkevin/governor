@@ -1,0 +1,107 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "org": {
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "orgid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "orgid", "cond": "in"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "orgid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "orgid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByName",
+            "conditions": [{"col": "name"}]
+          },
+          {
+            "kind": "getgroup",
+            "name": "All",
+            "order": [{"col": "name"}]
+          }
+        ]
+      }
+    },
+    "member": {
+      "model": {
+        "constraints": [
+          {"kind": "PRIMARY KEY", "columns": ["orgid", "userid"]}
+        ],
+        "indicies": [
+          {"columns": ["userid", "name"]},
+          {"columns": ["orgid", "username"]}
+        ]
+      },
+      "queries": {
+        "MemberModel": [
+          {
+            "kind": "deleq",
+            "name": "ByOrgid",
+            "conditions": [{"col": "orgid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserOrgs",
+            "conditions": [{"col": "userid"}, {"col": "orgid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "name"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserOrgNamePrefix",
+            "conditions": [{"col": "userid"}, {"col": "name", "cond": "like"}],
+            "order": [{"col": "name"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByOrgid",
+            "conditions": [{"col": "orgid"}],
+            "order": [{"col": "username"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByOrgUsernamePrefix",
+            "conditions": [
+              {"col": "orgid"},
+              {"col": "username", "cond": "like"}
+            ],
+            "order": [{"col": "username"}]
+          }
+        ],
+        "orgName": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "orgid"}]
+          }
+        ],
+        "memberUsername": [
+          {
+            "kind": "updeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
+          }
+        ]
+      }
+    }
+  }
+}

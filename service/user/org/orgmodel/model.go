@@ -52,31 +52,31 @@ type (
 	//forge:model org
 	//forge:model:query org
 	Model struct {
-		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY" query:"orgid;getoneeq,orgid;getgroupeq,orgid|in;updeq,orgid;deleq,orgid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE" query:"name;getoneeq,name"`
-		DisplayName  string `model:"display_name,VARCHAR(255) NOT NULL" query:"display_name"`
-		Desc         string `model:"description,VARCHAR(255) NOT NULL" query:"description"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index" query:"creation_time;getgroup"`
+		OrgID        string `model:"orgid,VARCHAR(31) PRIMARY KEY"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL UNIQUE"`
+		DisplayName  string `model:"display_name,VARCHAR(255) NOT NULL"`
+		Desc         string `model:"description,VARCHAR(255) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	// MemberModel is the user org member model
 	//forge:model member
 	//forge:model:query member
 	MemberModel struct {
-		OrgID    string `model:"orgid,VARCHAR(31)" query:"orgid;deleq,orgid"`
-		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (orgid, userid)" query:"userid;deleq,userid,orgid|in"`
-		Name     string `model:"name,VARCHAR(255) NOT NULL;index,userid" query:"name;getgroupeq,userid;getgroupeq,userid,name|like"`
-		Username string `model:"username,VARCHAR(255) NOT NULL;index,orgid" query:"username;getgroupeq,orgid;getgroupeq,orgid,username|like"`
+		OrgID    string `model:"orgid,VARCHAR(31)"`
+		Userid   string `model:"userid,VARCHAR(31)"`
+		Name     string `model:"name,VARCHAR(255) NOT NULL"`
+		Username string `model:"username,VARCHAR(255) NOT NULL"`
 	}
 
 	//forge:model:query member
 	orgName struct {
-		Name string `query:"name;updeq,orgid"`
+		Name string `model:"name"`
 	}
 
 	//forge:model:query member
 	memberUsername struct {
-		Username string `query:"username;updeq,userid"`
+		Username string `model:"username"`
 	}
 
 	ctxKeyRepo struct{}
@@ -145,7 +145,7 @@ func (r *repo) GetByID(ctx context.Context, orgid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqOrgID(ctx, d, orgid)
+	m, err := r.table.GetModelByID(ctx, d, orgid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -157,7 +157,7 @@ func (r *repo) GetByName(ctx context.Context, orgname string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqName(ctx, d, orgname)
+	m, err := r.table.GetModelByName(ctx, d, orgname)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org")
 	}
@@ -169,7 +169,7 @@ func (r *repo) GetAllOrgs(ctx context.Context, limit, offset int) ([]Model, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelOrdCreationTime(ctx, d, false, limit, offset)
+	m, err := r.table.GetModelAll(ctx, d, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
 	}
@@ -185,7 +185,7 @@ func (r *repo) GetOrgs(ctx context.Context, orgids []string) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelHasOrgIDOrdOrgID(ctx, d, orgids, true, len(orgids), 0)
+	m, err := r.table.GetModelByIDs(ctx, d, orgids, len(orgids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get orgs")
 	}
@@ -199,13 +199,13 @@ func (r *repo) GetOrgMembers(ctx context.Context, orgid string, prefix string, l
 	}
 	if prefix == "" {
 		var err error
-		m, err := r.tableMembers.GetMemberModelEqOrgIDOrdUsername(ctx, d, orgid, true, limit, offset)
+		m, err := r.tableMembers.GetMemberModelByOrgid(ctx, d, orgid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get org members")
 		}
 		return m, nil
 	}
-	m, err := r.tableMembers.GetMemberModelEqOrgIDLikeUsernameOrdUsername(ctx, d, orgid, prefix+"%", true, limit, offset)
+	m, err := r.tableMembers.GetMemberModelByOrgUsernamePrefix(ctx, d, orgid, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org members")
 	}
@@ -219,13 +219,13 @@ func (r *repo) GetOrgMods(ctx context.Context, orgid string, prefix string, limi
 	}
 	if prefix == "" {
 		var err error
-		m, err := r.tableMods.GetMemberModelEqOrgIDOrdUsername(ctx, d, orgid, true, limit, offset)
+		m, err := r.tableMods.GetMemberModelByOrgid(ctx, d, orgid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get org mods")
 		}
 		return m, nil
 	}
-	m, err := r.tableMods.GetMemberModelEqOrgIDLikeUsernameOrdUsername(ctx, d, orgid, prefix+"%", true, limit, offset)
+	m, err := r.tableMods.GetMemberModelByOrgUsernamePrefix(ctx, d, orgid, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get org mods")
 	}
@@ -240,13 +240,13 @@ func (r *repo) GetUserOrgs(ctx context.Context, userid string, prefix string, li
 	var m []MemberModel
 	if prefix == "" {
 		var err error
-		m, err = r.tableMembers.GetMemberModelEqUseridOrdName(ctx, d, userid, true, limit, offset)
+		m, err = r.tableMembers.GetMemberModelByUserid(ctx, d, userid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get user orgs")
 		}
 	} else {
 		var err error
-		m, err = r.tableMembers.GetMemberModelEqUseridLikeNameOrdName(ctx, d, userid, prefix+"%", true, limit, offset)
+		m, err = r.tableMembers.GetMemberModelByUserOrgNamePrefix(ctx, d, userid, prefix+"%", limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get user orgs")
 		}
@@ -266,13 +266,13 @@ func (r *repo) GetUserMods(ctx context.Context, userid string, prefix string, li
 	var m []MemberModel
 	if prefix == "" {
 		var err error
-		m, err = r.tableMods.GetMemberModelEqUseridOrdName(ctx, d, userid, true, limit, offset)
+		m, err = r.tableMods.GetMemberModelByUserid(ctx, d, userid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get user orgs")
 		}
 	} else {
 		var err error
-		m, err = r.tableMods.GetMemberModelEqUseridLikeNameOrdName(ctx, d, userid, prefix+"%", true, limit, offset)
+		m, err = r.tableMods.GetMemberModelByUserOrgNamePrefix(ctx, d, userid, prefix+"%", limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get user orgs")
 		}
@@ -300,7 +300,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqOrgID(ctx, d, m, m.OrgID); err != nil {
+	if err := r.table.UpdModelByID(ctx, d, m, m.OrgID); err != nil {
 		return kerrors.WithMsg(err, "Failed to update org")
 	}
 	return nil
@@ -311,12 +311,12 @@ func (r *repo) UpdateName(ctx context.Context, orgid string, name string) error 
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.UpdorgNameEqOrgID(ctx, d, &orgName{
+	if err := r.tableMembers.UpdorgNameByID(ctx, d, &orgName{
 		Name: name,
 	}, orgid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update org name for members")
 	}
-	if err := r.tableMods.UpdorgNameEqOrgID(ctx, d, &orgName{
+	if err := r.tableMods.UpdorgNameByID(ctx, d, &orgName{
 		Name: name,
 	}, orgid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update org name for mods")
@@ -363,7 +363,7 @@ func (r *repo) RmMembers(ctx context.Context, userid string, orgids []string) er
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.DelEqUseridHasOrgID(ctx, d, userid, orgids); err != nil {
+	if err := r.tableMembers.DelByUserOrgs(ctx, d, userid, orgids); err != nil {
 		return kerrors.WithMsg(err, "Failed to remove org members")
 	}
 	return nil
@@ -378,7 +378,7 @@ func (r *repo) RmMods(ctx context.Context, userid string, orgids []string) error
 	if err != nil {
 		return err
 	}
-	if err := r.tableMods.DelEqUseridHasOrgID(ctx, d, userid, orgids); err != nil {
+	if err := r.tableMods.DelByUserOrgs(ctx, d, userid, orgids); err != nil {
 		return kerrors.WithMsg(err, "Failed to remove org mods")
 	}
 	return nil
@@ -389,12 +389,12 @@ func (r *repo) UpdateUsername(ctx context.Context, userid string, username strin
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.UpdmemberUsernameEqUserid(ctx, d, &memberUsername{
+	if err := r.tableMembers.UpdmemberUsernameByUserid(ctx, d, &memberUsername{
 		Username: username,
 	}, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update member username")
 	}
-	if err := r.tableMods.UpdmemberUsernameEqUserid(ctx, d, &memberUsername{
+	if err := r.tableMods.UpdmemberUsernameByUserid(ctx, d, &memberUsername{
 		Username: username,
 	}, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update mod username")
@@ -407,7 +407,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqOrgID(ctx, d, m.OrgID); err != nil {
+	if err := r.table.DelByID(ctx, d, m.OrgID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete org")
 	}
 	return nil
