@@ -7,8 +7,14 @@
           {"kind": "PRIMARY KEY", "columns": ["userid", "clientid"]}
         ],
         "indicies": [
-          {"columns": ["clientid"]},
-          {"columns": ["userid", "access_time"]}
+          {
+            "name": "clientid",
+            "columns": [{"col": "clientid"}]
+          },
+          {
+            "name": "userid_access_time",
+            "columns": [{"col": "userid"}, {"col": "access_time"}]
+          }
         ]
       },
       "queries": {

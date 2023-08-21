@@ -3,7 +3,12 @@
   "models": {
     "apikey": {
       "model": {
-        "indicies": [{"columns": ["userid", "time"]}]
+        "indicies": [
+          {
+            "name": "userid_time",
+            "columns": [{"col": "userid"}, {"col": "time"}]
+          }
+        ]
       },
       "queries": {
         "Model": [

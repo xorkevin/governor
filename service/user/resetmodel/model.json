@@ -4,7 +4,12 @@
     "reset": {
       "model": {
         "constraints": [{"kind": "PRIMARY KEY", "columns": ["userid", "kind"]}],
-        "indicies": [{"columns": ["code_time"]}]
+        "indicies": [
+          {
+            "name": "code_time",
+            "columns": [{"col": "code_time"}]
+          }
+        ]
       },
       "queries": {
         "Model": [

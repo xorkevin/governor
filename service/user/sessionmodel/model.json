@@ -4,8 +4,14 @@
     "session": {
       "model": {
         "indicies": [
-          {"columns": ["userid", "sessionid"]},
-          {"columns": ["userid", "time"]}
+          {
+            "name": "userid_sessionid",
+            "columns": [{"col": "userid"}, {"col": "sessionid"}]
+          },
+          {
+            "name": "userid_time",
+            "columns": [{"col": "userid"}, {"col": "time"}]
+          }
         ]
       },
       "queries": {

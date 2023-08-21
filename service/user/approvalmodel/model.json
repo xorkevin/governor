@@ -3,7 +3,12 @@
   "models": {
     "approval": {
       "model": {
-        "indicies": [{"columns": ["creation_time"]}]
+        "indicies": [
+          {
+            "name": "creation_time",
+            "columns": [{"col": "creation_time"}]
+          }
+        ]
       },
       "queries": {
         "Model": [

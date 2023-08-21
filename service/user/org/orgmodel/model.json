@@ -43,8 +43,14 @@
           {"kind": "PRIMARY KEY", "columns": ["orgid", "userid"]}
         ],
         "indicies": [
-          {"columns": ["userid", "name"]},
-          {"columns": ["orgid", "username"]}
+          {
+            "name": "userid_name",
+            "columns": [{"col": "userid"}, {"col": "name"}]
+          },
+          {
+            "name": "orgid_username",
+            "columns": [{"col": "orgid"}, {"col": "username"}]
+          }
         ]
       },
       "queries": {

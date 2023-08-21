@@ -5,9 +5,18 @@
       "model": {
         "constraints": [{"kind": "PRIMARY KEY", "columns": ["userid", "role"]}],
         "indicies": [
-          {"columns": ["creation_time"]},
-          {"columns": ["userid", "creation_time"]},
-          {"columns": ["role", "creation_time"]}
+          {
+            "name": "creation_time",
+            "columns": [{"col": "creation_time"}]
+          },
+          {
+            "name": "userid_creation_time",
+            "columns": [{"col": "userid"}, {"col": "creation_time"}]
+          },
+          {
+            "name": "role_creation_time",
+            "columns": [{"col": "role"}, {"col": "creation_time"}]
+          }
         ]
       },
       "queries": {

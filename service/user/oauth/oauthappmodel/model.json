@@ -4,8 +4,18 @@
     "oauthapp": {
       "model": {
         "indicies": [
-          {"columns": ["name", "creation_time"]},
-          {"columns": ["creator_id", "name", "creation_time"]}
+          {
+            "name": "name",
+            "columns": [{"col": "name"}, {"col": "creation_time"}]
+          },
+          {
+            "name": "creator_name",
+            "columns": [
+              {"col": "creator_id"},
+              {"col": "name"},
+              {"col": "creation_time"}
+            ]
+          }
         ]
       },
       "queries": {
