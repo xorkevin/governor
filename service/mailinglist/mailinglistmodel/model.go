@@ -31,7 +31,6 @@ type (
 		DeleteCreatorLists(ctx context.Context, creatorid string) error
 		GetMember(ctx context.Context, listid, userid string) (*MemberModel, error)
 		GetMembers(ctx context.Context, listid string, limit, offset int) ([]MemberModel, error)
-		GetListsMembers(ctx context.Context, listids []string, limit int) ([]MemberModel, error)
 		GetListMembers(ctx context.Context, listid string, userids []string) ([]MemberModel, error)
 		GetLatestLists(ctx context.Context, userid string, limit, offset int) ([]MemberModel, error)
 		AddMembers(m *ListModel, userids []string) []*MemberModel
@@ -78,111 +77,111 @@ type (
 	//forge:model list
 	//forge:model:query list
 	ListModel struct {
-		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY" query:"listid;getoneeq,listid;getgroupeq,listid|in;deleq,listid"`
-		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid;deleq,creatorid"`
-		Listname     string `model:"listname,VARCHAR(127) NOT NULL" query:"listname"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Description  string `model:"description,VARCHAR(255)" query:"description"`
-		Archive      bool   `model:"archive,BOOLEAN NOT NULL" query:"archive"`
-		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL" query:"sender_policy"`
-		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL" query:"member_policy"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,creatorid" query:"last_updated;getgroupeq,creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		ListID       string `model:"listid,VARCHAR(255) PRIMARY KEY"`
+		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL"`
+		Listname     string `model:"listname,VARCHAR(127) NOT NULL"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Description  string `model:"description,VARCHAR(255)"`
+		Archive      bool   `model:"archive,BOOLEAN NOT NULL"`
+		SenderPolicy string `model:"sender_policy,VARCHAR(255) NOT NULL"`
+		MemberPolicy string `model:"member_policy,VARCHAR(255) NOT NULL"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query list
 	listProps struct {
-		Name         string `query:"name;updeq,listid"`
-		Description  string `query:"description"`
-		Archive      bool   `query:"archive"`
-		SenderPolicy string `query:"sender_policy"`
-		MemberPolicy string `query:"member_policy"`
+		Name         string `model:"name"`
+		Description  string `model:"description"`
+		Archive      bool   `model:"archive"`
+		SenderPolicy string `model:"sender_policy"`
+		MemberPolicy string `model:"member_policy"`
 	}
 
 	// MemberModel is the db mailing list member model
 	//forge:model member
 	//forge:model:query member
 	MemberModel struct {
-		ListID      string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid;getgroupeq,listid|in"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, userid)" query:"userid;getoneeq,listid,userid;getgroupeq,listid;getgroupeq,listid,userid|in;deleq,listid,userid|in;deleq,userid"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid"`
+		ListID      string `model:"listid,VARCHAR(255)"`
+		Userid      string `model:"userid,VARCHAR(31)"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query list
 	//forge:model:query member
 	listLastUpdated struct {
-		LastUpdated int64 `query:"last_updated;updeq,listid"`
+		LastUpdated int64 `model:"last_updated"`
 	}
 
 	// MsgModel is the db mailing list message model
 	//forge:model msg
 	//forge:model:query msg
 	MsgModel struct {
-		ListID       string `model:"listid,VARCHAR(255)" query:"listid"`
-		Msgid        string `model:"msgid,VARCHAR(1023), PRIMARY KEY (listid, msgid)" query:"msgid;getoneeq,listid,msgid"`
-		Userid       string `model:"userid,VARCHAR(31) NOT NULL" query:"userid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid;index,listid,thread_id" query:"creation_time;getgroupeq,listid;getgroupeq,listid,thread_id"`
-		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL" query:"spf_pass"`
-		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL" query:"dkim_pass"`
-		Subject      string `model:"subject,VARCHAR(255) NOT NULL" query:"subject"`
-		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL;index,listid;index,listid,thread_id" query:"in_reply_to"`
-		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL" query:"parent_id"`
-		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL" query:"thread_id"`
-		Processed    bool   `model:"processed,BOOL NOT NULL" query:"processed"`
-		Sent         bool   `model:"sent,BOOL NOT NULL" query:"sent"`
-		Deleted      bool   `model:"deleted,BOOL NOT NULL" query:"deleted"`
+		ListID       string `model:"listid,VARCHAR(255)"`
+		Msgid        string `model:"msgid,VARCHAR(1023)"`
+		Userid       string `model:"userid,VARCHAR(31) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
+		SPFPass      string `model:"spf_pass,VARCHAR(255) NOT NULL"`
+		DKIMPass     string `model:"dkim_pass,VARCHAR(255) NOT NULL"`
+		Subject      string `model:"subject,VARCHAR(255) NOT NULL"`
+		InReplyTo    string `model:"in_reply_to,VARCHAR(1023) NOT NULL"`
+		ParentID     string `model:"parent_id,VARCHAR(1023) NOT NULL"`
+		ThreadID     string `model:"thread_id,VARCHAR(1023) NOT NULL"`
+		Processed    bool   `model:"processed,BOOL NOT NULL"`
+		Sent         bool   `model:"sent,BOOL NOT NULL"`
+		Deleted      bool   `model:"deleted,BOOL NOT NULL"`
 	}
 
 	//forge:model:query msg
 	msgProcessed struct {
-		Processed bool `query:"processed;updeq,listid,msgid"`
+		Processed bool `model:"processed"`
 	}
 
 	//forge:model:query msg
 	msgSent struct {
-		Sent bool `query:"sent;updeq,listid,msgid"`
+		Sent bool `model:"sent"`
 	}
 
 	//forge:model:query msg
 	msgDeleted struct {
-		Userid   string `query:"userid"`
-		SPFPass  string `query:"spf_pass"`
-		DKIMPass string `query:"dkim_pass"`
-		Subject  string `query:"subject"`
-		Deleted  bool   `query:"deleted;updeq,listid,msgid|in"`
+		Userid   string `model:"userid"`
+		SPFPass  string `model:"spf_pass"`
+		DKIMPass string `model:"dkim_pass"`
+		Subject  string `model:"subject"`
+		Deleted  bool   `model:"deleted"`
 	}
 
 	//forge:model:query msg
 	msgParent struct {
-		ParentID string `query:"parent_id"`
-		ThreadID string `query:"thread_id;updeq,listid,msgid,thread_id"`
+		ParentID string `model:"parent_id"`
+		ThreadID string `model:"thread_id"`
 	}
 
 	//forge:model:query msg
 	msgChildren struct {
-		ParentID string `query:"parent_id"`
-		ThreadID string `query:"thread_id;updeq,listid,thread_id,in_reply_to"`
+		ParentID string `model:"parent_id"`
+		ThreadID string `model:"thread_id"`
 	}
 
 	// SentMsgModel is the db mailing list sent message log
 	//forge:model sentmsg
 	//forge:model:query sentmsg
 	SentMsgModel struct {
-		ListID   string `model:"listid,VARCHAR(255)" query:"listid"`
-		Msgid    string `model:"msgid,VARCHAR(1023);index,listid,userid" query:"msgid;deleq,listid,msgid|in"`
-		Userid   string `model:"userid,VARCHAR(31), PRIMARY KEY (listid, msgid, userid)" query:"userid"`
-		SentTime int64  `model:"sent_time,BIGINT NOT NULL" query:"sent_time"`
+		ListID   string `model:"listid,VARCHAR(255)"`
+		Msgid    string `model:"msgid,VARCHAR(1023)"`
+		Userid   string `model:"userid,VARCHAR(31)"`
+		SentTime int64  `model:"sent_time,BIGINT NOT NULL"`
 	}
 
 	// TreeModel is the db mailing list message tree model
 	//forge:model tree
 	//forge:model:query tree
 	TreeModel struct {
-		ListID       string `model:"listid,VARCHAR(255)" query:"listid;deleq,listid"`
-		Msgid        string `model:"msgid,VARCHAR(1023)" query:"msgid"`
-		ParentID     string `model:"parent_id,VARCHAR(1023), PRIMARY KEY (listid, msgid, parent_id)" query:"parent_id;getoneeq,listid,msgid,parent_id"`
-		Depth        int    `model:"depth,INT NOT NULL;index,listid,msgid" query:"depth;getgroupeq,listid,msgid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index,listid,parent_id,depth" query:"creation_time;getgroupeq,listid,parent_id,depth"`
+		ListID       string `model:"listid,VARCHAR(255)"`
+		Msgid        string `model:"msgid,VARCHAR(1023)"`
+		ParentID     string `model:"parent_id,VARCHAR(1023)"`
+		Depth        int    `model:"depth,INT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -263,7 +262,7 @@ func (r *repo) GetListByID(ctx context.Context, listid string) (*ListModel, erro
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableLists.GetListModelEqListID(ctx, d, listid)
+	m, err := r.tableLists.GetListModelByID(ctx, d, listid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
@@ -279,7 +278,7 @@ func (r *repo) GetLists(ctx context.Context, listids []string) ([]ListModel, err
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableLists.GetListModelHasListIDOrdListID(ctx, d, listids, true, len(listids), 0)
+	m, err := r.tableLists.GetListModelByIDs(ctx, d, listids, len(listids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get lists")
 	}
@@ -291,7 +290,7 @@ func (r *repo) GetCreatorLists(ctx context.Context, creatorid string, limit, off
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableLists.GetListModelEqCreatorIDOrdLastUpdated(ctx, d, creatorid, false, limit, offset)
+	m, err := r.tableLists.GetListModelByCreator(ctx, d, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest lists")
 	}
@@ -314,7 +313,7 @@ func (r *repo) UpdateList(ctx context.Context, m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLists.UpdlistPropsEqListID(ctx, d, &listProps{
+	if err := r.tableLists.UpdlistPropsByID(ctx, d, &listProps{
 		Name:         m.Name,
 		Description:  m.Description,
 		Archive:      m.Archive,
@@ -331,12 +330,12 @@ func (r *repo) UpdateListLastUpdated(ctx context.Context, listid string, t int64
 	if err != nil {
 		return err
 	}
-	if err := r.tableLists.UpdlistLastUpdatedEqListID(ctx, d, &listLastUpdated{
+	if err := r.tableLists.UpdlistLastUpdatedByID(ctx, d, &listLastUpdated{
 		LastUpdated: t,
 	}, listid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update list last updated")
 	}
-	if err := r.tableMembers.UpdlistLastUpdatedEqListID(ctx, d, &listLastUpdated{
+	if err := r.tableMembers.UpdlistLastUpdatedByList(ctx, d, &listLastUpdated{
 		LastUpdated: t,
 	}, listid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update list last updated")
@@ -349,7 +348,7 @@ func (r *repo) DeleteList(ctx context.Context, m *ListModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLists.DelEqListID(ctx, d, m.ListID); err != nil {
+	if err := r.tableLists.DelByID(ctx, d, m.ListID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list")
 	}
 	return nil
@@ -360,7 +359,7 @@ func (r *repo) DeleteCreatorLists(ctx context.Context, creatorid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLists.DelEqCreatorID(ctx, d, creatorid); err != nil {
+	if err := r.tableLists.DelByCreator(ctx, d, creatorid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete lists")
 	}
 	return nil
@@ -371,7 +370,7 @@ func (r *repo) GetMember(ctx context.Context, listid, userid string) (*MemberMod
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqListIDEqUserid(ctx, d, listid, userid)
+	m, err := r.tableMembers.GetMemberModelByListUser(ctx, d, listid, userid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list member")
 	}
@@ -383,23 +382,7 @@ func (r *repo) GetMembers(ctx context.Context, listid string, limit, offset int)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqListIDOrdUserid(ctx, d, listid, true, limit, offset)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get list members")
-	}
-	return m, nil
-}
-
-func (r *repo) GetListsMembers(ctx context.Context, listids []string, limit int) ([]MemberModel, error) {
-	if len(listids) == 0 {
-		return nil, nil
-	}
-
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m, err := r.tableMembers.GetMemberModelHasListIDOrdListID(ctx, d, listids, true, limit, 0)
+	m, err := r.tableMembers.GetMemberModelByList(ctx, d, listid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list members")
 	}
@@ -415,7 +398,7 @@ func (r *repo) GetListMembers(ctx context.Context, listid string, userids []stri
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqListIDHasUseridOrdUserid(ctx, d, listid, userids, true, len(userids), 0)
+	m, err := r.tableMembers.GetMemberModelByListUsers(ctx, d, listid, userids, len(userids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list members")
 	}
@@ -427,7 +410,7 @@ func (r *repo) GetLatestLists(ctx context.Context, userid string, limit, offset 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqUseridOrdLastUpdated(ctx, d, userid, false, limit, offset)
+	m, err := r.tableMembers.GetMemberModelByUser(ctx, d, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest user lists")
 	}
@@ -470,7 +453,7 @@ func (r *repo) DeleteMembers(ctx context.Context, listid string, userids []strin
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.DelEqListIDHasUserid(ctx, d, listid, userids); err != nil {
+	if err := r.tableMembers.DelByListUsers(ctx, d, listid, userids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list members")
 	}
 	return nil
@@ -481,7 +464,7 @@ func (r *repo) DeleteListMembers(ctx context.Context, listid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.DelEqListID(ctx, d, listid); err != nil {
+	if err := r.tableMembers.DelByList(ctx, d, listid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list members")
 	}
 	return nil
@@ -492,7 +475,7 @@ func (r *repo) DeleteUserMembers(ctx context.Context, userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableMembers.DelEqUserid(ctx, d, userid); err != nil {
+	if err := r.tableMembers.DelByUser(ctx, d, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user list memberships")
 	}
 	return nil
@@ -513,7 +496,7 @@ func (r *repo) GetMsg(ctx context.Context, listid, msgid string) (*MsgModel, err
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMsgs.GetMsgModelEqListIDEqMsgid(ctx, d, listid, msgid)
+	m, err := r.tableMsgs.GetMsgModelByListMsg(ctx, d, listid, msgid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
@@ -525,7 +508,7 @@ func (r *repo) GetListMsgs(ctx context.Context, listid string, limit, offset int
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMsgs.GetMsgModelEqListIDOrdCreationTime(ctx, d, listid, false, limit, offset)
+	m, err := r.tableMsgs.GetMsgModelByList(ctx, d, listid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest list messages")
 	}
@@ -537,7 +520,7 @@ func (r *repo) GetListThreads(ctx context.Context, listid string, limit, offset 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMsgs.GetMsgModelEqListIDEqThreadIDOrdCreationTime(ctx, d, listid, "", false, limit, offset)
+	m, err := r.tableMsgs.GetMsgModelThreadByList(ctx, d, listid, "", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get latest list threads")
 	}
@@ -549,7 +532,7 @@ func (r *repo) GetListThread(ctx context.Context, listid, threadid string, limit
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMsgs.GetMsgModelEqListIDEqThreadIDOrdCreationTime(ctx, d, listid, threadid, true, limit, offset)
+	m, err := r.tableMsgs.GetMsgModelByListThread(ctx, d, listid, threadid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get list thread")
 	}
@@ -572,7 +555,7 @@ func (r *repo) UpdateMsgParent(ctx context.Context, listid, msgid string, parent
 	if err != nil {
 		return err
 	}
-	if err := r.tableMsgs.UpdmsgParentEqListIDEqMsgidEqThreadID(ctx, d, &msgParent{
+	if err := r.tableMsgs.UpdmsgParentByListMsgThread(ctx, d, &msgParent{
 		ParentID: parentid,
 		ThreadID: threadid,
 	}, listid, msgid, ""); err != nil {
@@ -586,7 +569,7 @@ func (r *repo) UpdateMsgChildren(ctx context.Context, listid, parentid, threadid
 	if err != nil {
 		return err
 	}
-	if err := r.tableMsgs.UpdmsgChildrenEqListIDEqThreadIDEqInReplyTo(ctx, d, &msgChildren{
+	if err := r.tableMsgs.UpdmsgChildrenByListThreadReply(ctx, d, &msgChildren{
 		ParentID: parentid,
 		ThreadID: threadid,
 	}, listid, "", parentid); err != nil {
@@ -618,7 +601,7 @@ func (r *repo) MarkMsgProcessed(ctx context.Context, listid, msgid string) error
 	if err != nil {
 		return err
 	}
-	if err := r.tableMsgs.UpdmsgProcessedEqListIDEqMsgid(ctx, d, &msgProcessed{
+	if err := r.tableMsgs.UpdmsgProcessedByListMsg(ctx, d, &msgProcessed{
 		Processed: true,
 	}, listid, msgid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update list message")
@@ -631,7 +614,7 @@ func (r *repo) MarkMsgSent(ctx context.Context, listid, msgid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableMsgs.UpdmsgSentEqListIDEqMsgid(ctx, d, &msgSent{
+	if err := r.tableMsgs.UpdmsgSentByListMsg(ctx, d, &msgSent{
 		Sent: true,
 	}, listid, msgid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update list message")
@@ -648,7 +631,7 @@ func (r *repo) DeleteMsgs(ctx context.Context, listid string, msgids []string) e
 	if err != nil {
 		return err
 	}
-	if err := r.tableMsgs.UpdmsgDeletedEqListIDHasMsgid(ctx, d, &msgDeleted{
+	if err := r.tableMsgs.UpdmsgDeletedByListMsgs(ctx, d, &msgDeleted{
 		Userid:   "",
 		SPFPass:  "",
 		DKIMPass: "",
@@ -722,7 +705,7 @@ func (r *repo) DeleteSentMsgLogs(ctx context.Context, listid string, msgids []st
 	if err != nil {
 		return err
 	}
-	if err := r.tableSent.DelEqListIDHasMsgid(ctx, d, listid, msgids); err != nil {
+	if err := r.tableSent.DelByListMsgs(ctx, d, listid, msgids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete sent message logs")
 	}
 	return nil
@@ -743,7 +726,7 @@ func (r *repo) GetTreeEdge(ctx context.Context, listid, msgid, parentid string) 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableTree.GetTreeModelEqListIDEqMsgidEqParentID(ctx, d, listid, msgid, parentid)
+	m, err := r.tableTree.GetTreeModelByListMsgParent(ctx, d, listid, msgid, parentid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get tree edge")
 	}
@@ -755,7 +738,7 @@ func (r *repo) GetTreeChildren(ctx context.Context, listid, parentid string, dep
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableTree.GetTreeModelEqListIDEqParentIDEqDepthOrdCreationTime(ctx, d, listid, parentid, depth, true, limit, offset)
+	m, err := r.tableTree.GetTreeModelByListParentDepth(ctx, d, listid, parentid, depth, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get tree children")
 	}
@@ -767,7 +750,7 @@ func (r *repo) GetTreeParents(ctx context.Context, listid, msgid string, limit, 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableTree.GetTreeModelEqListIDEqMsgidOrdDepth(ctx, d, listid, msgid, true, limit, offset)
+	m, err := r.tableTree.GetTreeModelByListMsg(ctx, d, listid, msgid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get tree parents")
 	}
@@ -819,7 +802,7 @@ func (r *repo) DeleteListTrees(ctx context.Context, listid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableTree.DelEqListID(ctx, d, listid); err != nil {
+	if err := r.tableTree.DelByList(ctx, d, listid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete list trees")
 	}
 	return nil

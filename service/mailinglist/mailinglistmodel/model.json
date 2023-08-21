@@ -1,0 +1,313 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "list": {
+      "model": {
+        "indicies": [
+          {
+            "name": "creator_last_updated",
+            "columns": [{"col": "creatorid"}, {"col": "last_updated"}]
+          }
+        ]
+      },
+      "queries": {
+        "ListModel": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "listid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "listid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "listid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creatorid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creatorid"}],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          }
+        ],
+        "listProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "listid"}]
+          }
+        ],
+        "listLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "listid"}]
+          }
+        ]
+      }
+    },
+    "member": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["listid", "userid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "userid_last_updated",
+            "columns": [{"col": "userid"}, {"col": "last_updated"}]
+          }
+        ]
+      },
+      "queries": {
+        "MemberModel": [
+          {
+            "kind": "deleq",
+            "name": "ByList",
+            "conditions": [{"col": "listid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByListUser",
+            "conditions": [{"col": "listid"}, {"col": "userid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByList",
+            "conditions": [{"col": "listid"}],
+            "order": [{"col": "userid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByListUsers",
+            "conditions": [{"col": "listid"}, {"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByListUsers",
+            "conditions": [{"col": "listid"}, {"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUser",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          }
+        ],
+        "listLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByList",
+            "conditions": [{"col": "listid"}]
+          }
+        ]
+      }
+    },
+    "msg": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["listid", "msgid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "list_creation_time",
+            "columns": [{"col": "listid"}, {"col": "creation_time"}]
+          },
+          {
+            "name": "list_thread_creation_time",
+            "columns": [
+              {"col": "listid"},
+              {"col": "thread_id"},
+              {"col": "creation_time"}
+            ]
+          },
+          {
+            "name": "list_reply_to",
+            "columns": [{"col": "listid"}, {"col": "in_reply_to"}]
+          },
+          {
+            "name": "list_thread_reply_to",
+            "columns": [
+              {"col": "listid"},
+              {"col": "thread_id"},
+              {"col": "in_reply_to"}
+            ]
+          }
+        ]
+      },
+      "queries": {
+        "MsgModel": [
+          {
+            "kind": "getoneeq",
+            "name": "ByListMsg",
+            "conditions": [{"col": "listid"}, {"col": "msgid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByList",
+            "conditions": [{"col": "listid"}],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ThreadByList",
+            "conditions": [{"col": "listid"}, {"col": "thread_id"}],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByListThread",
+            "conditions": [{"col": "listid"}, {"col": "thread_id"}],
+            "order": [{"col": "creation_time"}]
+          }
+        ],
+        "msgProcessed": [
+          {
+            "kind": "updeq",
+            "name": "ByListMsg",
+            "conditions": [{"col": "listid"}, {"col": "msgid"}]
+          }
+        ],
+        "msgSent": [
+          {
+            "kind": "updeq",
+            "name": "ByListMsg",
+            "conditions": [{"col": "listid"}, {"col": "msgid"}]
+          }
+        ],
+        "msgDeleted": [
+          {
+            "kind": "updeq",
+            "name": "ByListMsgs",
+            "conditions": [{"col": "listid"}, {"col": "msgid", "cond": "in"}]
+          }
+        ],
+        "msgParent": [
+          {
+            "kind": "updeq",
+            "name": "ByListMsgThread",
+            "conditions": [
+              {"col": "listid"},
+              {"col": "msgid"},
+              {"col": "thread_id"}
+            ]
+          }
+        ],
+        "msgChildren": [
+          {
+            "kind": "updeq",
+            "name": "ByListThreadReply",
+            "conditions": [
+              {"col": "listid"},
+              {"col": "thread_id"},
+              {"col": "in_reply_to"}
+            ]
+          }
+        ]
+      }
+    },
+    "sentmsg": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["listid", "msgid", "userid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "list_user_msg",
+            "columns": [{"col": "listid"}, {"col": "userid"}, {"col": "msgid"}]
+          }
+        ]
+      },
+      "queries": {
+        "SentMsgModel": [
+          {
+            "kind": "deleq",
+            "name": "ByListMsgs",
+            "conditions": [{"col": "listid"}, {"col": "msgid", "cond": "in"}]
+          }
+        ]
+      }
+    },
+    "tree": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["listid", "msgid", "parent_id"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "list_msg_depth",
+            "columns": [{"col": "listid"}, {"col": "msgid"}, {"col": "depth"}]
+          },
+          {
+            "name": "list_parent_depth_creation_time",
+            "columns": [
+              {"col": "listid"},
+              {"col": "parent_id"},
+              {"col": "depth"},
+              {"col": "creation_time"}
+            ]
+          }
+        ]
+      },
+      "queries": {
+        "TreeModel": [
+          {
+            "kind": "deleq",
+            "name": "ByList",
+            "conditions": [{"col": "listid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByListMsgParent",
+            "conditions": [
+              {"col": "listid"},
+              {"col": "msgid"},
+              {"col": "parent_id"}
+            ]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByListMsg",
+            "conditions": [{"col": "listid"}, {"col": "msgid"}],
+            "order": [{"col": "depth"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByListParentDepth",
+            "conditions": [
+              {"col": "listid"},
+              {"col": "parent_id"},
+              {"col": "depth"}
+            ],
+            "order": [{"col": "creation_time"}]
+          }
+        ]
+      }
+    }
+  }
+}
