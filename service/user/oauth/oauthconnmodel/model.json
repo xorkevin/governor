@@ -1,0 +1,46 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "conn": {
+      "model": {
+        "constraints": [
+          {"kind": "PRIMARY KEY", "columns": ["userid", "clientid"]}
+        ],
+        "indicies": [
+          {"columns": ["clientid"]},
+          {"columns": ["userid", "access_time"]}
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "deleq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByUserClient",
+            "conditions": [{"col": "userid"}, {"col": "clientid"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByUserClient",
+            "conditions": [{"col": "userid"}, {"col": "clientid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserClients",
+            "conditions": [{"col": "userid"}, {"col": "clientid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "access_time", "dir": "DESC"}]
+          }
+        ]
+      }
+    }
+  }
+}

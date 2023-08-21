@@ -37,28 +37,28 @@ type (
 	}
 
 	repo struct {
-		table    *connectionModelTable
+		table    *connModelTable
 		db       db.Database
 		hasher   h2hash.Hasher
 		verifier *h2hash.Verifier
 	}
 
 	// Model is an connected OAuth app to a user account
-	//forge:model connection
-	//forge:model:query connection
+	//forge:model conn
+	//forge:model:query conn
 	Model struct {
-		Userid          string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
-		ClientID        string `model:"clientid,VARCHAR(31), PRIMARY KEY (userid, clientid);index" query:"clientid;getoneeq,userid,clientid;updeq,userid,clientid;deleq,userid,clientid|in"`
-		Scope           string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
-		Nonce           string `model:"nonce,VARCHAR(255)" query:"nonce"`
-		Challenge       string `model:"challenge,VARCHAR(128)" query:"challenge"`
-		ChallengeMethod string `model:"challenge_method,VARCHAR(31)" query:"challenge_method"`
-		CodeHash        string `model:"codehash,VARCHAR(255) NOT NULL" query:"codehash"`
-		AuthTime        int64  `model:"auth_time,BIGINT NOT NULL" query:"auth_time"`
-		CodeTime        int64  `model:"code_time,BIGINT NOT NULL" query:"code_time"`
-		AccessTime      int64  `model:"access_time,BIGINT NOT NULL;index,userid" query:"access_time;getgroupeq,userid"`
-		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
-		KeyHash         string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
+		Userid          string `model:"userid,VARCHAR(31)"`
+		ClientID        string `model:"clientid,VARCHAR(31)"`
+		Scope           string `model:"scope,VARCHAR(4095) NOT NULL"`
+		Nonce           string `model:"nonce,VARCHAR(255)"`
+		Challenge       string `model:"challenge,VARCHAR(128)"`
+		ChallengeMethod string `model:"challenge_method,VARCHAR(31)"`
+		CodeHash        string `model:"codehash,VARCHAR(255) NOT NULL"`
+		AuthTime        int64  `model:"auth_time,BIGINT NOT NULL"`
+		CodeTime        int64  `model:"code_time,BIGINT NOT NULL"`
+		AccessTime      int64  `model:"access_time,BIGINT NOT NULL"`
+		CreationTime    int64  `model:"creation_time,BIGINT NOT NULL"`
+		KeyHash         string `model:"keyhash,VARCHAR(255) NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -96,7 +96,7 @@ func New(database db.Database, table string) Repo {
 	verifier.Register(hasher)
 
 	return &repo{
-		table: &connectionModelTable{
+		table: &connModelTable{
 			TableName: table,
 		},
 		db:       database,
@@ -187,7 +187,7 @@ func (r *repo) GetByID(ctx context.Context, userid, clientid string) (*Model, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridEqClientID(ctx, d, userid, clientid)
+	m, err := r.table.GetModelByUserClient(ctx, d, userid, clientid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get connected oauth app")
 	}
@@ -199,7 +199,7 @@ func (r *repo) GetUserConnections(ctx context.Context, userid string, limit, off
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridOrdAccessTime(ctx, d, userid, false, limit, offset)
+	m, err := r.table.GetModelByUserid(ctx, d, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get connected oauth apps")
 	}
@@ -222,7 +222,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqUseridEqClientID(ctx, d, m, m.Userid, m.ClientID); err != nil {
+	if err := r.table.UpdModelByUserClient(ctx, d, m, m.Userid, m.ClientID); err != nil {
 		return kerrors.WithMsg(err, "Failed to update connected oauth app")
 	}
 	return nil
@@ -233,7 +233,7 @@ func (r *repo) Delete(ctx context.Context, userid string, clientids []string) er
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridHasClientID(ctx, d, userid, clientids); err != nil {
+	if err := r.table.DelByUserClients(ctx, d, userid, clientids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete connected oauth app")
 	}
 	return nil
@@ -244,7 +244,7 @@ func (r *repo) DeleteUserConnections(ctx context.Context, userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+	if err := r.table.DelByUserid(ctx, d, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete connected oauth apps")
 	}
 	return nil
