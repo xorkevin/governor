@@ -47,29 +47,29 @@ type (
 	//forge:model oauthapp
 	//forge:model:query oauthapp
 	Model struct {
-		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY" query:"clientid;getoneeq,clientid;getgroupeq,clientid|in;deleq,clientid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		URL          string `model:"url,VARCHAR(512) NOT NULL" query:"url"`
-		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL" query:"redirect_uri"`
-		Logo         string `model:"logo,VARCHAR(4095)" query:"logo"`
-		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL" query:"keyhash"`
-		Time         int64  `model:"time,BIGINT NOT NULL" query:"time"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creator_id" query:"creation_time;getgroup;getgroupeq,creator_id"`
-		CreatorID    string `model:"creator_id,VARCHAR(31) NOT NULL" query:"creator_id;deleq,creator_id"`
+		ClientID     string `model:"clientid,VARCHAR(31) PRIMARY KEY"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		URL          string `model:"url,VARCHAR(512) NOT NULL"`
+		RedirectURI  string `model:"redirect_uri,VARCHAR(512) NOT NULL"`
+		Logo         string `model:"logo,VARCHAR(4095)"`
+		KeyHash      string `model:"keyhash,VARCHAR(255) NOT NULL"`
+		Time         int64  `model:"time,BIGINT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
+		CreatorID    string `model:"creator_id,VARCHAR(31) NOT NULL"`
 	}
 
 	//forge:model:query oauthapp
 	oauthKeyHash struct {
-		KeyHash string `query:"keyhash;updeq,clientid"`
-		Time    int64  `query:"time"`
+		KeyHash string `model:"keyhash"`
+		Time    int64  `model:"time"`
 	}
 
 	//forge:model:query oauthapp
 	oauthProps struct {
-		Name        string `query:"name;updeq,clientid"`
-		URL         string `query:"url"`
-		RedirectURI string `query:"redirect_uri"`
-		Logo        string `query:"logo"`
+		Name        string `model:"name"`
+		URL         string `model:"url"`
+		RedirectURI string `model:"redirect_uri"`
+		Logo        string `model:"logo"`
 	}
 
 	ctxKeyRepo struct{}
@@ -169,7 +169,7 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 		return "", err
 	}
 	now := time.Now().Round(0).Unix()
-	if err := r.table.UpdoauthKeyHashEqClientID(ctx, d, &oauthKeyHash{
+	if err := r.table.UpdoauthKeyHashByID(ctx, d, &oauthKeyHash{
 		KeyHash: keyhash,
 		Time:    now,
 	}, m.ClientID); err != nil {
@@ -185,7 +185,7 @@ func (r *repo) GetByID(ctx context.Context, clientid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqClientID(ctx, d, clientid)
+	m, err := r.table.GetModelByID(ctx, d, clientid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
 	}
@@ -198,13 +198,13 @@ func (r *repo) GetApps(ctx context.Context, limit, offset int, creatorid string)
 		return nil, err
 	}
 	if creatorid == "" {
-		m, err := r.table.GetModelOrdCreationTime(ctx, d, false, limit, offset)
+		m, err := r.table.GetModelAll(ctx, d, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 		}
 		return m, nil
 	}
-	m, err := r.table.GetModelEqCreatorIDOrdCreationTime(ctx, d, creatorid, false, limit, offset)
+	m, err := r.table.GetModelByCreator(ctx, d, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 	}
@@ -216,7 +216,7 @@ func (r *repo) GetBulk(ctx context.Context, clientids []string) ([]Model, error)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelHasClientIDOrdClientID(ctx, d, clientids, true, len(clientids), 0)
+	m, err := r.table.GetModelByIDs(ctx, d, clientids, len(clientids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get oauth apps")
 	}
@@ -239,7 +239,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdoauthPropsEqClientID(ctx, d, &oauthProps{
+	if err := r.table.UpdoauthPropsByID(ctx, d, &oauthProps{
 		Name:        m.Name,
 		URL:         m.URL,
 		RedirectURI: m.RedirectURI,
@@ -255,7 +255,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqClientID(ctx, d, m.ClientID); err != nil {
+	if err := r.table.DelByID(ctx, d, m.ClientID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete oauth app")
 	}
 	return nil
@@ -266,7 +266,7 @@ func (r *repo) DeleteCreatorApps(ctx context.Context, creatorid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqCreatorID(ctx, d, creatorid); err != nil {
+	if err := r.table.DelByCreator(ctx, d, creatorid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete oauth apps")
 	}
 	return nil

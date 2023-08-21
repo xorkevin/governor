@@ -1,0 +1,62 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "oauthapp": {
+      "model": {
+        "indicies": [
+          {"columns": ["name", "creation_time"]},
+          {"columns": ["creator_id", "name", "creation_time"]}
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "clientid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "clientid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "clientid"}]
+          },
+          {
+            "kind": "getgroup",
+            "name": "All",
+            "order": [{"col": "name"}, {"col": "creation_time"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creator_id"}],
+            "order": [{"col": "name"}, {"col": "creation_time"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creator_id"}]
+          }
+        ],
+        "oauthKeyHash": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "clientid"}]
+          }
+        ],
+        "oauthProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "clientid"}]
+          }
+        ]
+      }
+    }
+  }
+}
