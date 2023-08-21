@@ -51,26 +51,26 @@ type (
 	//forge:model apikey
 	//forge:model:query apikey
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY" query:"keyid;getoneeq,keyid;deleq,keyid;deleq,keyid|in"`
-		Userid  string `model:"userid,VARCHAR(31) NOT NULL;index" query:"userid"`
-		Scope   string `model:"scope,VARCHAR(4095) NOT NULL" query:"scope"`
-		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL" query:"keyhash"`
-		Name    string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Desc    string `model:"description,VARCHAR(255)" query:"description"`
-		Time    int64  `model:"time,BIGINT NOT NULL;index,userid" query:"time;getgroupeq,userid"`
+		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY"`
+		Userid  string `model:"userid,VARCHAR(31) NOT NULL"`
+		Scope   string `model:"scope,VARCHAR(4095) NOT NULL"`
+		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL"`
+		Name    string `model:"name,VARCHAR(255) NOT NULL"`
+		Desc    string `model:"description,VARCHAR(255)"`
+		Time    int64  `model:"time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query apikey
 	apikeyHash struct {
-		KeyHash string `query:"keyhash;updeq,keyid"`
-		Time    int64  `query:"time"`
+		KeyHash string `model:"keyhash"`
+		Time    int64  `model:"time"`
 	}
 
 	//forge:model:query apikey
 	apikeyProps struct {
-		Scope string `query:"scope;updeq,keyid"`
-		Name  string `query:"name"`
-		Desc  string `query:"description"`
+		Scope string `model:"scope"`
+		Name  string `model:"name"`
+		Desc  string `model:"description"`
 	}
 
 	ctxKeyRepo struct{}
@@ -175,7 +175,7 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 		return "", err
 	}
 	now := time.Now().Round(0).Unix()
-	if err := r.table.UpdapikeyHashEqKeyid(ctx, d, &apikeyHash{
+	if err := r.table.UpdapikeyHashByID(ctx, d, &apikeyHash{
 		KeyHash: hash,
 		Time:    now,
 	}, m.Keyid); err != nil {
@@ -191,7 +191,7 @@ func (r *repo) GetByID(ctx context.Context, keyid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqKeyid(ctx, d, keyid)
+	m, err := r.table.GetModelByID(ctx, d, keyid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikey")
 	}
@@ -203,7 +203,7 @@ func (r *repo) GetUserKeys(ctx context.Context, userid string, limit, offset int
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridOrdTime(ctx, d, userid, false, limit, offset)
+	m, err := r.table.GetModelByUserid(ctx, d, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user apikeys")
 	}
@@ -226,7 +226,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdapikeyPropsEqKeyid(ctx, d, &apikeyProps{
+	if err := r.table.UpdapikeyPropsByID(ctx, d, &apikeyProps{
 		Scope: m.Scope,
 		Name:  m.Name,
 		Desc:  m.Desc,
@@ -241,7 +241,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqKeyid(ctx, d, m.Keyid); err != nil {
+	if err := r.table.DelByID(ctx, d, m.Keyid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete apikey")
 	}
 	return nil
@@ -255,7 +255,7 @@ func (r *repo) DeleteKeys(ctx context.Context, keyids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelHasKeyid(ctx, d, keyids); err != nil {
+	if err := r.table.DelByIDs(ctx, d, keyids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete apikeys")
 	}
 	return nil

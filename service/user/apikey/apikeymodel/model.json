@@ -1,0 +1,49 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "apikey": {
+      "model": {
+        "indicies": [{"columns": ["userid", "time"]}]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "keyid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "keyid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByIDs",
+            "conditions": [{"col": "keyid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "time", "dir": "DESC"}]
+          }
+        ],
+        "apikeyHash": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "keyid"}]
+          }
+        ],
+        "apikeyProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "keyid"}]
+          }
+        ]
+      }
+    }
+  }
+}
