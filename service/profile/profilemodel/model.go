@@ -33,10 +33,10 @@ type (
 	//forge:model profile
 	//forge:model:query profile
 	Model struct {
-		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY" query:"userid;getoneeq,userid;getgroupeq,userid|in;updeq,userid;deleq,userid"`
-		Email  string `model:"contact_email,VARCHAR(255)" query:"contact_email"`
-		Bio    string `model:"bio,VARCHAR(4095)" query:"bio"`
-		Image  string `model:"profile_image_url,VARCHAR(4095)" query:"profile_image_url"`
+		Userid string `model:"userid,VARCHAR(31) PRIMARY KEY"`
+		Email  string `model:"contact_email,VARCHAR(255)"`
+		Bio    string `model:"bio,VARCHAR(4095)"`
+		Image  string `model:"profile_image_url,VARCHAR(4095)"`
 	}
 
 	ctxKeyRepo struct{}
@@ -92,7 +92,7 @@ func (r *repo) GetByID(ctx context.Context, userid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid(ctx, d, userid)
+	m, err := r.table.GetModelByID(ctx, d, userid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get profile")
 	}
@@ -104,7 +104,7 @@ func (r *repo) GetBulk(ctx context.Context, userids []string) ([]Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelHasUseridOrdUserid(ctx, d, userids, true, len(userids), 0)
+	m, err := r.table.GetModelByIDs(ctx, d, userids, len(userids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get profiles of userids")
 	}
@@ -129,7 +129,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqUserid(ctx, d, m, m.Userid); err != nil {
+	if err := r.table.UpdModelByID(ctx, d, m, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update profile")
 	}
 	return nil
@@ -141,7 +141,7 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, m.Userid); err != nil {
+	if err := r.table.DelByID(ctx, d, m.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete profile")
 	}
 	return nil

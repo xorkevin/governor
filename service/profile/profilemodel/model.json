@@ -1,0 +1,31 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "profile": {
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ]
+      }
+    }
+  }
+}
