@@ -1,0 +1,40 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "reset": {
+      "model": {
+        "constraints": [{"kind": "PRIMARY KEY", "columns": ["userid", "kind"]}],
+        "indicies": [{"columns": ["code_time"]}]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "deleq",
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByUserKind",
+            "conditions": [{"col": "userid"}, {"col": "kind"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByUserKind",
+            "conditions": [{"col": "userid"}, {"col": "kind"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserKind",
+            "conditions": [{"col": "userid"}, {"col": "kind"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "BeforeCodeTime",
+            "conditions": [{"col": "code_time", "cond": "lt"}]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -45,11 +45,11 @@ type (
 	//forge:model reset
 	//forge:model:query reset
 	Model struct {
-		Userid   string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
-		Kind     string `model:"kind,VARCHAR(255), PRIMARY KEY (userid, kind)" query:"kind;getoneeq,userid,kind;updeq,userid,kind;deleq,userid,kind"`
-		CodeHash string `model:"code_hash,VARCHAR(255) NOT NULL" query:"code_hash"`
-		CodeTime int64  `model:"code_time,BIGINT NOT NULL;index" query:"code_time;deleq,code_time|lt"`
-		Params   string `model:"params,VARCHAR(4096)" query:"params"`
+		Userid   string `model:"userid,VARCHAR(31)"`
+		Kind     string `model:"kind,VARCHAR(255)"`
+		CodeHash string `model:"code_hash,VARCHAR(255) NOT NULL"`
+		CodeTime int64  `model:"code_time,BIGINT NOT NULL"`
+		Params   string `model:"params,VARCHAR(4096)"`
 	}
 
 	ctxKeyRepo struct{}
@@ -135,7 +135,7 @@ func (r *repo) GetByID(ctx context.Context, userid, kind string) (*Model, error)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridEqKind(ctx, d, userid, kind)
+	m, err := r.table.GetModelByUserKind(ctx, d, userid, kind)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get reset code")
 	}
@@ -158,7 +158,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelEqUseridEqKind(ctx, d, m, m.Userid, m.Kind); err != nil {
+	if err := r.table.UpdModelByUserKind(ctx, d, m, m.Userid, m.Kind); err != nil {
 		return kerrors.WithMsg(err, "Failed to update reset code")
 	}
 	return nil
@@ -169,7 +169,7 @@ func (r *repo) Delete(ctx context.Context, userid, kind string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridEqKind(ctx, d, userid, kind); err != nil {
+	if err := r.table.DelByUserKind(ctx, d, userid, kind); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete reset code")
 	}
 	return nil
@@ -180,7 +180,7 @@ func (r *repo) DeleteByUserid(ctx context.Context, userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+	if err := r.table.DelByUserid(ctx, d, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete reset codes")
 	}
 	return nil
@@ -191,7 +191,7 @@ func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelLtCodeTime(ctx, d, t); err != nil {
+	if err := r.table.DelBeforeCodeTime(ctx, d, t); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete reset codes")
 	}
 	return nil
