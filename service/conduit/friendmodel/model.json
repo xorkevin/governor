@@ -1,0 +1,64 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "friend": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["userid_1", "userid_2"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "userid2",
+            "columns": [{"col": "userid_2"}]
+          },
+          {
+            "name": "userid1_username",
+            "columns": [{"col": "userid_1"}, {"col": "username"}]
+          }
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser1User2s",
+            "conditions": [
+              {"col": "userid_1"},
+              {"col": "userid_2", "cond": "in"}
+            ]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser1",
+            "conditions": [{"col": "userid_1"}],
+            "order": [{"col": "username"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser1UsernamePrefix",
+            "conditions": [
+              {"col": "userid_1"},
+              {"col": "username", "cond": "like"}
+            ],
+            "order": [{"col": "username"}]
+          }
+        ],
+        "friendUsername": [
+          {
+            "kind": "updeq",
+            "name": "ByUser2",
+            "conditions": [{"col": "userid_2"}]
+          }
+        ]
+      }
+    }
+  }
+}

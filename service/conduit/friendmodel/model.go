@@ -32,14 +32,14 @@ type (
 	//forge:model friend
 	//forge:model:query friend
 	Model struct {
-		Userid1  string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
-		Userid2  string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2);index" query:"userid_2;getoneeq,userid_1,userid_2;getgroupeq,userid_1,userid_2|in"`
-		Username string `model:"username,VARCHAR(255) NOT NULL;index,userid_1" query:"username;getgroupeq,userid_1;getgroupeq,userid_1,username|like"`
+		Userid1  string `model:"userid_1,VARCHAR(31)"`
+		Userid2  string `model:"userid_2,VARCHAR(31)"`
+		Username string `model:"username,VARCHAR(255) NOT NULL"`
 	}
 
 	//forge:model:query friend
 	friendUsername struct {
-		Username string `query:"username;updeq,userid_2"`
+		Username string `model:"username"`
 	}
 
 	ctxKeyRepo struct{}
@@ -82,7 +82,7 @@ func (r *repo) GetByID(ctx context.Context, userid1, userid2 string) (*Model, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid1EqUserid2(ctx, d, userid1, userid2)
+	m, err := r.table.GetModelByUser1User2(ctx, d, userid1, userid2)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get friend")
 	}
@@ -95,13 +95,13 @@ func (r *repo) GetFriends(ctx context.Context, userid string, prefix string, lim
 		return nil, err
 	}
 	if prefix == "" {
-		m, err := r.table.GetModelEqUserid1OrdUsername(ctx, d, userid, true, limit, offset)
+		m, err := r.table.GetModelByUser1(ctx, d, userid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get friends")
 		}
 		return m, nil
 	}
-	m, err := r.table.GetModelEqUserid1LikeUsernameOrdUsername(ctx, d, userid, prefix+"%", true, limit, offset)
+	m, err := r.table.GetModelByUser1UsernamePrefix(ctx, d, userid, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get friends")
 	}
@@ -117,7 +117,7 @@ func (r *repo) GetFriendsByID(ctx context.Context, userid string, userids []stri
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid1HasUserid2OrdUserid2(ctx, d, userid, userids, true, len(userids), 0)
+	m, err := r.table.GetModelByUser1User2s(ctx, d, userid, userids, len(userids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get friends")
 	}
@@ -169,7 +169,7 @@ func (r *repo) UpdateUsername(ctx context.Context, userid, username string) erro
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdfriendUsernameEqUserid2(ctx, d, &friendUsername{
+	if err := r.table.UpdfriendUsernameByUser2(ctx, d, &friendUsername{
 		Username: username,
 	}, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update username")
