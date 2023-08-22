@@ -265,7 +265,7 @@ const (
 	listMemberPolicyUser   = "user"
 )
 
-func (s *smtpSession) Rcpt(to string) error {
+func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	if s.from == "" {
 		s.log.Warn(s.ctx, "Failed smtp command sequence",
 			klog.AString("smtp.cmd", "to"),

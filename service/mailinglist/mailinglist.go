@@ -88,7 +88,7 @@ type (
 		authdomain   string
 		usrdomain    string
 		orgdomain    string
-		maxmsgsize   int
+		maxmsgsize   int64
 		readtimeout  time.Duration
 		writetimeout time.Duration
 		streamsize   int64
@@ -186,7 +186,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	if limit, err := bytefmt.ToBytes(r.GetStr("maxmsgsize")); err != nil {
 		return kerrors.WithMsg(err, "Invalid mail max message size")
 	} else {
-		s.maxmsgsize = int(limit)
+		s.maxmsgsize = limit
 	}
 	var err error
 	s.readtimeout, err = r.GetDuration("readtimeout")
