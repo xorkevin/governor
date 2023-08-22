@@ -51,43 +51,43 @@ type (
 	//forge:model gdm
 	//forge:model:query gdm
 	Model struct {
-		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY" query:"chatid;getoneeq,chatid;getgroupeq,chatid|in;updeq,chatid;deleq,chatid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL" query:"last_updated"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		Chatid       string `model:"chatid,VARCHAR(31) PRIMARY KEY"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Theme        string `model:"theme,VARCHAR(4095) NOT NULL"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query gdm
 	gdmProps struct {
-		Name  string `query:"name;updeq,chatid"`
-		Theme string `query:"theme"`
+		Name  string `model:"name"`
+		Theme string `model:"theme"`
 	}
 
 	// MemberModel is the db chat member model
 	//forge:model member
 	//forge:model:query member
 	MemberModel struct {
-		Chatid      string `model:"chatid,VARCHAR(31);index,userid" query:"chatid;deleq,chatid;getgroupeq,userid,chatid|in;getgroupeq,chatid|in"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (chatid, userid)" query:"userid;getgroupeq,chatid,userid|in;deleq,chatid,userid|in"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid" query:"last_updated;getgroupeq,userid;getgroupeq,userid,last_updated|lt"`
+		Chatid      string `model:"chatid,VARCHAR(31)"`
+		Userid      string `model:"userid,VARCHAR(31)"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL"`
 	}
 
 	// AssocModel is the db chat association model
 	//forge:model assoc
 	//forge:model:query assoc
 	AssocModel struct {
-		Chatid      string `model:"chatid,VARCHAR(31)" query:"chatid;deleq,chatid"`
-		Userid1     string `model:"userid_1,VARCHAR(31)" query:"userid_1;deleq,chatid,userid_1|in"`
-		Userid2     string `model:"userid_2,VARCHAR(31), PRIMARY KEY (chatid, userid_1, userid_2);index;index,chatid" query:"userid_2;deleq,chatid,userid_2|in"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1,userid_2" query:"last_updated;getgroupeq,userid_1,userid_2"`
+		Chatid      string `model:"chatid,VARCHAR(31)"`
+		Userid1     string `model:"userid_1,VARCHAR(31)"`
+		Userid2     string `model:"userid_2,VARCHAR(31)"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query gdm
 	//forge:model:query member
 	//forge:model:query assoc
 	modelLastUpdated struct {
-		LastUpdated int64 `query:"last_updated;updeq,chatid"`
+		LastUpdated int64 `model:"last_updated"`
 	}
 
 	ctxKeyRepo struct{}
@@ -153,7 +153,7 @@ func (r *repo) GetByID(ctx context.Context, chatid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqChatid(ctx, d, chatid)
+	m, err := r.table.GetModelByID(ctx, d, chatid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chat")
 	}
@@ -169,13 +169,13 @@ func (r *repo) GetLatest(ctx context.Context, userid string, before int64, limit
 	var m []MemberModel
 	if before == 0 {
 		var err error
-		m, err = r.tableMembers.GetMemberModelEqUseridOrdLastUpdated(ctx, d, userid, false, limit, 0)
+		m, err = r.tableMembers.GetMemberModelByUser(ctx, d, userid, limit, 0)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get latest group chats")
 		}
 	} else {
 		var err error
-		m, err = r.tableMembers.GetMemberModelEqUseridLtLastUpdatedOrdLastUpdated(ctx, d, userid, before, false, limit, 0)
+		m, err = r.tableMembers.GetMemberModelByUserBeforeLastUpdated(ctx, d, userid, before, limit, 0)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get latest group chats")
 		}
@@ -197,7 +197,7 @@ func (r *repo) GetChats(ctx context.Context, chatids []string) ([]Model, error) 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelHasChatidOrdChatid(ctx, d, chatids, true, len(chatids), 0)
+	m, err := r.table.GetModelByIDs(ctx, d, chatids, len(chatids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
@@ -214,7 +214,7 @@ func (r *repo) GetMembers(ctx context.Context, chatid string, userids []string) 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqChatidHasUseridOrdUserid(ctx, d, chatid, userids, true, len(userids), 0)
+	m, err := r.tableMembers.GetMemberModelByChatUsers(ctx, d, chatid, userids, len(userids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chat members")
 	}
@@ -235,7 +235,7 @@ func (r *repo) GetChatsMembers(ctx context.Context, chatids []string, limit int)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelHasChatidOrdChatid(ctx, d, chatids, true, limit, 0)
+	m, err := r.tableMembers.GetMemberModelByChats(ctx, d, chatids, limit, 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chat members")
 	}
@@ -252,7 +252,7 @@ func (r *repo) GetUserChats(ctx context.Context, userid string, chatids []string
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableMembers.GetMemberModelEqUseridHasChatidOrdChatid(ctx, d, userid, chatids, true, len(chatids), 0)
+	m, err := r.tableMembers.GetMemberModelByUserChats(ctx, d, userid, chatids, len(chatids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
@@ -290,7 +290,7 @@ func (r *repo) GetAssocs(ctx context.Context, userid1, userid2 string, limit, of
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableAssoc.GetAssocModelEqUserid1EqUserid2OrdLastUpdated(ctx, d, userid1, userid2, false, limit, offset)
+	m, err := r.tableAssoc.GetAssocModelByUser1User2(ctx, d, userid1, userid2, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get group chats")
 	}
@@ -319,7 +319,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdgdmPropsEqChatid(ctx, d, &gdmProps{
+	if err := r.table.UpdgdmPropsByID(ctx, d, &gdmProps{
 		Name:  m.Name,
 		Theme: m.Theme,
 	}, m.Chatid); err != nil {
@@ -334,17 +334,17 @@ func (r *repo) UpdateLastUpdated(ctx context.Context, chatid string, t int64) er
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
+	if err := r.table.UpdmodelLastUpdatedByID(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update group chat last updated")
 	}
-	if err := r.tableMembers.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
+	if err := r.tableMembers.UpdmodelLastUpdatedByChat(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update group chat last updated")
 	}
-	if err := r.tableAssoc.UpdmodelLastUpdatedEqChatid(ctx, d, &modelLastUpdated{
+	if err := r.tableAssoc.UpdmodelLastUpdatedByChat(ctx, d, &modelLastUpdated{
 		LastUpdated: t,
 	}, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update group chat last updated")
@@ -404,13 +404,13 @@ func (r *repo) RmMembers(ctx context.Context, chatid string, userids []string) e
 	if err != nil {
 		return err
 	}
-	if err := r.tableAssoc.DelEqChatidHasUserid1(ctx, d, chatid, userids); err != nil {
+	if err := r.tableAssoc.DelByChatUser1s(ctx, d, chatid, userids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat associations")
 	}
-	if err := r.tableAssoc.DelEqChatidHasUserid2(ctx, d, chatid, userids); err != nil {
+	if err := r.tableAssoc.DelByChatUser2s(ctx, d, chatid, userids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat associations")
 	}
-	if err := r.tableMembers.DelEqChatidHasUserid(ctx, d, chatid, userids); err != nil {
+	if err := r.tableMembers.DelByChatUsers(ctx, d, chatid, userids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
 	return nil
@@ -421,13 +421,13 @@ func (r *repo) Delete(ctx context.Context, chatid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableAssoc.DelEqChatid(ctx, d, chatid); err != nil {
+	if err := r.tableAssoc.DelByChat(ctx, d, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
-	if err := r.tableMembers.DelEqChatid(ctx, d, chatid); err != nil {
+	if err := r.tableMembers.DelByChat(ctx, d, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat members")
 	}
-	if err := r.table.DelEqChatid(ctx, d, chatid); err != nil {
+	if err := r.table.DelByID(ctx, d, chatid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete group chat")
 	}
 	return nil

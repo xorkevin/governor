@@ -1,0 +1,176 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "gdm": {
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "chatid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByIDs",
+            "conditions": [{"col": "chatid", "cond": "in"}]
+          },
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "chatid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "chatid"}]
+          }
+        ],
+        "gdmProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "chatid"}]
+          }
+        ],
+        "modelLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "chatid"}]
+          }
+        ]
+      }
+    },
+    "member": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["chatid", "userid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "user_chat",
+            "columns": [{"col": "userid"}, {"col": "chatid"}]
+          },
+          {
+            "name": "user_last_updated",
+            "columns": [{"col": "userid"}, {"col": "last_updated"}]
+          }
+        ]
+      },
+      "queries": {
+        "MemberModel": [
+          {
+            "kind": "deleq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserChats",
+            "conditions": [{"col": "userid"}, {"col": "chatid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChats",
+            "conditions": [{"col": "chatid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChatUsers",
+            "conditions": [{"col": "chatid"}, {"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByChatUsers",
+            "conditions": [{"col": "chatid"}, {"col": "userid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser",
+            "conditions": [{"col": "userid"}],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserBeforeLastUpdated",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "last_updated", "cond": "lt"}
+            ],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          }
+        ],
+        "modelLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          }
+        ]
+      }
+    },
+    "assoc": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["chatid", "userid_1", "userid_2"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "user2",
+            "columns": [{"col": "userid_2"}]
+          },
+          {
+            "name": "chat_user2",
+            "columns": [{"col": "chatid"}, {"col": "userid_2"}]
+          },
+          {
+            "name": "user1_user2_last_updated",
+            "columns": [
+              {"col": "userid_1"},
+              {"col": "userid_2"},
+              {"col": "last_updated"}
+            ]
+          }
+        ]
+      },
+      "queries": {
+        "AssocModel": [
+          {
+            "kind": "deleq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByChatUser1s",
+            "conditions": [{"col": "chatid"}, {"col": "userid_1", "cond": "in"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByChatUser2s",
+            "conditions": [{"col": "chatid"}, {"col": "userid_2", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          }
+        ],
+        "modelLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          }
+        ]
+      }
+    }
+  }
+}
