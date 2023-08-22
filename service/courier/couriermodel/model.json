@@ -1,0 +1,78 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "link": {
+      "model": {
+        "indicies": [
+          {
+            "name": "creator_creation_time",
+            "columns": [{"col": "creatorid"}, {"col": "creation_time"}]
+          }
+        ]
+      },
+      "queries": {
+        "LinkModel": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "linkid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "linkid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByIDs",
+            "conditions": [{"col": "linkid", "cond": "in"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creatorid"}],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          }
+        ]
+      }
+    },
+    "brand": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["creatorid", "brandid"]
+          }
+        ]
+      },
+      "queries": {
+        "BrandModel": [
+          {
+            "kind": "getoneeq",
+            "name": "ByCreatorBrand",
+            "conditions": [{"col": "creatorid"}, {"col": "brandid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByCreatorBrand",
+            "conditions": [{"col": "creatorid"}, {"col": "brandid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByCreatorBrands",
+            "conditions": [
+              {"col": "creatorid"},
+              {"col": "brandid", "cond": "in"}
+            ]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByCreator",
+            "conditions": [{"col": "creatorid"}],
+            "order": [{"col": "brandid"}]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -46,19 +46,19 @@ type (
 	//forge:model link
 	//forge:model:query link
 	LinkModel struct {
-		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY" query:"linkid;getoneeq,linkid;deleq,linkid;deleq,linkid|in"`
-		URL          string `model:"url,VARCHAR(2047) NOT NULL" query:"url"`
-		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL" query:"creatorid"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroupeq,creatorid"`
+		LinkID       string `model:"linkid,VARCHAR(63) PRIMARY KEY"`
+		URL          string `model:"url,VARCHAR(2047) NOT NULL"`
+		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	// BrandModel is the db brand model
 	//forge:model brand
 	//forge:model:query brand
 	BrandModel struct {
-		CreatorID    string `model:"creatorid,VARCHAR(31)" query:"creatorid"`
-		BrandID      string `model:"brandid,VARCHAR(63), PRIMARY KEY (creatorid, brandid)" query:"brandid;getoneeq,creatorid,brandid;deleq,creatorid,brandid;deleq,creatorid,brandid|in"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,creatorid" query:"creation_time;getgroupeq,creatorid"`
+		CreatorID    string `model:"creatorid,VARCHAR(31)"`
+		BrandID      string `model:"brandid,VARCHAR(63)"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -128,7 +128,7 @@ func (r *repo) GetLinkGroup(ctx context.Context, creatorid string, limit, offset
 		return nil, err
 	}
 
-	m, err := r.tableLinks.GetLinkModelEqCreatorIDOrdCreationTime(ctx, d, creatorid, false, limit, offset)
+	m, err := r.tableLinks.GetLinkModelByCreator(ctx, d, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get links")
 	}
@@ -141,7 +141,7 @@ func (r *repo) GetLink(ctx context.Context, linkid string) (*LinkModel, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableLinks.GetLinkModelEqLinkID(ctx, d, linkid)
+	m, err := r.tableLinks.GetLinkModelByID(ctx, d, linkid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get link")
 	}
@@ -166,7 +166,7 @@ func (r *repo) DeleteLink(ctx context.Context, m *LinkModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLinks.DelEqLinkID(ctx, d, m.LinkID); err != nil {
+	if err := r.tableLinks.DelByID(ctx, d, m.LinkID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete link")
 	}
 	return nil
@@ -182,7 +182,7 @@ func (r *repo) DeleteLinks(ctx context.Context, linkids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableLinks.DelHasLinkID(ctx, d, linkids); err != nil {
+	if err := r.tableLinks.DelByIDs(ctx, d, linkids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete links")
 	}
 	return nil
@@ -204,7 +204,7 @@ func (r *repo) GetBrandGroup(ctx context.Context, creatorid string, limit, offse
 		return nil, err
 	}
 
-	m, err := r.tableBrands.GetBrandModelEqCreatorIDOrdCreationTime(ctx, d, creatorid, false, limit, offset)
+	m, err := r.tableBrands.GetBrandModelByCreator(ctx, d, creatorid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get brands")
 	}
@@ -217,7 +217,7 @@ func (r *repo) GetBrand(ctx context.Context, creatorid, brandid string) (*BrandM
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableBrands.GetBrandModelEqCreatorIDEqBrandID(ctx, d, creatorid, brandid)
+	m, err := r.tableBrands.GetBrandModelByCreatorBrand(ctx, d, creatorid, brandid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get brand")
 	}
@@ -242,7 +242,7 @@ func (r *repo) DeleteBrand(ctx context.Context, m *BrandModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableBrands.DelEqCreatorIDEqBrandID(ctx, d, m.CreatorID, m.BrandID); err != nil {
+	if err := r.tableBrands.DelByCreatorBrand(ctx, d, m.CreatorID, m.BrandID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete brand")
 	}
 	return nil
@@ -258,7 +258,7 @@ func (r *repo) DeleteBrands(ctx context.Context, creatorid string, brandids []st
 	if err != nil {
 		return err
 	}
-	if err := r.tableBrands.DelEqCreatorIDHasBrandID(ctx, d, creatorid, brandids); err != nil {
+	if err := r.tableBrands.DelByCreatorBrands(ctx, d, creatorid, brandids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete brands")
 	}
 	return nil
