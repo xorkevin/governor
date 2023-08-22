@@ -1,0 +1,35 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "acl": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": [
+              "obj_ns",
+              "obj_key",
+              "obj_pred",
+              "sub_ns",
+              "sub_key",
+              "sub_pred"
+            ]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "sub_obj",
+            "columns": [
+              {"col": "sub_ns"},
+              {"col": "sub_key"},
+              {"col": "sub_pred"},
+              {"col": "obj_ns"},
+              {"col": "obj_key"},
+              {"col": "obj_pred"}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

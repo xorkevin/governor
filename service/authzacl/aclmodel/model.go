@@ -33,29 +33,29 @@ type (
 	// Model is the db acl entry model
 	//forge:model acl
 	Model struct {
-		ObjNS   string `model:"obj_ns,VARCHAR(255)" query:"obj_ns"`
-		ObjKey  string `model:"obj_key,VARCHAR(255)" query:"obj_key"`
-		ObjPred string `model:"obj_pred,VARCHAR(255);index,sub_ns,sub_key,sub_pred,obj_ns,obj_key" query:"obj_pred"`
-		SubNS   string `model:"sub_ns,VARCHAR(255)" query:"sub_ns"`
-		SubKey  string `model:"sub_key,VARCHAR(255)" query:"sub_key"`
-		SubPred string `model:"sub_pred,VARCHAR(255), PRIMARY KEY (obj_ns, obj_key, obj_pred, sub_ns, sub_key, sub_pred)" query:"sub_pred"`
+		ObjNS   string `model:"obj_ns,VARCHAR(255)"`
+		ObjKey  string `model:"obj_key,VARCHAR(255)"`
+		ObjPred string `model:"obj_pred,VARCHAR(255)"`
+		SubNS   string `model:"sub_ns,VARCHAR(255)"`
+		SubKey  string `model:"sub_key,VARCHAR(255)"`
+		SubPred string `model:"sub_pred,VARCHAR(255)"`
 	}
 
 	Subject struct {
-		SubNS   string `query:"sub_ns"`
-		SubKey  string `query:"sub_key"`
-		SubPred string `query:"sub_pred"`
+		SubNS   string
+		SubKey  string
+		SubPred string
 	}
 
 	Object struct {
-		ObjNS  string `query:"obj_ns"`
-		ObjKey string `query:"obj_key"`
+		ObjNS  string
+		ObjKey string
 	}
 
 	ObjectRel struct {
-		ObjNS   string `query:"obj_ns"`
-		ObjKey  string `query:"obj_key"`
-		ObjPred string `query:"obj_pred"`
+		ObjNS   string
+		ObjKey  string
+		ObjPred string
 	}
 
 	ctxKeyRepo struct{}
