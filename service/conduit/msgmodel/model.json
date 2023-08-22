@@ -1,0 +1,65 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "msg": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["chatid", "msgid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "chat_kind_msg",
+            "columns": [{"col": "chatid"}, {"col": "kind"}, {"col": "msgid"}]
+          }
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getgroupeq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}],
+            "order": [{"col": "msgid", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChatBeforeMsg",
+            "conditions": [{"col": "chatid"}, {"col": "msgid", "cond": "lt"}],
+            "order": [{"col": "msgid", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChatKind",
+            "conditions": [{"col": "chatid"}, {"col": "kind"}],
+            "order": [{"col": "msgid", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChatKindBeforeMsg",
+            "conditions": [
+              {"col": "chatid"},
+              {"col": "kind"},
+              {"col": "msgid", "cond": "lt"}
+            ],
+            "order": [{"col": "msgid", "dir": "DESC"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          }
+        ],
+        "msgValue": [
+          {
+            "kind": "updeq",
+            "name": "ByChatMsgs",
+            "conditions": [{"col": "chatid"}, {"col": "msgid", "cond": "in"}]
+          }
+        ]
+      }
+    }
+  }
+}
