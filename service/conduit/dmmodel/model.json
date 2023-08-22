@@ -1,0 +1,63 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "dm": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["userid_1", "userid_2"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "userid1_last_updated",
+            "columns": [{"col": "userid_1"}, {"col": "last_updated"}]
+          },
+          {
+            "name": "userid2_last_updated",
+            "columns": [{"col": "userid_2"}, {"col": "last_updated"}]
+          }
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByChat",
+            "conditions": [{"col": "chatid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByChats",
+            "conditions": [{"col": "chatid", "cond": "in"}]
+          }
+        ],
+        "dmProps": [
+          {
+            "kind": "updeq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}]
+          }
+        ],
+        "dmLastUpdated": [
+          {
+            "kind": "updeq",
+            "name": "ByUser1User2",
+            "conditions": [{"col": "userid_1"}, {"col": "userid_2"}]
+          }
+        ]
+      }
+    }
+  }
+}

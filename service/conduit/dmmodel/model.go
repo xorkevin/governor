@@ -44,13 +44,13 @@ type (
 	//forge:model dm
 	//forge:model:query dm
 	Model struct {
-		Userid1      string `model:"userid_1,VARCHAR(31)" query:"userid_1"`
-		Userid2      string `model:"userid_2,VARCHAR(31), PRIMARY KEY (userid_1, userid_2)" query:"userid_2;getoneeq,userid_1,userid_2;deleq,userid_1,userid_2"`
-		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE" query:"chatid;getoneeq,chatid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL;index,userid_1;index,userid_2" query:"last_updated;getgroupeq,chatid|in"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		Userid1      string `model:"userid_1,VARCHAR(31)"`
+		Userid2      string `model:"userid_2,VARCHAR(31)"`
+		Chatid       string `model:"chatid,VARCHAR(31) NOT NULL UNIQUE"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Theme        string `model:"theme,VARCHAR(4095) NOT NULL"`
+		LastUpdated  int64  `model:"last_updated,BIGINT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	DMInfo struct {
@@ -62,13 +62,13 @@ type (
 
 	//forge:model:query dm
 	dmProps struct {
-		Name  string `query:"name;updeq,userid_1,userid_2"`
-		Theme string `query:"theme"`
+		Name  string `model:"name"`
+		Theme string `model:"theme"`
 	}
 
 	//forge:model:query dm
 	dmLastUpdated struct {
-		LastUpdated int64 `query:"last_updated;updeq,userid_1,userid_2"`
+		LastUpdated int64 `model:"last_updated"`
 	}
 
 	ctxKeyRepo struct{}
@@ -138,7 +138,7 @@ func (r *repo) GetByID(ctx context.Context, userid1, userid2 string) (*Model, er
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUserid1EqUserid2(ctx, d, userid1, userid2)
+	m, err := r.table.GetModelByUser1User2(ctx, d, userid1, userid2)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get dm")
 	}
@@ -150,7 +150,7 @@ func (r *repo) GetByChatID(ctx context.Context, chatid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqChatid(ctx, d, chatid)
+	m, err := r.table.GetModelByChat(ctx, d, chatid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get dm")
 	}
@@ -289,7 +289,7 @@ func (r *repo) GetChats(ctx context.Context, chatids []string) ([]Model, error) 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelHasChatidOrdLastUpdated(ctx, d, chatids, false, len(chatids), 0)
+	m, err := r.table.GetModelByChats(ctx, d, chatids, len(chatids), 0)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get dms")
 	}
@@ -313,7 +313,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpddmPropsEqUserid1EqUserid2(ctx, d, &dmProps{
+	if err := r.table.UpddmPropsByUser1User2(ctx, d, &dmProps{
 		Name:  m.Name,
 		Theme: m.Theme,
 	}, userid1, userid2); err != nil {
@@ -328,7 +328,7 @@ func (r *repo) UpdateLastUpdated(ctx context.Context, userid1, userid2 string, t
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpddmLastUpdatedEqUserid1EqUserid2(ctx, d, &dmLastUpdated{
+	if err := r.table.UpddmLastUpdatedByUser1User2(ctx, d, &dmLastUpdated{
 		LastUpdated: t,
 	}, userid1, userid2); err != nil {
 		return kerrors.WithMsg(err, "Failed to update dm last updated")
@@ -342,7 +342,7 @@ func (r *repo) Delete(ctx context.Context, userid1, userid2 string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid1EqUserid2(ctx, d, userid1, userid2); err != nil {
+	if err := r.table.DelByUser1User2(ctx, d, userid1, userid2); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete dm")
 	}
 	return nil
