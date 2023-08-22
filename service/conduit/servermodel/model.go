@@ -48,47 +48,47 @@ type (
 	//forge:model server
 	//forge:model:query server
 	Model struct {
-		ServerID     string `model:"serverid,VARCHAR(31) PRIMARY KEY" query:"serverid;getoneeq,serverid;deleq,serverid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Desc         string `model:"desc,VARCHAR(255)" query:"desc"`
-		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		ServerID     string `model:"serverid,VARCHAR(31) PRIMARY KEY"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Desc         string `model:"desc,VARCHAR(255)"`
+		Theme        string `model:"theme,VARCHAR(4095) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query server
 	serverProps struct {
-		Name  string `query:"name;updeq,serverid"`
-		Desc  string `query:"desc"`
-		Theme string `query:"theme"`
+		Name  string `model:"name"`
+		Desc  string `model:"desc"`
+		Theme string `model:"theme"`
 	}
 
 	// ChannelModel is the db server channel model
 	//forge:model channel
 	//forge:model:query channel
 	ChannelModel struct {
-		ServerID     string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
-		ChannelID    string `model:"channelid,VARCHAR(31), PRIMARY KEY (serverid, channelid)" query:"channelid;getoneeq,serverid,channelid;getgroupeq,serverid;getgroupeq,serverid,channelid|like;deleq,serverid,channelid|in"`
-		Chatid       string `model:"chatid,VARCHAR(31) UNIQUE" query:"chatid"`
-		Name         string `model:"name,VARCHAR(255) NOT NULL" query:"name"`
-		Desc         string `model:"desc,VARCHAR(255)" query:"desc"`
-		Theme        string `model:"theme,VARCHAR(4095) NOT NULL" query:"theme"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL" query:"creation_time"`
+		ServerID     string `model:"serverid,VARCHAR(31)"`
+		ChannelID    string `model:"channelid,VARCHAR(31)"`
+		Chatid       string `model:"chatid,VARCHAR(31) UNIQUE"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Desc         string `model:"desc,VARCHAR(255)"`
+		Theme        string `model:"theme,VARCHAR(4095) NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query channel
 	channelProps struct {
-		Name  string `query:"name;updeq,serverid,channelid"`
-		Desc  string `query:"desc"`
-		Theme string `query:"theme"`
+		Name  string `model:"name"`
+		Desc  string `model:"desc"`
+		Theme string `model:"theme"`
 	}
 
 	// PresenceModel is the db presence model
 	//forge:model presence
 	//forge:model:query presence
 	PresenceModel struct {
-		ServerID    string `model:"serverid,VARCHAR(31)" query:"serverid;deleq,serverid"`
-		Userid      string `model:"userid,VARCHAR(31), PRIMARY KEY (serverid, userid)" query:"userid"`
-		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL;index,serverid" query:"last_updated;getgroupeq,serverid,last_updated|gt;deleq,serverid,last_updated|leq"`
+		ServerID    string `model:"serverid,VARCHAR(31)"`
+		Userid      string `model:"userid,VARCHAR(31)"`
+		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -149,7 +149,7 @@ func (r *repo) GetServer(ctx context.Context, serverid string) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqServerID(ctx, d, serverid)
+	m, err := r.table.GetModelByID(ctx, d, serverid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get server")
 	}
@@ -161,7 +161,7 @@ func (r *repo) GetChannel(ctx context.Context, serverid string, channelid string
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tableChannels.GetChannelModelEqServerIDEqChannelID(ctx, d, serverid, channelid)
+	m, err := r.tableChannels.GetChannelModelByServerChannel(ctx, d, serverid, channelid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get channel")
 	}
@@ -174,13 +174,13 @@ func (r *repo) GetChannels(ctx context.Context, serverid string, prefix string, 
 		return nil, err
 	}
 	if prefix == "" {
-		m, err := r.tableChannels.GetChannelModelEqServerIDOrdChannelID(ctx, d, serverid, true, limit, offset)
+		m, err := r.tableChannels.GetChannelModelByServer(ctx, d, serverid, limit, offset)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to get channels")
 		}
 		return m, nil
 	}
-	m, err := r.tableChannels.GetChannelModelEqServerIDLikeChannelIDOrdChannelID(ctx, d, serverid, prefix+"%", true, limit, offset)
+	m, err := r.tableChannels.GetChannelModelByServerChannelPrefix(ctx, d, serverid, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get channels")
 	}
@@ -192,7 +192,7 @@ func (r *repo) GetPresence(ctx context.Context, serverid string, after int64, li
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.tablePresence.GetPresenceModelEqServerIDGtLastUpdatedOrdLastUpdated(ctx, d, serverid, after, true, limit, offset)
+	m, err := r.tablePresence.GetPresenceModelByServerAfterLastUpdated(ctx, d, serverid, after, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get presence")
 	}
@@ -215,7 +215,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdserverPropsEqServerID(ctx, d, &serverProps{
+	if err := r.table.UpdserverPropsByID(ctx, d, &serverProps{
 		Name:  m.Name,
 		Desc:  m.Desc,
 		Theme: m.Theme,
@@ -257,7 +257,7 @@ func (r *repo) UpdateChannelProps(ctx context.Context, m *ChannelModel) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tableChannels.UpdchannelPropsEqServerIDEqChannelID(ctx, d, &channelProps{
+	if err := r.tableChannels.UpdchannelPropsByServerChannel(ctx, d, &channelProps{
 		Name:  m.Name,
 		Desc:  m.Desc,
 		Theme: m.Theme,
@@ -276,7 +276,7 @@ func (r *repo) DeleteChannels(ctx context.Context, serverid string, channelids [
 	if err != nil {
 		return err
 	}
-	if err := r.tableChannels.DelEqServerIDHasChannelID(ctx, d, serverid, channelids); err != nil {
+	if err := r.tableChannels.DelByServerChannels(ctx, d, serverid, channelids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete channels")
 	}
 	return nil
@@ -305,7 +305,7 @@ func (r *repo) DeletePresence(ctx context.Context, serverid string, before int64
 	if err != nil {
 		return err
 	}
-	if err := r.tablePresence.DelEqServerIDLeqLastUpdated(ctx, d, serverid, before); err != nil {
+	if err := r.tablePresence.DelByServerBeforeLastUpdated(ctx, d, serverid, before); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete presence")
 	}
 	return nil
@@ -316,13 +316,13 @@ func (r *repo) Delete(ctx context.Context, serverid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.tablePresence.DelEqServerID(ctx, d, serverid); err != nil {
+	if err := r.tablePresence.DelByServer(ctx, d, serverid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete presence")
 	}
-	if err := r.tableChannels.DelEqServerID(ctx, d, serverid); err != nil {
+	if err := r.tableChannels.DelByServer(ctx, d, serverid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete channels")
 	}
-	if err := r.table.DelEqServerID(ctx, d, serverid); err != nil {
+	if err := r.table.DelByID(ctx, d, serverid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete server")
 	}
 	return nil

@@ -1,0 +1,124 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "server": {
+      "queries": {
+        "Model": [
+          {
+            "kind": "getoneeq",
+            "name": "ByID",
+            "conditions": [{"col": "serverid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByID",
+            "conditions": [{"col": "serverid"}]
+          }
+        ],
+        "serverProps": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "serverid"}]
+          }
+        ]
+      }
+    },
+    "channel": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["serverid", "channelid"]
+          }
+        ]
+      },
+      "queries": {
+        "ChannelModel": [
+          {
+            "kind": "deleq",
+            "name": "ByServer",
+            "conditions": [{"col": "serverid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByServerChannel",
+            "conditions": [{"col": "serverid"}, {"col": "channelid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByServer",
+            "conditions": [{"col": "serverid"}],
+            "order": [{"col": "channelid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByServerChannelPrefix",
+            "conditions": [
+              {"col": "serverid"},
+              {"col": "channelid", "cond": "like"}
+            ],
+            "order": [{"col": "channelid"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByServerChannels",
+            "conditions": [
+              {"col": "serverid"},
+              {"col": "channelid", "cond": "in"}
+            ]
+          }
+        ],
+        "channelProps": [
+          {
+            "kind": "updeq",
+            "name": "ByServerChannel",
+            "conditions": [{"col": "serverid"}, {"col": "channelid"}]
+          }
+        ]
+      }
+    },
+    "presence": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["serverid", "userid"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "server_last_updated",
+            "columns": [{"col": "serverid"}, {"col": "last_updated"}]
+          }
+        ]
+      },
+      "queries": {
+        "PresenceModel": [
+          {
+            "kind": "deleq",
+            "name": "ByServer",
+            "conditions": [{"col": "serverid"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByServerAfterLastUpdated",
+            "conditions": [
+              {"col": "serverid"},
+              {"col": "last_updated", "cond": "gt"}
+            ],
+            "order": [{"col": "last_updated", "dir": "DESC"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByServerBeforeLastUpdated",
+            "conditions": [
+              {"col": "serverid"},
+              {"col": "last_updated", "cond": "leq"}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
