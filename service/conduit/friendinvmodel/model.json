@@ -1,0 +1,83 @@
+{
+  "$schema": "https://xorkevin.dev/forge/schema/modelschema.json",
+  "models": {
+    "inv": {
+      "model": {
+        "constraints": [
+          {
+            "kind": "PRIMARY KEY",
+            "columns": ["userid", "invited_by"]
+          }
+        ],
+        "indicies": [
+          {
+            "name": "creation_time",
+            "columns": [{"col": "creation_time"}]
+          },
+          {
+            "name": "userid_creation_time",
+            "columns": [{"col": "userid"}, {"col": "creation_time"}]
+          },
+          {
+            "name": "invited_by_creation_time",
+            "columns": [{"col": "invited_by"}, {"col": "creation_time"}]
+          }
+        ]
+      },
+      "queries": {
+        "Model": [
+          {
+            "kind": "deleq",
+            "name": "ByUser",
+            "conditions": [{"col": "userid"}]
+          },
+          {
+            "kind": "getoneeq",
+            "name": "ByUserInviterAfterCreationTime",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "invited_by"},
+              {"col": "creation_time", "cond": "gt"}
+            ]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserInviter",
+            "conditions": [{"col": "userid"}, {"col": "invited_by"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "ByUserInviters",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "invited_by", "cond": "in"}
+            ]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByUserAfterCreationTime",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "creation_time", "cond": "gt"}
+            ],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "getgroupeq",
+            "name": "ByInviterAfterCreationTime",
+            "conditions": [
+              {"col": "invited_by"},
+              {"col": "creation_time", "cond": "gt"}
+            ],
+            "order": [{"col": "creation_time", "dir": "DESC"}]
+          },
+          {
+            "kind": "deleq",
+            "name": "BeforeCreationTime",
+            "conditions": [{"col": "creation_time", "cond": "leq"}]
+          }
+        ]
+      }
+    }
+  }
+}

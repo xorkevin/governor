@@ -34,9 +34,9 @@ type (
 	//forge:model inv
 	//forge:model:query inv
 	Model struct {
-		Userid       string `model:"userid,VARCHAR(31)" query:"userid;deleq,userid"`
-		InvitedBy    string `model:"invited_by,VARCHAR(31), PRIMARY KEY (userid, invited_by)" query:"invited_by;getoneeq,userid,invited_by,creation_time|gt;deleq,userid,invited_by;deleq,userid,invited_by|in"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL;index;index,userid;index,invited_by" query:"creation_time;getgroupeq,userid,creation_time|gt;getgroupeq,invited_by,creation_time|gt;deleq,creation_time|leq"`
+		Userid       string `model:"userid,VARCHAR(31)"`
+		InvitedBy    string `model:"invited_by,VARCHAR(31)"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	ctxKeyRepo struct{}
@@ -82,7 +82,7 @@ func (r *repo) GetByID(ctx context.Context, userid, invitedBy string, after int6
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridEqInvitedByGtCreationTime(ctx, d, userid, invitedBy, after)
+	m, err := r.table.GetModelByUserInviterAfterCreationTime(ctx, d, userid, invitedBy, after)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitation")
 	}
@@ -95,7 +95,7 @@ func (r *repo) GetByUser(ctx context.Context, userid string, after int64, limit,
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqUseridGtCreationTimeOrdCreationTime(ctx, d, userid, after, false, limit, offset)
+	m, err := r.table.GetModelByUserAfterCreationTime(ctx, d, userid, after, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
@@ -108,7 +108,7 @@ func (r *repo) GetByInviter(ctx context.Context, invitedBy string, after int64, 
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelEqInvitedByGtCreationTimeOrdCreationTime(ctx, d, invitedBy, after, false, limit, offset)
+	m, err := r.table.GetModelByInviterAfterCreationTime(ctx, d, invitedBy, after, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get invitations")
 	}
@@ -137,7 +137,7 @@ func (r *repo) DeleteByID(ctx context.Context, userid, invitedBy string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridEqInvitedBy(ctx, d, userid, invitedBy); err != nil {
+	if err := r.table.DelByUserInviter(ctx, d, userid, invitedBy); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitation")
 	}
 	return nil
@@ -152,7 +152,7 @@ func (r *repo) DeleteByInviters(ctx context.Context, userid string, inviters []s
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUseridHasInvitedBy(ctx, d, userid, inviters); err != nil {
+	if err := r.table.DelByUserInviters(ctx, d, userid, inviters); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
@@ -163,7 +163,7 @@ func (r *repo) DeleteBefore(ctx context.Context, t int64) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelLeqCreationTime(ctx, d, t); err != nil {
+	if err := r.table.DelBeforeCreationTime(ctx, d, t); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete invitations")
 	}
 	return nil
@@ -174,7 +174,7 @@ func (r *repo) DeleteByUser(ctx context.Context, userid string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelEqUserid(ctx, d, userid); err != nil {
+	if err := r.table.DelByUser(ctx, d, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user invitations")
 	}
 	return nil
