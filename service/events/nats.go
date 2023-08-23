@@ -50,9 +50,7 @@ func NewNats() *NatsService {
 	}
 }
 
-func (s *NatsService) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxEvents(inj, s)
-
+func (s *NatsService) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")

@@ -44,45 +44,7 @@ type (
 		hbmaxfail  int
 		wg         *ksync.WaitGroup
 	}
-
-	ctxKeyObjstore struct{}
-
-	ctxKeyBucket struct{}
 )
-
-// getCtxObjstore returns an Objstore from the context
-func getCtxObjstore(inj governor.Injector) Objstore {
-	v := inj.Get(ctxKeyObjstore{})
-	if v == nil {
-		return nil
-	}
-	return v.(Objstore)
-}
-
-// setCtxObjstore sets an Objstore in the context
-func setCtxObjstore(inj governor.Injector, o Objstore) {
-	inj.Set(ctxKeyObjstore{}, o)
-}
-
-// GetCtxBucket returns a Bucket from the context
-func GetCtxBucket(inj governor.Injector) Bucket {
-	v := inj.Get(ctxKeyBucket{})
-	if v == nil {
-		return nil
-	}
-	return v.(Bucket)
-}
-
-// setCtxBucket sets a Bucket in the context
-func setCtxBucket(inj governor.Injector, b Bucket) {
-	inj.Set(ctxKeyBucket{}, b)
-}
-
-// NewBucketInCtx creates a new bucket from a context and sets it in the context
-func NewBucketInCtx(inj governor.Injector, name string) {
-	obj := getCtxObjstore(inj)
-	setCtxBucket(inj, obj.GetBucket(name))
-}
 
 // New creates a new object store service instance
 func New() *Service {
@@ -92,9 +54,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxObjstore(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "9000")

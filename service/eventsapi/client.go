@@ -29,19 +29,13 @@ type (
 	}
 )
 
-func NewCmdClientCtx(inj governor.Injector) *CmdClient {
-	return NewCmdClient(
-		gate.GetCtxClient(inj),
-	)
-}
-
 func NewCmdClient(g gate.Client) *CmdClient {
 	return &CmdClient{
 		gate: g,
 	}
 }
 
-func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
+func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	cr.Register(governor.CmdDesc{
 		Usage: "publish",
 		Short: "publishes an event",

@@ -52,7 +52,7 @@ func NewCmdClient() *CmdClient {
 	}
 }
 
-func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
+func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")
 

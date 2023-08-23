@@ -35,7 +35,7 @@ type (
 	}
 )
 
-func (s *testServiceC) Register(inj Injector, r ConfigRegistrar) {
+func (s *testServiceC) Register(r ConfigRegistrar) {
 }
 
 func (s *testServiceC) Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error {
@@ -84,7 +84,7 @@ type (
 	}
 )
 
-func (c *testClientC) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar) {
+func (c *testClientC) Register(r ConfigRegistrar, cr CmdRegistrar) {
 	c.ranRegister = true
 
 	r.SetDefault("prop1", "val1")

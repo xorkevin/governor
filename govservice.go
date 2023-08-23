@@ -30,7 +30,7 @@ type (
 	// Then Setup will run when setup is triggered. Stop runs when the server
 	// begins the shutdown process.
 	Service interface {
-		Register(inj Injector, r ConfigRegistrar)
+		Register(r ConfigRegistrar)
 		Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error
 		Start(ctx context.Context) error
 		Stop(ctx context.Context)
@@ -58,7 +58,7 @@ func (s *Server) Register(name string, url string, r Service) {
 		},
 		r: r,
 	})
-	r.Register(s.inj, s.settings.registrar(name))
+	r.Register(s.settings.registrar(name))
 }
 
 type (

@@ -47,36 +47,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyCourier struct{}
 )
-
-// GetCtxCourier returns a Courier service from the context
-func GetCtxCourier(inj governor.Injector) Courier {
-	v := inj.Get(ctxKeyCourier{})
-	if v == nil {
-		return nil
-	}
-	return v.(Courier)
-}
-
-// setCtxCourier sets a Courier service in the context
-func setCtxCourier(inj governor.Injector, c Courier) {
-	inj.Set(ctxKeyCourier{}, c)
-}
-
-// NewCtx creates a new Courier service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		couriermodel.GetCtxRepo(inj),
-		kvstore.GetCtxKVStore(inj),
-		objstore.GetCtxBucket(inj),
-		user.GetCtxUsers(inj),
-		org.GetCtxOrgs(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New creates a new Courier service
 func New(
@@ -102,8 +73,7 @@ func New(
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxCourier(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()
 

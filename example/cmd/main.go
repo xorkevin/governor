@@ -1,4 +1,4 @@
-package main
+package maimln
 
 import (
 	"xorkevin.dev/governor"
@@ -61,102 +61,110 @@ func main() {
 
 	gov := governor.New(opts, nil)
 
-	gov.Register("database", "/null/db", db.New())
-	gov.Register("kvstore", "/null/kv", kvstore.New())
-	gov.Register("objstore", "/null/obj", objstore.New())
-	gov.Register("pubsub", "/null/pubsub", pubsub.New())
-	gov.Register("events", "/null/events", events.NewNats())
-	gov.Register("template", "/null/tpl", template.New())
-	{
-		inj := gov.Injector()
-		objstore.NewBucketInCtx(inj, "mail")
-		gov.Register("mail", "/null/mail", mail.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		kvstore.NewSubtreeInCtx(inj, "ratelimit")
-		gov.Register("ratelimit", "/null/ratelimit", ratelimit.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		rolemodel.NewInCtx(inj, "userroles")
-		kvstore.NewSubtreeInCtx(inj, "roles")
-		gov.Register("role", "/null/role", role.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		apikeymodel.NewInCtx(inj, "userapikeys")
-		kvstore.NewSubtreeInCtx(inj, "apikeys")
-		gov.Register("apikey", "/null/apikey", apikey.NewCtx(inj))
-	}
-	gov.Register("token", "/null/token", token.New())
-	gov.Register("gate", "/null/gate", gate.NewCtx(gov.Injector()))
-	gov.Register("eventsapi", "/eventsapi", eventsapi.NewCtx(gov.Injector()))
-	{
-		inj := gov.Injector()
-		ratelimit.NewSubtreeInCtx(inj, "ws")
-		gov.Register("ws", "/ws", ws.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		usermodel.NewInCtx(inj, "users")
-		sessionmodel.NewInCtx(inj, "usersessions")
-		approvalmodel.NewInCtx(inj, "userapprovals")
-		roleinvmodel.NewInCtx(inj, "userroleinvitations")
-		resetmodel.NewInCtx(inj, "userresets")
-		kvstore.NewSubtreeInCtx(inj, "user")
-		ratelimit.NewSubtreeInCtx(inj, "user")
-		gov.Register("user", "/u", user.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		orgmodel.NewInCtx(inj, "userorgs", "userorgmembers", "userorgmods")
-		ratelimit.NewSubtreeInCtx(inj, "org")
-		gov.Register("org", "/org", org.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		oauthappmodel.NewInCtx(inj, "oauthapps")
-		oauthconnmodel.NewInCtx(inj, "oauthconnections")
-		kvstore.NewSubtreeInCtx(inj, "oauth")
-		objstore.NewBucketInCtx(inj, "oauth-app-logo")
-		ratelimit.NewSubtreeInCtx(inj, "oauth")
-		gov.Register("oauth", "/oauth", oauth.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		profilemodel.NewInCtx(inj, "profiles")
-		objstore.NewBucketInCtx(inj, "profile-image")
-		ratelimit.NewSubtreeInCtx(inj, "profile")
-		gov.Register("profile", "/profile", profile.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		couriermodel.NewInCtx(inj, "courierlinks", "courierbrands")
-		kvstore.NewSubtreeInCtx(inj, "courier")
-		objstore.NewBucketInCtx(inj, "link-qr-image")
-		ratelimit.NewSubtreeInCtx(inj, "courier")
-		gov.Register("courier", "/courier", courier.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		friendmodel.NewInCtx(inj, "friends")
-		friendinvmodel.NewInCtx(inj, "friendinvitations")
-		dmmodel.NewInCtx(inj, "dms")
-		gdmmodel.NewInCtx(inj, "gdms", "gdmmembers", "gdmassocs")
-		servermodel.NewInCtx(inj, "servers", "serverchannels", "serverpresence")
-		msgmodel.NewInCtx(inj, "chatmsgs")
-		kvstore.NewSubtreeInCtx(inj, "conduit")
-		ratelimit.NewSubtreeInCtx(inj, "conduit")
-		gov.Register("conduit", "/conduit", conduit.NewCtx(inj))
-	}
-	{
-		inj := gov.Injector()
-		mailinglistmodel.NewInCtx(inj, "mailinglists", "mailinglistmembers", "mailinglistmsgs", "mailinglistsentmsgs", "mailinglisttree")
-		objstore.NewBucketInCtx(inj, "mailinglist")
-		ratelimit.NewSubtreeInCtx(inj, "mailinglist")
-		gov.Register("mailinglist", "/mailinglist", mailinglist.NewCtx(inj))
-	}
+	d := db.New()
+	gov.Register("database", "/null/db", d)
+	kv := kvstore.New()
+	gov.Register("kvstore", "/null/kv", kv)
+	obj := objstore.New()
+	gov.Register("objstore", "/null/obj", obj)
+	ps := pubsub.New()
+	gov.Register("pubsub", "/null/pubsub", ps)
+	ev := events.NewNats()
+	gov.Register("events", "/null/events", ev)
+	tpl := template.New()
+	gov.Register("template", "/null/tpl", tpl)
+	ml := mail.New(tpl, ev, obj.GetBucket("mail"))
+	gov.Register("mail", "/null/mail", ml)
+	ratelim := ratelimit.New(kv.Subtree("ratelimit"))
+	gov.Register("ratelimit", "/null/ratelimit", ratelim)
+	rolesvc := role.New(rolemodel.New(d, "userroles"), kv.Subtree("roles"), ev)
+	gov.Register("role", "/null/role", rolesvc)
+	apikeysvc := apikey.New(apikeymodel.New(d, "userapikeys"), kv.Subtree("apikeys"))
+	gov.Register("apikey", "/null/apikey", apikeysvc)
+	tokensvc := token.New()
+	gov.Register("token", "/null/token", tokensvc)
+	g := gate.New(rolesvc, apikeysvc, tokensvc)
+	gov.Register("gate", "/null/gate", g)
+	gov.Register("eventsapi", "/eventsapi", eventsapi.New(ps, g))
+	wssvc := ws.New(ps, ratelim.Subtree("ws"), g)
+	gov.Register("ws", "/ws", wssvc)
+	usersvc := user.New(
+		usermodel.New(d, "users"),
+		sessionmodel.New(d, "usersessions"),
+		approvalmodel.New(d, "userapprovals"),
+		roleinvmodel.New(d, "userroleinvitations"),
+		resetmodel.New(d, "userresets"),
+		rolesvc,
+		apikeysvc,
+		kv.Subtree("user"),
+		ps,
+		ev,
+		ml,
+		ratelim.Subtree("user"),
+		tokensvc,
+		g,
+	)
+	gov.Register("user", "/u", usersvc)
+	orgsvc := org.New(
+		orgmodel.New(d, "userorgs", "userorgmembers", "userorgmods"),
+		usersvc,
+		ev,
+		ratelim.Subtree("org"),
+		g,
+	)
+	gov.Register("org", "/org", orgsvc)
+	gov.Register("oauth", "/oauth", oauth.New(
+		oauthappmodel.New(d, "oauthapps"),
+		oauthconnmodel.New(d, "oauthconnections"),
+		tokensvc,
+		kv.Subtree("oauth"),
+		obj.GetBucket("oauth-app-logo"),
+		usersvc,
+		ev,
+		ratelim.Subtree("oauth"),
+		g,
+	))
+	gov.Register("profile", "/profile", profile.New(
+		profilemodel.New(d, "profiles"),
+		obj.GetBucket("profile-image"),
+		usersvc,
+		ratelim.Subtree("profile"),
+		g,
+	))
+	gov.Register("courier", "/courier", courier.New(
+		couriermodel.New(d, "courierlinks", "courierbrands"),
+		kv.Subtree("courier"),
+		obj.GetBucket("link-qr-image"),
+		usersvc,
+		orgsvc,
+		ratelim.Subtree("courier"),
+		g,
+	))
+	gov.Register("conduit", "/conduit", conduit.New(
+		friendmodel.New(d, "friends"),
+		friendinvmodel.New(d, "friendinvitations"),
+		dmmodel.New(d, "dms"),
+		gdmmodel.New(d, "gdms", "gdmmembers", "gdmassocs"),
+		servermodel.New(d, "servers", "serverchannels", "serverpresence"),
+		msgmodel.New(d, "chatmsgs"),
+		kv.Subtree("conduit"),
+		usersvc,
+		ps,
+		ev,
+		wssvc,
+		ratelim.Subtree("conduit"),
+		g,
+	))
+	gov.Register("mailinglist", "/mailinglist", mailinglist.New(
+		mailinglistmodel.New(d, "mailinglists", "mailinglistmembers", "mailinglistmsgs", "mailinglistsentmsgs", "mailinglisttree"),
+		obj.GetBucket("mailinglist"),
+		ev,
+		usersvc,
+		orgsvc,
+		ml,
+		ratelim.Subtree("mailinglist"),
+		g,
+	))
 
 	client := governor.NewClient(opts, nil)
 	client.Register("token", "/null/token", &governor.CmdDesc{
@@ -164,17 +172,18 @@ func main() {
 		Short: "manage tokens",
 		Long:  "manage tokens",
 	}, token.NewCmdClient())
-	client.Register("gate", "/null/gate", nil, gate.NewCmdClient())
+	gateclient := gate.NewCmdClient()
+	client.Register("gate", "/null/gate", nil, gateclient)
 	client.Register("events", "/eventsapi", &governor.CmdDesc{
 		Usage: "events",
 		Short: "interact with events",
 		Long:  "interact with events",
-	}, eventsapi.NewCmdClientCtx(client.Injector()))
+	}, eventsapi.NewCmdClient(gateclient))
 	client.Register("user", "/u", &governor.CmdDesc{
 		Usage: "user",
 		Short: "manage users",
 		Long:  "manage users",
-	}, user.NewCmdClientCtx(client.Injector()))
+	}, user.NewCmdClient(gateclient))
 
 	cmd := governor.NewCmd(opts, nil, gov, client)
 	cmd.Execute()

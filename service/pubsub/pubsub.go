@@ -54,8 +54,6 @@ type (
 		wg         *ksync.WaitGroup
 	}
 
-	ctxKeyPubsub struct{}
-
 	subscription struct {
 		subject string
 		group   string
@@ -65,20 +63,6 @@ type (
 	}
 )
 
-// GetCtxPubsub returns a Pubsub from the context
-func GetCtxPubsub(inj governor.Injector) Pubsub {
-	v := inj.Get(ctxKeyPubsub{})
-	if v == nil {
-		return nil
-	}
-	return v.(Pubsub)
-}
-
-// setCtxPubsub sets a Pubsub in the context
-func setCtxPubsub(inj governor.Injector, p Pubsub) {
-	inj.Set(ctxKeyPubsub{}, p)
-}
-
 // New creates a new pubsub service
 func New() *Service {
 	return &Service{
@@ -87,9 +71,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxPubsub(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "4222")

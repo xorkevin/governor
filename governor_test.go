@@ -65,8 +65,6 @@ type (
 	testServiceAReq struct {
 		Ping string `json:"ping"`
 	}
-
-	ctxKeyTestServiceA struct{}
 )
 
 func newTestServiceA(check testServiceACheck) *testServiceA {
@@ -76,9 +74,7 @@ func newTestServiceA(check testServiceACheck) *testServiceA {
 	}
 }
 
-func (s *testServiceA) Register(inj Injector, r ConfigRegistrar) {
-	inj.Set(ctxKeyTestServiceA{}, s)
-
+func (s *testServiceA) Register(r ConfigRegistrar) {
 	s.name = r.Name()
 	r.SetDefault("prop1", "somevalue")
 	r.SetDefault("prop2", "anothervalue")

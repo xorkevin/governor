@@ -25,7 +25,7 @@ type (
 	}
 )
 
-func (s *testServiceB) Register(inj Injector, r ConfigRegistrar) {
+func (s *testServiceB) Register(r ConfigRegistrar) {
 }
 
 func (s *testServiceB) Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error {

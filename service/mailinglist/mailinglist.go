@@ -100,36 +100,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyMailingList struct{}
 )
-
-// GetCtxMailingList returns a MailingList service from the context
-func GetCtxMailingList(inj governor.Injector) MailingList {
-	v := inj.Get(ctxKeyMailingList{})
-	if v == nil {
-		return nil
-	}
-	return v.(MailingList)
-}
-
-// setCtxMailingList sets a MailingList service in the context
-func setCtxMailingList(inj governor.Injector, m MailingList) {
-	inj.Set(ctxKeyMailingList{}, m)
-}
-
-// NewCtx creates a new MailingList service from a context
-func NewCtx(inj governor.Injector) *Service {
-	lists := mailinglistmodel.GetCtxRepo(inj)
-	obj := objstore.GetCtxBucket(inj)
-	ev := events.GetCtxEvents(inj)
-	users := user.GetCtxUsers(inj)
-	orgs := org.GetCtxOrgs(inj)
-	ratelimiter := ratelimit.GetCtxRatelimiter(inj)
-	g := gate.GetCtxGate(inj)
-	mailer := mail.GetCtxMailer(inj)
-	return New(lists, obj, ev, users, orgs, mailer, ratelimiter, g)
-}
 
 // New creates a new MailingList service
 func New(lists mailinglistmodel.Repo, obj objstore.Bucket, ev events.Events, users user.Users, orgs org.Orgs, mailer mail.Mailer, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
@@ -150,8 +121,7 @@ func New(lists mailinglistmodel.Repo, obj objstore.Bucket, ev events.Events, use
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxMailingList(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()
 	s.streammail = r.Name()

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -90,32 +89,7 @@ type (
 		Userid      string `model:"userid,VARCHAR(31)"`
 		LastUpdated int64  `model:"last_updated,BIGINT NOT NULL"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-func NewInCtx(inj governor.Injector, table, tableChannels, tablePresence string) {
-	SetCtxRepo(inj, NewCtx(inj, table, tableChannels, tablePresence))
-}
-
-func NewCtx(inj governor.Injector, table, tableChannels, tablePresence string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, table, tableChannels, tablePresence)
-}
 
 func New(database db.Database, table, tableChannels, tablePresence string) Repo {
 	return &repo{

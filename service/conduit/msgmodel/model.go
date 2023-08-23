@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -48,32 +47,7 @@ type (
 	msgValue struct {
 		Value string `model:"value"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-func NewInCtx(inj governor.Injector, table string) {
-	SetCtxRepo(inj, NewCtx(inj, table))
-}
-
-func NewCtx(inj governor.Injector, table string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, table)
-}
 
 func New(database db.Database, table string) Repo {
 	return &repo{

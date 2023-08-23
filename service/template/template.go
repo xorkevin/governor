@@ -26,8 +26,6 @@ type (
 		ht  *htmlTemplate.Template
 		log *klog.LevelLogger
 	}
-
-	ctxKeyTemplate struct{}
 )
 
 type (
@@ -40,28 +38,12 @@ const (
 	KindLocal Kind = "local"
 )
 
-// GetCtxTemplate returns a Template service from the context
-func GetCtxTemplate(inj governor.Injector) Template {
-	v := inj.Get(ctxKeyTemplate{})
-	if v == nil {
-		return nil
-	}
-	return v.(Template)
-}
-
-// setCtxTemplate sets a Template service in the context
-func setCtxTemplate(inj governor.Injector, t Template) {
-	inj.Set(ctxKeyTemplate{}, t)
-}
-
 // New creates a new Template service
 func New() *Service {
 	return &Service{}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxTemplate(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("dir", "templates")
 	r.SetDefault("txtglob", "*.txt.tmpl")
 	r.SetDefault("htmlglob", "*.html.tmpl")

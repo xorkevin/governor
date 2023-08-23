@@ -32,31 +32,7 @@ type (
 	router struct {
 		s *Service
 	}
-
-	ctxKeyEventsAPI struct{}
 )
-
-// GetCtxEventsAPI returns an EventsAPI from the context
-func GetCtxEvents(inj governor.Injector) EventsAPI {
-	v := inj.Get(ctxKeyEventsAPI{})
-	if v == nil {
-		return nil
-	}
-	return v.(EventsAPI)
-}
-
-// setCtxEventsAPI sets an EventsAPI in the context
-func setCtxEventsAPI(inj governor.Injector, ea EventsAPI) {
-	inj.Set(ctxKeyEventsAPI{}, ea)
-}
-
-// NewCtx creates a new EventsAPI service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		pubsub.GetCtxPubsub(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New creates a new events service
 func New(ps pubsub.Pubsub, g gate.Gate) *Service {
@@ -72,8 +48,7 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxEventsAPI(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 }
 

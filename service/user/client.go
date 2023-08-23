@@ -29,13 +29,6 @@ type (
 	}
 )
 
-// NewCmdClientCtx creates a new [*CmdClient] from a context
-func NewCmdClientCtx(inj governor.Injector) *CmdClient {
-	return NewCmdClient(
-		gate.GetCtxClient(inj),
-	)
-}
-
 // NewCmdClient creates a new [*CmdClient]
 func NewCmdClient(g gate.Client) *CmdClient {
 	return &CmdClient{
@@ -43,7 +36,7 @@ func NewCmdClient(g gate.Client) *CmdClient {
 	}
 }
 
-func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
+func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	cr.Register(governor.CmdDesc{
 		Usage: "add-admin",
 		Short: "adds an admin",

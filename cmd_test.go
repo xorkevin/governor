@@ -34,7 +34,7 @@ type (
 	}
 )
 
-func (c *testClientD) Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar) {
+func (c *testClientD) Register(r ConfigRegistrar, cr CmdRegistrar) {
 	cr.Register(CmdDesc{
 		Usage: "echo",
 		Short: "echo input",

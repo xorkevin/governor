@@ -196,43 +196,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyUsers struct{}
 )
-
-// GetCtxUsers returns a [Users] service from the context
-func GetCtxUsers(inj governor.Injector) Users {
-	v := inj.Get(ctxKeyUsers{})
-	if v == nil {
-		return nil
-	}
-	return v.(Users)
-}
-
-// setCtxUser sets a [Users] service in the context
-func setCtxUser(inj governor.Injector, u Users) {
-	inj.Set(ctxKeyUsers{}, u)
-}
-
-// NewCtx creates a new [Users] service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		usermodel.GetCtxRepo(inj),
-		sessionmodel.GetCtxRepo(inj),
-		approvalmodel.GetCtxRepo(inj),
-		roleinvmodel.GetCtxRepo(inj),
-		resetmodel.GetCtxRepo(inj),
-		role.GetCtxRolesManager(inj),
-		apikey.GetCtxApikeys(inj),
-		kvstore.GetCtxKVStore(inj),
-		pubsub.GetCtxPubsub(inj),
-		events.GetCtxEvents(inj),
-		mail.GetCtxMailer(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		token.GetCtxTokenizer(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New creates a new Users service
 func New(
@@ -277,8 +241,7 @@ func New(
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxUser(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.rolens = "gov." + r.Name()
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()

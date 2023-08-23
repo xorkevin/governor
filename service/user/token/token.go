@@ -101,23 +101,7 @@ type (
 		keyrefresh   time.Duration
 		wg           *ksync.WaitGroup
 	}
-
-	ctxKeyTokenizer struct{}
 )
-
-// GetCtxTokenizer returns a Tokenizer from the context
-func GetCtxTokenizer(inj governor.Injector) Tokenizer {
-	v := inj.Get(ctxKeyTokenizer{})
-	if v == nil {
-		return nil
-	}
-	return v.(Tokenizer)
-}
-
-// setCtxTokenizer sets a Tokenizer in the context
-func setCtxTokenizer(inj governor.Injector, t Tokenizer) {
-	inj.Set(ctxKeyTokenizer{}, t)
-}
 
 // New creates a new Tokenizer
 func New() *Service {
@@ -135,9 +119,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxTokenizer(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("audience", "governor")

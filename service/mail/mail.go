@@ -165,8 +165,6 @@ type (
 		authrefresh time.Duration
 		wg          *ksync.WaitGroup
 	}
-
-	ctxKeyMailer struct{}
 )
 
 // TplLocal is a local template source
@@ -175,28 +173,6 @@ func TplLocal(name string) Tpl {
 		Kind: template.KindLocal,
 		Name: name,
 	}
-}
-
-// GetCtxMailer returns a Mailer service from the context
-func GetCtxMailer(inj governor.Injector) Mailer {
-	v := inj.Get(ctxKeyMailer{})
-	if v == nil {
-		return nil
-	}
-	return v.(Mailer)
-}
-
-// setCtxMailer sets a Mailer service in the context
-func setCtxMailer(inj governor.Injector, m Mailer) {
-	inj.Set(ctxKeyMailer{}, m)
-}
-
-// NewCtx creates a new Mailer service from a context
-func NewCtx(inj governor.Injector) *Service {
-	tpl := template.GetCtxTemplate(inj)
-	ev := events.GetCtxEvents(inj)
-	obj := objstore.GetCtxBucket(inj)
-	return New(tpl, ev, obj)
 }
 
 // New creates a new Mailer
@@ -218,8 +194,7 @@ func New(tpl template.Template, ev events.Events, obj objstore.Bucket) *Service 
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxMailer(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.streamns = r.Name()
 	s.streammail = r.Name()
 

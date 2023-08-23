@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -60,34 +59,7 @@ type (
 		BrandID      string `model:"brandid,VARCHAR(63)"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-// NewInCtx creates a new courier repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, tableLinks, tableBrands string) {
-	SetCtxRepo(inj, NewCtx(inj, tableLinks, tableBrands))
-}
-
-// NewCtx creates a new courier repo from a context
-func NewCtx(inj governor.Injector, tableLinks, tableBrands string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, tableLinks, tableBrands)
-}
 
 // New creates a new courier repo
 func New(database db.Database, tableLinks, tableBrands string) Repo {

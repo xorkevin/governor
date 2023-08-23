@@ -33,7 +33,6 @@ type (
 	// Server is a governor server to which services may be registered
 	Server struct {
 		services []serviceDef
-		inj      Injector
 		settings *settings
 		log      *klog.LevelLogger
 		i        chi.Router
@@ -48,7 +47,6 @@ func New(opts Opts, serverOpts *ServerOpts) *Server {
 		serverOpts = &ServerOpts{}
 	}
 	return &Server{
-		inj:      newInjector(context.Background()),
 		settings: newSettings(opts, *serverOpts),
 	}
 }

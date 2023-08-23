@@ -43,8 +43,6 @@ type (
 		rt governor.MiddlewareCtx
 	}
 
-	ctxKeyWS struct{}
-
 	svcOpts struct {
 		PresenceChannel       string
 		UserSendChannelPrefix string
@@ -83,29 +81,6 @@ type (
 	}
 )
 
-// GetCtxWS returns a WS service from the context
-func GetCtxWS(inj governor.Injector) WS {
-	v := inj.Get(ctxKeyWS{})
-	if v == nil {
-		return nil
-	}
-	return v.(WS)
-}
-
-// setCtxWS sets a WS service in the context
-func setCtxWS(inj governor.Injector, w WS) {
-	inj.Set(ctxKeyWS{}, w)
-}
-
-// NewCtx creates a new WS service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		pubsub.GetCtxPubsub(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
-
 // New creates a new WS service
 func New(ps pubsub.Pubsub, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
 	return &Service{
@@ -115,8 +90,7 @@ func New(ps pubsub.Pubsub, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Serv
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxWS(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.rolens = "gov." + r.Name()
 	s.scopens = "gov." + r.Name()
 	s.channelns = "gov." + r.Name()

@@ -29,22 +29,7 @@ type (
 		config       governor.ConfigValueReader
 		term         governor.Term
 	}
-
-	ctxKeyClient struct{}
 )
-
-// GetCtxClient returns a Client from the context
-func GetCtxClient(inj governor.Injector) Client {
-	v := inj.Get(ctxKeyClient{})
-	if v == nil {
-		return nil
-	}
-	return v.(Client)
-}
-
-func setCtxClient(inj governor.Injector, client Client) {
-	inj.Set(ctxKeyClient{}, client)
-}
 
 // NewCmdClient creates a new [*CmdClient]
 func NewCmdClient() *CmdClient {
@@ -54,9 +39,7 @@ func NewCmdClient() *CmdClient {
 	}
 }
 
-func (c *CmdClient) Register(inj governor.Injector, r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
-	setCtxClient(inj, c)
-
+func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	r.SetDefault("systokenfile", "")
 }
 

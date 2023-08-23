@@ -36,34 +36,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyProfiles struct{}
 )
-
-// GetCtxProfiles returns a Profiles service from the context
-func GetCtxProfiles(inj governor.Injector) Profiles {
-	v := inj.Get(ctxKeyProfiles{})
-	if v == nil {
-		return nil
-	}
-	return v.(Profiles)
-}
-
-// setCtxProfiles sets a profile service in the context
-func setCtxProfiles(inj governor.Injector, p Profiles) {
-	inj.Set(ctxKeyProfiles{}, p)
-}
-
-// NewCtx creates a new Profiles service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		profilemodel.GetCtxRepo(inj),
-		objstore.GetCtxBucket(inj),
-		user.GetCtxUsers(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New creates a new Profiles service
 func New(profiles profilemodel.Repo, obj objstore.Bucket, users user.Users, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
@@ -78,8 +51,7 @@ func New(profiles profilemodel.Repo, obj objstore.Bucket, users user.Users, rate
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxProfiles(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()
 }

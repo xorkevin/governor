@@ -126,23 +126,7 @@ type (
 		keyrefresh   time.Duration
 		wg           *ksync.WaitGroup
 	}
-
-	ctxKeyGate struct{}
 )
-
-// GetCtxGate returns a Gate from the context
-func GetCtxGate(inj governor.Injector) Gate {
-	v := inj.Get(ctxKeyGate{})
-	if v == nil {
-		return nil
-	}
-	return v.(Gate)
-}
-
-// setCtxGate sets a Gate in the context
-func setCtxGate(inj governor.Injector, g Gate) {
-	inj.Set(ctxKeyGate{}, g)
-}
 
 // New creates a new Tokenizer
 func New() *Service {
@@ -159,9 +143,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxGate(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("tokensecret", "")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("hbinterval", "5s")

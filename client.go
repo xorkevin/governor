@@ -19,7 +19,6 @@ type (
 	// Client is a server client
 	Client struct {
 		clients    []clientDef
-		inj        Injector
 		cmds       []*cmdTree
 		settings   *clientSettings
 		configTerm *TermConfig
@@ -75,7 +74,7 @@ type (
 
 	// ServiceClient is a client for a service
 	ServiceClient interface {
-		Register(inj Injector, r ConfigRegistrar, cr CmdRegistrar)
+		Register(r ConfigRegistrar, cr CmdRegistrar)
 		Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error
 	}
 
@@ -91,7 +90,6 @@ func NewClient(opts Opts, clientOpts *ClientOpts) *Client {
 		clientOpts = &ClientOpts{}
 	}
 	return &Client{
-		inj:        newInjector(context.Background()),
 		settings:   newClientSettings(opts, *clientOpts),
 		configTerm: clientOpts.TermConfig,
 	}
@@ -155,7 +153,7 @@ func (c *Client) Register(name string, url string, cmd *CmdDesc, r ServiceClient
 	if cmd != nil {
 		cr = cr.Group(*cmd)
 	}
-	r.Register(c.inj, &configRegistrar{
+	r.Register(&configRegistrar{
 		prefix: name,
 		v:      c.settings.v,
 	}, cr)

@@ -42,40 +42,7 @@ type (
 		log       *klog.LevelLogger
 		streamacl string
 	}
-
-	ctxKeyService struct{}
 )
-
-// GetCtxACL returns an ACL service from the context
-func GetCtxACL(inj governor.Injector) ACL {
-	v := inj.Get(ctxKeyService{})
-	if v == nil {
-		return nil
-	}
-	return v.(ACL)
-}
-
-// GetCtxACLManager returns an ACL service from the context
-func GetCtxACLManager(inj governor.Injector) ACLManager {
-	v := inj.Get(ctxKeyService{})
-	if v == nil {
-		return nil
-	}
-	return v.(ACLManager)
-}
-
-// setCtxACL sets an ACLManager service in the context
-func setCtxACL(inj governor.Injector, a ACLManager) {
-	inj.Set(ctxKeyService{}, a)
-}
-
-// NewCtx creates a new ACL service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		aclmodel.GetCtxRepo(inj),
-		events.GetCtxEvents(inj),
-	)
-}
 
 // New returns a new RolesManager
 func New(repo aclmodel.Repo, ev events.Events) *Service {
@@ -85,8 +52,7 @@ func New(repo aclmodel.Repo, ev events.Events) *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxACL(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.streamacl = r.Name()
 }
 

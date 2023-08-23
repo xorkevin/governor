@@ -94,8 +94,6 @@ type (
 		rt governor.MiddlewareCtx
 	}
 
-	ctxKeyConduit struct{}
-
 	svcOpts struct {
 		PresenceQueryChannel string
 		DMMsgChannel         string
@@ -104,39 +102,6 @@ type (
 		GDMSettingsChannel   string
 	}
 )
-
-// GetCtxConduit returns a Conduit service from the context
-func GetCtxCourier(inj governor.Injector) Conduit {
-	v := inj.Get(ctxKeyConduit{})
-	if v == nil {
-		return nil
-	}
-	return v.(Conduit)
-}
-
-// setCtxConduit sets a Conduit service in the context
-func setCtxConduit(inj governor.Injector, c Conduit) {
-	inj.Set(ctxKeyConduit{}, c)
-}
-
-// NewCtx creates a new Conduit service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		friendmodel.GetCtxRepo(inj),
-		friendinvmodel.GetCtxRepo(inj),
-		dmmodel.GetCtxRepo(inj),
-		gdmmodel.GetCtxRepo(inj),
-		servermodel.GetCtxRepo(inj),
-		msgmodel.GetCtxRepo(inj),
-		kvstore.GetCtxKVStore(inj),
-		user.GetCtxUsers(inj),
-		pubsub.GetCtxPubsub(inj),
-		events.GetCtxEvents(inj),
-		ws.GetCtxWS(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New creates a new Conduit service
 func New(
@@ -172,8 +137,7 @@ func New(
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxConduit(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 	s.channelns = r.Name()
 	s.streamns = r.Name()

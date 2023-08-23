@@ -47,10 +47,6 @@ type (
 		Period     int64 `json:"period"`
 		Limit      int64 `json:"limit"`
 	}
-
-	ctxKeyRootRL struct{}
-
-	ctxKeyRatelimiter struct{}
 )
 
 func (p Params) String() string {
@@ -64,46 +60,6 @@ func (p Params) String() string {
 	return b.String()
 }
 
-// getCtxRootRL returns a root Ratelimiter from the context
-func getCtxRootRL(inj governor.Injector) Ratelimiter {
-	v := inj.Get(ctxKeyRootRL{})
-	if v == nil {
-		return nil
-	}
-	return v.(Ratelimiter)
-}
-
-// setCtxRootRL sets a root Ratelimiter in the context
-func setCtxRootRL(inj governor.Injector, r Ratelimiter) {
-	inj.Set(ctxKeyRootRL{}, r)
-}
-
-// GetCtxRatelimiter returns a Ratelimiter from the context
-func GetCtxRatelimiter(inj governor.Injector) Ratelimiter {
-	v := inj.Get(ctxKeyRatelimiter{})
-	if v == nil {
-		return nil
-	}
-	return v.(Ratelimiter)
-}
-
-// setCtxRatelimiter sets a Ratelimiter in the context
-func setCtxRatelimiter(inj governor.Injector, r Ratelimiter) {
-	inj.Set(ctxKeyRatelimiter{}, r)
-}
-
-// NewSubtreeInCtx creates a new ratelimiter subtree with a prefix and sets it in the context
-func NewSubtreeInCtx(inj governor.Injector, prefix string) {
-	rt := getCtxRootRL(inj)
-	setCtxRatelimiter(inj, rt.Subtree(prefix))
-}
-
-// NewCtx creates a new Ratelimiter from a context
-func NewCtx(inj governor.Injector) *Service {
-	kv := kvstore.GetCtxKVStore(inj)
-	return New(kv)
-}
-
 // New creates a new Ratelimiter
 func New(kv kvstore.KVStore) *Service {
 	return &Service{
@@ -111,9 +67,7 @@ func New(kv kvstore.KVStore) *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxRootRL(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("params.base", map[string]interface{}{
 		"expiration": 60,
 		"period":     15,

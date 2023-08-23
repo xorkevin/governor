@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
@@ -78,34 +77,7 @@ type (
 	memberUsername struct {
 		Username string `model:"username"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-// NewInCtx creates a new org repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, table, tableMembers, tableMods string) {
-	SetCtxRepo(inj, NewCtx(inj, table, tableMembers, tableMods))
-}
-
-// NewCtx creates a new org repo from a context
-func NewCtx(inj governor.Injector, table, tableMembers, tableMods string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, table, tableMembers, tableMods)
-}
 
 // New creates a new OAuth app repository
 func New(database db.Database, table, tableMembers, tableMods string) Repo {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2cipher"
@@ -117,34 +116,7 @@ type (
 		FailedLoginTime  int64 `model:"failed_login_time"`
 		FailedLoginCount int   `model:"failed_login_count"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-// NewInCtx creates a new user repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, table string) {
-	SetCtxRepo(inj, NewCtx(inj, table))
-}
-
-// NewCtx creates a new user repo from a context
-func NewCtx(inj governor.Injector, table string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, table)
-}
 
 // New creates a new user repository
 func New(database db.Database, table string) Repo {

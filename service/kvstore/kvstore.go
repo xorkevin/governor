@@ -85,45 +85,7 @@ type (
 		hbmaxfail int
 		wg        *ksync.WaitGroup
 	}
-
-	ctxKeyRootKV struct{}
-
-	ctxKeyKVStore struct{}
 )
-
-// getCtxRootKV returns a root KVStore from the context
-func getCtxRootKV(inj governor.Injector) KVStore {
-	v := inj.Get(ctxKeyRootKV{})
-	if v == nil {
-		return nil
-	}
-	return v.(KVStore)
-}
-
-// setCtxRootKV sets a root KVStore in the context
-func setCtxRootKV(inj governor.Injector, k KVStore) {
-	inj.Set(ctxKeyRootKV{}, k)
-}
-
-// GetCtxKVStore returns a KVStore from the context
-func GetCtxKVStore(inj governor.Injector) KVStore {
-	v := inj.Get(ctxKeyKVStore{})
-	if v == nil {
-		return nil
-	}
-	return v.(KVStore)
-}
-
-// setCtxKVStore sets a KVStore in the context
-func setCtxKVStore(inj governor.Injector, k KVStore) {
-	inj.Set(ctxKeyKVStore{}, k)
-}
-
-// NewSubtreeInCtx creates a new kv subtree with a prefix and sets it in the context
-func NewSubtreeInCtx(inj governor.Injector, prefix string) {
-	kv := getCtxRootKV(inj)
-	setCtxKVStore(inj, kv.Subtree(prefix))
-}
 
 // New creates a new cache service
 func New() *Service {
@@ -133,9 +95,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxRootKV(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth", "")
 	r.SetDefault("dbname", 0)
 	r.SetDefault("host", "localhost")

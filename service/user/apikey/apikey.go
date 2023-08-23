@@ -33,30 +33,7 @@ type (
 		log                *klog.LevelLogger
 		scopeCacheDuration time.Duration
 	}
-
-	ctxKeyApikeys struct{}
 )
-
-// GetCtxApikeys returns a Apikeys service from the context
-func GetCtxApikeys(inj governor.Injector) Apikeys {
-	v := inj.Get(ctxKeyApikeys{})
-	if v == nil {
-		return nil
-	}
-	return v.(Apikeys)
-}
-
-// setCtxApikeys sets a Apikeys service in the context
-func setCtxApikeys(inj governor.Injector, a Apikeys) {
-	inj.Set(ctxKeyApikeys{}, a)
-}
-
-// NewCtx returns a new Apikeys service from a context
-func NewCtx(inj governor.Injector) *Service {
-	apikeys := apikeymodel.GetCtxRepo(inj)
-	kv := kvstore.GetCtxKVStore(inj)
-	return New(apikeys, kv)
-}
 
 // New returns a new Apikeys service
 func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) *Service {
@@ -66,9 +43,7 @@ func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxApikeys(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("scopecache", "24h")
 }
 

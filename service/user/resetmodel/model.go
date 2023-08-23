@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2hash"
@@ -51,34 +50,7 @@ type (
 		CodeTime int64  `model:"code_time,BIGINT NOT NULL"`
 		Params   string `model:"params,VARCHAR(4096)"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-// NewInCtx creates a new user reset request repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, table string) {
-	SetCtxRepo(inj, NewCtx(inj, table))
-}
-
-// NewCtx creates a new user reset request repo from a context
-func NewCtx(inj governor.Injector, table string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, table)
-}
 
 // New creates a new user reset request repo
 func New(database db.Database, table string) Repo {

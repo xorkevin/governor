@@ -35,41 +35,7 @@ type (
 		log               *klog.LevelLogger
 		roleCacheDuration time.Duration
 	}
-
-	ctxKeyRoles struct{}
 )
-
-// GetCtxRoles returns a Roles service from the context
-func GetCtxRoles(inj governor.Injector) Roles {
-	v := inj.Get(ctxKeyRoles{})
-	if v == nil {
-		return nil
-	}
-	return v.(Roles)
-}
-
-// GetCtxRolesManager returns a RolesManager service from the context
-func GetCtxRolesManager(inj governor.Injector) RolesManager {
-	v := inj.Get(ctxKeyRoles{})
-	if v == nil {
-		return nil
-	}
-	return v.(RolesManager)
-}
-
-// setCtxRolesManager sets a RolesManager service in the context
-func setCtxRolesManager(inj governor.Injector, r RolesManager) {
-	inj.Set(ctxKeyRoles{}, r)
-}
-
-// NewCtx creates a new RolesManager service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		rolemodel.GetCtxRepo(inj),
-		kvstore.GetCtxKVStore(inj),
-		events.GetCtxEvents(inj),
-	)
-}
 
 // New returns a new RolesManager
 func New(roles rolemodel.Repo, kv kvstore.KVStore, ev events.Events) *Service {
@@ -79,9 +45,7 @@ func New(roles rolemodel.Repo, kv kvstore.KVStore, ev events.Events) *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxRolesManager(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("rolecacheduration", "24h")
 }
 

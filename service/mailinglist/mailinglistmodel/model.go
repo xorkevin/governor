@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/kerrors"
 )
@@ -183,34 +182,7 @@ type (
 		Depth        int    `model:"depth,INT NOT NULL"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
-
-	ctxKeyRepo struct{}
 )
-
-// GetCtxRepo returns a Repo from the context
-func GetCtxRepo(inj governor.Injector) Repo {
-	v := inj.Get(ctxKeyRepo{})
-	if v == nil {
-		return nil
-	}
-	return v.(Repo)
-}
-
-// SetCtxRepo sets a Repo in the context
-func SetCtxRepo(inj governor.Injector, r Repo) {
-	inj.Set(ctxKeyRepo{}, r)
-}
-
-// NewInCtx creates a new chat repo from a context and sets it in the context
-func NewInCtx(inj governor.Injector, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) {
-	SetCtxRepo(inj, NewCtx(inj, tableLists, tableMembers, tableMsgs, tableSent, tableTree))
-}
-
-// NewCtx creates a new chat repo from a context
-func NewCtx(inj governor.Injector, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {
-	dbService := db.GetCtxDB(inj)
-	return New(dbService, tableLists, tableMembers, tableMsgs, tableSent, tableTree)
-}
 
 // New creates a new user repository
 func New(database db.Database, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {

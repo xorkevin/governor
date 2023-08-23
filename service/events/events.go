@@ -107,23 +107,7 @@ type (
 		assigned map[int32]chan struct{}
 		closed   bool
 	}
-
-	ctxKeyEvents struct{}
 )
-
-// GetCtxEvents returns an Events from the context
-func GetCtxEvents(inj governor.Injector) Events {
-	v := inj.Get(ctxKeyEvents{})
-	if v == nil {
-		return nil
-	}
-	return v.(Events)
-}
-
-// setCtxEvents sets an Events in the context
-func setCtxEvents(inj governor.Injector, p Events) {
-	inj.Set(ctxKeyEvents{}, p)
-}
 
 // New creates a new events service
 func New() *Service {
@@ -133,9 +117,7 @@ func New() *Service {
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxEvents(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth", "")
 	r.SetDefault("host", "localhost")
 	r.SetDefault("port", "9092")

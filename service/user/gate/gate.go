@@ -116,32 +116,7 @@ type (
 
 	// Authorizer is a function to check the authorization of a user
 	Authorizer func(c Context) bool
-
-	ctxKeyGate struct{}
 )
-
-// GetCtxGate returns a Gate from the context
-func GetCtxGate(inj governor.Injector) Gate {
-	v := inj.Get(ctxKeyGate{})
-	if v == nil {
-		return nil
-	}
-	return v.(Gate)
-}
-
-// setCtxGate sets a Gate in the context
-func setCtxGate(inj governor.Injector, g Gate) {
-	inj.Set(ctxKeyGate{}, g)
-}
-
-// NewCtx creates a new Gate from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		role.GetCtxRoles(inj),
-		apikey.GetCtxApikeys(inj),
-		token.GetCtxTokenizer(inj),
-	)
-}
 
 // New returns a new Gate
 func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) *Service {
@@ -152,9 +127,7 @@ func New(roles role.Roles, apikeys apikey.Apikeys, tokenizer token.Tokenizer) *S
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxGate(inj, s)
-
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("realm", "governor")
 }
 

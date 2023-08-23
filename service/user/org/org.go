@@ -78,34 +78,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyOrgs struct{}
 )
-
-// GetCtxOrgs returns an Orgs service from the context
-func GetCtxOrgs(inj governor.Injector) Orgs {
-	v := inj.Get(ctxKeyOrgs{})
-	if v == nil {
-		return nil
-	}
-	return v.(Orgs)
-}
-
-// setCtxOrgs sets an Orgs service in the context
-func setCtxOrgs(inj governor.Injector, o Orgs) {
-	inj.Set(ctxKeyOrgs{}, o)
-}
-
-// NewCtx creates a new Orgs service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		orgmodel.GetCtxRepo(inj),
-		user.GetCtxUsers(inj),
-		events.GetCtxEvents(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New returns a new Orgs service
 func New(orgs orgmodel.Repo, users user.Users, ev events.Events, ratelimiter ratelimit.Ratelimiter, g gate.Gate) *Service {
@@ -119,8 +92,7 @@ func New(orgs orgmodel.Repo, users user.Users, ev events.Events, ratelimiter rat
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxOrgs(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()
 	s.streamorgs = r.Name()

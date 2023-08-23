@@ -64,38 +64,7 @@ type (
 		s  *Service
 		rt governor.MiddlewareCtx
 	}
-
-	ctxKeyOAuth struct{}
 )
-
-// GetCtxOAuth returns an OAuth service from the context
-func GetCtxOAuth(inj governor.Injector) OAuth {
-	v := inj.Get(ctxKeyOAuth{})
-	if v == nil {
-		return nil
-	}
-	return v.(OAuth)
-}
-
-// setCtxOAuth sets an OAuth service in the context
-func setCtxOAuth(inj governor.Injector, o OAuth) {
-	inj.Set(ctxKeyOAuth{}, o)
-}
-
-// NewCtx creates a new OAuth service from a context
-func NewCtx(inj governor.Injector) *Service {
-	return New(
-		oauthappmodel.GetCtxRepo(inj),
-		oauthconnmodel.GetCtxRepo(inj),
-		token.GetCtxTokenizer(inj),
-		kvstore.GetCtxKVStore(inj),
-		objstore.GetCtxBucket(inj),
-		user.GetCtxUsers(inj),
-		events.GetCtxEvents(inj),
-		ratelimit.GetCtxRatelimiter(inj),
-		gate.GetCtxGate(inj),
-	)
-}
 
 // New returns a new Apikey
 func New(
@@ -124,8 +93,7 @@ func New(
 	}
 }
 
-func (s *Service) Register(inj governor.Injector, r governor.ConfigRegistrar) {
-	setCtxOAuth(inj, s)
+func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.rolens = "gov." + r.Name()
 	s.scopens = "gov." + r.Name()
 	s.streamns = r.Name()
