@@ -35,6 +35,7 @@ type (
 		services []serviceDef
 		settings *settings
 		log      *klog.LevelLogger
+		tracer   Tracer
 		i        chi.Router
 		running  bool
 		mu       sync.Mutex
@@ -84,6 +85,10 @@ func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
 			)
 		}
 		s.log = klog.NewLevelLogger(klog.New(logOpts...))
+	}
+
+	s.tracer = &tracer{
+		instance: s.settings.config.Instance,
 	}
 
 	i := chi.NewRouter()

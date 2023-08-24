@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -19,7 +18,6 @@ import (
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/ktime"
 	"xorkevin.dev/governor/util/lifecycle"
-	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -125,8 +123,8 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("hbmaxfail", 3)
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
 	s.clientname = r.Config().Instance
 	s.appname = r.Config().Appname
@@ -866,16 +864,15 @@ type (
 
 	// Watcher watches over a subscription
 	Watcher struct {
-		ev          Events
-		log         *klog.LevelLogger
-		topic       string
-		group       string
-		opts        ConsumerOpts
-		handler     Handler
-		dlqhandler  Handler
-		maxdeliver  int
-		reqidprefix string
-		reqcount    *atomic.Uint32
+		ev         Events
+		log        *klog.LevelLogger
+		tracer     governor.Tracer
+		topic      string
+		group      string
+		opts       ConsumerOpts
+		handler    Handler
+		dlqhandler Handler
+		maxdeliver int
 	}
 )
 
@@ -885,26 +882,21 @@ func (f HandlerFunc) Handle(ctx context.Context, m Msg) error {
 }
 
 // NewWatcher creates a new watcher
-func NewWatcher(ev Events, log klog.Logger, topic, group string, opts ConsumerOpts, handler Handler, dlqhandler Handler, maxdeliver int, reqidprefix string) *Watcher {
+func NewWatcher(ev Events, log klog.Logger, tracer governor.Tracer, topic, group string, opts ConsumerOpts, handler Handler, dlqhandler Handler, maxdeliver int) *Watcher {
 	return &Watcher{
 		ev: ev,
 		log: klog.NewLevelLogger(log.Sublogger("watcher",
 			klog.AString("events.topic", topic),
 			klog.AString("events.group", group),
 		)),
-		topic:       topic,
-		group:       group,
-		opts:        opts,
-		handler:     handler,
-		dlqhandler:  dlqhandler,
-		maxdeliver:  maxdeliver,
-		reqidprefix: reqidprefix,
-		reqcount:    &atomic.Uint32{},
+		tracer:     tracer,
+		topic:      topic,
+		group:      group,
+		opts:       opts,
+		handler:    handler,
+		dlqhandler: dlqhandler,
+		maxdeliver: maxdeliver,
 	}
-}
-
-func (w *Watcher) lreqID() string {
-	return w.reqidprefix + "-" + uid.ReqID(w.reqcount.Add(1))
 }
 
 // Watch watches over a subscription
@@ -978,12 +970,11 @@ func (w *Watcher) consume(ctx context.Context, sub Subscription, opts WatchOpts)
 
 func (w *Watcher) consumeMsg(ctx context.Context, sub Subscription, m Msg, opts WatchOpts) {
 	ctx = klog.CtxWithAttrs(ctx,
-		klog.AString("events.topic", m.Topic),
 		klog.AInt("events.partition", m.Partition),
 		klog.AInt("events.offset", m.Offset),
 		klog.AInt64("events.time_us", m.Time.UnixMicro()),
 		klog.AString("events.time", m.Time.UTC().Format(time.RFC3339Nano)),
-		klog.AString("events.lreqid", w.lreqID()),
+		klog.AString("events.lreqid", w.tracer.LReqID()),
 	)
 
 	var wg sync.WaitGroup

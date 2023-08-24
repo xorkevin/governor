@@ -12,10 +12,6 @@ import (
 
 //go:generate forge model
 
-const (
-	uidSize = 16
-)
-
 type (
 	// Repo is a user org repository
 	Repo interface {
@@ -96,7 +92,7 @@ func New(database db.Database, table, tableMembers, tableMods string) Repo {
 }
 
 func (r *repo) New(displayName, desc string) (*Model, error) {
-	mUID, err := uid.New(uidSize)
+	mUID, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

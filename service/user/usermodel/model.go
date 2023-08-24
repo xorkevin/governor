@@ -18,7 +18,6 @@ import (
 //go:generate forge model
 
 const (
-	uidSize       = 16
 	passSaltLen   = 32
 	passHashLen   = 32
 	totpSecretLen = 32
@@ -140,7 +139,7 @@ func New(database db.Database, table string) Repo {
 
 // New creates a new User Model
 func (r *repo) New(username, password, email, firstname, lastname string) (*Model, error) {
-	mUID, err := uid.New(uidSize)
+	mUID, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

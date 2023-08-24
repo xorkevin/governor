@@ -77,6 +77,7 @@ type (
 		gate               gate.Gate
 		config             governor.ConfigReader
 		log                *klog.LevelLogger
+		tracer             governor.Tracer
 		scopens            string
 		channelns          string
 		streamns           string
@@ -163,8 +164,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 	s.config = r
 
 	var err error
@@ -184,7 +186,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	)
 
 	sr := s.router()
-	sr.mountRoutes(m)
+	sr.mountRoutes(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
@@ -194,13 +196,13 @@ func (s *Service) Start(ctx context.Context) error {
 	go events.NewWatcher(
 		s.events,
 		s.log.Logger,
+		s.tracer,
 		s.streamconduit,
 		s.streamns+".worker",
 		events.ConsumerOpts{},
 		events.HandlerFunc(s.conduitEventHandler),
 		nil,
 		0,
-		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to conduit stream")
 
@@ -208,9 +210,9 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.users.WatchUsers(s.streamns+".worker.users", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to users stream")
 
-	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
+	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger, s.tracer)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
+	go sysEvents.WatchGC(s.streamns+"_WORKER_INVITATION_GC", s.friendInvitationGCHook).Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel")
 
 	s.wg.Add(1)

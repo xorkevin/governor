@@ -64,8 +64,8 @@ type (
 		events      events.Events
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
-		config      governor.ConfigReader
 		log         *klog.LevelLogger
+		tracer      governor.Tracer
 		scopens     string
 		streamns    string
 		streamorgs  string
@@ -108,9 +108,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
-	s.config = r
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 
 	var err error
 	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
@@ -129,7 +129,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	)
 
 	sr := s.router()
-	sr.mountRoute(m)
+	sr.mountRoute(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
 
 	return nil
@@ -230,13 +230,13 @@ func (s *Service) WatchOrgs(group string, opts events.ConsumerOpts, handler, dlq
 			return dlqhandler(ctx, *props)
 		})
 	}
-	return events.NewWatcher(s.events, s.log.Logger, s.streamorgs, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+	return events.NewWatcher(s.events, s.log.Logger, s.tracer, s.streamorgs, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
 		props, err := decodeOrgEvent(msg.Value)
 		if err != nil {
 			return err
 		}
 		return handler(ctx, *props)
-	}), dlqfn, maxdeliver, s.config.Config().Instance)
+	}), dlqfn, maxdeliver)
 }
 
 const (

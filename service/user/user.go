@@ -172,6 +172,7 @@ type (
 		cipherAlgs   h2cipher.Algs
 		config       governor.ConfigReader
 		log          *klog.LevelLogger
+		tracer       governor.Tracer
 		rolens       string
 		scopens      string
 		streamns     string
@@ -295,8 +296,9 @@ type (
 	}
 )
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 	s.config = r
 
 	var err error
@@ -446,9 +448,9 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	go s.lc.Heartbeat(ctx, s.wg)
 
 	sr := s.router()
-	sr.mountRoute(m.GroupCtx("/user"))
-	sr.mountAuth(m.GroupCtx(authRoutePrefix, sr.rt))
-	sr.mountApikey(m.GroupCtx("/apikey"))
+	sr.mountRoute(kit.Router.GroupCtx("/user"))
+	sr.mountAuth(kit.Router.GroupCtx(authRoutePrefix, sr.rt))
+	sr.mountApikey(kit.Router.GroupCtx("/apikey"))
 	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
@@ -530,9 +532,9 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to users stream")
 
-	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger)
+	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger, s.tracer)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC, s.config.Config().Instance).Watch(ctx, s.wg, pubsub.WatchOpts{})
+	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC).Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel")
 
 	return nil
@@ -689,13 +691,13 @@ func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler, dl
 			return dlqhandler(ctx, *props)
 		})
 	}
-	return events.NewWatcher(s.events, s.log.Logger, s.streamusers, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
+	return events.NewWatcher(s.events, s.log.Logger, s.tracer, s.streamusers, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
 		props, err := decodeUserEvent(msg.Value)
 		if err != nil {
 			return err
 		}
 		return handler(ctx, *props)
-	}), dlqfn, maxdeliver, s.config.Config().Instance)
+	}), dlqfn, maxdeliver)
 }
 
 const (

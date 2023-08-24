@@ -5,7 +5,9 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -31,11 +33,17 @@ type (
 	// begins the shutdown process.
 	Service interface {
 		Register(r ConfigRegistrar)
-		Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error
+		Init(ctx context.Context, r ConfigReader, kit ServiceKit) error
 		Start(ctx context.Context) error
 		Stop(ctx context.Context)
 		Setup(ctx context.Context, req ReqSetup) error
 		Health(ctx context.Context) error
+	}
+
+	ServiceKit struct {
+		Logger klog.Logger
+		Router Router
+		Tracer Tracer
 	}
 
 	serviceOpt struct {
@@ -108,7 +116,11 @@ func (s *Server) initServices(ctx context.Context) error {
 	s.log.Info(ctx, "Init all services begin")
 	for _, i := range s.services {
 		l := s.log.Logger.Sublogger(i.opt.name, klog.AString("gov.service", i.opt.name))
-		if err := i.r.Init(ctx, s.settings.reader(i.opt), l, s.router(s.settings.config.BasePath+i.opt.url, l)); err != nil {
+		if err := i.r.Init(ctx, s.settings.reader(i.opt), ServiceKit{
+			Logger: l,
+			Router: s.router(s.settings.config.BasePath+i.opt.url, l),
+			Tracer: s.tracer,
+		}); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.AString("service", i.opt.name))
 			return err
@@ -142,4 +154,19 @@ func (s *Server) stopServices(ctx context.Context) {
 		s.log.Info(ctx, "Stop service", klog.AString("service", i.opt.name))
 	}
 	s.log.Info(ctx, "Stop all services complete")
+}
+
+type (
+	Tracer interface {
+		LReqID() string
+	}
+
+	tracer struct {
+		instance string
+		reqcount atomic.Uint32
+	}
+)
+
+func (t *tracer) LReqID() string {
+	return uid.NewSnowflake(t.reqcount.Add(1)).Base64() + t.instance
 }

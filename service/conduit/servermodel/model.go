@@ -13,10 +13,6 @@ import (
 
 //go:generate forge model
 
-const (
-	chatUIDSize = 16
-)
-
 type (
 	Repo interface {
 		New(serverid string, name, desc string, theme string) *Model
@@ -200,7 +196,7 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 }
 
 func (r *repo) NewChannel(serverid, channelid string, name, desc string, theme string) (*ChannelModel, error) {
-	u, err := uid.New(chatUIDSize)
+	u, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

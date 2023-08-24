@@ -128,8 +128,8 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("keyrefresh", "1m")
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
 
 	issuer := r.GetStr("issuer")

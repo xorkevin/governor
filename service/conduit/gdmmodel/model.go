@@ -15,10 +15,6 @@ import (
 
 //go:generate forge model
 
-const (
-	chatUIDSize = 16
-)
-
 type (
 	Repo interface {
 		New(name string, theme string) (*Model, error)
@@ -107,7 +103,7 @@ func New(database db.Database, table, tableMembers, tableAssoc string) Repo {
 
 // New creates new group chat
 func (r *repo) New(name string, theme string) (*Model, error) {
-	u, err := uid.New(chatUIDSize)
+	u, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

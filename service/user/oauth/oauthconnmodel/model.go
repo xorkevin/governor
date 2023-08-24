@@ -14,10 +14,6 @@ import (
 
 //go:generate forge model
 
-const (
-	keySize = 32
-)
-
 type (
 	// Repo is the OAuth account connection repository
 	Repo interface {
@@ -78,7 +74,7 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(userid, clientid, scope, nonce, challenge, challengeMethod string, authTime int64) (*Model, string, error) {
-	codebytes, err := uid.New(keySize)
+	codebytes, err := uid.NewKey()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
@@ -116,7 +112,7 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashCode(m *Model) (string, error) {
-	codebytes, err := uid.New(keySize)
+	codebytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth authorization code")
 	}
@@ -141,7 +137,7 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(m *Model) (string, error) {
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth session key")
 	}

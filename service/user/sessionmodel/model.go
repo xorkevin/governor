@@ -16,11 +16,6 @@ import (
 //go:generate forge model
 
 const (
-	uidSize = 8
-	keySize = 32
-)
-
-const (
 	keySeparator = "."
 )
 
@@ -79,11 +74,11 @@ func New(database db.Database, table string) Repo {
 
 // New creates a new User session Model
 func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
-	sid, err := uid.New(uidSize)
+	sid, err := uid.NewRandSnowflake()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new session id")
 	}
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new session key")
 	}
@@ -124,7 +119,7 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 
 // RehashKey generates a new key and saves its hash
 func (r *repo) RehashKey(m *Model) (string, error) {
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new session key")
 	}

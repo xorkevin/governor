@@ -77,8 +77,8 @@ type (
 		mailer       mail.Mailer
 		ratelimiter  ratelimit.Ratelimiter
 		gate         gate.Gate
-		config       governor.ConfigReader
 		log          *klog.LevelLogger
+		tracer       governor.Tracer
 		scopens      string
 		streamns     string
 		streammail   string
@@ -145,9 +145,9 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
-	s.config = r
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 
 	s.port = r.GetStr("port")
 	s.authdomain = r.GetStr("authdomain")
@@ -211,7 +211,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 	}()
 
 	sr := s.router()
-	sr.mountRoutes(m)
+	sr.mountRoutes(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
 
 	return nil
@@ -220,7 +220,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Lo
 func (s *Service) createSMTPServer() *smtp.Server {
 	be := &smtpBackend{
 		service:  s,
-		instance: s.config.Config().Instance,
 		log:      klog.NewLevelLogger(s.log.Logger.Sublogger("smtpserver")),
 		reqcount: &atomic.Uint32{},
 	}
@@ -240,13 +239,13 @@ func (s *Service) Start(ctx context.Context) error {
 	go events.NewWatcher(
 		s.events,
 		s.log.Logger,
+		s.tracer,
 		s.streammail,
 		s.streamns+".worker",
 		events.ConsumerOpts{},
 		events.HandlerFunc(s.listEventHandler),
 		nil,
 		0,
-		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to mailinglist stream")
 

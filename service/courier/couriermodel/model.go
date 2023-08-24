@@ -12,10 +12,6 @@ import (
 
 //go:generate forge model
 
-const (
-	defaultUIDSize = 8
-)
-
 type (
 	// Repo is a courier repository
 	Repo interface {
@@ -86,7 +82,7 @@ func (r *repo) NewLink(creatorid, linkid, url string) *LinkModel {
 
 // NewLinkAuto creates a new courier model with the link id randomly generated
 func (r *repo) NewLinkAuto(creatorid, url string) (*LinkModel, error) {
-	mUID, err := uid.New(defaultUIDSize)
+	mUID, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

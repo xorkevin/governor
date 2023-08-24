@@ -58,10 +58,10 @@ func (s *NatsService) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("hbmaxfail", 3)
 }
 
-func (s *NatsService) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *NatsService) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
-	s.clientname = r.Config().Hostname + "-" + r.Config().Instance
+	s.clientname = r.Config().Instance
 
 	s.addr = fmt.Sprintf("%s:%s", r.GetStr("host"), r.GetStr("port"))
 	var err error

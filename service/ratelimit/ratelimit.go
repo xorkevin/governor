@@ -80,8 +80,8 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 	})
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 
 	if err := r.Unmarshal("params.base", &s.paramsBase); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse base ratelimit params")

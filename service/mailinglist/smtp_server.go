@@ -26,7 +26,6 @@ import (
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/org"
 	"xorkevin.dev/governor/util/rank"
-	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -136,13 +135,8 @@ var (
 
 type smtpBackend struct {
 	service  *Service
-	instance string
 	log      *klog.LevelLogger
 	reqcount *atomic.Uint32
-}
-
-func (s *smtpBackend) lreqID() string {
-	return s.instance + "-" + uid.ReqID(s.reqcount.Add(1))
 }
 
 func (s *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
@@ -225,7 +219,7 @@ func (s *smtpSession) Mail(from string, opts *smtp.MailOptions) error {
 		klog.AString("smtp.cmd", "mail"),
 		klog.AString("smtp.mailfrom", from),
 	)
-	id := s.be.lreqID()
+	id := s.be.service.tracer.LReqID()
 	ctx = klog.CtxWithAttrs(ctx,
 		klog.AString("reqid", id),
 	)

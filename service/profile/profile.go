@@ -63,11 +63,11 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 
 	sr := s.router()
-	sr.mountProfileRoutes(m)
+	sr.mountProfileRoutes(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }

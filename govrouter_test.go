@@ -28,10 +28,10 @@ type (
 func (s *testServiceB) Register(r ConfigRegistrar) {
 }
 
-func (s *testServiceB) Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error {
-	s.log = klog.NewLevelLogger(l)
+func (s *testServiceB) Init(ctx context.Context, r ConfigReader, kit ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 
-	m = m.Group("", func(next http.Handler) http.Handler {
+	m := kit.Router.Group("", func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Common", "common")
 			next.ServeHTTP(w, r)

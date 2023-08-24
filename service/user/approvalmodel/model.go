@@ -15,10 +15,6 @@ import (
 
 //go:generate forge model
 
-const (
-	keySize = 16
-)
-
 type (
 	// Repo is an approval repository
 	Repo interface {
@@ -111,7 +107,7 @@ func (r *repo) ValidateCode(code string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashCode(m *Model) (string, error) {
-	codebytes, err := uid.New(keySize)
+	codebytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new user code")
 	}

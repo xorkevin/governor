@@ -12,7 +12,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,7 +19,6 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zlib"
 	"github.com/klauspost/compress/zstd"
-	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -163,19 +161,14 @@ func (w *govResponseWriter) isWS() bool {
 
 type (
 	middlewareReqLogger struct {
-		s        *Server
-		reqcount *atomic.Uint32
-		next     http.Handler
+		s    *Server
+		next http.Handler
 	}
 )
 
-func (m *middlewareReqLogger) lreqID() string {
-	return m.s.settings.config.Instance + "-" + uid.ReqID(m.reqcount.Add(1))
-}
-
 func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := NewContext(w, r, m.s.log.Logger)
-	lreqid := m.lreqID()
+	lreqid := m.s.tracer.LReqID()
 	setCtxLocalReqID(c, lreqid)
 	var realip string
 	if ip := c.RealIP(); ip != nil {
@@ -219,9 +212,8 @@ func (m *middlewareReqLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) reqLoggerMiddleware(next http.Handler) http.Handler {
 	return &middlewareReqLogger{
-		s:        s,
-		reqcount: &atomic.Uint32{},
-		next:     next,
+		s:    s,
+		next: next,
 	}
 }
 

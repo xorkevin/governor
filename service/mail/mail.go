@@ -34,10 +34,6 @@ import (
 )
 
 const (
-	mailUIDRandSize = 8
-)
-
-const (
 	mailEventKindMail = "mail"
 	mailEventKindGC   = "gc"
 )
@@ -149,6 +145,7 @@ type (
 		streamAlgs  h2streamcipher.Algs
 		config      governor.ConfigReader
 		log         *klog.LevelLogger
+		tracer      governor.Tracer
 		streamns    string
 		streammail  string
 		host        string
@@ -220,8 +217,9 @@ type (
 	}
 )
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 	s.config = r
 
 	s.host = r.GetStr("host")
@@ -375,13 +373,13 @@ func (s *Service) Start(ctx context.Context) error {
 	go events.NewWatcher(
 		s.events,
 		s.log.Logger,
+		s.tracer,
 		s.streammail,
 		s.streamns+".worker",
 		events.ConsumerOpts{},
 		events.HandlerFunc(s.mailEventHandler),
 		nil,
 		0,
-		s.config.Config().Instance,
 	).Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to mail stream")
 	return nil
@@ -791,11 +789,11 @@ func (s *Service) gcHandler(ctx context.Context, msgdata []byte) error {
 }
 
 func genMsgID(msgiddomain string) (string, error) {
-	u, err := uid.NewSnowflake(mailUIDRandSize)
+	u, err := uid.New()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to generate mail msg id")
 	}
-	return fmt.Sprintf("%s@%s", u.Base32(), msgiddomain), nil
+	return fmt.Sprintf("%s@%s", u.Base64(), msgiddomain), nil
 }
 
 // SendTpl creates and sends a message given a template and data
@@ -809,11 +807,11 @@ func (s *Service) SendTpl(ctx context.Context, retpath string, from Addr, to []A
 		return err
 	}
 
-	u, err := uid.NewSnowflake(mailUIDRandSize)
+	u, err := uid.New()
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
 	}
-	path := u.Base32()
+	path := u.Base64()
 
 	databytes, err := kjson.Marshal(emdata)
 	if err != nil {
@@ -876,11 +874,11 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 		return err
 	}
 
-	u, err := uid.NewSnowflake(mailUIDRandSize)
+	u, err := uid.New()
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
 	}
-	path := u.Base32()
+	path := u.Base64()
 
 	contentType := mediaTypeTextPlain
 
@@ -975,11 +973,11 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 		return kerrors.WithKind(nil, ErrInvalidMail, "Email must have at least one recipient")
 	}
 
-	u, err := uid.NewSnowflake(mailUIDRandSize)
+	u, err := uid.New()
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to generate mail body obj id")
 	}
-	path := u.Base32()
+	path := u.Base64()
 
 	contentType := mediaTypeTextPlain
 

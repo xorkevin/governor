@@ -12,10 +12,6 @@ import (
 
 //go:generate forge model
 
-const (
-	msgUIDRandSize = 8
-)
-
 type (
 	Repo interface {
 		New(chatid string, userid string, kind string, value string) (*Model, error)
@@ -59,13 +55,13 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(chatid string, userid string, kind string, value string) (*Model, error) {
-	u, err := uid.NewSnowflake(msgUIDRandSize)
+	u, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}
 	return &Model{
 		Chatid: chatid,
-		Msgid:  u.Base32(),
+		Msgid:  u.Base64(),
 		Userid: userid,
 		Timems: time.Now().Round(0).UnixMilli(),
 		Kind:   kind,

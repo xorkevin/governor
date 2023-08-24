@@ -80,8 +80,8 @@ func (s *testServiceA) Register(r ConfigRegistrar) {
 	r.SetDefault("prop2", "anothervalue")
 }
 
-func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error {
-	s.log = klog.NewLevelLogger(l)
+func (s *testServiceA) Init(ctx context.Context, r ConfigReader, kit ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 
 	if r.Config().Hostname == "" {
 		return kerrors.WithMsg(nil, "Invalid hostname")
@@ -168,7 +168,7 @@ func (s *testServiceA) Init(ctx context.Context, r ConfigReader, l klog.Logger, 
 		return kerrors.WithMsg(err, "Invalid propobj")
 	}
 
-	m = m.GroupCtx("", func(next RouteHandler) RouteHandler {
+	m := kit.Router.GroupCtx("", func(next RouteHandler) RouteHandler {
 		return RouteHandlerFunc(func(c *Context) {
 			c.AddHeader("Test-Custom-Header", "test-header-val")
 			c.AddHeader("Test-Custom-Header", "another-header-val")

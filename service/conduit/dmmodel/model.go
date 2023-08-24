@@ -15,10 +15,6 @@ import (
 
 //go:generate forge model
 
-const (
-	chatUIDSize = 16
-)
-
 type (
 	Repo interface {
 		New(userid1, userid2 string) (*Model, error)
@@ -90,7 +86,7 @@ func tupleSort(a, b string) (string, string) {
 // New creates new dm
 func (r *repo) New(userid1, userid2 string) (*Model, error) {
 	userid1, userid2 = tupleSort(userid1, userid2)
-	u, err := uid.New(chatUIDSize)
+	u, err := uid.New()
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create new uid")
 	}

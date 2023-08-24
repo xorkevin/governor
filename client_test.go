@@ -38,10 +38,10 @@ type (
 func (s *testServiceC) Register(r ConfigRegistrar) {
 }
 
-func (s *testServiceC) Init(ctx context.Context, r ConfigReader, l klog.Logger, m Router) error {
-	s.log = klog.NewLevelLogger(l)
+func (s *testServiceC) Init(ctx context.Context, r ConfigReader, kit ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
 
-	m1 := NewMethodRouter(m)
+	m1 := NewMethodRouter(kit.Router)
 	m1.AnyCtx("/echo", s.echo)
 	m1.AnyCtx("/fail", s.fail)
 	return nil

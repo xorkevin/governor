@@ -149,7 +149,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create signer")
 	}
-	u, err := uid.NewSnowflake(8)
+	u, err := uid.New()
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to generate token id")
 	}
@@ -162,7 +162,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Expiry:    jwt.NewNumericDate(now.Add(expire)),
-			ID:        u.Base32(),
+			ID:        u.Base64(),
 		},
 		Kind:     KindSystem,
 		AuthTime: now.Unix(),

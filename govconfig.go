@@ -230,10 +230,6 @@ func (e errVault) Error() string {
 	return "Failed vault request"
 }
 
-const (
-	instanceIDRandSize = 8
-)
-
 func (s *settings) init(ctx context.Context, flags Flags) error {
 	if flags.ConfigFile != "" {
 		s.v.SetConfigFile(flags.ConfigFile)
@@ -244,11 +240,11 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to get hostname")
 	}
-	u, err := uid.NewSnowflake(instanceIDRandSize)
+	u, err := uid.NewRandSnowflake()
 	if err != nil {
 		return err
 	}
-	s.config.Instance = u.Base32()
+	s.config.Instance = u.Base64()
 
 	if s.configReader != nil {
 		s.v.SetConfigType("json")

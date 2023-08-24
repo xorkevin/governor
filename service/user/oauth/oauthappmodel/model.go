@@ -14,11 +14,6 @@ import (
 
 //go:generate forge model
 
-const (
-	uidSize = 16
-	keySize = 32
-)
-
 type (
 	// Repo is an OAuth app repository
 	Repo interface {
@@ -89,13 +84,13 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(name, url, redirectURI, creatorID string) (*Model, string, error) {
-	mUID, err := uid.New(uidSize)
+	mUID, err := uid.New()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new uid")
 	}
 	clientid := mUID.Base64()
 
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}
@@ -127,7 +122,7 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create oauth client secret")
 	}

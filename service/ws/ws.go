@@ -30,8 +30,8 @@ type (
 		pubsub      pubsub.Pubsub
 		ratelimiter ratelimit.Ratelimiter
 		gate        gate.Gate
-		config      governor.ConfigReader
 		log         *klog.LevelLogger
+		tracer      governor.Tracer
 		rolens      string
 		scopens     string
 		channelns   string
@@ -108,12 +108,12 @@ func (s *Service) router() *router {
 	}
 }
 
-func (s *Service) Init(ctx context.Context, r governor.ConfigReader, log klog.Logger, m governor.Router) error {
-	s.log = klog.NewLevelLogger(log)
-	s.config = r
+func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	s.log = klog.NewLevelLogger(kit.Logger)
+	s.tracer = kit.Tracer
 
 	sr := s.router()
-	sr.mountRoutes(m)
+	sr.mountRoutes(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
@@ -182,24 +182,24 @@ func decodeReqMsg(b []byte) (string, string, []byte, error) {
 
 func (s *Service) WatchPresence(location, group string, handler PresenceHandlerFunc) *pubsub.Watcher {
 	presenceChannel := presenceChannelName(s.opts.PresenceChannel, location)
-	return pubsub.NewWatcher(s.pubsub, s.log.Logger, presenceChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
+	return pubsub.NewWatcher(s.pubsub, s.log.Logger, s.tracer, presenceChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
 		var props PresenceEventProps
 		if err := kjson.Unmarshal(m.Data, &props); err != nil {
 			return kerrors.WithMsg(err, "Invalid presence message")
 		}
 		return handler(ctx, props)
-	}), s.config.Config().Instance)
+	}))
 }
 
 func (s *Service) Watch(subject, group string, handler HandlerFunc) *pubsub.Watcher {
 	svcChannel := serviceChannelName(s.opts.UserRcvChannelPrefix, subject)
-	return pubsub.NewWatcher(s.pubsub, s.log.Logger, svcChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
+	return pubsub.NewWatcher(s.pubsub, s.log.Logger, s.tracer, svcChannel, group, pubsub.HandlerFunc(func(ctx context.Context, m pubsub.Msg) error {
 		channel, userid, v, err := decodeReqMsg(m.Data)
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed decoding request message")
 		}
 		return handler(ctx, channel, userid, v)
-	}), s.config.Config().Instance)
+	}))
 }
 
 func (s *Service) Publish(ctx context.Context, userid string, channel string, v interface{}) error {

@@ -16,11 +16,6 @@ import (
 //go:generate forge model
 
 const (
-	uidSize = 8
-	keySize = 32
-)
-
-const (
 	keySeparator = "."
 )
 
@@ -90,11 +85,11 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(userid string, scope string, name, desc string) (*Model, string, error) {
-	aid, err := uid.New(uidSize)
+	aid, err := uid.NewRandSnowflake()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new api key id")
 	}
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
@@ -133,7 +128,7 @@ func (r *repo) ValidateKey(key string, m *Model) (bool, error) {
 }
 
 func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
-	keybytes, err := uid.New(keySize)
+	keybytes, err := uid.NewKey()
 	if err != nil {
 		return "", kerrors.WithMsg(err, "Failed to create new api key")
 	}
