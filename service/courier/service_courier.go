@@ -3,16 +3,12 @@ package courier
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/barcode"
 	"xorkevin.dev/governor/service/courier/couriermodel"
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -74,28 +70,6 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 	return res.URL, nil
 }
 
-func (s *Service) statLinkImage(ctx context.Context, linkid string) (*objstore.ObjectInfo, error) {
-	objinfo, err := s.linkImgDir.Stat(ctx, linkid)
-	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound) {
-			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Link qr code image not found")
-		}
-		return nil, kerrors.WithMsg(err, "Failed to get link qr code image")
-	}
-	return objinfo, nil
-}
-
-func (s *Service) getLinkImage(ctx context.Context, linkid string) (io.ReadCloser, string, error) {
-	qrimg, objinfo, err := s.linkImgDir.Get(ctx, linkid)
-	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound) {
-			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Link qr code image not found")
-		}
-		return nil, "", kerrors.WithMsg(err, "Failed to get link qr code image")
-	}
-	return qrimg, objinfo.ContentType, nil
-}
-
 type (
 	resLinkGroup struct {
 		Links []resGetLink `json:"links"`
@@ -131,7 +105,7 @@ type (
 	}
 )
 
-func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandid string) (*resCreateLink, error) {
+func (s *Service) createLink(ctx context.Context, creatorid, linkid, url string) (*resCreateLink, error) {
 	var m *couriermodel.LinkModel
 	if len(linkid) == 0 {
 		var err error
@@ -143,57 +117,11 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url, brandi
 		m = s.repo.NewLink(creatorid, linkid, url)
 	}
 
-	var brand image.Image
-	if brandid != "" {
-		if err := func() (retErr error) {
-			brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(ctx, brandid)
-			if err != nil {
-				return kerrors.WithMsg(err, "Failed to get brand image")
-			}
-			defer func() {
-				if err := brandimg.Close(); err != nil {
-					retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to close brand image"))
-				}
-			}()
-			if objinfo.ContentType != image.MediaTypePng {
-				return kerrors.WithMsg(err, "Invalid brand image media type")
-			}
-			brand, err = image.FromPng(brandimg)
-			if err != nil {
-				return kerrors.WithMsg(err, "Failed to parse brand image")
-			}
-			return nil
-		}(); err != nil {
-			return nil, err
-		}
-	}
-
-	qrimg, err := barcode.GenerateQR(s.linkPrefix+"/"+m.LinkID, barcode.QRECHigh, qrScale)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to generate qr code image")
-	}
-
-	if brand != nil {
-		size := qrimg.Size()
-		w := size.W / 3
-		h := size.H / 3
-		brand.ResizeFit(w, h)
-		qrimg.Draw(brand, w, h, true)
-	}
-
-	qrpng, err := qrimg.ToPng(image.PngBest)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to encode qr code image")
-	}
-
 	if err := s.repo.InsertLink(ctx, m); err != nil {
 		if errors.Is(err, db.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Link id already taken")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create link")
-	}
-	if err := s.linkImgDir.Put(ctx, m.LinkID, image.MediaTypePng, int64(qrpng.Len()), nil, qrpng); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to save qr code image")
 	}
 
 	return &resCreateLink{
@@ -212,11 +140,6 @@ func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) erro
 	if m.CreatorID != creatorid {
 		return governor.ErrWithRes(nil, http.StatusNotFound, "", "Link not found")
 	}
-	if err := s.linkImgDir.Del(ctx, linkid); err != nil {
-		if !errors.Is(err, objstore.ErrNotFound) {
-			return kerrors.WithMsg(err, "Failed to delete qr code image")
-		}
-	}
 	if err := s.repo.DeleteLink(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete link")
 	}
@@ -226,106 +149,6 @@ func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) erro
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete linkid url"),
 			klog.AString("linkid", linkid),
 		)
-	}
-	return nil
-}
-
-type (
-	resGetBrand struct {
-		BrandID      string `json:"brandid"`
-		CreatorID    string `json:"creatorid"`
-		CreationTime int64  `json:"creation_time"`
-	}
-
-	resBrandGroup struct {
-		Brands []resGetBrand `json:"brands"`
-	}
-)
-
-func (s *Service) getBrandGroup(ctx context.Context, creatorid string, limit, offset int) (*resBrandGroup, error) {
-	brands, err := s.repo.GetBrandGroup(ctx, creatorid, limit, offset)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get links")
-	}
-	res := make([]resGetBrand, 0, len(brands))
-	for _, i := range brands {
-		res = append(res, resGetBrand{
-			BrandID:      i.BrandID,
-			CreatorID:    i.CreatorID,
-			CreationTime: i.CreationTime,
-		})
-	}
-	return &resBrandGroup{
-		Brands: res,
-	}, nil
-}
-
-func (s *Service) statBrandImage(ctx context.Context, creatorid, brandid string) (*objstore.ObjectInfo, error) {
-	objinfo, err := s.brandImgDir.Subdir(creatorid).Stat(ctx, brandid)
-	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound) {
-			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
-		}
-		return nil, kerrors.WithMsg(err, "Failed to get brand image")
-	}
-	return objinfo, nil
-}
-
-func (s *Service) getBrandImage(ctx context.Context, creatorid, brandid string) (io.ReadCloser, string, error) {
-	brandimg, objinfo, err := s.brandImgDir.Subdir(creatorid).Get(ctx, brandid)
-	if err != nil {
-		if errors.Is(err, objstore.ErrNotFound) {
-			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
-		}
-		return nil, "", kerrors.WithMsg(err, "Failed to get brand image")
-	}
-	return brandimg, objinfo.ContentType, nil
-}
-
-type (
-	resCreateBrand struct {
-		CreatorID string `json:"creatorid"`
-		BrandID   string `json:"brandid"`
-	}
-)
-
-func (s *Service) createBrand(ctx context.Context, creatorid, brandid string, img image.Image) (*resCreateBrand, error) {
-	m := s.repo.NewBrand(creatorid, brandid)
-	if err := s.repo.InsertBrand(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
-			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Brand name must be unique")
-		}
-		return nil, kerrors.WithMsg(err, "Failed to create brand")
-	}
-	img.ResizeFill(256, 256)
-	imgpng, err := img.ToPng(image.PngBest)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to encode png image")
-	}
-	if err := s.brandImgDir.Subdir(creatorid).Put(ctx, m.BrandID, image.MediaTypePng, int64(imgpng.Len()), nil, imgpng); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to save image")
-	}
-	return &resCreateBrand{
-		CreatorID: creatorid,
-		BrandID:   brandid,
-	}, nil
-}
-
-func (s *Service) deleteBrand(ctx context.Context, creatorid, brandid string) error {
-	m, err := s.repo.GetBrand(ctx, creatorid, brandid)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			return governor.ErrWithRes(err, http.StatusNotFound, "", "Brand image not found")
-		}
-		return kerrors.WithMsg(err, "Failed to delete brand")
-	}
-	if err := s.brandImgDir.Del(ctx, brandid); err != nil {
-		if !errors.Is(err, objstore.ErrNotFound) {
-			return kerrors.WithMsg(err, "Failed to delete brand image")
-		}
-	}
-	if err := s.repo.DeleteBrand(ctx, m); err != nil {
-		return err
 	}
 	return nil
 }

@@ -22,19 +22,12 @@ type (
 		InsertLink(ctx context.Context, m *LinkModel) error
 		DeleteLink(ctx context.Context, m *LinkModel) error
 		DeleteLinks(ctx context.Context, linkids []string) error
-		NewBrand(creatorid, brandid string) *BrandModel
-		GetBrandGroup(ctx context.Context, creatorid string, limit, offset int) ([]BrandModel, error)
-		GetBrand(ctx context.Context, creatorid, brandid string) (*BrandModel, error)
-		InsertBrand(ctx context.Context, m *BrandModel) error
-		DeleteBrand(ctx context.Context, m *BrandModel) error
-		DeleteBrands(ctx context.Context, creatorid string, brandids []string) error
 		Setup(ctx context.Context) error
 	}
 
 	repo struct {
-		tableLinks  *linkModelTable
-		tableBrands *brandModelTable
-		db          db.Database
+		tableLinks *linkModelTable
+		db         db.Database
 	}
 
 	// LinkModel is the db link model
@@ -46,15 +39,6 @@ type (
 		CreatorID    string `model:"creatorid,VARCHAR(31) NOT NULL"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
-
-	// BrandModel is the db brand model
-	//forge:model brand
-	//forge:model:query brand
-	BrandModel struct {
-		CreatorID    string `model:"creatorid,VARCHAR(31)"`
-		BrandID      string `model:"brandid,VARCHAR(63)"`
-		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
-	}
 )
 
 // New creates a new courier repo
@@ -62,9 +46,6 @@ func New(database db.Database, tableLinks, tableBrands string) Repo {
 	return &repo{
 		tableLinks: &linkModelTable{
 			TableName: tableLinks,
-		},
-		tableBrands: &brandModelTable{
-			TableName: tableBrands,
 		},
 		db: database,
 	}
@@ -156,82 +137,6 @@ func (r *repo) DeleteLinks(ctx context.Context, linkids []string) error {
 	return nil
 }
 
-// NewBrand creates a new brand model
-func (r *repo) NewBrand(creatorid, brandid string) *BrandModel {
-	return &BrandModel{
-		CreatorID:    creatorid,
-		BrandID:      brandid,
-		CreationTime: time.Now().Round(0).Unix(),
-	}
-}
-
-// GetBrandGroup gets a list of brands ordered by creation time
-func (r *repo) GetBrandGroup(ctx context.Context, creatorid string, limit, offset int) ([]BrandModel, error) {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	m, err := r.tableBrands.GetBrandModelByCreator(ctx, d, creatorid, limit, offset)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get brands")
-	}
-	return m, nil
-}
-
-// GetBrand returns a brand model with the given id
-func (r *repo) GetBrand(ctx context.Context, creatorid, brandid string) (*BrandModel, error) {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m, err := r.tableBrands.GetBrandModelByCreatorBrand(ctx, d, creatorid, brandid)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get brand")
-	}
-	return m, nil
-}
-
-// InsertBrand adds a brand to the db
-func (r *repo) InsertBrand(ctx context.Context, m *BrandModel) error {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.tableBrands.Insert(ctx, d, m); err != nil {
-		return kerrors.WithMsg(err, "Failed to insert brand")
-	}
-	return nil
-}
-
-// DeleteBrand removes a brand from the db
-func (r *repo) DeleteBrand(ctx context.Context, m *BrandModel) error {
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.tableBrands.DelByCreatorBrand(ctx, d, m.CreatorID, m.BrandID); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete brand")
-	}
-	return nil
-}
-
-// DeleteBrands removes brands from the db
-func (r *repo) DeleteBrands(ctx context.Context, creatorid string, brandids []string) error {
-	if len(brandids) == 0 {
-		return nil
-	}
-
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.tableBrands.DelByCreatorBrands(ctx, d, creatorid, brandids); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete brands")
-	}
-	return nil
-}
-
 // Setup creates new Courier tables
 func (r *repo) Setup(ctx context.Context) error {
 	d, err := r.db.DB(ctx)
@@ -240,12 +145,6 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.tableLinks.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup link model")
-		if !errors.Is(err, db.ErrAuthz) {
-			return err
-		}
-	}
-	if err := r.tableBrands.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup brand model")
 		if !errors.Is(err, db.ErrAuthz) {
 			return err
 		}

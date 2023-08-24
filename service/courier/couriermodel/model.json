@@ -35,44 +35,6 @@
           }
         ]
       }
-    },
-    "brand": {
-      "model": {
-        "constraints": [
-          {
-            "kind": "PRIMARY KEY",
-            "columns": ["creatorid", "brandid"]
-          }
-        ]
-      },
-      "queries": {
-        "BrandModel": [
-          {
-            "kind": "getoneeq",
-            "name": "ByCreatorBrand",
-            "conditions": [{"col": "creatorid"}, {"col": "brandid"}]
-          },
-          {
-            "kind": "deleq",
-            "name": "ByCreatorBrand",
-            "conditions": [{"col": "creatorid"}, {"col": "brandid"}]
-          },
-          {
-            "kind": "deleq",
-            "name": "ByCreatorBrands",
-            "conditions": [
-              {"col": "creatorid"},
-              {"col": "brandid", "cond": "in"}
-            ]
-          },
-          {
-            "kind": "getgroupeq",
-            "name": "ByCreator",
-            "conditions": [{"col": "creatorid"}],
-            "order": [{"col": "brandid"}]
-          }
-        ]
-      }
     }
   }
 }

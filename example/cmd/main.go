@@ -134,7 +134,6 @@ func main() {
 	gov.Register("courier", "/courier", courier.New(
 		couriermodel.New(d, "courierlinks", "courierbrands"),
 		kv.Subtree("courier"),
-		obj.GetBucket("link-qr-image"),
 		usersvc,
 		orgsvc,
 		ratelim.Subtree("courier"),

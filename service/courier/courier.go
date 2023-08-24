@@ -2,14 +2,12 @@ package courier
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/courier/couriermodel"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
@@ -27,9 +25,6 @@ type (
 	Service struct {
 		repo          couriermodel.Repo
 		kvlinks       kvstore.KVStore
-		courierBucket objstore.Bucket
-		linkImgDir    objstore.Dir
-		brandImgDir   objstore.Dir
 		users         user.Users
 		orgs          org.Orgs
 		ratelimiter   ratelimit.Ratelimiter
@@ -53,23 +48,19 @@ type (
 func New(
 	repo couriermodel.Repo,
 	kv kvstore.KVStore,
-	obj objstore.Bucket,
 	users user.Users,
 	orgs org.Orgs,
 	ratelimiter ratelimit.Ratelimiter,
 	g gate.Gate,
 ) *Service {
 	return &Service{
-		repo:          repo,
-		kvlinks:       kv.Subtree("links"),
-		courierBucket: obj,
-		linkImgDir:    obj.Subdir("qr"),
-		brandImgDir:   obj.Subdir("brand"),
-		users:         users,
-		orgs:          orgs,
-		ratelimiter:   ratelimiter,
-		gate:          g,
-		wg:            ksync.NewWaitGroup(),
+		repo:        repo,
+		kvlinks:     kv.Subtree("links"),
+		users:       users,
+		orgs:        orgs,
+		ratelimiter: ratelimiter,
+		gate:        g,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
@@ -145,11 +136,6 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 		return err
 	}
 	s.log.Info(ctx, "Created courierlinks table")
-
-	if err := s.courierBucket.Init(ctx); err != nil {
-		return kerrors.WithMsg(err, "Failed to init courier bucket")
-	}
-	s.log.Info(ctx, "Created courier bucket")
 	return nil
 }
 
@@ -198,11 +184,6 @@ func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid strin
 		}
 		linkids := make([]string, 0, len(links.Links))
 		for _, i := range links.Links {
-			if err := s.linkImgDir.Del(ctx, i.LinkID); err != nil {
-				if !errors.Is(err, objstore.ErrNotFound) {
-					return kerrors.WithMsg(err, "Failed to delete qr code image")
-				}
-			}
 			linkids = append(linkids, i.LinkID)
 		}
 		if err := s.repo.DeleteLinks(ctx, linkids); err != nil {
@@ -214,30 +195,6 @@ func (s *Service) creatorDeleteEventHandler(ctx context.Context, creatorid strin
 			)
 		}
 		if len(linkids) < linkDeleteBatchSize {
-			break
-		}
-	}
-	for {
-		brands, err := s.getBrandGroup(ctx, creatorid, linkDeleteBatchSize, 0)
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to get creator brands")
-		}
-		if len(brands.Brands) == 0 {
-			break
-		}
-		brandids := make([]string, 0, len(brands.Brands))
-		for _, i := range brands.Brands {
-			if err := s.brandImgDir.Del(ctx, i.BrandID); err != nil {
-				if !errors.Is(err, objstore.ErrNotFound) {
-					return kerrors.WithMsg(err, "Failed to delete brand image")
-				}
-			}
-			brandids = append(brandids, i.BrandID)
-		}
-		if err := s.repo.DeleteBrands(ctx, creatorid, brandids); err != nil {
-			return kerrors.WithMsg(err, "Failed to delete brands")
-		}
-		if len(brandids) < linkDeleteBatchSize {
 			break
 		}
 	}
