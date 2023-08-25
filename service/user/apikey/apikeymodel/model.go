@@ -3,7 +3,6 @@ package apikeymodel
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"xorkevin.dev/governor/service/db"
@@ -14,10 +13,6 @@ import (
 )
 
 //go:generate forge model
-
-const (
-	keySeparator = "."
-)
 
 type (
 	// Repo is an apikey repository
@@ -85,7 +80,7 @@ func New(database db.Database, table string) Repo {
 }
 
 func (r *repo) New(userid string, scope string, name, desc string) (*Model, string, error) {
-	aid, err := uid.NewRandSnowflake()
+	aid, err := uid.New()
 	if err != nil {
 		return nil, "", kerrors.WithMsg(err, "Failed to create new api key id")
 	}
@@ -100,7 +95,7 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 	}
 	now := time.Now().Round(0).Unix()
 	return &Model{
-		Keyid:   userid + keySeparator + aid.Base64(),
+		Keyid:   aid.Base64(),
 		Userid:  userid,
 		Scope:   scope,
 		KeyHash: hash,
@@ -108,15 +103,6 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 		Desc:    desc,
 		Time:    now,
 	}, key, nil
-}
-
-// ParseIDUserid gets the userid from a keyid
-func ParseIDUserid(keyid string) (string, error) {
-	userid, _, ok := strings.Cut(keyid, keySeparator)
-	if !ok {
-		return "", kerrors.WithMsg(nil, "Invalid apikey format")
-	}
-	return userid, nil
 }
 
 func (r *repo) ValidateKey(key string, m *Model) (bool, error) {

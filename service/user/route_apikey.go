@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"
@@ -74,14 +73,6 @@ type (
 	}
 )
 
-func (r *reqApikeyID) validUserid() error {
-	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
-	if err != nil || r.Userid != userid {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid apikey id")
-	}
-	return nil
-}
-
 func (s *router) deleteApikey(c *governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
@@ -91,11 +82,7 @@ func (s *router) deleteApikey(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.validUserid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	if err := s.s.deleteApikey(c.Ctx(), req.Keyid); err != nil {
+	if err := s.s.deleteApikey(c.Ctx(), req.Userid, req.Keyid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -113,14 +100,6 @@ type (
 	}
 )
 
-func (r *reqApikeyUpdate) validUserid() error {
-	userid, err := apikeymodel.ParseIDUserid(r.Keyid)
-	if err != nil || r.Userid != userid {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid apikey id")
-	}
-	return nil
-}
-
 func (s *router) updateApikey(c *governor.Context) {
 	var req reqApikeyUpdate
 	if err := c.Bind(&req, false); err != nil {
@@ -133,11 +112,7 @@ func (s *router) updateApikey(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.validUserid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	if err := s.s.updateApikey(c.Ctx(), req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
+	if err := s.s.updateApikey(c.Ctx(), req.Userid, req.Keyid, req.Scope, req.Name, req.Desc); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -153,11 +128,7 @@ func (s *router) rotateApikey(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.validUserid(); err != nil {
-		c.WriteError(err)
-		return
-	}
-	res, err := s.s.rotateApikey(c.Ctx(), req.Keyid)
+	res, err := s.s.rotateApikey(c.Ctx(), req.Userid, req.Keyid)
 	if err != nil {
 		c.WriteError(err)
 		return

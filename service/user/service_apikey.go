@@ -62,8 +62,8 @@ func (s *Service) createApikey(ctx context.Context, userid string, scope string,
 	}, nil
 }
 
-func (s *Service) rotateApikey(ctx context.Context, keyid string) (*resApikeyModel, error) {
-	m, err := s.apikeys.RotateKey(ctx, keyid)
+func (s *Service) rotateApikey(ctx context.Context, userid string, keyid string) (*resApikeyModel, error) {
+	m, err := s.apikeys.RotateKey(ctx, userid, keyid)
 	if err != nil {
 		if errors.Is(err, apikey.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
@@ -76,8 +76,8 @@ func (s *Service) rotateApikey(ctx context.Context, keyid string) (*resApikeyMod
 	}, nil
 }
 
-func (s *Service) updateApikey(ctx context.Context, keyid string, scope string, name, desc string) error {
-	if err := s.apikeys.UpdateKey(ctx, keyid, scope, name, desc); err != nil {
+func (s *Service) updateApikey(ctx context.Context, userid string, keyid string, scope string, name, desc string) error {
+	if err := s.apikeys.UpdateKey(ctx, userid, keyid, scope, name, desc); err != nil {
 		if errors.Is(err, apikey.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}
@@ -86,8 +86,8 @@ func (s *Service) updateApikey(ctx context.Context, keyid string, scope string, 
 	return nil
 }
 
-func (s *Service) deleteApikey(ctx context.Context, keyid string) error {
-	if err := s.apikeys.DeleteKey(ctx, keyid); err != nil {
+func (s *Service) deleteApikey(ctx context.Context, userid string, keyid string) error {
+	if err := s.apikeys.DeleteKey(ctx, userid, keyid); err != nil {
 		if errors.Is(err, apikey.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Apikey not found")
 		}

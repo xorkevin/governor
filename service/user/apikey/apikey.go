@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -21,25 +20,23 @@ type (
 		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error)
 		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
 		Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
-		RotateKey(ctx context.Context, keyid string) (*ResApikeyModel, error)
-		UpdateKey(ctx context.Context, keyid string, scope string, name, desc string) error
-		DeleteKey(ctx context.Context, keyid string) error
+		RotateKey(ctx context.Context, userid string, keyid string) (*ResApikeyModel, error)
+		UpdateKey(ctx context.Context, userid string, keyid string, scope string, name, desc string) error
+		DeleteKey(ctx context.Context, userid string, keyid string) error
 		DeleteKeys(ctx context.Context, keyids []string) error
 	}
 
 	Service struct {
 		apikeys            apikeymodel.Repo
-		kvkey              kvstore.KVStore
 		log                *klog.LevelLogger
 		scopeCacheDuration time.Duration
 	}
 )
 
 // New returns a new Apikeys service
-func New(apikeys apikeymodel.Repo, kv kvstore.KVStore) *Service {
+func New(apikeys apikeymodel.Repo) *Service {
 	return &Service{
 		apikeys: apikeys,
-		kvkey:   kv.Subtree("key"),
 	}
 }
 

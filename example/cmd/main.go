@@ -79,7 +79,7 @@ func main() {
 	gov.Register("ratelimit", "/null/ratelimit", ratelim)
 	rolesvc := role.New(rolemodel.New(d, "userroles"), kv.Subtree("roles"), ev)
 	gov.Register("role", "/null/role", rolesvc)
-	apikeysvc := apikey.New(apikeymodel.New(d, "userapikeys"), kv.Subtree("apikeys"))
+	apikeysvc := apikey.New(apikeymodel.New(d, "userapikeys"))
 	gov.Register("apikey", "/null/apikey", apikeysvc)
 	tokensvc := token.New()
 	gov.Register("token", "/null/token", tokensvc)
