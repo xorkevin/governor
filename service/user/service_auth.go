@@ -93,7 +93,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	sessionExists := false
 	var sm *sessionmodel.Model
 	if len(sessionID) > 0 {
-		if m, err := s.sessions.GetByID(ctx, sessionID); err != nil {
+		if m, err := s.sessions.GetByID(ctx, userid, sessionID); err != nil {
 			if !errors.Is(err, db.ErrNotFound) {
 				return nil, kerrors.WithMsg(err, "Failed to get user session")
 			}
@@ -249,7 +249,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
 	}
 
-	sm, err := s.sessions.GetByID(ctx, claims.ID)
+	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return &resUserAuth{
@@ -336,7 +336,7 @@ func (s *Service) logout(ctx context.Context, refreshToken string) (string, erro
 		return "", governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
 	}
 
-	sm, err := s.sessions.GetByID(ctx, claims.ID)
+	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid token")

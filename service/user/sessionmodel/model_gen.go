@@ -18,11 +18,7 @@ type (
 )
 
 func (t *sessionModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
-	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (sessionid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, auth_time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023));")
-	if err != nil {
-		return err
-	}
-	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_sessionid_index ON "+t.TableName+" (userid, sessionid);")
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (userid VARCHAR(31), sessionid VARCHAR(63), keyhash VARCHAR(127) NOT NULL, time BIGINT NOT NULL, auth_time BIGINT NOT NULL, ipaddr VARCHAR(63), user_agent VARCHAR(1023), PRIMARY KEY (userid, sessionid));")
 	if err != nil {
 		return err
 	}
@@ -34,7 +30,7 @@ func (t *sessionModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
 }
 
 func (t *sessionModelTable) Insert(ctx context.Context, d sqldb.Executor, m *Model) error {
-	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, sessionid, keyhash, time, auth_time, ipaddr, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Userid, m.SessionID, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
 	if err != nil {
 		return err
 	}
@@ -51,39 +47,40 @@ func (t *sessionModelTable) InsertBulk(ctx context.Context, d sqldb.Executor, mo
 	for c, m := range models {
 		n := c * 7
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
-		args = append(args, m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
+		args = append(args, m.Userid, m.SessionID, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent)
 	}
-	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (userid, sessionid, keyhash, time, auth_time, ipaddr, user_agent) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *sessionModelTable) GetModelByID(ctx context.Context, d sqldb.Executor, sessionid string) (*Model, error) {
+func (t *sessionModelTable) GetModelByUserSession(ctx context.Context, d sqldb.Executor, userid string, sessionid string) (*Model, error) {
 	m := &Model{}
-	if err := d.QueryRowContext(ctx, "SELECT sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent FROM "+t.TableName+" WHERE sessionid = $1;", sessionid).Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT userid, sessionid, keyhash, time, auth_time, ipaddr, user_agent FROM "+t.TableName+" WHERE userid = $1 AND sessionid = $2;", userid, sessionid).Scan(&m.Userid, &m.SessionID, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (t *sessionModelTable) UpdModelByID(ctx context.Context, d sqldb.Executor, m *Model, sessionid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent) = ($1, $2, $3, $4, $5, $6, $7) WHERE sessionid = $8;", m.SessionID, m.Userid, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent, sessionid)
+func (t *sessionModelTable) UpdModelByUserSession(ctx context.Context, d sqldb.Executor, m *Model, userid string, sessionid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (userid, sessionid, keyhash, time, auth_time, ipaddr, user_agent) = ($1, $2, $3, $4, $5, $6, $7) WHERE userid = $8 AND sessionid = $9;", m.Userid, m.SessionID, m.KeyHash, m.Time, m.AuthTime, m.IPAddr, m.UserAgent, userid, sessionid)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *sessionModelTable) DelByID(ctx context.Context, d sqldb.Executor, sessionid string) error {
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sessionid = $1;", sessionid)
+func (t *sessionModelTable) DelByUserSession(ctx context.Context, d sqldb.Executor, userid string, sessionid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND sessionid = $2;", userid, sessionid)
 	return err
 }
 
-func (t *sessionModelTable) DelByIDs(ctx context.Context, d sqldb.Executor, sessionids []string) error {
-	paramCount := 0
+func (t *sessionModelTable) DelByUserSessions(ctx context.Context, d sqldb.Executor, userid string, sessionids []string) error {
+	paramCount := 1
 	args := make([]interface{}, 0, paramCount+len(sessionids))
+	args = append(args, userid)
 	var placeholderssessionids string
 	{
 		placeholders := make([]string, 0, len(sessionids))
@@ -94,7 +91,7 @@ func (t *sessionModelTable) DelByIDs(ctx context.Context, d sqldb.Executor, sess
 		}
 		placeholderssessionids = strings.Join(placeholders, ", ")
 	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE sessionid IN (VALUES "+placeholderssessionids+");", args...)
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND sessionid IN (VALUES "+placeholderssessionids+");", args...)
 	return err
 }
 
@@ -105,7 +102,7 @@ func (t *sessionModelTable) DelByUserid(ctx context.Context, d sqldb.Executor, u
 
 func (t *sessionModelTable) GetModelByUserid(ctx context.Context, d sqldb.Executor, userid string, limit, offset int) (_ []Model, retErr error) {
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT sessionid, userid, keyhash, time, auth_time, ipaddr, user_agent FROM "+t.TableName+" WHERE userid = $3 ORDER BY time DESC LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT userid, sessionid, keyhash, time, auth_time, ipaddr, user_agent FROM "+t.TableName+" WHERE userid = $3 ORDER BY time DESC LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +113,7 @@ func (t *sessionModelTable) GetModelByUserid(ctx context.Context, d sqldb.Execut
 	}()
 	for rows.Next() {
 		var m Model
-		if err := rows.Scan(&m.SessionID, &m.Userid, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
+		if err := rows.Scan(&m.Userid, &m.SessionID, &m.KeyHash, &m.Time, &m.AuthTime, &m.IPAddr, &m.UserAgent); err != nil {
 			return nil, err
 		}
 		res = append(res, m)

@@ -49,8 +49,8 @@ func (s *Service) killCacheSessions(ctx context.Context, sessionids []string) {
 	}
 }
 
-func (s *Service) killSessions(ctx context.Context, sessionids []string) error {
-	if err := s.sessions.DeleteSessions(ctx, sessionids); err != nil {
+func (s *Service) killSessions(ctx context.Context, userid string, sessionids []string) error {
+	if err := s.sessions.DeleteSessions(ctx, userid, sessionids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 	// must make a best effort to remove cached sessions

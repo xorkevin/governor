@@ -5,7 +5,6 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/sessionmodel"
 )
 
 type (
@@ -39,22 +38,9 @@ type (
 	//forge:valid
 	reqUserRmSessions struct {
 		Userid     string   `valid:"userid,has" json:"-"`
-		SessionIDs []string `valid:"sessionIDs" json:"session_ids"`
+		SessionIDs []string `valid:"sessionids" json:"session_ids"`
 	}
 )
-
-func (r *reqUserRmSessions) validUserid() error {
-	for _, i := range r.SessionIDs {
-		userid, err := sessionmodel.ParseIDUserid(i)
-		if err != nil {
-			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid session ids")
-		}
-		if r.Userid != userid {
-			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid session ids")
-		}
-	}
-	return nil
-}
 
 func (s *router) killSessions(c *governor.Context) {
 	var req reqUserRmSessions
@@ -67,12 +53,8 @@ func (s *router) killSessions(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.validUserid(); err != nil {
-		c.WriteError(err)
-		return
-	}
 
-	if err := s.s.killSessions(c.Ctx(), req.SessionIDs); err != nil {
+	if err := s.s.killSessions(c.Ctx(), req.Userid, req.SessionIDs); err != nil {
 		c.WriteError(err)
 		return
 	}

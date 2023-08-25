@@ -3,11 +3,13 @@
   "models": {
     "session": {
       "model": {
-        "indicies": [
+        "constraints": [
           {
-            "name": "userid_sessionid",
-            "columns": [{"col": "userid"}, {"col": "sessionid"}]
-          },
+            "kind": "PRIMARY KEY",
+            "columns": ["userid", "sessionid"]
+          }
+        ],
+        "indicies": [
           {
             "name": "userid_time",
             "columns": [{"col": "userid"}, {"col": "time"}]
@@ -18,23 +20,26 @@
         "Model": [
           {
             "kind": "getoneeq",
-            "name": "ByID",
-            "conditions": [{"col": "sessionid"}]
+            "name": "ByUserSession",
+            "conditions": [{"col": "userid"}, {"col": "sessionid"}]
           },
           {
             "kind": "updeq",
-            "name": "ByID",
-            "conditions": [{"col": "sessionid"}]
+            "name": "ByUserSession",
+            "conditions": [{"col": "userid"}, {"col": "sessionid"}]
           },
           {
             "kind": "deleq",
-            "name": "ByID",
-            "conditions": [{"col": "sessionid"}]
+            "name": "ByUserSession",
+            "conditions": [{"col": "userid"}, {"col": "sessionid"}]
           },
           {
             "kind": "deleq",
-            "name": "ByIDs",
-            "conditions": [{"col": "sessionid", "cond": "in"}]
+            "name": "ByUserSessions",
+            "conditions": [
+              {"col": "userid"},
+              {"col": "sessionid", "cond": "in"}
+            ]
           },
           {
             "kind": "deleq",

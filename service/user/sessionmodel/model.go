@@ -3,7 +3,6 @@ package sessionmodel
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"xorkevin.dev/governor/service/db"
@@ -15,22 +14,18 @@ import (
 
 //go:generate forge model
 
-const (
-	keySeparator = "."
-)
-
 type (
 	// Repo is a user session repository
 	Repo interface {
 		New(userid, ipaddr, useragent string) (*Model, string, error)
 		ValidateKey(key string, m *Model) (bool, error)
 		RehashKey(m *Model) (string, error)
-		GetByID(ctx context.Context, sessionid string) (*Model, error)
+		GetByID(ctx context.Context, userid, sessionid string) (*Model, error)
 		GetUserSessions(ctx context.Context, userid string, limit, offset int) ([]Model, error)
 		Insert(ctx context.Context, m *Model) error
 		Update(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
-		DeleteSessions(ctx context.Context, sessionids []string) error
+		DeleteSessions(ctx context.Context, userid string, sessionids []string) error
 		DeleteUserSessions(ctx context.Context, userid string) error
 		Setup(ctx context.Context) error
 	}
@@ -46,8 +41,8 @@ type (
 	//forge:model session
 	//forge:model:query session
 	Model struct {
-		SessionID string `model:"sessionid,VARCHAR(63) PRIMARY KEY"`
-		Userid    string `model:"userid,VARCHAR(31) NOT NULL"`
+		Userid    string `model:"userid,VARCHAR(31)"`
+		SessionID string `model:"sessionid,VARCHAR(63)"`
 		KeyHash   string `model:"keyhash,VARCHAR(127) NOT NULL"`
 		Time      int64  `model:"time,BIGINT NOT NULL"`
 		AuthTime  int64  `model:"auth_time,BIGINT NOT NULL"`
@@ -89,23 +84,14 @@ func (r *repo) New(userid, ipaddr, useragent string) (*Model, string, error) {
 	}
 	now := time.Now().Round(0).Unix()
 	return &Model{
-		SessionID: userid + keySeparator + sid.Base64(),
 		Userid:    userid,
+		SessionID: sid.Base64(),
 		KeyHash:   hash,
 		Time:      now,
 		AuthTime:  now,
 		IPAddr:    ipaddr,
 		UserAgent: useragent,
 	}, key, nil
-}
-
-// ParseIDUserid gets the userid from a keyid
-func ParseIDUserid(sessionID string) (string, error) {
-	userid, _, ok := strings.Cut(sessionID, keySeparator)
-	if !ok {
-		return "", kerrors.WithMsg(nil, "Invalid session id")
-	}
-	return userid, nil
 }
 
 // ValidateKey validates the key against a hash
@@ -135,12 +121,12 @@ func (r *repo) RehashKey(m *Model) (string, error) {
 }
 
 // GetByID returns a user session model with the given id
-func (r *repo) GetByID(ctx context.Context, sessionID string) (*Model, error) {
+func (r *repo) GetByID(ctx context.Context, userid, sessionid string) (*Model, error) {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, err := r.table.GetModelByID(ctx, d, sessionID)
+	m, err := r.table.GetModelByUserSession(ctx, d, userid, sessionid)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get session")
 	}
@@ -178,7 +164,7 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.UpdModelByID(ctx, d, m, m.SessionID); err != nil {
+	if err := r.table.UpdModelByUserSession(ctx, d, m, m.Userid, m.SessionID); err != nil {
 		return kerrors.WithMsg(err, "Failed to update session")
 	}
 	return nil
@@ -190,14 +176,14 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelByID(ctx, d, m.SessionID); err != nil {
+	if err := r.table.DelByUserSession(ctx, d, m.Userid, m.SessionID); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete session")
 	}
 	return nil
 }
 
 // DeleteSessions deletes the sessions in the set of session ids
-func (r *repo) DeleteSessions(ctx context.Context, sessionids []string) error {
+func (r *repo) DeleteSessions(ctx context.Context, userid string, sessionids []string) error {
 	if len(sessionids) == 0 {
 		return nil
 	}
@@ -205,7 +191,7 @@ func (r *repo) DeleteSessions(ctx context.Context, sessionids []string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelByIDs(ctx, d, sessionids); err != nil {
+	if err := r.table.DelByUserSessions(ctx, d, userid, sessionids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete sessions")
 	}
 	return nil

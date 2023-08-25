@@ -447,7 +447,7 @@ func (r reqUserRmSessions) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validSessionIDs(r.SessionIDs); err != nil {
+	if err := validSessionids(r.SessionIDs); err != nil {
 		return err
 	}
 	return nil

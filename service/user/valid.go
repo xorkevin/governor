@@ -27,9 +27,7 @@ const (
 	lengthCapOTPCode   = 31
 )
 
-var (
-	userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
-)
+var userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 func validhasUserid(userid string) error {
 	if len(userid) == 0 {
@@ -209,7 +207,7 @@ func validhasUsernameOrEmail(useroremail string) error {
 	return validhasUsername(useroremail)
 }
 
-func validSessionIDs(ids []string) error {
+func validSessionids(ids []string) error {
 	if len(ids) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "SessionID must be provided")
 	}
