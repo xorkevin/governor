@@ -3,9 +3,6 @@ package gate
 import (
 	"context"
 	"crypto"
-	"errors"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v3"
@@ -19,23 +16,6 @@ import (
 	"xorkevin.dev/hunter2/h2signer/rs256"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
-)
-
-const (
-	// CookieNameAccessToken is the name of the access token cookie
-	CookieNameAccessToken = "access_token"
-)
-
-const (
-	// ScopeAll grants all scopes to a token
-	ScopeAll = "all"
-	// ScopeForbidden denies all access
-	ScopeForbidden = "forbidden"
-)
-
-const (
-	// KeyIDSystem is the system id key
-	KeyIDSystem = "gov.system"
 )
 
 type (
@@ -73,46 +53,11 @@ type (
 		Scope     string `json:"scope,omitempty"`
 		Key       string `json:"key,omitempty"`
 	}
-
-	ctxKeyUserid struct{}
-	ctxKeyClaims struct{}
 )
-
-// GetCtxUserid returns a userid from the context
-func GetCtxUserid(c *governor.Context) string {
-	v := c.Get(ctxKeyUserid{})
-	if v == nil {
-		return ""
-	}
-	return v.(string)
-}
-
-func setCtxUserid(c *governor.Context, userid string) {
-	c.Set(ctxKeyUserid{}, userid)
-	c.LogAttrs(klog.AString("gate.userid", userid))
-}
-
-// GetCtxClaims returns token claims from the context
-func GetCtxClaims(c *governor.Context) *Claims {
-	v := c.Get(ctxKeyClaims{})
-	if v == nil {
-		return nil
-	}
-	return v.(*Claims)
-}
-
-func setCtxClaims(c *governor.Context, claims *Claims) {
-	c.Set(ctxKeyUserid{}, claims.Subject)
-	c.Set(ctxKeyClaims{}, claims)
-	c.LogAttrs(
-		klog.AString("gate.userid", claims.Subject),
-		klog.AString("gate.sessionid", claims.ID),
-	)
-}
 
 type (
 	Gate interface {
-		Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
+		Validate(ctx context.Context, kind Kind, tokenString string) (*Claims, error)
 		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
 	}
 
@@ -459,59 +404,81 @@ func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool
 	return nil, false
 }
 
-func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims) {
+var (
+	// ErrInvalidToken is returned when the token is invalid
+	ErrInvalidToken errInvalidToken
+	// ErrTokenAssert is returned when a token assertion is invalid
+	ErrTokenAssert errTokenAssert
+)
+
+type (
+	errInvalidToken struct{}
+	errTokenAssert  struct{}
+)
+
+func (e errInvalidToken) Error() string {
+	return "Invalid token"
+}
+
+func (e errTokenAssert) Error() string {
+	return "Invalid token assertion"
+}
+
+func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (*Claims, error) {
 	if kind == kindOpenID {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrTokenAssert, "Invalid token kind assertion")
 	}
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token")
 	}
 	if len(token.Headers) != 1 {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token headers")
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
-		return false, nil
+		err = kerrors.WithMsg(err, "Failed to get signer keys")
+		s.log.Err(ctx, err)
+		return nil, err
 	}
 	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
 	if !ok {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token key id")
 	}
 	claims := &Claims{}
 	var jwtclaims jwt.Claims
 	if err := token.Claims(pubkey, claims, &jwtclaims); err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
 	}
 	if claims.Kind != kind {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token kind")
 	}
 	now := time.Now().Round(0).UTC()
 	if err := jwtclaims.ValidateWithLeeway(jwt.Expected{
 		Time: now,
 	}, 0); err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
 	}
-	return true, claims
+	return claims, nil
 }
 
-func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClaims interface{}) (bool, *Claims) {
+func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClaims interface{}) (*Claims, error) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token")
 	}
 	if len(token.Headers) != 1 {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token headers")
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get signer keys"))
-		return false, nil
+		err = kerrors.WithMsg(err, "Failed to get signer keys")
+		s.log.Err(ctx, err)
+		return nil, err
 	}
 	pubkey, ok := signer.getPubKey(kindOpenID, token.Headers[0].KeyID)
 	if !ok {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token key id")
 	}
 	claims := &Claims{}
 	var jwtclaims jwt.Claims
@@ -520,90 +487,21 @@ func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClai
 		otherClaims = &empty
 	}
 	if err := token.Claims(pubkey, claims, &jwtclaims, otherClaims); err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
 	}
 	if claims.Kind != kindOpenID {
-		return false, nil
+		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token kind")
 	}
 	now := time.Now().Round(0).UTC()
 	if err := jwtclaims.ValidateWithLeeway(jwt.Expected{
 		Issuer: s.issuer,
 		Time:   now,
 	}, 0); err != nil {
-		return false, nil
+		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
 	}
-	return true, claims
+	return claims, nil
 }
 
 func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
 	return s.apikeys.CheckKey(ctx, keyid, key)
-}
-
-// HasScope returns if a token scope contains a scope
-func HasScope(tokenScope string, scope string) bool {
-	if scope == "" {
-		return true
-	}
-	if scope == ScopeForbidden {
-		return false
-	}
-	for _, i := range strings.Fields(tokenScope) {
-		if i == ScopeAll || i == scope {
-			return true
-		}
-	}
-	return false
-}
-
-type (
-	Context struct {
-		IsSystem bool
-		Userid   string
-		Scope    string
-		Ctx      *governor.Context
-	}
-
-	// Authorizer is a function to check the authorization of a user
-	Authorizer func(c Context) error
-)
-
-func (c *Context) HasScope(scope string) bool {
-	return HasScope(c.Scope, scope)
-}
-
-func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx {
-	return func(next governor.RouteHandler) governor.RouteHandler {
-		return governor.RouteHandlerFunc(func(c *governor.Context) {
-			if keyid, keysecret, ok := c.BasicAuth(); ok {
-				userid, keyscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
-				if err != nil {
-					if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
-						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
-						return
-					}
-					c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
-					return
-				}
-				if !HasScope(keyscope, scope) {
-					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
-					return
-				}
-				if err := v(Context{
-					IsSystem: false,
-					Userid:   userid,
-					Scope:    keyscope,
-					Ctx:      c,
-				}); err != nil {
-					c.WriteError(governor.ErrWithRes(err, http.StatusForbidden, "", "User is forbidden"))
-					return
-				}
-				setCtxUserid(c, userid)
-				next.ServeHTTPCtx(c)
-				return
-			}
-
-			// TODO impl access token
-			next.ServeHTTPCtx(c)
-		})
-	}
 }
