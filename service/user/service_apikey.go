@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/apikey"
+	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/kerrors"
 )
 

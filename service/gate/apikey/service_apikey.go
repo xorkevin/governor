@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"xorkevin.dev/governor/service/db"
-	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
+	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
 	"xorkevin.dev/kerrors"
 )
 

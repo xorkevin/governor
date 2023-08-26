@@ -2,16 +2,10 @@ package apikey
 
 import (
 	"context"
-	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
-	"xorkevin.dev/kerrors"
+	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
 	"xorkevin.dev/klog"
-)
-
-const (
-	time24h int64 = int64(24 * time.Hour / time.Second)
 )
 
 type (
@@ -27,9 +21,8 @@ type (
 	}
 
 	Service struct {
-		apikeys            apikeymodel.Repo
-		log                *klog.LevelLogger
-		scopeCacheDuration time.Duration
+		apikeys apikeymodel.Repo
+		log     *klog.LevelLogger
 	}
 )
 
@@ -41,22 +34,10 @@ func New(apikeys apikeymodel.Repo) *Service {
 }
 
 func (s *Service) Register(r governor.ConfigRegistrar) {
-	r.SetDefault("scopecache", "24h")
 }
 
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
 	s.log = klog.NewLevelLogger(kit.Logger)
-
-	var err error
-	s.scopeCacheDuration, err = r.GetDuration("scopecache")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse scope cache time")
-	}
-
-	s.log.Info(ctx, "Loaded config",
-		klog.AString("scopecache", s.scopeCacheDuration.String()),
-	)
-
 	return nil
 }
 
@@ -71,7 +52,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	if err := s.apikeys.Setup(ctx); err != nil {
 		return err
 	}
-	s.log.Info(ctx, "Created userapikeys table")
+	s.log.Info(ctx, "Created apikeys table")
 
 	return nil
 }

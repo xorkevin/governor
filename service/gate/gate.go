@@ -3,11 +3,15 @@ package gate
 import (
 	"context"
 	"crypto"
+	"errors"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/hunter2/h2signer"
@@ -27,6 +31,11 @@ const (
 	ScopeAll = "all"
 	// ScopeForbidden denies all access
 	ScopeForbidden = "forbidden"
+)
+
+const (
+	// KeyIDSystem is the system id key
+	KeyIDSystem = "gov.system"
 )
 
 type (
@@ -102,7 +111,10 @@ func setCtxClaims(c *governor.Context, claims *Claims) {
 }
 
 type (
-	Gate interface{}
+	Gate interface {
+		Validate(ctx context.Context, kind Kind, tokenString string) (bool, *Claims)
+		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
+	}
 
 	tokenSigner struct {
 		signer         jose.Signer
@@ -116,6 +128,8 @@ type (
 
 	Service struct {
 		lc           *lifecycle.Lifecycle[tokenSigner]
+		apikeys      apikey.Apikeys
+		realm        string
 		issuer       string
 		signingAlgs  h2signer.SigningKeyAlgs
 		verifierAlgs h2signer.VerifierKeyAlgs
@@ -128,14 +142,15 @@ type (
 	}
 )
 
-// New creates a new Tokenizer
-func New() *Service {
+// New creates a new Gate
+func New(apikeys apikey.Apikeys) *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
 	rs256.Register(signingAlgs)
 	verifierAlgs := h2signer.NewVerifierKeysMap()
 	eddsa.RegisterVerifier(verifierAlgs)
 	return &Service{
+		apikeys:      apikeys,
 		signingAlgs:  signingAlgs,
 		verifierAlgs: verifierAlgs,
 		hbfailed:     0,
@@ -145,6 +160,7 @@ func New() *Service {
 
 func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("tokensecret", "")
+	r.SetDefault("realm", "governor")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
@@ -155,6 +171,10 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
 
+	s.realm = r.GetStr("realm")
+	if s.issuer == "" {
+		return kerrors.WithMsg(nil, "Auth realm is not set")
+	}
 	s.issuer = r.GetStr("issuer")
 	if s.issuer == "" {
 		return kerrors.WithMsg(nil, "Token issuer is not set")
@@ -513,4 +533,77 @@ func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClai
 		return false, nil
 	}
 	return true, claims
+}
+
+func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
+	return s.apikeys.CheckKey(ctx, keyid, key)
+}
+
+// HasScope returns if a token scope contains a scope
+func HasScope(tokenScope string, scope string) bool {
+	if scope == "" {
+		return true
+	}
+	if scope == ScopeForbidden {
+		return false
+	}
+	for _, i := range strings.Fields(tokenScope) {
+		if i == ScopeAll || i == scope {
+			return true
+		}
+	}
+	return false
+}
+
+type (
+	Context struct {
+		IsSystem bool
+		Userid   string
+		Scope    string
+		Ctx      *governor.Context
+	}
+
+	// Authorizer is a function to check the authorization of a user
+	Authorizer func(c Context) error
+)
+
+func (c *Context) HasScope(scope string) bool {
+	return HasScope(c.Scope, scope)
+}
+
+func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx {
+	return func(next governor.RouteHandler) governor.RouteHandler {
+		return governor.RouteHandlerFunc(func(c *governor.Context) {
+			if keyid, keysecret, ok := c.BasicAuth(); ok {
+				userid, keyscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
+				if err != nil {
+					if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
+						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
+						return
+					}
+					c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
+					return
+				}
+				if !HasScope(keyscope, scope) {
+					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
+					return
+				}
+				if err := v(Context{
+					IsSystem: false,
+					Userid:   userid,
+					Scope:    keyscope,
+					Ctx:      c,
+				}); err != nil {
+					c.WriteError(governor.ErrWithRes(err, http.StatusForbidden, "", "User is forbidden"))
+					return
+				}
+				setCtxUserid(c, userid)
+				next.ServeHTTPCtx(c)
+				return
+			}
+
+			// TODO impl access token
+			next.ServeHTTPCtx(c)
+		})
+	}
 }

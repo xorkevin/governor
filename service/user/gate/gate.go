@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/apikey"
+	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/rank"

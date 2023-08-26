@@ -14,6 +14,8 @@ import (
 	"xorkevin.dev/governor/service/db"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/eventsapi"
+	"xorkevin.dev/governor/service/gate/apikey"
+	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/mailinglist"
@@ -25,8 +27,6 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user"
-	"xorkevin.dev/governor/service/user/apikey"
-	"xorkevin.dev/governor/service/user/apikey/apikeymodel"
 	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/oauth"
@@ -79,7 +79,7 @@ func main() {
 	gov.Register("ratelimit", "/null/ratelimit", ratelim)
 	rolesvc := role.New(rolemodel.New(d, "userroles"), kv.Subtree("roles"), ev)
 	gov.Register("role", "/null/role", rolesvc)
-	apikeysvc := apikey.New(apikeymodel.New(d, "userapikeys"))
+	apikeysvc := apikey.New(apikeymodel.New(d, "apikeys"))
 	gov.Register("apikey", "/null/apikey", apikeysvc)
 	tokensvc := token.New()
 	gov.Register("token", "/null/token", tokensvc)
