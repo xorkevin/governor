@@ -75,7 +75,13 @@ type (
 	// ServiceClient is a client for a service
 	ServiceClient interface {
 		Register(r ConfigRegistrar, cr CmdRegistrar)
-		Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error
+		Init(r ClientConfigReader, kit ClientKit) error
+	}
+
+	ClientKit struct {
+		Logger     klog.Logger
+		Term       Term
+		HTTPClient HTTPClient
 	}
 
 	cmdRegistrar struct {
@@ -174,15 +180,17 @@ func (c *Client) Init(flags ClientFlags, log klog.Logger) error {
 		klog.OptHandler(log.Handler()),
 		klog.OptMinLevelStr(c.settings.logger.level),
 	))
-	c.term = newTermClient(c.configTerm, c.log.Logger)
+	c.term = newTermClient(c.configTerm)
 	c.httpc = NewHTTPFetcher(newHTTPClient(c.settings.httpClient))
 
 	for _, i := range c.clients {
 		if err := i.r.Init(
 			c.settings.reader(i.opt),
-			c.log.Logger.Sublogger(i.opt.name),
-			c.term,
-			c.httpc.HTTPClient.Subclient(i.opt.url),
+			ClientKit{
+				Logger:     c.log.Logger.Sublogger(i.opt.name),
+				Term:       c.term,
+				HTTPClient: c.httpc.HTTPClient.Subclient(i.opt.url),
+			},
 		); err != nil {
 			return kerrors.WithMsg(err, "Init client failed")
 		}

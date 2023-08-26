@@ -59,10 +59,10 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 	}, governor.CmdHandlerFunc(c.publishEvent))
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
-	c.log = klog.NewLevelLogger(log)
-	c.term = term
-	c.httpc = governor.NewHTTPFetcher(m)
+func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
+	c.log = klog.NewLevelLogger(kit.Logger)
+	c.term = kit.Term
+	c.httpc = governor.NewHTTPFetcher(kit.HTTPClient)
 	return nil
 }
 

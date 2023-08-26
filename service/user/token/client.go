@@ -102,10 +102,10 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 	}, governor.CmdHandlerFunc(c.genSysToken))
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
 	c.config = r
-	c.log = klog.NewLevelLogger(log)
-	c.term = term
+	c.log = klog.NewLevelLogger(kit.Logger)
+	c.term = kit.Term
 	return nil
 }
 

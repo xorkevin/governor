@@ -97,7 +97,7 @@ func (c *testClientC) Register(r ConfigRegistrar, cr CmdRegistrar) {
 	}, CmdHandlerFunc(c.echo))
 }
 
-func (c *testClientC) Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error {
+func (c *testClientC) Init(r ClientConfigReader, kit ClientKit) error {
 	c.ranInit = true
 
 	if u, err := url.Parse(r.Config().BaseURL); err != nil {
@@ -136,9 +136,9 @@ func (c *testClientC) Init(r ClientConfigReader, log klog.Logger, term Term, m H
 		return kerrors.WithMsg(err, "Mismatched prop obj")
 	}
 
-	c.log = klog.NewLevelLogger(log)
-	c.term = term
-	c.httpc = NewHTTPFetcher(m)
+	c.log = klog.NewLevelLogger(kit.Logger)
+	c.term = kit.Term
+	c.httpc = NewHTTPFetcher(kit.HTTPClient)
 	return nil
 }
 

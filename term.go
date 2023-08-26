@@ -10,7 +10,6 @@ import (
 	"golang.org/x/term"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/kfs"
-	"xorkevin.dev/klog"
 )
 
 type (
@@ -21,7 +20,6 @@ type (
 		ReadLine() (string, error)
 		ReadPassword() (string, error)
 		FS() fs.FS
-		Log() klog.Logger
 	}
 
 	TermConfig struct {
@@ -33,7 +31,6 @@ type (
 	}
 
 	termClient struct {
-		log     *klog.LevelLogger
 		stdinfd int
 		stdin   *bufio.Reader
 		stdout  io.Writer
@@ -42,7 +39,7 @@ type (
 	}
 )
 
-func newTermClient(config *TermConfig, l klog.Logger) Term {
+func newTermClient(config *TermConfig) Term {
 	if config == nil {
 		config = &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
@@ -53,7 +50,6 @@ func newTermClient(config *TermConfig, l klog.Logger) Term {
 		}
 	}
 	return &termClient{
-		log:     klog.NewLevelLogger(l.Sublogger("term")),
 		stdinfd: config.StdinFd,
 		stdin:   bufio.NewReader(config.Stdin),
 		stdout:  config.Stdout,
@@ -95,8 +91,4 @@ func (c *termClient) ReadPassword() (string, error) {
 
 func (c *termClient) FS() fs.FS {
 	return c.fsys
-}
-
-func (c *termClient) Log() klog.Logger {
-	return c.log.Logger
 }

@@ -76,8 +76,8 @@ func (c *testClientD) Register(r ConfigRegistrar, cr CmdRegistrar) {
 	}, CmdHandlerFunc(c.echo))
 }
 
-func (c *testClientD) Init(r ClientConfigReader, log klog.Logger, term Term, m HTTPClient) error {
-	c.term = term
+func (c *testClientD) Init(r ClientConfigReader, kit ClientKit) error {
+	c.term = kit.Term
 	return nil
 }
 

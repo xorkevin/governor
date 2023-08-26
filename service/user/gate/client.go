@@ -8,7 +8,6 @@ import (
 	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
-	"xorkevin.dev/klog"
 )
 
 type (
@@ -43,9 +42,9 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 	r.SetDefault("systokenfile", "")
 }
 
-func (c *CmdClient) Init(r governor.ClientConfigReader, log klog.Logger, term governor.Term, m governor.HTTPClient) error {
+func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
 	c.config = r
-	c.term = term
+	c.term = kit.Term
 	return nil
 }
 
