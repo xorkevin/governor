@@ -147,7 +147,25 @@ func getAccessCookie(c *governor.Context) (string, error) {
 func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx {
 	return func(next governor.RouteHandler) governor.RouteHandler {
 		return governor.RouteHandlerFunc(func(c *governor.Context) {
-			if keyid, keysecret, ok := c.BasicAuth(); ok {
+			token, err := getAuthHeader(c)
+			if err != nil {
+				if !errors.Is(err, ErrAuthNotFound) {
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					return
+				}
+				var err error
+				token, err = getAccessCookie(c)
+				if err != nil {
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					return
+				}
+			}
+			if apitoken, ok := strings.CutPrefix(token, "ga."); ok {
+				keyid, keysecret, ok := strings.Cut(apitoken, ".")
+				if !ok {
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					return
+				}
 				userid, keyscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
 				if err != nil {
 					if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
@@ -174,21 +192,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 				next.ServeHTTPCtx(c)
 				return
 			}
-
-			accessToken, err := getAuthHeader(c)
-			if err != nil {
-				if !errors.Is(err, ErrAuthNotFound) {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
-					return
-				}
-				var err error
-				accessToken, err = getAccessCookie(c)
-				if err != nil {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
-					return
-				}
-			}
-			claims, err := g.Validate(c.Ctx(), KindAccess, accessToken)
+			claims, err := g.Validate(c.Ctx(), KindAccess, token)
 			if err != nil {
 				c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
 				return
