@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/authzacl"
 	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -53,7 +54,7 @@ type (
 	}
 
 	// Authorizer is a function to check the authorization of a user
-	Authorizer func(c Context) error
+	Authorizer func(c Context, acl ACL) (bool, error)
 )
 
 func (c *Context) HasScope(scope string) bool {
@@ -160,6 +161,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					return
 				}
 			}
+			var ctx Context
 			if apitoken, ok := strings.CutPrefix(token, "ga."); ok {
 				keyid, keysecret, ok := strings.Cut(apitoken, ".")
 				if !ok {
@@ -175,43 +177,74 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
 					return
 				}
-				if !HasScope(keyscope, scope) {
-					c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
-					return
-				}
-				if err := v(Context{
+				ctx = Context{
 					Ctx:      c,
 					IsSystem: false,
 					Userid:   userid,
 					Scope:    keyscope,
-				}); err != nil {
-					c.WriteError(governor.ErrWithRes(err, http.StatusForbidden, "", "User is forbidden"))
-					return
 				}
 				setCtxApikey(c, userid, keyid)
-				next.ServeHTTPCtx(c)
-				return
+			} else {
+				claims, err := g.Validate(c.Ctx(), KindAccess, token)
+				if err != nil {
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					return
+				}
+				ctx = Context{
+					Ctx:      c,
+					IsSystem: claims.Subject == KeyIDSystem,
+					Userid:   claims.Subject,
+					Scope:    claims.Scope,
+				}
+				setCtxClaims(c, claims)
 			}
-			claims, err := g.Validate(c.Ctx(), KindAccess, token)
-			if err != nil {
-				c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
-				return
-			}
-			if !HasScope(claims.Scope, scope) {
+			if !ctx.HasScope(scope) {
 				c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 				return
 			}
-			if err := v(Context{
-				Ctx:      c,
-				IsSystem: claims.Subject == KeyIDSystem,
-				Userid:   claims.Subject,
-				Scope:    claims.Scope,
-			}); err != nil {
-				c.WriteError(governor.ErrWithRes(err, http.StatusForbidden, "", "User is forbidden"))
+			if ok, err := v(ctx, g); err != nil {
+				c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
 				return
+			} else if !ok {
+				c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 			}
-			setCtxClaims(c, claims)
 			next.ServeHTTPCtx(c)
 		})
 	}
+}
+
+const (
+	UserNS    = "gov.user"
+	RelMember = "member"
+	RoleNS    = "gov.role"
+	UserRole  = "gov.user"
+)
+
+// Owner is a middleware function to validate if a user owns the resource
+//
+// idfunc should return true if the resource is owned by the given user
+func Owner(g Gate, idfunc func(Context) (bool, error), scope string) governor.MiddlewareCtx {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		return acl.CheckRel(c.Ctx.Ctx(), authzacl.Obj{
+			NS:  UserNS,
+			Key: c.Userid,
+		}, RelMember, authzacl.Sub{
+			NS:  UserRole,
+			Key: UserRole,
+		})
+	}, scope)
+}
+
+// OwnerParam is a middleware function to validate if a url param is the given
+// userid
+func OwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+	return Owner(g, func(c Context) (bool, error) {
+		return c.Ctx.Param(idparam) == c.Userid, nil
+	}, scope)
 }

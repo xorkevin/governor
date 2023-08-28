@@ -32,7 +32,9 @@ type (
 		Sub Sub    `json:"sub"`
 	}
 
-	ACL interface{}
+	ACL interface {
+		Check(ctx context.Context, obj Obj, pred string, sub Sub) (bool, error)
+	}
 
 	ACLManager interface{}
 

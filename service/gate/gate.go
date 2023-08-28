@@ -8,6 +8,7 @@ import (
 	"github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/authzacl"
 	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
@@ -56,7 +57,12 @@ type (
 )
 
 type (
+	ACL interface {
+		CheckRel(ctx context.Context, obj authzacl.Obj, pred string, sub authzacl.Sub) (bool, error)
+	}
+
 	Gate interface {
+		ACL
 		Validate(ctx context.Context, kind Kind, tokenString string) (*Claims, error)
 		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
 	}
@@ -73,6 +79,7 @@ type (
 
 	Service struct {
 		lc           *lifecycle.Lifecycle[tokenSigner]
+		acl          authzacl.ACL
 		apikeys      apikey.Apikeys
 		realm        string
 		issuer       string
@@ -88,13 +95,14 @@ type (
 )
 
 // New creates a new Gate
-func New(apikeys apikey.Apikeys) *Service {
+func New(acl authzacl.ACL, apikeys apikey.Apikeys) *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
 	rs256.Register(signingAlgs)
 	verifierAlgs := h2signer.NewVerifierKeysMap()
 	eddsa.RegisterVerifier(verifierAlgs)
 	return &Service{
+		acl:          acl,
 		apikeys:      apikeys,
 		signingAlgs:  signingAlgs,
 		verifierAlgs: verifierAlgs,
@@ -504,4 +512,8 @@ func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClai
 
 func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
 	return s.apikeys.CheckKey(ctx, keyid, key)
+}
+
+func (s *Service) CheckRel(ctx context.Context, obj authzacl.Obj, pred string, sub authzacl.Sub) (bool, error) {
+	return s.acl.Check(ctx, obj, pred, sub)
 }
