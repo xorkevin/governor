@@ -214,37 +214,103 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 }
 
 const (
-	UserNS    = "gov.user"
-	RelMember = "member"
-	RoleNS    = "gov.role"
-	UserRole  = "gov.user"
+	NSUser    = "gov.user"
+	RelIn     = "in"
+	RelMember = "mem"
+	RelMod    = "mod"
+	NSRole    = "gov.role"
+	RoleUser  = "gov.user"
+	RoleAdmin = "gov.admin"
 )
 
-// Owner is a middleware function to validate if a user owns the resource
+func checkRole(c Context, acl ACL, role string) (bool, error) {
+	return acl.CheckRel(c.Ctx.Ctx(), authzacl.Obj{
+		NS:  NSRole,
+		Key: role,
+	}, RelIn, authzacl.Sub{
+		NS:  NSUser,
+		Key: c.Userid,
+	})
+}
+
+// AuthUser is a middleware function to validate if a user is authenticated and
+// not banned
+func AuthUser(g Gate, scope string) governor.MiddlewareCtx {
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+		return checkRole(c, acl, RoleUser)
+	}, scope)
+}
+
+// AuthAdmin is a middleware function to validate if a user is an admin
+func AuthAdmin(g Gate, scope string) governor.MiddlewareCtx {
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		return checkRole(c, acl, RoleAdmin)
+	}, scope)
+}
+
+// AuthOwner is a middleware function to validate if a user owns the resource
 //
 // idfunc should return true if the resource is owned by the given user
-func Owner(g Gate, idfunc func(Context) (bool, error), scope string) governor.MiddlewareCtx {
+func AuthOwner(g Gate, idfunc func(Context) (bool, error), scope string) governor.MiddlewareCtx {
 	if idfunc == nil {
 		panic("idfunc cannot be nil")
 	}
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
-		return acl.CheckRel(c.Ctx.Ctx(), authzacl.Obj{
-			NS:  UserNS,
-			Key: c.Userid,
-		}, RelMember, authzacl.Sub{
-			NS:  UserRole,
-			Key: UserRole,
-		})
+		if ok, err := checkRole(c, acl, RoleUser); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+		return idfunc(c)
 	}, scope)
 }
 
-// OwnerParam is a middleware function to validate if a url param is the given
-// userid
-func OwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
+// AuthOwnerParam is a middleware function to validate if a url param is the
+// given userid
+func AuthOwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
 	if idparam == "" {
 		panic("idparam cannot be empty")
 	}
-	return Owner(g, func(c Context) (bool, error) {
+	return AuthOwner(g, func(c Context) (bool, error) {
+		return c.Ctx.Param(idparam) == c.Userid, nil
+	}, scope)
+}
+
+// AuthOwnerOrAdmin is a middleware function to validate if the request is made
+// by the resource owner or an admin
+//
+// idfunc should return true if the resource is owned by the given user
+func AuthOwnerOrAdmin(g Gate, idfunc func(Context) (bool, error), scope string) governor.MiddlewareCtx {
+	if idfunc == nil {
+		panic("idfunc cannot be nil")
+	}
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+		if ok, err := checkRole(c, acl, RoleUser); err != nil {
+			return false, err
+		} else if !ok {
+			return false, nil
+		}
+		return idfunc(c)
+	}, scope)
+}
+
+// AuthOwnerOrAdminParam is a middleware function to validate if a url param is
+// the given userid or if the user is an admin
+func AuthOwnerOrAdminParam(g Gate, idparam string, scope string) governor.MiddlewareCtx {
+	if idparam == "" {
+		panic("idparam cannot be empty")
+	}
+	return AuthOwnerOrAdmin(g, func(c Context) (bool, error) {
 		return c.Ctx.Param(idparam) == c.Userid, nil
 	}, scope)
 }
