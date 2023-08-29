@@ -13,8 +13,8 @@ import (
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/hunter2/h2signer"
 	"xorkevin.dev/hunter2/h2signer/eddsa"
-	"xorkevin.dev/hunter2/h2signer/hs512"
-	"xorkevin.dev/hunter2/h2signer/rs256"
+	"xorkevin.dev/hunter2/h2signer/hmacsig"
+	"xorkevin.dev/hunter2/h2signer/rsasig"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -106,8 +106,8 @@ type (
 // New creates a new Tokenizer
 func New() *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
-	hs512.Register(signingAlgs)
-	rs256.Register(signingAlgs)
+	hmacsig.Register(signingAlgs)
+	rsasig.RegisterSigner(signingAlgs)
 	eddsa.RegisterSigner(signingAlgs)
 	verifierAlgs := h2signer.NewVerifierKeysMap()
 	eddsa.RegisterVerifier(verifierAlgs)
@@ -281,12 +281,12 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*h2si
 			return nil, nil, "", kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case hs512.SigID:
+		case hmacsig.SigID:
 			if khs512 == nil {
 				khs512 = k
 			}
 		}
-		if current != nil && khs512 != nil && khs512.ID() == current.hs512id {
+		if current != nil && khs512 != nil && khs512.Verifier().ID() == current.hs512id {
 			// first signing key matches current signing key, therefore no change in
 			// signing keys
 			return current.signingkeys, current.signer, current.hs512id, nil
@@ -296,11 +296,11 @@ func (s *Service) getTokenSecrets(secrets []string, current *tokenSigner) (*h2si
 	if khs512 == nil {
 		return nil, nil, "", kerrors.WithKind(nil, governor.ErrInvalidConfig, "No token keys present")
 	}
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS512, Key: khs512.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, khs512.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", kerrors.WithKind(err, ErrSigner, "Failed to create new jwt HS512 signer")
 	}
-	return signingkeys, sig, khs512.ID(), nil
+	return signingkeys, sig, khs512.Verifier().ID(), nil
 }
 
 func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
@@ -313,18 +313,18 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*h2sign
 			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case rs256.SigID:
+		case rsasig.SigID:
 			jwks = append(jwks, jose.JSONWebKey{
 				Algorithm: "RS256",
-				KeyID:     k.ID(),
-				Key:       k.Public(),
+				KeyID:     k.Verifier().ID(),
+				Key:       k.Verifier().Public(),
 				Use:       "sig",
 			})
 			if krs256 == nil {
 				krs256 = k
 			}
 		}
-		if current != nil && krs256 != nil && krs256.ID() == current.rs256id {
+		if current != nil && krs256 != nil && krs256.Verifier().ID() == current.rs256id {
 			// first signing key matches current signing key, therefore no change in
 			// signing keys
 			return current.extsigningkeys, current.extsigner, current.rs256id, current.jwks, nil
@@ -334,11 +334,11 @@ func (s *Service) getExtSecrets(secrets []string, current *tokenSigner) (*h2sign
 	if krs256 == nil {
 		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "No token keys present")
 	}
-	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
+	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", nil, kerrors.WithKind(err, ErrSigner, "Failed to create new jwt RS256 signer")
 	}
-	return signingkeys, extsig, krs256.ID(), jwks, nil
+	return signingkeys, extsig, krs256.Verifier().ID(), jwks, nil
 }
 
 func (s *Service) getSysVerifierSecrets(secrets []string, current *tokenSigner) (*h2signer.VerifierKeyring, string, error) {
@@ -489,10 +489,10 @@ func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool
 		return nil, false
 	} else {
 		if key, ok := s.signingkeys.Get(keyid); ok {
-			return key.Public(), true
+			return key.Verifier().Public(), true
 		}
 		if key, ok := s.extsigningkeys.Get(keyid); ok {
-			return key.Public(), true
+			return key.Verifier().Public(), true
 		}
 		return nil, false
 	}

@@ -14,7 +14,7 @@ import (
 	"xorkevin.dev/governor/util/lifecycle"
 	"xorkevin.dev/hunter2/h2signer"
 	"xorkevin.dev/hunter2/h2signer/eddsa"
-	"xorkevin.dev/hunter2/h2signer/rs256"
+	"xorkevin.dev/hunter2/h2signer/rsasig"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -98,7 +98,7 @@ type (
 func New(acl authzacl.ACL, apikeys apikey.Apikeys) *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
-	rs256.Register(signingAlgs)
+	rsasig.RegisterSigner(signingAlgs)
 	verifierAlgs := h2signer.NewVerifierKeysMap()
 	eddsa.RegisterVerifier(verifierAlgs)
 	return &Service{
@@ -265,18 +265,18 @@ func (s *Service) getSigningKeys(keys []string, current *tokenSigner) (*h2signer
 				keddsa = k
 			}
 		}
-		if current != nil && keddsa != nil && keddsa.ID() == current.eddsaid {
+		if current != nil && keddsa != nil && keddsa.Verifier().ID() == current.eddsaid {
 			// first verifier key matches current verifier key, therefore no change
 			// in verifier keys
 			return current.signingkeys, current.signer, current.eddsaid, nil
 		}
 		signingkeys.Register(k)
 	}
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: keddsa.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, keddsa.ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: keddsa.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, keddsa.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", kerrors.WithKind(err, ErrSigner, "Failed to create new jwt HS512 signer")
 	}
-	return signingkeys, sig, keddsa.ID(), nil
+	return signingkeys, sig, keddsa.Verifier().ID(), nil
 }
 
 func (s *Service) getExtSigningKeys(keys []string, current *tokenSigner) (*h2signer.SigningKeyring, jose.Signer, string, []jose.JSONWebKey, error) {
@@ -289,18 +289,18 @@ func (s *Service) getExtSigningKeys(keys []string, current *tokenSigner) (*h2sig
 			return nil, nil, "", nil, kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid key param")
 		}
 		switch k.Alg() {
-		case rs256.SigID:
+		case rsasig.SigID:
 			jwks = append(jwks, jose.JSONWebKey{
 				Algorithm: "RS256",
-				KeyID:     k.ID(),
-				Key:       k.Public(),
+				KeyID:     k.Verifier().ID(),
+				Key:       k.Verifier().Public(),
 				Use:       "sig",
 			})
 			if krs256 == nil {
 				krs256 = k
 			}
 		}
-		if current != nil && krs256 != nil && krs256.ID() == current.rs256id {
+		if current != nil && krs256 != nil && krs256.Verifier().ID() == current.rs256id {
 			// first signing key matches current signing key, therefore no change in
 			// signing keys
 			return current.extsigningkeys, current.extsigner, current.rs256id, current.jwks, nil
@@ -310,11 +310,11 @@ func (s *Service) getExtSigningKeys(keys []string, current *tokenSigner) (*h2sig
 	if krs256 == nil {
 		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "No token keys present")
 	}
-	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.ID()))
+	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", nil, kerrors.WithKind(err, ErrSigner, "Failed to create new jwt RS256 signer")
 	}
-	return signingkeys, extsig, krs256.ID(), jwks, nil
+	return signingkeys, extsig, krs256.Verifier().ID(), jwks, nil
 }
 
 func (s *Service) closeKeys(ctx context.Context, signer *tokenSigner) {
@@ -402,11 +402,11 @@ func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool
 	switch kind {
 	case KindAccess, KindRefresh:
 		if key, ok := s.signingkeys.Get(keyid); ok {
-			return key.Public(), true
+			return key.Verifier().Public(), true
 		}
 	case kindOpenID:
 		if key, ok := s.extsigningkeys.Get(keyid); ok {
-			return key.Public(), true
+			return key.Verifier().Public(), true
 		}
 	}
 	return nil, false

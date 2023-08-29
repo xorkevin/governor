@@ -145,7 +145,7 @@ func (c *CmdClient) genSysToken(args []string) error {
 	if key.Alg() != eddsa.SigID {
 		return kerrors.WithMsg(nil, "Invalid private key signature algorithm")
 	}
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, key.ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, key.Verifier().ID()))
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create signer")
 	}
