@@ -78,19 +78,18 @@ type (
 	}
 
 	Service struct {
-		lc           *lifecycle.Lifecycle[tokenSigner]
-		acl          authzacl.ACL
-		apikeys      apikey.Apikeys
-		realm        string
-		issuer       string
-		signingAlgs  h2signer.SigningKeyAlgs
-		verifierAlgs h2signer.VerifierKeyAlgs
-		config       governor.SecretReader
-		log          *klog.LevelLogger
-		hbfailed     int
-		hbmaxfail    int
-		keyrefresh   time.Duration
-		wg           *ksync.WaitGroup
+		lc          *lifecycle.Lifecycle[tokenSigner]
+		acl         authzacl.ACL
+		apikeys     apikey.Apikeys
+		realm       string
+		issuer      string
+		signingAlgs h2signer.SigningKeyAlgs
+		config      governor.SecretReader
+		log         *klog.LevelLogger
+		hbfailed    int
+		hbmaxfail   int
+		keyrefresh  time.Duration
+		wg          *ksync.WaitGroup
 	}
 )
 
@@ -99,15 +98,12 @@ func New(acl authzacl.ACL, apikeys apikey.Apikeys) *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
 	rsasig.RegisterSigner(signingAlgs)
-	verifierAlgs := h2signer.NewVerifierKeysMap()
-	eddsa.RegisterVerifier(verifierAlgs)
 	return &Service{
-		acl:          acl,
-		apikeys:      apikeys,
-		signingAlgs:  signingAlgs,
-		verifierAlgs: verifierAlgs,
-		hbfailed:     0,
-		wg:           ksync.NewWaitGroup(),
+		acl:         acl,
+		apikeys:     apikeys,
+		signingAlgs: signingAlgs,
+		hbfailed:    0,
+		wg:          ksync.NewWaitGroup(),
 	}
 }
 
