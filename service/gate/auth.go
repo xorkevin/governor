@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	// KeyIDSystem is the system id key
-	KeyIDSystem = "gov.system"
+	// KeySubSystem is the system id key
+	KeySubSystem = "gov.system"
 )
 
 const (
@@ -192,7 +192,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 				}
 				ctx = Context{
 					Ctx:      c,
-					IsSystem: claims.Subject == KeyIDSystem,
+					IsSystem: claims.Subject == KeySubSystem,
 					Userid:   claims.Subject,
 					Scope:    claims.Scope,
 				}
