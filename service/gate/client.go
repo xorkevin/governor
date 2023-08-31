@@ -38,6 +38,7 @@ type (
 		config      governor.ConfigValueReader
 		term        governor.Term
 		tokenFlags  tokenFlags
+		keyFlags    keyFlags
 	}
 
 	tokenFlags struct {
@@ -46,6 +47,10 @@ type (
 		expirestr string
 		scope     string
 		output    string
+	}
+
+	keyFlags struct {
+		privkey string
 	}
 )
 
@@ -63,6 +68,21 @@ func NewCmdClient() *CmdClient {
 func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
 	r.SetDefault("keyfile", "")
 	r.SetDefault("tokenfile", "")
+
+	cr.Register(governor.CmdDesc{
+		Usage: "gen-key",
+		Short: "generates a key",
+		Long:  "generates a key",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "output",
+				Short:    "o",
+				Usage:    "key output file",
+				Required: false,
+				Value:    &c.keyFlags.privkey,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.genKey))
 
 	cr.Register(governor.CmdDesc{
 		Usage: "gen-token",
@@ -165,6 +185,41 @@ func (c *CmdClient) AddReqToken(r *http.Request) error {
 	return nil
 }
 
+func (c *CmdClient) genKey(args []string) error {
+	cc, err := c.initConfig()
+	if err != nil {
+		return err
+	}
+
+	keyfile := c.keyFlags.privkey
+	if keyfile == "" {
+		keyfile = cc.keyfile
+	}
+	if keyfile == "" {
+		return kerrors.WithMsg(err, "Invalid key output")
+	}
+
+	cfg, err := eddsa.NewConfig()
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to generate key")
+	}
+	cfgstr, err := cfg.String()
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to serialize key")
+	}
+
+	if keyfile == "-" {
+		if _, err := io.WriteString(c.term.Stdout(), cfgstr+"\n"); err != nil {
+			return kerrors.WithMsg(err, "Failed to write key to stdout")
+		}
+		return nil
+	}
+	if err := kfs.WriteFile(c.term.FS(), keyfile, []byte(cfgstr+"\n"), 0o600); err != nil {
+		return kerrors.WithMsg(err, "Failed to write key to file")
+	}
+	return nil
+}
+
 func (c *CmdClient) genToken(args []string) error {
 	cc, err := c.initConfig()
 	if err != nil {
@@ -215,12 +270,12 @@ func (c *CmdClient) genToken(args []string) error {
 
 	if output == "-" {
 		if _, err := io.WriteString(c.term.Stdout(), token+"\n"); err != nil {
-			return kerrors.WithMsg(err, "Failed to write token output")
+			return kerrors.WithMsg(err, "Failed to write token to stdout")
 		}
 		return nil
 	}
-	if err := kfs.WriteFile(c.term.FS(), c.tokenFlags.output, []byte(token+"\n"), 0o600); err != nil {
-		return kerrors.WithMsg(err, "Failed to write token output to file")
+	if err := kfs.WriteFile(c.term.FS(), output, []byte(token+"\n"), 0o600); err != nil {
+		return kerrors.WithMsg(err, "Failed to write token to file")
 	}
 	return nil
 }
