@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 )
 
@@ -26,7 +26,7 @@ type (
 
 	repo struct {
 		table *aclModelTable
-		db    db.Database
+		db    dbsql.Database
 	}
 
 	// Model is the db acl entry model
@@ -59,7 +59,7 @@ type (
 )
 
 // New creates a new acl repository
-func New(database db.Database, table string) Repo {
+func New(database dbsql.Database, table string) Repo {
 	return &repo{
 		table: &aclModelTable{
 			TableName: table,
@@ -201,7 +201,7 @@ func (r *repo) Check(ctx context.Context, obj Object, pred string, sub Subject) 
 		return false, err
 	}
 	if _, err := r.checkRelation(ctx, d, obj, pred, sub); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return false, nil
 		}
 		return false, kerrors.WithMsg(err, "Failed to check acl tuple")
@@ -217,7 +217,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup acl model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

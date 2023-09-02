@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 )
@@ -29,7 +29,7 @@ type (
 
 	repo struct {
 		table *roleModelTable
-		db    db.Database
+		db    dbsql.Database
 	}
 
 	// Model is the db User role model
@@ -42,7 +42,7 @@ type (
 )
 
 // New creates a new user role repository
-func New(database db.Database, table string) Repo {
+func New(database dbsql.Database, table string) Repo {
 	return &repo{
 		table: &roleModelTable{
 			TableName: table,
@@ -243,7 +243,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup role model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

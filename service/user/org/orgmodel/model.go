@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -40,7 +40,7 @@ type (
 		table        *orgModelTable
 		tableMembers *memberModelTable
 		tableMods    *memberModelTable
-		db           db.Database
+		db           dbsql.Database
 	}
 
 	// Model is the user org model
@@ -76,7 +76,7 @@ type (
 )
 
 // New creates a new OAuth app repository
-func New(database db.Database, table, tableMembers, tableMods string) Repo {
+func New(database dbsql.Database, table, tableMembers, tableMods string) Repo {
 	return &repo{
 		table: &orgModelTable{
 			TableName: table,
@@ -388,19 +388,19 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org member model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMods.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup org mod model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

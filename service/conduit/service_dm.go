@@ -7,7 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/dmmodel"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -53,7 +53,7 @@ const (
 func (s *Service) getDMByChatid(ctx context.Context, userid string, chatid string) (*dmmodel.Model, error) {
 	m, err := s.dms.GetByChatID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "DM not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get dm")

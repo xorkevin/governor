@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -27,7 +27,7 @@ type (
 
 	repo struct {
 		tableLinks *linkModelTable
-		db         db.Database
+		db         dbsql.Database
 	}
 
 	// LinkModel is the db link model
@@ -42,7 +42,7 @@ type (
 )
 
 // New creates a new courier repo
-func New(database db.Database, tableLinks, tableBrands string) Repo {
+func New(database dbsql.Database, tableLinks, tableBrands string) Repo {
 	return &repo{
 		tableLinks: &linkModelTable{
 			TableName: tableLinks,
@@ -145,7 +145,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.tableLinks.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup link model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

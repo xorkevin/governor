@@ -20,7 +20,7 @@ import (
 	"github.com/emersion/go-msgauth/dkim"
 	"github.com/emersion/go-msgauth/dmarc"
 	"github.com/emersion/go-smtp"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/user"
 	"xorkevin.dev/governor/service/user/gate"
@@ -331,7 +331,7 @@ func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 
 	list, err := s.service.lists.GetList(ctx, listCreatorID, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			s.log.WarnErr(ctx, kerrors.WithMsg(err, "Mailbox not found"))
 			return errSMTPMailbox
 		}
@@ -407,7 +407,7 @@ func (s *smtpSession) checkListPolicy(ctx context.Context, senderid string, msgi
 			return errSMTPAuthSend
 		}
 		if _, err := s.service.lists.GetMember(ctx, s.rcptList, senderid); err != nil {
-			if errors.Is(err, db.ErrNotFound) {
+			if errors.Is(err, dbsql.ErrNotFound) {
 				s.log.WarnErr(ctx, kerrors.WithMsg(err, "List member not found"))
 				return errSMTPAuthSend
 			}
@@ -643,7 +643,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	}
 
 	if msg, err := s.service.lists.GetMsg(ctx, s.rcptList, msgid); err != nil {
-		if !errors.Is(err, db.ErrNotFound) {
+		if !errors.Is(err, dbsql.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get list msg"))
 			return errSMTPBaseExists
 		}
@@ -684,7 +684,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 		msg.InReplyTo = inReplyTo[0]
 	}
 	if err := s.service.lists.InsertMsg(ctx, msg); err != nil {
-		if !errors.Is(err, db.ErrUnique) {
+		if !errors.Is(err, dbsql.ErrUnique) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to add list msg"))
 			return errSMTPBaseExists
 		}

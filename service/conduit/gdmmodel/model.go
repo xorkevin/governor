@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -39,7 +39,7 @@ type (
 		table        *gdmModelTable
 		tableMembers *memberModelTable
 		tableAssoc   *assocModelTable
-		db           db.Database
+		db           dbsql.Database
 	}
 
 	// Model is the db dm chat model
@@ -86,7 +86,7 @@ type (
 	}
 )
 
-func New(database db.Database, table, tableMembers, tableAssoc string) Repo {
+func New(database dbsql.Database, table, tableMembers, tableAssoc string) Repo {
 	return &repo{
 		table: &gdmModelTable{
 			TableName: table,
@@ -411,19 +411,19 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm member model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableAssoc.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup gdm assoc model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

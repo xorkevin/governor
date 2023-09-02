@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/sessionmodel"
@@ -56,7 +56,7 @@ func (e errDiscardSession) Error() string {
 func (s *Service) login(ctx context.Context, userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -94,7 +94,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	var sm *sessionmodel.Model
 	if len(sessionID) > 0 {
 		if m, err := s.sessions.GetByID(ctx, userid, sessionID); err != nil {
-			if !errors.Is(err, db.ErrNotFound) {
+			if !errors.Is(err, dbsql.ErrNotFound) {
 				return nil, kerrors.WithMsg(err, "Failed to get user session")
 			}
 		} else {
@@ -251,7 +251,7 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, userag
 
 	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return &resUserAuth{
 				Valid: false,
 				Claims: &token.Claims{
@@ -338,7 +338,7 @@ func (s *Service) logout(ctx context.Context, refreshToken string) (string, erro
 
 	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid token")
 		}
 		return "", kerrors.WithMsg(err, "Failed to get session")

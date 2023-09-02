@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/governor/service/user/gate"
@@ -35,7 +35,7 @@ type (
 func (s *Service) createList(ctx context.Context, creatorid string, listname string, name, desc string, senderPolicy, memberPolicy string) (*resList, error) {
 	list := s.lists.NewList(creatorid, listname, name, desc, senderPolicy, memberPolicy)
 	if err := s.lists.InsertList(ctx, list); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "List id already taken")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create list")
@@ -57,7 +57,7 @@ func (s *Service) createList(ctx context.Context, creatorid string, listname str
 func (s *Service) updateList(ctx context.Context, creatorid string, listname string, name, desc string, archive bool, senderPolicy, memberPolicy string) error {
 	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -87,7 +87,7 @@ func (s *Service) checkUsersExist(ctx context.Context, userids []string) error {
 func (s *Service) subscribe(ctx context.Context, creatorid string, listname string, userid string) error {
 	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -133,7 +133,7 @@ func (s *Service) subscribe(ctx context.Context, creatorid string, listname stri
 func (s *Service) removeListMembers(ctx context.Context, creatorid string, listname string, userids []string) error {
 	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -152,7 +152,7 @@ func (s *Service) removeListMembers(ctx context.Context, creatorid string, listn
 func (s *Service) deleteList(ctx context.Context, creatorid string, listname string) error {
 	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -175,7 +175,7 @@ func (s *Service) deleteList(ctx context.Context, creatorid string, listname str
 func (s *Service) getList(ctx context.Context, listid string) (*resList, error) {
 	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -202,7 +202,7 @@ type (
 
 func (s *Service) getListMembers(ctx context.Context, listid string, amount, offset int) (*resListMemberIDs, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -222,7 +222,7 @@ func (s *Service) getListMembers(ctx context.Context, listid string, amount, off
 
 func (s *Service) getListMemberIDs(ctx context.Context, listid string, userids []string) (*resListMemberIDs, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -315,7 +315,7 @@ func (s *Service) encodeMsgid(msgid string) string {
 func (s *Service) deleteMsgs(ctx context.Context, creatorid string, listname string, msgids []string) error {
 	m, err := s.lists.GetList(ctx, creatorid, listname)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get list")
@@ -358,14 +358,14 @@ type (
 
 func (s *Service) getMsg(ctx context.Context, listid, msgid string) (*resMsg, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
 	}
 	m, err := s.lists.GetMsg(ctx, listid, msgid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Message not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get message")
@@ -387,7 +387,7 @@ func (s *Service) getMsg(ctx context.Context, listid, msgid string) (*resMsg, er
 
 func (s *Service) getLatestMsgs(ctx context.Context, listid string, amount, offset int) (*resMsgs, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -419,7 +419,7 @@ func (s *Service) getLatestMsgs(ctx context.Context, listid string, amount, offs
 
 func (s *Service) getLatestThreads(ctx context.Context, listid string, amount, offset int) (*resMsgs, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -451,7 +451,7 @@ func (s *Service) getLatestThreads(ctx context.Context, listid string, amount, o
 
 func (s *Service) getThreadMsgs(ctx context.Context, listid, threadid string, amount, offset int) (*resMsgs, error) {
 	if _, err := s.lists.GetListByID(ctx, listid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -484,7 +484,7 @@ func (s *Service) getThreadMsgs(ctx context.Context, listid, threadid string, am
 func (s *Service) statMsg(ctx context.Context, listid, msgid string) (*objstore.ObjectInfo, error) {
 	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get list")
@@ -502,7 +502,7 @@ func (s *Service) statMsg(ctx context.Context, listid, msgid string) (*objstore.
 func (s *Service) getMsgContent(ctx context.Context, listid, msgid string) (io.ReadCloser, string, error) {
 	m, err := s.lists.GetListByID(ctx, listid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, "", governor.ErrWithRes(err, http.StatusNotFound, "", "List not found")
 		}
 		return nil, "", kerrors.WithMsg(err, "Failed to get list")
@@ -570,7 +570,7 @@ func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
 
 	ml, err := s.lists.GetListByID(ctx, props.ListID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"))
 			return nil
 		}
@@ -578,7 +578,7 @@ func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
 	}
 	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"))
 			return nil
 		}
@@ -592,14 +592,14 @@ func (s *Service) mailEventHandler(ctx context.Context, props mailProps) error {
 	// In a closure table, every node must also point to itself with depth 0, so
 	// insert a node that does that.
 	if err := s.lists.InsertTree(ctx, s.lists.NewTree(m.ListID, m.Msgid, m.CreationTime)); err != nil {
-		if !errors.Is(err, db.ErrUnique) {
+		if !errors.Is(err, dbsql.ErrUnique) {
 			return kerrors.WithMsg(err, "Failed to insert list thread tree")
 		}
 	}
 	threadid := m.Msgid
 	if m.InReplyTo != "" {
 		if p, err := s.lists.GetMsg(ctx, m.ListID, m.InReplyTo); err != nil {
-			if !errors.Is(err, db.ErrNotFound) {
+			if !errors.Is(err, dbsql.ErrNotFound) {
 				return kerrors.WithMsg(err, "Failed to get list msg parent")
 			}
 			// parent not found
@@ -658,7 +658,7 @@ const (
 
 func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 	if _, err := s.lists.GetListByID(ctx, props.ListID); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "List not found"))
 			return nil
 		}
@@ -666,7 +666,7 @@ func (s *Service) sendEventHandler(ctx context.Context, props sendProps) error {
 	}
 	m, err := s.lists.GetMsg(ctx, props.ListID, props.MsgID)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Msg not found"))
 			return nil
 		}

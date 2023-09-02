@@ -7,7 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/courier/couriermodel"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
@@ -29,7 +29,7 @@ type (
 func (s *Service) getLink(ctx context.Context, linkid string) (*resGetLink, error) {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get link")
@@ -54,7 +54,7 @@ func (s *Service) getLinkFast(ctx context.Context, linkid string) (string, error
 	}
 	res, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			if err := s.kvlinks.Set(ctx, linkid, cacheValTombstone, s.cacheDuration); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache linkid url"))
 			}
@@ -118,7 +118,7 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url string)
 	}
 
 	if err := s.repo.InsertLink(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Link id already taken")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create link")
@@ -132,7 +132,7 @@ func (s *Service) createLink(ctx context.Context, creatorid, linkid, url string)
 func (s *Service) deleteLink(ctx context.Context, creatorid, linkid string) error {
 	m, err := s.repo.GetLink(ctx, linkid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Link not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get link")

@@ -1,4 +1,4 @@
-package db
+package dbsql
 
 import (
 	"context"
@@ -105,22 +105,26 @@ func (e errAuthz) Error() string {
 	return "Insufficient privilege"
 }
 
+func errWithKind(err error, kind error, msg string) error {
+	return kerrors.New(kerrors.OptInner(err), kerrors.OptKind(ErrNotFound), kerrors.OptMsg("Not found"), kerrors.OptSkip(2))
+}
+
 func wrapDBErr(err error, fallbackmsg string) error {
 	if errors.Is(err, sql.ErrNoRows) {
-		return kerrors.WithKind(err, ErrNotFound, "Not found")
+		return errWithKind(err, ErrNotFound, "Not found")
 	}
 	var perr *pq.Error
 	if errors.As(err, &perr) {
 		switch perr.Code {
 		case "23505": // unique_violation
-			return kerrors.WithKind(err, ErrUnique, "Unique constraint violated")
+			return errWithKind(err, ErrUnique, "Unique constraint violated")
 		case "42P01": // undefined_table
-			return kerrors.WithKind(err, ErrUndefinedTable, "Table not defined")
+			return errWithKind(err, ErrUndefinedTable, "Table not defined")
 		case "42501": // insufficient_privilege
-			return kerrors.WithKind(err, ErrAuthz, "Unauthorized")
+			return errWithKind(err, ErrAuthz, "Unauthorized")
 		}
 	}
-	return kerrors.WithMsg(err, fallbackmsg)
+	return errWithKind(err, nil, fallbackmsg)
 }
 
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {

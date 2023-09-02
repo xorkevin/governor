@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/usermodel"
@@ -69,7 +69,7 @@ func (e *emailEmailChange) computeURL(base string, tpl *htmlTemplate.Template) e
 
 func (s *Service) updateEmail(ctx context.Context, userid string, newEmail string, password string) error {
 	if _, err := s.users.GetByEmail(ctx, newEmail); err != nil {
-		if !errors.Is(err, db.ErrNotFound) {
+		if !errors.Is(err, dbsql.ErrNotFound) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 	} else {
@@ -77,7 +77,7 @@ func (s *Service) updateEmail(ctx context.Context, userid string, newEmail strin
 	}
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -94,7 +94,7 @@ func (s *Service) updateEmail(ctx context.Context, userid string, newEmail strin
 	needInsert := false
 	mr, err := s.resets.GetByID(ctx, m.Userid, kindResetEmail)
 	if err != nil {
-		if !errors.Is(err, db.ErrNotFound) {
+		if !errors.Is(err, dbsql.ErrNotFound) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 		needInsert = true
@@ -132,7 +132,7 @@ func (s *Service) updateEmail(ctx context.Context, userid string, newEmail strin
 func (s *Service) commitEmail(ctx context.Context, userid string, key string, password string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetEmail)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "New email verification expired")
 		}
 		return kerrors.WithMsg(err, "Failed to get email reset request")
@@ -149,7 +149,7 @@ func (s *Service) commitEmail(ctx context.Context, userid string, key string, pa
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -169,7 +169,7 @@ func (s *Service) commitEmail(ctx context.Context, userid string, key string, pa
 	}
 
 	if err = s.users.UpdateEmail(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Email is already in use by another account")
 		}
 		return kerrors.WithMsg(err, "Failed to update email")
@@ -241,7 +241,7 @@ func (e *emailForgotPass) computeURL(base string, tpl *htmlTemplate.Template) er
 func (s *Service) updatePassword(ctx context.Context, userid string, newPassword string, oldPassword string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -277,7 +277,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 	if isEmail(useroremail) {
 		mu, err := s.users.GetByEmail(ctx, useroremail)
 		if err != nil {
-			if errors.Is(err, db.ErrNotFound) {
+			if errors.Is(err, dbsql.ErrNotFound) {
 				// prevent email scanning for unauthorized users
 				return nil
 			}
@@ -287,7 +287,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 	} else {
 		mu, err := s.users.GetByUsername(ctx, useroremail)
 		if err != nil {
-			if errors.Is(err, db.ErrNotFound) {
+			if errors.Is(err, dbsql.ErrNotFound) {
 				return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 			}
 			return kerrors.WithMsg(err, "Failed to get user")
@@ -298,7 +298,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 	needInsert := false
 	mr, err := s.resets.GetByID(ctx, m.Userid, kindResetPass)
 	if err != nil {
-		if !errors.Is(err, db.ErrNotFound) {
+		if !errors.Is(err, dbsql.ErrNotFound) {
 			return kerrors.WithMsg(err, "Failed to get user")
 		}
 		needInsert = true
@@ -344,7 +344,7 @@ func (s *Service) forgotPassword(ctx context.Context, useroremail string) error 
 func (s *Service) resetPassword(ctx context.Context, userid string, key string, newPassword string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetPass)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Password reset expired")
 		}
 		return kerrors.WithMsg(err, "Failed to get password reset request")
@@ -361,7 +361,7 @@ func (s *Service) resetPassword(ctx context.Context, userid string, key string, 
 
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -418,7 +418,7 @@ type (
 func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits int, password string) (*resAddOTP, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get user")
@@ -449,7 +449,7 @@ func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits 
 func (s *Service) commitOTP(ctx context.Context, userid string, code string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
@@ -586,7 +586,7 @@ func (s *Service) resetLoginFailCount(ctx context.Context, m *usermodel.Model) {
 func (s *Service) removeOTP(ctx context.Context, userid string, code string, backup string, password string, ipaddr, useragent string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get user")

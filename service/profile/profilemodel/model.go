@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 )
 
@@ -24,7 +24,7 @@ type (
 
 	repo struct {
 		table *profileModelTable
-		db    db.Database
+		db    dbsql.Database
 	}
 
 	// Model is the db profile model
@@ -40,7 +40,7 @@ type (
 )
 
 // New creates a new profile repo
-func New(db db.Database, table string) Repo {
+func New(db dbsql.Database, table string) Repo {
 	return &repo{
 		table: &profileModelTable{
 			TableName: table,
@@ -127,7 +127,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup profile model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

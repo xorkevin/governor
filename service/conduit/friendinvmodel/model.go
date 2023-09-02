@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 )
 
@@ -26,7 +26,7 @@ type (
 
 	repo struct {
 		table *invModelTable
-		db    db.Database
+		db    dbsql.Database
 	}
 
 	// Model is the db friend invitation model
@@ -40,7 +40,7 @@ type (
 )
 
 // New creates a new role invitation repo
-func New(database db.Database, table string) Repo {
+func New(database dbsql.Database, table string) Repo {
 	return &repo{
 		table: &invModelTable{
 			TableName: table,
@@ -160,7 +160,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup friend invitation model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

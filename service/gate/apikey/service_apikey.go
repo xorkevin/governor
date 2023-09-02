@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
 	"xorkevin.dev/kerrors"
 )
@@ -76,7 +76,7 @@ func (s *Service) Insert(ctx context.Context, userid string, scope string, name,
 func (s *Service) RotateKey(ctx context.Context, userid string, keyid string) (*ResApikeyModel, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get apikey")
@@ -97,7 +97,7 @@ func (s *Service) RotateKey(ctx context.Context, userid string, keyid string) (*
 func (s *Service) UpdateKey(ctx context.Context, userid string, keyid string, scope string, name, desc string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")
@@ -117,7 +117,7 @@ func (s *Service) UpdateKey(ctx context.Context, userid string, keyid string, sc
 func (s *Service) DeleteKey(ctx context.Context, userid string, keyid string) error {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return kerrors.WithKind(err, ErrNotFound, "Apikey not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get apikey")

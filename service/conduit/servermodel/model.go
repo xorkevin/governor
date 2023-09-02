@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -36,7 +36,7 @@ type (
 		table         *serverModelTable
 		tableChannels *channelModelTable
 		tablePresence *presenceModelTable
-		db            db.Database
+		db            dbsql.Database
 	}
 
 	// Model is the db conduit server model
@@ -87,7 +87,7 @@ type (
 	}
 )
 
-func New(database db.Database, table, tableChannels, tablePresence string) Repo {
+func New(database dbsql.Database, table, tableChannels, tablePresence string) Repo {
 	return &repo{
 		table: &serverModelTable{
 			TableName: table,
@@ -306,19 +306,19 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup server model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableChannels.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup server channel model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tablePresence.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup server presence model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 )
 
@@ -69,7 +69,7 @@ type (
 		tableMsgs    *msgModelTable
 		tableSent    *sentmsgModelTable
 		tableTree    *treeModelTable
-		db           db.Database
+		db           dbsql.Database
 	}
 
 	// ListModel is the db mailing list model
@@ -185,7 +185,7 @@ type (
 )
 
 // New creates a new user repository
-func New(database db.Database, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {
+func New(database dbsql.Database, tableLists, tableMembers, tableMsgs, tableSent, tableTree string) Repo {
 	return &repo{
 		tableLists: &listModelTable{
 			TableName: tableLists,
@@ -787,31 +787,31 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.tableLists.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list member model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableMsgs.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list message model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableSent.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list sent message model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}
 	if err := r.tableTree.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup list message model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

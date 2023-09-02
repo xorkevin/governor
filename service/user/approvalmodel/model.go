@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2hash"
@@ -33,7 +33,7 @@ type (
 
 	repo struct {
 		table    *approvalModelTable
-		db       db.Database
+		db       dbsql.Database
 		hasher   h2hash.Hasher
 		verifier *h2hash.Verifier
 	}
@@ -56,7 +56,7 @@ type (
 )
 
 // New creates a new approval repository
-func New(database db.Database, table string) Repo {
+func New(database dbsql.Database, table string) Repo {
 	hasher := blake2b.New(blake2b.Config{})
 	verifier := h2hash.NewVerifier()
 	verifier.Register(hasher)
@@ -198,7 +198,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup user approval model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

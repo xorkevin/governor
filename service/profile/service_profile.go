@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/objstore"
 	"xorkevin.dev/kerrors"
@@ -34,7 +34,7 @@ func (s *Service) createProfile(ctx context.Context, userid, email, bio string) 
 	m := s.profiles.New(userid, email, bio)
 
 	if err := s.profiles.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Profile already created")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create profile")
@@ -48,7 +48,7 @@ func (s *Service) createProfile(ctx context.Context, userid, email, bio string) 
 func (s *Service) updateProfile(ctx context.Context, userid, email, bio string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
@@ -73,7 +73,7 @@ const (
 func (s *Service) updateImage(ctx context.Context, userid string, img image.Image) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
@@ -105,7 +105,7 @@ func (s *Service) updateImage(ctx context.Context, userid string, img image.Imag
 func (s *Service) deleteProfile(ctx context.Context, userid string) error {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return kerrors.WithMsg(err, "Failed to get profile")
@@ -126,7 +126,7 @@ func (s *Service) deleteProfile(ctx context.Context, userid string) error {
 func (s *Service) getProfile(ctx context.Context, userid string) (*resProfileModel, error) {
 	m, err := s.profiles.GetByID(ctx, userid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "No profile found with that id")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get profile")

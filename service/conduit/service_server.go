@@ -7,7 +7,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/servermodel"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 )
 
@@ -24,7 +24,7 @@ type (
 func (s *Service) createServer(ctx context.Context, serverid string, name, desc string, theme string) (*resServer, error) {
 	m := s.servers.New(serverid, name, desc, theme)
 	if err := s.servers.Insert(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Server already created")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to create server")
@@ -41,7 +41,7 @@ func (s *Service) createServer(ctx context.Context, serverid string, name, desc 
 func (s *Service) getServer(ctx context.Context, serverid string) (*resServer, error) {
 	m, err := s.servers.GetServer(ctx, serverid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
@@ -58,7 +58,7 @@ func (s *Service) getServer(ctx context.Context, serverid string) (*resServer, e
 func (s *Service) updateServer(ctx context.Context, serverid string, name, desc string, theme string) error {
 	m, err := s.servers.GetServer(ctx, serverid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get server")
@@ -87,7 +87,7 @@ type (
 
 func (s *Service) createChannel(ctx context.Context, serverid, channelid string, name, desc string, theme string) (*resChannel, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
@@ -97,7 +97,7 @@ func (s *Service) createChannel(ctx context.Context, serverid, channelid string,
 		return nil, kerrors.WithMsg(err, "Failed to create channel")
 	}
 	if err := s.servers.InsertChannel(ctx, m); err != nil {
-		if errors.Is(err, db.ErrUnique) {
+		if errors.Is(err, dbsql.ErrUnique) {
 			return nil, governor.ErrWithRes(err, http.StatusConflict, "", "Channel already created")
 		}
 	}
@@ -115,14 +115,14 @@ func (s *Service) createChannel(ctx context.Context, serverid, channelid string,
 
 func (s *Service) getServerChannel(ctx context.Context, serverid, channelid string) (*servermodel.ChannelModel, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")
 	}
 	m, err := s.servers.GetChannel(ctx, serverid, channelid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Channel not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get channel")
@@ -154,7 +154,7 @@ type (
 
 func (s *Service) getChannels(ctx context.Context, serverid string, prefix string, limit, offset int) (*resChannels, error) {
 	if _, err := s.servers.GetServer(ctx, serverid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Server not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get server")

@@ -8,7 +8,7 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/conduit/gdmmodel"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -156,7 +156,7 @@ func (s *Service) getGDMByChatid(ctx context.Context, userid string, chatid stri
 	}
 	m, err := s.gdms.GetByID(ctx, chatid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "Group chat not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get group chat")
@@ -307,7 +307,7 @@ func (s *Service) rmGDMUser(ctx context.Context, chatid string, userid string) e
 		return nil
 	}
 	if _, err := s.gdms.GetByID(ctx, chatid); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			// TODO: emit gdm delete event
 			return nil
 		}

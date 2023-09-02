@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/image"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/objstore"
@@ -108,7 +108,7 @@ func (s *Service) getCachedClient(ctx context.Context, clientid string) (*oautha
 
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			if err := s.kvclient.Set(ctx, clientid, cacheValTombstone, s.keyCache); err != nil {
 				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to set oauth client in cache"))
 			}
@@ -150,7 +150,7 @@ func (s *Service) createApp(ctx context.Context, name, url, redirectURI, creator
 func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate, error) {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return nil, governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return nil, kerrors.WithMsg(err, "Failed to get oauth app")
@@ -171,7 +171,7 @@ func (s *Service) rotateAppKey(ctx context.Context, clientid string) (*resCreate
 func (s *Service) updateApp(ctx context.Context, clientid string, name, url, redirectURI string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -197,7 +197,7 @@ const (
 func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Image) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")
@@ -231,7 +231,7 @@ func (s *Service) updateLogo(ctx context.Context, clientid string, img image.Ima
 func (s *Service) deleteApp(ctx context.Context, clientid string) error {
 	m, err := s.apps.GetByID(ctx, clientid)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "OAuth app not found")
 		}
 		return kerrors.WithMsg(err, "Failed to get oauth app")

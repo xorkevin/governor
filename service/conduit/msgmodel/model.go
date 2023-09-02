@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
 )
@@ -24,7 +24,7 @@ type (
 
 	repo struct {
 		table *msgModelTable
-		db    db.Database
+		db    dbsql.Database
 	}
 
 	// Model is the db chat msg model
@@ -45,7 +45,7 @@ type (
 	}
 )
 
-func New(database db.Database, table string) Repo {
+func New(database dbsql.Database, table string) Repo {
 	return &repo{
 		table: &msgModelTable{
 			TableName: table,
@@ -140,7 +140,7 @@ func (r *repo) Setup(ctx context.Context) error {
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
 		err = kerrors.WithMsg(err, "Failed to setup chat msg model")
-		if !errors.Is(err, db.ErrAuthz) {
+		if !errors.Is(err, dbsql.ErrAuthz) {
 			return err
 		}
 	}

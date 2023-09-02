@@ -11,7 +11,7 @@ import (
 	"xorkevin.dev/governor/service/conduit/servermodel"
 	"xorkevin.dev/governor/service/courier"
 	"xorkevin.dev/governor/service/courier/couriermodel"
-	"xorkevin.dev/governor/service/db"
+	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/eventsapi"
 	"xorkevin.dev/governor/service/gate/apikey"
@@ -61,7 +61,7 @@ func main() {
 
 	gov := governor.New(opts, nil)
 
-	d := db.New()
+	d := dbsql.New()
 	gov.Register("database", "/null/db", d)
 	kv := kvstore.New()
 	gov.Register("kvstore", "/null/kv", kv)
