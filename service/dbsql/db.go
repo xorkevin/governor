@@ -116,7 +116,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
 
-	s.connopts = fmt.Sprintf("dbname=%s host=%s port=%s sslmode=%s", r.GetStr("dbname"), r.GetStr("host"), r.GetStr("port"), r.GetStr("sslmode"))
+	s.connopts = fmt.Sprintf("%s:%s/%s?sslmode=%s", r.GetStr("host"), r.GetStr("port"), r.GetStr("dbname"), r.GetStr("sslmode"))
 	hbinterval, err := r.GetDuration("hbinterval")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse hbinterval")
@@ -206,7 +206,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[sqldbC
 		}
 	}
 
-	dbClient, err := sql.Open("postgres", fmt.Sprintf("user=%s password=%s %s", auth.Username, auth.Password, s.connopts))
+	dbClient, err := sql.Open("postgres", fmt.Sprintf("postgresql://%s:%s@%s", auth.Username, auth.Password, s.connopts))
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrClient, "Failed to init db conn")
 	}
