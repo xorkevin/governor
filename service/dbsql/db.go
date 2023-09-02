@@ -67,11 +67,10 @@ var (
 )
 
 type (
-	errConn           struct{}
-	errClient         struct{}
-	errNotFound       struct{}
-	errUnique         struct{}
-	errUndefinedTable struct{}
+	errConn     struct{}
+	errClient   struct{}
+	errNotFound struct{}
+	errUnique   struct{}
 )
 
 func (e errConn) Error() string {
@@ -88,10 +87,6 @@ func (e errNotFound) Error() string {
 
 func (e errUnique) Error() string {
 	return "Unique constraint violated"
-}
-
-func (e errUndefinedTable) Error() string {
-	return "Undefined table"
 }
 
 func errWithKind(err error, kind error, msg string) error {

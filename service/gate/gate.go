@@ -81,7 +81,6 @@ type (
 		lc          *lifecycle.Lifecycle[tokenSigner]
 		acl         authzacl.ACL
 		apikeys     apikey.Apikeys
-		realm       string
 		issuer      string
 		signingAlgs h2signer.SigningKeyAlgs
 		config      governor.SecretReader
@@ -109,7 +108,6 @@ func New(acl authzacl.ACL, apikeys apikey.Apikeys) *Service {
 
 func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("tokensecret", "")
-	r.SetDefault("realm", "governor")
 	r.SetDefault("issuer", "governor")
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
@@ -120,10 +118,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	s.log = klog.NewLevelLogger(kit.Logger)
 	s.config = r
 
-	s.realm = r.GetStr("realm")
-	if s.issuer == "" {
-		return kerrors.WithMsg(nil, "Auth realm is not set")
-	}
 	s.issuer = r.GetStr("issuer")
 	if s.issuer == "" {
 		return kerrors.WithMsg(nil, "Token issuer is not set")
