@@ -2,7 +2,6 @@ package profilemodel
 
 import (
 	"context"
-	"errors"
 
 	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/kerrors"
@@ -126,10 +125,7 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup profile model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup profile model")
 	}
 	return nil
 }

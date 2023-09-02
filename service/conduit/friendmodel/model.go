@@ -2,7 +2,6 @@ package friendmodel
 
 import (
 	"context"
-	"errors"
 
 	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor/service/dbsql"
@@ -157,10 +156,7 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup friend model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup friend model")
 	}
 	return nil
 }

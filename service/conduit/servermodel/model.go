@@ -2,7 +2,6 @@ package servermodel
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"xorkevin.dev/forge/model/sqldb"
@@ -305,22 +304,13 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup server model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup server model")
 	}
 	if err := r.tableChannels.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup server channel model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup server channel model")
 	}
 	if err := r.tablePresence.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup server presence model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup server presence model")
 	}
 	return nil
 }

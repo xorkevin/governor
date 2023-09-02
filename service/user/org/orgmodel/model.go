@@ -2,7 +2,6 @@ package orgmodel
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"xorkevin.dev/governor/service/dbsql"
@@ -387,22 +386,13 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup org model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup org model")
 	}
 	if err := r.tableMembers.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup org member model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup org member model")
 	}
 	if err := r.tableMods.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup org mod model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup org mod model")
 	}
 	return nil
 }

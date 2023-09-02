@@ -35,8 +35,6 @@ type (
 		hbmaxfail int
 		wg        *ksync.WaitGroup
 	}
-
-	ctxKeyDatabase struct{}
 )
 
 // New creates a new db service
@@ -66,10 +64,6 @@ var (
 	ErrNotFound errNotFound
 	// ErrUnique is returned when a unique constraint is violated
 	ErrUnique errUnique
-	// ErrUndefinedTable is returned when a table does not exist yet
-	ErrUndefinedTable errUndefinedTable
-	// ErrAuthz is returned when not authorized
-	ErrAuthz errAuthz
 )
 
 type (
@@ -78,7 +72,6 @@ type (
 	errNotFound       struct{}
 	errUnique         struct{}
 	errUndefinedTable struct{}
-	errAuthz          struct{}
 )
 
 func (e errConn) Error() string {
@@ -101,10 +94,6 @@ func (e errUndefinedTable) Error() string {
 	return "Undefined table"
 }
 
-func (e errAuthz) Error() string {
-	return "Insufficient privilege"
-}
-
 func errWithKind(err error, kind error, msg string) error {
 	return kerrors.New(kerrors.OptInner(err), kerrors.OptKind(ErrNotFound), kerrors.OptMsg("Not found"), kerrors.OptSkip(2))
 }
@@ -118,10 +107,6 @@ func wrapDBErr(err error, fallbackmsg string) error {
 		switch perr.Code {
 		case "23505": // unique_violation
 			return errWithKind(err, ErrUnique, "Unique constraint violated")
-		case "42P01": // undefined_table
-			return errWithKind(err, ErrUndefinedTable, "Table not defined")
-		case "42501": // insufficient_privilege
-			return errWithKind(err, ErrAuthz, "Unauthorized")
 		}
 	}
 	return errWithKind(err, nil, fallbackmsg)

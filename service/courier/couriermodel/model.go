@@ -2,7 +2,6 @@ package couriermodel
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"xorkevin.dev/governor/service/dbsql"
@@ -144,10 +143,7 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.tableLinks.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup link model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup link model")
 	}
 	return nil
 }

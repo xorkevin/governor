@@ -3,7 +3,6 @@ package usermodel
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"time"
 
 	"xorkevin.dev/governor/service/dbsql"
@@ -459,10 +458,7 @@ func (r *repo) Setup(ctx context.Context) error {
 		return err
 	}
 	if err := r.table.Setup(ctx, d); err != nil {
-		err = kerrors.WithMsg(err, "Failed to setup user model")
-		if !errors.Is(err, dbsql.ErrAuthz) {
-			return err
-		}
+		return kerrors.WithMsg(err, "Failed to setup user model")
 	}
 	return nil
 }
