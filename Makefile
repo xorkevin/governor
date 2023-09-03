@@ -23,10 +23,10 @@ COVERAGE_ARGS=-cover -covermode atomic -coverprofile $(COVERAGE_OUT)
 .PHONY: test testcover coverage cover
 
 test: ## Run tests
-	go test -trimpath -ldflags "-w -s" -race $(TEST_ARGS) $(TEST_PACKAGE)
+	./test.sh $(TEST_ARGS) $(TEST_PACKAGE)
 
 testcover: ## Run tests with coverage
-	go test -trimpath -ldflags "-w -s" -race $(COVERAGE_ARGS) $(TEST_ARGS) $(TEST_PACKAGE)
+	./test.sh $(COVERAGE_ARGS) $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## Create coverage report
 	go tool cover -html $(COVERAGE_OUT) -o $(COVERAGE_HTML)
