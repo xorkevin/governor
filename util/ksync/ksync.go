@@ -26,9 +26,7 @@ type (
 // NewWaitGroup creates a new [WaitGroup]
 func NewWaitGroup() *WaitGroup {
 	return &WaitGroup{
-		done:  make(chan struct{}),
-		once:  sync.Once{},
-		count: atomic.Int32{},
+		done: make(chan struct{}),
 	}
 }
 
