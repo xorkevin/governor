@@ -896,7 +896,9 @@ func TestServer(t *testing.T) {
 					// does not stop again if already stopped
 					server.Stop(context.Background())
 
-					assert.True(serviceA.ranStop)
+					if !serviceA.ranStop {
+						t.Error("service A did not stop")
+					}
 				})
 
 				logbuf.Reset()

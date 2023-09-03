@@ -199,15 +199,17 @@ func TestContext(t *testing.T) {
 		req, _, _, c := generateTestContext(http.MethodPost, "/api/path", &reqbody)
 		req.Header.Set(headerContentType, reqwriter.FormDataContentType())
 
-		file, header, err := c.FormFile("testfile")
-		assert.NoError(err)
-		t.Cleanup(func() {
-			assert.NoError(file.Close())
-		})
-		assert.Equal("testfilename", header.Filename)
-		body, err := io.ReadAll(file)
-		assert.NoError(err)
-		assert.Equal("test form file", string(body))
+		func() {
+			file, header, err := c.FormFile("testfile")
+			assert.NoError(err)
+			defer func() {
+				assert.NoError(file.Close())
+			}()
+			assert.Equal("testfilename", header.Filename)
+			body, err := io.ReadAll(file)
+			assert.NoError(err)
+			assert.Equal("test form file", string(body))
+		}()
 	})
 
 	t.Run("WriteStatus", func(t *testing.T) {

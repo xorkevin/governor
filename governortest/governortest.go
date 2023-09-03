@@ -1,13 +1,16 @@
 package governortest
 
 import (
+	"context"
 	"io"
+	"testing"
 
 	"xorkevin.dev/governor"
 )
 
-func NewTestServer(config, secrets io.Reader) *governor.Server {
-	return governor.New(governor.Opts{
+func NewTestServer(t *testing.T, config, secrets io.Reader) *governor.Server {
+	t.Helper()
+	server := governor.New(governor.Opts{
 		Appname: "govtest",
 		Version: governor.Version{
 			Num:  "test",
@@ -20,4 +23,8 @@ func NewTestServer(config, secrets io.Reader) *governor.Server {
 		ConfigReader: config,
 		VaultReader:  secrets,
 	})
+	t.Cleanup(func() {
+		server.Stop(context.Background())
+	})
+	return server
 }
