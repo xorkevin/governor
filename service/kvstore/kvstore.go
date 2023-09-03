@@ -49,7 +49,7 @@ type (
 		SetNX(ctx context.Context, key, val string, duration time.Duration) BoolResulter
 		Del(ctx context.Context, key ...string) ErrResulter
 		Incr(ctx context.Context, key string, delta int64) IntResulter
-		Expire(ctx context.Context, key string, duration time.Duration) BoolResulter
+		Expire(ctx context.Context, key string, duration time.Duration) ErrResulter
 		Subkey(keypath ...string) string
 		Subtree(prefix string) Multi
 		Exec(ctx context.Context) error
@@ -460,7 +460,7 @@ type (
 
 	multi struct {
 		prefix string
-		base   *baseMulti
+		base   Multi
 	}
 )
 
@@ -500,8 +500,8 @@ func (t *baseMulti) Incr(ctx context.Context, key string, delta int64) IntResult
 	}
 }
 
-func (t *baseMulti) Expire(ctx context.Context, key string, duration time.Duration) BoolResulter {
-	return &boolCmdResulter{
+func (t *baseMulti) Expire(ctx context.Context, key string, duration time.Duration) ErrResulter {
+	return &boolCmdErrResulter{
 		res: t.base.Expire(ctx, key, duration),
 	}
 }
@@ -557,7 +557,7 @@ func (t *multi) Incr(ctx context.Context, key string, delta int64) IntResulter {
 	return t.base.Incr(ctx, t.prefix+kvpathSeparator+key, delta)
 }
 
-func (t *multi) Expire(ctx context.Context, key string, duration time.Duration) BoolResulter {
+func (t *multi) Expire(ctx context.Context, key string, duration time.Duration) ErrResulter {
 	return t.base.Expire(ctx, t.prefix+kvpathSeparator+key, duration)
 }
 
@@ -582,7 +582,7 @@ func (t *multi) Subtree(prefix string) Multi {
 type (
 	tree struct {
 		prefix string
-		base   *Service
+		base   KVStore
 	}
 )
 
@@ -739,6 +739,22 @@ type (
 )
 
 func (r *intCmdErrResulter) Result() error {
+	if err := r.res.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			return kerrors.WithKind(err, ErrNotFound, "Key not found")
+		}
+		return kerrors.WithKind(err, ErrClient, "Failed to get key")
+	}
+	return nil
+}
+
+type (
+	boolCmdErrResulter struct {
+		res *redis.BoolCmd
+	}
+)
+
+func (r *boolCmdErrResulter) Result() error {
 	if err := r.res.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
 			return kerrors.WithKind(err, ErrNotFound, "Key not found")
