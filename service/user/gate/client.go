@@ -32,10 +32,10 @@ type (
 
 // NewCmdClient creates a new [*CmdClient]
 func NewCmdClient() *CmdClient {
-	return &CmdClient{
-		once:         ksync.NewOnce[clientConfig](),
-		systokenonce: ksync.NewOnce[string](),
-	}
+	c := &CmdClient{}
+	c.once = ksync.NewOnce(c.doInitConfig)
+	c.systokenonce = ksync.NewOnce(c.doGetSysToken)
+	return c
 }
 
 func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
@@ -48,12 +48,14 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) 
 	return nil
 }
 
+func (c *CmdClient) doInitConfig() (*clientConfig, error) {
+	return &clientConfig{
+		systokenfile: c.config.GetStr("systokenfile"),
+	}, nil
+}
+
 func (c *CmdClient) initConfig() (*clientConfig, error) {
-	return c.once.Do(func() (*clientConfig, error) {
-		return &clientConfig{
-			systokenfile: c.config.GetStr("systokenfile"),
-		}, nil
-	})
+	return c.once.Do()
 }
 
 func (c *clientConfig) getSysTokenFile() (string, error) {
@@ -63,23 +65,25 @@ func (c *clientConfig) getSysTokenFile() (string, error) {
 	return c.systokenfile, nil
 }
 
+func (c *CmdClient) doGetSysToken() (*string, error) {
+	cc, err := c.initConfig()
+	if err != nil {
+		return nil, err
+	}
+	fp, err := cc.getSysTokenFile()
+	if err != nil {
+		return nil, err
+	}
+	b, err := fs.ReadFile(c.term.FS(), fp)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to read systoken file")
+	}
+	s := string(b)
+	return &s, nil
+}
+
 func (c *CmdClient) GetSysToken() (string, error) {
-	s, err := c.systokenonce.Do(func() (*string, error) {
-		cc, err := c.initConfig()
-		if err != nil {
-			return nil, err
-		}
-		fp, err := cc.getSysTokenFile()
-		if err != nil {
-			return nil, err
-		}
-		b, err := fs.ReadFile(c.term.FS(), fp)
-		if err != nil {
-			return nil, kerrors.WithMsg(err, "Failed to read systoken file")
-		}
-		s := string(b)
-		return &s, nil
-	})
+	s, err := c.systokenonce.Do()
 	if err != nil {
 		return "", err
 	}

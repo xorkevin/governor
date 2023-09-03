@@ -46,10 +46,11 @@ type (
 func NewCmdClient() *CmdClient {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
-	return &CmdClient{
-		once:        ksync.NewOnce[clientConfig](),
+	c := &CmdClient{
 		signingAlgs: signingAlgs,
 	}
+	c.once = ksync.NewOnce(c.doInitConfig)
+	return c
 }
 
 func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
@@ -109,20 +110,22 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) 
 	return nil
 }
 
+func (c *CmdClient) doInitConfig() (*clientConfig, error) {
+	cc := &clientConfig{
+		issuer:   c.config.GetStr("issuer"),
+		audience: c.config.GetStr("audience"),
+	}
+	if cc.issuer == "" {
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token issuer is not set")
+	}
+	if cc.audience == "" {
+		return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token audience is not set")
+	}
+	return cc, nil
+}
+
 func (c *CmdClient) initConfig() (*clientConfig, error) {
-	return c.once.Do(func() (*clientConfig, error) {
-		cc := &clientConfig{
-			issuer:   c.config.GetStr("issuer"),
-			audience: c.config.GetStr("audience"),
-		}
-		if cc.issuer == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token issuer is not set")
-		}
-		if cc.audience == "" {
-			return nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token audience is not set")
-		}
-		return cc, nil
-	})
+	return c.once.Do()
 }
 
 func (c *CmdClient) genSysToken(args []string) error {

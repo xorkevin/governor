@@ -109,16 +109,15 @@ func TestOnce(t *testing.T) {
 
 		assert := require.New(t)
 
-		once := NewOnce[testobj]()
-		count := &atomic.Int64{}
-		fn := func() (*testobj, error) {
+		var count atomic.Int64
+		once := NewOnce(func() (*testobj, error) {
 			return &testobj{
 				field: count.Add(1),
 			}, nil
-		}
-		v1, err := once.Do(fn)
+		})
+		v1, err := once.Do()
 		assert.NoError(err)
-		v2, err := once.Do(fn)
+		v2, err := once.Do()
 		assert.NoError(err)
 		assert.True(v1 == v2)
 	})

@@ -58,11 +58,12 @@ type (
 func NewCmdClient() *CmdClient {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
-	return &CmdClient{
-		once:        ksync.NewOnce[clientConfig](),
-		tokenonce:   ksync.NewOnce[string](),
+	c := &CmdClient{
 		signingAlgs: signingAlgs,
 	}
+	c.once = ksync.NewOnce(c.doInitConfig)
+	c.tokenonce = ksync.NewOnce(c.doGetToken)
+	return c
 }
 
 func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistrar) {
@@ -137,13 +138,15 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) 
 	return nil
 }
 
+func (c *CmdClient) doInitConfig() (*clientConfig, error) {
+	return &clientConfig{
+		keyfile:   c.config.GetStr("keyfile"),
+		tokenfile: c.config.GetStr("tokenfile"),
+	}, nil
+}
+
 func (c *CmdClient) initConfig() (*clientConfig, error) {
-	return c.once.Do(func() (*clientConfig, error) {
-		return &clientConfig{
-			keyfile:   c.config.GetStr("keyfile"),
-			tokenfile: c.config.GetStr("tokenfile"),
-		}, nil
-	})
+	return c.once.Do()
 }
 
 func (c *clientConfig) getTokenFile() (string, error) {
@@ -153,23 +156,25 @@ func (c *clientConfig) getTokenFile() (string, error) {
 	return c.tokenfile, nil
 }
 
+func (c *CmdClient) doGetToken() (*string, error) {
+	cc, err := c.initConfig()
+	if err != nil {
+		return nil, err
+	}
+	fp, err := cc.getTokenFile()
+	if err != nil {
+		return nil, err
+	}
+	b, err := fs.ReadFile(c.term.FS(), fp)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to read token file")
+	}
+	s := string(b)
+	return &s, nil
+}
+
 func (c *CmdClient) GetToken() (string, error) {
-	s, err := c.tokenonce.Do(func() (*string, error) {
-		cc, err := c.initConfig()
-		if err != nil {
-			return nil, err
-		}
-		fp, err := cc.getTokenFile()
-		if err != nil {
-			return nil, err
-		}
-		b, err := fs.ReadFile(c.term.FS(), fp)
-		if err != nil {
-			return nil, kerrors.WithMsg(err, "Failed to read token file")
-		}
-		s := string(b)
-		return &s, nil
-	})
+	s, err := c.tokenonce.Do()
 	if err != nil {
 		return "", err
 	}

@@ -76,22 +76,23 @@ type (
 	// Once performs an action once
 	Once[T any] struct {
 		once sync.Once
+		f    func() (*T, error)
 		val  *T
 		err  error
 	}
 )
 
 // NewOnce creates a new [*Once]
-func NewOnce[T any]() *Once[T] {
+func NewOnce[T any](f func() (*T, error)) *Once[T] {
 	return &Once[T]{
-		once: sync.Once{},
+		f: f,
 	}
 }
 
 // Do calls a function returning a value and error once
-func (o *Once[T]) Do(f func() (*T, error)) (*T, error) {
+func (o *Once[T]) Do() (*T, error) {
 	o.once.Do(func() {
-		o.val, o.err = f()
+		o.val, o.err = o.f()
 	})
 	return o.val, o.err
 }
