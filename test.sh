@@ -2,6 +2,10 @@
 
 set -e
 
+log2() {
+  echo "$@" > /dev/stderr
+}
+
 export GOV_TEST_POSTGRES_USERNAME=postgres
 export GOV_TEST_POSTGRES_PASSWORD=admin
 export GOV_TEST_POSTGRES_DB=postgres
@@ -18,22 +22,21 @@ container_id=$(docker container run --detach \
   --env POSTGRES_INITDB_ARGS="--encoding UTF8 --locale=C --auth-local=trust --auth-host=scram-sha-256" \
   --env LANG="C" \
   postgres:alpine)
-echo "started container $container_id"
+log2 "started container $container_id"
 
 cleanup() {
-  echo "cleaning up container $container_id"
-  docker container stop "$container_id"
-  docker container rm --force --volumes "$container_id"
-  echo "cleaned up container $container_id"
+  log2 "stopping container $container_id"
+  docker container stop "$container_id" > /dev/stderr
+  docker container rm --force --volumes "$container_id" > /dev/stderr
 }
 
 trap cleanup EXIT
 
 dsn=postgresql://$GOV_TEST_POSTGRES_USERNAME:$GOV_TEST_POSTGRES_PASSWORD@$GOV_TEST_POSTGRES_HOST:$GOV_TEST_POSTGRES_PORT/$GOV_TEST_POSTGRES_DB
 
+log2 "waiting for container $container_id"
 until psql $dsn -A -t -c "select 'ok';" > /dev/null 2>&1; do
-  echo "waiting for container $container_id"
-  sleep 1
+  sleep 0.5
 done
 
 go test -trimpath -ldflags "-w -s" -race "$@"
