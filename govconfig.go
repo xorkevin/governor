@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/kerrors"
+	"xorkevin.dev/kfs"
 )
 
 type (
@@ -41,6 +43,7 @@ type (
 	ServerOpts struct {
 		ConfigReader io.Reader
 		VaultReader  io.Reader
+		Fsys         fs.FS
 	}
 )
 
@@ -62,6 +65,7 @@ type (
 		vault        secretsClient
 		vaultCache   *sync.Map
 		vaultReader  io.Reader
+		fsys         fs.FS
 		showBanner   bool
 		config       Config
 		logger       configLogger
@@ -202,6 +206,7 @@ func newSettings(opts Opts, serverOpts ServerOpts) *settings {
 		configReader: serverOpts.ConfigReader,
 		vaultCache:   &sync.Map{},
 		vaultReader:  serverOpts.VaultReader,
+		fsys:         serverOpts.Fsys,
 		config: Config{
 			Appname: opts.Appname,
 			Version: opts.Version,
@@ -255,6 +260,10 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 		if err := s.v.ReadInConfig(); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
+	}
+
+	if s.fsys == nil {
+		s.fsys = kfs.DirFS(".")
 	}
 
 	s.showBanner = s.v.GetBool("banner")

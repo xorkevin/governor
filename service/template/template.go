@@ -5,7 +5,7 @@ import (
 	"fmt"
 	htmlTemplate "html/template"
 	"io"
-	"os"
+	"io/fs"
 	"strings"
 	textTemplate "text/template"
 
@@ -55,7 +55,10 @@ const (
 
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
 	s.log = klog.NewLevelLogger(kit.Logger)
-	templateDir := os.DirFS(r.GetStr("dir"))
+	templateDir, err := fs.Sub(kit.Fsys, r.GetStr("dir"))
+	if err != nil {
+		return kerrors.WithKind(err, governor.ErrInvalidConfig, "Failed to get template dir")
+	}
 	tt, err := textTemplate.ParseFS(templateDir, r.GetStr("txtglob"))
 	if err != nil {
 		if strings.Contains(err.Error(), tplNoMatchErrorSubstring) {

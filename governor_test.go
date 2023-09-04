@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -801,6 +802,7 @@ func TestServer(t *testing.T) {
   }
 }
 `),
+					Fsys: fstest.MapFS{},
 				})
 
 				serviceA := newTestServiceA(tc.Check)
@@ -990,6 +992,7 @@ func TestServer(t *testing.T) {
   }
 }
 `),
+			Fsys: fstest.MapFS{},
 		})
 
 		serviceA := newTestServiceA(testServiceACheck{})

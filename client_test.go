@@ -260,6 +260,7 @@ func TestClient(t *testing.T) {
   }
 }
 `),
+		Fsys: fstest.MapFS{},
 	})
 
 	serviceC := &testServiceC{}

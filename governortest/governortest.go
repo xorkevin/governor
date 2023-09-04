@@ -1,8 +1,10 @@
 package governortest
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,17 +13,30 @@ import (
 	"testing/fstest"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/klog"
 )
 
-func NewTestServer(t *testing.T, config, secrets io.Reader) *governor.Server {
+func NewTestServer(t *testing.T, config, secrets map[string]any, fsys fs.FS) *governor.Server {
 	t.Helper()
 
 	if config == nil {
-		config = strings.NewReader("{}")
+		config = map[string]any{}
 	}
 	if secrets == nil {
-		secrets = strings.NewReader("{}")
+		secrets = map[string]any{}
+	}
+	if fsys == nil {
+		fsys = fstest.MapFS{}
+	}
+
+	configb, err := kjson.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretsb, err := kjson.Marshal(secrets)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	server := governor.New(governor.Opts{
@@ -34,8 +49,9 @@ func NewTestServer(t *testing.T, config, secrets io.Reader) *governor.Server {
 		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
 	}, &governor.ServerOpts{
-		ConfigReader: config,
-		VaultReader:  secrets,
+		ConfigReader: bytes.NewReader(configb),
+		VaultReader:  bytes.NewReader(secretsb),
+		Fsys:         fsys,
 	})
 	t.Cleanup(func() {
 		server.Stop(context.Background())

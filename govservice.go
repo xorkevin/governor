@@ -3,6 +3,7 @@ package governor
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sync/atomic"
 
 	"xorkevin.dev/governor/util/uid"
@@ -41,6 +42,7 @@ type (
 		Logger klog.Logger
 		Router Router
 		Tracer Tracer
+		Fsys   fs.FS
 	}
 
 	serviceOpt struct {
@@ -98,6 +100,7 @@ func (s *Server) initServices(ctx context.Context) error {
 			Logger: l,
 			Router: s.router(s.settings.config.BasePath+i.opt.url, l),
 			Tracer: s.tracer,
+			Fsys:   s.settings.fsys,
 		}); err != nil {
 			err := kerrors.WithMsg(err, "Init service failed")
 			s.log.Err(ctx, err, klog.AString("service", i.opt.name))

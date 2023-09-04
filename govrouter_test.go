@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 	"xorkevin.dev/klog"
@@ -509,6 +510,7 @@ func TestRouter(t *testing.T) {
   }
 }
 `),
+					Fsys: fstest.MapFS{},
 				})
 
 				assert := require.New(t)

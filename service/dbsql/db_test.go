@@ -3,7 +3,6 @@ package dbsql_test
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,25 +22,21 @@ func TestDatabase(t *testing.T) {
 
 	assert := require.New(t)
 
-	server := governortest.NewTestServer(t, strings.NewReader(`
-{
-  "database": {
-    "auth": "dbauth",
-    "dbname": "`+os.Getenv("GOV_TEST_POSTGRES_DB")+`",
-    "host": "`+os.Getenv("GOV_TEST_POSTGRES_HOST")+`",
-    "port": "`+os.Getenv("GOV_TEST_POSTGRES_PORT")+`"
-  }
-}
-`), strings.NewReader(`
-{
-  "data": {
-    "dbauth": {
-      "username": "`+os.Getenv("GOV_TEST_POSTGRES_USERNAME")+`",
-      "password": "`+os.Getenv("GOV_TEST_POSTGRES_PASSWORD")+`"
-    }
-  }
-}
-`))
+	server := governortest.NewTestServer(t, map[string]any{
+		"database": map[string]any{
+			"auth":   "dbauth",
+			"dbname": os.Getenv("GOV_TEST_POSTGRES_DB"),
+			"host":   os.Getenv("GOV_TEST_POSTGRES_HOST"),
+			"port":   os.Getenv("GOV_TEST_POSTGRES_PORT"),
+		},
+	}, map[string]any{
+		"data": map[string]any{
+			"dbauth": map[string]any{
+				"username": os.Getenv("GOV_TEST_POSTGRES_USERNAME"),
+				"password": os.Getenv("GOV_TEST_POSTGRES_PASSWORD"),
+			},
+		},
+	}, nil)
 
 	d := dbsql.New()
 	server.Register("database", "/null/db", d)

@@ -58,4 +58,14 @@ func TestGate(t *testing.T) {
 	assert.Equal(KeySubSystem, claims.Subject)
 	assert.Equal(KindAccess, claims.Kind)
 	assert.Equal(ScopeAll, claims.Scope)
+
+	governortest.NewTestServer(t, map[string]any{
+		"gate": map[string]any{
+			"tokensecret": "tokensecret",
+		},
+	}, map[string]any{
+		"data": map[string]any{
+			"tokensecret": string(bytes.TrimSpace(fsys.Fsys["key.txt"].Data)),
+		},
+	}, nil)
 }
