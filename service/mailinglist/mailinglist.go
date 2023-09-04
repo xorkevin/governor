@@ -201,15 +201,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 		klog.AString("eventsize", r.GetStr("eventsize")),
 	)
 
-	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
-
-	s.server = s.createSMTPServer()
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down mailinglist SMTP server"))
-		}
-	}()
-
 	sr := s.router()
 	sr.mountRoutes(kit.Router)
 	s.log.Info(ctx, "Mounted http routes")
@@ -235,6 +226,23 @@ func (s *Service) createSMTPServer() *smtp.Server {
 }
 
 func (s *Service) Start(ctx context.Context) error {
+	s.server = s.createSMTPServer()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		ctx := klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if err := s.server.ListenAndServe(); err != nil {
+					s.log.Err(ctx, kerrors.WithMsg(err, "Shutting down mailinglist SMTP server"))
+				}
+			}
+		}
+	}()
+
 	s.wg.Add(1)
 	go events.NewWatcher(
 		s.events,
@@ -261,20 +269,13 @@ func (s *Service) Start(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if err := s.server.Close(); err != nil {
+	if s.server != nil {
+		if err := s.server.Shutdown(ctx); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Shutdown mailing list SMTP server error"))
 		}
-	}()
+	}
 	if err := s.wg.Wait(ctx); err != nil {
 		s.log.WarnErr(ctx, kerrors.WithMsg(err, "Failed to stop"))
-	}
-	select {
-	case <-done:
-	case <-ctx.Done():
-		s.log.Warn(ctx, "Failed to stop")
 	}
 }
 

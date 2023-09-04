@@ -55,8 +55,6 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
 	s.log = klog.NewLevelLogger(kit.Logger)
 
-	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
-
 	sr := s.router()
 	sr.mountRoutes(governor.NewMethodRouter(kit.Router))
 	s.log.Info(ctx, "Mounted http routes")

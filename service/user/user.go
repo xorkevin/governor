@@ -436,8 +436,13 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 		klog.AString("gcduration", s.gcDuration.String()),
 	)
 
-	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
+	sr := s.router()
+	sr.mountRoute(kit.Router.GroupCtx("/user"))
+	sr.mountAuth(kit.Router.GroupCtx(authRoutePrefix, sr.rt))
+	sr.mountApikey(kit.Router.GroupCtx("/apikey"))
+	s.log.Info(ctx, "Mounted http routes")
 
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
 	s.lc = lifecycle.New(
 		ctx,
 		s.handleGetCipher,
@@ -447,11 +452,6 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	)
 	go s.lc.Heartbeat(ctx, s.wg)
 
-	sr := s.router()
-	sr.mountRoute(kit.Router.GroupCtx("/user"))
-	sr.mountAuth(kit.Router.GroupCtx(authRoutePrefix, sr.rt))
-	sr.mountApikey(kit.Router.GroupCtx("/apikey"))
-	s.log.Info(ctx, "Mounted http routes")
 	return nil
 }
 

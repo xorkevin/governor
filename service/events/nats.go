@@ -78,7 +78,6 @@ func (s *NatsService) Init(ctx context.Context, r governor.ConfigReader, kit gov
 	)
 
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "run"))
-
 	s.lc = lifecycle.New(
 		ctx,
 		s.handleGetClient,
