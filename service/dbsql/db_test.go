@@ -15,6 +15,10 @@ import (
 )
 
 func TestDatabase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("relies on db")
+	}
+
 	t.Parallel()
 
 	assert := require.New(t)

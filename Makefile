@@ -20,12 +20,15 @@ COVERAGE_HTML?=coverage.html
 
 COVERAGE_ARGS=-cover -covermode atomic -coverprofile $(COVERAGE_OUT)
 
-.PHONY: test testcover coverage cover
+.PHONY: test testunit testcover coverage cover
 
-test: ## Run tests
+test: ## Run all tests
 	./test.sh $(TEST_ARGS) $(TEST_PACKAGE)
 
-testcover: ## Run tests with coverage
+testunit: ## Runs unit tests
+	go test -trimpath -ldflags "-w -s" -race -short $(TEST_ARGS) $(TEST_PACKAGE)
+
+testcover: ## Run all tests with coverage
 	./test.sh $(COVERAGE_ARGS) $(TEST_ARGS) $(TEST_PACKAGE)
 
 coverage: ## Create coverage report
