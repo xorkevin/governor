@@ -14,7 +14,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func TestService(t *testing.T) {
+func TestDatabase(t *testing.T) {
 	t.Parallel()
 
 	assert := require.New(t)

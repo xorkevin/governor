@@ -220,6 +220,19 @@ func (c *testClientC) fail(args []string) error {
 	return kerrors.WithMsg(nil, "Should have errored")
 }
 
+type (
+	handlerRoundTripper struct {
+		Handler http.Handler
+	}
+)
+
+func (h handlerRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	rec := httptest.NewRecorder()
+	r = r.Clone(klog.ExtendCtx(r.Context(), nil))
+	h.Handler.ServeHTTP(rec, r)
+	return rec.Result(), nil
+}
+
 func TestClient(t *testing.T) {
 	t.Parallel()
 
@@ -256,12 +269,6 @@ func TestClient(t *testing.T) {
 
 	assert.NoError(server.Start(context.Background(), Flags{}, klog.Discard{}))
 
-	hserver := httptest.NewServer(server)
-	t.Cleanup(func() {
-		hserver.Close()
-		server.Stop(context.Background())
-	})
-
 	var out bytes.Buffer
 	fsys := &kfstest.MapFS{
 		Fsys: fstest.MapFS{
@@ -274,14 +281,17 @@ func TestClient(t *testing.T) {
 	}
 
 	client := NewClient(Opts{
-		Appname:      "govtest",
+		Appname: "govtest",
+		Version: Version{
+			Num:  "test",
+			Hash: "dev",
+		},
+		Description:  "test gov server",
+		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
 	}, &ClientOpts{
 		ConfigReader: strings.NewReader(`
 {
-  "http": {
-    "baseurl": "` + hserver.URL + `/api"
-  },
   "servicec": {
     "propbool": true,
     "propint": 123,
@@ -299,6 +309,9 @@ func TestClient(t *testing.T) {
   }
 }
 `),
+		HTTPTransport: handlerRoundTripper{
+			Handler: server,
+		},
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
 			Stdin:   strings.NewReader("test input contents"),

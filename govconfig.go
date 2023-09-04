@@ -169,7 +169,7 @@ func newSettings(opts Opts, serverOpts ServerOpts) *settings {
 	v.SetDefault("logger.level", "INFO")
 	v.SetDefault("banner", true)
 	v.SetDefault("http.addr", ":8080")
-	v.SetDefault("http.basepath", "/")
+	v.SetDefault("http.basepath", "/api")
 	v.SetDefault("http.maxreqsize", "2M")
 	v.SetDefault("http.maxheadersize", "1M")
 	v.SetDefault("http.maxconnread", "5s")
