@@ -404,7 +404,6 @@ func TestServer(t *testing.T) {
 			ResBody    cloner
 			Compressed string
 			Logs       []cloner
-			Setup      bool
 			MaxReqSize string
 			Check      testServiceACheck
 		}{
@@ -724,72 +723,6 @@ func TestServer(t *testing.T) {
 					Version: "test-dev",
 				},
 			},
-			{
-				Test:       "sets up services",
-				Method:     http.MethodPost,
-				Path:       "/api/setupz",
-				Route:      "/api/setupz",
-				RemoteAddr: "192.168.0.3:1234",
-				Username:   "setup",
-				Password:   "setupsecret",
-				Status:     http.StatusOK,
-				ResBody: testVersionRes{
-					Version: "test-dev",
-				},
-				Logs: []cloner{
-					testLogMsg{
-						Msg:     "Setup all services begin",
-						ReqPath: "/api/setupz",
-					},
-					testLogMsg{
-						Msg:     "Setup service success",
-						ReqPath: "/api/setupz",
-					},
-					testLogMsg{
-						Msg:     "Setup all services complete",
-						ReqPath: "/api/setupz",
-					},
-				},
-				Setup: true,
-			},
-			{
-				Test:       "checks setup username",
-				Method:     http.MethodPost,
-				Path:       "/api/setupz",
-				Route:      "/api/setupz",
-				RemoteAddr: "192.168.0.3:1234",
-				Username:   "bogus",
-				Password:   "setupsecret",
-				Status:     http.StatusForbidden,
-				ResBody: testServiceAErrorRes{
-					Msg: "Invalid setup secret",
-				},
-				Logs: []cloner{
-					testLogMsg{
-						Msg:     "Error response",
-						ReqPath: "/api/setupz",
-					},
-				},
-			},
-			{
-				Test:       "checks setup password",
-				Method:     http.MethodPost,
-				Path:       "/api/setupz",
-				Route:      "/api/setupz",
-				RemoteAddr: "192.168.0.3:1234",
-				Username:   "setup",
-				Password:   "bogus",
-				Status:     http.StatusForbidden,
-				ResBody: testServiceAErrorRes{
-					Msg: "Invalid setup secret",
-				},
-				Logs: []cloner{
-					testLogMsg{
-						Msg:     "Error response",
-						ReqPath: "/api/setupz",
-					},
-				},
-			},
 		} {
 			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
@@ -840,7 +773,6 @@ func TestServer(t *testing.T) {
   "trustedproxies": [
     "10.0.0.0/8"
   ],
-  "setupsecret": "setupsecret",
   "servicea": {
     "prop2": "yetanothervalue",
     "somesecret": "s1secret",
@@ -863,9 +795,6 @@ func TestServer(t *testing.T) {
 					VaultReader: strings.NewReader(`
 {
   "data": {
-    "setupsecret": {
-      "secret": "setupsecret"
-    },
     "s1secret": {
       "secret": "secretval"
     }
@@ -882,9 +811,9 @@ func TestServer(t *testing.T) {
 				log := klog.New(
 					klog.OptHandler(klog.NewJSONSlogHandler(klog.NewSyncWriter(&logbuf))),
 				)
-				assert.NoError(server.Init(context.Background(), Flags{}, log))
+				assert.NoError(server.Start(context.Background(), Flags{}, log))
 				// does not reinit if already init-ed
-				assert.NoError(server.Init(context.Background(), Flags{}, log))
+				assert.NoError(server.Start(context.Background(), Flags{}, log))
 
 				assert.True(serviceA.ranInit)
 				assert.True(serviceA.ranStart)
@@ -993,8 +922,6 @@ func TestServer(t *testing.T) {
 					assert.Equal(tc.ResBody, res.Value())
 				}
 
-				assert.Equal(tc.Setup, serviceA.ranSetup)
-
 				for _, i := range tc.Logs {
 					logEntry := i.CloneEmptyPointer()
 					assert.NoError(j.Decode(logEntry))
@@ -1012,5 +939,68 @@ func TestServer(t *testing.T) {
 				assert.False(j.More())
 			})
 		}
+	})
+
+	t.Run("Setup", func(t *testing.T) {
+		t.Parallel()
+
+		assert := require.New(t)
+
+		server := New(Opts{
+			Appname: "govtest",
+			Version: Version{
+				Num:  "test",
+				Hash: "dev",
+			},
+			Description:  "test gov server",
+			EnvPrefix:    "gov",
+			ClientPrefix: "govc",
+		}, &ServerOpts{
+			ConfigReader: strings.NewReader(`
+{
+  "http": {
+    "addr": ":8080",
+    "basepath": "/api"
+  },
+  "servicea": {
+    "prop2": "yetanothervalue",
+    "somesecret": "s1secret",
+    "bogussecret": "bogussecret",
+    "propbool": true,
+    "propint": 271828,
+    "propdur": "24h",
+    "propstrslice": [
+      "abc",
+      "def"
+    ],
+    "propobj": [
+      {
+        "field1": "abc"
+      }
+    ]
+  }
+}
+`),
+			VaultReader: strings.NewReader(`
+{
+  "data": {
+    "s1secret": {
+      "secret": "secretval"
+    }
+  }
+}
+`),
+		})
+
+		serviceA := newTestServiceA(testServiceACheck{})
+		server.Register("servicea", "/servicea", serviceA)
+
+		assert.Equal("servicea", serviceA.name)
+
+		assert.NoError(server.Setup(context.Background(), Flags{}, klog.Discard{}))
+		assert.True(serviceA.ranInit)
+		assert.False(serviceA.ranStart)
+		assert.True(serviceA.ranSetup)
+		assert.True(serviceA.ranStop)
 	})
 }

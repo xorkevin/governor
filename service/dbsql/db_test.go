@@ -41,7 +41,7 @@ func TestService(t *testing.T) {
 
 	d := dbsql.New()
 	server.Register("database", "/null/db", d)
-	assert.NoError(server.Init(context.Background(), governor.Flags{}, klog.Discard{}))
+	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
 	static := dbsqltest.NewTestStatic(t)
 

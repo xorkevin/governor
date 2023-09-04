@@ -25,8 +25,7 @@ import (
 
 type (
 	testServiceC struct {
-		log      *klog.LevelLogger
-		ranSetup bool
+		log *klog.LevelLogger
 	}
 
 	testServiceCReq struct {
@@ -55,7 +54,6 @@ func (s *testServiceC) Stop(ctx context.Context) {
 }
 
 func (s *testServiceC) Setup(ctx context.Context, req ReqSetup) error {
-	s.ranSetup = true
 	return nil
 }
 
@@ -166,11 +164,22 @@ func (c *testClientC) echo(args []string) error {
 		return err
 	}
 
+	var buf bytes.Buffer
 	f, err := fs.ReadFile(c.term.FS(), "test.txt")
 	if err != nil {
 		return kerrors.WithMsg(err, "Could not read file")
 	}
-	if err := kfs.WriteFile(c.term.FS(), "testoutput.txt", f, 0o644); err != nil {
+	if _, err := buf.Write(f); err != nil {
+		return err
+	}
+	ib, err := io.ReadAll(c.term.Stdin())
+	if err != nil {
+		return kerrors.WithMsg(err, "Could not read stdin")
+	}
+	if _, err := buf.Write(ib); err != nil {
+		return err
+	}
+	if err := kfs.WriteFile(c.term.FS(), "testoutput.txt", buf.Bytes(), 0o644); err != nil {
 		return kerrors.WithMsg(err, "Could not write file")
 	}
 
@@ -229,16 +238,12 @@ func TestClient(t *testing.T) {
   "http": {
     "addr": ":8080",
     "basepath": "/api"
-  },
-  "setupsecret": "setupsecret"
+  }
 }
 `),
 		VaultReader: strings.NewReader(`
 {
   "data": {
-    "setupsecret": {
-      "secret": "setupsecret"
-    }
   }
 }
 `),
@@ -249,7 +254,7 @@ func TestClient(t *testing.T) {
 
 	assert := require.New(t)
 
-	assert.NoError(server.Init(context.Background(), Flags{}, klog.Discard{}))
+	assert.NoError(server.Start(context.Background(), Flags{}, klog.Discard{}))
 
 	hserver := httptest.NewServer(server)
 	t.Cleanup(func() {
@@ -296,7 +301,7 @@ func TestClient(t *testing.T) {
 `),
 		TermConfig: &TermConfig{
 			StdinFd: int(os.Stdin.Fd()),
-			Stdin:   strings.NewReader("setupsecret"),
+			Stdin:   strings.NewReader("test input contents"),
 			Stdout:  klog.NewSyncWriter(&out),
 			Stderr:  io.Discard,
 			Fsys:    fsys,
@@ -315,13 +320,6 @@ func TestClient(t *testing.T) {
 
 	assert.NoError(client.Init(ClientFlags{}, klog.Discard{}))
 
-	setupres, err := client.Setup(context.Background(), "-")
-	assert.NoError(err)
-	assert.Equal(&ResSetup{
-		Version: "test-dev",
-	}, setupres)
-	assert.True(serviceC.ranSetup)
-
 	assert.True(clientC.ranRegister)
 	assert.True(clientC.ranInit)
 
@@ -336,7 +334,7 @@ func TestClient(t *testing.T) {
 
 	outputFile := fsys.Fsys["testoutput.txt"]
 	assert.NotNil(outputFile)
-	assert.Equal([]byte("test file contents"), outputFile.Data)
+	assert.Equal([]byte("test file contentstest input contents"), outputFile.Data)
 
 	assert.NoError(clientC.echoEmpty(nil))
 	status, err := strconv.Atoi(out.String())

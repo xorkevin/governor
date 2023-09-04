@@ -500,16 +500,12 @@ func TestRouter(t *testing.T) {
   "http": {
     "addr": ":8080",
     "basepath": "/api"
-  },
-  "setupsecret": "setupsecret"
+  }
 }
 `),
 					VaultReader: strings.NewReader(`
 {
   "data": {
-    "setupsecret": {
-      "secret": "setupsecret"
-    }
   }
 }
 `),
@@ -520,7 +516,7 @@ func TestRouter(t *testing.T) {
 				serviceB := &testServiceB{}
 				server.Register("serviceb", "/serviceb", serviceB)
 
-				assert.NoError(server.Init(context.Background(), Flags{}, klog.Discard{}))
+				assert.NoError(server.Start(context.Background(), Flags{}, klog.Discard{}))
 
 				t.Cleanup(func() {
 					server.Stop(context.Background())

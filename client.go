@@ -1,11 +1,6 @@
 package governor
 
 import (
-	"context"
-	"errors"
-	"io"
-	"net/http"
-
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -196,33 +191,4 @@ func (c *Client) Init(flags ClientFlags, log klog.Logger) error {
 		}
 	}
 	return nil
-}
-
-// Setup sends a setup request to the server
-func (c *Client) Setup(ctx context.Context, secret string) (*ResSetup, error) {
-	if secret == "-" {
-		var err error
-		secret, err = c.term.ReadLine()
-		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, kerrors.WithMsg(err, "Failed reading setup secret")
-		}
-	}
-	if err := setupSecretValid(secret); err != nil {
-		return nil, err
-	}
-	body := &ResSetup{}
-	r, err := c.httpc.HTTPClient.Req(http.MethodPost, "/setupz", nil)
-	if err != nil {
-		return nil, err
-	}
-	r.SetBasicAuth("setup", secret)
-	_, decoded, err := c.httpc.DoJSON(ctx, r, body)
-	if err != nil {
-		return nil, err
-	}
-	if !decoded {
-		return nil, kerrors.WithKind(nil, ErrServerRes, "Non-decodable response")
-	}
-	c.log.Info(ctx, "Successfully setup governor", klog.AString("version", body.Version))
-	return body, nil
 }

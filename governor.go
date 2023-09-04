@@ -37,7 +37,8 @@ type (
 		log      *klog.LevelLogger
 		tracer   Tracer
 		i        chi.Router
-		running  bool
+		initted  bool
+		started  bool
 		mu       sync.Mutex
 	}
 )
@@ -52,12 +53,11 @@ func New(opts Opts, serverOpts *ServerOpts) *Server {
 	}
 }
 
-// Init initializes the config, initializes the server and its registered
-// services, and starts all services
-func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
+// init initializes the config, registered services, and server
+func (s *Server) init(ctx context.Context, flags Flags, log klog.Logger) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.running {
+	if s.initted {
 		return nil
 	}
 
@@ -167,8 +167,6 @@ func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
 
 	s.log.Info(ctx, "Secrets source", klog.AString("source", s.settings.vault.Info()))
 
-	s.initSetup(s.router(s.settings.config.BasePath+"/setupz", s.log.Logger))
-	s.log.Info(ctx, "Init setup routes")
 	s.initHealth(s.router(s.settings.config.BasePath+"/healthz", s.log.Logger))
 	s.log.Info(ctx, "Init health routes")
 
@@ -176,12 +174,29 @@ func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
 		return err
 	}
 
+	s.initted = true
+	return nil
+}
+
+// Start runs init and starts registered services
+func (s *Server) Start(ctx context.Context, flags Flags, log klog.Logger) error {
+	if err := s.init(ctx, flags, log); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		return nil
+	}
+
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "start"))
+
 	if err := s.startServices(ctx); err != nil {
 		return err
 	}
 
-	s.running = true
+	s.started = true
 	return nil
 }
 
@@ -189,11 +204,12 @@ func (s *Server) Init(ctx context.Context, flags Flags, log klog.Logger) error {
 func (s *Server) Stop(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.running {
+	if !s.initted {
 		return
 	}
 	s.stopServices(ctx)
-	s.running = false
+	s.initted = false
+	s.started = false
 }
 
 // ServeHTTP implements [net/http.Handler]
@@ -205,7 +221,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Serve(ctx context.Context, flags Flags, log klog.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if err := s.Init(ctx, flags, log); err != nil {
+	if err := s.Start(ctx, flags, log); err != nil {
 		return err
 	}
 
@@ -247,6 +263,31 @@ func (s *Server) Serve(ctx context.Context, flags Flags, log klog.Logger) error 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		s.log.Err(shutdownCtx, kerrors.WithMsg(err, "Shutdown server error"))
 	}
+	s.Stop(shutdownCtx)
+	return nil
+}
+
+type (
+	// ReqSetup is a service setup request
+	ReqSetup struct{}
+)
+
+// Setup runs init and setup
+func (s *Server) Setup(ctx context.Context, flags Flags, log klog.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if err := s.init(ctx, flags, log); err != nil {
+		return err
+	}
+
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "setup"))
+	if err := s.setupServices(ctx, ReqSetup{}); err != nil {
+		return err
+	}
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.phase", "stop"))
+	s.log.Info(ctx, "Shutdown process begin")
+	shutdownCtx, shutdownCancel := context.WithTimeout(klog.ExtendCtx(context.Background(), ctx), 16*time.Second)
+	defer shutdownCancel()
 	s.Stop(shutdownCtx)
 	return nil
 }

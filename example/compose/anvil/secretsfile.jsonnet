@@ -5,9 +5,6 @@ local secrets = import 'secrets.libsonnet';
 
 {
   data: {
-    setupsecret: {
-      secret: 'admin',
-    },
     dbauth: secrets.postgres,
     kvauth: secrets.redis,
     objauth: secrets.minio,

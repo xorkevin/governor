@@ -38,7 +38,6 @@ local args = anvil.getargs();
   vault: {
     filesource: anvil.pathJoin([args.outputdir, 'secrets.json']),
   },
-  setupsecret: 'setupsecret',
 
   // services
   database: {

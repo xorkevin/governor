@@ -56,8 +56,7 @@
       "port": 6379
    },
    "logger": {
-      "level": "DEBUG",
-      "output": "STDERR"
+      "level": "DEBUG"
    },
    "mail": {
       "auth": "mailauth",
@@ -153,7 +152,6 @@
          "replace": "/api/oauth/openid-configuration"
       }
    ],
-   "setupsecret": "setupsecret",
    "template": {
       "dir": "compose/anvil_out/governor/templates"
    },

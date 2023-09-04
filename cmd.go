@@ -31,7 +31,6 @@ type (
 		clientConfig string
 		logLevel     string
 		logPlain     bool
-		setupSecret  string
 		docOutputDir string
 	}
 
@@ -85,15 +84,12 @@ The server first runs all init procedures for all services before starting.`,
 
 	if c.c != nil {
 		setupCmd := &cobra.Command{
-			Use:   "setup",
-			Short: "runs the setup procedures for all services",
-			Long: `Runs the setup procedures for all services
-
-Calls the server setup endpoint.`,
+			Use:               "setup",
+			Short:             "runs the setup procedures for all services",
+			Long:              `Runs the setup procedures for all services`,
 			Run:               c.execSetup,
 			DisableAutoGenTag: true,
 		}
-		setupCmd.PersistentFlags().StringVar(&c.cmdFlags.setupSecret, "secret", "", "setup secret")
 		rootCmd.AddCommand(setupCmd)
 	}
 
@@ -192,18 +188,21 @@ func (c *Cmd) execServe(cmd *cobra.Command, args []string) {
 	c.runInt(c.serve)
 }
 
+func (c *Cmd) setup(ctx context.Context) error {
+	return c.s.Setup(ctx, Flags{
+		ConfigFile: c.cmdFlags.configFile,
+		LogPlain:   c.cmdFlags.logPlain,
+	}, c.log.Logger)
+}
+
+func (c *Cmd) execSetup(cmd *cobra.Command, args []string) {
+	c.runInt(c.setup)
+}
+
 func (c *Cmd) clientInit() {
 	if err := c.c.Init(ClientFlags{
 		ConfigFile: c.cmdFlags.clientConfig,
 	}, c.log.Logger); err != nil {
-		c.logFatal(err)
-		return
-	}
-}
-
-func (c *Cmd) execSetup(cmd *cobra.Command, args []string) {
-	c.clientInit()
-	if _, err := c.c.Setup(context.Background(), c.cmdFlags.setupSecret); err != nil {
 		c.logFatal(err)
 		return
 	}
