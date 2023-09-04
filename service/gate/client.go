@@ -1,6 +1,8 @@
 package gate
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -32,13 +34,18 @@ type (
 
 	// CmdClient is a gate cmd client
 	CmdClient struct {
-		once        *ksync.Once[clientConfig]
-		tokenonce   *ksync.Once[string]
-		signingAlgs h2signer.SigningKeyAlgs
-		config      governor.ConfigValueReader
-		term        governor.Term
-		tokenFlags  tokenFlags
-		keyFlags    keyFlags
+		once          *ksync.Once[clientConfig]
+		tokenonce     *ksync.Once[string]
+		signingAlgs   h2signer.SigningKeyAlgs
+		config        governor.ConfigValueReader
+		term          governor.Term
+		keyFlags      keyFlags
+		tokenFlags    tokenFlags
+		validateFlags validateFlags
+	}
+
+	keyFlags struct {
+		privkey string
 	}
 
 	tokenFlags struct {
@@ -49,8 +56,9 @@ type (
 		output    string
 	}
 
-	keyFlags struct {
+	validateFlags struct {
 		privkey string
+		token   string
 	}
 )
 
@@ -92,7 +100,6 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 		Flags: []governor.CmdFlag{
 			{
 				Long:     "key",
-				Short:    "i",
 				Usage:    "token private key",
 				Required: false,
 				Value:    &c.tokenFlags.privkey,
@@ -130,6 +137,27 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.genToken))
+
+	cr.Register(governor.CmdDesc{
+		Usage: "validate",
+		Short: "validates a token",
+		Long:  "validates a token and prints out parsed claims",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "key",
+				Usage:    "token private key",
+				Required: false,
+				Value:    &c.validateFlags.privkey,
+			},
+			{
+				Long:     "token",
+				Short:    "i",
+				Usage:    "token file",
+				Required: false,
+				Value:    &c.validateFlags.token,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.validateToken))
 }
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
@@ -200,9 +228,6 @@ func (c *CmdClient) genKey(args []string) error {
 	if keyfile == "" {
 		keyfile = cc.keyfile
 	}
-	if keyfile == "" {
-		return kerrors.WithMsg(err, "Invalid key output")
-	}
 
 	cfg, err := eddsa.NewConfig()
 	if err != nil {
@@ -213,7 +238,7 @@ func (c *CmdClient) genKey(args []string) error {
 		return kerrors.WithMsg(err, "Failed to serialize key")
 	}
 
-	if keyfile == "-" {
+	if keyfile == "" {
 		if _, err := io.WriteString(c.term.Stdout(), cfgstr+"\n"); err != nil {
 			return kerrors.WithMsg(err, "Failed to write key to stdout")
 		}
@@ -223,6 +248,35 @@ func (c *CmdClient) genKey(args []string) error {
 		return kerrors.WithMsg(err, "Failed to write key to file")
 	}
 	return nil
+}
+
+func (c *CmdClient) readKeyFile(keyfile string) (h2signer.SigningKey, error) {
+	cc, err := c.initConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if keyfile == "" {
+		keyfile = cc.keyfile
+	}
+	if keyfile == "" {
+		return nil, kerrors.WithMsg(err, "Invalid key file")
+	}
+
+	skb, err := fs.ReadFile(c.term.FS(), keyfile)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to read private key file")
+	}
+	skb = bytes.TrimSpace(skb)
+
+	key, err := h2signer.SigningKeyFromParams(string(skb), c.signingAlgs)
+	if err != nil {
+		return nil, kerrors.WithMsg(err, "Failed to parse private key")
+	}
+	if key.Alg() != eddsa.SigID {
+		return nil, kerrors.WithMsg(nil, "Invalid private key signature algorithm")
+	}
+	return key, nil
 }
 
 func (c *CmdClient) genToken(args []string) error {
@@ -235,24 +289,15 @@ func (c *CmdClient) genToken(args []string) error {
 	if output == "" {
 		output = cc.tokenfile
 	}
-	if output == "" {
-		return kerrors.WithMsg(err, "Invalid token output")
-	}
 
 	expire, err := time.ParseDuration(c.tokenFlags.expirestr)
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
-	skb, err := fs.ReadFile(c.term.FS(), c.tokenFlags.privkey)
+
+	key, err := c.readKeyFile(c.tokenFlags.privkey)
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to read private key file")
-	}
-	key, err := h2signer.SigningKeyFromParams(string(skb), c.signingAlgs)
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse private key")
-	}
-	if key.Alg() != eddsa.SigID {
-		return kerrors.WithMsg(nil, "Invalid private key signature algorithm")
+		return err
 	}
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, key.Verifier().ID()))
 	if err != nil {
@@ -273,7 +318,7 @@ func (c *CmdClient) genToken(args []string) error {
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
 
-	if output == "-" {
+	if output == "" {
 		if _, err := io.WriteString(c.term.Stdout(), token+"\n"); err != nil {
 			return kerrors.WithMsg(err, "Failed to write token to stdout")
 		}
@@ -281,6 +326,73 @@ func (c *CmdClient) genToken(args []string) error {
 	}
 	if err := kfs.WriteFile(c.term.FS(), output, []byte(token+"\n"), 0o600); err != nil {
 		return kerrors.WithMsg(err, "Failed to write token to file")
+	}
+	return nil
+}
+
+func (c *CmdClient) validateToken(args []string) error {
+	cc, err := c.initConfig()
+	if err != nil {
+		return err
+	}
+
+	key, err := c.readKeyFile(c.tokenFlags.privkey)
+	if err != nil {
+		return err
+	}
+
+	tokenfile := c.validateFlags.token
+	if tokenfile == "" {
+		tokenfile = cc.tokenfile
+	}
+	if tokenfile == "" {
+		return kerrors.WithMsg(nil, "Invalid token file")
+	}
+
+	var tokenb []byte
+	if tokenfile == "-" {
+		var err error
+		tokenb, err = io.ReadAll(c.term.Stdin())
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to read token from stdin")
+		}
+	} else {
+		var err error
+		tokenb, err = fs.ReadFile(c.term.FS(), tokenfile)
+		if err != nil {
+			return kerrors.WithMsg(err, "Failed to read token file")
+		}
+	}
+
+	token, err := jwt.ParseSigned(string(tokenb))
+	if err != nil {
+		return kerrors.WithKind(err, ErrInvalidToken, "Invalid token")
+	}
+	if len(token.Headers) != 1 {
+		return kerrors.WithKind(nil, ErrInvalidToken, "Invalid token headers")
+	}
+	if token.Headers[0].KeyID != key.Verifier().ID() {
+		return kerrors.WithKind(nil, ErrInvalidToken, "Invalid token key id")
+	}
+
+	var claims Claims
+	var jwtclaims jwt.Claims
+	if err := token.Claims(key.Verifier().Public(), &claims, &jwtclaims); err != nil {
+		return kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
+	}
+	now := time.Now().Round(0).UTC()
+	if err := jwtclaims.ValidateWithLeeway(jwt.Expected{
+		Time: now,
+	}, 0); err != nil {
+		return kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
+	}
+
+	claimsb, err := json.Marshal(claims)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to marshal token claims to json")
+	}
+	if _, err := io.WriteString(c.term.Stdout(), string(claimsb)+"\n"); err != nil {
+		return kerrors.WithMsg(err, "Failed to write token claims to stdout")
 	}
 	return nil
 }

@@ -5,7 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/klog"
@@ -13,6 +16,14 @@ import (
 
 func NewTestServer(t *testing.T, config, secrets io.Reader) *governor.Server {
 	t.Helper()
+
+	if config == nil {
+		config = strings.NewReader("{}")
+	}
+	if secrets == nil {
+		secrets = strings.NewReader("{}")
+	}
+
 	server := governor.New(governor.Opts{
 		Appname: "govtest",
 		Version: governor.Version{
@@ -45,8 +56,36 @@ func (h HandlerRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) 
 	return rec.Result(), nil
 }
 
+type (
+	emptyReader struct{}
+)
+
+func (r emptyReader) Read(p []byte) (int, error) {
+	return 0, io.EOF
+}
+
+type (
+	SuccessHandler struct{}
+)
+
+func (h SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+}
+
 func NewTestClient(t *testing.T, server http.Handler, config io.Reader, termConfig *governor.TermConfig) *governor.Client {
 	t.Helper()
+
+	if config == nil {
+		config = strings.NewReader("{}")
+	}
+
+	if termConfig == nil {
+		termConfig = NewTestTerm()
+	}
+
+	if server == nil {
+		server = SuccessHandler{}
+	}
 
 	return governor.NewClient(governor.Opts{
 		Appname: "govtest",
@@ -64,4 +103,14 @@ func NewTestClient(t *testing.T, server http.Handler, config io.Reader, termConf
 		},
 		TermConfig: termConfig,
 	})
+}
+
+func NewTestTerm() *governor.TermConfig {
+	return &governor.TermConfig{
+		StdinFd: int(os.Stdin.Fd()),
+		Stdin:   emptyReader{},
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+		Fsys:    fstest.MapFS{},
+	}
 }
