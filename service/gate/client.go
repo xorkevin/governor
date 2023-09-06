@@ -294,6 +294,9 @@ func (c *CmdClient) genToken(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Invalid token expiration")
 	}
+	if expire > 12*time.Hour {
+		return kerrors.WithMsg(err, "Token expiration too long")
+	}
 
 	key, err := c.readKeyFile(c.tokenFlags.privkey)
 	if err != nil {
