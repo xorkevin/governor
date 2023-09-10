@@ -84,9 +84,12 @@ type (
 	}
 
 	chanSubscription struct {
-		s     *MuxChan
-		topic string
-		group string
+		s      *MuxChan
+		topic  string
+		group  string
+		inbox  chan Msg
+		done   chan struct{}
+		closed bool
 	}
 )
 
@@ -100,20 +103,21 @@ func (s *MuxChan) Curate(ctx context.Context, wg *ksync.WaitGroup) {
 	}
 }
 
-func (s *MuxChan) writeMsgs(ctx context.Context, msgs []PublishMsg) {
-}
-
 func (s *MuxChan) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	t, ok := s.topics[topic]
 	if !ok {
 		return nil, kerrors.WithKind(nil, ErrNotFound, fmt.Sprintf("Unknown topic: %s", topic))
 	}
 	sub := &chanSubscription{
-		s:     s,
-		topic: topic,
-		group: group,
+		s:      s,
+		topic:  topic,
+		group:  group,
+		inbox:  make(chan Msg),
+		done:   make(chan struct{}),
+		closed: false,
 	}
 	g, ok := t.groups[group]
 	if !ok {
@@ -134,6 +138,15 @@ func (s *MuxChan) Subscribe(ctx context.Context, topic, group string, opts Consu
 func (s *MuxChan) unsubscribe(ctx context.Context, sub *chanSubscription) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if sub.closed {
+		return
+	}
+
+	sub.closed = true
+	close(sub.inbox)
+	close(sub.done)
+
 	t, ok := s.topics[sub.topic]
 	if !ok {
 		return
@@ -213,7 +226,12 @@ func (s *MuxChan) DeleteStream(ctx context.Context, topic string) error {
 }
 
 func (s *chanSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
-	return nil, nil
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case m := <-s.inbox:
+		return &m, nil
+	}
 }
 
 func (s *chanSubscription) IsAssigned(msg Msg) bool {
