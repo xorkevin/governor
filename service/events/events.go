@@ -101,7 +101,7 @@ type (
 		group    string
 		log      *klog.LevelLogger
 		reader   *kgo.Client
-		mu       *sync.RWMutex
+		mu       sync.RWMutex
 		assigned map[int32]chan struct{}
 		closed   bool
 	}
@@ -504,7 +504,6 @@ func (s *Service) Subscribe(ctx context.Context, topic, group string, opts Consu
 			klog.AString("events.topic", topic),
 			klog.AString("events.group", group),
 		)),
-		mu:       &sync.RWMutex{},
 		assigned: map[int32]chan struct{}{},
 		closed:   false,
 	}
