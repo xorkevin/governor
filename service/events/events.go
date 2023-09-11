@@ -62,11 +62,9 @@ type (
 	// Subscription manages an active subscription
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
-		IsAssigned(msg Msg) bool
 		MsgUnassigned(msg Msg) <-chan struct{}
 		Commit(ctx context.Context, msg Msg) error
 		Close(ctx context.Context) error
-		IsClosed() bool
 	}
 
 	// Events is an events service with at least once semantics
@@ -564,8 +562,7 @@ func (s *subscription) isClosed() bool {
 	return s.closed
 }
 
-// IsAssigned returns if a message is assigned to the consumer
-func (s *subscription) IsAssigned(msg Msg) bool {
+func (s *subscription) isAssigned(msg Msg) bool {
 	if msg.record == nil || msg.record.Topic != s.topic {
 		return false
 	}
@@ -675,14 +672,14 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
+	if msg.record == nil {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
 	if s.isClosed() {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
-	if !s.IsAssigned(msg) {
+	if !s.isAssigned(msg) {
 		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
-	}
-	if msg.record == nil {
-		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	s.reader.MarkCommitRecords(msg.record)
 	return nil
@@ -711,11 +708,6 @@ func (s *subscription) Close(ctx context.Context) error {
 	s.reader.Close()
 	s.log.Info(ctx, "Closed subscriber")
 	return nil
-}
-
-// IsClosed returns if the client is closed
-func (s *subscription) IsClosed() bool {
-	return s.isClosed()
 }
 
 func optInt(a int) *string {
@@ -956,9 +948,6 @@ func (w *Watcher) consume(ctx context.Context, sub Subscription, opts WatchOpts)
 				return
 			}
 			delay = min(delay*2, opts.MaxBackoff)
-			continue
-		}
-		if !sub.IsAssigned(*m) {
 			continue
 		}
 		w.consumeMsg(ctx, sub, *m, opts)

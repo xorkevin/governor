@@ -2,11 +2,11 @@ package events
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/kerrors"
 )
 
@@ -73,35 +73,24 @@ type (
 
 	chanTopic struct {
 		groups map[string]*chanGroup
-		ring   *ringBuffer
 		offset int
 	}
 
 	chanGroup struct {
-		sub    *chanSubscription
-		subs   map[*chanSubscription]struct{}
-		offset int
+		ring *ringBuffer
+		sub  *chanSubscription
+		subs map[*chanSubscription]struct{}
 	}
 
 	chanSubscription struct {
 		s      *MuxChan
 		topic  string
 		group  string
-		inbox  chan Msg
-		done   chan struct{}
+		rCond  *sync.Cond
 		closed bool
+		done   chan struct{}
 	}
 )
-
-func (s *MuxChan) Curate(ctx context.Context, wg *ksync.WaitGroup) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		}
-	}
-}
 
 func (s *MuxChan) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
 	s.mu.Lock()
@@ -115,16 +104,20 @@ func (s *MuxChan) Subscribe(ctx context.Context, topic, group string, opts Consu
 		s:      s,
 		topic:  topic,
 		group:  group,
-		inbox:  make(chan Msg),
-		done:   make(chan struct{}),
+		rCond:  sync.NewCond(s.mu.RLocker()),
 		closed: false,
+		done:   make(chan struct{}),
 	}
 	g, ok := t.groups[group]
 	if !ok {
 		g = &chanGroup{
-			sub:    sub,
-			subs:   map[*chanSubscription]struct{}{},
-			offset: 0,
+			ring: &ringBuffer{
+				buf: make([]Msg, 2),
+				r:   0,
+				w:   0,
+			},
+			sub:  sub,
+			subs: map[*chanSubscription]struct{}{},
 		}
 		t.groups[group] = g
 	}
@@ -144,7 +137,6 @@ func (s *MuxChan) unsubscribe(ctx context.Context, sub *chanSubscription) {
 	}
 
 	sub.closed = true
-	close(sub.inbox)
 	close(sub.done)
 
 	t, ok := s.topics[sub.topic]
@@ -180,18 +172,23 @@ func (s *MuxChan) Publish(ctx context.Context, msgs ...PublishMsg) error {
 			return kerrors.WithKind(nil, ErrNotFound, fmt.Sprintf("Unknown topic: %s", i.Topic))
 		}
 		t.offset++
-		ti := i.Time
-		if ti.IsZero() {
-			ti = now
-		}
-		t.ring.Write(Msg{
+		m := Msg{
 			Topic:     i.Topic,
 			Key:       i.Key,
 			Value:     i.Value,
 			Partition: 0,
 			Offset:    t.offset,
-			Time:      ti,
-		})
+			Time:      i.Time,
+		}
+		if m.Time.IsZero() {
+			m.Time = now
+		}
+		for _, g := range t.groups {
+			g.ring.Write(m)
+			if g.sub != nil {
+				g.sub.rCond.Broadcast()
+			}
+		}
 	}
 	return nil
 }
@@ -199,17 +196,14 @@ func (s *MuxChan) Publish(ctx context.Context, msgs ...PublishMsg) error {
 func (s *MuxChan) InitStream(ctx context.Context, topic string, opts StreamOpts) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if _, ok := s.topics[topic]; ok {
 		return nil
 	}
 
 	s.topics[topic] = &chanTopic{
 		groups: map[string]*chanGroup{},
-		ring: &ringBuffer{
-			buf: make([]Msg, 2),
-			r:   0,
-			w:   0,
-		},
+		offset: 0,
 	}
 	return nil
 }
@@ -217,6 +211,7 @@ func (s *MuxChan) InitStream(ctx context.Context, topic string, opts StreamOpts)
 func (s *MuxChan) DeleteStream(ctx context.Context, topic string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if _, ok := s.topics[topic]; !ok {
 		return nil
 	}
@@ -229,17 +224,129 @@ func (s *chanSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case m := <-s.inbox:
-		return &m, nil
+	default:
+	}
+
+	var rMsg *Msg
+	var rerr error
+
+	done := make(chan struct{})
+	defer func() {
+		<-done
+	}()
+	exiting := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		s.rCond.L.Lock()
+		defer s.rCond.L.Unlock()
+
+		for {
+			select {
+			case <-exiting:
+				return
+			default:
+			}
+
+			if s.closed {
+				rerr = kerrors.WithKind(nil, ErrClientClosed, "Client closed")
+				return
+			}
+
+			t, ok := s.s.topics[s.topic]
+			if !ok {
+				rerr = kerrors.WithKind(nil, ErrNotFound, fmt.Sprintf("Unknown topic: %s", s.topic))
+				return
+			}
+			g, ok := t.groups[s.group]
+			if !ok {
+				rerr = kerrors.WithKind(nil, ErrNotFound, fmt.Sprintf("Unknown group: %s", s.group))
+				return
+			}
+			if g.sub != s {
+				s.rCond.Wait()
+				continue
+			}
+
+			m, err := g.ring.Peek()
+			if err != nil {
+				if !errors.Is(err, ErrReadEmpty) {
+					rerr = err
+					return
+				}
+				s.rCond.Wait()
+				continue
+			}
+			rMsg = m
+			return
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		close(exiting)
+		s.rCond.Broadcast()
+		return nil, ctx.Err()
+	case <-done:
+		return rMsg, rerr
 	}
 }
 
-func (s *chanSubscription) IsAssigned(msg Msg) bool {
-	return false
+func (s *chanSubscription) isAssigned(msg Msg) bool {
+	if msg.Topic != s.topic {
+		return false
+	}
+
+	s.s.mu.RLock()
+	defer s.s.mu.RUnlock()
+
+	if s.closed {
+		return false
+	}
+	t, ok := s.s.topics[s.topic]
+	if !ok {
+		return false
+	}
+	g, ok := t.groups[s.group]
+	if !ok {
+		return false
+	}
+	return g.sub == s
 }
 
 func (s *chanSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
-	return nil
+	if msg.Topic != s.topic {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+
+	s.s.mu.RLock()
+	defer s.s.mu.RUnlock()
+
+	if s.closed {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	t, ok := s.s.topics[s.topic]
+	if !ok {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	g, ok := t.groups[s.group]
+	if !ok {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	if g.sub != s {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return s.done
 }
 
 func (s *chanSubscription) Commit(ctx context.Context, msg Msg) error {
@@ -248,8 +355,4 @@ func (s *chanSubscription) Commit(ctx context.Context, msg Msg) error {
 
 func (s *chanSubscription) Close(ctx context.Context) error {
 	return nil
-}
-
-func (s *chanSubscription) IsClosed() bool {
-	return false
 }

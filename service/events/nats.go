@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -40,6 +41,9 @@ type (
 		log    *klog.LevelLogger
 		client *nats.Conn
 		sub    *nats.Subscription
+		mu     sync.RWMutex
+		closed bool
+		done   chan struct{}
 	}
 )
 
@@ -313,17 +317,20 @@ func (s *NatsService) Subscribe(ctx context.Context, topic, group string, opts C
 		)),
 		client: client,
 		sub:    nsub,
+		closed: false,
+		done:   make(chan struct{}),
 	}
 	sub.log.Info(ctx, "Added subscription")
 	return sub, nil
 }
 
 func (s *natsSubscription) isClosed() bool {
-	return !s.sub.IsValid()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.closed
 }
 
-// IsAssigned returns if a message is assigned to the consumer
-func (s *natsSubscription) IsAssigned(msg Msg) bool {
+func (s *natsSubscription) isAssigned(msg Msg) bool {
 	if msg.natsmsg == nil || msg.natsmsg.Subject != s.topic {
 		return false
 	}
@@ -344,7 +351,7 @@ func (s *natsSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
 		close(ch)
 		return ch
 	}
-	return make(chan struct{})
+	return s.done
 }
 
 // ReadMsg reads a message
@@ -384,14 +391,14 @@ func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 
 // Commit commits a new message offset
 func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
+	if msg.natsmsg == nil {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
 	if s.isClosed() {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
-	if !s.IsAssigned(msg) {
+	if !s.isAssigned(msg) {
 		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
-	}
-	if msg.natsmsg == nil {
-		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
 		s.log.Err(ctx, kerrors.WithKind(nil, ErrClient, "Failed to ack message"))
@@ -404,16 +411,21 @@ func (s *natsSubscription) Close(ctx context.Context) error {
 	if s.isClosed() {
 		return nil
 	}
-	if err := s.sub.Unsubscribe(); err != nil {
-		return kerrors.WithKind(err, ErrClient, "Failed to close subscription")
-	}
-	s.log.Info(ctx, "Closed subscription")
-	return nil
-}
 
-// IsClosed returns if the client is closed
-func (s *natsSubscription) IsClosed() bool {
-	return s.isClosed()
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	close(s.done)
+	s.mu.Unlock()
+
+	if err := s.sub.Unsubscribe(); err != nil {
+		s.log.Err(ctx, kerrors.WithKind(err, ErrClient, "Failed to close subscription"))
+	}
+	s.log.Info(ctx, "Closed subscriber")
+	return nil
 }
 
 // InitStream initializes a stream
