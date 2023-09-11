@@ -292,28 +292,6 @@ func (s *chanSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 	}
 }
 
-func (s *chanSubscription) isAssigned(msg Msg) bool {
-	if msg.Topic != s.topic {
-		return false
-	}
-
-	s.s.mu.RLock()
-	defer s.s.mu.RUnlock()
-
-	if s.closed {
-		return false
-	}
-	t, ok := s.s.topics[s.topic]
-	if !ok {
-		return false
-	}
-	g, ok := t.groups[s.group]
-	if !ok {
-		return false
-	}
-	return g.sub == s
-}
-
 func (s *chanSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
 	if msg.Topic != s.topic {
 		ch := make(chan struct{})
@@ -350,9 +328,49 @@ func (s *chanSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
 }
 
 func (s *chanSubscription) Commit(ctx context.Context, msg Msg) error {
+	if msg.Topic != s.topic {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
+
+	s.s.mu.Lock()
+	defer s.s.mu.Unlock()
+
+	if s.closed {
+		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
+	}
+	t, ok := s.s.topics[s.topic]
+	if !ok {
+		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
+	}
+	g, ok := t.groups[s.group]
+	if !ok {
+		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
+	}
+	if g.sub != s {
+		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
+	}
+
+	m, err := g.ring.Peek()
+	if err != nil {
+		if !errors.Is(err, ErrReadEmpty) {
+			return err
+		}
+		return nil
+	}
+	if m.Offset != msg.Offset {
+		return nil
+	}
+	g.ring.Read()
 	return nil
 }
 
 func (s *chanSubscription) Close(ctx context.Context) error {
+	select {
+	case <-s.done:
+		return nil
+	default:
+	}
+
+	s.s.unsubscribe(ctx, s)
 	return nil
 }

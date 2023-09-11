@@ -330,23 +330,15 @@ func (s *natsSubscription) isClosed() bool {
 	return s.closed
 }
 
-func (s *natsSubscription) isAssigned(msg Msg) bool {
-	if msg.natsmsg == nil || msg.natsmsg.Subject != s.topic {
-		return false
-	}
-	if s.isClosed() {
-		return false
-	}
-	return true
-}
-
 func (s *natsSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
 	if msg.natsmsg == nil || msg.natsmsg.Subject != s.topic {
 		ch := make(chan struct{})
 		close(ch)
 		return ch
 	}
-	if s.isClosed() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
 		ch := make(chan struct{})
 		close(ch)
 		return ch
@@ -394,11 +386,10 @@ func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 	if msg.natsmsg == nil {
 		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
-	if s.isClosed() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
-	}
-	if !s.isAssigned(msg) {
-		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
 	}
 	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
 		s.log.Err(ctx, kerrors.WithKind(nil, ErrClient, "Failed to ack message"))
@@ -408,8 +399,10 @@ func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 
 // Close closese the subscription
 func (s *natsSubscription) Close(ctx context.Context) error {
-	if s.isClosed() {
+	select {
+	case <-s.done:
 		return nil
+	default:
 	}
 
 	s.mu.Lock()

@@ -562,19 +562,6 @@ func (s *subscription) isClosed() bool {
 	return s.closed
 }
 
-func (s *subscription) isAssigned(msg Msg) bool {
-	if msg.record == nil || msg.record.Topic != s.topic {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.closed {
-		return false
-	}
-	_, ok := s.assigned[msg.record.Partition]
-	return ok
-}
-
 // MsgUnassigned returns a channel that closes if a message is unassigned from the consumer
 func (s *subscription) MsgUnassigned(msg Msg) <-chan struct{} {
 	if msg.record == nil || msg.record.Topic != s.topic {
@@ -672,13 +659,15 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
-	if msg.record == nil {
+	if msg.record == nil || msg.record.Topic != s.topic {
 		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
-	if s.isClosed() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
-	if !s.isAssigned(msg) {
+	if _, ok := s.assigned[msg.record.Partition]; !ok {
 		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
 	}
 	s.reader.MarkCommitRecords(msg.record)
