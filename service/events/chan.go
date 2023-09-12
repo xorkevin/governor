@@ -152,6 +152,7 @@ func (s *MuxChan) unsubscribe(ctx context.Context, sub *chanSubscription) {
 		g.sub = nil
 		for k := range g.subs {
 			g.sub = k
+			g.sub.rCond.Broadcast()
 			break
 		}
 	}
