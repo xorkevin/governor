@@ -10,11 +10,11 @@ require (
 	github.com/emersion/go-message v0.17.0
 	github.com/emersion/go-msgauth v0.6.6
 	github.com/emersion/go-sasl v0.0.0-20220912192320-0145f2c60ead
-	github.com/emersion/go-smtp v0.18.0
+	github.com/emersion/go-smtp v0.18.1
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
 	github.com/go-jose/go-jose/v3 v3.0.0
-	github.com/hashicorp/vault/api v1.9.2
+	github.com/hashicorp/vault/api v1.10.0
 	github.com/klauspost/compress v1.16.7
 	github.com/lib/pq v1.10.9
 	github.com/minio/minio-go/v7 v7.0.63
@@ -26,12 +26,12 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/twmb/franz-go v1.14.4
 	github.com/twmb/franz-go/pkg/kadm v1.9.0
-	golang.org/x/image v0.11.0
-	golang.org/x/term v0.11.0
+	golang.org/x/image v0.12.0
+	golang.org/x/term v0.12.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/forge v0.5.2
-	xorkevin.dev/hunter2 v0.2.8
+	xorkevin.dev/hunter2 v0.2.9
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/kfs v0.1.2
 	xorkevin.dev/klog v0.1.0
@@ -84,10 +84,10 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.6.1 // indirect
-	golang.org/x/crypto v0.12.0 // indirect
+	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

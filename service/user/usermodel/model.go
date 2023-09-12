@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2cipher"
 	"xorkevin.dev/hunter2/h2hash"
-	"xorkevin.dev/hunter2/h2hash/passhash/scrypt"
+	"xorkevin.dev/hunter2/h2hash/passhash/argon2"
 	"xorkevin.dev/hunter2/h2otp"
 	"xorkevin.dev/kerrors"
 )
@@ -118,10 +118,10 @@ type (
 
 // New creates a new user repository
 func New(database dbsql.Database, table string) Repo {
-	hasher := scrypt.New(passHashLen, passSaltLen, scrypt.Config{
-		WorkFactor:     32768,
-		MemBlocksize:   8,
-		ParallelFactor: 1,
+	hasher := argon2.New(passHashLen, passSaltLen, argon2.Config{
+		Time:     2,
+		Mem:      19456,
+		Parallel: 1,
 	})
 	verifier := h2hash.NewVerifier()
 	verifier.Register(hasher)
