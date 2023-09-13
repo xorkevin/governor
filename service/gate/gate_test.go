@@ -48,7 +48,6 @@ func TestGate(t *testing.T) {
 	assert.NotNil(fsys.Fsys["key.txt"])
 	gateClient.tokenFlags.subject = KeySubSystem
 	gateClient.tokenFlags.expirestr = "1h"
-	gateClient.tokenFlags.scope = ScopeAll
 	assert.NoError(gateClient.genToken(nil))
 	assert.NotNil(fsys.Fsys["token.txt"])
 
@@ -56,8 +55,8 @@ func TestGate(t *testing.T) {
 	var claims Claims
 	assert.NoError(json.Unmarshal(out.Bytes(), &claims))
 	assert.Equal(KeySubSystem, claims.Subject)
-	assert.Equal(KindAccess, claims.Kind)
-	assert.Equal(ScopeAll, claims.Scope)
+	assert.Equal("", claims.Kind)
+	assert.Equal("", claims.Scope)
 
 	governortest.NewTestServer(t, map[string]any{
 		"gate": map[string]any{

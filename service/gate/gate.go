@@ -19,16 +19,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-type (
-	// Kind is a token kind
-	Kind string
-)
-
 const (
-	// KindAccess is an access token kind
-	KindAccess Kind = "access"
-	// KindRefresh is a refresh token kind
-	KindRefresh = "refresh"
 	// kindOpenID is an openid id token kind
 	kindOpenID = "openid"
 )
@@ -48,7 +39,7 @@ type (
 		IssuedAt  int64    `json:"iat,omitempty"`
 		ID        string   `json:"jti,omitempty"`
 		// Custom fields
-		Kind      Kind   `json:"k,omitempty"`
+		Kind      string `json:"k,omitempty"`
 		SessionID string `json:"sid,omitempty"`
 		AuthAt    int64  `json:"aat,omitempty"`
 		Scope     string `json:"scope,omitempty"`
@@ -63,7 +54,7 @@ type (
 
 	Gate interface {
 		ACL
-		Validate(ctx context.Context, kind Kind, tokenString string) (*Claims, error)
+		Validate(ctx context.Context, tokenString string) (*Claims, error)
 		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
 	}
 
@@ -352,7 +343,7 @@ func (s *Service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 
 // Generate returns a new jwt token from a user model
 func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Duration) (string, error) {
-	if claims.Kind != KindAccess && claims.Kind != KindRefresh {
+	if claims.Kind != "" {
 		return "", kerrors.WithKind(nil, ErrGenerate, "Invalid token kind")
 	}
 	signer, err := s.getSigner(ctx)
@@ -387,9 +378,9 @@ func (s *Service) GenerateExt(ctx context.Context, baseClaims Claims, duration t
 	return token, nil
 }
 
-func (s *tokenSigner) getPubKey(kind Kind, keyid string) (crypto.PublicKey, bool) {
+func (s *tokenSigner) getPubKey(kind string, keyid string) (crypto.PublicKey, bool) {
 	switch kind {
-	case KindAccess, KindRefresh:
+	case "":
 		if key, ok := s.signingkeys.Get(keyid); ok {
 			return key.Verifier().Public(), true
 		}
@@ -421,10 +412,7 @@ func (e errTokenAssert) Error() string {
 	return "Invalid token assertion"
 }
 
-func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (*Claims, error) {
-	if kind == kindOpenID {
-		return nil, kerrors.WithKind(nil, ErrTokenAssert, "Invalid token kind assertion")
-	}
+func (s *Service) Validate(ctx context.Context, tokenString string) (*Claims, error) {
 	token, err := jwt.ParseSigned(tokenString)
 	if err != nil {
 		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token")
@@ -438,7 +426,7 @@ func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (
 		s.log.Err(ctx, err)
 		return nil, err
 	}
-	pubkey, ok := signer.getPubKey(kind, token.Headers[0].KeyID)
+	pubkey, ok := signer.getPubKey("", token.Headers[0].KeyID)
 	if !ok {
 		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token key id")
 	}
@@ -447,7 +435,7 @@ func (s *Service) Validate(ctx context.Context, kind Kind, tokenString string) (
 	if err := token.Claims(pubkey, claims, &jwtclaims); err != nil {
 		return nil, kerrors.WithKind(err, ErrInvalidToken, "Invalid token claims")
 	}
-	if claims.Kind != kind {
+	if claims.Kind != "" {
 		return nil, kerrors.WithKind(nil, ErrInvalidToken, "Invalid token kind")
 	}
 	now := time.Now().Round(0).UTC()

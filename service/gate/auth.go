@@ -23,14 +23,15 @@ const (
 )
 
 const (
-	// ScopeAll grants all scopes to a token
-	ScopeAll = "gov.all"
 	// ScopeNone denies all access
 	ScopeNone = "gov.none"
 )
 
 // HasScope returns if a token scope contains a scope
 func HasScope(tokenScope string, scope string) bool {
+	if tokenScope == "" {
+		return true
+	}
 	if scope == "" {
 		return true
 	}
@@ -38,7 +39,7 @@ func HasScope(tokenScope string, scope string) bool {
 		return false
 	}
 	for _, i := range strings.Fields(tokenScope) {
-		if i == ScopeAll || i == scope {
+		if i == scope {
 			return true
 		}
 	}
@@ -185,7 +186,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 				}
 				setCtxApikey(c, userid, keyid)
 			} else {
-				claims, err := g.Validate(c.Ctx(), KindAccess, token)
+				claims, err := g.Validate(c.Ctx(), token)
 				if err != nil {
 					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
 					return

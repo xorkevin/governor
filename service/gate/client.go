@@ -132,7 +132,6 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 				Short:    "s",
 				Usage:    "token scope",
 				Required: false,
-				Default:  ScopeAll,
 				Value:    &c.tokenFlags.scope,
 			},
 		},
@@ -315,7 +314,6 @@ func (c *CmdClient) genToken(args []string) error {
 		Subject:   c.tokenFlags.subject,
 		Expiry:    now.Add(expire).Unix(),
 		ID:        u.Base64(),
-		Kind:      KindAccess,
 		SessionID: u.Base64(),
 		Scope:     c.tokenFlags.scope,
 	}
