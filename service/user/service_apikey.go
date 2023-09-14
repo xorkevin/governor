@@ -52,7 +52,7 @@ type (
 )
 
 func (s *Service) createApikey(ctx context.Context, userid string, scope string, name, desc string) (*resApikeyModel, error) {
-	m, err := s.apikeys.Insert(ctx, userid, scope, name, desc)
+	m, err := s.apikeys.InsertKey(ctx, userid, scope, name, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey")
 	}

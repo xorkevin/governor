@@ -37,18 +37,21 @@ func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset 
 	return m, nil
 }
 
-func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
+func (s *Service) Check(ctx context.Context, keyid, key string) (*UserScope, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	if ok, err := s.apikeys.ValidateKey(key, m); err != nil {
-		return "", "", kerrors.WithMsg(err, "Failed to validate key")
+		return nil, kerrors.WithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return "", "", kerrors.WithKind(err, ErrInvalidKey, "Invalid key")
+		return nil, kerrors.WithKind(err, ErrInvalidKey, "Invalid key")
 	}
-	return m.Userid, m.Scope, nil
+	return &UserScope{
+		Userid: m.Userid,
+		Scope:  m.Scope,
+	}, nil
 }
 
 type (
@@ -59,7 +62,7 @@ type (
 	}
 )
 
-func (s *Service) Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error) {
+func (s *Service) InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error) {
 	m, key, err := s.apikeys.New(userid, scope, name, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey keys")

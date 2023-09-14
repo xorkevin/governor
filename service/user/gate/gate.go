@@ -281,7 +281,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 					}
 					setCtxSystem(c, claims)
 				} else {
-					userid, keyscope, err := s.apikeys.CheckKey(c.Ctx(), keyid, password)
+					userscope, err := s.apikeys.Check(c.Ctx(), keyid, password)
 					if err != nil {
 						if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
 							c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
@@ -299,7 +299,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 						c.WriteError(governor.ErrWithRes(nil, http.StatusUnauthorized, "", "User is not authorized"))
 						return
 					}
-					if !token.HasScope(keyscope, scope) {
+					if !token.HasScope(userscope.Scope, scope) {
 						c.SetHeader(
 							"WWW-Authenticate",
 							fmt.Sprintf(
@@ -313,7 +313,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 						return
 					}
-					if !v(s.authctx(false, userid, keyscope, c)) {
+					if !v(s.authctx(false, userscope.Userid, userscope.Scope, c)) {
 						c.SetHeader(
 							"WWW-Authenticate",
 							fmt.Sprintf(
@@ -326,7 +326,7 @@ func (s *Service) AuthenticateCtx(v Authorizer, scope string) governor.Middlewar
 						c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
 						return
 					}
-					setCtxUserid(c, userid)
+					setCtxUserid(c, userscope.Userid)
 					c.LogAttrs(
 						klog.AString("gate.keyid", keyid),
 					)

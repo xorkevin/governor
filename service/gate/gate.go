@@ -55,7 +55,7 @@ type (
 	Gate interface {
 		ACL
 		Validate(ctx context.Context, tokenString string) (*Claims, error)
-		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
+		CheckKey(ctx context.Context, keyid, key string) (*apikey.UserScope, error)
 	}
 
 	tokenSigner struct {
@@ -71,7 +71,7 @@ type (
 	Service struct {
 		lc          *lifecycle.Lifecycle[tokenSigner]
 		acl         authzacl.ACL
-		apikeys     apikey.Apikeys
+		apikeys     apikey.Validator
 		issuer      string
 		signingAlgs h2signer.SigningKeyAlgs
 		config      governor.SecretReader
@@ -84,7 +84,7 @@ type (
 )
 
 // New creates a new Gate
-func New(acl authzacl.ACL, apikeys apikey.Apikeys) *Service {
+func New(acl authzacl.ACL, apikeys apikey.Validator) *Service {
 	signingAlgs := h2signer.NewSigningKeysMap()
 	eddsa.RegisterSigner(signingAlgs)
 	rsasig.RegisterSigner(signingAlgs)
@@ -218,7 +218,7 @@ func (s *Service) getKeys(ctx context.Context, m *lifecycle.State[tokenSigner]) 
 		rs256id:        rs256id,
 	}
 
-	s.log.Info(ctx, "Refreshed token keys with new keys",
+	s.log.Info(ctx, "Refreshed with new keys",
 		klog.AString("eddsakid", signer.eddsaid),
 		klog.AString("rs256kid", signer.rs256id),
 		klog.AInt("numjwks", len(jwks)),
@@ -325,7 +325,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 
 func (s *Service) Health(ctx context.Context) error {
 	if s.lc.Load(ctx) == nil {
-		return kerrors.WithKind(nil, governor.ErrInvalidConfig, "Token service not ready")
+		return kerrors.WithKind(nil, governor.ErrInvalidConfig, "Gate service not ready")
 	}
 	return nil
 }
@@ -487,8 +487,8 @@ func (s *Service) ValidateExt(ctx context.Context, tokenString string, otherClai
 	return claims, nil
 }
 
-func (s *Service) CheckKey(ctx context.Context, keyid, key string) (string, string, error) {
-	return s.apikeys.CheckKey(ctx, keyid, key)
+func (s *Service) CheckKey(ctx context.Context, keyid, key string) (*apikey.UserScope, error) {
+	return s.apikeys.Check(ctx, keyid, key)
 }
 
 func (s *Service) CheckRel(ctx context.Context, obj authzacl.Obj, pred string, sub authzacl.Sub) (bool, error) {

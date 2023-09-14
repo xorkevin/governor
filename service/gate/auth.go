@@ -169,7 +169,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
 					return
 				}
-				userid, keyscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
+				userscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
 				if err != nil {
 					if !errors.Is(err, apikey.ErrInvalidKey) && !errors.Is(err, apikey.ErrNotFound) {
 						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
@@ -181,10 +181,10 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 				ctx = Context{
 					Ctx:      c,
 					IsSystem: false,
-					Userid:   userid,
-					Scope:    keyscope,
+					Userid:   userscope.Userid,
+					Scope:    userscope.Scope,
 				}
-				setCtxApikey(c, userid, keyid)
+				setCtxApikey(c, userscope.Userid, keyid)
 			} else {
 				claims, err := g.Validate(c.Ctx(), token)
 				if err != nil {

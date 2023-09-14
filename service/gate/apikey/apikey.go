@@ -9,11 +9,21 @@ import (
 )
 
 type (
+	UserScope struct {
+		Userid string
+		Scope  string
+	}
+
+	// Validator checks apikeys
+	Validator interface {
+		Check(ctx context.Context, keyid, key string) (*UserScope, error)
+	}
+
 	// Apikeys manages apikeys
 	Apikeys interface {
+		Validator
 		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error)
-		CheckKey(ctx context.Context, keyid, key string) (string, string, error)
-		Insert(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
+		InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
 		RotateKey(ctx context.Context, userid string, keyid string) (*ResApikeyModel, error)
 		UpdateKey(ctx context.Context, userid string, keyid string, scope string, name, desc string) error
 		DeleteKey(ctx context.Context, userid string, keyid string) error
