@@ -12,6 +12,7 @@ import (
 	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
+	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2signer"
 	"xorkevin.dev/hunter2/h2signer/eddsa"
 	"xorkevin.dev/hunter2/h2signer/rsasig"
@@ -350,9 +351,13 @@ func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Dur
 	if err != nil {
 		return "", err
 	}
+	u, err := uid.New()
+	if err != nil {
+		return "", kerrors.WithMsg(err, "Failed to generate token id")
+	}
 	now := time.Now().Round(0).UTC()
-	claims.IssuedAt = now.Unix()
 	claims.Expiry = now.Add(duration).Unix()
+	claims.ID = u.Base64()
 	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
 		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
@@ -366,11 +371,18 @@ func (s *Service) GenerateExt(ctx context.Context, baseClaims Claims, duration t
 	if err != nil {
 		return "", err
 	}
+	u, err := uid.New()
+	if err != nil {
+		return "", kerrors.WithMsg(err, "Failed to generate token id")
+	}
+	if otherClaims == nil {
+		otherClaims = struct{}{}
+	}
 	now := time.Now().Round(0).UTC()
 	baseClaims.Kind = kindOpenID
 	baseClaims.Issuer = s.issuer
-	baseClaims.IssuedAt = now.Unix()
 	baseClaims.Expiry = now.Add(duration).Unix()
+	baseClaims.ID = u.Base64()
 	token, err := jwt.Signed(signer.extsigner).Claims(baseClaims).Claims(otherClaims).CompactSerialize()
 	if err != nil {
 		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")

@@ -3,10 +3,13 @@ package gate
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/go-jose/go-jose/v3"
 	"github.com/stretchr/testify/require"
@@ -32,7 +35,8 @@ func TestGate(t *testing.T) {
 	}
 	term.Fsys = fsys
 
-	client := governortest.NewTestClient(t, nil, strings.NewReader(`
+	{
+		client := governortest.NewTestClient(t, nil, strings.NewReader(`
 {
   "gate": {
     "keyfile": "key.txt",
@@ -41,36 +45,41 @@ func TestGate(t *testing.T) {
 }
 `), term)
 
-	gateClient := NewCmdClient()
-	client.Register("gate", "/null/gate", &governor.CmdDesc{
-		Usage: "gate",
-		Short: "gate",
-		Long:  "gate",
-	}, gateClient)
-	assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
+		gateClient := NewCmdClient()
+		client.Register("gate", "/null/gate", &governor.CmdDesc{
+			Usage: "gate",
+			Short: "gate",
+			Long:  "gate",
+		}, gateClient)
+		assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
 
-	assert.NoError(gateClient.genKey(nil))
-	assert.NotNil(fsys.Fsys["key.txt"])
-	gateClient.tokenFlags.subject = KeySubSystem
-	gateClient.tokenFlags.expirestr = "1h"
-	assert.NoError(gateClient.genToken(nil))
-	assert.NotNil(fsys.Fsys["token.txt"])
+		assert.NoError(gateClient.genKey(nil))
+		assert.NotNil(fsys.Fsys["key.txt"])
+		gateClient.tokenFlags.subject = KeySubSystem
+		gateClient.tokenFlags.expirestr = "1h"
+		assert.NoError(gateClient.genToken(nil))
+		assert.NotNil(fsys.Fsys["token.txt"])
 
-	assert.NoError(gateClient.validateToken(nil))
-	var claims Claims
-	assert.NoError(json.Unmarshal(out.Bytes(), &claims))
-	assert.Equal(KeySubSystem, claims.Subject)
-	assert.Equal("", claims.Kind)
-	assert.Equal("", claims.Scope)
+		assert.NoError(gateClient.validateToken(nil))
+		var claims Claims
+		assert.NoError(json.Unmarshal(out.Bytes(), &claims))
+		assert.Equal(KeySubSystem, claims.Subject)
+		assert.Equal("", claims.Kind)
+		assert.Equal("", claims.Scope)
+	}
 
-	rsakey, err := rsasig.NewConfig()
+	rsakey, err := rsa.GenerateKey(rand.Reader, 1024)
 	assert.NoError(err)
-	rsastr, err := rsakey.String()
+	rsaconfig := rsasig.Config{
+		Key: rsakey,
+	}
+	rsastr, err := rsaconfig.String()
 	assert.NoError(err)
 
 	server := governortest.NewTestServer(t, map[string]any{
 		"gate": map[string]any{
 			"tokensecret": "tokensecret",
+			"issuer":      "test-issuer",
 		},
 	}, map[string]any{
 		"data": map[string]any{
@@ -101,8 +110,74 @@ func TestGate(t *testing.T) {
 
 	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
-	jwks, err := g.GetJWKS(context.Background())
-	assert.NoError(err)
-	assert.Len(jwks.Keys, 1)
-	assert.Equal(string(jose.RS256), jwks.Keys[0].Algorithm)
+	{
+		jwks, err := g.GetJWKS(context.Background())
+		assert.NoError(err)
+		assert.Len(jwks.Keys, 1)
+		assert.Equal(string(jose.RS256), jwks.Keys[0].Algorithm)
+	}
+
+	{
+		token, err := g.Generate(context.Background(), Claims{
+			Subject:   "test-user-1",
+			SessionID: "test-session-id",
+		}, 1*time.Minute)
+		assert.NoError(err)
+
+		claims, err := g.Validate(context.Background(), token)
+		assert.NoError(err)
+		assert.Equal("test-user-1", claims.Subject)
+		assert.Equal("test-session-id", claims.SessionID)
+		assert.Equal("", claims.Scope)
+		assert.NotEmpty(claims.Expiry)
+		assert.NotEmpty(claims.ID)
+	}
+
+	{
+		token, err := g.GenerateExt(context.Background(), Claims{
+			Subject:   "test-user-1",
+			SessionID: "test-session-id",
+			Audience:  []string{"test-audience"},
+			Scope:     "openid profile",
+		}, 1*time.Minute, nil)
+		assert.NoError(err)
+
+		claims, err := g.ValidateExt(context.Background(), token, nil)
+		assert.NoError(err)
+		assert.Equal("test-user-1", claims.Subject)
+		assert.Equal("test-session-id", claims.SessionID)
+		assert.Equal([]string{"test-audience"}, claims.Audience)
+		assert.Equal("openid profile", claims.Scope)
+		assert.Equal(kindOpenID, claims.Kind)
+		assert.Equal("test-issuer", claims.Issuer)
+		assert.NotEmpty(claims.Expiry)
+		assert.NotEmpty(claims.ID)
+	}
+
+	{
+		token, err := g.GenerateExt(context.Background(), Claims{
+			Subject:   "test-user-1",
+			SessionID: "test-session-id",
+			Audience:  []string{"test-audience"},
+			Scope:     "openid profile",
+		}, 1*time.Minute, map[string]any{
+			"custom": "value",
+		})
+		assert.NoError(err)
+
+		var otherClaims struct {
+			Custom string `json:"custom"`
+		}
+		claims, err := g.ValidateExt(context.Background(), token, &otherClaims)
+		assert.NoError(err)
+		assert.Equal("value", otherClaims.Custom)
+		assert.Equal("test-user-1", claims.Subject)
+		assert.Equal("test-session-id", claims.SessionID)
+		assert.Equal([]string{"test-audience"}, claims.Audience)
+		assert.Equal("openid profile", claims.Scope)
+		assert.Equal(kindOpenID, claims.Kind)
+		assert.Equal("test-issuer", claims.Issuer)
+		assert.NotEmpty(claims.Expiry)
+		assert.NotEmpty(claims.ID)
+	}
 }
