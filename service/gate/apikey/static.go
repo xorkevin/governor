@@ -3,6 +3,7 @@ package apikey
 import (
 	"context"
 	"crypto/hmac"
+	"fmt"
 	"sync"
 
 	"golang.org/x/crypto/blake2b"
@@ -71,7 +72,7 @@ func (s *KeySet) InsertKey(ctx context.Context, userid string, scope string, nam
 	}
 	return &ResApikeyModel{
 		Keyid: keyid,
-		Key:   key,
+		Key:   fmt.Sprintf("ga.%s.%s", keyid, key),
 	}, nil
 }
 

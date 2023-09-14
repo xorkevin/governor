@@ -3,6 +3,7 @@ package apikey
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
@@ -72,7 +73,7 @@ func (s *Service) InsertKey(ctx context.Context, userid string, scope string, na
 	}
 	return &ResApikeyModel{
 		Keyid: m.Keyid,
-		Key:   key,
+		Key:   fmt.Sprintf("ga.%s.%s", m.Keyid, key),
 	}, nil
 }
 

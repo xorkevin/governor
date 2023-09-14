@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -21,6 +23,41 @@ import (
 	"xorkevin.dev/kfs/kfstest"
 	"xorkevin.dev/klog"
 )
+
+type (
+	testServiceA struct {
+		g Gate
+	}
+)
+
+func (s *testServiceA) Register(r governor.ConfigRegistrar) {
+}
+
+func (s *testServiceA) Init(ctx context.Context, r governor.ConfigReader, kit governor.ServiceKit) error {
+	mr := governor.NewMethodRouter(kit.Router)
+	mr.GetCtx("/user", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthUser(s.g, "test-scope"))
+	mr.GetCtx("/admin", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthAdmin(s.g, "test-scope"))
+	return nil
+}
+
+func (s *testServiceA) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *testServiceA) Stop(ctx context.Context) {
+}
+
+func (s *testServiceA) Setup(ctx context.Context, req governor.ReqSetup) error {
+	return nil
+}
+
+func (s *testServiceA) Health(ctx context.Context) error {
+	return nil
+}
 
 func TestGate(t *testing.T) {
 	t.Parallel()
@@ -102,11 +139,12 @@ func TestGate(t *testing.T) {
 	keyset := apikey.KeySet{
 		Set: map[string]apikey.MemKey{},
 	}
-	_, err = keyset.InsertKey(context.Background(), "test-user-1", "test-scope", "", "")
+	akey, err := keyset.InsertKey(context.Background(), "test-user-1", "other-scope test-scope", "", "")
 	assert.NoError(err)
 
 	g := New(&acl, &keyset)
 	server.Register("gate", "/null/gate", g)
+	server.Register("test", "/test", &testServiceA{g: g})
 
 	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
@@ -179,5 +217,23 @@ func TestGate(t *testing.T) {
 		assert.Equal("test-issuer", claims.Issuer)
 		assert.NotEmpty(claims.Expiry)
 		assert.NotEmpty(claims.ID)
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/api/test/user", nil)
+		req.Header.Set("Authorization", "Bearer "+akey.Key)
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+		t.Log(rec.Body.String())
+		assert.Equal(http.StatusOK, rec.Code)
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/api/test/admin", nil)
+		req.Header.Set("Authorization", "Bearer "+akey.Key)
+		rec := httptest.NewRecorder()
+		server.ServeHTTP(rec, req)
+		t.Log(rec.Body.String())
+		assert.Equal(http.StatusForbidden, rec.Code)
 	}
 }
