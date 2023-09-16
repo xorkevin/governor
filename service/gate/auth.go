@@ -264,8 +264,8 @@ func AuthOwner(g Gate, idfunc func(Context) (bool, error), scope string) governo
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
 		if ok, err := checkRole(c, acl, RoleUser); err != nil {
 			return false, err
-		} else if ok {
-			return true, nil
+		} else if !ok {
+			return false, nil
 		}
 		return idfunc(c)
 	}, scope)

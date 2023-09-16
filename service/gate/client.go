@@ -196,7 +196,7 @@ func (c *CmdClient) doGetToken() (*string, error) {
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to read token file")
 	}
-	s := string(b)
+	s := string(bytes.TrimSpace(b))
 	return &s, nil
 }
 

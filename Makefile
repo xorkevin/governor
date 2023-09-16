@@ -20,7 +20,7 @@ COVERAGE_HTML?=coverage.html
 
 COVERAGE_ARGS=-cover -covermode atomic -coverprofile $(COVERAGE_OUT)
 
-.PHONY: test testunit testcover coverage cover
+.PHONY: test testunit testcover testcoverunit coverage cover coverunit
 
 test: ## Run all tests
 	./test.sh $(TEST_ARGS) $(TEST_PACKAGE)
@@ -31,10 +31,15 @@ testunit: ## Runs unit tests
 testcover: ## Run all tests with coverage
 	./test.sh $(COVERAGE_ARGS) $(TEST_ARGS) $(TEST_PACKAGE)
 
+testcoverunit: ## Run unit tests with coverage
+	go test -trimpath -ldflags "-w -s" -race -short $(COVERAGE_ARGS) $(TEST_ARGS) $(TEST_PACKAGE)
+
 coverage: ## Create coverage report
 	go tool cover -html $(COVERAGE_OUT) -o $(COVERAGE_HTML)
 
 cover: testcover coverage ## Test with coverage
+
+coverunit: testcoverunit coverage ## Test with coverage
 
 ## FMT
 

@@ -41,6 +41,12 @@ func (s *testServiceA) Init(ctx context.Context, r governor.ConfigReader, kit go
 	mr.GetCtx("/admin", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthAdmin(s.g, "test-scope"))
+	mr.GetCtx("/user/{id}", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthOwnerOrAdminParam(s.g, "id", "test-scope"))
+	mr.GetCtx("/user/{id}/private", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthOwnerParam(s.g, "id", "test-scope"))
 	return nil
 }
 
@@ -96,6 +102,9 @@ func TestGate(t *testing.T) {
 		gateClient.tokenFlags.expirestr = "1h"
 		assert.NoError(gateClient.genToken(nil))
 		assert.NotNil(fsys.Fsys["token.txt"])
+		token, err := gateClient.GetToken()
+		assert.NoError(err)
+		assert.Equal(string(bytes.TrimSpace(fsys.Fsys["token.txt"].Data)), token)
 
 		assert.NoError(gateClient.validateToken(nil))
 		var claims Claims
@@ -155,14 +164,20 @@ func TestGate(t *testing.T) {
 		assert.Equal(string(jose.RS256), jwks.Keys[0].Algorithm)
 	}
 
-	{
-		token, err := g.Generate(context.Background(), Claims{
-			Subject:   "test-user-1",
-			SessionID: "test-session-id",
-		}, 1*time.Minute)
-		assert.NoError(err)
+	usertoken, err := g.Generate(context.Background(), Claims{
+		Subject:   "test-user-1",
+		SessionID: "test-session-id",
+	}, 1*time.Minute)
+	assert.NoError(err)
 
-		claims, err := g.Validate(context.Background(), token)
+	admintoken, err := g.Generate(context.Background(), Claims{
+		Subject:   "test-admin-1",
+		SessionID: "test-session-id",
+	}, 1*time.Minute)
+	assert.NoError(err)
+
+	{
+		claims, err := g.Validate(context.Background(), usertoken)
 		assert.NoError(err)
 		assert.Equal("test-user-1", claims.Subject)
 		assert.Equal("test-session-id", claims.SessionID)
@@ -219,21 +234,97 @@ func TestGate(t *testing.T) {
 		assert.NotEmpty(claims.ID)
 	}
 
-	{
-		req := httptest.NewRequest(http.MethodGet, "/api/test/user", nil)
-		req.Header.Set("Authorization", "Bearer "+akey.Key)
-		rec := httptest.NewRecorder()
-		server.ServeHTTP(rec, req)
-		t.Log(rec.Body.String())
-		assert.Equal(http.StatusOK, rec.Code)
-	}
+	for _, tc := range []struct {
+		Name   string
+		Path   string
+		Token  string
+		Status int
+	}{
+		{
+			Name:   "user token success",
+			Path:   "/api/test/user",
+			Token:  usertoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "user token failure",
+			Path:   "/api/test/admin",
+			Token:  usertoken,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "admin token success",
+			Path:   "/api/test/admin",
+			Token:  admintoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "api key success",
+			Path:   "/api/test/user",
+			Token:  akey.Key,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "api key failure",
+			Path:   "/api/test/admin",
+			Token:  akey.Key,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "user token check owner success",
+			Path:   "/api/test/user/test-user-1/private",
+			Token:  usertoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "user token check owner failure",
+			Path:   "/api/test/user/test-user-2/private",
+			Token:  usertoken,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "admin token check owner success",
+			Path:   "/api/test/user/test-user-1",
+			Token:  admintoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "admin token check owner failure",
+			Path:   "/api/test/user/test-user-1/private",
+			Token:  admintoken,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "api key check owner success",
+			Path:   "/api/test/user/test-user-1",
+			Token:  akey.Key,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "api key check owner failure",
+			Path:   "/api/test/user/test-user-2",
+			Token:  akey.Key,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "no token",
+			Path:   "/api/test/user",
+			Token:  "",
+			Status: http.StatusUnauthorized,
+		},
+	} {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
 
-	{
-		req := httptest.NewRequest(http.MethodGet, "/api/test/admin", nil)
-		req.Header.Set("Authorization", "Bearer "+akey.Key)
-		rec := httptest.NewRecorder()
-		server.ServeHTTP(rec, req)
-		t.Log(rec.Body.String())
-		assert.Equal(http.StatusForbidden, rec.Code)
+			assert := require.New(t)
+
+			req := httptest.NewRequest(http.MethodGet, tc.Path, nil)
+			req.Header.Set("Authorization", "Bearer "+tc.Token)
+			rec := httptest.NewRecorder()
+			server.ServeHTTP(rec, req)
+			t.Log(rec.Body.String())
+			assert.Equal(tc.Status, rec.Code)
+		})
 	}
 }
