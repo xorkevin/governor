@@ -2,7 +2,7 @@ package usermodel
 
 import (
 	"context"
-	"crypto/subtle"
+	"crypto/hmac"
 	"time"
 
 	"xorkevin.dev/governor/service/dbsql"
@@ -206,7 +206,7 @@ func (r *repo) ValidateOTPBackup(keyring *h2cipher.Keyring, m *Model, backup str
 	if err != nil {
 		return false, kerrors.WithMsg(err, "Failed to decrypt otp backup")
 	}
-	return subtle.ConstantTimeCompare([]byte(code), []byte(backup)) == 1, nil
+	return hmac.Equal([]byte(code), []byte(backup)), nil
 }
 
 // GenerateOTPSecret generates an otp secret

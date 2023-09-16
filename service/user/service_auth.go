@@ -74,7 +74,9 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 	}
 
 	if m.OTPEnabled {
-		if len(code) == 0 && len(backup) == 0 {
+		if code == "" && backup == "" {
+			// must make a best effort to increment login failures
+			s.incrLoginFailCount(klog.ExtendCtx(context.Background(), ctx), m, ipaddr, useragent)
 			return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "otp_required", "OTP code required")
 		}
 
@@ -92,7 +94,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 
 	sessionExists := false
 	var sm *sessionmodel.Model
-	if len(sessionID) > 0 {
+	if sessionID != "" {
 		if m, err := s.sessions.GetByID(ctx, userid, sessionID); err != nil {
 			if !errors.Is(err, dbsql.ErrNotFound) {
 				return nil, kerrors.WithMsg(err, "Failed to get user session")
@@ -178,8 +180,10 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"))
 	}
 
-	// must make a best effort to mark otp code as used
-	s.markOTPCode(klog.ExtendCtx(context.Background(), ctx), userid, code)
+	if m.OTPEnabled {
+		// must make a best effort to mark otp code as used
+		s.markOTPCode(klog.ExtendCtx(context.Background(), ctx), userid, code)
+	}
 
 	return &resUserAuth{
 		Valid:        true,
