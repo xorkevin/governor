@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/authzacl"
@@ -23,13 +24,15 @@ const (
 )
 
 const (
+	// ScopeAll allows all access
+	ScopeAll = "gov.all"
 	// ScopeNone denies all access
 	ScopeNone = "gov.none"
 )
 
 // HasScope returns if a token scope contains a scope
 func HasScope(tokenScope string, scope string) bool {
-	if tokenScope == "" {
+	if tokenScope == ScopeAll {
 		return true
 	}
 	if scope == "" {
@@ -52,6 +55,7 @@ type (
 		IsSystem bool
 		Userid   string
 		Scope    string
+		AuthAt   time.Time
 	}
 
 	// Authorizer is a function to check the authorization of a user
@@ -166,7 +170,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 			if apitoken, ok := strings.CutPrefix(token, "ga."); ok {
 				keyid, keysecret, ok := strings.Cut(apitoken, ".")
 				if !ok {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid api token"))
 					return
 				}
 				userscope, err := g.CheckKey(c.Ctx(), keyid, keysecret)
@@ -175,7 +179,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 						c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
 						return
 					}
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid api token"))
 					return
 				}
 				ctx = Context{
@@ -188,7 +192,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 			} else {
 				claims, err := g.Validate(c.Ctx(), token)
 				if err != nil {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid access token"))
 					return
 				}
 				ctx = Context{
@@ -196,15 +200,19 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					IsSystem: claims.Subject == KeySubSystem,
 					Userid:   claims.Subject,
 					Scope:    claims.Scope,
+					AuthAt:   time.Unix(claims.AuthAt, 0).UTC(),
+				}
+				if claims.Kind == "" {
+					ctx.Scope = ScopeAll
 				}
 				setCtxClaims(c, claims)
 			}
 			if !ctx.HasScope(scope) {
-				c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
+				c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "Insufficient scope"))
 				return
 			}
 			if ok, err := v(ctx, g); err != nil {
-				c.WriteError(kerrors.WithMsg(err, "Failed to get apikey"))
+				c.WriteError(kerrors.WithMsg(err, "Authorization error"))
 				return
 			} else if !ok {
 				c.WriteError(governor.ErrWithRes(nil, http.StatusForbidden, "", "User is forbidden"))
@@ -251,6 +259,21 @@ func AuthUser(g Gate, scope string) governor.MiddlewareCtx {
 func AuthAdmin(g Gate, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
 		return checkRole(c, acl, RoleAdmin)
+	}, scope)
+}
+
+// AuthUserRecent is a middleware function to validate if a user logged in recently
+func AuthUserRecent(g Gate, recent time.Duration, scope string) governor.MiddlewareCtx {
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		if c.AuthAt.Add(recent).Before(time.Now().Round(0)) {
+			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
+		}
+		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+		return checkRole(c, acl, RoleUser)
 	}, scope)
 }
 

@@ -38,6 +38,9 @@ func (s *testServiceA) Init(ctx context.Context, r governor.ConfigReader, kit go
 	mr.GetCtx("/user", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthUser(s.g, "test-scope"))
+	mr.GetCtx("/user/recent", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthUserRecent(s.g, 1*time.Minute, "test-scope"))
 	mr.GetCtx("/admin", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthAdmin(s.g, "test-scope"))
@@ -261,6 +264,12 @@ func TestGate(t *testing.T) {
 			Status: http.StatusOK,
 		},
 		{
+			Name:   "user token recent success",
+			Path:   "/api/test/user/recent",
+			Token:  usertoken,
+			Status: http.StatusOK,
+		},
+		{
 			Name:   "api key success",
 			Path:   "/api/test/user",
 			Token:  akey.Key,
@@ -269,6 +278,12 @@ func TestGate(t *testing.T) {
 		{
 			Name:   "api key failure",
 			Path:   "/api/test/admin",
+			Token:  akey.Key,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "api key recent failure",
+			Path:   "/api/test/user/recent",
 			Token:  akey.Key,
 			Status: http.StatusForbidden,
 		},
