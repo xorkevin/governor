@@ -9,18 +9,17 @@ import (
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/events/sysevent"
+	"xorkevin.dev/governor/service/gate"
 	"xorkevin.dev/governor/service/gate/apikey"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/approvalmodel"
-	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/governor/service/user/resetmodel"
 	"xorkevin.dev/governor/service/user/role"
 	"xorkevin.dev/governor/service/user/roleinvmodel"
 	"xorkevin.dev/governor/service/user/sessionmodel"
-	"xorkevin.dev/governor/service/user/token"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
@@ -109,7 +108,7 @@ type (
 		GetRoleUsers(ctx context.Context, roleName string, amount, offset int) ([]string, error)
 		InsertRoles(ctx context.Context, userid string, roles rank.Rank) error
 		DeleteRolesByRole(ctx context.Context, roleName string, userids []string) error
-		WatchUsers(group string, opts events.ConsumerOpts, handler, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher
+		StreamName() string
 	}
 
 	otpCipher struct {
@@ -117,23 +116,37 @@ type (
 		keyring *h2cipher.Keyring
 	}
 
-	authSettings struct {
-		accessDuration        time.Duration
-		refreshDuration       time.Duration
-		refreshCache          time.Duration
-		confirmDuration       time.Duration
-		emailConfirmDuration  time.Duration
-		passwordReset         bool
-		passwordResetDuration time.Duration
-		passResetDelay        time.Duration
-		invitationDuration    time.Duration
-		userCacheDuration     time.Duration
-		newLoginEmail         bool
-		passwordMinSize       int
-		userApproval          bool
+	eventSettings struct {
+		streamNS    string
+		streamUsers string
+		streamSize  int64
+		eventSize   int64
 	}
 
-	tplName struct {
+	authSettings struct {
+		accessDuration  time.Duration
+		refreshDuration time.Duration
+		newLoginEmail   bool
+		passMinSize     int
+		otpIssuer       string
+	}
+
+	editSettings struct {
+		newUserApproval         bool
+		newUserConfirmDuration  time.Duration
+		newEmailConfirmDuration time.Duration
+		passReset               bool
+		passResetDuration       time.Duration
+		passResetDelay          time.Duration
+	}
+
+	emailSettings struct {
+		tplName emailTplName
+		urlTpl  emailURLTpl
+	}
+
+	emailTplName struct {
+		newuser           string
 		emailchange       string
 		emailchangenotify string
 		passchange        string
@@ -141,56 +154,47 @@ type (
 		passreset         string
 		loginratelimit    string
 		otpbackupused     string
-		newuser           string
 	}
 
 	emailURLTpl struct {
 		base        string
-		emailchange *htmlTemplate.Template
-		forgotpass  *htmlTemplate.Template
-		newuser     *htmlTemplate.Template
+		newUser     *htmlTemplate.Template
+		emailChange *htmlTemplate.Template
+		forgotPass  *htmlTemplate.Template
 	}
 
 	Service struct {
-		users        usermodel.Repo
-		sessions     sessionmodel.Repo
-		approvals    approvalmodel.Repo
-		invitations  roleinvmodel.Repo
-		resets       resetmodel.Repo
-		roles        role.RolesManager
-		apikeys      apikey.Apikeys
-		kvusers      kvstore.KVStore
-		kvsessions   kvstore.KVStore
-		kvotpcodes   kvstore.KVStore
-		pubsub       pubsub.Pubsub
-		events       events.Events
-		mailer       mail.Mailer
-		ratelimiter  ratelimit.Ratelimiter
-		gate         gate.Gate
-		tokenizer    token.Tokenizer
-		lc           *lifecycle.Lifecycle[otpCipher]
-		cipherAlgs   h2cipher.Algs
-		config       governor.ConfigReader
-		log          *klog.LevelLogger
-		tracer       governor.Tracer
-		rolens       string
-		scopens      string
-		streamns     string
-		streamusers  string
-		streamsize   int64
-		eventsize    int32
-		baseURL      string
-		authURL      string
-		authsettings authSettings
-		otpIssuer    string
-		rolesummary  rank.Rank
-		tplname      tplName
-		emailurl     emailURLTpl
-		hbfailed     int
-		hbmaxfail    int
-		otprefresh   time.Duration
-		gcDuration   time.Duration
-		wg           *ksync.WaitGroup
+		users         usermodel.Repo
+		sessions      sessionmodel.Repo
+		approvals     approvalmodel.Repo
+		invitations   roleinvmodel.Repo
+		resets        resetmodel.Repo
+		roles         role.RolesManager
+		apikeys       apikey.Apikeys
+		kvotpcodes    kvstore.KVStore
+		pubsub        pubsub.Pubsub
+		events        events.Events
+		mailer        mail.Mailer
+		ratelimiter   ratelimit.Ratelimiter
+		gate          gate.Manager
+		lc            *lifecycle.Lifecycle[otpCipher]
+		cipherAlgs    h2cipher.Algs
+		config        governor.ConfigReader
+		log           *klog.LevelLogger
+		tracer        governor.Tracer
+		rolens        string
+		scopens       string
+		eventSettings eventSettings
+		baseURL       string
+		authURL       string
+		authSettings  authSettings
+		editSettings  editSettings
+		emailSettings emailSettings
+		hbfailed      int
+		hbmaxfail     int
+		otprefresh    time.Duration
+		gcDuration    time.Duration
+		wg            *ksync.WaitGroup
 	}
 
 	router struct {
@@ -213,8 +217,7 @@ func New(
 	ev events.Events,
 	mailer mail.Mailer,
 	ratelimiter ratelimit.Ratelimiter,
-	tokenizer token.Tokenizer,
-	g gate.Gate,
+	g gate.Manager,
 ) *Service {
 	cipherAlgs := h2cipher.NewAlgsMap()
 	xchacha20poly1305.Register(cipherAlgs)
@@ -227,15 +230,12 @@ func New(
 		resets:      resets,
 		roles:       roles,
 		apikeys:     apikeys,
-		kvusers:     kv.Subtree("users"),
-		kvsessions:  kv.Subtree("sessions"),
 		kvotpcodes:  kv.Subtree("otpcodes"),
 		pubsub:      ps,
 		events:      ev,
 		mailer:      mailer,
 		ratelimiter: ratelimiter,
 		gate:        g,
-		tokenizer:   tokenizer,
 		cipherAlgs:  cipherAlgs,
 		hbfailed:    0,
 		wg:          ksync.NewWaitGroup(),
@@ -245,26 +245,27 @@ func New(
 func (s *Service) Register(r governor.ConfigRegistrar) {
 	s.rolens = "gov." + r.Name()
 	s.scopens = "gov." + r.Name()
-	s.streamns = r.Name()
-	s.streamusers = r.Name()
+	s.eventSettings = eventSettings{
+		streamNS:    r.Name(),
+		streamUsers: r.Name(),
+	}
 
-	r.SetDefault("streamsize", "200M")
-	r.SetDefault("eventsize", "2K")
-	r.SetDefault("accessduration", "5m")
-	r.SetDefault("refreshduration", "4380h")
-	r.SetDefault("refreshcache", "24h")
-	r.SetDefault("confirmduration", "24h")
-	r.SetDefault("emailconfirmduration", "24h")
-	r.SetDefault("passwordreset", true)
-	r.SetDefault("passwordresetduration", "24h")
-	r.SetDefault("passresetdelay", "1h")
-	r.SetDefault("invitationduration", "24h")
-	r.SetDefault("usercacheduration", "24h")
-	r.SetDefault("newloginemail", true)
-	r.SetDefault("passwordminsize", 8)
-	r.SetDefault("userapproval", false)
-	r.SetDefault("otpissuer", "governor")
-	r.SetDefault("rolesummary", []string{rank.TagUser, rank.TagAdmin})
+	r.SetDefault("event.streamSize", "200M")
+	r.SetDefault("event.eventSize", "2K")
+
+	r.SetDefault("auth.accessDuration", "5m")
+	r.SetDefault("auth.refreshDuration", "4380h")
+	r.SetDefault("auth.newLoginEmail", true)
+	r.SetDefault("auth.passMinSize", 8)
+	r.SetDefault("auth.otpIssuer", "governor")
+
+	r.SetDefault("edit.newUserApproval", false)
+	r.SetDefault("edit.newUserConfirmDuration", "24h")
+	r.SetDefault("edit.newEmailConfirmDuration", "24h")
+	r.SetDefault("edit.passReset", true)
+	r.SetDefault("edit.passResetDuration", "24h")
+	r.SetDefault("edit.passResetDelay", "1h")
+
 	r.SetDefault("email.tpl.emailchange", "emailchange")
 	r.SetDefault("email.tpl.emailchangenotify", "emailchangenotify")
 	r.SetDefault("email.tpl.passchange", "passchange")
@@ -273,10 +274,12 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("email.tpl.loginratelimit", "loginratelimit")
 	r.SetDefault("email.tpl.otpbackupused", "otpbackupused")
 	r.SetDefault("email.tpl.newuser", "newuser")
+
 	r.SetDefault("email.url.base", "http://localhost:8080")
-	r.SetDefault("email.url.emailchange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
-	r.SetDefault("email.url.forgotpass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
-	r.SetDefault("email.url.newuser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
+	r.SetDefault("email.url.newUser", "/x/confirm?userid={{.Userid}}&key={{.Key}}")
+	r.SetDefault("email.url.emailChange", "/a/confirm/email?key={{.Userid}}.{{.Key}}")
+	r.SetDefault("email.url.forgotPass", "/x/resetpass?key={{.Userid}}.{{.Key}}")
+
 	r.SetDefault("hbinterval", "5s")
 	r.SetDefault("hbmaxfail", 6)
 	r.SetDefault("otprefresh", "1m")
@@ -302,89 +305,77 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	s.config = r
 
 	var err error
-	s.streamsize, err = bytefmt.ToBytes(r.GetStr("streamsize"))
+	s.eventSettings.streamSize, err = bytefmt.ToBytes(r.GetStr("event.streamSize"))
 	if err != nil {
-		return kerrors.WithMsg(err, "Invalid stream size")
+		return kerrors.WithMsg(err, "Invalid event stream size")
 	}
-	eventsize, err := bytefmt.ToBytes(r.GetStr("eventsize"))
+	s.eventSettings.eventSize, err = bytefmt.ToBytes(r.GetStr("event.eventSize"))
 	if err != nil {
-		return kerrors.WithMsg(err, "Invalid msg size")
+		return kerrors.WithMsg(err, "Invalid event msg size")
 	}
-	s.eventsize = int32(eventsize)
+
 	s.baseURL = r.Config().BasePath
 	s.authURL = s.baseURL + r.URL() + authRoutePrefix
-	s.authsettings.accessDuration, err = r.GetDuration("accessduration")
+
+	s.authSettings.accessDuration, err = r.GetDuration("auth.accessDuration")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse access duration")
 	}
-	s.authsettings.refreshDuration, err = r.GetDuration("refreshduration")
+	s.authSettings.refreshDuration, err = r.GetDuration("auth.refreshDuration")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse refresh duration")
 	}
-	s.authsettings.refreshCache, err = r.GetDuration("refreshcache")
+	s.authSettings.newLoginEmail = r.GetBool("auth.newLoginEmail")
+	s.authSettings.passMinSize = r.GetInt("auth.passMinSize")
+	s.authSettings.otpIssuer = r.GetStr("auth.otpIssuer")
+
+	s.editSettings.newUserApproval = r.GetBool("edit.newUserApproval")
+	s.editSettings.newUserConfirmDuration, err = r.GetDuration("edit.newUserConfirmDuration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse refresh cache duration")
+		return kerrors.WithMsg(err, "Failed to parse new user confirm duration")
 	}
-	s.authsettings.confirmDuration, err = r.GetDuration("confirmduration")
+	s.editSettings.newEmailConfirmDuration, err = r.GetDuration("edit.newEmailConfirmDuration")
 	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse confirm duration")
+		return kerrors.WithMsg(err, "Failed to parse new email confirm duration")
 	}
-	s.authsettings.emailConfirmDuration, err = r.GetDuration("emailconfirmduration")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse confirm duration")
-	}
-	s.authsettings.passwordReset = r.GetBool("passwordreset")
-	s.authsettings.passwordResetDuration, err = r.GetDuration("passwordresetduration")
+	s.editSettings.passReset = r.GetBool("edit.passReset")
+	s.editSettings.passResetDuration, err = r.GetDuration("edit.passResetDuration")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse password reset duration")
 	}
-	s.authsettings.passResetDelay, err = r.GetDuration("passresetdelay")
+	s.editSettings.passResetDelay, err = r.GetDuration("edit.passResetDelay")
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to parse password reset delay")
 	}
-	s.authsettings.invitationDuration, err = r.GetDuration("invitationduration")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse role invitation duration")
-	}
-	s.authsettings.userCacheDuration, err = r.GetDuration("usercacheduration")
-	if err != nil {
-		return kerrors.WithMsg(err, "Failed to parse user cache duration")
-	}
-	s.authsettings.newLoginEmail = r.GetBool("newloginemail")
-	s.authsettings.passwordMinSize = r.GetInt("passwordminsize")
-	s.authsettings.userApproval = r.GetBool("userapproval")
-	s.otpIssuer = r.GetStr("otpissuer")
-	s.rolesummary, err = rank.FromSlice(r.GetStrSlice("rolesummary"))
-	if err != nil {
-		return kerrors.WithKind(err, governor.ErrInvalidConfig, "Invalid rank for role summary")
+
+	s.emailSettings = emailSettings{
+		tplName: emailTplName{
+			newuser:           r.GetStr("email.tpl.newuser"),
+			emailchange:       r.GetStr("email.tpl.emailchange"),
+			emailchangenotify: r.GetStr("email.tpl.emailchangenotify"),
+			passchange:        r.GetStr("email.tpl.passchange"),
+			forgotpass:        r.GetStr("email.tpl.forgotpass"),
+			passreset:         r.GetStr("email.tpl.passreset"),
+			loginratelimit:    r.GetStr("email.tpl.loginratelimit"),
+			otpbackupused:     r.GetStr("email.tpl.otpbackupused"),
+		},
 	}
 
-	s.tplname = tplName{
-		emailchange:       r.GetStr("email.tpl.emailchange"),
-		emailchangenotify: r.GetStr("email.tpl.emailchangenotify"),
-		passchange:        r.GetStr("email.tpl.passchange"),
-		forgotpass:        r.GetStr("email.tpl.forgotpass"),
-		passreset:         r.GetStr("email.tpl.passreset"),
-		loginratelimit:    r.GetStr("email.tpl.loginratelimit"),
-		otpbackupused:     r.GetStr("email.tpl.otpbackupused"),
-		newuser:           r.GetStr("email.tpl.newuser"),
-	}
-
-	s.emailurl.base = r.GetStr("email.url.base")
-	if t, err := htmlTemplate.New("email.url.emailchange").Parse(r.GetStr("email.url.emailchange")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse email change url template")
-	} else {
-		s.emailurl.emailchange = t
-	}
-	if t, err := htmlTemplate.New("email.url.forgotpass").Parse(r.GetStr("email.url.forgotpass")); err != nil {
-		return kerrors.WithMsg(err, "Failed to parse forgot pass url template")
-	} else {
-		s.emailurl.forgotpass = t
-	}
-	if t, err := htmlTemplate.New("email.url.newuser").Parse(r.GetStr("email.url.newuser")); err != nil {
+	s.emailSettings.urlTpl.base = r.GetStr("email.url.base")
+	if t, err := htmlTemplate.New("email.url.newUser").Parse(r.GetStr("email.url.newUser")); err != nil {
 		return kerrors.WithMsg(err, "Failed to parse new user url template")
 	} else {
-		s.emailurl.newuser = t
+		s.emailSettings.urlTpl.newUser = t
+	}
+	if t, err := htmlTemplate.New("email.url.emailChange").Parse(r.GetStr("email.url.emailChange")); err != nil {
+		return kerrors.WithMsg(err, "Failed to parse email change url template")
+	} else {
+		s.emailSettings.urlTpl.emailChange = t
+	}
+	if t, err := htmlTemplate.New("email.url.forgotPass").Parse(r.GetStr("email.url.forgotPass")); err != nil {
+		return kerrors.WithMsg(err, "Failed to parse forgot pass url template")
+	} else {
+		s.emailSettings.urlTpl.forgotPass = t
 	}
 
 	hbinterval, err := r.GetDuration("hbinterval")
@@ -402,34 +393,36 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	}
 
 	s.log.Info(ctx, "Loaded config",
-		klog.AString("streamsize", r.GetStr("streamsize")),
-		klog.AString("eventsize", r.GetStr("eventsize")),
-		klog.AString("auth.accessduration", s.authsettings.accessDuration.String()),
-		klog.AString("auth.refreshduration", s.authsettings.refreshDuration.String()),
-		klog.AString("auth.refreshcache", s.authsettings.refreshCache.String()),
-		klog.AString("confirmduration", s.authsettings.confirmDuration.String()),
-		klog.AString("emailconfirmduration", s.authsettings.emailConfirmDuration.String()),
-		klog.ABool("passwordresetallowed", s.authsettings.passwordReset),
-		klog.AString("passwordresetduration", s.authsettings.passwordResetDuration.String()),
-		klog.AString("passresetdelay", s.authsettings.passResetDelay.String()),
-		klog.AString("invitationduration", s.authsettings.invitationDuration.String()),
-		klog.AString("cacheduration", s.authsettings.userCacheDuration.String()),
-		klog.ABool("newlogin_email", s.authsettings.newLoginEmail),
-		klog.AInt("passwordminsize", s.authsettings.passwordMinSize),
-		klog.ABool("approvalrequired", s.authsettings.userApproval),
-		klog.AString("otpissuer", s.otpIssuer),
-		klog.AString("rolesummary", s.rolesummary.String()),
-		klog.AString("tplname.emailchange", s.tplname.emailchange),
-		klog.AString("tplname.emailchangenotify", s.tplname.emailchangenotify),
-		klog.AString("tplname.passchange", s.tplname.passchange),
-		klog.AString("tplname.forgotpass", s.tplname.forgotpass),
-		klog.AString("tplname.passreset", s.tplname.passreset),
-		klog.AString("tplname.loginratelimit", s.tplname.loginratelimit),
-		klog.AString("tplname.otpbackupused", s.tplname.otpbackupused),
-		klog.AString("emailurlbase", s.emailurl.base),
-		klog.AString("tpl.emailchange", r.GetStr("email.url.emailchange")),
-		klog.AString("tpl.forgotpass", r.GetStr("email.url.forgotpass")),
-		klog.AString("tpl.newuser", r.GetStr("email.url.newuser")),
+		klog.AString("event.streamSize", bytefmt.ToString(s.eventSettings.streamSize)),
+		klog.AString("event.eventSize", bytefmt.ToString(s.eventSettings.eventSize)),
+
+		klog.AString("auth.accessDuration", s.authSettings.accessDuration.String()),
+		klog.AString("auth.refreshDuration", s.authSettings.refreshDuration.String()),
+		klog.ABool("auth.newLoginEmail", s.authSettings.newLoginEmail),
+		klog.AInt("auth.passMinSize", s.authSettings.passMinSize),
+		klog.AString("auth.otpIssuer", s.authSettings.otpIssuer),
+
+		klog.ABool("edit.newUserApproval", s.editSettings.newUserApproval),
+		klog.AString("edit.newUserConfirmDuration", s.editSettings.newUserConfirmDuration.String()),
+		klog.AString("edit.newEmailConfirmDuration", s.editSettings.newEmailConfirmDuration.String()),
+		klog.ABool("edit.passReset", s.editSettings.passReset),
+		klog.AString("edit.passResetDuration", s.editSettings.passResetDuration.String()),
+		klog.AString("edit.passResetDelay", s.editSettings.passResetDelay.String()),
+
+		klog.AString("email.tpl.newuser", s.emailSettings.tplName.newuser),
+		klog.AString("email.tpl.emailchange", s.emailSettings.tplName.emailchange),
+		klog.AString("email.tpl.emailchangenotify", s.emailSettings.tplName.emailchangenotify),
+		klog.AString("email.tpl.passchange", s.emailSettings.tplName.passchange),
+		klog.AString("email.tpl.forgotpass", s.emailSettings.tplName.forgotpass),
+		klog.AString("email.tpl.passreset", s.emailSettings.tplName.passreset),
+		klog.AString("email.tpl.loginratelimit", s.emailSettings.tplName.loginratelimit),
+		klog.AString("email.tpl.otpbackupused", s.emailSettings.tplName.otpbackupused),
+
+		klog.AString("email.url.base", s.emailSettings.urlTpl.base),
+		klog.AString("email.url.newUser", r.GetStr("email.url.newUser")),
+		klog.AString("email.url.emailChange", r.GetStr("email.url.emailChange")),
+		klog.AString("email.url.forgotPass", r.GetStr("email.url.forgotPass")),
+
 		klog.AString("hbinterval", hbinterval.String()),
 		klog.AInt("hbmaxfail", s.hbmaxfail),
 		klog.AString("otprefresh", s.otprefresh.String()),
@@ -437,8 +430,8 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	)
 
 	sr := s.router()
-	sr.mountRoute(kit.Router.GroupCtx("/user"))
 	sr.mountAuth(kit.Router.GroupCtx(authRoutePrefix, sr.rt))
+	sr.mountRoute(kit.Router.GroupCtx("/user"))
 	sr.mountApikey(kit.Router.GroupCtx("/apikey"))
 	s.log.Info(ctx, "Mounted http routes")
 
@@ -528,13 +521,31 @@ func (s *Service) getCipher(ctx context.Context) (*otpCipher, error) {
 }
 
 func (s *Service) Start(ctx context.Context) error {
+	userEventWatcher := events.NewWatcher(
+		s.events,
+		s.log.Logger,
+		s.tracer,
+		s.eventSettings.streamUsers,
+		s.eventSettings.streamNS+".worker",
+		events.ConsumerOpts{},
+		events.HandlerFunc(s.userEventHandler),
+		nil,
+		0,
+	)
 	s.wg.Add(1)
-	go s.WatchUsers(s.streamns+".worker", events.ConsumerOpts{}, s.userEventHandler, nil, 0).Watch(ctx, s.wg, events.WatchOpts{})
+	go userEventWatcher.Watch(ctx, s.wg, events.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to users stream")
 
-	sysEvents := sysevent.New(s.config.Config(), s.pubsub, s.log.Logger, s.tracer)
+	gcWatcher := pubsub.NewWatcher(
+		s.pubsub,
+		s.log.Logger,
+		s.tracer,
+		sysevent.GCChannel,
+		s.eventSettings.streamNS+".worker.gc",
+		pubsub.HandlerFunc(s.userEventHandlerGC),
+	)
 	s.wg.Add(1)
-	go sysEvents.WatchGC(s.streamns+".worker.gc", s.userEventHandlerGC).Watch(ctx, s.wg, pubsub.WatchOpts{})
+	go gcWatcher.Watch(ctx, s.wg, pubsub.WatchOpts{})
 	s.log.Info(ctx, "Subscribed to gov sys gc channel")
 
 	return nil
@@ -547,13 +558,13 @@ func (s *Service) Stop(ctx context.Context) {
 }
 
 func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
-	if err := s.events.InitStream(ctx, s.streamusers, events.StreamOpts{
+	if err := s.events.InitStream(ctx, s.eventSettings.streamUsers, events.StreamOpts{
 		Partitions:     16,
 		Replicas:       1,
 		ReplicaQuorum:  1,
 		RetentionAge:   30 * 24 * time.Hour,
-		RetentionBytes: int(s.streamsize),
-		MaxMsgBytes:    int(s.eventsize),
+		RetentionBytes: int(s.eventSettings.streamSize),
+		MaxMsgBytes:    int(s.eventSettings.eventSize),
 	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to init user stream")
 	}
@@ -594,6 +605,10 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) StreamName() string {
+	return s.eventSettings.streamUsers
+}
+
 // ErrUserEvent is returned when the user event is malformed
 var ErrUserEvent errUserEvent
 
@@ -605,7 +620,8 @@ func (e errUserEvent) Error() string {
 	return "Malformed user event"
 }
 
-func decodeUserEvent(msgdata []byte) (*UserEvent, error) {
+// DecodeUserEvent decodes a user event
+func DecodeUserEvent(msgdata []byte) (*UserEvent, error) {
 	var m userEventDec
 	if err := kjson.Unmarshal(msgdata, &m); err != nil {
 		return nil, kerrors.WithKind(err, ErrUserEvent, "Failed to decode user event")
@@ -680,32 +696,16 @@ func encodeUserEventRoles(props RolesProps) ([]byte, error) {
 	return b, nil
 }
 
-func (s *Service) WatchUsers(group string, opts events.ConsumerOpts, handler, dlqhandler HandlerFunc, maxdeliver int) *events.Watcher {
-	var dlqfn events.Handler
-	if dlqhandler != nil {
-		dlqfn = events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
-			props, err := decodeUserEvent(msg.Value)
-			if err != nil {
-				return err
-			}
-			return dlqhandler(ctx, *props)
-		})
-	}
-	return events.NewWatcher(s.events, s.log.Logger, s.tracer, s.streamusers, group, opts, events.HandlerFunc(func(ctx context.Context, msg events.Msg) error {
-		props, err := decodeUserEvent(msg.Value)
-		if err != nil {
-			return err
-		}
-		return handler(ctx, *props)
-	}), dlqfn, maxdeliver)
-}
-
 const (
 	roleDeleteBatchSize   = 256
 	apikeyDeleteBatchSize = 256
 )
 
-func (s *Service) userEventHandler(ctx context.Context, props UserEvent) error {
+func (s *Service) userEventHandler(ctx context.Context, msg events.Msg) error {
+	props, err := DecodeUserEvent(msg.Value)
+	if err != nil {
+		return err
+	}
 	switch props.Kind {
 	case UserEventKindDelete:
 		return s.userEventHandlerDelete(ctx, props.Delete)
@@ -731,7 +731,7 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 		if err != nil {
 			return err
 		}
-		if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, props.Userid, b)...); err != nil {
+		if err := s.events.Publish(ctx, events.NewMsgs(s.eventSettings.streamUsers, props.Userid, b)...); err != nil {
 			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish delete roles event"))
 		}
 		if err := s.roles.DeleteRoles(ctx, props.Userid, r); err != nil {
@@ -763,7 +763,11 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 	return nil
 }
 
-func (s *Service) userEventHandlerGC(ctx context.Context, props sysevent.TimestampProps) error {
+func (s *Service) userEventHandlerGC(ctx context.Context, m pubsub.Msg) error {
+	props, err := sysevent.DecodeGCEvent(m.Data)
+	if err != nil {
+		return err
+	}
 	if err := s.approvals.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC approvals"))
 	} else {

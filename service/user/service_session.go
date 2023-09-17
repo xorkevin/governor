@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"xorkevin.dev/kerrors"
-	"xorkevin.dev/klog"
 )
 
 type (
@@ -43,19 +42,10 @@ func (s *Service) getUserSessions(ctx context.Context, userid string, limit, off
 	}, nil
 }
 
-func (s *Service) killCacheSessions(ctx context.Context, sessionids []string) {
-	if err := s.kvsessions.Del(ctx, sessionids...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete session keys"))
-	}
-}
-
 func (s *Service) killSessions(ctx context.Context, userid string, sessionids []string) error {
 	if err := s.sessions.DeleteSessions(ctx, userid, sessionids); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
-	// must make a best effort to remove cached sessions
-	ctx = klog.ExtendCtx(context.Background(), ctx)
-	s.killCacheSessions(ctx, sessionids)
 	return nil
 }
 

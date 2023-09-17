@@ -432,9 +432,9 @@ end:
 	return res, nil
 }
 
-func (s *Service) getUseridForLogin(ctx context.Context, useroremail string) (string, error) {
-	if isEmail(useroremail) {
-		m, err := s.users.GetByEmail(ctx, useroremail)
+func (s *Service) getUseridForLogin(ctx context.Context, username string, email string) (string, error) {
+	if email != "" {
+		m, err := s.users.GetByEmail(ctx, email)
 		if err != nil {
 			if errors.Is(err, dbsql.ErrNotFound) {
 				return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")
@@ -443,7 +443,7 @@ func (s *Service) getUseridForLogin(ctx context.Context, useroremail string) (st
 		}
 		return m.Userid, nil
 	}
-	m, err := s.users.GetByUsername(ctx, useroremail)
+	m, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, dbsql.ErrNotFound) {
 			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid username or password")

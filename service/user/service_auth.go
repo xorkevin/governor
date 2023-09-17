@@ -3,16 +3,18 @@ package user
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	"gopkg.in/square/go-jose.v2/jwt"
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/dbsql"
+	"xorkevin.dev/governor/service/gate"
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/sessionmodel"
-	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -35,22 +37,133 @@ const (
 
 type (
 	resUserAuth struct {
-		Valid        bool          `json:"valid"`
-		Refresh      bool          `json:"refresh"`
-		AccessToken  string        `json:"access_token,omitempty"`
-		RefreshToken string        `json:"refresh_token,omitempty"`
-		SessionID    string        `json:"session_token,omitempty"`
-		Claims       *token.Claims `json:"claims,omitempty"`
+		Valid        bool         `json:"valid"`
+		AccessToken  string       `json:"access_token,omitempty"`
+		RefreshToken string       `json:"refresh_token,omitempty"`
+		Claims       *gate.Claims `json:"claims,omitempty"`
 	}
 )
 
 type (
+	// errAuthenticate is returned when failing to authenticate
+	errAuthenticate struct{}
 	// errDiscardSession is returned when the login session should be discarded
 	errDiscardSession struct{}
 )
 
+func (e errAuthenticate) Error() string {
+	return "Failed authenticating"
+}
+
 func (e errDiscardSession) Error() string {
 	return "Discard session"
+}
+
+func (s *Service) checkLoginRatelimit(ctx context.Context, m *usermodel.Model) error {
+	var k time.Duration
+	if m.FailedLoginCount > 293 || m.FailedLoginCount < 0 {
+		k = 24 * time.Hour
+	} else {
+		k = time.Duration(m.FailedLoginCount*m.FailedLoginCount) * time.Second
+	}
+	cliff := time.Unix(m.FailedLoginTime, 0).Add(k).UTC()
+	if time.Now().Round(0).Before(cliff) {
+		return governor.ErrWithTooManyRequests(nil, cliff, "", "Failed login too many times")
+	}
+	return nil
+}
+
+func (s *Service) checkOTPCode(ctx context.Context, m *usermodel.Model, code string, backup string, ipaddr, useragent string) error {
+	if code == "" {
+		cipher, err := s.getCipher(ctx)
+		if err != nil {
+			return err
+		}
+		if ok, err := s.users.ValidateOTPBackup(cipher.keyring, m, backup); err != nil {
+			return kerrors.WithMsg(err, "Failed to validate otp backup code")
+		} else if !ok {
+			return governor.ErrWithRes(kerrors.WithKind(nil, errAuthenticate{}, "Invalid otp backup code"), http.StatusUnauthorized, "", "Inalid otp backup code")
+		}
+
+		emdata := emailOTPBackupUsed{
+			FirstName: m.FirstName,
+			LastName:  m.LastName,
+			Username:  m.Username,
+			IP:        ipaddr,
+			Time:      time.Now().Round(0).UTC().Format(time.RFC1123Z),
+			UserAgent: useragent,
+		}
+		// must make best effort attempt to send the email
+		ctx = klog.ExtendCtx(context.Background(), ctx)
+		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.emailSettings.tplName.otpbackupused), emdata, false); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp backup used email"))
+		}
+	} else {
+		if _, err := s.kvotpcodes.Get(ctx, s.kvotpcodes.Subkey(m.Userid, code)); err != nil {
+			if !errors.Is(err, kvstore.ErrNotFound) {
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user used otp code"))
+			}
+		} else {
+			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code already used")
+		}
+		cipher, err := s.getCipher(ctx)
+		if err != nil {
+			return err
+		}
+		if ok, err := s.users.ValidateOTPCode(cipher.keyring, m, code); err != nil {
+			return kerrors.WithMsg(err, "Failed to validate otp code")
+		} else if !ok {
+			return governor.ErrWithRes(kerrors.WithKind(nil, errAuthenticate{}, "Invalid otp code"), http.StatusUnauthorized, "", "Invalid otp code")
+		}
+	}
+	return nil
+}
+
+func (s *Service) markOTPCode(ctx context.Context, userid string, code string) {
+	if err := s.kvotpcodes.Set(ctx, s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark otp code as used"))
+	}
+}
+
+func (s *Service) incrLoginFailCount(ctx context.Context, m *usermodel.Model, ipaddr, useragent string) {
+	m.FailedLoginTime = time.Now().Round(0).Unix()
+	if m.FailedLoginCount < 0 {
+		m.FailedLoginCount = 0
+	}
+	m.FailedLoginCount += 1
+	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to update login failure count"))
+	}
+
+	if m.FailedLoginCount%8 == 0 {
+		emdata := emailLoginRatelimit{
+			FirstName: m.FirstName,
+			LastName:  m.LastName,
+			Username:  m.Username,
+			IP:        ipaddr,
+			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC1123Z),
+			UserAgent: useragent,
+		}
+		if err := s.mailer.SendTpl(
+			ctx,
+			"",
+			mail.Addr{},
+			[]mail.Addr{{Address: m.Email, Name: m.FirstName}},
+			mail.TplLocal(s.emailSettings.tplName.loginratelimit),
+			emdata,
+			false,
+		); err != nil {
+			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp ratelimit email"))
+		}
+	}
+}
+
+func (s *Service) resetLoginFailCount(ctx context.Context, m *usermodel.Model) {
+	m.FailedLoginTime = 0
+	m.FailedLoginCount = 0
+	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to reset login failure count"))
+	}
 }
 
 func (s *Service) login(ctx context.Context, userid, password, code, backup, sessionID, ipaddr, useragent string) (*resUserAuth, error) {
@@ -105,7 +218,7 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 	}
 
-	sessionKey := ""
+	var sessionKey string
 	if sm == nil {
 		m, key, err := s.sessions.New(userid, ipaddr, useragent)
 		if err != nil {
@@ -119,39 +232,27 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 			return nil, kerrors.WithMsg(err, "Failed to generate session key")
 		}
 		sm.AuthTime = sm.Time
+		sm.IPAddr = ipaddr
+		sm.UserAgent = useragent
 		sessionKey = key
 	}
+	refreshToken := fmt.Sprintf("gr.%s.%s.%s", sm.Userid, sm.SessionID, sessionKey)
 
 	// generate an access token
-	accessToken, accessClaims, err := s.tokenizer.Generate(
+	accessToken, accessClaims, err := s.gate.Generate(
 		ctx,
-		token.KindAccess,
-		m.Userid,
-		s.authsettings.accessDuration,
-		sm.SessionID,
-		sm.AuthTime,
-		token.ScopeAll,
-		"",
+		gate.Claims{
+			Subject:   sm.Userid,
+			SessionID: sm.SessionID,
+			AuthAt:    sm.AuthTime,
+		},
+		s.authSettings.accessDuration,
 	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
-	// generate a refresh token with the sessionKey
-	refreshToken, _, err := s.tokenizer.Generate(
-		ctx,
-		token.KindRefresh,
-		m.Userid,
-		s.authsettings.refreshDuration,
-		sm.SessionID,
-		sm.AuthTime,
-		token.ScopeAll,
-		sessionKey,
-	)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
-	}
 
-	if s.authsettings.newLoginEmail && !sessionExists {
+	if s.authSettings.newLoginEmail && !sessionExists {
 		emdata := emailNewLogin{
 			FirstName: m.FirstName,
 			LastName:  m.LastName,
@@ -176,10 +277,6 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 		}
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"))
-	}
-
 	if m.OTPEnabled {
 		// must make a best effort to mark otp code as used
 		s.markOTPCode(klog.ExtendCtx(context.Background(), ctx), userid, code)
@@ -187,178 +284,87 @@ func (s *Service) login(ctx context.Context, userid, password, code, backup, ses
 
 	return &resUserAuth{
 		Valid:        true,
-		Refresh:      true,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		SessionID:    sm.SessionID,
 		Claims:       accessClaims,
 	}, nil
 }
 
-func (s *Service) exchangeToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(ctx, token.KindRefresh, refreshToken)
-	if !validToken {
-		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
+func (s *Service) validateRefreshToken(ctx context.Context, refreshToken string) (*sessionmodel.Model, string, error) {
+	tokenParts := strings.Split(refreshToken, ".")
+	if len(tokenParts) != 4 || tokenParts[0] != "gr" || tokenParts[1] == "" || tokenParts[2] == "" || tokenParts[3] == "" {
+		return nil, "", governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
 	}
+	userid := tokenParts[1]
+	sessionID := tokenParts[2]
+	sessionKey := tokenParts[3]
 
-	if ok, err := s.CheckUserExists(ctx, claims.Subject); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get user")
-	} else if !ok {
-		return nil, governor.ErrWithRes(nil, http.StatusNotFound, "", "Invalid user")
-	}
-
-	keyhash, err := s.kvsessions.Get(ctx, claims.ID)
+	sm, err := s.sessions.GetByID(ctx, userid, sessionID)
 	if err != nil {
-		if !errors.Is(err, kvstore.ErrNotFound) {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get cached session"))
+		if errors.Is(err, dbsql.ErrNotFound) {
+			return nil, userid, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "No session"), http.StatusUnauthorized, "", "Invalid token")
 		}
-		return s.refreshToken(ctx, refreshToken, ipaddr, useragent)
+		return nil, "", kerrors.WithMsg(err, "Failed to get session")
 	}
-
-	if ok, err := s.sessions.ValidateKey(claims.Key, &sessionmodel.Model{
-		KeyHash: keyhash,
-	}); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to validate key")
+	if ok, err := s.sessions.ValidateKey(sessionKey, sm); err != nil {
+		return nil, "", kerrors.WithMsg(err, "Failed to validate key")
 	} else if !ok {
-		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
+		return nil, userid, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
 	}
-
-	accessToken, accessClaims, err := s.tokenizer.Generate(
-		ctx,
-		token.KindAccess,
-		claims.Subject,
-		s.authsettings.accessDuration,
-		claims.ID,
-		claims.AuthTime,
-		claims.Scope,
-		"",
-	)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to generate access token")
-	}
-
-	return &resUserAuth{
-		Valid:        true,
-		Refresh:      false,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		SessionID:    claims.ID,
-		Claims:       accessClaims,
-	}, nil
+	return sm, "", nil
 }
 
 func (s *Service) refreshToken(ctx context.Context, refreshToken, ipaddr, useragent string) (*resUserAuth, error) {
-	validToken, claims := s.tokenizer.Validate(ctx, token.KindRefresh, refreshToken)
-	if !validToken {
-		return nil, governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
-	}
-
-	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
+	sm, erruserid, err := s.validateRefreshToken(ctx, refreshToken)
 	if err != nil {
-		if errors.Is(err, dbsql.ErrNotFound) {
-			return &resUserAuth{
-				Valid: false,
-				Claims: &token.Claims{
-					Claims: jwt.Claims{
-						Subject: claims.Subject,
-					},
-				},
-			}, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "No session"), http.StatusUnauthorized, "", "Invalid token")
-		}
-		return nil, kerrors.WithMsg(err, "Failed to get session")
-	}
-	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to validate key")
-	} else if !ok {
 		return &resUserAuth{
 			Valid: false,
-			Claims: &token.Claims{
-				Claims: jwt.Claims{
-					Subject: claims.Subject,
-				},
+			Claims: &gate.Claims{
+				Subject: erruserid,
 			},
-		}, governor.ErrWithRes(kerrors.WithKind(err, errDiscardSession{}, "Invalid session key"), http.StatusUnauthorized, "", "Invalid token")
+		}, err
 	}
 
 	sessionKey, err := s.sessions.RehashKey(sm)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate session key")
 	}
+	sm.IPAddr = ipaddr
+	sm.UserAgent = useragent
+	refreshToken = fmt.Sprintf("gr.%s.%s.%s", sm.Userid, sm.SessionID, sessionKey)
 
-	accessToken, accessClaims, err := s.tokenizer.Generate(
+	accessToken, accessClaims, err := s.gate.Generate(
 		ctx,
-		token.KindAccess,
-		claims.Subject,
-		s.authsettings.accessDuration,
-		sm.SessionID,
-		sm.AuthTime,
-		claims.Scope,
-		"",
+		gate.Claims{
+			Subject:   sm.Userid,
+			SessionID: sm.SessionID,
+			AuthAt:    sm.AuthTime,
+		},
+		s.authSettings.accessDuration,
 	)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate access token")
 	}
-	newRefreshToken, _, err := s.tokenizer.Generate(
-		ctx,
-		token.KindRefresh,
-		claims.Subject,
-		s.authsettings.refreshDuration,
-		sm.SessionID,
-		sm.AuthTime,
-		claims.Scope,
-		sessionKey,
-	)
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to generate refresh token")
-	}
 
-	sm.IPAddr = ipaddr
-	sm.UserAgent = useragent
 	if err := s.sessions.Update(ctx, sm); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to save user session")
 	}
 
-	if err := s.kvsessions.Set(ctx, sm.SessionID, sm.KeyHash, s.authsettings.refreshCache); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to cache user session"))
-	}
-
 	return &resUserAuth{
 		Valid:        true,
-		Refresh:      true,
 		AccessToken:  accessToken,
-		RefreshToken: newRefreshToken,
-		SessionID:    sm.SessionID,
+		RefreshToken: refreshToken,
 		Claims:       accessClaims,
 	}, nil
 }
 
 func (s *Service) logout(ctx context.Context, refreshToken string) (string, error) {
-	// if session_id is provided, is in cache, and is valid, set it as the sessionID
-	// the session can be expired by time
-	ok, claims := s.tokenizer.GetClaims(ctx, token.KindRefresh, refreshToken)
-	if !ok {
-		return "", governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
-	}
-
-	sm, err := s.sessions.GetByID(ctx, claims.Subject, claims.ID)
+	sm, erruserid, err := s.validateRefreshToken(ctx, refreshToken)
 	if err != nil {
-		if errors.Is(err, dbsql.ErrNotFound) {
-			return "", governor.ErrWithRes(err, http.StatusUnauthorized, "", "Invalid token")
-		}
-		return "", kerrors.WithMsg(err, "Failed to get session")
+		return erruserid, err
 	}
-	if ok, err := s.sessions.ValidateKey(claims.Key, sm); err != nil {
-		return "", kerrors.WithMsg(err, "Failed to validate key")
-	} else if !ok {
-		return "", governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Invalid token")
-	}
-
 	if err := s.sessions.Delete(ctx, sm); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to delete session")
 	}
-	// must make a best effort to remove cached sessions
-	ctx = klog.ExtendCtx(context.Background(), ctx)
-	s.killCacheSessions(ctx, []string{claims.ID})
-
-	return claims.Subject, nil
+	return sm.Userid, nil
 }

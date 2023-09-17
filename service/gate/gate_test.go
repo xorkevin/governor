@@ -164,15 +164,17 @@ func TestGate(t *testing.T) {
 		assert.Equal(string(jose.RS256), jwks.Keys[0].Algorithm)
 	}
 
-	usertoken, err := g.Generate(context.Background(), Claims{
+	usertoken, _, err := g.Generate(context.Background(), Claims{
 		Subject:   "test-user-1",
 		SessionID: "test-session-id",
+		AuthAt:    time.Now().Round(0).Unix(),
 	}, 1*time.Minute)
 	assert.NoError(err)
 
-	admintoken, err := g.Generate(context.Background(), Claims{
+	admintoken, _, err := g.Generate(context.Background(), Claims{
 		Subject:   "test-admin-1",
 		SessionID: "test-session-id",
+		AuthAt:    time.Now().Round(0).Unix(),
 	}, 1*time.Minute)
 	assert.NoError(err)
 

@@ -71,19 +71,22 @@ func (r reqApikeyCheck) valid() error {
 }
 
 func (r reqUserAuth) valid() error {
-	if err := validhasUsernameOrEmail(r.Username); err != nil {
+	if err := validoptUsername(r.Username); err != nil {
+		return err
+	}
+	if err := validoptEmail(r.Email); err != nil {
 		return err
 	}
 	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
-	if err := validOTPCode(r.Code); err != nil {
+	if err := validoptOTPCode(r.Code); err != nil {
 		return err
 	}
-	if err := validOTPCode(r.Backup); err != nil {
+	if err := validoptOTPCode(r.Backup); err != nil {
 		return err
 	}
-	if err := validhasSessionToken(r.SessionToken); err != nil {
+	if err := validoptSessionID(r.SessionID); err != nil {
 		return err
 	}
 	return nil

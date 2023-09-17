@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/mail"
 	"regexp"
-	"strings"
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/hunter2/h2otp"
@@ -14,17 +13,19 @@ import (
 
 const (
 	lengthCapUserid    = 31
-	lengthCapApikeyid  = 63
 	lengthCapUsername  = 127
-	lengthCapPassword  = 255
 	lengthCapEmail     = 254
-	lengthCapName      = 127
-	lengthCapRole      = 127
-	lengthCapLarge     = 4095
-	amountCap          = 255
-	lengthCapSessionID = 127
-	lengthCapToken     = 127
+	lengthCapPassword  = 255
 	lengthCapOTPCode   = 31
+	lengthCapSessionID = 31
+	lengthCapToken     = 255
+
+	lengthCapApikeyid = 63
+	lengthCapName     = 127
+	lengthCapRole     = 127
+	lengthCapLarge    = 4095
+	amountCap         = 255
+	lengthCapApikey   = 127
 )
 
 var userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
@@ -39,12 +40,26 @@ func validhasUserid(userid string) error {
 	return nil
 }
 
-func validUsername(username string) error {
-	if len(username) < 3 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be longer than 2 characters")
-	}
+func validoptUsername(username string) error {
 	if len(username) > lengthCapUsername {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be shorter than 128 characters")
+	}
+	return nil
+}
+
+func validhasUsername(username string) error {
+	if username == "" {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be provided")
+	}
+	return validoptUsername(username)
+}
+
+func validUsername(username string) error {
+	if err := validhasUsername(username); err != nil {
+		return err
+	}
+	if len(username) < 3 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be longer than 2 characters")
 	}
 	if !userRegex.MatchString(username) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username contains invalid characters")
@@ -52,19 +67,67 @@ func validUsername(username string) error {
 	return nil
 }
 
-func validhasUsername(username string) error {
-	if len(username) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be provided")
+func validEmail(email string) error {
+	if len(email) > lengthCapEmail {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Email must be shorter than 255 characters")
 	}
-	if len(username) > lengthCapUsername {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be shorter than 128 characters")
+	a, err := mail.ParseAddress(email)
+	if err != nil {
+		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Email is invalid")
+	}
+	if a.Address != email {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Email is invalid")
 	}
 	return nil
 }
 
-func validoptUsername(username string) error {
-	if len(username) > lengthCapUsername {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username must be shorter than 128 characters")
+func validoptEmail(email string) error {
+	if email == "" {
+		return nil
+	}
+	return validEmail(email)
+}
+
+func validhasPassword(password string) error {
+	if len(password) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password must be provided")
+	}
+	if len(password) > lengthCapPassword {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password entropy exceeds that of stored password hash")
+	}
+	return nil
+}
+
+func validPassword(password string) error {
+	if err := validhasPassword(password); err != nil {
+		return err
+	}
+	if len(password) < 10 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password must be at least 10 chars")
+	}
+	return nil
+}
+
+func validoptOTPCode(code string) error {
+	if len(code) > lengthCapOTPCode {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp code")
+	}
+	return nil
+}
+
+func validoptSessionID(sessionID string) error {
+	if len(sessionID) > lengthCapSessionID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
+	}
+	return nil
+}
+
+func validhasRefreshToken(token string) error {
+	if len(token) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Refresh token must be provided")
+	}
+	if len(token) > lengthCapToken {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
 	}
 	return nil
 }
@@ -118,40 +181,6 @@ func validhasUserids(userids []string) error {
 	return nil
 }
 
-func validPassword(password string) error {
-	if len(password) < 10 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password must be at least 10 chars")
-	}
-	if len(password) > lengthCapPassword {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password entropy exceeds that of stored password hash")
-	}
-	return nil
-}
-
-func validhasPassword(password string) error {
-	if len(password) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password must be provided")
-	}
-	if len(password) > lengthCapPassword {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password entropy exceeds that of stored password hash")
-	}
-	return nil
-}
-
-func validEmail(email string) error {
-	if len(email) > lengthCapEmail {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Email must be shorter than 255 characters")
-	}
-	a, err := mail.ParseAddress(email)
-	if err != nil {
-		return governor.ErrWithRes(err, http.StatusBadRequest, "", "Email is invalid")
-	}
-	if a.Address != email {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Email is invalid")
-	}
-	return nil
-}
-
 func validFirstName(firstname string) error {
 	if len(firstname) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "First name must be provided")
@@ -176,7 +205,7 @@ func validhasToken(token string) error {
 	if len(token) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token must be provided")
 	}
-	if len(token) > lengthCapToken {
+	if len(token) > lengthCapApikey {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
 	}
 	return nil
@@ -196,17 +225,6 @@ func validScope(scopeString string) error {
 	return nil
 }
 
-func isEmail(useroremail string) bool {
-	return strings.ContainsRune(useroremail, '@')
-}
-
-func validhasUsernameOrEmail(useroremail string) error {
-	if isEmail(useroremail) {
-		return validEmail(useroremail)
-	}
-	return validhasUsername(useroremail)
-}
-
 func validSessionids(ids []string) error {
 	if len(ids) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "SessionID must be provided")
@@ -218,23 +236,6 @@ func validSessionids(ids []string) error {
 		if len(i) > lengthCapSessionID {
 			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "SessionID is too large")
 		}
-	}
-	return nil
-}
-
-func validhasSessionToken(token string) error {
-	if len(token) > lengthCapLarge {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
-	}
-	return nil
-}
-
-func validhasRefreshToken(token string) error {
-	if len(token) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Refresh token must be provided")
-	}
-	if len(token) > lengthCapLarge {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
 	}
 	return nil
 }
@@ -279,13 +280,6 @@ func validOTPDigits(digits int) error {
 	case 6, 8:
 	default:
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp digits")
-	}
-	return nil
-}
-
-func validOTPCode(code string) error {
-	if len(code) > lengthCapOTPCode {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp code")
 	}
 	return nil
 }

@@ -59,6 +59,11 @@ type (
 		CheckKey(ctx context.Context, keyid, key string) (*apikey.UserScope, error)
 	}
 
+	Manager interface {
+		Gate
+		Generate(ctx context.Context, claims Claims, duration time.Duration) (string, *Claims, error)
+	}
+
 	tokenSigner struct {
 		signer         jose.Signer
 		extsigner      jose.Signer
@@ -343,26 +348,26 @@ func (s *Service) GetJWKS(ctx context.Context) (*jose.JSONWebKeySet, error) {
 }
 
 // Generate returns a new jwt token from a user model
-func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Duration) (string, error) {
+func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Duration) (string, *Claims, error) {
 	if claims.Kind != "" {
-		return "", kerrors.WithKind(nil, ErrGenerate, "Invalid token kind")
+		return "", nil, kerrors.WithKind(nil, ErrGenerate, "Invalid token kind")
 	}
 	signer, err := s.getSigner(ctx)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	u, err := uid.New()
 	if err != nil {
-		return "", kerrors.WithMsg(err, "Failed to generate token id")
+		return "", nil, kerrors.WithMsg(err, "Failed to generate token id")
 	}
 	now := time.Now().Round(0).UTC()
 	claims.Expiry = now.Add(duration).Unix()
 	claims.ID = u.Base64()
 	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
+		return "", nil, kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
 	}
-	return token, nil
+	return token, &claims, nil
 }
 
 // GenerateExt creates a new id token

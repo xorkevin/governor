@@ -65,3 +65,38 @@ func ToBytes(s string) (int64, error) {
 		return 0, kerrors.WithKind(nil, ErrFmt, "Invalid unit")
 	}
 }
+
+func ToString(bytes int64) string {
+	unitname := "B"
+	for _, i := range []struct {
+		unit int64
+		name string
+	}{
+		{
+			unit: PETABYTE,
+			name: "PiB",
+		},
+		{
+			unit: TERABYTE,
+			name: "TiB",
+		},
+		{
+			unit: GIGABYTE,
+			name: "GiB",
+		},
+		{
+			unit: MEGABYTE,
+			name: "MiB",
+		},
+		{
+			unit: KILOBYTE,
+			name: "KiB",
+		},
+	} {
+		if bytes%i.unit == 0 {
+			bytes /= i.unit
+			unitname = i.name
+		}
+	}
+	return strconv.FormatInt(bytes, 10) + unitname
+}

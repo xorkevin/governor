@@ -19,7 +19,7 @@ const (
 
 const (
 	// CookieNameAccessToken is the name of the access token cookie
-	CookieNameAccessToken = "gov_access_token"
+	CookieNameAccessToken = "gov_access"
 )
 
 const (

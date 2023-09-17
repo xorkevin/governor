@@ -11,7 +11,6 @@ import (
 
 	"xorkevin.dev/governor"
 	"xorkevin.dev/governor/service/dbsql"
-	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/kerrors"
@@ -473,114 +472,6 @@ func (s *Service) commitOTP(ctx context.Context, userid string, code string) err
 		return kerrors.WithMsg(err, "Failed to enable otp")
 	}
 	return nil
-}
-
-func (s *Service) checkLoginRatelimit(ctx context.Context, m *usermodel.Model) error {
-	var k time.Duration
-	if m.FailedLoginCount > 293 || m.FailedLoginCount < 0 {
-		k = 24 * time.Hour
-	} else {
-		k = time.Duration(m.FailedLoginCount*m.FailedLoginCount) * time.Second
-	}
-	cliff := time.Unix(m.FailedLoginTime, 0).Add(k).UTC()
-	if time.Now().Round(0).Before(cliff) {
-		return governor.ErrWithTooManyRequests(nil, cliff, "", "Failed login too many times")
-	}
-	return nil
-}
-
-type (
-	// errAuthenticate is returned when failing to authenticate
-	errAuthenticate struct{}
-)
-
-func (e errAuthenticate) Error() string {
-	return "Failed authenticating"
-}
-
-func (s *Service) checkOTPCode(ctx context.Context, m *usermodel.Model, code string, backup string, ipaddr, useragent string) error {
-	if code == "" {
-		cipher, err := s.getCipher(ctx)
-		if err != nil {
-			return err
-		}
-		if ok, err := s.users.ValidateOTPBackup(cipher.keyring, m, backup); err != nil {
-			return kerrors.WithMsg(err, "Failed to validate otp backup code")
-		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, errAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Inalid otp backup code")
-		}
-
-		emdata := emailOTPBackupUsed{
-			FirstName: m.FirstName,
-			LastName:  m.LastName,
-			Username:  m.Username,
-			IP:        ipaddr,
-			Time:      time.Now().Round(0).UTC().Format(time.RFC1123Z),
-			UserAgent: useragent,
-		}
-		// must make best effort attempt to send the email
-		ctx = klog.ExtendCtx(context.Background(), ctx)
-		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.otpbackupused), emdata, false); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp backup used email"))
-		}
-	} else {
-		if _, err := s.kvotpcodes.Get(ctx, s.kvotpcodes.Subkey(m.Userid, code)); err != nil {
-			if !errors.Is(err, kvstore.ErrNotFound) {
-				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get user used otp code"))
-			}
-		} else {
-			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code already used")
-		}
-		cipher, err := s.getCipher(ctx)
-		if err != nil {
-			return err
-		}
-		if ok, err := s.users.ValidateOTPCode(cipher.keyring, m, code); err != nil {
-			return kerrors.WithMsg(err, "Failed to validate otp code")
-		} else if !ok {
-			return governor.ErrWithRes(kerrors.WithKind(nil, errAuthenticate{}, "Failed to authenticate"), http.StatusUnauthorized, "", "Invalid otp code")
-		}
-	}
-	return nil
-}
-
-func (s *Service) markOTPCode(ctx context.Context, userid string, code string) {
-	if err := s.kvotpcodes.Set(ctx, s.kvotpcodes.Subkey(userid, code), "-", 120); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to mark otp code as used"))
-	}
-}
-
-func (s *Service) incrLoginFailCount(ctx context.Context, m *usermodel.Model, ipaddr, useragent string) {
-	m.FailedLoginTime = time.Now().Round(0).Unix()
-	if m.FailedLoginCount < 0 {
-		m.FailedLoginCount = 0
-	}
-	m.FailedLoginCount += 1
-	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to update login failure count"))
-	}
-
-	if m.FailedLoginCount%8 == 0 {
-		emdata := emailLoginRatelimit{
-			FirstName: m.FirstName,
-			LastName:  m.LastName,
-			Username:  m.Username,
-			IP:        ipaddr,
-			Time:      time.Unix(m.FailedLoginTime, 0).UTC().Format(time.RFC1123Z),
-			UserAgent: useragent,
-		}
-		if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.loginratelimit), emdata, false); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to send otp ratelimit email"))
-		}
-	}
-}
-
-func (s *Service) resetLoginFailCount(ctx context.Context, m *usermodel.Model) {
-	m.FailedLoginTime = 0
-	m.FailedLoginCount = 0
-	if err := s.users.UpdateLoginFailed(ctx, m); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to reset login failure count"))
-	}
 }
 
 func (s *Service) removeOTP(ctx context.Context, userid string, code string, backup string, password string, ipaddr, useragent string) error {
