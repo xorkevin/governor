@@ -38,12 +38,15 @@ func (s *testServiceA) Init(ctx context.Context, r governor.ConfigReader, kit go
 	mr.GetCtx("/user", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthUser(s.g, "test-scope"))
-	mr.GetCtx("/user/recent", func(c *governor.Context) {
+	mr.GetCtx("/user/sudo", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
-	}, AuthUserRecent(s.g, 1*time.Minute, "test-scope"))
+	}, AuthUserSudo(s.g, 1*time.Minute, "test-scope"))
 	mr.GetCtx("/admin", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthAdmin(s.g, "test-scope"))
+	mr.GetCtx("/admin/sudo", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthAdminSudo(s.g, 1*time.Minute, "test-scope"))
 	mr.GetCtx("/user/{id}", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthOwnerOrAdminParam(s.g, "id", "test-scope"))
@@ -276,9 +279,15 @@ func TestGate(t *testing.T) {
 			Status: http.StatusOK,
 		},
 		{
-			Name:   "user token recent success",
-			Path:   "/api/test/user/recent",
+			Name:   "user token sudo success",
+			Path:   "/api/test/user/sudo",
 			Token:  usertoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "admin token sudo success",
+			Path:   "/api/test/admin/sudo",
+			Token:  admintoken,
 			Status: http.StatusOK,
 		},
 		{
@@ -294,8 +303,8 @@ func TestGate(t *testing.T) {
 			Status: http.StatusForbidden,
 		},
 		{
-			Name:   "api key recent failure",
-			Path:   "/api/test/user/recent",
+			Name:   "api key sudo failure",
+			Path:   "/api/test/user/sudo",
 			Token:  akey.Key,
 			Status: http.StatusForbidden,
 		},

@@ -221,6 +221,6 @@ func (s *router) mountCreate(m *governor.MethodRouter) {
 	m.GetCtx("/approvals", s.getUserApprovals, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalRead))
 	m.PostCtx("/approvals/id/{id}", s.approveUser, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
 	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
-	m.DeleteCtx("", s.deleteUserSelf, s.rt, gate.AuthUser(s.s.gate, gate.ScopeNone))
-	m.DeleteCtx("/id/{id}", s.deleteUser, s.rt, gate.AuthAdmin(s.s.gate, scopeAdminAccount))
+	m.DeleteCtx("", s.deleteUserSelf, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.DeleteCtx("/id/{id}", s.deleteUser, s.rt, gate.AuthAdminSudo(s.s.gate, s.s.authSettings.sudoDuration, scopeAdminAccount))
 }

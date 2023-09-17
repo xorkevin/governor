@@ -259,8 +259,7 @@ func AuthSystem(g Gate, scope string) governor.MiddlewareCtx {
 	}, scope)
 }
 
-// AuthUser is a middleware function to validate if a user is authenticated and
-// not banned
+// AuthUser is a middleware function to validate if a user is authenticated
 func AuthUser(g Gate, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
 		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
@@ -279,10 +278,11 @@ func AuthAdmin(g Gate, scope string) governor.MiddlewareCtx {
 	}, scope)
 }
 
-// AuthUserRecent is a middleware function to validate if a user logged in recently
-func AuthUserRecent(g Gate, recent time.Duration, scope string) governor.MiddlewareCtx {
+// AuthUserSudo is a middleware function to validate if a user logged in
+// recently
+func AuthUserSudo(g Gate, d time.Duration, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
-		if time.Now().Round(0).After(c.AuthAt.Add(recent)) {
+		if time.Now().Round(0).After(c.AuthAt.Add(d)) {
 			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
 		}
 		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
@@ -291,6 +291,17 @@ func AuthUserRecent(g Gate, recent time.Duration, scope string) governor.Middlew
 			return true, nil
 		}
 		return checkRole(c, acl, RoleUser)
+	}, scope)
+}
+
+// AuthAdminSudo is a middleware function to validate if a user is an admin and
+// logged in recently
+func AuthAdminSudo(g Gate, d time.Duration, scope string) governor.MiddlewareCtx {
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		if time.Now().Round(0).After(c.AuthAt.Add(d)) {
+			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
+		}
+		return checkRole(c, acl, RoleAdmin)
 	}, scope)
 }
 

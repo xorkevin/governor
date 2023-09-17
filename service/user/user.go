@@ -114,6 +114,7 @@ type (
 		newLoginEmail   bool
 		passMinSize     int
 		otpIssuer       string
+		sudoDuration    time.Duration
 	}
 
 	editSettings struct {
@@ -240,6 +241,7 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("auth.newLoginEmail", true)
 	r.SetDefault("auth.passMinSize", 8)
 	r.SetDefault("auth.otpIssuer", "governor")
+	r.SetDefault("auth.sudoDuration", "1h")
 
 	r.SetDefault("edit.newUserApproval", false)
 	r.SetDefault("edit.newUserConfirmDuration", "24h")
@@ -310,6 +312,10 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 	s.authSettings.newLoginEmail = r.GetBool("auth.newLoginEmail")
 	s.authSettings.passMinSize = r.GetInt("auth.passMinSize")
 	s.authSettings.otpIssuer = r.GetStr("auth.otpIssuer")
+	s.authSettings.sudoDuration, err = r.GetDuration("auth.sudoDuration")
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to parse sudo duration")
+	}
 
 	s.editSettings.newUserApproval = r.GetBool("edit.newUserApproval")
 	s.editSettings.newUserConfirmDuration, err = r.GetDuration("edit.newUserConfirmDuration")
@@ -383,6 +389,7 @@ func (s *Service) Init(ctx context.Context, r governor.ConfigReader, kit governo
 		klog.ABool("auth.newLoginEmail", s.authSettings.newLoginEmail),
 		klog.AInt("auth.passMinSize", s.authSettings.passMinSize),
 		klog.AString("auth.otpIssuer", s.authSettings.otpIssuer),
+		klog.AString("auth.sudoDuration", s.authSettings.sudoDuration.String()),
 
 		klog.ABool("edit.newUserApproval", s.editSettings.newUserApproval),
 		klog.AString("edit.newUserConfirmDuration", s.editSettings.newUserConfirmDuration.String()),
