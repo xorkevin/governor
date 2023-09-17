@@ -4,8 +4,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/gate"
 )
 
 type (
@@ -70,7 +69,6 @@ type (
 	reqUserDeleteSelf struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Username string `valid:"username,has" json:"username"`
-		Password string `valid:"password,has" json:"password"`
 	}
 )
 
@@ -86,7 +84,7 @@ func (s *router) deleteUserSelf(c *governor.Context) {
 		return
 	}
 
-	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username, false, req.Password); err != nil {
+	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -113,7 +111,7 @@ func (s *router) deleteUser(c *governor.Context) {
 		return
 	}
 
-	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username, true, ""); err != nil {
+	if err := s.s.deleteUser(c.Ctx(), req.Userid, req.Username); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -218,11 +216,11 @@ func (s *router) mountCreate(m *governor.MethodRouter) {
 	scopeAdminAccount := s.s.scopens + ".admin.account:delete"
 	scopeAddAdmin := s.s.scopens + ".add.admin:write"
 	m.PostCtx("", s.createUser, s.rt)
-	m.PostCtx("/admin", s.addAdmin, s.rt, gate.System(s.s.gate, scopeAddAdmin))
 	m.PostCtx("/confirm", s.commitUser, s.rt)
-	m.GetCtx("/approvals", s.getUserApprovals, gate.Member(s.s.gate, s.s.rolens, scopeApprovalRead), s.rt)
-	m.PostCtx("/approvals/id/{id}", s.approveUser, gate.Member(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
-	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, gate.Member(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
-	m.DeleteCtx("", s.deleteUserSelf, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.DeleteCtx("/id/{id}", s.deleteUser, gate.Admin(s.s.gate, scopeAdminAccount), s.rt)
+	m.PostCtx("/admin", s.addAdmin, s.rt, gate.AuthSystem(s.s.gate, scopeAddAdmin))
+	m.GetCtx("/approvals", s.getUserApprovals, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalRead))
+	m.PostCtx("/approvals/id/{id}", s.approveUser, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
+	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
+	m.DeleteCtx("", s.deleteUserSelf, s.rt, gate.AuthUser(s.s.gate, gate.ScopeNone))
+	m.DeleteCtx("/id/{id}", s.deleteUser, s.rt, gate.AuthAdmin(s.s.gate, scopeAdminAccount))
 }

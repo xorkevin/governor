@@ -42,9 +42,9 @@ type (
 	//forge:model:query approval
 	Model struct {
 		Userid       string `model:"userid,VARCHAR(31) PRIMARY KEY"`
-		Username     string `model:"username,VARCHAR(255) NOT NULL"`
+		Username     string `model:"username,VARCHAR(255) NOT NULL UNIQUE"`
 		PassHash     string `model:"pass_hash,VARCHAR(255) NOT NULL"`
-		Email        string `model:"email,VARCHAR(255) NOT NULL"`
+		Email        string `model:"email,VARCHAR(255) NOT NULL UNIQUE"`
 		FirstName    string `model:"first_name,VARCHAR(255) NOT NULL"`
 		LastName     string `model:"last_name,VARCHAR(255) NOT NULL"`
 		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`

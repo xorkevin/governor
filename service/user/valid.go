@@ -12,19 +12,20 @@ import (
 //go:generate forge validation
 
 const (
-	lengthCapUserid    = 31
-	lengthCapUsername  = 127
-	lengthCapEmail     = 254
-	lengthCapPassword  = 255
-	lengthCapOTPCode   = 31
-	lengthCapSessionID = 31
-	lengthCapToken     = 255
+	lengthCapUserid       = 31
+	lengthCapUsername     = 127
+	lengthCapEmail        = 254
+	lengthCapPassword     = 255
+	lengthCapOTPCode      = 31
+	lengthCapSessionID    = 31
+	lengthCapRefreshToken = 255
+	lengthCapName         = 127
+	lengthCapToken        = 127
+	amountCap             = 255
 
 	lengthCapApikeyid = 63
-	lengthCapName     = 127
 	lengthCapRole     = 127
 	lengthCapLarge    = 4095
-	amountCap         = 255
 	lengthCapApikey   = 127
 )
 
@@ -126,57 +127,8 @@ func validhasRefreshToken(token string) error {
 	if len(token) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Refresh token must be provided")
 	}
-	if len(token) > lengthCapToken {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
-	}
-	return nil
-}
-
-func validhasRole(role string) error {
-	if len(role) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
-	}
-	if len(role) > lengthCapRole {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role must be shorter than 128 characters")
-	}
-	return nil
-}
-
-func validhasRolePrefix(prefix string) error {
-	if len(prefix) > lengthCapRole {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role prefix must be shorter than 128 characters")
-	}
-	return nil
-}
-
-func validAmount(amt int) error {
-	if amt < 1 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be positive")
-	}
-	if amt > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be less than 256")
-	}
-	return nil
-}
-
-func validOffset(offset int) error {
-	if offset < 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Offset must not be negative")
-	}
-	return nil
-}
-
-func validhasUserids(userids []string) error {
-	if len(userids) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "IDs must be provided")
-	}
-	if len(userids) > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Request is too large")
-	}
-	for _, i := range userids {
-		if err := validhasUserid(i); err != nil {
-			return err
-		}
+	if len(token) > lengthCapRefreshToken {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Refresh token is too long")
 	}
 	return nil
 }
@@ -205,8 +157,57 @@ func validhasToken(token string) error {
 	if len(token) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token must be provided")
 	}
-	if len(token) > lengthCapApikey {
+	if len(token) > lengthCapToken {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
+	}
+	return nil
+}
+
+func validAmount(amt int) error {
+	if amt < 1 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be positive")
+	}
+	if amt > amountCap {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Amount must be less than 256")
+	}
+	return nil
+}
+
+func validOffset(offset int) error {
+	if offset < 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Offset must not be negative")
+	}
+	return nil
+}
+
+func validhasRole(role string) error {
+	if len(role) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
+	}
+	if len(role) > lengthCapRole {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role must be shorter than 128 characters")
+	}
+	return nil
+}
+
+func validhasRolePrefix(prefix string) error {
+	if len(prefix) > lengthCapRole {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role prefix must be shorter than 128 characters")
+	}
+	return nil
+}
+
+func validhasUserids(userids []string) error {
+	if len(userids) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "IDs must be provided")
+	}
+	if len(userids) > amountCap {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Request is too large")
+	}
+	for _, i := range userids {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }

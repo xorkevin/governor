@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -225,12 +226,21 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 const (
 	NSUser    = "gov.user"
 	RelIn     = "in"
-	RelMember = "mem"
 	RelMod    = "mod"
 	NSRole    = "gov.role"
 	RoleUser  = "gov.user"
 	RoleAdmin = "gov.admin"
 )
+
+func CheckRole(ctx context.Context, acl authzacl.ACL, userid string, role string) (bool, error) {
+	return acl.Check(ctx, authzacl.Obj{
+		NS:  NSRole,
+		Key: role,
+	}, RelIn, authzacl.Sub{
+		NS:  NSUser,
+		Key: userid,
+	})
+}
 
 func checkRole(c Context, acl ACL, role string) (bool, error) {
 	return acl.CheckRel(c.Ctx.Ctx(), authzacl.Obj{
@@ -240,6 +250,13 @@ func checkRole(c Context, acl ACL, role string) (bool, error) {
 		NS:  NSUser,
 		Key: c.Userid,
 	})
+}
+
+// AuthSystem is a middleware function to validate a sys token
+func AuthSystem(g Gate, scope string) governor.MiddlewareCtx {
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		return c.IsSystem, nil
+	}, scope)
 }
 
 // AuthUser is a middleware function to validate if a user is authenticated and
@@ -265,7 +282,7 @@ func AuthAdmin(g Gate, scope string) governor.MiddlewareCtx {
 // AuthUserRecent is a middleware function to validate if a user logged in recently
 func AuthUserRecent(g Gate, recent time.Duration, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
-		if c.AuthAt.Add(recent).Before(time.Now().Round(0)) {
+		if time.Now().Round(0).After(c.AuthAt.Add(recent)) {
 			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
 		}
 		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
@@ -305,8 +322,8 @@ func AuthOwnerParam(g Gate, idparam string, scope string) governor.MiddlewareCtx
 	}, scope)
 }
 
-// AuthOwnerOrAdmin is a middleware function to validate if the request is made
-// by the resource owner or an admin
+// AuthOwnerOrAdmin is a middleware function to validate if a user is the
+// resource owner or an admin
 //
 // idfunc should return true if the resource is owned by the given user
 func AuthOwnerOrAdmin(g Gate, idfunc func(Context) (bool, error), scope string) governor.MiddlewareCtx {
@@ -336,5 +353,26 @@ func AuthOwnerOrAdminParam(g Gate, idparam string, scope string) governor.Middle
 	}
 	return AuthOwnerOrAdmin(g, func(c Context) (bool, error) {
 		return c.Ctx.Param(idparam) == c.Userid, nil
+	}, scope)
+}
+
+// AuthMember is a middleware function to validate if a user has a role
+func AuthMember(g Gate, role string, scope string) governor.MiddlewareCtx {
+	if role == "" {
+		panic("role cannot be empty")
+	}
+
+	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
+		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+		if ok, err := checkRole(c, acl, RoleUser); err != nil {
+			return false, err
+		} else if !ok {
+			return false, nil
+		}
+		return checkRole(c, acl, role)
 	}, scope)
 }

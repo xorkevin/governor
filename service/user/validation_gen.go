@@ -135,9 +135,6 @@ func (r reqUserDeleteSelf) valid() error {
 	if err := validhasUsername(r.Username); err != nil {
 		return err
 	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
 	return nil
 }
 

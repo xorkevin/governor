@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/authzacl"
 	"xorkevin.dev/governor/service/events"
 	"xorkevin.dev/governor/service/events/sysevent"
 	"xorkevin.dev/governor/service/gate"
@@ -17,15 +18,12 @@ import (
 	"xorkevin.dev/governor/service/ratelimit"
 	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/service/user/resetmodel"
-	"xorkevin.dev/governor/service/user/role"
-	"xorkevin.dev/governor/service/user/roleinvmodel"
 	"xorkevin.dev/governor/service/user/sessionmodel"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/bytefmt"
 	"xorkevin.dev/governor/util/kjson"
 	"xorkevin.dev/governor/util/ksync"
 	"xorkevin.dev/governor/util/lifecycle"
-	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/hunter2/h2cipher"
 	"xorkevin.dev/hunter2/h2cipher/aes"
 	"xorkevin.dev/hunter2/h2cipher/xchacha20poly1305"
@@ -42,7 +40,6 @@ const (
 	UserEventKindCreate = "create"
 	UserEventKindUpdate = "update"
 	UserEventKindDelete = "delete"
-	UserEventKindRoles  = "roles"
 )
 
 type (
@@ -62,7 +59,6 @@ type (
 		Create CreateUserProps
 		Update UpdateUserProps
 		Delete DeleteUserProps
-		Roles  RolesProps
 	}
 
 	// CreateUserProps are properties of a newly created user
@@ -86,13 +82,6 @@ type (
 		Username string `json:"username"`
 	}
 
-	// RolesProps are properties of a user role update
-	RolesProps struct {
-		Add    bool     `json:"add"`
-		Userid string   `json:"userid"`
-		Roles  []string `json:"roles"`
-	}
-
 	// HandlerFunc is a user event handler
 	HandlerFunc = func(ctx context.Context, props UserEvent) error
 
@@ -104,10 +93,6 @@ type (
 		GetInfoBulk(ctx context.Context, userids []string) (*ResUserInfoList, error)
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
 		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
-		DeleteRoleInvitations(ctx context.Context, role string) error
-		GetRoleUsers(ctx context.Context, roleName string, amount, offset int) ([]string, error)
-		InsertRoles(ctx context.Context, userid string, roles rank.Rank) error
-		DeleteRolesByRole(ctx context.Context, roleName string, userids []string) error
 		StreamName() string
 	}
 
@@ -167,9 +152,8 @@ type (
 		users         usermodel.Repo
 		sessions      sessionmodel.Repo
 		approvals     approvalmodel.Repo
-		invitations   roleinvmodel.Repo
 		resets        resetmodel.Repo
-		roles         role.RolesManager
+		acl           authzacl.Manager
 		apikeys       apikey.Apikeys
 		kvotpcodes    kvstore.KVStore
 		pubsub        pubsub.Pubsub
@@ -208,9 +192,8 @@ func New(
 	users usermodel.Repo,
 	sessions sessionmodel.Repo,
 	approvals approvalmodel.Repo,
-	invitations roleinvmodel.Repo,
 	resets resetmodel.Repo,
-	roles role.RolesManager,
+	acl authzacl.Manager,
 	apikeys apikey.Apikeys,
 	kv kvstore.KVStore,
 	ps pubsub.Pubsub,
@@ -226,9 +209,8 @@ func New(
 		users:       users,
 		sessions:    sessions,
 		approvals:   approvals,
-		invitations: invitations,
 		resets:      resets,
-		roles:       roles,
+		acl:         acl,
 		apikeys:     apikeys,
 		kvotpcodes:  kv.Subtree("otpcodes"),
 		pubsub:      ps,
@@ -585,11 +567,6 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 	}
 	s.log.Info(ctx, "Created userapprovals table")
 
-	if err := s.invitations.Setup(ctx); err != nil {
-		return err
-	}
-	s.log.Info(ctx, "Created userroleinvitations table")
-
 	if err := s.resets.Setup(ctx); err != nil {
 		return err
 	}
@@ -642,10 +619,6 @@ func DecodeUserEvent(msgdata []byte) (*UserEvent, error) {
 		if err := kjson.Unmarshal(m.Payload, &props.Delete); err != nil {
 			return nil, kerrors.WithKind(err, ErrUserEvent, "Failed to decode delete user event")
 		}
-	case UserEventKindRoles:
-		if err := kjson.Unmarshal(m.Payload, &props.Roles); err != nil {
-			return nil, kerrors.WithKind(err, ErrUserEvent, "Failed to decode roles user event")
-		}
 	default:
 		return nil, kerrors.WithKind(nil, ErrUserEvent, "Invalid user event kind")
 	}
@@ -685,17 +658,6 @@ func encodeUserEventDelete(props DeleteUserProps) ([]byte, error) {
 	return b, nil
 }
 
-func encodeUserEventRoles(props RolesProps) ([]byte, error) {
-	b, err := kjson.Marshal(userEventEnc{
-		Kind:    UserEventKindRoles,
-		Payload: props,
-	})
-	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to encode user roles props to json")
-	}
-	return b, nil
-}
-
 const (
 	roleDeleteBatchSize   = 256
 	apikeyDeleteBatchSize = 256
@@ -715,27 +677,29 @@ func (s *Service) userEventHandler(ctx context.Context, msg events.Msg) error {
 }
 
 func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserProps) error {
+	if err := s.resets.DeleteByUserid(ctx, props.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user resets")
+	}
+	if err := s.killAllSessions(ctx, props.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user sessions")
+	}
 	for {
-		r, err := s.roles.GetRoles(ctx, props.Userid, "", roleDeleteBatchSize, 0)
+		r, err := s.acl.ReadBySub(ctx, authzacl.Sub{NS: gate.NSUser, Key: props.Userid}, roleDeleteBatchSize, nil)
 		if err != nil {
-			return kerrors.WithMsg(err, "Failed to get user roles")
+			return kerrors.WithMsg(err, "Failed to get user acl tuples")
 		}
 		if len(r) == 0 {
 			break
 		}
-		b, err := encodeUserEventRoles(RolesProps{
-			Add:    false,
-			Userid: props.Userid,
-			Roles:  r.ToSlice(),
-		})
-		if err != nil {
-			return err
+		rels := make([]authzacl.Relation, 0, len(r))
+		for _, i := range r {
+			rels = append(rels, authzacl.Relation{
+				Obj: i,
+				Sub: authzacl.Sub{NS: gate.NSUser, Key: props.Userid},
+			})
 		}
-		if err := s.events.Publish(ctx, events.NewMsgs(s.eventSettings.streamUsers, props.Userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish delete roles event"))
-		}
-		if err := s.roles.DeleteRoles(ctx, props.Userid, r); err != nil {
-			return kerrors.WithMsg(err, "Failed to delete user roles")
+		if err := s.acl.DeleteRelations(ctx, rels); err != nil {
+			return kerrors.WithMsg(err, "Failed to delete user acl tuples")
 		}
 		if len(r) < roleDeleteBatchSize {
 			break
@@ -777,11 +741,6 @@ func (s *Service) userEventHandlerGC(ctx context.Context, m pubsub.Msg) error {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC resets"))
 	} else {
 		s.log.Info(ctx, "GC user resets")
-	}
-	if err := s.invitations.DeleteBefore(ctx, time.Unix(props.Timestamp, 0).Add(-s.gcDuration).Unix()); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to GC inviations"))
-	} else {
-		s.log.Info(ctx, "GC user invitations")
 	}
 	return nil
 }

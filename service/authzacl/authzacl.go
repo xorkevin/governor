@@ -36,7 +36,13 @@ type (
 		Check(ctx context.Context, obj Obj, pred string, sub Sub) (bool, error)
 	}
 
-	ACLManager interface{}
+	Manager interface {
+		ACL
+		InsertRelations(ctx context.Context, rels []Relation) error
+		DeleteRelations(ctx context.Context, rels []Relation) error
+		Read(ctx context.Context, obj Obj, limit int, afterPred string, after *Sub) ([]Sub, error)
+		ReadBySub(ctx context.Context, sub Sub, limit int, after *ObjRel) ([]ObjRel, error)
+	}
 
 	Service struct {
 		repo      aclmodel.Repo
@@ -46,7 +52,7 @@ type (
 	}
 )
 
-// New returns a new RolesManager
+// New returns a new [Manager]
 func New(repo aclmodel.Repo, ev events.Events) *Service {
 	return &Service{
 		repo:   repo,

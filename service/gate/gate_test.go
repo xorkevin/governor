@@ -50,6 +50,9 @@ func (s *testServiceA) Init(ctx context.Context, r governor.ConfigReader, kit go
 	mr.GetCtx("/user/{id}/private", func(c *governor.Context) {
 		c.WriteStatus(http.StatusOK)
 	}, AuthOwnerParam(s.g, "id", "test-scope"))
+	mr.GetCtx("/customrole", func(c *governor.Context) {
+		c.WriteStatus(http.StatusOK)
+	}, AuthMember(s.g, "customrole", "test-scope"))
 	return nil
 }
 
@@ -146,6 +149,8 @@ func TestGate(t *testing.T) {
 		authzacl.Rel(NSRole, RoleUser, RelIn, NSUser, "test-admin-1", ""),
 		authzacl.Rel(NSRole, RoleAdmin, RelIn, NSUser, "test-admin-1", ""),
 		authzacl.Rel(NSRole, RoleUser, RelIn, NSUser, "test-user-1", ""),
+		authzacl.Rel(NSRole, "customrole", RelIn, NSUser, "test-user-1", ""),
+		authzacl.Rel(NSRole, RoleUser, RelIn, NSUser, "test-user-2", ""),
 	)
 
 	keyset := apikey.KeySet{
@@ -169,6 +174,13 @@ func TestGate(t *testing.T) {
 
 	usertoken, _, err := g.Generate(context.Background(), Claims{
 		Subject:   "test-user-1",
+		SessionID: "test-session-id",
+		AuthAt:    time.Now().Round(0).Unix(),
+	}, 1*time.Minute)
+	assert.NoError(err)
+
+	usertoken2, _, err := g.Generate(context.Background(), Claims{
+		Subject:   "test-user-2",
 		SessionID: "test-session-id",
 		AuthAt:    time.Now().Round(0).Unix(),
 	}, 1*time.Minute)
@@ -321,6 +333,24 @@ func TestGate(t *testing.T) {
 			Name:   "api key check owner failure",
 			Path:   "/api/test/user/test-user-2",
 			Token:  akey.Key,
+			Status: http.StatusForbidden,
+		},
+		{
+			Name:   "user token check member success",
+			Path:   "/api/test/customrole",
+			Token:  usertoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "admin token check member success",
+			Path:   "/api/test/customrole",
+			Token:  admintoken,
+			Status: http.StatusOK,
+		},
+		{
+			Name:   "other user token check member failure",
+			Path:   "/api/test/customrole",
+			Token:  usertoken2,
 			Status: http.StatusForbidden,
 		},
 		{

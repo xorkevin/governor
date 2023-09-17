@@ -42,7 +42,7 @@ func (s *Service) InsertRelations(ctx context.Context, rels []Relation) error {
 		}
 		msgs = append(msgs, events.PublishMsg{
 			Topic: s.streamacl,
-			Key:   i.Sub.NS + ":" + i.Sub.Key + "#" + i.Sub.Pred,
+			Key:   i.Sub.NS + ":" + i.Sub.Key + "@" + i.Sub.Pred,
 			Value: b,
 		})
 	}
@@ -51,7 +51,7 @@ func (s *Service) InsertRelations(ctx context.Context, rels []Relation) error {
 		return kerrors.WithMsg(err, "Failed to add relations")
 	}
 
-	// must make a best effort to publish role event
+	// must make a best effort to publish tuple event
 	ctx = klog.ExtendCtx(context.Background(), ctx)
 	if err := s.events.Publish(ctx, msgs...); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish add relations acl event")
@@ -84,7 +84,7 @@ func (s *Service) DeleteRelations(ctx context.Context, rels []Relation) error {
 		}
 		msgs = append(msgs, events.PublishMsg{
 			Topic: s.streamacl,
-			Key:   i.Sub.NS + ":" + i.Sub.Key + "#" + i.Sub.Pred,
+			Key:   i.Sub.NS + ":" + i.Sub.Key + "@" + i.Sub.Pred,
 			Value: b,
 		})
 	}

@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/authzacl"
 	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/service/events"
+	"xorkevin.dev/governor/service/gate"
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/user/approvalmodel"
-	"xorkevin.dev/governor/util/rank"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -87,8 +88,11 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 	}
 
 	am := s.approvals.New(m)
-	if s.authsettings.userApproval {
+	if s.editSettings.newUserApproval {
 		if err := s.approvals.Insert(ctx, am); err != nil {
+			if errors.Is(err, dbsql.ErrUnique) {
+				return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Username or email is already waiting for approval")
+			}
 			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
 	} else {
@@ -97,6 +101,9 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 			return nil, kerrors.WithMsg(err, "Failed to generate email verification code")
 		}
 		if err := s.approvals.Insert(ctx, am); err != nil {
+			if errors.Is(err, dbsql.ErrUnique) {
+				return nil, governor.ErrWithRes(err, http.StatusBadRequest, "", "Username or email is already waiting for approval")
+			}
 			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
 		if err := s.sendNewUserEmail(ctx, code, am); err != nil {
@@ -130,7 +137,7 @@ type (
 func (s *Service) getUserApprovals(ctx context.Context, limit, offset int) (*resApprovals, error) {
 	m, err := s.approvals.GetGroup(ctx, limit, offset)
 	if err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to get user requests")
+		return nil, kerrors.WithMsg(err, "Failed to get new account requests")
 	}
 	approvals := make([]resApproval, 0, len(m))
 	for _, i := range m {
@@ -154,9 +161,9 @@ func (s *Service) approveUser(ctx context.Context, userid string) error {
 	m, err := s.approvals.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, dbsql.ErrNotFound) {
-			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "New user request not found")
 		}
-		return kerrors.WithMsg(err, "Failed to get user request")
+		return kerrors.WithMsg(err, "Failed to get new user request")
 	}
 	code, err := s.approvals.RehashCode(m)
 	if err != nil {
@@ -177,10 +184,10 @@ func (s *Service) deleteUserApproval(ctx context.Context, userid string) error {
 		if errors.Is(err, dbsql.ErrNotFound) {
 			return governor.ErrWithRes(err, http.StatusNotFound, "", "User request not found")
 		}
-		return kerrors.WithMsg(err, "Failed to get user request")
+		return kerrors.WithMsg(err, "Failed to get new user request")
 	}
 	if err := s.approvals.Delete(ctx, m); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete user request")
+		return kerrors.WithMsg(err, "Failed to delete new user request")
 	}
 	return nil
 }
@@ -193,10 +200,18 @@ func (s *Service) sendNewUserEmail(ctx context.Context, code string, m *approval
 		LastName:  m.LastName,
 		Username:  m.Username,
 	}
-	if err := emdata.computeURL(s.emailurl.base, s.emailurl.newuser); err != nil {
+	if err := emdata.computeURL(s.emailSettings.urlTpl.base, s.emailSettings.urlTpl.newUser); err != nil {
 		return kerrors.WithMsg(err, "Failed to generate account verification email")
 	}
-	if err := s.mailer.SendTpl(ctx, "", mail.Addr{}, []mail.Addr{{Address: m.Email, Name: m.FirstName}}, mail.TplLocal(s.tplname.newuser), emdata, true); err != nil {
+	if err := s.mailer.SendTpl(
+		ctx,
+		"",
+		mail.Addr{},
+		[]mail.Addr{{Address: m.Email, Name: m.FirstName}},
+		mail.TplLocal(s.emailSettings.tplName.newuser),
+		emdata,
+		true,
+	); err != nil {
 		return kerrors.WithMsg(err, "Failed to send account verification email")
 	}
 	return nil
@@ -213,7 +228,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	if !am.Approved {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not approved")
 	}
-	if time.Now().Round(0).After(time.Unix(am.CodeTime, 0).Add(s.authsettings.confirmDuration)) {
+	if time.Now().Round(0).After(time.Unix(am.CodeTime, 0).Add(s.editSettings.newUserConfirmDuration)) {
 		return nil, governor.ErrWithRes(nil, http.StatusBadRequest, "", "Code expired")
 	}
 	if ok, err := s.approvals.ValidateCode(key, am); err != nil {
@@ -234,14 +249,6 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	if err != nil {
 		return nil, err
 	}
-	b1, err := encodeUserEventRoles(RolesProps{
-		Add:    true,
-		Userid: userid,
-		Roles:  rank.BaseUser().ToSlice(),
-	})
-	if err != nil {
-		return nil, err
-	}
 
 	if err := s.approvals.Delete(ctx, am); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to clean up user approval")
@@ -254,15 +261,22 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 		return nil, kerrors.WithMsg(err, "Failed to create user")
 	}
 
-	// must make a best effort attempt to add roles, publish new user event, and clear user existence cache
+	// must make a best effort attempt to publish new user event and add roles
 	ctx = klog.ExtendCtx(context.Background(), ctx)
 
-	if err := s.roles.InsertRoles(ctx, m.Userid, rank.BaseUser()); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to create user roles")
+	if err := s.events.Publish(ctx, events.PublishMsg{
+		Topic: s.eventSettings.streamUsers,
+		Key:   userid,
+		Value: b0,
+	}); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"))
 	}
 
-	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b0, b1)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"))
+	if err := s.acl.InsertRelations(ctx, []authzacl.Relation{{
+		Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleUser, Pred: gate.RelIn},
+		Sub: authzacl.Sub{NS: gate.NSUser, Key: m.Userid},
+	}}); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create user acl tuples"))
 	}
 
 	s.log.Info(ctx, "Created user",
@@ -270,15 +284,13 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 		klog.AString("username", m.Username),
 	)
 
-	s.clearUserExists(ctx, userid)
-
 	return &resUserUpdate{
 		Userid:   m.Userid,
 		Username: m.Username,
 	}, nil
 }
 
-func (s *Service) deleteUser(ctx context.Context, userid string, username string, admin bool, password string) error {
+func (s *Service) deleteUser(ctx context.Context, userid string, username string) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, dbsql.ErrNotFound) {
@@ -290,17 +302,10 @@ func (s *Service) deleteUser(ctx context.Context, userid string, username string
 	if m.Username != username {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username does not match")
 	}
-	if roles, err := s.roles.IntersectRoles(ctx, userid, rank.Rank{"admin": struct{}{}}); err != nil {
+	if ok, err := gate.CheckRole(ctx, s.acl, userid, gate.RoleAdmin); err != nil {
 		return kerrors.WithMsg(err, "Failed to get user roles")
-	} else if roles.Has("admin") {
+	} else if ok {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Not allowed to delete admin user")
-	}
-	if !admin {
-		if ok, err := s.users.ValidatePass(password, m); err != nil {
-			return kerrors.WithMsg(err, "Failed to validate password")
-		} else if !ok {
-			return governor.ErrWithRes(nil, http.StatusUnauthorized, "", "Incorrect password")
-		}
 	}
 
 	b, err := encodeUserEventDelete(DeleteUserProps{
@@ -309,25 +314,17 @@ func (s *Service) deleteUser(ctx context.Context, userid string, username string
 	if err != nil {
 		return err
 	}
-	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, userid, b)...); err != nil {
+	if err := s.events.Publish(ctx, events.PublishMsg{
+		Topic: s.eventSettings.streamUsers,
+		Key:   userid,
+		Value: b,
+	}); err != nil {
 		return kerrors.WithMsg(err, "Failed to publish delete user event")
-	}
-
-	if err := s.resets.DeleteByUserid(ctx, userid); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete user resets")
-	}
-
-	if err := s.killAllSessions(ctx, userid); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
 
 	if err := s.users.Delete(ctx, m); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user roles")
 	}
-
-	// must make a best effort to clear user existence cache
-	ctx = klog.ExtendCtx(context.Background(), ctx)
-	s.clearUserExists(ctx, userid)
 	return nil
 }
 
@@ -348,28 +345,33 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate
 	if err != nil {
 		return nil, err
 	}
-	b1, err := encodeUserEventRoles(RolesProps{
-		Add:    true,
-		Userid: madmin.Userid,
-		Roles:  rank.Admin().ToSlice(),
-	})
-	if err != nil {
-		return nil, err
-	}
 
 	if err := s.users.Insert(ctx, madmin); err != nil {
 		return nil, err
 	}
 
-	// must make best effort to add roles, publish new user event, and clear user existence cache
+	// must make best effort to publish new user event and add roles
 	ctx = klog.ExtendCtx(context.Background(), ctx)
 
-	if err := s.roles.InsertRoles(ctx, madmin.Userid, rank.Admin()); err != nil {
-		return nil, kerrors.WithMsg(err, "Failed to add user roles")
+	if err := s.events.Publish(ctx, events.PublishMsg{
+		Topic: s.eventSettings.streamUsers,
+		Key:   madmin.Userid,
+		Value: b0,
+	}); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"))
 	}
 
-	if err := s.events.Publish(ctx, events.NewMsgs(s.streamusers, madmin.Userid, b0, b1)...); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish create user event"))
+	if err := s.acl.InsertRelations(ctx, []authzacl.Relation{
+		{
+			Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleUser, Pred: gate.RelIn},
+			Sub: authzacl.Sub{NS: gate.NSUser, Key: madmin.Userid},
+		},
+		{
+			Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleAdmin, Pred: gate.RelIn},
+			Sub: authzacl.Sub{NS: gate.NSUser, Key: madmin.Userid},
+		},
+	}); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create user acl tuples"))
 	}
 
 	s.log.Info(ctx, "Added admin",
@@ -377,16 +379,8 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate
 		klog.AString("userid", madmin.Userid),
 	)
 
-	s.clearUserExists(ctx, madmin.Userid)
-
 	return &resUserUpdate{
 		Userid:   madmin.Userid,
 		Username: madmin.Username,
 	}, nil
-}
-
-func (s *Service) clearUserExists(ctx context.Context, userid string) {
-	if err := s.kvusers.Del(ctx, userid); err != nil {
-		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to delete user exists in cache"))
-	}
 }
