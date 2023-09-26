@@ -103,9 +103,7 @@ func validPassword(password string) error {
 	if err := validhasPassword(password); err != nil {
 		return err
 	}
-	if len(password) < 10 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Password must be at least 10 chars")
-	}
+	// min length checked by pass min size
 	return nil
 }
 

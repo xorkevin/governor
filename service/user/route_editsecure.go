@@ -4,16 +4,14 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
+	"xorkevin.dev/governor/service/gate"
 )
 
 type (
 	//forge:valid
 	reqUserPutEmail struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		Email    string `valid:"email" json:"email"`
-		Password string `valid:"password,has" json:"password"`
+		Userid string `valid:"userid,has" json:"-"`
+		Email  string `valid:"email" json:"email"`
 	}
 )
 
@@ -29,7 +27,7 @@ func (s *router) putEmail(c *governor.Context) {
 		return
 	}
 
-	if err := s.s.updateEmail(c.Ctx(), req.Userid, req.Email, req.Password); err != nil {
+	if err := s.s.updateEmail(c.Ctx(), req.Userid, req.Email); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -39,9 +37,8 @@ func (s *router) putEmail(c *governor.Context) {
 type (
 	//forge:valid
 	reqUserPutEmailVerify struct {
-		Userid   string `valid:"userid,has" json:"userid"`
-		Key      string `valid:"token,has" json:"key"`
-		Password string `valid:"password,has" json:"password"`
+		Userid string `valid:"userid,has" json:"userid"`
+		Key    string `valid:"token,has" json:"key"`
 	}
 )
 
@@ -56,7 +53,7 @@ func (s *router) putEmailVerify(c *governor.Context) {
 		return
 	}
 
-	if err := s.s.commitEmail(c.Ctx(), req.Userid, req.Key, req.Password); err != nil {
+	if err := s.s.commitEmail(c.Ctx(), req.Userid, req.Key); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -94,9 +91,23 @@ func (s *router) putPassword(c *governor.Context) {
 type (
 	//forge:valid
 	reqForgotPassword struct {
-		Username string `valid:"usernameOrEmail,has" json:"username"`
+		Username string `valid:"username,opt" json:"username"`
+		Email    string `valid:"email,opt" json:"email"`
 	}
 )
+
+func (r *reqForgotPassword) preValidate() error {
+	if err := r.valid(); err != nil {
+		return err
+	}
+	if r.Username == "" && r.Email == "" {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide either username and email")
+	}
+	if r.Username != "" && r.Email != "" {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not provide both username and email")
+	}
+	return nil
+}
 
 func (s *router) forgotPassword(c *governor.Context) {
 	var req reqForgotPassword
@@ -104,12 +115,17 @@ func (s *router) forgotPassword(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	if err := req.valid(); err != nil {
+	if err := req.preValidate(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	if err := s.s.forgotPassword(c.Ctx(), req.Username); err != nil {
+	userid, err := s.s.getUseridForLogin(c.Ctx(), req.Username, req.Email)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := s.s.forgotPassword(c.Ctx(), userid); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -146,10 +162,9 @@ func (s *router) forgotPasswordReset(c *governor.Context) {
 type (
 	//forge:valid
 	reqAddOTP struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		Alg      string `valid:"OTPAlg" json:"alg"`
-		Digits   int    `valid:"OTPDigits" json:"digits"`
-		Password string `valid:"password,has" json:"password"`
+		Userid string `valid:"userid,has" json:"-"`
+		Alg    string `valid:"OTPAlg" json:"alg"`
+		Digits int    `valid:"OTPDigits" json:"digits"`
 	}
 )
 
@@ -165,7 +180,7 @@ func (s *router) addOTP(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.addOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Password)
+	res, err := s.s.addOTP(c.Ctx(), req.Userid, req.Alg, req.Digits)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -177,7 +192,7 @@ type (
 	//forge:valid
 	reqOTPCode struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Code   string `valid:"OTPCode" json:"code"`
+		Code   string `valid:"OTPCode,opt" json:"code"`
 	}
 )
 
@@ -203,10 +218,9 @@ func (s *router) commitOTP(c *governor.Context) {
 type (
 	//forge:valid
 	reqOTPCodeBackup struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		Code     string `valid:"OTPCode" json:"code"`
-		Backup   string `valid:"OTPCode" json:"backup"`
-		Password string `valid:"password,has" json:"password"`
+		Userid string `valid:"userid,has" json:"-"`
+		Code   string `valid:"OTPCode,opt" json:"code"`
+		Backup string `valid:"OTPCode,opt" json:"backup"`
 	}
 )
 
@@ -214,10 +228,10 @@ func (r *reqOTPCodeBackup) validCode() error {
 	if err := r.valid(); err != nil {
 		return err
 	}
-	if len(r.Code) == 0 && len(r.Backup) == 0 {
+	if r.Code == "" && r.Backup == "" {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code must be provided")
 	}
-	if len(r.Code) > 0 && len(r.Backup) > 0 {
+	if r.Code != "" && r.Backup != "" {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "May not provide both otp code and backup code")
 	}
 	return nil
@@ -239,7 +253,7 @@ func (s *router) removeOTP(c *governor.Context) {
 	if ip := c.RealIP(); ip != nil {
 		ipaddr = ip.String()
 	}
-	if err := s.s.removeOTP(c.Ctx(), req.Userid, req.Code, req.Backup, req.Password, ipaddr, c.Header("User-Agent")); err != nil {
+	if err := s.s.removeOTP(c.Ctx(), req.Userid, req.Code, req.Backup, ipaddr, c.Header("User-Agent")); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -247,12 +261,12 @@ func (s *router) removeOTP(c *governor.Context) {
 }
 
 func (s *router) mountEditSecure(m *governor.MethodRouter) {
-	m.PutCtx("/email", s.putEmail, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.PutCtx("/email/verify", s.putEmailVerify, s.rt)
-	m.PutCtx("/password", s.putPassword, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/email", s.putEmail, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.PutCtx("/email/verify", s.putEmailVerify, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.PutCtx("/password", s.putPassword, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
 	m.PutCtx("/password/forgot", s.forgotPassword, s.rt)
 	m.PutCtx("/password/forgot/reset", s.forgotPasswordReset, s.rt)
-	m.PutCtx("/otp", s.addOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.PutCtx("/otp/verify", s.commitOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.DeleteCtx("/otp", s.removeOTP, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
+	m.PutCtx("/otp", s.addOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.PutCtx("/otp/verify", s.commitOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.DeleteCtx("/otp", s.removeOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
 }
