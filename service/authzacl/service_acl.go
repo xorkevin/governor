@@ -40,9 +40,13 @@ func (s *Service) InsertRelations(ctx context.Context, rels []Relation) error {
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encode add relation acl event")
 		}
+		msgkey := i.Sub.NS + ":" + i.Sub.Key
+		if i.Sub.Pred != "" {
+			msgkey += "#" + i.Sub.Pred
+		}
 		msgs = append(msgs, events.PublishMsg{
 			Topic: s.streamacl,
-			Key:   i.Sub.NS + ":" + i.Sub.Key + "@" + i.Sub.Pred,
+			Key:   msgkey,
 			Value: b,
 		})
 	}
@@ -82,9 +86,13 @@ func (s *Service) DeleteRelations(ctx context.Context, rels []Relation) error {
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to encode remove relation acl event")
 		}
+		msgkey := i.Sub.NS + ":" + i.Sub.Key
+		if i.Sub.Pred != "" {
+			msgkey += "#" + i.Sub.Pred
+		}
 		msgs = append(msgs, events.PublishMsg{
 			Topic: s.streamacl,
-			Key:   i.Sub.NS + ":" + i.Sub.Key + "@" + i.Sub.Pred,
+			Key:   msgkey,
 			Value: b,
 		})
 	}

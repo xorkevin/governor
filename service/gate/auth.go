@@ -242,6 +242,16 @@ func CheckRole(ctx context.Context, acl authzacl.ACL, userid string, role string
 	})
 }
 
+func CheckMod(ctx context.Context, acl authzacl.ACL, userid string, role string) (bool, error) {
+	return acl.Check(ctx, authzacl.Obj{
+		NS:  NSRole,
+		Key: role,
+	}, RelMod, authzacl.Sub{
+		NS:  NSUser,
+		Key: userid,
+	})
+}
+
 func checkRole(c Context, acl ACL, role string) (bool, error) {
 	return acl.CheckRel(c.Ctx.Ctx(), authzacl.Obj{
 		NS:  NSRole,

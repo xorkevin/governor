@@ -22,9 +22,9 @@ const (
 	lengthCapName         = 127
 	lengthCapToken        = 127
 	amountCap             = 255
+	lengthCapRole         = 127
 
 	lengthCapApikeyid = 63
-	lengthCapRole     = 127
 	lengthCapLarge    = 4095
 	lengthCapApikey   = 127
 )
@@ -178,7 +178,7 @@ func validOffset(offset int) error {
 	return nil
 }
 
-func validhasRole(role string) error {
+func validRole(role string) error {
 	if len(role) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
 	}
@@ -206,13 +206,6 @@ func validhasUserids(userids []string) error {
 		if err := validhasUserid(i); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validRank(rankSlice []string) error {
-	if len(rankSlice) > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide less than 256 roles")
 	}
 	return nil
 }

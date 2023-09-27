@@ -190,60 +190,11 @@ func (r reqUserPut) valid() error {
 	return nil
 }
 
-func (r reqUserPutRank) valid() error {
+func (r reqUserPatchRole) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validRank(r.Add); err != nil {
-		return err
-	}
-	if err := validRank(r.Remove); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqAcceptRoleInvitation) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validhasRole(r.Role); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqGetRoleInvitations) valid() error {
-	if err := validhasRole(r.Role); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqGetUserRoleInvitations) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqDelRoleInvitation) valid() error {
-	if err := validhasUserid(r.Userid); err != nil {
-		return err
-	}
-	if err := validhasRole(r.Role); err != nil {
+	if err := validRole(r.Role); err != nil {
 		return err
 	}
 	return nil
@@ -256,9 +207,6 @@ func (r reqUserPutEmail) valid() error {
 	if err := validEmail(r.Email); err != nil {
 		return err
 	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -267,9 +215,6 @@ func (r reqUserPutEmailVerify) valid() error {
 		return err
 	}
 	if err := validhasToken(r.Key); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.Password); err != nil {
 		return err
 	}
 	return nil
@@ -289,7 +234,10 @@ func (r reqUserPutPassword) valid() error {
 }
 
 func (r reqForgotPassword) valid() error {
-	if err := validhasUsernameOrEmail(r.Username); err != nil {
+	if err := validoptUsername(r.Username); err != nil {
+		return err
+	}
+	if err := validoptEmail(r.Email); err != nil {
 		return err
 	}
 	return nil
@@ -318,9 +266,6 @@ func (r reqAddOTP) valid() error {
 	if err := validOTPDigits(r.Digits); err != nil {
 		return err
 	}
-	if err := validhasPassword(r.Password); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -328,7 +273,7 @@ func (r reqOTPCode) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validOTPCode(r.Code); err != nil {
+	if err := validoptOTPCode(r.Code); err != nil {
 		return err
 	}
 	return nil
@@ -338,13 +283,10 @@ func (r reqOTPCodeBackup) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validOTPCode(r.Code); err != nil {
+	if err := validoptOTPCode(r.Code); err != nil {
 		return err
 	}
-	if err := validOTPCode(r.Backup); err != nil {
-		return err
-	}
-	if err := validhasPassword(r.Password); err != nil {
+	if err := validoptOTPCode(r.Backup); err != nil {
 		return err
 	}
 	return nil

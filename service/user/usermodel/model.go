@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"time"
 
+	"xorkevin.dev/forge/model/sqldb"
 	"xorkevin.dev/governor/service/dbsql"
 	"xorkevin.dev/governor/util/uid"
 	"xorkevin.dev/hunter2/h2cipher"
@@ -38,6 +39,7 @@ type (
 		GetGroup(ctx context.Context, limit, offset int) ([]Info, error)
 		GetBulk(ctx context.Context, userids []string) ([]Info, error)
 		GetByUsernamePrefix(ctx context.Context, prefix string, limit, offset int) ([]Info, error)
+		Exists(ctx context.Context, userid string) (bool, error)
 		GetByID(ctx context.Context, userid string) (*Model, error)
 		GetByUsername(ctx context.Context, username string) (*Model, error)
 		GetByEmail(ctx context.Context, email string) (*Model, error)
@@ -354,6 +356,27 @@ func (r *repo) GetByUsernamePrefix(ctx context.Context, prefix string, limit, of
 	m, err := r.table.GetInfoByUsernamePrefix(ctx, d, prefix+"%", limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user info of username prefix")
+	}
+	return m, nil
+}
+
+func (r *repo) userExists(ctx context.Context, d sqldb.Executor, userid string) (bool, error) {
+	var exists bool
+	if err := d.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM "+r.table.TableName+" WHERE userid = $1);", userid).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// Exists returns if a user exists
+func (r *repo) Exists(ctx context.Context, userid string) (bool, error) {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return false, err
+	}
+	m, err := r.userExists(ctx, d, userid)
+	if err != nil {
+		return false, kerrors.WithMsg(err, "Failed to get user exists")
 	}
 	return m, nil
 }
