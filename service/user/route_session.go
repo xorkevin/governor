@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/gate"
 )
 
 type (
@@ -36,14 +36,14 @@ func (s *router) getSessions(c *governor.Context) {
 
 type (
 	//forge:valid
-	reqUserRmSessions struct {
-		Userid     string   `valid:"userid,has" json:"-"`
-		SessionIDs []string `valid:"sessionids" json:"session_ids"`
+	reqUserRmSession struct {
+		Userid    string `valid:"userid,has" json:"-"`
+		SessionID string `valid:"sessionID,has" json:"session_id"`
 	}
 )
 
-func (s *router) killSessions(c *governor.Context) {
-	var req reqUserRmSessions
+func (s *router) killSession(c *governor.Context) {
+	var req reqUserRmSession
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
@@ -54,7 +54,7 @@ func (s *router) killSessions(c *governor.Context) {
 		return
 	}
 
-	if err := s.s.killSessions(c.Ctx(), req.Userid, req.SessionIDs); err != nil {
+	if err := s.s.killSession(c.Ctx(), req.Userid, req.SessionID); err != nil {
 		c.WriteError(err)
 		return
 	}
@@ -64,6 +64,6 @@ func (s *router) killSessions(c *governor.Context) {
 func (s *router) mountSession(m *governor.MethodRouter) {
 	scopeSessionRead := s.s.scopens + ".session:read"
 	scopeSessionWrite := s.s.scopens + ".session:write"
-	m.GetCtx("/sessions", s.getSessions, gate.User(s.s.gate, scopeSessionRead), s.rt)
-	m.DeleteCtx("/sessions", s.killSessions, gate.User(s.s.gate, scopeSessionWrite), s.rt)
+	m.GetCtx("/sessions", s.getSessions, s.rt, gate.AuthUser(s.s.gate, scopeSessionRead))
+	m.DeleteCtx("/session", s.killSession, s.rt, gate.AuthUser(s.s.gate, scopeSessionWrite))
 }

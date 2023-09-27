@@ -23,8 +23,7 @@ type (
 		GetUserSessions(ctx context.Context, userid string, limit, offset int) ([]Model, error)
 		Insert(ctx context.Context, m *Model) error
 		Update(ctx context.Context, m *Model) error
-		Delete(ctx context.Context, m *Model) error
-		DeleteSessions(ctx context.Context, userid string, sessionids []string) error
+		DeleteSession(ctx context.Context, userid string, sessionid string) error
 		DeleteUserSessions(ctx context.Context, userid string) error
 		Setup(ctx context.Context) error
 	}
@@ -169,29 +168,14 @@ func (r *repo) Update(ctx context.Context, m *Model) error {
 	return nil
 }
 
-// Delete deletes the model in the db
-func (r *repo) Delete(ctx context.Context, m *Model) error {
+// DeleteSession deletes the user session
+func (r *repo) DeleteSession(ctx context.Context, userid string, sessionid string) error {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelByUserSession(ctx, d, m.Userid, m.SessionID); err != nil {
+	if err := r.table.DelByUserSession(ctx, d, userid, sessionid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete session")
-	}
-	return nil
-}
-
-// DeleteSessions deletes the sessions in the set of session ids
-func (r *repo) DeleteSessions(ctx context.Context, userid string, sessionids []string) error {
-	if len(sessionids) == 0 {
-		return nil
-	}
-	d, err := r.db.DB(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.table.DelByUserSessions(ctx, d, userid, sessionids); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete sessions")
 	}
 	return nil
 }

@@ -77,24 +77,6 @@ func (t *sessionModelTable) DelByUserSession(ctx context.Context, d sqldb.Execut
 	return err
 }
 
-func (t *sessionModelTable) DelByUserSessions(ctx context.Context, d sqldb.Executor, userid string, sessionids []string) error {
-	paramCount := 1
-	args := make([]interface{}, 0, paramCount+len(sessionids))
-	args = append(args, userid)
-	var placeholderssessionids string
-	{
-		placeholders := make([]string, 0, len(sessionids))
-		for _, i := range sessionids {
-			paramCount++
-			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
-			args = append(args, i)
-		}
-		placeholderssessionids = strings.Join(placeholders, ", ")
-	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1 AND sessionid IN (VALUES "+placeholderssessionids+");", args...)
-	return err
-}
-
 func (t *sessionModelTable) DelByUserid(ctx context.Context, d sqldb.Executor, userid string) error {
 	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err

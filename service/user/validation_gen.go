@@ -385,11 +385,11 @@ func (r reqGetUserSessions) valid() error {
 	return nil
 }
 
-func (r reqUserRmSessions) valid() error {
+func (r reqUserRmSession) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validSessionids(r.SessionIDs); err != nil {
+	if err := validhasSessionID(r.SessionID); err != nil {
 		return err
 	}
 	return nil

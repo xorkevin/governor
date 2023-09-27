@@ -69,5 +69,5 @@ func (s *router) patchRole(c *governor.Context) {
 func (s *router) mountEdit(m *governor.MethodRouter) {
 	scopeAdminWrite := s.s.scopens + ".admin:write"
 	m.PutCtx("", s.putUser, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.PatchCtx("/id/{id}/role", s.patchRole, gate.AuthUser(s.s.gate, scopeAdminWrite), s.rt)
+	m.PatchCtx("/id/{id}/role", s.patchRole, s.rt, gate.AuthUser(s.s.gate, scopeAdminWrite))
 }

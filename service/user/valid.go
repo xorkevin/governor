@@ -116,7 +116,17 @@ func validoptOTPCode(code string) error {
 
 func validoptSessionID(sessionID string) error {
 	if len(sessionID) > lengthCapSessionID {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Token is too long")
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Session id is too long")
+	}
+	return nil
+}
+
+func validhasSessionID(id string) error {
+	if id == "" {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Session id must be provided")
+	}
+	if len(id) > lengthCapSessionID {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Session id is too long")
 	}
 	return nil
 }
@@ -213,21 +223,6 @@ func validhasUserids(userids []string) error {
 func validScope(scopeString string) error {
 	if len(scopeString) > lengthCapLarge {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Scope string must be shorter than 4096 characters")
-	}
-	return nil
-}
-
-func validSessionids(ids []string) error {
-	if len(ids) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "SessionID must be provided")
-	}
-	if len(ids) > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Must provide less than 256 sessions")
-	}
-	for _, i := range ids {
-		if len(i) > lengthCapSessionID {
-			return governor.ErrWithRes(nil, http.StatusBadRequest, "", "SessionID is too large")
-		}
 	}
 	return nil
 }

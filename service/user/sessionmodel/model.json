@@ -35,14 +35,6 @@
           },
           {
             "kind": "deleq",
-            "name": "ByUserSessions",
-            "conditions": [
-              {"col": "userid"},
-              {"col": "sessionid", "cond": "in"}
-            ]
-          },
-          {
-            "kind": "deleq",
             "name": "ByUserid",
             "conditions": [{"col": "userid"}]
           },

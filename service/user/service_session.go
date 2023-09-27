@@ -17,7 +17,7 @@ type (
 	}
 
 	resUserGetSessions struct {
-		Sessions []resSession `json:"active_sessions"`
+		Sessions []resSession `json:"sessions"`
 	}
 )
 
@@ -42,9 +42,9 @@ func (s *Service) getUserSessions(ctx context.Context, userid string, limit, off
 	}, nil
 }
 
-func (s *Service) killSessions(ctx context.Context, userid string, sessionids []string) error {
-	if err := s.sessions.DeleteSessions(ctx, userid, sessionids); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete user sessions")
+func (s *Service) killSession(ctx context.Context, userid string, sessionid string) error {
+	if err := s.sessions.DeleteSession(ctx, userid, sessionid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user session")
 	}
 	return nil
 }
