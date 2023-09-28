@@ -24,8 +24,8 @@
               {"col": "sub_key"},
               {"col": "sub_pred"},
               {"col": "obj_ns"},
-              {"col": "obj_key"},
-              {"col": "obj_pred"}
+              {"col": "obj_pred"},
+              {"col": "obj_key"}
             ]
           }
         ]

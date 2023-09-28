@@ -316,9 +316,6 @@ func (r reqGetUserRoles) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
 	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -326,7 +323,7 @@ func (r reqGetUserRolesIntersect) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validRank(r.Roles); err != nil {
+	if err := validRoles(r.Roles); err != nil {
 		return err
 	}
 	return nil
@@ -336,26 +333,26 @@ func (r reqGetRoleUser) valid() error {
 	if err := validhasRole(r.Role); err != nil {
 		return err
 	}
+	if err := validoptUserid(r.After); err != nil {
+		return err
+	}
 	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r reqGetUserBulk) valid() error {
-	if err := validAmount(r.Amount); err != nil {
-		return err
-	}
-	if err := validOffset(r.Offset); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (r reqGetUsers) valid() error {
+	if err := validAmount(r.Amount); err != nil {
+		return err
+	}
+	if err := validOffset(r.Offset); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqGetUsersMany) valid() error {
 	if err := validhasUserids(r.Userids); err != nil {
 		return err
 	}

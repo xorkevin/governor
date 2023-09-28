@@ -29,14 +29,36 @@ const (
 	lengthCapApikey   = 127
 )
 
-var userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
+var (
+	userRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
+	roleRegex = regexp.MustCompile(`^[a-z0-9._-]+$`)
+)
+
+func validoptUserid(userid string) error {
+	if len(userid) > lengthCapUserid {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be shorter than 32 characters")
+	}
+	return nil
+}
 
 func validhasUserid(userid string) error {
 	if len(userid) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be provided")
 	}
-	if len(userid) > lengthCapUserid {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userid must be shorter than 32 characters")
+	if err := validoptUserid(userid); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validhasUserids(userids []string) error {
+	if len(userids) > amountCap {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Userids amount must be less than 256")
+	}
+	for _, i := range userids {
+		if err := validhasUserid(i); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -195,6 +217,9 @@ func validRole(role string) error {
 	if len(role) > lengthCapRole {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role must be shorter than 128 characters")
 	}
+	if !roleRegex.MatchString(role) {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role contains invalid characters")
+	}
 	return nil
 }
 
@@ -205,15 +230,12 @@ func validhasRolePrefix(prefix string) error {
 	return nil
 }
 
-func validhasUserids(userids []string) error {
-	if len(userids) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "IDs must be provided")
+func validRoles(roles []string) error {
+	if len(roles) > amountCap {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Roles amount must be less than 256")
 	}
-	if len(userids) > amountCap {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Request is too large")
-	}
-	for _, i := range userids {
-		if err := validhasUserid(i); err != nil {
+	for _, i := range roles {
+		if err := validRole(i); err != nil {
 			return err
 		}
 	}

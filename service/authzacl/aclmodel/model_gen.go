@@ -21,7 +21,7 @@ func (t *aclModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_sub_obj_index ON "+t.TableName+" (sub_ns, sub_key, sub_pred, obj_ns, obj_key, obj_pred);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_sub_obj_index ON "+t.TableName+" (sub_ns, sub_key, sub_pred, obj_ns, obj_pred, obj_key);")
 	if err != nil {
 		return err
 	}

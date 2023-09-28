@@ -217,10 +217,10 @@ func (s *router) mountCreate(m *governor.MethodRouter) {
 	scopeAddAdmin := s.s.scopens + ".add.admin:write"
 	m.PostCtx("", s.createUser, s.rt)
 	m.PostCtx("/confirm", s.commitUser, s.rt)
-	m.PostCtx("/admin", s.addAdmin, s.rt, gate.AuthSystem(s.s.gate, scopeAddAdmin))
-	m.GetCtx("/approvals", s.getUserApprovals, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalRead))
-	m.PostCtx("/approvals/id/{id}", s.approveUser, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
-	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, s.rt, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite))
-	m.DeleteCtx("", s.deleteUserSelf, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.DeleteCtx("/id/{id}", s.deleteUser, s.rt, gate.AuthAdminSudo(s.s.gate, s.s.authSettings.sudoDuration, scopeAdminAccount))
+	m.PostCtx("/admin", s.addAdmin, gate.AuthSystem(s.s.gate, scopeAddAdmin), s.rt)
+	m.GetCtx("/approvals", s.getUserApprovals, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalRead), s.rt)
+	m.PostCtx("/approvals/id/{id}", s.approveUser, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
+	m.DeleteCtx("/approvals/id/{id}", s.deleteUserApproval, gate.AuthMember(s.s.gate, s.s.rolens, scopeApprovalWrite), s.rt)
+	m.DeleteCtx("", s.deleteUserSelf, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.DeleteCtx("/id/{id}", s.deleteUser, gate.AuthAdminSudo(s.s.gate, s.s.authSettings.sudoDuration, scopeAdminAccount), s.rt)
 }

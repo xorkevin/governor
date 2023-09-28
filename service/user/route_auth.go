@@ -246,9 +246,9 @@ func (s *router) logoutUser(c *governor.Context) {
 
 func (s *router) mountAuth(r governor.Router) {
 	m := governor.NewMethodRouter(r)
-	m.PostCtx("/login", s.loginUser)
-	m.PostCtx("/refresh", s.refreshToken)
-	m.PostCtx("/logout", s.logoutUser)
-	m.PostCtx("/id/{id}/refresh", s.refreshToken)
-	m.PostCtx("/id/{id}/logout", s.logoutUser)
+	m.PostCtx("/login", s.loginUser, s.rt)
+	m.PostCtx("/refresh", s.refreshToken, s.rt)
+	m.PostCtx("/logout", s.logoutUser, s.rt)
+	m.PostCtx("/id/{id}/refresh", s.refreshToken, s.rt)
+	m.PostCtx("/id/{id}/logout", s.logoutUser, s.rt)
 }

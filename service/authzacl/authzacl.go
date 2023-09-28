@@ -40,8 +40,8 @@ type (
 		ACL
 		InsertRelations(ctx context.Context, rels []Relation) error
 		DeleteRelations(ctx context.Context, rels []Relation) error
-		Read(ctx context.Context, obj Obj, limit int, afterPred string, after *Sub) ([]Sub, error)
-		ReadBySub(ctx context.Context, sub Sub, limit int, after *ObjRel) ([]ObjRel, error)
+		Read(ctx context.Context, obj ObjRel, after *Sub, limit int) ([]Sub, error)
+		ReadBySubObjPred(ctx context.Context, sub Sub, objns, pred, afterKey string, limit int) ([]string, error)
 	}
 
 	Service struct {

@@ -1,13 +1,11 @@
 package user
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/service/gate"
 )
 
 type (
@@ -31,7 +29,6 @@ func (s *router) getByID(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -49,7 +46,6 @@ func (s *router) getByIDPersonal(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -67,7 +63,6 @@ func (s *router) getByIDPrivate(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -92,7 +87,6 @@ func (s *router) getByUsername(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -110,7 +104,6 @@ func (s *router) getByUsernamePrivate(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -120,7 +113,6 @@ type (
 		Userid string `valid:"userid,has" json:"-"`
 		Prefix string `valid:"rolePrefix,has" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
-		Offset int    `valid:"offset" json:"-"`
 	}
 )
 
@@ -129,19 +121,36 @@ func (s *router) getUserRoles(c *governor.Context) {
 		Userid: c.Param("id"),
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
-		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
+	c.WriteJSON(http.StatusOK, res)
+}
 
+func (s *router) getUserMods(c *governor.Context) {
+	req := reqGetUserRoles{
+		Userid: c.Param("id"),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -150,19 +159,36 @@ func (s *router) getUserRolesPersonal(c *governor.Context) {
 		Userid: gate.GetCtxUserid(c),
 		Prefix: c.Query("prefix"),
 		Amount: c.QueryInt("amount", -1),
-		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount, req.Offset)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
 	}
+	c.WriteJSON(http.StatusOK, res)
+}
 
+func (s *router) getUserModsPersonal(c *governor.Context) {
+	req := reqGetUserRoles{
+		Userid: gate.GetCtxUserid(c),
+		Prefix: c.Query("prefix"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -170,63 +196,79 @@ type (
 	//forge:valid
 	reqGetUserRolesIntersect struct {
 		Userid string   `valid:"userid,has" json:"-"`
-		Roles  []string `valid:"rank" json:"-"`
+		Roles  []string `valid:"roles" json:"-"`
 	}
 )
 
 func (s *router) getUserRolesIntersect(c *governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: c.Param("id"),
-		Roles:  rank.SplitString(c.Query("roles")),
+		Roles:  strings.Split(c.Query("roles"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	roles, err := rank.FromSlice(req.Roles)
+	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrInvalidRank) {
-			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
-			return
-		}
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, roles)
-	if err != nil {
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (s *router) getUserModsIntersect(c *governor.Context) {
+	req := reqGetUserRolesIntersect{
+		Userid: c.Param("id"),
+		Roles:  strings.Split(c.Query("roles"), ","),
+	}
+	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
+	res, err := s.s.getUserModsIntersect(c.Ctx(), req.Userid, req.Roles)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	c.WriteJSON(http.StatusOK, res)
 }
 
 func (s *router) getUserRolesIntersectPersonal(c *governor.Context) {
 	req := reqGetUserRolesIntersect{
 		Userid: gate.GetCtxUserid(c),
-		Roles:  rank.SplitString(c.Query("roles")),
+		Roles:  strings.Split(c.Query("roles"), ","),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	roles, err := rank.FromSlice(req.Roles)
+	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, req.Roles)
 	if err != nil {
-		if errors.Is(err, rank.ErrInvalidRank) {
-			c.WriteError(governor.ErrWithRes(err, http.StatusBadRequest, "", "Invalid rank string"))
-			return
-		}
 		c.WriteError(err)
 		return
 	}
-	res, err := s.s.getUserRolesIntersect(c.Ctx(), req.Userid, roles)
-	if err != nil {
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (s *router) getUserModsIntersectPersonal(c *governor.Context) {
+	req := reqGetUserRolesIntersect{
+		Userid: gate.GetCtxUserid(c),
+		Roles:  strings.Split(c.Query("roles"), ","),
+	}
+	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
+	res, err := s.s.getUserModsIntersect(c.Ctx(), req.Userid, req.Roles)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
 	c.WriteJSON(http.StatusOK, res)
 }
 
@@ -234,23 +276,42 @@ type (
 	//forge:valid
 	reqGetRoleUser struct {
 		Role   string `valid:"role,has" json:"-"`
+		After  string `valid:"userid,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
-		Offset int    `valid:"offset" json:"-"`
 	}
 )
 
 func (s *router) getUsersByRole(c *governor.Context) {
 	req := reqGetRoleUser{
 		Role:   c.Param("role"),
+		After:  c.Query("after"),
 		Amount: c.QueryInt("amount", -1),
-		Offset: c.QueryInt("offset", -1),
 	}
 	if err := req.valid(); err != nil {
 		c.WriteError(err)
 		return
 	}
 
-	res, err := s.s.getIDsByRole(c.Ctx(), req.Role, req.Amount, req.Offset)
+	res, err := s.s.getIDsByRole(c.Ctx(), req.Role, req.After, req.Amount)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
+func (s *router) getUsersByMod(c *governor.Context) {
+	req := reqGetRoleUser{
+		Role:   c.Param("role"),
+		After:  c.Query("after"),
+		Amount: c.QueryInt("amount", -1),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	res, err := s.s.getIDsByMod(c.Ctx(), req.Role, req.After, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -260,14 +321,14 @@ func (s *router) getUsersByRole(c *governor.Context) {
 
 type (
 	//forge:valid
-	reqGetUserBulk struct {
+	reqGetUsers struct {
 		Amount int `valid:"amount" json:"-"`
 		Offset int `valid:"offset" json:"-"`
 	}
 )
 
 func (s *router) getAllUserInfo(c *governor.Context) {
-	req := reqGetUserBulk{
+	req := reqGetUsers{
 		Amount: c.QueryInt("amount", -1),
 		Offset: c.QueryInt("offset", -1),
 	}
@@ -286,13 +347,13 @@ func (s *router) getAllUserInfo(c *governor.Context) {
 
 type (
 	//forge:valid
-	reqGetUsers struct {
+	reqGetUsersMany struct {
 		Userids []string `valid:"userids,has" json:"-"`
 	}
 )
 
 func (s *router) getUserInfoBulkPublic(c *governor.Context) {
-	req := reqGetUsers{
+	req := reqGetUsersMany{
 		Userids: strings.Split(c.Query("ids"), ","),
 	}
 	if err := req.valid(); err != nil {
@@ -300,7 +361,7 @@ func (s *router) getUserInfoBulkPublic(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.getInfoBulkPublic(c.Ctx(), req.Userids)
+	res, err := s.s.getInfoManyPublic(c.Ctx(), req.Userids)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -338,16 +399,21 @@ func (s *router) mountGet(m *governor.MethodRouter) {
 	scopeAccountRead := s.s.scopens + ".account:read"
 	scopeAdminRead := s.s.scopens + ".admin:read"
 	m.GetCtx("/id/{id}", s.getByID, s.rt)
-	m.GetCtx("", s.getByIDPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
-	m.GetCtx("/roles", s.getUserRolesPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
-	m.GetCtx("/roleint", s.getUserRolesIntersectPersonal, gate.User(s.s.gate, scopeAccountRead), s.rt)
-	m.GetCtx("/id/{id}/private", s.getByIDPrivate, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("", s.getByIDPersonal, gate.AuthUser(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/roles", s.getUserRolesPersonal, gate.AuthUser(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/roleint", s.getUserRolesIntersectPersonal, gate.AuthUser(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/mods", s.getUserModsPersonal, gate.AuthUser(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/modint", s.getUserModsIntersectPersonal, gate.AuthUser(s.s.gate, scopeAccountRead), s.rt)
+	m.GetCtx("/id/{id}/private", s.getByIDPrivate, gate.AuthAdmin(s.s.gate, scopeAdminRead), s.rt)
 	m.GetCtx("/id/{id}/roles", s.getUserRoles, s.rt)
 	m.GetCtx("/id/{id}/roleint", s.getUserRolesIntersect, s.rt)
+	m.GetCtx("/id/{id}/mods", s.getUserMods, s.rt)
+	m.GetCtx("/id/{id}/modint", s.getUserModsIntersect, s.rt)
 	m.GetCtx("/name/{username}", s.getByUsername, s.rt)
-	m.GetCtx("/name/{username}/private", s.getByUsernamePrivate, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("/name/{username}/private", s.getByUsernamePrivate, gate.AuthAdmin(s.s.gate, scopeAdminRead), s.rt)
 	m.GetCtx("/role/{role}", s.getUsersByRole, s.rt)
-	m.GetCtx("/all", s.getAllUserInfo, gate.Admin(s.s.gate, scopeAdminRead), s.rt)
+	m.GetCtx("/mod/{role}", s.getUsersByMod, s.rt)
+	m.GetCtx("/all", s.getAllUserInfo, gate.AuthAdmin(s.s.gate, scopeAdminRead), s.rt)
 	m.GetCtx("/ids", s.getUserInfoBulkPublic, s.rt)
 	m.GetCtx("/search", s.searchUsers, s.rt)
 }

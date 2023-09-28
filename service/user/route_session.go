@@ -64,6 +64,6 @@ func (s *router) killSession(c *governor.Context) {
 func (s *router) mountSession(m *governor.MethodRouter) {
 	scopeSessionRead := s.s.scopens + ".session:read"
 	scopeSessionWrite := s.s.scopens + ".session:write"
-	m.GetCtx("/sessions", s.getSessions, s.rt, gate.AuthUser(s.s.gate, scopeSessionRead))
-	m.DeleteCtx("/session", s.killSession, s.rt, gate.AuthUser(s.s.gate, scopeSessionWrite))
+	m.GetCtx("/sessions", s.getSessions, gate.AuthUser(s.s.gate, scopeSessionRead), s.rt)
+	m.DeleteCtx("/session", s.killSession, gate.AuthUser(s.s.gate, scopeSessionWrite), s.rt)
 }

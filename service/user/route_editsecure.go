@@ -261,12 +261,12 @@ func (s *router) removeOTP(c *governor.Context) {
 }
 
 func (s *router) mountEditSecure(m *governor.MethodRouter) {
-	m.PutCtx("/email", s.putEmail, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.PutCtx("/email/verify", s.putEmailVerify, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.PutCtx("/password", s.putPassword, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.PutCtx("/email", s.putEmail, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/email/verify", s.putEmailVerify, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/password", s.putPassword, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
 	m.PutCtx("/password/forgot", s.forgotPassword, s.rt)
 	m.PutCtx("/password/forgot/reset", s.forgotPasswordReset, s.rt)
-	m.PutCtx("/otp", s.addOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.PutCtx("/otp/verify", s.commitOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
-	m.DeleteCtx("/otp", s.removeOTP, s.rt, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone))
+	m.PutCtx("/otp", s.addOTP, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/otp/verify", s.commitOTP, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.DeleteCtx("/otp", s.removeOTP, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
 }

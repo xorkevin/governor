@@ -37,7 +37,7 @@ type (
 		DisableOTP(ctx context.Context, m *Model) error
 		UpdateLoginFailed(ctx context.Context, m *Model) error
 		GetGroup(ctx context.Context, limit, offset int) ([]Info, error)
-		GetBulk(ctx context.Context, userids []string) ([]Info, error)
+		GetMany(ctx context.Context, userids []string) ([]Info, error)
 		GetByUsernamePrefix(ctx context.Context, prefix string, limit, offset int) ([]Info, error)
 		Exists(ctx context.Context, userid string) (bool, error)
 		GetByID(ctx context.Context, userid string) (*Model, error)
@@ -331,8 +331,8 @@ func (r *repo) GetGroup(ctx context.Context, limit, offset int) ([]Info, error) 
 	return m, nil
 }
 
-// GetBulk gets information from users
-func (r *repo) GetBulk(ctx context.Context, userids []string) ([]Info, error) {
+// GetMany gets information from users
+func (r *repo) GetMany(ctx context.Context, userids []string) ([]Info, error) {
 	if len(userids) == 0 {
 		return nil, nil
 	}
