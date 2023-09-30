@@ -363,7 +363,7 @@ func (s *Service) logout(ctx context.Context, refreshToken string) (string, erro
 	if err != nil {
 		return erruserid, err
 	}
-	if err := s.sessions.Delete(ctx, sm); err != nil {
+	if err := s.sessions.DeleteSession(ctx, sm.Userid, sm.SessionID); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to delete session")
 	}
 	return sm.Userid, nil

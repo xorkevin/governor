@@ -23,10 +23,8 @@ const (
 	lengthCapToken        = 127
 	amountCap             = 255
 	lengthCapRole         = 127
-
-	lengthCapApikeyid = 63
-	lengthCapLarge    = 4095
-	lengthCapApikey   = 127
+	lengthCapApikeyid     = 31
+	lengthCapScope        = 1024
 )
 
 var (
@@ -210,12 +208,19 @@ func validOffset(offset int) error {
 	return nil
 }
 
-func validRole(role string) error {
+func validhasRole(role string) error {
 	if len(role) == 0 {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
 	}
 	if len(role) > lengthCapRole {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role must be shorter than 128 characters")
+	}
+	return nil
+}
+
+func validRole(role string) error {
+	if err := validhasRole(role); err != nil {
+		return err
 	}
 	if !roleRegex.MatchString(role) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role contains invalid characters")
@@ -243,7 +248,7 @@ func validRoles(roles []string) error {
 }
 
 func validScope(scopeString string) error {
-	if len(scopeString) > lengthCapLarge {
+	if len(scopeString) > lengthCapScope {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Scope string must be shorter than 4096 characters")
 	}
 	return nil

@@ -4,9 +4,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
-	"xorkevin.dev/governor/service/user/token"
-	"xorkevin.dev/governor/util/rank"
+	"xorkevin.dev/governor/service/gate"
 )
 
 type (
@@ -137,41 +135,6 @@ func (s *router) rotateApikey(c *governor.Context) {
 }
 
 type (
-	//forge:valid
-	reqApikeyCheck struct {
-		Roles []string `valid:"rank"`
-		Scope string   `valid:"scope"`
-	}
-)
-
-func (s *router) checkApikeyValidator(c gate.Context) bool {
-	req := reqApikeyCheck{
-		Roles: rank.SplitString(c.Ctx().Query("roles")),
-		Scope: c.Ctx().Query("scope"),
-	}
-	if err := req.valid(); err != nil {
-		return false
-	}
-
-	if !c.HasScope(req.Scope) {
-		return false
-	}
-
-	expected, err := rank.FromSlice(req.Roles)
-	if err != nil {
-		return false
-	}
-	roles, err := c.Intersect(c.Ctx().Ctx(), expected)
-	if err != nil {
-		return false
-	}
-	if roles.Len() != expected.Len() {
-		return false
-	}
-	return true
-}
-
-type (
 	resApikeyOK struct {
 		Message string `json:"message"`
 	}
@@ -187,10 +150,10 @@ func (s *router) mountApikey(r governor.Router) {
 	m := governor.NewMethodRouter(r)
 	scopeApikeyRead := s.s.scopens + ".apikey:read"
 	scopeApikeyWrite := s.s.scopens + ".apikey:write"
-	m.GetCtx("", s.getUserApikeys, gate.User(s.s.gate, scopeApikeyRead), s.rt)
-	m.PostCtx("", s.createApikey, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.PutCtx("/id/{id}", s.updateApikey, gate.User(s.s.gate, token.ScopeForbidden), s.rt)
-	m.PutCtx("/id/{id}/rotate", s.rotateApikey, gate.User(s.s.gate, scopeApikeyWrite), s.rt)
-	m.DeleteCtx("/id/{id}", s.deleteApikey, gate.User(s.s.gate, scopeApikeyWrite), s.rt)
-	m.AnyCtx("/check", s.checkApikey, s.s.gate.AuthenticateCtx(s.checkApikeyValidator, ""), s.rt)
+	m.GetCtx("", s.getUserApikeys, gate.AuthUser(s.s.gate, scopeApikeyRead), s.rt)
+	m.PostCtx("", s.createApikey, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/id/{id}", s.updateApikey, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/id/{id}/rotate", s.rotateApikey, gate.AuthUser(s.s.gate, scopeApikeyWrite), s.rt)
+	m.DeleteCtx("/id/{id}", s.deleteApikey, gate.AuthUser(s.s.gate, scopeApikeyWrite), s.rt)
+	m.AnyCtx("/check", s.checkApikey, gate.AuthUser(s.s.gate, ""), s.rt)
 }

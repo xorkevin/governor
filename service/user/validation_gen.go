@@ -60,16 +60,6 @@ func (r reqApikeyUpdate) valid() error {
 	return nil
 }
 
-func (r reqApikeyCheck) valid() error {
-	if err := validRank(r.Roles); err != nil {
-		return err
-	}
-	if err := validScope(r.Scope); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r reqUserAuth) valid() error {
 	if err := validoptUsername(r.Username); err != nil {
 		return err
