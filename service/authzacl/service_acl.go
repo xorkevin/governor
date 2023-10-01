@@ -10,6 +10,21 @@ import (
 	"xorkevin.dev/klog"
 )
 
+func Rel(objns, objkey, objpred, subns, subkey, subpred string) Relation {
+	return Relation{
+		Obj: ObjRel{
+			NS:   objns,
+			Key:  objkey,
+			Pred: objpred,
+		},
+		Sub: Sub{
+			NS:   subns,
+			Key:  subkey,
+			Pred: subpred,
+		},
+	}
+}
+
 type (
 	aclEvent struct {
 		Add bool     `json:"add"`

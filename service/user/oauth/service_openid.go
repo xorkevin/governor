@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -134,7 +134,7 @@ func dedupSSV(s string, allowed map[string]struct{}) string {
 			}
 		}
 	}
-	sort.Strings(next)
+	slices.Sort(next)
 	return strings.Join(next, " ")
 }
 

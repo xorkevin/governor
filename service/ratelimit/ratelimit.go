@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"xorkevin.dev/governor"
+	"xorkevin.dev/governor/service/gate"
 	"xorkevin.dev/governor/service/kvstore"
-	"xorkevin.dev/governor/service/user/gate"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
