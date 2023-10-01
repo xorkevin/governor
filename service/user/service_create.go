@@ -272,10 +272,9 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish new user event"))
 	}
 
-	if err := s.acl.InsertRelations(ctx, []authzacl.Relation{{
-		Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleUser, Pred: gate.RelIn},
-		Sub: authzacl.Sub{NS: gate.NSUser, Key: m.Userid},
-	}}); err != nil {
+	if err := s.acl.InsertRelations(ctx, []authzacl.Relation{
+		authzacl.Rel(gate.NSRole, gate.RoleUser, gate.RelIn, gate.NSUser, m.Userid, ""),
+	}); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create user acl tuples"))
 	}
 
@@ -362,14 +361,8 @@ func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate
 	}
 
 	if err := s.acl.InsertRelations(ctx, []authzacl.Relation{
-		{
-			Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleUser, Pred: gate.RelIn},
-			Sub: authzacl.Sub{NS: gate.NSUser, Key: madmin.Userid},
-		},
-		{
-			Obj: authzacl.ObjRel{NS: gate.NSRole, Key: gate.RoleAdmin, Pred: gate.RelIn},
-			Sub: authzacl.Sub{NS: gate.NSUser, Key: madmin.Userid},
-		},
+		authzacl.Rel(gate.NSRole, gate.RoleUser, gate.RelIn, gate.NSUser, madmin.Userid, ""),
+		authzacl.Rel(gate.NSRole, gate.RoleAdmin, gate.RelIn, gate.NSUser, madmin.Userid, ""),
 	}); err != nil {
 		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create user acl tuples"))
 	}

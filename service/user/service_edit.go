@@ -102,10 +102,7 @@ func (s *Service) updateRole(ctx context.Context, userid string, updaterid strin
 	if mod {
 		pred = gate.RelMod
 	}
-	rel := authzacl.Relation{
-		Obj: authzacl.ObjRel{NS: gate.NSRole, Key: role, Pred: pred},
-		Sub: authzacl.Sub{NS: gate.NSUser, Key: userid},
-	}
+	rel := authzacl.Rel(gate.NSRole, role, pred, gate.NSUser, userid, "")
 	if add {
 		if err := s.acl.InsertRelations(ctx, []authzacl.Relation{rel}); err != nil {
 			return kerrors.WithMsg(err, "Failed to add role")

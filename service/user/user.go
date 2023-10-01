@@ -92,7 +92,6 @@ type (
 		GetByEmail(ctx context.Context, email string) (*ResUserGet, error)
 		GetInfoMany(ctx context.Context, userids []string) (*ResUserInfoList, error)
 		CheckUserExists(ctx context.Context, userid string) (bool, error)
-		CheckUsersExist(ctx context.Context, userids []string) ([]string, error)
 		StreamName() string
 	}
 
@@ -700,10 +699,7 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 		}
 		rels := make([]authzacl.Relation, 0, len(r))
 		for _, i := range r {
-			rels = append(rels, authzacl.Relation{
-				Obj: authzacl.ObjRel{NS: gate.NSRole, Key: i, Pred: gate.RelIn},
-				Sub: authzacl.Sub{NS: gate.NSUser, Key: props.Userid},
-			})
+			rels = append(rels, authzacl.Rel(gate.NSRole, i, gate.RelIn, gate.NSUser, props.Userid, ""))
 		}
 		if err := s.acl.DeleteRelations(ctx, rels); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user role acl tuples")
@@ -722,10 +718,7 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 		}
 		rels := make([]authzacl.Relation, 0, len(r))
 		for _, i := range r {
-			rels = append(rels, authzacl.Relation{
-				Obj: authzacl.ObjRel{NS: gate.NSRole, Key: i, Pred: gate.RelMod},
-				Sub: authzacl.Sub{NS: gate.NSUser, Key: props.Userid},
-			})
+			rels = append(rels, authzacl.Rel(gate.NSRole, i, gate.RelMod, gate.NSUser, props.Userid, ""))
 		}
 		if err := s.acl.DeleteRelations(ctx, rels); err != nil {
 			return kerrors.WithMsg(err, "Failed to delete user mod acl tuples")
