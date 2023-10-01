@@ -43,17 +43,14 @@ type (
 
 	// Params specify rate limiting params
 	Params struct {
-		Expiration int64 `json:"expiration"`
-		Period     int64 `json:"period"`
-		Limit      int64 `json:"limit"`
+		Period int64 `json:"period"`
+		Limit  int64 `json:"limit"`
 	}
 )
 
 func (p Params) String() string {
 	var b strings.Builder
-	b.WriteString("expiration:")
-	b.WriteString(strconv.FormatInt(p.Expiration, 10))
-	b.WriteString(",period:")
+	b.WriteString("period:")
 	b.WriteString(strconv.FormatInt(p.Period, 10))
 	b.WriteString(",limit:")
 	b.WriteString(strconv.FormatInt(p.Limit, 10))
@@ -69,14 +66,12 @@ func New(kv kvstore.KVStore) *Service {
 
 func (s *Service) Register(r governor.ConfigRegistrar) {
 	r.SetDefault("params.base", map[string]interface{}{
-		"expiration": 60,
-		"period":     15,
-		"limit":      240,
+		"period": 60,
+		"limit":  240,
 	})
 	r.SetDefault("params.auth", map[string]interface{}{
-		"expiration": 60,
-		"period":     15,
-		"limit":      240,
+		"period": 60,
+		"limit":  240,
 	})
 }
 
@@ -119,9 +114,11 @@ func divroundup(a, b int64) int64 {
 
 type (
 	tagSum struct {
-		limit   int64
-		periods []kvstore.IntResulter
-		end     int64
+		limit      int64
+		current    kvstore.IntResulter
+		prev       kvstore.IntResulter
+		prevWindow float64
+		end        int64
 	}
 )
 
@@ -145,18 +142,16 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 						continue
 					}
 					t := now / i.Params.Period
-					l := divroundup(i.Params.Expiration, i.Params.Period)
-					periods := make([]kvstore.IntResulter, 0, l)
-					k := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
-					periods = append(periods, multiget.Incr(c.Ctx(), k, 1))
-					multiget.Expire(c.Ctx(), k, time.Duration(i.Params.Period+1)*time.Second)
-					for j := int64(1); j < l; j++ {
-						periods = append(periods, multiget.GetInt(c.Ctx(), multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-j, 32))))
-					}
+					prevWindow := float64(i.Params.Period-(now%i.Params.Period)) / float64(i.Params.Period)
+					k1 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
+					multiget.SetNX(c.Ctx(), k1, "0", time.Duration(i.Params.Period+1)*time.Second)
+					k0 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-1, 32))
 					sums = append(sums, tagSum{
-						limit:   i.Params.Limit,
-						periods: periods,
-						end:     (t + 1) * i.Params.Period,
+						limit:      i.Params.Limit,
+						current:    multiget.Incr(c.Ctx(), k1, 1),
+						prev:       multiget.GetInt(c.Ctx(), k0),
+						prevWindow: prevWindow,
+						end:        (t + 1) * i.Params.Period,
 					})
 				}
 				if len(sums) == 0 {
@@ -168,17 +163,21 @@ func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.Middlewa
 				}
 				var minRatelimitEnd int64 = 0
 				for _, i := range sums {
-					var sum int64 = 0
-					for _, j := range i.periods {
-						k, err := j.Result()
-						if err != nil {
-							if !errors.Is(err, kvstore.ErrNotFound) {
-								s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
-							}
-							continue
+					current, err := i.current.Result()
+					if err != nil {
+						if !errors.Is(err, kvstore.ErrNotFound) {
+							s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
 						}
-						sum += k
+						current = 0
 					}
+					prev, err := i.prev.Result()
+					if err != nil {
+						if !errors.Is(err, kvstore.ErrNotFound) {
+							s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
+						}
+						prev = 0
+					}
+					sum := min(current, i.limit) + int64(float64(min(prev, i.limit))*i.prevWindow)
 					if sum <= i.limit {
 						goto end
 					}
