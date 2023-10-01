@@ -26,7 +26,6 @@ type (
 	Subscription interface {
 		ReadMsg(ctx context.Context) (*Msg, error)
 		Close(ctx context.Context) error
-		IsClosed() bool
 	}
 
 	// Pubsub is an events service with at most once semantics
@@ -230,7 +229,7 @@ func (s *Service) handleGetClient(ctx context.Context, m *lifecycle.State[pubsub
 }
 
 func (s *Service) closeClient(ctx context.Context, client *pubsubClient) {
-	if client != nil && !client.client.IsClosed() {
+	if client != nil {
 		client.client.Close()
 		s.log.Info(ctx, "Closed pubsub connection",
 			klog.AString("addr", s.addr),
@@ -352,17 +351,6 @@ func (s *subscription) Close(ctx context.Context) error {
 	}
 	s.log.Info(ctx, "Closed subscription")
 	return nil
-}
-
-func (s *subscription) IsClosed() bool {
-	return s.isClosed()
-}
-
-func min(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 type (

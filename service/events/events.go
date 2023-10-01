@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/twmb/franz-go/pkg/kadm"
 	kafkaerr "github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -47,8 +46,7 @@ type (
 		Partition int
 		Offset    int
 		Time      time.Time
-		record    *kgo.Record
-		natsmsg   *nats.Msg
+		Record    any
 	}
 
 	// PublishMsg is a message for writing
@@ -564,7 +562,18 @@ func (s *subscription) isClosed() bool {
 
 // MsgUnassigned returns a channel that closes if a message is unassigned from the consumer
 func (s *subscription) MsgUnassigned(msg Msg) <-chan struct{} {
-	if msg.record == nil || msg.record.Topic != s.topic {
+	if msg.Record == nil {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	record, ok := msg.Record.(*kgo.Record)
+	if !ok {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	if record.Topic != s.topic {
 		ch := make(chan struct{})
 		close(ch)
 		return ch
@@ -576,7 +585,7 @@ func (s *subscription) MsgUnassigned(msg Msg) <-chan struct{} {
 		close(ch)
 		return ch
 	}
-	ch, ok := s.assigned[msg.record.Partition]
+	ch, ok := s.assigned[record.Partition]
 	if !ok {
 		ch := make(chan struct{})
 		close(ch)
@@ -653,13 +662,20 @@ func (s *subscription) ReadMsg(ctx context.Context) (*Msg, error) {
 		Partition: int(m.Partition),
 		Offset:    int(m.Offset),
 		Time:      m.Timestamp.UTC(),
-		record:    m,
+		Record:    m,
 	}, nil
 }
 
 // Commit commits a new message offset
 func (s *subscription) Commit(ctx context.Context, msg Msg) error {
-	if msg.record == nil || msg.record.Topic != s.topic {
+	if msg.Record == nil {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
+	record, ok := msg.Record.(*kgo.Record)
+	if !ok {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
+	if record.Topic != s.topic {
 		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	s.mu.RLock()
@@ -667,10 +683,10 @@ func (s *subscription) Commit(ctx context.Context, msg Msg) error {
 	if s.closed {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
-	if _, ok := s.assigned[msg.record.Partition]; !ok {
+	if _, ok := s.assigned[record.Partition]; !ok {
 		return kerrors.WithKind(nil, ErrPartitionUnassigned, "Unassigned partition")
 	}
-	s.reader.MarkCommitRecords(msg.record)
+	s.reader.MarkCommitRecords(record)
 	return nil
 }
 

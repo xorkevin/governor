@@ -331,7 +331,18 @@ func (s *natsSubscription) isClosed() bool {
 }
 
 func (s *natsSubscription) MsgUnassigned(msg Msg) <-chan struct{} {
-	if msg.natsmsg == nil || msg.natsmsg.Subject != s.topic {
+	if msg.Record == nil {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	natsmsg, ok := msg.Record.(*nats.Msg)
+	if !ok {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	if natsmsg.Subject != s.topic {
 		ch := make(chan struct{})
 		close(ch)
 		return ch
@@ -377,13 +388,20 @@ func (s *natsSubscription) ReadMsg(ctx context.Context) (*Msg, error) {
 		Partition: 0,
 		Offset:    int(meta.Sequence.Stream),
 		Time:      meta.Timestamp.UTC(),
-		natsmsg:   m,
+		Record:    m,
 	}, nil
 }
 
 // Commit commits a new message offset
 func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
-	if msg.natsmsg == nil {
+	if msg.Record == nil {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
+	natsmsg, ok := msg.Record.(*nats.Msg)
+	if !ok {
+		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
+	}
+	if natsmsg.Subject != s.topic {
 		return kerrors.WithKind(nil, ErrInvalidMsg, "Invalid message")
 	}
 	s.mu.RLock()
@@ -391,7 +409,7 @@ func (s *natsSubscription) Commit(ctx context.Context, msg Msg) error {
 	if s.closed {
 		return kerrors.WithKind(nil, ErrClientClosed, "Client closed")
 	}
-	if err := msg.natsmsg.Ack(nats.Context(ctx)); err != nil {
+	if err := natsmsg.Ack(nats.Context(ctx)); err != nil {
 		s.log.Err(ctx, kerrors.WithKind(nil, ErrClient, "Failed to ack message"))
 	}
 	return nil
