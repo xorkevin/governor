@@ -6,7 +6,7 @@
         "indicies": [
           {
             "name": "userid_time",
-            "columns": [{"col": "userid"}, {"col": "time"}]
+            "columns": [{"col": "userid"}, {"col": "keyid"}]
           }
         ]
       },
@@ -24,14 +24,14 @@
           },
           {
             "kind": "deleq",
-            "name": "ByIDs",
-            "conditions": [{"col": "keyid", "cond": "in"}]
+            "name": "ByUserid",
+            "conditions": [{"col": "userid"}]
           },
           {
             "kind": "getgroupeq",
             "name": "ByUserid",
             "conditions": [{"col": "userid"}],
-            "order": [{"col": "time", "dir": "DESC"}]
+            "order": [{"col": "keyid", "dir": "DESC"}]
           }
         ],
         "apikeyHash": [

@@ -18,11 +18,11 @@ type (
 )
 
 func (t *apikeyModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
-	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), time BIGINT NOT NULL);")
+	_, err := d.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS "+t.TableName+" (keyid VARCHAR(63) PRIMARY KEY, userid VARCHAR(31) NOT NULL, scope VARCHAR(4095) NOT NULL, keyhash VARCHAR(127) NOT NULL, name VARCHAR(255) NOT NULL, description VARCHAR(255), rotate_time BIGINT NOT NULL, update_time BIGINT NOT NULL, creation_time BIGINT NOT NULL);")
 	if err != nil {
 		return err
 	}
-	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_time_index ON "+t.TableName+" (userid, time);")
+	_, err = d.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS "+t.TableName+"_userid_time_index ON "+t.TableName+" (userid, keyid);")
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func (t *apikeyModelTable) Setup(ctx context.Context, d sqldb.Executor) error {
 }
 
 func (t *apikeyModelTable) Insert(ctx context.Context, d sqldb.Executor, m *Model) error {
-	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES ($1, $2, $3, $4, $5, $6, $7);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, rotate_time, update_time, creation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);", m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.RotateTime, m.UpdateTime, m.CreationTime)
 	if err != nil {
 		return err
 	}
@@ -43,13 +43,13 @@ func (t *apikeyModelTable) InsertBulk(ctx context.Context, d sqldb.Executor, mod
 		conflictSQL = " ON CONFLICT DO NOTHING"
 	}
 	placeholders := make([]string, 0, len(models))
-	args := make([]interface{}, 0, len(models)*7)
+	args := make([]interface{}, 0, len(models)*9)
 	for c, m := range models {
-		n := c * 7
-		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7))
-		args = append(args, m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.Time)
+		n := c * 9
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9))
+		args = append(args, m.Keyid, m.Userid, m.Scope, m.KeyHash, m.Name, m.Desc, m.RotateTime, m.UpdateTime, m.CreationTime)
 	}
-	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
+	_, err := d.ExecContext(ctx, "INSERT INTO "+t.TableName+" (keyid, userid, scope, keyhash, name, description, rotate_time, update_time, creation_time) VALUES "+strings.Join(placeholders, ", ")+conflictSQL+";", args...)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (t *apikeyModelTable) InsertBulk(ctx context.Context, d sqldb.Executor, mod
 
 func (t *apikeyModelTable) GetModelByID(ctx context.Context, d sqldb.Executor, keyid string) (*Model, error) {
 	m := &Model{}
-	if err := d.QueryRowContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, time FROM "+t.TableName+" WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
+	if err := d.QueryRowContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, rotate_time, update_time, creation_time FROM "+t.TableName+" WHERE keyid = $1;", keyid).Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.RotateTime, &m.UpdateTime, &m.CreationTime); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -69,26 +69,14 @@ func (t *apikeyModelTable) DelByID(ctx context.Context, d sqldb.Executor, keyid 
 	return err
 }
 
-func (t *apikeyModelTable) DelByIDs(ctx context.Context, d sqldb.Executor, keyids []string) error {
-	paramCount := 0
-	args := make([]interface{}, 0, paramCount+len(keyids))
-	var placeholderskeyids string
-	{
-		placeholders := make([]string, 0, len(keyids))
-		for _, i := range keyids {
-			paramCount++
-			placeholders = append(placeholders, fmt.Sprintf("($%d)", paramCount))
-			args = append(args, i)
-		}
-		placeholderskeyids = strings.Join(placeholders, ", ")
-	}
-	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE keyid IN (VALUES "+placeholderskeyids+");", args...)
+func (t *apikeyModelTable) DelByUserid(ctx context.Context, d sqldb.Executor, userid string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM "+t.TableName+" WHERE userid = $1;", userid)
 	return err
 }
 
 func (t *apikeyModelTable) GetModelByUserid(ctx context.Context, d sqldb.Executor, userid string, limit, offset int) (_ []Model, retErr error) {
 	res := make([]Model, 0, limit)
-	rows, err := d.QueryContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, time FROM "+t.TableName+" WHERE userid = $3 ORDER BY time DESC LIMIT $1 OFFSET $2;", limit, offset, userid)
+	rows, err := d.QueryContext(ctx, "SELECT keyid, userid, scope, keyhash, name, description, rotate_time, update_time, creation_time FROM "+t.TableName+" WHERE userid = $3 ORDER BY keyid DESC LIMIT $1 OFFSET $2;", limit, offset, userid)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +87,7 @@ func (t *apikeyModelTable) GetModelByUserid(ctx context.Context, d sqldb.Executo
 	}()
 	for rows.Next() {
 		var m Model
-		if err := rows.Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.Time); err != nil {
+		if err := rows.Scan(&m.Keyid, &m.Userid, &m.Scope, &m.KeyHash, &m.Name, &m.Desc, &m.RotateTime, &m.UpdateTime, &m.CreationTime); err != nil {
 			return nil, err
 		}
 		res = append(res, m)
@@ -111,7 +99,7 @@ func (t *apikeyModelTable) GetModelByUserid(ctx context.Context, d sqldb.Executo
 }
 
 func (t *apikeyModelTable) UpdapikeyHashByID(ctx context.Context, d sqldb.Executor, m *apikeyHash, keyid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyhash, time) = ($1, $2) WHERE keyid = $3;", m.KeyHash, m.Time, keyid)
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (keyhash, rotate_time) = ($1, $2) WHERE keyid = $3;", m.KeyHash, m.RotateTime, keyid)
 	if err != nil {
 		return err
 	}
@@ -119,7 +107,7 @@ func (t *apikeyModelTable) UpdapikeyHashByID(ctx context.Context, d sqldb.Execut
 }
 
 func (t *apikeyModelTable) UpdapikeyPropsByID(ctx context.Context, d sqldb.Executor, m *apikeyProps, keyid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (scope, name, description) = ($1, $2, $3) WHERE keyid = $4;", m.Scope, m.Name, m.Desc, keyid)
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (scope, name, description, update_time) = ($1, $2, $3, $4) WHERE keyid = $5;", m.Scope, m.Name, m.Desc, m.UpdateTime, keyid)
 	if err != nil {
 		return err
 	}

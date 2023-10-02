@@ -20,7 +20,7 @@ type (
 	}
 
 	resApikeys struct {
-		Apikeys []resApikey `json:"apikeys"`
+		Apikeys []apikey.Props `json:"apikeys"`
 	}
 )
 
@@ -29,18 +29,8 @@ func (s *Service) getUserApikeys(ctx context.Context, userid string, limit, offs
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
 	}
-	res := make([]resApikey, 0, len(m))
-	for _, i := range m {
-		res = append(res, resApikey{
-			Keyid: i.Keyid,
-			Scope: i.Scope,
-			Name:  i.Name,
-			Desc:  i.Desc,
-			Time:  i.Time,
-		})
-	}
 	return &resApikeys{
-		Apikeys: res,
+		Apikeys: m,
 	}, nil
 }
 

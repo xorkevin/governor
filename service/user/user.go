@@ -686,6 +686,9 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 	if err := s.resets.DeleteByUserid(ctx, props.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user resets")
 	}
+	if err := s.apikeys.DeleteUserKeys(ctx, props.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user apikeys")
+	}
 	if err := s.killAllSessions(ctx, props.Userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete user sessions")
 	}
@@ -724,25 +727,6 @@ func (s *Service) userEventHandlerDelete(ctx context.Context, props DeleteUserPr
 			return kerrors.WithMsg(err, "Failed to delete user mod acl tuples")
 		}
 		if len(r) < roleDeleteBatchSize {
-			break
-		}
-	}
-	for {
-		keys, err := s.apikeys.GetUserKeys(ctx, props.Userid, apikeyDeleteBatchSize, 0)
-		if err != nil {
-			return kerrors.WithMsg(err, "Failed to get user apikeys")
-		}
-		if len(keys) == 0 {
-			break
-		}
-		keyids := make([]string, 0, len(keys))
-		for _, i := range keys {
-			keyids = append(keyids, i.Keyid)
-		}
-		if err := s.apikeys.DeleteKeys(ctx, keyids); err != nil {
-			return kerrors.WithMsg(err, "Failed to delete user apikeys")
-		}
-		if len(keys) < apikeyDeleteBatchSize {
 			break
 		}
 	}

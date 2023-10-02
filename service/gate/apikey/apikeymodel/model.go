@@ -24,7 +24,7 @@ type (
 		Insert(ctx context.Context, m *Model) error
 		UpdateProps(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
-		DeleteKeys(ctx context.Context, keyids []string) error
+		DeleteUserKeys(ctx context.Context, userid string) error
 		Setup(ctx context.Context) error
 	}
 
@@ -39,26 +39,29 @@ type (
 	//forge:model apikey
 	//forge:model:query apikey
 	Model struct {
-		Keyid   string `model:"keyid,VARCHAR(63) PRIMARY KEY"`
-		Userid  string `model:"userid,VARCHAR(31) NOT NULL"`
-		Scope   string `model:"scope,VARCHAR(4095) NOT NULL"`
-		KeyHash string `model:"keyhash,VARCHAR(127) NOT NULL"`
-		Name    string `model:"name,VARCHAR(255) NOT NULL"`
-		Desc    string `model:"description,VARCHAR(255)"`
-		Time    int64  `model:"time,BIGINT NOT NULL"`
+		Keyid        string `model:"keyid,VARCHAR(63) PRIMARY KEY"`
+		Userid       string `model:"userid,VARCHAR(31) NOT NULL"`
+		Scope        string `model:"scope,VARCHAR(4095) NOT NULL"`
+		KeyHash      string `model:"keyhash,VARCHAR(127) NOT NULL"`
+		Name         string `model:"name,VARCHAR(255) NOT NULL"`
+		Desc         string `model:"description,VARCHAR(255)"`
+		RotateTime   int64  `model:"rotate_time,BIGINT NOT NULL"`
+		UpdateTime   int64  `model:"update_time,BIGINT NOT NULL"`
+		CreationTime int64  `model:"creation_time,BIGINT NOT NULL"`
 	}
 
 	//forge:model:query apikey
 	apikeyHash struct {
-		KeyHash string `model:"keyhash"`
-		Time    int64  `model:"time"`
+		KeyHash    string `model:"keyhash"`
+		RotateTime int64  `model:"rotate_time"`
 	}
 
 	//forge:model:query apikey
 	apikeyProps struct {
-		Scope string `model:"scope"`
-		Name  string `model:"name"`
-		Desc  string `model:"description"`
+		Scope      string `model:"scope"`
+		Name       string `model:"name"`
+		Desc       string `model:"description"`
+		UpdateTime int64  `model:"update_time"`
 	}
 )
 
@@ -94,13 +97,15 @@ func (r *repo) New(userid string, scope string, name, desc string) (*Model, stri
 	}
 	now := time.Now().Round(0).Unix()
 	return &Model{
-		Keyid:   aid.Base64(),
-		Userid:  userid,
-		Scope:   scope,
-		KeyHash: hash,
-		Name:    name,
-		Desc:    desc,
-		Time:    now,
+		Keyid:        aid.Base64(),
+		Userid:       userid,
+		Scope:        scope,
+		KeyHash:      hash,
+		Name:         name,
+		Desc:         desc,
+		RotateTime:   now,
+		UpdateTime:   now,
+		CreationTime: now,
 	}, key, nil
 }
 
@@ -128,13 +133,13 @@ func (r *repo) RehashKey(ctx context.Context, m *Model) (string, error) {
 	}
 	now := time.Now().Round(0).Unix()
 	if err := r.table.UpdapikeyHashByID(ctx, d, &apikeyHash{
-		KeyHash: hash,
-		Time:    now,
+		KeyHash:    hash,
+		RotateTime: now,
 	}, m.Keyid); err != nil {
 		return "", kerrors.WithMsg(err, "Failed to update apikey")
 	}
 	m.KeyHash = hash
-	m.Time = now
+	m.RotateTime = now
 	return key, nil
 }
 
@@ -178,13 +183,16 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	if err != nil {
 		return err
 	}
+	now := time.Now().Round(0).Unix()
 	if err := r.table.UpdapikeyPropsByID(ctx, d, &apikeyProps{
-		Scope: m.Scope,
-		Name:  m.Name,
-		Desc:  m.Desc,
+		Scope:      m.Scope,
+		Name:       m.Name,
+		Desc:       m.Desc,
+		UpdateTime: now,
 	}, m.Keyid); err != nil {
 		return kerrors.WithMsg(err, "Failed to update apikey")
 	}
+	m.UpdateTime = now
 	return nil
 }
 
@@ -199,16 +207,13 @@ func (r *repo) Delete(ctx context.Context, m *Model) error {
 	return nil
 }
 
-func (r *repo) DeleteKeys(ctx context.Context, keyids []string) error {
-	if len(keyids) == 0 {
-		return nil
-	}
+func (r *repo) DeleteUserKeys(ctx context.Context, userid string) error {
 	d, err := r.db.DB(ctx)
 	if err != nil {
 		return err
 	}
-	if err := r.table.DelByIDs(ctx, d, keyids); err != nil {
-		return kerrors.WithMsg(err, "Failed to delete apikeys")
+	if err := r.table.DelByUserid(ctx, d, userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to delete user apikeys")
 	}
 	return nil
 }

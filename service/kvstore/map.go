@@ -13,6 +13,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
+var _ KVStore = (*Map)(nil)
+
 type (
 	Map struct {
 		store        map[string]mapValue

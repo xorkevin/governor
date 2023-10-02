@@ -10,6 +10,8 @@ import (
 	"xorkevin.dev/kerrors"
 )
 
+var _ Events = (*MuxChan)(nil)
+
 type (
 	MuxChan struct {
 		topics map[string]*chanTopic
@@ -36,6 +38,12 @@ type (
 		done   chan struct{}
 	}
 )
+
+func NewMuxChan() *MuxChan {
+	return &MuxChan{
+		topics: map[string]*chanTopic{},
+	}
+}
 
 func (s *MuxChan) Subscribe(ctx context.Context, topic, group string, opts ConsumerOpts) (Subscription, error) {
 	s.mu.Lock()

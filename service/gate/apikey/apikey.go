@@ -22,12 +22,28 @@ type (
 	// Apikeys manages apikeys
 	Apikeys interface {
 		Validator
-		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error)
-		InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error)
-		RotateKey(ctx context.Context, userid string, keyid string) (*ResApikeyModel, error)
+		GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]Props, error)
+		InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*Key, error)
+		RotateKey(ctx context.Context, userid string, keyid string) (*Key, error)
 		UpdateKey(ctx context.Context, userid string, keyid string, scope string, name, desc string) error
 		DeleteKey(ctx context.Context, userid string, keyid string) error
-		DeleteKeys(ctx context.Context, keyids []string) error
+		DeleteUserKeys(ctx context.Context, userid string) error
+	}
+
+	Key struct {
+		Keyid string `json:"keyid"`
+		Key   string `json:"key"`
+	}
+
+	Props struct {
+		Keyid        string `json:"keyid"`
+		Userid       string `json:"userid"`
+		Scope        string `json:"scope"`
+		Name         string `json:"name"`
+		Desc         string `json:"desc"`
+		RotateTime   int64  `json:"rotate_time"`
+		UpdateTime   int64  `json:"update_time"`
+		CreationTime int64  `json:"creation_time"`
 	}
 
 	Service struct {

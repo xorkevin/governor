@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"xorkevin.dev/governor/service/dbsql"
-	"xorkevin.dev/governor/service/gate/apikey/apikeymodel"
 	"xorkevin.dev/kerrors"
 )
 
@@ -30,12 +29,25 @@ func (e errInvalidKey) Error() string {
 	return "Invalid apikey"
 }
 
-func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]apikeymodel.Model, error) {
+func (s *Service) GetUserKeys(ctx context.Context, userid string, limit, offset int) ([]Props, error) {
 	m, err := s.apikeys.GetUserKeys(ctx, userid, limit, offset)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get apikeys")
 	}
-	return m, nil
+	res := make([]Props, 0, len(m))
+	for _, i := range m {
+		res = append(res, Props{
+			Keyid:        i.Keyid,
+			Userid:       i.Userid,
+			Scope:        i.Scope,
+			Name:         i.Name,
+			Desc:         i.Desc,
+			RotateTime:   i.RotateTime,
+			UpdateTime:   i.UpdateTime,
+			CreationTime: i.CreationTime,
+		})
+	}
+	return res, nil
 }
 
 func (s *Service) Check(ctx context.Context, keyid, key string) (*UserScope, error) {
@@ -55,15 +67,7 @@ func (s *Service) Check(ctx context.Context, keyid, key string) (*UserScope, err
 	}, nil
 }
 
-type (
-	// ResApikeyModel is apikey info
-	ResApikeyModel struct {
-		Keyid string `json:"keyid"`
-		Key   string `json:"key"`
-	}
-)
-
-func (s *Service) InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*ResApikeyModel, error) {
+func (s *Service) InsertKey(ctx context.Context, userid string, scope string, name, desc string) (*Key, error) {
 	m, key, err := s.apikeys.New(userid, scope, name, desc)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey keys")
@@ -71,13 +75,13 @@ func (s *Service) InsertKey(ctx context.Context, userid string, scope string, na
 	if err := s.apikeys.Insert(ctx, m); err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to create apikey")
 	}
-	return &ResApikeyModel{
+	return &Key{
 		Keyid: m.Keyid,
 		Key:   fmt.Sprintf("ga.%s.%s", m.Keyid, key),
 	}, nil
 }
 
-func (s *Service) RotateKey(ctx context.Context, userid string, keyid string) (*ResApikeyModel, error) {
+func (s *Service) RotateKey(ctx context.Context, userid string, keyid string) (*Key, error) {
 	m, err := s.apikeys.GetByID(ctx, keyid)
 	if err != nil {
 		if errors.Is(err, dbsql.ErrNotFound) {
@@ -92,9 +96,9 @@ func (s *Service) RotateKey(ctx context.Context, userid string, keyid string) (*
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to rotate apikey")
 	}
-	return &ResApikeyModel{
+	return &Key{
 		Keyid: m.Keyid,
-		Key:   key,
+		Key:   fmt.Sprintf("ga.%s.%s", m.Keyid, key),
 	}, nil
 }
 
@@ -135,11 +139,8 @@ func (s *Service) DeleteKey(ctx context.Context, userid string, keyid string) er
 	return nil
 }
 
-func (s *Service) DeleteKeys(ctx context.Context, keyids []string) error {
-	if len(keyids) == 0 {
-		return nil
-	}
-	if err := s.apikeys.DeleteKeys(ctx, keyids); err != nil {
+func (s *Service) DeleteUserKeys(ctx context.Context, userid string) error {
+	if err := s.apikeys.DeleteUserKeys(ctx, userid); err != nil {
 		return kerrors.WithMsg(err, "Failed to delete apikeys")
 	}
 	return nil

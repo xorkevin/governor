@@ -9,6 +9,8 @@ import (
 	"xorkevin.dev/governor/util/kjson"
 )
 
+var _ Mailer = (*MemLog)(nil)
+
 type (
 	MemLog struct {
 		Records []LogRecord

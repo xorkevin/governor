@@ -6,6 +6,8 @@ import (
 	"sync"
 )
 
+var _ Manager = (*ACLSet)(nil)
+
 type (
 	ACLSet struct {
 		mu  sync.RWMutex

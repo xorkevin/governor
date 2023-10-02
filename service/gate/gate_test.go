@@ -379,7 +379,6 @@ func TestGate(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer "+tc.Token)
 			rec := httptest.NewRecorder()
 			server.ServeHTTP(rec, req)
-			t.Log(rec.Body.String())
 			assert.Equal(tc.Status, rec.Code)
 		})
 	}
