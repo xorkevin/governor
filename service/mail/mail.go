@@ -53,7 +53,7 @@ const (
 type (
 	// Mailer is a service wrapper around a mailer instance
 	Mailer interface {
-		FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error
+		FwdStream(ctx context.Context, retpath string, to []Addr, size int64, body io.Reader, encrypt bool) error
 		SendStream(ctx context.Context, retpath string, from Addr, to []Addr, subject string, size int64, body io.Reader, encrypt bool) error
 		SendTpl(ctx context.Context, retpath string, from Addr, to []Addr, tpl Tpl, emdata interface{}, encrypt bool) error
 	}
@@ -644,7 +644,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) (retErr error
 		}
 
 		b := &bytes.Buffer{}
-		if err := msgToBytes(s.log, ctx, msgid, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
+		if err := msgToBytes(ctx, msgid, emmsg.From, emmsg.To, subject, body, htmlbody, b); err != nil {
 			return err
 		}
 		msg = b
@@ -671,7 +671,7 @@ func (s *Service) mailHandler(ctx context.Context, msgdata []byte) (retErr error
 	return nil
 }
 
-func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) error {
+func msgToBytes(ctx context.Context, msgid string, from Addr, to []Addr, subject, body, htmlbody io.Reader, dst io.Writer) (retErr error) {
 	var h emmail.Header
 	h.SetMessageID(msgid)
 	h.SetDate(time.Now().Round(0).UTC())
@@ -703,7 +703,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := mw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing plain mail writer"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed closing plain mail writer"))
 			}
 		}()
 		if _, err := io.Copy(mw, body); err != nil {
@@ -718,7 +718,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 	}
 	defer func() {
 		if err := mw.Close(); err != nil {
-			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail writer"))
+			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed closing mail writer"))
 		}
 	}()
 
@@ -728,7 +728,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 	}
 	defer func() {
 		if err := bw.Close(); err != nil {
-			log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body writer"))
+			retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed closing mail body writer"))
 		}
 	}()
 
@@ -741,7 +741,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
 			}
 		}()
 		if _, err := io.Copy(pw, body); err != nil {
@@ -761,7 +761,7 @@ func msgToBytes(log *klog.LevelLogger, ctx context.Context, msgid string, from A
 		}
 		defer func() {
 			if err := pw.Close(); err != nil {
-				log.Err(ctx, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
+				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed closing mail body plaintext writer"))
 			}
 		}()
 		if _, err := io.Copy(pw, htmlbody); err != nil {
@@ -967,7 +967,7 @@ func (s *Service) SendStream(ctx context.Context, retpath string, from Addr, to 
 }
 
 // FwdStream forwards an rfc5322 message
-func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, size int64, body io.Reader, encrypt bool) error {
+func (s *Service) FwdStream(ctx context.Context, retpath string, to []Addr, size int64, body io.Reader, encrypt bool) error {
 	if len(to) == 0 {
 		return kerrors.WithKind(nil, ErrInvalidMail, "Email must have at least one recipient")
 	}
@@ -1018,18 +1018,12 @@ func (s *Service) FwdStream(ctx context.Context, retpath string, to []string, si
 	if retpath == "" {
 		retpath = s.returnpath
 	}
-	toAddrs := make([]Addr, 0, len(to))
-	for _, i := range to {
-		toAddrs = append(toAddrs, Addr{
-			Address: i,
-		})
-	}
 
 	b0, err := kjson.Marshal(mailEventEnc{
 		Kind: mailEventKindMail,
 		Payload: mailmsg{
 			ReturnPath: retpath,
-			To:         toAddrs,
+			To:         to,
 			Kind:       mailMsgKindFwd,
 			FwdData: fwdData{
 				Path:      path,
