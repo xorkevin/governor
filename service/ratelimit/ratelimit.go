@@ -15,20 +15,10 @@ import (
 )
 
 type (
-	// Ratelimiter creates new ratelimiting middleware
-	Ratelimiter interface {
-		RatelimitCtx(tagger Tagger) governor.MiddlewareCtx
-		Ratelimit(tagger Tagger) governor.Middleware
-		Subtree(prefix string) Ratelimiter
-		BaseCtx() governor.MiddlewareCtx
-		Base() governor.Middleware
-	}
-
-	Service struct {
-		tags       kvstore.KVStore
-		log        *klog.LevelLogger
-		paramsBase Params
-		paramsAuth Params
+	// Limiter ratelimits operations
+	Limiter interface {
+		Ratelimit(ctx context.Context, tags []Tag) error
+		Subtree(prefix string) Limiter
 	}
 
 	// Tag is a request tag
@@ -38,13 +28,26 @@ type (
 		Params Params
 	}
 
-	// Tagger computes tags for requests
-	Tagger func(c *governor.Context) []Tag
-
 	// Params specify rate limiting params
 	Params struct {
 		Period int64 `json:"period"`
 		Limit  int64 `json:"limit"`
+	}
+
+	// ReqLimiter creates new ratelimiting middleware
+	ReqLimiter interface {
+		Limiter
+		BaseTagger() ReqTagger
+	}
+
+	// ReqTagger computes tags for requests
+	ReqTagger func(c *governor.Context) []Tag
+
+	Service struct {
+		tags       kvstore.KVStore
+		log        *klog.LevelLogger
+		paramsBase Params
+		paramsAuth Params
 	}
 )
 
@@ -57,7 +60,7 @@ func (p Params) String() string {
 	return b.String()
 }
 
-// New creates a new Ratelimiter
+// New creates a new [Limiter]
 func New(kv kvstore.KVStore) *Service {
 	return &Service{
 		tags: kv.Subtree("tags"),
@@ -108,10 +111,6 @@ func (s *Service) Health(ctx context.Context) error {
 	return nil
 }
 
-func divroundup(a, b int64) int64 {
-	return (a-1)/b + 1
-}
-
 type (
 	tagSum struct {
 		limit      int64
@@ -122,105 +121,84 @@ type (
 	}
 )
 
-func (s *Service) rlimitCtx(kv kvstore.KVStore, tagger Tagger) governor.MiddlewareCtx {
-	return func(next governor.RouteHandler) governor.RouteHandler {
-		return governor.RouteHandlerFunc(func(c *governor.Context) {
-			now := time.Now().Round(0).Unix()
-			tags := tagger(c)
-			if len(tags) > 0 {
-				multiget, err := kv.Multi(c.Ctx())
-				if err != nil {
-					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to create kvstore multi"))
-					goto end
-				}
-				sums := make([]tagSum, 0, len(tags))
-				for _, i := range tags {
-					if i.Params.Period <= 0 {
-						s.log.Error(c.Ctx(), "Invalid ratelimit period",
-							klog.AInt64("period", i.Params.Period),
-						)
-						continue
-					}
-					t := now / i.Params.Period
-					prevWindow := float64(i.Params.Period-(now%i.Params.Period)) / float64(i.Params.Period)
-					k1 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
-					multiget.SetNX(c.Ctx(), k1, "0", time.Duration(i.Params.Period+1)*time.Second)
-					k0 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-1, 32))
-					sums = append(sums, tagSum{
-						limit:      i.Params.Limit,
-						current:    multiget.Incr(c.Ctx(), k1, 1),
-						prev:       multiget.GetInt(c.Ctx(), k0),
-						prevWindow: prevWindow,
-						end:        (t + 1) * i.Params.Period,
-					})
-				}
-				if len(sums) == 0 {
-					goto end
-				}
-				if err := multiget.Exec(c.Ctx()); err != nil {
-					s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tags from cache"))
-					goto end
-				}
-				var minRatelimitEnd int64 = 0
-				for _, i := range sums {
-					current, err := i.current.Result()
-					if err != nil {
-						if !errors.Is(err, kvstore.ErrNotFound) {
-							s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
-						}
-						current = 0
-					}
-					prev, err := i.prev.Result()
-					if err != nil {
-						if !errors.Is(err, kvstore.ErrNotFound) {
-							s.log.Err(c.Ctx(), kerrors.WithMsg(err, "Failed to get tag from cache"))
-						}
-						prev = 0
-					}
-					sum := min(current, i.limit) + int64(float64(min(prev, i.limit))*i.prevWindow)
-					if sum <= i.limit {
-						goto end
-					}
-					if minRatelimitEnd == 0 || i.end < minRatelimitEnd {
-						minRatelimitEnd = i.end
-					}
-				}
-				if minRatelimitEnd > 0 {
-					c.WriteError(governor.ErrWithTooManyRequests(nil, time.Unix(minRatelimitEnd, 0).UTC(), "", "Hit rate limit"))
-					return
-				}
-			}
-		end:
-			next.ServeHTTPCtx(c)
+func (s *Service) rlimit(ctx context.Context, kv kvstore.KVStore, tags []Tag) error {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	now := time.Now().Round(0).Unix()
+	multiget, err := kv.Multi(ctx)
+	if err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to create kvstore multi"))
+		return nil
+	}
+	sums := make([]tagSum, 0, len(tags))
+	for _, i := range tags {
+		if i.Params.Period <= 0 {
+			s.log.Error(ctx, "Invalid ratelimit period",
+				klog.AInt64("period", i.Params.Period),
+			)
+			continue
+		}
+		t := now / i.Params.Period
+		prevWindow := float64(i.Params.Period-(now%i.Params.Period)) / float64(i.Params.Period)
+		k1 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t, 32))
+		multiget.SetNX(ctx, k1, "0", time.Duration(i.Params.Period+1)*time.Second)
+		k0 := multiget.Subkey(i.Key, i.Value, strconv.FormatInt(t-1, 32))
+		sums = append(sums, tagSum{
+			limit:      i.Params.Limit,
+			current:    multiget.Incr(ctx, k1, 1),
+			prev:       multiget.GetInt(ctx, k0),
+			prevWindow: prevWindow,
+			end:        (t + 1) * i.Params.Period,
 		})
 	}
+	if len(sums) == 0 {
+		return nil
+	}
+	if err := multiget.Exec(ctx); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get tags from cache"))
+		return nil
+	}
+	var minRatelimitEnd int64 = 0
+	for _, i := range sums {
+		current, err := i.current.Result()
+		if err != nil {
+			if !errors.Is(err, kvstore.ErrNotFound) {
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get tag from cache"))
+			}
+			current = 0
+		}
+		prev, err := i.prev.Result()
+		if err != nil {
+			if !errors.Is(err, kvstore.ErrNotFound) {
+				s.log.Err(ctx, kerrors.WithMsg(err, "Failed to get tag from cache"))
+			}
+			prev = 0
+		}
+		sum := min(current, i.limit) + int64(float64(min(prev, i.limit))*i.prevWindow)
+		if sum <= i.limit {
+			return nil
+		}
+		if minRatelimitEnd == 0 || i.end < minRatelimitEnd {
+			minRatelimitEnd = i.end
+		}
+	}
+	if minRatelimitEnd > 0 {
+		return governor.ErrWithTooManyRequests(nil, time.Unix(minRatelimitEnd, 0).UTC(), "", "Hit rate limit")
+	}
+	return nil
 }
 
-func (s *Service) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
-	return s.rlimitCtx(s.tags, tagger)
+func (s *Service) Ratelimit(ctx context.Context, tags []Tag) error {
+	return s.rlimit(ctx, s.tags, tags)
 }
 
-func (s *Service) Ratelimit(tagger Tagger) governor.Middleware {
-	return governor.MiddlewareFromCtx(s.log.Logger, s.RatelimitCtx(tagger))
-}
-
-func (s *Service) Subtree(prefix string) Ratelimiter {
+func (s *Service) Subtree(prefix string) Limiter {
 	return &tree{
 		kv:   s.tags.Subtree(prefix),
 		base: s,
 	}
-}
-
-func (s *Service) BaseCtx() governor.MiddlewareCtx {
-	return Compose(
-		s,
-		IPAddress("ip", s.paramsBase),
-		Userid("id", s.paramsAuth),
-	)
-}
-
-func (s *Service) Base() governor.Middleware {
-	return governor.MiddlewareFromCtx(s.log.Logger, s.BaseCtx())
 }
 
 type (
@@ -230,42 +208,48 @@ type (
 	}
 )
 
-func (t *tree) RatelimitCtx(tagger Tagger) governor.MiddlewareCtx {
-	return t.base.rlimitCtx(t.kv, tagger)
+func (t *tree) Ratelimit(ctx context.Context, tags []Tag) error {
+	return t.base.rlimit(ctx, t.kv, tags)
 }
 
-func (t *tree) Ratelimit(tagger Tagger) governor.Middleware {
-	return governor.MiddlewareFromCtx(t.base.log.Logger, t.RatelimitCtx(tagger))
-}
-
-func (t *tree) Subtree(prefix string) Ratelimiter {
+func (t *tree) Subtree(prefix string) Limiter {
 	return &tree{
 		kv:   t.kv.Subtree(prefix),
 		base: t.base,
 	}
 }
 
-func (t *tree) BaseCtx() governor.MiddlewareCtx {
-	return t.base.BaseCtx()
+func (s *Service) BaseTagger() ReqTagger {
+	return ComposeReqTaggers(
+		ReqTaggerIPAddress("ip", s.paramsBase),
+		ReqTaggerUserid("id", s.paramsAuth),
+	)
 }
 
-func (t *tree) Base() governor.Middleware {
-	return t.base.Base()
+// LimitReqCtx creates ratelimiting middleware
+func LimitReqCtx(l Limiter, tagger ReqTagger) governor.MiddlewareCtx {
+	return func(next governor.RouteHandler) governor.RouteHandler {
+		return governor.RouteHandlerFunc(func(c *governor.Context) {
+			tags := tagger(c)
+			l.Ratelimit(c.Ctx(), tags)
+			next.ServeHTTPCtx(c)
+		})
+	}
 }
 
-// Compose composes rate limit taggers
-func Compose(r Ratelimiter, taggers ...Tagger) governor.MiddlewareCtx {
-	return r.RatelimitCtx(func(c *governor.Context) []Tag {
+// ComposeReqTaggers composes rate limit req taggers
+func ComposeReqTaggers(taggers ...ReqTagger) ReqTagger {
+	return func(c *governor.Context) []Tag {
 		var tags []Tag
 		for _, i := range taggers {
 			tags = append(tags, i(c)...)
 		}
 		return tags
-	})
+	}
 }
 
-// IPAddress tags ips
-func IPAddress(key string, params Params) Tagger {
+// ReqTaggerIPAddress tags ips
+func ReqTaggerIPAddress(key string, params Params) ReqTagger {
 	if params.Period <= 0 {
 		panic("period must be positive")
 	}
@@ -284,8 +268,8 @@ func IPAddress(key string, params Params) Tagger {
 	}
 }
 
-// Userid tags userids
-func Userid(key string, params Params) Tagger {
+// ReqTaggerUserid tags userids
+func ReqTaggerUserid(key string, params Params) ReqTagger {
 	if params.Period <= 0 {
 		panic("period must be positive")
 	}

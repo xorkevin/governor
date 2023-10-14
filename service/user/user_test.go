@@ -52,7 +52,7 @@ func TestUsers(t *testing.T) {
 	psmux := pubsub.NewMuxChan()
 	evmux := events.NewMuxChan()
 	maillog := mail.MemLog{}
-	ratelimiter := ratelimit.New(kvmap)
+	ratelimiter := ratelimit.Unrestricted{}
 	g := gate.New(&acl, &keyset)
 	users := New(
 		usermodel.New(db, "users"),
@@ -65,11 +65,10 @@ func TestUsers(t *testing.T) {
 		psmux,
 		evmux,
 		&maillog,
-		ratelimiter,
+		&ratelimiter,
 		g,
 	)
 
-	server.Register("ratelimit", "/null/ratelimit", ratelimiter)
 	server.Register("gate", "/null/gate", g)
 	server.Register("user", "/u", users)
 

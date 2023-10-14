@@ -159,7 +159,7 @@ type (
 		pubsub        pubsub.Pubsub
 		events        events.Events
 		mailer        mail.Mailer
-		ratelimiter   ratelimit.Ratelimiter
+		limiter       ratelimit.ReqLimiter
 		gate          gate.Manager
 		lc            *lifecycle.Lifecycle[otpCipher]
 		cipherAlgs    h2cipher.Algs
@@ -199,28 +199,28 @@ func New(
 	ps pubsub.Pubsub,
 	ev events.Events,
 	mailer mail.Mailer,
-	ratelimiter ratelimit.Ratelimiter,
+	limiter ratelimit.ReqLimiter,
 	g gate.Manager,
 ) *Service {
 	cipherAlgs := h2cipher.NewAlgsMap()
 	xchacha20poly1305.Register(cipherAlgs)
 	aes.Register(cipherAlgs)
 	return &Service{
-		users:       users,
-		sessions:    sessions,
-		approvals:   approvals,
-		resets:      resets,
-		acl:         acl,
-		apikeys:     apikeys,
-		kvotpcodes:  kv.Subtree("otpcodes"),
-		pubsub:      ps,
-		events:      ev,
-		mailer:      mailer,
-		ratelimiter: ratelimiter,
-		gate:        g,
-		cipherAlgs:  cipherAlgs,
-		hbfailed:    0,
-		wg:          ksync.NewWaitGroup(),
+		users:      users,
+		sessions:   sessions,
+		approvals:  approvals,
+		resets:     resets,
+		acl:        acl,
+		apikeys:    apikeys,
+		kvotpcodes: kv.Subtree("otpcodes"),
+		pubsub:     ps,
+		events:     ev,
+		mailer:     mailer,
+		limiter:    limiter,
+		gate:       g,
+		cipherAlgs: cipherAlgs,
+		hbfailed:   0,
+		wg:         ksync.NewWaitGroup(),
 	}
 }
 
@@ -272,7 +272,7 @@ func (s *Service) Register(r governor.ConfigRegistrar) {
 func (s *Service) router() *router {
 	return &router{
 		s:  s,
-		rt: s.ratelimiter.BaseCtx(),
+		rt: ratelimit.LimitReqCtx(s.limiter, s.limiter.BaseTagger()),
 	}
 }
 
