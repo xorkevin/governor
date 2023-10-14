@@ -10,18 +10,18 @@ type (
 	Unrestricted struct{}
 )
 
-func (s *Unrestricted) Ratelimit(ctx context.Context, tags []Tag) error {
+func (s Unrestricted) Ratelimit(ctx context.Context, tags []Tag) error {
 	return nil
 }
 
-func (s *Unrestricted) Subtree(prefix string) Limiter {
+func (s Unrestricted) Subtree(prefix string) Limiter {
 	return s
 }
 
-func (s *Unrestricted) BaseTagger() ReqTagger {
-	return NoopTagger
+func (s Unrestricted) BaseTagger() ReqTagger {
+	return NoopReqTagger
 }
 
-func NoopTagger(c *governor.Context) []Tag {
+func NoopReqTagger(c *governor.Context) []Tag {
 	return nil
 }

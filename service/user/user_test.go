@@ -65,7 +65,7 @@ func TestUsers(t *testing.T) {
 		psmux,
 		evmux,
 		&maillog,
-		&ratelimiter,
+		ratelimiter,
 		g,
 	)
 
