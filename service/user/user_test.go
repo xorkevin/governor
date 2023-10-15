@@ -49,6 +49,9 @@ func TestUsers(t *testing.T) {
 		},
 		"user": map[string]any{
 			"otpkey": "otpkey",
+			"edit": map[string]any{
+				"newUserApproval": true,
+			},
 		},
 	}, map[string]any{
 		"data": map[string]any{
@@ -96,44 +99,46 @@ func TestUsers(t *testing.T) {
 	assert.NoError(server.Setup(context.Background(), governor.Flags{}, klog.Discard{}))
 	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
-	term := governortest.NewTestTerm()
-	var out bytes.Buffer
-	term.Stdout = &out
-	client := governortest.NewTestClient(t, server, nil, term)
+	{
+		term := governortest.NewTestTerm()
+		var out bytes.Buffer
+		term.Stdout = &out
+		client := governortest.NewTestClient(t, server, nil, term)
 
-	userClient := NewCmdClient(gateClient)
-	client.Register("user", "/u", &governor.CmdDesc{
-		Usage: "user",
-		Short: "user",
-		Long:  "user",
-	}, userClient)
+		userClient := NewCmdClient(gateClient)
+		client.Register("user", "/u", &governor.CmdDesc{
+			Usage: "user",
+			Short: "user",
+			Long:  "user",
+		}, userClient)
 
-	assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
+		assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
 
-	userClient.addAdminReq = reqAddAdmin{
-		Username:  "xorkevin",
-		Password:  "password",
-		Email:     "test@example.com",
-		Firstname: "Kevin",
-		Lastname:  "Wang",
+		userClient.addAdminReq = reqAddAdmin{
+			Username:  "xorkevin",
+			Password:  "password",
+			Email:     "test@example.com",
+			Firstname: "Kevin",
+			Lastname:  "Wang",
+		}
+		assert.NoError(userClient.addAdmin(nil))
+
+		adminUserid := strings.TrimSpace(out.String())
+		out.Reset()
+
+		userClient.getUserFlags.userid = adminUserid
+		assert.NoError(userClient.getUser(nil))
+
+		var body ResUserGetPublic
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal(ResUserGetPublic{
+			Userid:       adminUserid,
+			Username:     "xorkevin",
+			FirstName:    "Kevin",
+			LastName:     "Wang",
+			CreationTime: body.CreationTime,
+		}, body)
 	}
-	assert.NoError(userClient.addAdmin(nil))
-
-	adminUserid := strings.TrimSpace(out.String())
-	out.Reset()
-
-	userClient.getUserFlags.userid = adminUserid
-	assert.NoError(userClient.getUser(nil))
-
-	var body ResUserGetPublic
-	assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
-	out.Reset()
-
-	assert.Equal(ResUserGetPublic{
-		Userid:       adminUserid,
-		Username:     "xorkevin",
-		FirstName:    "Kevin",
-		LastName:     "Wang",
-		CreationTime: body.CreationTime,
-	}, body)
 }

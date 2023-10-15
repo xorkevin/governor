@@ -149,12 +149,8 @@ func (c *testClientC) echo(args []string) error {
 		return err
 	}
 	var res testServiceCReq
-	_, decoded, err := c.httpc.DoJSON(context.Background(), req, &res)
-	if err != nil {
+	if _, err := c.httpc.DoJSON(context.Background(), req, &res); err != nil {
 		return err
-	}
-	if !decoded {
-		return kerrors.WithMsg(nil, "Undecodable response")
 	}
 	b, err := kjson.Marshal(res)
 	if err != nil {
@@ -213,8 +209,7 @@ func (c *testClientC) fail(args []string) error {
 		return err
 	}
 	var res testServiceCReq
-	_, _, err = c.httpc.DoJSON(context.Background(), req, &res)
-	if err != nil {
+	if _, err = c.httpc.DoJSON(context.Background(), req, &res); err != nil {
 		return err
 	}
 	return kerrors.WithMsg(nil, "Should have errored")
