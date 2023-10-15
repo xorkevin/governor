@@ -3,7 +3,6 @@ package governor
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -112,9 +111,13 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 				retErr = errors.Join(retErr, kerrors.WithMsg(err, "Failed to discard http response body"))
 			}
 		}()
+		b, err := io.ReadAll(res.Body)
+		if err != nil {
+			return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed reading response")
+		}
 		var errres ErrorRes
-		if err := json.NewDecoder(res.Body).Decode(&errres); err != nil {
-			return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
+		if err := kjson.Unmarshal(b, &errres); err != nil {
+			return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed reading response")
 		}
 		return res, kerrors.WithKind(nil, ErrServerRes, errres.Message)
 	}

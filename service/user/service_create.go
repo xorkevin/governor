@@ -327,8 +327,8 @@ func (s *Service) deleteUser(ctx context.Context, userid string, username string
 	return nil
 }
 
-func (s *Service) addAdmin(ctx context.Context, req reqAddAdmin) (*resUserUpdate, error) {
-	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.Firstname, req.Lastname)
+func (s *Service) addAdmin(ctx context.Context, req reqUserPost) (*resUserUpdate, error) {
+	madmin, err := s.users.New(req.Username, req.Password, req.Email, req.FirstName, req.LastName)
 	if err != nil {
 		return nil, err
 	}

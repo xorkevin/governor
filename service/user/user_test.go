@@ -76,7 +76,7 @@ func TestUsers(t *testing.T) {
 	psmux := pubsub.NewMuxChan()
 	evmux := events.NewMuxChan()
 	maillog := mail.MemLog{}
-	ratelimiter := ratelimit.Unrestricted{}
+	ratelimiter := ratelimit.Unlimited{}
 	g := gate.New(&acl, &keyset)
 	users := New(
 		usermodel.New(db, "users"),
@@ -99,46 +99,55 @@ func TestUsers(t *testing.T) {
 	assert.NoError(server.Setup(context.Background(), governor.Flags{}, klog.Discard{}))
 	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
+	term := governortest.NewTestTerm()
+	var out bytes.Buffer
+	term.Stdout = &out
+	client := governortest.NewTestClient(t, server, nil, term)
+
+	userClient := NewCmdClient(gateClient)
+	client.Register("user", "/u", &governor.CmdDesc{
+		Usage: "user",
+		Short: "user",
+		Long:  "user",
+	}, userClient)
+
+	assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
+
+	userClient.addAdminReq = reqUserPost{
+		Username:  "xorkevin",
+		Password:  "password",
+		Email:     "test@example.com",
+		FirstName: "Kevin",
+		LastName:  "Wang",
+	}
+	assert.NoError(userClient.addAdmin(nil))
+
+	adminUserid := strings.TrimSpace(out.String())
+	out.Reset()
+
+	adminToken, err := gateClient.GenToken(adminUserid, time.Hour, "")
+	assert.NoError(err)
+	gateClient.Token = adminToken
+
 	{
-		term := governortest.NewTestTerm()
-		var out bytes.Buffer
-		term.Stdout = &out
-		client := governortest.NewTestClient(t, server, nil, term)
-
-		userClient := NewCmdClient(gateClient)
-		client.Register("user", "/u", &governor.CmdDesc{
-			Usage: "user",
-			Short: "user",
-			Long:  "user",
-		}, userClient)
-
-		assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
-
-		userClient.addAdminReq = reqAddAdmin{
-			Username:  "xorkevin",
-			Password:  "password",
-			Email:     "test@example.com",
-			Firstname: "Kevin",
-			Lastname:  "Wang",
-		}
-		assert.NoError(userClient.addAdmin(nil))
-
-		adminUserid := strings.TrimSpace(out.String())
-		out.Reset()
-
 		userClient.getUserFlags.userid = adminUserid
+		userClient.getUserFlags.private = true
 		assert.NoError(userClient.getUser(nil))
 
-		var body ResUserGetPublic
+		var body ResUserGet
 		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
 		out.Reset()
 
-		assert.Equal(ResUserGetPublic{
-			Userid:       adminUserid,
-			Username:     "xorkevin",
-			FirstName:    "Kevin",
-			LastName:     "Wang",
-			CreationTime: body.CreationTime,
+		assert.Equal(ResUserGet{
+			ResUserGetPublic: ResUserGetPublic{
+				Userid:       adminUserid,
+				Username:     "xorkevin",
+				FirstName:    "Kevin",
+				LastName:     "Wang",
+				CreationTime: body.CreationTime,
+			},
+			Email:      "test@example.com",
+			OTPEnabled: false,
 		}, body)
 	}
 }

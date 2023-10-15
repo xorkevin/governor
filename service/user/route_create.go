@@ -118,19 +118,8 @@ func (s *router) deleteUser(c *governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
-type (
-	//forge:valid
-	reqAddAdmin struct {
-		Username  string `json:"username" valid:"username"`
-		Password  string `json:"password" valid:"password"`
-		Email     string `json:"email" valid:"email"`
-		Firstname string `json:"first_name" valid:"firstName"`
-		Lastname  string `json:"last_name" valid:"lastName"`
-	}
-)
-
 func (s *router) addAdmin(c *governor.Context) {
-	var req reqAddAdmin
+	var req reqUserPost
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return

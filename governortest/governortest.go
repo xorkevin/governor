@@ -80,11 +80,16 @@ func (r emptyReader) Read(p []byte) (int, error) {
 }
 
 type (
-	SuccessHandler struct{}
+	SuccessHandler  struct{}
+	NotFoundHandler struct{}
 )
 
 func (h SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h NotFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
 }
 
 func NewTestClient(t *testing.T, server http.Handler, config map[string]any, termConfig *governor.TermConfig) *governor.Client {
@@ -99,7 +104,7 @@ func NewTestClient(t *testing.T, server http.Handler, config map[string]any, ter
 	}
 
 	if server == nil {
-		server = SuccessHandler{}
+		server = NotFoundHandler{}
 	}
 
 	configb, err := kjson.Marshal(config)

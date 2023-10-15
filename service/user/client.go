@@ -20,7 +20,7 @@ type (
 		log           *klog.LevelLogger
 		term          governor.Term
 		httpc         *governor.HTTPFetcher
-		addAdminReq   reqAddAdmin
+		reqUserPost   reqUserPost
 		addAdminFlags addAdminFlags
 		getUserFlags  getUserFlags
 	}
@@ -30,7 +30,8 @@ type (
 	}
 
 	getUserFlags struct {
-		userid string
+		userid  string
+		private bool
 	}
 )
 
@@ -52,35 +53,35 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 				Short:    "u",
 				Usage:    "username",
 				Required: true,
-				Value:    &c.addAdminReq.Username,
+				Value:    &c.reqUserPost.Username,
 			},
 			{
 				Long:     "password",
 				Short:    "p",
 				Usage:    "password",
 				Required: false,
-				Value:    &c.addAdminReq.Password,
+				Value:    &c.reqUserPost.Password,
 			},
 			{
 				Long:     "email",
 				Short:    "m",
 				Usage:    "email",
 				Required: true,
-				Value:    &c.addAdminReq.Email,
+				Value:    &c.reqUserPost.Email,
 			},
 			{
 				Long:     "firstname",
 				Short:    "",
 				Usage:    "user first name",
 				Required: true,
-				Value:    &c.addAdminReq.Firstname,
+				Value:    &c.reqUserPost.FirstName,
 			},
 			{
 				Long:     "lastname",
 				Short:    "",
 				Usage:    "user last name",
 				Required: true,
-				Value:    &c.addAdminReq.Lastname,
+				Value:    &c.reqUserPost.LastName,
 			},
 			{
 				Long:     "interactive",
@@ -91,6 +92,7 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.addAdmin))
+
 	cr.Register(governor.CmdDesc{
 		Usage: "get",
 		Short: "gets a user",
@@ -102,6 +104,13 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 				Usage:    "userid",
 				Required: true,
 				Value:    &c.getUserFlags.userid,
+			},
+			{
+				Long:     "private",
+				Short:    "p",
+				Usage:    "private info",
+				Required: true,
+				Value:    &c.getUserFlags.private,
 			},
 		},
 	}, governor.CmdHandlerFunc(c.getUser))
@@ -115,17 +124,17 @@ func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) 
 }
 
 func (c *CmdClient) addAdmin(args []string) error {
-	if c.addAdminReq.Password == "-" {
+	if c.reqUserPost.Password == "-" {
 		var err error
-		c.addAdminReq.Password, err = c.term.ReadLine()
+		c.reqUserPost.Password, err = c.term.ReadLine()
 		if err != nil && !errors.Is(err, io.EOF) {
 			return kerrors.WithMsg(err, "Failed reading user password")
 		}
 	}
-	if c.addAdminFlags.interactive && c.addAdminReq.Password == "" {
+	if c.addAdminFlags.interactive && c.reqUserPost.Password == "" {
 		fmt.Fprint(c.term.Stderr(), "Password: ")
 		var err error
-		c.addAdminReq.Password, err = c.term.ReadPassword()
+		c.reqUserPost.Password, err = c.term.ReadPassword()
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")
 		}
@@ -134,14 +143,14 @@ func (c *CmdClient) addAdmin(args []string) error {
 		if err != nil {
 			return kerrors.WithMsg(err, "Failed to read password")
 		}
-		if passwordAgain != c.addAdminReq.Password {
+		if passwordAgain != c.reqUserPost.Password {
 			return kerrors.WithMsg(err, "Passwords do not match")
 		}
 	}
-	if err := c.addAdminReq.valid(); err != nil {
+	if err := c.reqUserPost.valid(); err != nil {
 		return err
 	}
-	r, err := c.httpc.ReqJSON(http.MethodPost, "/user/admin", c.addAdminReq)
+	r, err := c.httpc.ReqJSON(http.MethodPost, "/user/admin", c.reqUserPost)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")
 	}
@@ -163,7 +172,13 @@ func (c *CmdClient) addAdmin(args []string) error {
 }
 
 func (c *CmdClient) getUser(args []string) error {
-	r, err := c.httpc.HTTPClient.Req(http.MethodGet, fmt.Sprintf("/user/id/%s", c.getUserFlags.userid), nil)
+	var u string
+	if c.getUserFlags.private {
+		u = fmt.Sprintf("/user/id/%s/private", c.getUserFlags.userid)
+	} else {
+		u = fmt.Sprintf("/user/id/%s", c.getUserFlags.userid)
+	}
+	r, err := c.httpc.HTTPClient.Req(http.MethodGet, u, nil)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create get user request")
 	}

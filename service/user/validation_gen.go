@@ -138,25 +138,6 @@ func (r reqUserDelete) valid() error {
 	return nil
 }
 
-func (r reqAddAdmin) valid() error {
-	if err := validUsername(r.Username); err != nil {
-		return err
-	}
-	if err := validPassword(r.Password); err != nil {
-		return err
-	}
-	if err := validEmail(r.Email); err != nil {
-		return err
-	}
-	if err := validFirstName(r.Firstname); err != nil {
-		return err
-	}
-	if err := validLastName(r.Lastname); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r reqGetUserApprovals) valid() error {
 	if err := validAmount(r.Amount); err != nil {
 		return err
