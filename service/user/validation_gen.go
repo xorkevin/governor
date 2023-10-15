@@ -281,7 +281,7 @@ func (r reqGetUserRoles) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validhasRolePrefix(r.Prefix); err != nil {
+	if err := validoptRole(r.After); err != nil {
 		return err
 	}
 	if err := validAmount(r.Amount); err != nil {

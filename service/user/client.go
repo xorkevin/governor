@@ -26,6 +26,7 @@ type (
 		listFlags    listFlags
 		useridFlags  useridFlags
 		keyFlags     keyFlags
+		roleFlags    roleFlags
 	}
 
 	addUserFlags struct {
@@ -33,13 +34,15 @@ type (
 	}
 
 	getUserFlags struct {
-		userid  string
-		private bool
+		userid   string
+		username string
+		private  bool
 	}
 
 	listFlags struct {
 		amount int
 		offset int
+		after  string
 	}
 
 	useridFlags struct {
@@ -49,6 +52,12 @@ type (
 	keyFlags struct {
 		key         string
 		interactive bool
+	}
+
+	roleFlags struct {
+		mod       bool
+		intersect string
+		name      string
 	}
 )
 
@@ -119,8 +128,15 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 				Long:     "userid",
 				Short:    "i",
 				Usage:    "userid",
-				Required: true,
+				Required: false,
 				Value:    &c.getUserFlags.userid,
+			},
+			{
+				Long:     "username",
+				Short:    "u",
+				Usage:    "username",
+				Required: false,
+				Value:    &c.getUserFlags.username,
 			},
 			{
 				Long:     "private",
@@ -227,6 +243,7 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 				Short:    "a",
 				Usage:    "amount",
 				Required: false,
+				Default:  8,
 				Value:    &c.listFlags.amount,
 			},
 			{
@@ -268,6 +285,100 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.denyApproval))
+
+	role := cr.Group(governor.CmdDesc{
+		Usage: "role",
+		Short: "manage user roles",
+		Long:  "manage user roles",
+	})
+
+	role.Register(governor.CmdDesc{
+		Usage: "list",
+		Short: "list user roles",
+		Long:  "list user roles",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: false,
+				Value:    &c.useridFlags.userid,
+			},
+			{
+				Long:     "mod",
+				Short:    "m",
+				Usage:    "mod",
+				Required: false,
+				Value:    &c.roleFlags.mod,
+			},
+			{
+				Long:     "amount",
+				Short:    "a",
+				Usage:    "amount",
+				Required: false,
+				Default:  8,
+				Value:    &c.listFlags.amount,
+			},
+			{
+				Long:     "after",
+				Short:    "a",
+				Usage:    "after",
+				Required: false,
+				Value:    &c.listFlags.after,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.getRoles))
+
+	role.Register(governor.CmdDesc{
+		Usage: "intersect",
+		Short: "intersect user roles",
+		Long:  "intersect user roles",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: false,
+				Value:    &c.useridFlags.userid,
+			},
+			{
+				Long:     "mod",
+				Short:    "m",
+				Usage:    "mod",
+				Required: false,
+				Value:    &c.roleFlags.mod,
+			},
+			{
+				Long:     "intersect",
+				Short:    "j",
+				Usage:    "intersect",
+				Required: true,
+				Value:    &c.roleFlags.intersect,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.intersectRoles))
+
+	role.Register(governor.CmdDesc{
+		Usage: "members",
+		Short: "list role members",
+		Long:  "list role members",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "role",
+				Short:    "i",
+				Usage:    "role",
+				Required: true,
+				Value:    &c.roleFlags.name,
+			},
+			{
+				Long:     "mod",
+				Short:    "m",
+				Usage:    "mod",
+				Required: false,
+				Value:    &c.roleFlags.mod,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.getRoleMembers))
 }
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
@@ -322,17 +433,24 @@ func (c *CmdClient) addAdmin(args []string) error {
 }
 
 func (c *CmdClient) getUser(args []string) error {
-	var u string
-	if c.getUserFlags.private {
-		u = fmt.Sprintf("/user/id/%s/private", c.getUserFlags.userid)
+	needToken := false
+	u := "/user"
+	if c.getUserFlags.userid != "" {
+		u += "/id/" + c.getUserFlags.userid
+	} else if c.getUserFlags.username != "" {
+		u += "/name/" + c.getUserFlags.username
 	} else {
-		u = fmt.Sprintf("/user/id/%s", c.getUserFlags.userid)
+		needToken = true
+	}
+	if c.getUserFlags.private {
+		u += "/private"
+		needToken = true
 	}
 	r, err := c.httpc.HTTPClient.Req(http.MethodGet, u, nil)
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create get user request")
 	}
-	if c.getUserFlags.private {
+	if needToken {
 		if err := c.gate.AddReqToken(r); err != nil {
 			return kerrors.WithMsg(err, "Failed to add token")
 		}
@@ -481,6 +599,101 @@ func (c *CmdClient) denyApproval(args []string) error {
 	}
 	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
 		return kerrors.WithMsg(err, "Failed denying user approval")
+	}
+	return nil
+}
+
+func (c *CmdClient) getRoles(args []string) error {
+	needToken := false
+	u := "/user"
+	if c.useridFlags.userid != "" {
+		u += "/id/" + c.useridFlags.userid
+	} else {
+		needToken = true
+	}
+	if c.roleFlags.mod {
+		u += "/mods"
+	} else {
+		u += "/roles"
+	}
+	u += fmt.Sprintf("?amount=%d", c.listFlags.amount)
+	if c.listFlags.after != "" {
+		u += "&after=" + c.listFlags.after
+	}
+	r, err := c.httpc.HTTPClient.Req(http.MethodGet, u, nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create get user roles request")
+	}
+	if needToken {
+		if err := c.gate.AddReqToken(r); err != nil {
+			return kerrors.WithMsg(err, "Failed to add token")
+		}
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed getting user roles")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) intersectRoles(args []string) error {
+	needToken := false
+	u := "/user"
+	if c.useridFlags.userid != "" {
+		u += "/id/" + c.useridFlags.userid
+	} else {
+		needToken = true
+	}
+	if c.roleFlags.mod {
+		u += "/modint"
+	} else {
+		u += "/roleint"
+	}
+	u += fmt.Sprintf("?roles=%s", c.roleFlags.intersect)
+	r, err := c.httpc.HTTPClient.Req(http.MethodGet, u, nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create get user roles request")
+	}
+	if needToken {
+		if err := c.gate.AddReqToken(r); err != nil {
+			return kerrors.WithMsg(err, "Failed to add token")
+		}
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed getting user roles")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) getRoleMembers(args []string) error {
+	u := "/user"
+	if c.roleFlags.mod {
+		u += "/mod/"
+	} else {
+		u += "/role/"
+	}
+	u += c.roleFlags.name
+	u += fmt.Sprintf("?amount=%d", c.listFlags.amount)
+	if c.listFlags.after != "" {
+		u += "&after=" + c.listFlags.after
+	}
+	r, err := c.httpc.HTTPClient.Req(http.MethodGet, u, nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create get user roles request")
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed getting user roles")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
 	}
 	return nil
 }

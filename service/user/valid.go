@@ -208,14 +208,18 @@ func validOffset(offset int) error {
 	return nil
 }
 
-func validhasRole(role string) error {
-	if len(role) == 0 {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
-	}
+func validoptRole(role string) error {
 	if len(role) > lengthCapRole {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role must be shorter than 128 characters")
 	}
 	return nil
+}
+
+func validhasRole(role string) error {
+	if len(role) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role is invalid")
+	}
+	return validoptRole(role)
 }
 
 func validRole(role string) error {
@@ -224,13 +228,6 @@ func validRole(role string) error {
 	}
 	if !roleRegex.MatchString(role) {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role contains invalid characters")
-	}
-	return nil
-}
-
-func validhasRolePrefix(prefix string) error {
-	if len(prefix) > lengthCapRole {
-		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Role prefix must be shorter than 128 characters")
 	}
 	return nil
 }

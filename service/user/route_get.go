@@ -111,7 +111,7 @@ type (
 	//forge:valid
 	reqGetUserRoles struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Prefix string `valid:"rolePrefix,has" json:"-"`
+		After  string `valid:"role,opt" json:"-"`
 		Amount int    `valid:"amount" json:"-"`
 	}
 )
@@ -119,7 +119,7 @@ type (
 func (s *router) getUserRoles(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: c.Param("id"),
-		Prefix: c.Query("prefix"),
+		After:  c.Query("after"),
 		Amount: c.QueryInt("amount", -1),
 	}
 	if err := req.valid(); err != nil {
@@ -127,7 +127,7 @@ func (s *router) getUserRoles(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.After, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -138,7 +138,7 @@ func (s *router) getUserRoles(c *governor.Context) {
 func (s *router) getUserMods(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: c.Param("id"),
-		Prefix: c.Query("prefix"),
+		After:  c.Query("after"),
 		Amount: c.QueryInt("amount", -1),
 	}
 	if err := req.valid(); err != nil {
@@ -146,7 +146,7 @@ func (s *router) getUserMods(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.After, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -157,7 +157,7 @@ func (s *router) getUserMods(c *governor.Context) {
 func (s *router) getUserRolesPersonal(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: gate.GetCtxUserid(c),
-		Prefix: c.Query("prefix"),
+		After:  c.Query("after"),
 		Amount: c.QueryInt("amount", -1),
 	}
 	if err := req.valid(); err != nil {
@@ -165,7 +165,7 @@ func (s *router) getUserRolesPersonal(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.getUserRoles(c.Ctx(), req.Userid, req.After, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -176,7 +176,7 @@ func (s *router) getUserRolesPersonal(c *governor.Context) {
 func (s *router) getUserModsPersonal(c *governor.Context) {
 	req := reqGetUserRoles{
 		Userid: gate.GetCtxUserid(c),
-		Prefix: c.Query("prefix"),
+		After:  c.Query("after"),
 		Amount: c.QueryInt("amount", -1),
 	}
 	if err := req.valid(); err != nil {
@@ -184,7 +184,7 @@ func (s *router) getUserModsPersonal(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.Prefix, req.Amount)
+	res, err := s.s.getUserMods(c.Ctx(), req.Userid, req.After, req.Amount)
 	if err != nil {
 		c.WriteError(err)
 		return

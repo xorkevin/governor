@@ -131,8 +131,10 @@ func TestUsers(t *testing.T) {
 	gateClient.Token = adminToken
 
 	{
-		userClient.getUserFlags.userid = adminUserid
-		userClient.getUserFlags.private = true
+		userClient.getUserFlags = getUserFlags{
+			userid:  adminUserid,
+			private: true,
+		}
 		assert.NoError(userClient.getUser(nil))
 
 		var body ResUserGet
@@ -181,7 +183,9 @@ func TestUsers(t *testing.T) {
 	}
 
 	{
-		userClient.useridFlags.userid = regularUserid
+		userClient.useridFlags = useridFlags{
+			userid: regularUserid,
+		}
 		assert.NoError(userClient.acceptApproval(nil))
 	}
 
@@ -208,8 +212,12 @@ func TestUsers(t *testing.T) {
 		assert.Equal("newuser", maillog.Records[0].Tpl.Name)
 		key := maillog.Records[0].TplData["Key"]
 
-		userClient.useridFlags.userid = regularUserid
-		userClient.keyFlags.key = key
+		userClient.useridFlags = useridFlags{
+			userid: regularUserid,
+		}
+		userClient.keyFlags = keyFlags{
+			key: key,
+		}
 		assert.NoError(userClient.commitUser(nil))
 
 		assert.Equal(regularUserid, strings.TrimSpace(out.String()))
@@ -228,5 +236,77 @@ func TestUsers(t *testing.T) {
 		out.Reset()
 
 		assert.Len(body.Approvals, 0)
+	}
+
+	{
+		userClient.useridFlags = useridFlags{
+			userid: "",
+		}
+		userClient.roleFlags = roleFlags{
+			mod: false,
+		}
+		userClient.listFlags = listFlags{
+			amount: 8,
+		}
+		assert.NoError(userClient.getRoles(nil))
+
+		var body resUserRoles
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal([]string{gate.RoleAdmin, gate.RoleUser}, body.Roles)
+	}
+
+	{
+		userClient.useridFlags = useridFlags{
+			userid: regularUserid,
+		}
+		userClient.roleFlags = roleFlags{
+			mod: false,
+		}
+		userClient.listFlags = listFlags{
+			amount: 8,
+		}
+		assert.NoError(userClient.getRoles(nil))
+
+		var body resUserRoles
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal([]string{gate.RoleUser}, body.Roles)
+	}
+
+	{
+		userClient.useridFlags = useridFlags{
+			userid: "",
+		}
+		userClient.roleFlags = roleFlags{
+			mod:       false,
+			intersect: gate.RoleAdmin,
+		}
+		assert.NoError(userClient.intersectRoles(nil))
+
+		var body resUserRoles
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal([]string{gate.RoleAdmin}, body.Roles)
+	}
+
+	{
+		userClient.roleFlags = roleFlags{
+			mod:  false,
+			name: gate.RoleAdmin,
+		}
+		userClient.listFlags = listFlags{
+			amount: 8,
+		}
+		assert.NoError(userClient.getRoleMembers(nil))
+
+		var body resUserList
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal([]string{adminUserid}, body.Userids)
 	}
 }

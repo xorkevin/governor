@@ -87,13 +87,13 @@ func (s *Service) updateRole(ctx context.Context, userid string, updaterid strin
 	if mod {
 		if ok, err := gate.CheckMod(ctx, s.acl, userid, role); err != nil {
 			return kerrors.WithMsg(err, "Failed to get user role")
-		} else if !ok {
+		} else if ok == add {
 			return nil
 		}
 	} else {
 		if ok, err := gate.CheckRole(ctx, s.acl, userid, role); err != nil {
 			return kerrors.WithMsg(err, "Failed to get user role")
-		} else if !ok {
+		} else if ok == add {
 			return nil
 		}
 	}

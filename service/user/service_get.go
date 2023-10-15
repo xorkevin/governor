@@ -126,8 +126,8 @@ type (
 	}
 )
 
-func (s *Service) getUserRoles(ctx context.Context, userid string, prefix string, amount int) (*resUserRoles, error) {
-	roles, err := s.acl.ReadBySubObjPred(ctx, authzacl.Sub{NS: gate.NSUser, Key: userid}, gate.NSRole, gate.RelIn, prefix, amount)
+func (s *Service) getUserRoles(ctx context.Context, userid string, after string, amount int) (*resUserRoles, error) {
+	roles, err := s.acl.ReadBySubObjPred(ctx, authzacl.Sub{NS: gate.NSUser, Key: userid}, gate.NSRole, gate.RelIn, after, amount)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
@@ -136,8 +136,8 @@ func (s *Service) getUserRoles(ctx context.Context, userid string, prefix string
 	}, nil
 }
 
-func (s *Service) getUserMods(ctx context.Context, userid string, prefix string, amount int) (*resUserRoles, error) {
-	roles, err := s.acl.ReadBySubObjPred(ctx, authzacl.Sub{NS: gate.NSUser, Key: userid}, gate.NSRole, gate.RelMod, prefix, amount)
+func (s *Service) getUserMods(ctx context.Context, userid string, after string, amount int) (*resUserRoles, error) {
+	roles, err := s.acl.ReadBySubObjPred(ctx, authzacl.Sub{NS: gate.NSUser, Key: userid}, gate.NSRole, gate.RelMod, after, amount)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to get user roles")
 	}
