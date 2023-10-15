@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -88,14 +87,12 @@ func TestGate(t *testing.T) {
 	term.Fsys = fsys
 
 	{
-		client := governortest.NewTestClient(t, nil, strings.NewReader(`
-{
-  "gate": {
-    "keyfile": "key.txt",
-    "tokenfile": "token.txt"
-  }
-}
-`), term)
+		client := governortest.NewTestClient(t, nil, map[string]any{
+			"gate": map[string]any{
+				"keyfile":   "key.txt",
+				"tokenfile": "token.txt",
+			},
+		}, term)
 
 		gateClient := NewCmdClient()
 		client.Register("gate", "/null/gate", &governor.CmdDesc{

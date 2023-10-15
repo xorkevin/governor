@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -88,11 +87,11 @@ func (h SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-func NewTestClient(t *testing.T, server http.Handler, config io.Reader, termConfig *governor.TermConfig) *governor.Client {
+func NewTestClient(t *testing.T, server http.Handler, config map[string]any, termConfig *governor.TermConfig) *governor.Client {
 	t.Helper()
 
 	if config == nil {
-		config = strings.NewReader("{}")
+		config = map[string]any{}
 	}
 
 	if termConfig == nil {
@@ -101,6 +100,11 @@ func NewTestClient(t *testing.T, server http.Handler, config io.Reader, termConf
 
 	if server == nil {
 		server = SuccessHandler{}
+	}
+
+	configb, err := kjson.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	return governor.NewClient(governor.Opts{
@@ -113,7 +117,7 @@ func NewTestClient(t *testing.T, server http.Handler, config io.Reader, termConf
 		EnvPrefix:    "gov",
 		ClientPrefix: "govc",
 	}, &governor.ClientOpts{
-		ConfigReader: config,
+		ConfigReader: bytes.NewReader(configb),
 		HTTPTransport: HandlerRoundTripper{
 			Handler: server,
 		},

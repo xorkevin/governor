@@ -42,7 +42,7 @@ func TestDatabase(t *testing.T) {
 	server.Register("database", "/null/db", d)
 	assert.NoError(server.Start(context.Background(), governor.Flags{}, klog.Discard{}))
 
-	static := dbsqltest.NewTestStatic(t)
+	static := dbsqltest.NewStatic(t)
 
 	for _, tc := range []struct {
 		Name string

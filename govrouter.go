@@ -52,7 +52,7 @@ type (
 func (s *Server) router(path string, l klog.Logger) Router {
 	return &govrouter{
 		r:    s.i.Route(path, func(r chi.Router) {}),
-		log:  l.Sublogger("router", klog.AString("gov.router.path", path)),
+		log:  l.Sublogger("router"),
 		path: path,
 	}
 }
@@ -70,7 +70,7 @@ func (r *govrouter) Group(path string, mw ...Middleware) Router {
 	}
 	return &govrouter{
 		r:    sr,
-		log:  r.log.Sublogger("", klog.AString("gov.router.path", cpath)),
+		log:  r.log,
 		path: cpath,
 	}
 }
@@ -136,7 +136,6 @@ func MiddlewareFromCtx(log klog.Logger, mw ...MiddlewareCtx) Middleware {
 
 func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 	cpath := r.path + path
-	l := r.log.Sublogger("", klog.AString("gov.router.path", cpath))
 	var sr chi.Router
 	if path == "" {
 		sr = r.r.Group(func(r chi.Router) {})
@@ -144,11 +143,11 @@ func (r *govrouter) GroupCtx(path string, mw ...MiddlewareCtx) Router {
 		sr = r.r.Route(path, func(r chi.Router) {})
 	}
 	if len(mw) > 0 {
-		sr = sr.With(MiddlewareFromCtx(l, mw...))
+		sr = sr.With(MiddlewareFromCtx(r.log.Sublogger("", klog.AString("gov.router.path", cpath)), mw...))
 	}
 	return &govrouter{
 		r:    sr,
-		log:  l,
+		log:  r.log,
 		path: cpath,
 	}
 }
@@ -171,6 +170,7 @@ func (r *govrouter) NotFoundCtx(h RouteHandler, mw ...MiddlewareCtx) {
 	r.NotFound(toHTTPHandler(
 		chainMiddlewareCtx(h, mw),
 		r.log.Sublogger("",
+			klog.AString("gov.router.path", r.path),
 			klog.ABool("gov.router.notfound", true),
 		),
 	))
@@ -180,6 +180,7 @@ func (r *govrouter) MethodNotAllowedCtx(h RouteHandler, mw ...MiddlewareCtx) {
 	r.MethodNotAllowed(toHTTPHandler(
 		chainMiddlewareCtx(h, mw),
 		r.log.Sublogger("",
+			klog.AString("gov.router.path", r.path),
 			klog.ABool("gov.router.methodnotallowed", true),
 		)),
 	)

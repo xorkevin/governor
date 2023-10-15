@@ -301,7 +301,7 @@ func (c *CmdClient) genToken(args []string) error {
 	if err != nil {
 		return err
 	}
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, key.Verifier().ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: key.Private()}, (&jose.SignerOptions{}).WithType(JWTHeaderJWT).WithHeader(JWTHeaderKid, key.Verifier().ID()))
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create signer")
 	}
@@ -318,6 +318,9 @@ func (c *CmdClient) genToken(args []string) error {
 		Scope:     c.tokenFlags.scope,
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to generate token")
+	}
 
 	if output == "" {
 		if _, err := io.WriteString(c.term.Stdout(), token+"\n"); err != nil {

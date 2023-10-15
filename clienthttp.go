@@ -170,12 +170,12 @@ func (c *HTTPFetcher) DoNoContent(ctx context.Context, r *http.Request) (_ *http
 	return res, nil
 }
 
-// DoJSON sends a request to the server and decodes response json
-func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response interface{}) (_ *http.Response, _ bool, retErr error) {
+// DoBytes sends a request to the server and gets response bytes
+func (c *HTTPFetcher) DoBytes(ctx context.Context, r *http.Request) (_ *http.Response, _ []byte, retErr error) {
 	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
 	res, err := c.HTTPClient.Do(ctx, r)
 	if err != nil {
-		return res, false, err
+		return res, nil, err
 	}
 	defer func() {
 		if err := res.Body.Close(); err != nil {
@@ -188,18 +188,30 @@ func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response inte
 		}
 	}()
 
-	decoded := false
-	if response != nil && isStatusDecodable(res.StatusCode) {
-		dec := json.NewDecoder(res.Body)
-		if err := dec.Decode(response); err != nil {
-			return res, false, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
-		}
-		if dec.More() {
-			return res, false, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
-		}
-		decoded = true
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return res, nil, kerrors.WithKind(err, ErrInvalidServerRes, "Failed reading response")
 	}
-	return res, decoded, nil
+	return res, body, nil
+}
+
+// DoJSON sends a request to the server and decodes response json
+func (c *HTTPFetcher) DoJSON(ctx context.Context, r *http.Request, response interface{}) (_ *http.Response, retErr error) {
+	ctx = klog.CtxWithAttrs(ctx, klog.AString("gov.httpc.url", r.URL.String()))
+	res, body, err := c.DoBytes(ctx, r)
+	if err != nil {
+		return res, err
+	}
+	if !isStatusDecodable(res.StatusCode) {
+		return res, kerrors.WithKind(nil, ErrInvalidServerRes, "Non-decodable response")
+	}
+	if response == nil {
+		response = &struct{}{}
+	}
+	if err := kjson.Unmarshal(body, response); err != nil {
+		return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed decoding response")
+	}
+	return res, nil
 }
 
 func isStatusDecodable(status int) bool {

@@ -26,12 +26,13 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/twmb/franz-go v1.14.4
 	github.com/twmb/franz-go/pkg/kadm v1.9.0
+	golang.org/x/crypto v0.13.0
 	golang.org/x/image v0.12.0
 	golang.org/x/term v0.12.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/forge v0.5.2
-	xorkevin.dev/hunter2 v0.2.9
+	xorkevin.dev/hunter2 v0.2.10
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/kfs v0.1.2
 	xorkevin.dev/klog v0.1.0
@@ -84,7 +85,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.6.1 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 	golang.org/x/text v0.13.0 // indirect

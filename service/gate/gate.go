@@ -26,8 +26,8 @@ const (
 )
 
 const (
-	jwtHeaderKid = "kid"
-	jwtHeaderJWT = "JWT"
+	JWTHeaderKid = "kid"
+	JWTHeaderJWT = "JWT"
 )
 
 type (
@@ -258,7 +258,7 @@ func (s *Service) getSigningKeys(keys []string, current *tokenSigner) (*h2signer
 		}
 		signingkeys.Register(k)
 	}
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: keddsa.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, keddsa.Verifier().ID()))
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: keddsa.Private()}, (&jose.SignerOptions{}).WithType(JWTHeaderJWT).WithHeader(JWTHeaderKid, keddsa.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", kerrors.WithKind(err, ErrSigner, "Failed to create new jwt HS512 signer")
 	}
@@ -296,7 +296,7 @@ func (s *Service) getExtSigningKeys(keys []string, current *tokenSigner) (*h2sig
 	if krs256 == nil {
 		return nil, nil, "", nil, kerrors.WithKind(nil, governor.ErrInvalidConfig, "No token keys present")
 	}
-	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(jwtHeaderJWT).WithHeader(jwtHeaderKid, krs256.Verifier().ID()))
+	extsig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: krs256.Private()}, (&jose.SignerOptions{}).WithType(JWTHeaderJWT).WithHeader(JWTHeaderKid, krs256.Verifier().ID()))
 	if err != nil {
 		return nil, nil, "", nil, kerrors.WithKind(err, ErrSigner, "Failed to create new jwt RS256 signer")
 	}
@@ -365,7 +365,7 @@ func (s *Service) Generate(ctx context.Context, claims Claims, duration time.Dur
 	claims.ID = u.Base64()
 	token, err := jwt.Signed(signer.signer).Claims(claims).CompactSerialize()
 	if err != nil {
-		return "", nil, kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
+		return "", nil, kerrors.WithKind(err, ErrGenerate, "Failed to generate token")
 	}
 	return token, &claims, nil
 }
@@ -390,7 +390,7 @@ func (s *Service) GenerateExt(ctx context.Context, baseClaims Claims, duration t
 	baseClaims.ID = u.Base64()
 	token, err := jwt.Signed(signer.extsigner).Claims(baseClaims).Claims(otherClaims).CompactSerialize()
 	if err != nil {
-		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate a new jwt token")
+		return "", kerrors.WithKind(err, ErrGenerate, "Failed to generate token")
 	}
 	return token, nil
 }

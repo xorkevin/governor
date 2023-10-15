@@ -121,6 +121,7 @@ type (
 // New creates a new user repository
 func New(database dbsql.Database, table string) Repo {
 	hasher := argon2.New(passHashLen, passSaltLen, argon2.Config{
+		Version:  argon2.Version,
 		Time:     2,
 		Mem:      19456,
 		Parallel: 1,

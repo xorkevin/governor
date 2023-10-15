@@ -253,6 +253,11 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 
 	if s.configReader != nil {
 		s.v.SetConfigType("json")
+		if seeker, ok := s.configReader.(io.Seeker); ok {
+			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+				return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
+			}
+		}
 		if err := s.v.ReadConfig(s.configReader); err != nil {
 			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
 		}
@@ -341,6 +346,11 @@ type (
 func newSecretsFileSource(s string, r io.Reader) (secretsClient, error) {
 	var b []byte
 	if r != nil {
+		if seeker, ok := r.(io.Seeker); ok {
+			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+				return nil, kerrors.WithKind(err, ErrInvalidConfig, "Failed to read secrets file source")
+			}
+		}
 		var err error
 		b, err = io.ReadAll(r)
 		if err != nil {

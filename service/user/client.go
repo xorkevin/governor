@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"xorkevin.dev/governor"
-	"xorkevin.dev/governor/service/user/gate"
+	"xorkevin.dev/governor/service/gate"
 	"xorkevin.dev/kerrors"
 	"xorkevin.dev/klog"
 )
@@ -22,10 +22,15 @@ type (
 		httpc         *governor.HTTPFetcher
 		addAdminReq   reqAddAdmin
 		addAdminFlags addAdminFlags
+		getUserFlags  getUserFlags
 	}
 
 	addAdminFlags struct {
 		interactive bool
+	}
+
+	getUserFlags struct {
+		userid string
 	}
 )
 
@@ -86,6 +91,20 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.addAdmin))
+	cr.Register(governor.CmdDesc{
+		Usage: "get",
+		Short: "gets a user",
+		Long:  "gets a user",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: true,
+				Value:    &c.getUserFlags.userid,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.getUser))
 }
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
@@ -126,20 +145,37 @@ func (c *CmdClient) addAdmin(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create admin request")
 	}
-	if err := c.gate.AddSysToken(r); err != nil {
+	if err := c.gate.AddReqToken(r); err != nil {
 		return kerrors.WithMsg(err, "Failed to add systoken")
 	}
 	var body resUserUpdate
-	_, decoded, err := c.httpc.DoJSON(context.Background(), r, &body)
-	if err != nil {
+	if _, err := c.httpc.DoJSON(context.Background(), r, &body); err != nil {
 		return kerrors.WithMsg(err, "Failed adding admin")
-	}
-	if !decoded {
-		return kerrors.WithKind(nil, governor.ErrServerRes, "Non-decodable response")
 	}
 	c.log.Info(context.Background(), "Created admin user",
 		klog.AString("userid", body.Userid),
 		klog.AString("username", body.Username),
 	)
+	if _, err := io.WriteString(c.term.Stdout(), body.Userid+"\n"); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) getUser(args []string) error {
+	r, err := c.httpc.HTTPClient.Req(http.MethodGet, fmt.Sprintf("/user/id/%s", c.getUserFlags.userid), nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create get user request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		c.log.Err(context.Background(), kerrors.WithMsg(err, "Failed to add systoken"))
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed getting user")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
 	return nil
 }
