@@ -20,6 +20,7 @@ import (
 	"xorkevin.dev/governor/service/mail"
 	"xorkevin.dev/governor/service/pubsub"
 	"xorkevin.dev/governor/service/ratelimit"
+	"xorkevin.dev/governor/service/template"
 	"xorkevin.dev/governor/service/user/approvalmodel"
 	"xorkevin.dev/governor/service/user/resetmodel"
 	"xorkevin.dev/governor/service/user/sessionmodel"
@@ -113,7 +114,7 @@ func TestUsers(t *testing.T) {
 
 	assert.NoError(client.Init(governor.ClientFlags{}, klog.Discard{}))
 
-	userClient.addAdminReq = reqUserPost{
+	userClient.reqUserPost = reqUserPost{
 		Username:  "xorkevin",
 		Password:  "password",
 		Email:     "test@example.com",
@@ -149,5 +150,83 @@ func TestUsers(t *testing.T) {
 			Email:      "test@example.com",
 			OTPEnabled: false,
 		}, body)
+	}
+
+	userClient.reqUserPost = reqUserPost{
+		Username:  "xorkevin2",
+		Password:  "password",
+		Email:     "test2@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+	assert.NoError(userClient.createUser(nil))
+
+	regularUserid := strings.TrimSpace(out.String())
+	out.Reset()
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.getApprovals(nil))
+
+		var body resApprovals
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Approvals, 1)
+		assert.Equal(regularUserid, body.Approvals[0].Userid)
+		assert.False(body.Approvals[0].Approved)
+	}
+
+	{
+		userClient.useridFlags.userid = regularUserid
+		assert.NoError(userClient.acceptApproval(nil))
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.getApprovals(nil))
+
+		var body resApprovals
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Approvals, 1)
+		assert.Equal(regularUserid, body.Approvals[0].Userid)
+		assert.True(body.Approvals[0].Approved)
+	}
+
+	{
+		assert.Len(maillog.Records, 1)
+		assert.Equal("test2@example.com", maillog.Records[0].To[0].Address)
+		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+		assert.Equal("newuser", maillog.Records[0].Tpl.Name)
+		key := maillog.Records[0].TplData["Key"]
+
+		userClient.useridFlags.userid = regularUserid
+		userClient.keyFlags.key = key
+		assert.NoError(userClient.commitUser(nil))
+
+		assert.Equal(regularUserid, strings.TrimSpace(out.String()))
+		out.Reset()
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.getApprovals(nil))
+
+		var body resApprovals
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Approvals, 0)
 	}
 }

@@ -34,7 +34,11 @@ func (s *router) createUser(c *governor.Context) {
 		c.WriteError(err)
 		return
 	}
-	c.WriteJSON(http.StatusCreated, res)
+	if res.Created {
+		c.WriteJSON(http.StatusCreated, res)
+	} else {
+		c.WriteJSON(http.StatusAccepted, res)
+	}
 }
 
 type (

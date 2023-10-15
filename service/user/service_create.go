@@ -60,6 +60,7 @@ func (e *emailNewUser) computeURL(base string, tpl *htmlTemplate.Template) error
 
 type (
 	resUserUpdate struct {
+		Created  bool   `json:"created"`
 		Userid   string `json:"userid"`
 		Username string `json:"username"`
 	}
@@ -87,6 +88,7 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 		return nil, kerrors.WithMsg(err, "Failed to create new user request")
 	}
 
+	created := false
 	am := s.approvals.New(m)
 	if s.editSettings.newUserApproval {
 		if err := s.approvals.Insert(ctx, am); err != nil {
@@ -96,6 +98,7 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 			return nil, kerrors.WithMsg(err, "Failed to create new user request")
 		}
 	} else {
+		created = true
 		code, err := s.approvals.RehashCode(am)
 		if err != nil {
 			return nil, kerrors.WithMsg(err, "Failed to generate email verification code")
@@ -112,6 +115,7 @@ func (s *Service) createUser(ctx context.Context, ruser reqUserPost) (*resUserUp
 	}
 
 	return &resUserUpdate{
+		Created:  created,
 		Userid:   m.Userid,
 		Username: m.Username,
 	}, nil
@@ -284,6 +288,7 @@ func (s *Service) commitUser(ctx context.Context, userid string, key string) (*r
 	)
 
 	return &resUserUpdate{
+		Created:  true,
 		Userid:   m.Userid,
 		Username: m.Username,
 	}, nil
@@ -373,6 +378,7 @@ func (s *Service) addAdmin(ctx context.Context, req reqUserPost) (*resUserUpdate
 	)
 
 	return &resUserUpdate{
+		Created:  true,
 		Userid:   madmin.Userid,
 		Username: madmin.Username,
 	}, nil

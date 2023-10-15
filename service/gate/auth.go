@@ -157,13 +157,13 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 			token, err := getAuthHeader(c)
 			if err != nil {
 				if !errors.Is(err, ErrAuthNotFound) {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authenticated"))
 					return
 				}
 				var err error
 				token, err = getAccessCookie(c)
 				if err != nil {
-					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authorized"))
+					c.WriteError(governor.ErrWithRes(err, http.StatusUnauthorized, "", "User is not authenticated"))
 					return
 				}
 			}
