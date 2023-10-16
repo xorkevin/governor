@@ -14,7 +14,7 @@ type (
 	// Client is a server client
 	Client struct {
 		clients    []clientDef
-		cmds       []*cmdTree
+		cmds       []*CmdTree
 		settings   *clientSettings
 		configTerm *TermConfig
 		term       Term
@@ -28,11 +28,11 @@ type (
 		r   ServiceClient
 	}
 
-	// cmdTree is a tree of client cmds
-	cmdTree struct {
+	// CmdTree is a tree of client cmds
+	CmdTree struct {
 		Desc     CmdDesc
 		Handler  CmdHandler
-		Children []*cmdTree
+		Children []*CmdTree
 	}
 
 	// CmdFlag describes a client flag
@@ -81,7 +81,7 @@ type (
 
 	cmdRegistrar struct {
 		c      *Client
-		parent *cmdTree
+		parent *CmdTree
 	}
 )
 
@@ -106,15 +106,15 @@ func (c *Client) SetFlags(flags ClientFlags) {
 	c.flags = flags
 }
 
-func (c *Client) addCmd(cmd *cmdTree) {
+func (c *Client) addCmd(cmd *CmdTree) {
 	c.cmds = append(c.cmds, cmd)
 }
 
-func (t *cmdTree) addCmd(cmd *cmdTree) {
+func (t *CmdTree) addCmd(cmd *CmdTree) {
 	t.Children = append(t.Children, cmd)
 }
 
-func (r *cmdRegistrar) addCmd(cmd *cmdTree) {
+func (r *cmdRegistrar) addCmd(cmd *CmdTree) {
 	if r.parent == nil {
 		r.c.addCmd(cmd)
 	} else {
@@ -123,14 +123,14 @@ func (r *cmdRegistrar) addCmd(cmd *cmdTree) {
 }
 
 func (r *cmdRegistrar) Register(cmd CmdDesc, handler CmdHandler) {
-	r.addCmd(&cmdTree{
+	r.addCmd(&CmdTree{
 		Desc:    cmd,
 		Handler: handler,
 	})
 }
 
 func (r *cmdRegistrar) Group(cmd CmdDesc) CmdRegistrar {
-	t := &cmdTree{
+	t := &CmdTree{
 		Desc: cmd,
 	}
 	r.addCmd(t)
@@ -161,7 +161,7 @@ func (c *Client) Register(name string, url string, cmd *CmdDesc, r ServiceClient
 }
 
 // GetCmds returns registered cmds
-func (c *Client) GetCmds() []*cmdTree {
+func (c *Client) GetCmds() []*CmdTree {
 	return c.cmds
 }
 
@@ -191,4 +191,8 @@ func (c *Client) Init(flags ClientFlags, log klog.Logger) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) HTTPFetcher() *HTTPFetcher {
+	return c.httpc
 }

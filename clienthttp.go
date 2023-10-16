@@ -18,6 +18,7 @@ type (
 		Req(method, path string, body io.Reader) (*http.Request, error)
 		Do(ctx context.Context, r *http.Request) (*http.Response, error)
 		Subclient(path string) HTTPClient
+		NetClient() *http.Client
 	}
 
 	httpClient struct {
@@ -122,6 +123,10 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 		return res, kerrors.WithKind(nil, ErrServerRes, errres.Message)
 	}
 	return res, nil
+}
+
+func (c *httpClient) NetClient() *http.Client {
+	return c.httpc
 }
 
 type (

@@ -3,6 +3,10 @@ package user
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -40,9 +44,12 @@ func TestUsers(t *testing.T) {
 
 	gateClient, err := gatetest.NewClient()
 	assert.NoError(err)
-	systoken, err := gateClient.GenToken(gate.KeySubSystem, time.Hour, "")
-	assert.NoError(err)
-	gateClient.Token = systoken
+
+	{
+		systoken, err := gateClient.GenToken(gate.KeySubSystem, time.Hour, "")
+		assert.NoError(err)
+		gateClient.Token = systoken
+	}
 
 	server := governortest.NewTestServer(t, map[string]any{
 		"gate": map[string]any{
@@ -126,9 +133,11 @@ func TestUsers(t *testing.T) {
 	adminUserid := strings.TrimSpace(out.String())
 	out.Reset()
 
-	adminToken, err := gateClient.GenToken(adminUserid, time.Hour, "")
-	assert.NoError(err)
-	gateClient.Token = adminToken
+	{
+		adminToken, err := gateClient.GenToken(adminUserid, time.Hour, "")
+		assert.NoError(err)
+		gateClient.Token = adminToken
+	}
 
 	{
 		userClient.getUserFlags = getUserFlags{
@@ -337,9 +346,76 @@ func TestUsers(t *testing.T) {
 		assert.Equal([]string{regularUserid}, body.Userids)
 	}
 
-	regularToken, err := gateClient.GenToken(regularUserid, time.Hour, "")
+	httpc := client.HTTPFetcher()
+	jar, err := cookiejar.New(nil)
+	httpc.HTTPClient.NetClient().Jar = jar
 	assert.NoError(err)
-	gateClient.Token = regularToken
+
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+			Username: "xorkevin2",
+			Password: "password",
+		})
+		assert.NoError(err)
+
+		var body resUserAuth
+		_, err = httpc.DoJSON(context.Background(), r, &body)
+		assert.NoError(err)
+
+		assert.True(body.Valid)
+
+		baseURL, err := url.Parse("http://localhost:8080/api")
+		assert.NoError(err)
+
+		var accessTokenCookie string
+		for _, i := range jar.Cookies(baseURL) {
+			if i.Name == gate.CookieNameAccessToken {
+				accessTokenCookie = i.Value
+			}
+		}
+
+		assert.Equal(body.AccessToken, accessTokenCookie)
+
+		gateClient.Token = body.AccessToken
+
+		{
+			userClient.getUserFlags = getUserFlags{}
+			assert.NoError(userClient.getUser(nil))
+
+			var body ResUserGet
+			assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+			out.Reset()
+
+			assert.Equal(regularUserid, body.Userid)
+		}
+
+		{
+			r, err := httpc.HTTPClient.Req(http.MethodGet, "/u/user", nil)
+			assert.NoError(err)
+
+			var body ResUserGet
+			_, err = httpc.DoJSON(context.Background(), r, &body)
+			assert.NoError(err)
+
+			assert.Equal(regularUserid, body.Userid)
+		}
+
+		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/refresh", regularUserid), nil)
+		assert.NoError(err)
+
+		_, err = httpc.DoJSON(context.Background(), r, &body)
+		assert.NoError(err)
+
+		assert.True(body.Valid)
+
+		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/logout", regularUserid), nil)
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+
+		assert.Empty(jar.Cookies(baseURL))
+	}
 
 	{
 		userClient.accountFlags = accountFlags{

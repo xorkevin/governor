@@ -225,13 +225,13 @@ func (c *Cmd) docMd(cmd *cobra.Command, args []string) {
 	}
 }
 
-func (c *Cmd) addTrees(t []*cmdTree, parent *cobra.Command) {
+func (c *Cmd) addTrees(t []*CmdTree, parent *cobra.Command) {
 	for _, i := range t {
 		c.addTree(i, parent)
 	}
 }
 
-func (c *Cmd) addTree(t *cmdTree, parent *cobra.Command) {
+func (c *Cmd) addTree(t *CmdTree, parent *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:               t.Desc.Usage,
 		Short:             t.Desc.Short,
