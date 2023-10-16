@@ -78,3 +78,10 @@ func (s *MemLog) SendTpl(ctx context.Context, retpath string, from Addr, to []Ad
 	})
 	return nil
 }
+
+func (s *MemLog) Reset() {
+	if len(s.Records) == 0 {
+		return
+	}
+	s.Records = s.Records[:0]
+}

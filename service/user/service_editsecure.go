@@ -300,16 +300,17 @@ func (s *Service) forgotPassword(ctx context.Context, userid string) error {
 	mr, err := s.resets.GetByID(ctx, userid, kindResetPass)
 	if err != nil {
 		if !errors.Is(err, dbsql.ErrNotFound) {
-			return kerrors.WithMsg(err, "Failed to get user")
+			return kerrors.WithMsg(err, "Failed to get password reset")
 		}
 		needInsert = true
 		mr = s.resets.New(userid, kindResetPass)
 	} else {
-		if time.Now().Round(0).Before(time.Unix(mr.CodeTime, 0).Add(s.editSettings.passResetDelay)) {
+		cliff := time.Unix(mr.CodeTime, 0).Add(s.editSettings.passResetDelay)
+		if time.Now().Round(0).Before(cliff) {
 			s.log.Warn(ctx, "Forgot password called prior to delay end",
 				klog.AString("userid", userid),
 			)
-			return nil
+			return governor.ErrWithTooManyRequests(nil, cliff, "", "Failed login too many times")
 		}
 	}
 	code, err := s.resets.RehashCode(mr)

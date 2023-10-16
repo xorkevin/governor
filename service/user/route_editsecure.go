@@ -262,7 +262,7 @@ func (s *router) removeOTP(c *governor.Context) {
 
 func (s *router) mountEditSecure(m *governor.MethodRouter) {
 	m.PutCtx("/email", s.putEmail, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
-	m.PutCtx("/email/verify", s.putEmailVerify, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/email/verify", s.putEmailVerify, s.rt)
 	m.PutCtx("/password", s.putPassword, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
 	m.PutCtx("/password/forgot", s.forgotPassword, s.rt)
 	m.PutCtx("/password/forgot/reset", s.forgotPasswordReset, s.rt)

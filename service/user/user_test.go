@@ -221,10 +221,12 @@ func TestUsers(t *testing.T) {
 		assert.Equal("test2@example.com", maillog.Records[0].To[0].Address)
 		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
 		assert.Equal("newuser", maillog.Records[0].Tpl.Name)
+		userid := maillog.Records[0].TplData["Userid"]
 		key := maillog.Records[0].TplData["Key"]
+		maillog.Reset()
 
 		userClient.useridFlags = useridFlags{
-			userid: regularUserid,
+			userid: userid,
 		}
 		userClient.keyFlags = keyFlags{
 			key: key,
@@ -351,6 +353,9 @@ func TestUsers(t *testing.T) {
 	httpc.HTTPClient.NetClient().Jar = jar
 	assert.NoError(err)
 
+	baseURL, err := url.Parse("http://localhost:8080/api")
+	assert.NoError(err)
+
 	{
 		r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
 			Username: "xorkevin2",
@@ -358,14 +363,11 @@ func TestUsers(t *testing.T) {
 		})
 		assert.NoError(err)
 
-		var body resUserAuth
-		_, err = httpc.DoJSON(context.Background(), r, &body)
+		var authbody resUserAuth
+		_, err = httpc.DoJSON(context.Background(), r, &authbody)
 		assert.NoError(err)
 
-		assert.True(body.Valid)
-
-		baseURL, err := url.Parse("http://localhost:8080/api")
-		assert.NoError(err)
+		assert.True(authbody.Valid)
 
 		var accessTokenCookie string
 		for _, i := range jar.Cookies(baseURL) {
@@ -374,9 +376,15 @@ func TestUsers(t *testing.T) {
 			}
 		}
 
-		assert.Equal(body.AccessToken, accessTokenCookie)
+		assert.Equal(authbody.AccessToken, accessTokenCookie)
 
-		gateClient.Token = body.AccessToken
+		assert.Len(maillog.Records, 1)
+		assert.Equal("test2@example.com", maillog.Records[0].To[0].Address)
+		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+		assert.Equal("newlogin", maillog.Records[0].Tpl.Name)
+		maillog.Reset()
+
+		gateClient.Token = authbody.AccessToken
 
 		{
 			userClient.getUserFlags = getUserFlags{}
@@ -403,10 +411,155 @@ func TestUsers(t *testing.T) {
 		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/refresh", regularUserid), nil)
 		assert.NoError(err)
 
-		_, err = httpc.DoJSON(context.Background(), r, &body)
+		_, err = httpc.DoJSON(context.Background(), r, &authbody)
 		assert.NoError(err)
 
-		assert.True(body.Valid)
+		assert.True(authbody.Valid)
+
+		{
+			r, err := httpc.HTTPClient.Req(http.MethodGet, "/u/user/sessions?amount=8&offset=0", nil)
+			assert.NoError(err)
+
+			var body resUserGetSessions
+			_, err = httpc.DoJSON(context.Background(), r, &body)
+			assert.NoError(err)
+
+			assert.Len(body.Sessions, 1)
+			assert.Equal(authbody.Claims.SessionID, body.Sessions[0].SessionID)
+		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPut, "/u/user/email", reqUserPutEmail{
+				Email: "test3@example.com",
+			})
+			assert.NoError(err)
+
+			_, err = httpc.DoNoContent(context.Background(), r)
+			assert.NoError(err)
+
+			assert.Len(maillog.Records, 1)
+			assert.Equal("test3@example.com", maillog.Records[0].To[0].Address)
+			assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+			assert.Equal("emailchange", maillog.Records[0].Tpl.Name)
+			userid := maillog.Records[0].TplData["Userid"]
+			key := maillog.Records[0].TplData["Key"]
+			maillog.Reset()
+
+			r, err = httpc.ReqJSON(http.MethodPut, "/u/user/email/verify", reqUserPutEmailVerify{
+				Userid: userid,
+				Key:    key,
+			})
+			assert.NoError(err)
+
+			_, err = httpc.DoNoContent(context.Background(), r)
+			assert.NoError(err)
+
+			userClient.getUserFlags = getUserFlags{}
+			assert.NoError(userClient.getUser(nil))
+
+			var body ResUserGet
+			assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+			out.Reset()
+
+			assert.Equal("test3@example.com", body.Email)
+
+			assert.Len(maillog.Records, 1)
+			assert.Equal("test2@example.com", maillog.Records[0].To[0].Address)
+			assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+			assert.Equal("emailchangenotify", maillog.Records[0].Tpl.Name)
+			maillog.Reset()
+		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPut, "/u/user/password", reqUserPutPassword{
+				NewPassword: "password2",
+				OldPassword: "password",
+			})
+			assert.NoError(err)
+
+			_, err = httpc.DoNoContent(context.Background(), r)
+			assert.NoError(err)
+
+			assert.Len(maillog.Records, 1)
+			assert.Equal("test3@example.com", maillog.Records[0].To[0].Address)
+			assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+			assert.Equal("passchange", maillog.Records[0].Tpl.Name)
+			maillog.Reset()
+
+			r, err = httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+				Username: "xorkevin2",
+				Password: "password2",
+			})
+			assert.NoError(err)
+		}
+
+		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/logout", regularUserid), nil)
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+
+		assert.Empty(jar.Cookies(baseURL))
+
+		{
+			r, err := httpc.HTTPClient.Req(http.MethodGet, "/u/user/sessions?amount=8&offset=0", nil)
+			assert.NoError(err)
+
+			assert.NoError(gateClient.AddReqToken(r))
+
+			var body resUserGetSessions
+			_, err = httpc.DoJSON(context.Background(), r, &body)
+			assert.NoError(err)
+
+			assert.Len(body.Sessions, 0)
+		}
+	}
+
+	{
+		r, err := httpc.ReqJSON(http.MethodPut, "/u/user/password/forgot", reqForgotPassword{
+			Username: "xorkevin2",
+		})
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+
+		assert.Len(maillog.Records, 1)
+		assert.Equal("test3@example.com", maillog.Records[0].To[0].Address)
+		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+		assert.Equal("forgotpass", maillog.Records[0].Tpl.Name)
+		userid := maillog.Records[0].TplData["Userid"]
+		key := maillog.Records[0].TplData["Key"]
+		maillog.Reset()
+
+		r, err = httpc.ReqJSON(http.MethodPut, "/u/user/password/forgot/reset", reqForgotPasswordReset{
+			Userid:      userid,
+			Key:         key,
+			NewPassword: "password3",
+		})
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+
+		assert.Len(maillog.Records, 1)
+		assert.Equal("test3@example.com", maillog.Records[0].To[0].Address)
+		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
+		assert.Equal("passreset", maillog.Records[0].Tpl.Name)
+		maillog.Reset()
+
+		r, err = httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+			Username: "xorkevin2",
+			Password: "password3",
+		})
+		assert.NoError(err)
+
+		var authbody resUserAuth
+		_, err = httpc.DoJSON(context.Background(), r, &authbody)
+		assert.NoError(err)
+
+		assert.True(authbody.Valid)
+		gateClient.Token = authbody.AccessToken
 
 		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/logout", regularUserid), nil)
 		assert.NoError(err)
@@ -439,7 +592,7 @@ func TestUsers(t *testing.T) {
 				LastName:     "User2",
 				CreationTime: body.CreationTime,
 			},
-			Email:      "test2@example.com",
+			Email:      "test3@example.com",
 			OTPEnabled: false,
 		}, body)
 	}
